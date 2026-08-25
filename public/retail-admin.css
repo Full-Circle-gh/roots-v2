@@ -3841,7 +3841,7 @@
   body:not(.ent-socialProof) [data-feat="socialProof"],
   body:not(.ent-quickStock)  [data-feat="quickStock"],
   body:not(.ent-kitchenAdd)  [data-feat="kitchenAdd"],
-  body:not(.ent-materials)   [data-feat="materials"],
+  body:not(.ent-production)  [data-feat="production"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
@@ -3854,16 +3854,17 @@
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"],
   body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"],
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"] { opacity: .5; }
-  /* Materials is the exception to the dim-with-an-OFF-pill rule above, and it is
-     deliberate. Option B dims rather than hides because the feature's own page
-     is where its switch lives — you sit on that row to turn it back on. The
-     Materials switch does NOT live on the Materials page; it is in Settings →
-     Operations. So a dimmed row here would lead to a page that still works,
-     wearing a badge that says it doesn't. Hidden is the honest answer; the
-     switch is still reachable where it actually is.
+  /* Production (Materials + Recipes, §28) is the exception to the dim-with-an-
+     OFF-pill rule above, and it is deliberate. Option B dims rather than hides
+     because the feature's own page is where its switch lives — you sit on
+     that row to turn it back on. The Production switch does NOT live on
+     either the Materials or Recipes page; it is in Settings → Operations. So
+     a dimmed row here would lead to a page that still works, wearing a badge
+     that says it doesn't. Hidden is the honest answer; the switch is still
+     reachable where it actually is.
      Scoped to .tabs so it never reaches #mat-settings-home, which carries the
      same data-feat and must keep showing its own switch while off. */
-  body.ent-materials:not(.feat-materials) .tabs [data-feat="materials"] { display: none !important; }
+  body.ent-production:not(.feat-production) .tabs [data-feat="production"] { display: none !important; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
@@ -3953,14 +3954,14 @@
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
   body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
-  body.ent-materials:not(.feat-materials)     #mat-settings-home > :not(.feat-bar):not(.feat-off),
+  body.ent-production:not(.feat-production)   #mat-settings-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
   body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home .feat-off,
-  body.ent-materials:not(.feat-materials)     #mat-settings-home .feat-off,
+  body.ent-production:not(.feat-production)   #mat-settings-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page).
      Tacet-native: quiet card, ink primary action — amber/brass stay reserved

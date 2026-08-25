@@ -389,6 +389,7 @@ app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-purchasing')); // online store buying dept: suppliers + retail POs
 app.use(require('./routes/retail-materials')); // Materials (物料) — the shared ingredients masterlist, backend door
+app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend door onto the same recipes tables the kitchen app writes; not wired into any UI yet
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost

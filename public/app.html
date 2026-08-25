@@ -7294,7 +7294,10 @@ function showRFAC(input, rowId, rawQuery) {
   // never go into a recipe. The Items page shows everything; this picker
   // is the one place we narrow it. quickCreateIngredient also stamps
   // item_kind='food' so anything created from here lands in the right tab.
-  const matches = _ingredients.filter(i => (i.item_kind || 'food') === 'food').filter(matchTokens).slice(0,8);
+  // A made material (source_recipe_id set, §29) is always eligible too,
+  // regardless of its own item_kind — a bulk sauce used in another recipe
+  // must stay pickable even if it was ever reclassified away from 'food'.
+  const matches = _ingredients.filter(i => (i.item_kind || 'food') === 'food' || i.source_recipe_id != null).filter(matchTokens).slice(0,8);
   const rect = input.getBoundingClientRect();
   ac.style.top = (rect.bottom+4)+'px';
   ac.style.left = rect.left+'px';
