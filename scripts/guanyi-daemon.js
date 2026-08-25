@@ -98,15 +98,20 @@ let _lastHealthAt = 0;
 // does — both come back null — so without this gate processSessionHealth blamed
 // EVERY failure on the login and paged ops to burn ~6 min on a manual headed
 // re-login (scripts/guanyi-login.js) even when the real fix was the proxy.
-// Guanyi has no failover watchdog (a static per-store env var, unlike Meituan's
-// proxy-manager), so this probes exactly what guanyi-browser.js's
-// resolveProxy(storeCode) would launch Chrome on. Direct mode (no proxy
-// configured) is always "healthy" — a no-op there.
+// Probes exactly what guanyi-browser.js's resolveProxy(storeCode) would launch
+// Chrome on: the failover watchdog's live pick for this channel first (so Guanyi
+// auto-follows the same residential/GZ/direct election Meituan's tianhe channel
+// already makes — see lib/proxy-manager.js), else the static per-store env var.
+// Direct mode (no proxy at all) is always "healthy" — a no-op there.
 const GUANYI_BASE_URL      = 'https://v2.guanyierp.com';
 const PROXY_DOWN_GRACE     = Number(process.env.GUANYI_PROXY_DOWN_GRACE || LOGIN_DOWN_GRACE);
 const proxyFailStreak = {};   // storeCode -> consecutive failed probes
 const proxyDownFlagged = {};  // storeCode -> already alerted for this outage
 function activeProxy(storeCode) {
+  try {
+    const active = require('../lib/proxy-manager').readActive(storeCode);
+    if (active !== undefined) return active; // '' is a valid value (direct)
+  } catch (_) { /* manager optional — fall through to the static env var */ }
   return (storeCode && process.env[`GUANYI_PROXY_${String(storeCode).toUpperCase()}`])
     || process.env.GUANYI_PROXY_URL || '';
 }
