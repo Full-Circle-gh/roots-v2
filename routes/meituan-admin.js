@@ -16,6 +16,7 @@ const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const bundleLib = require('../lib/meituan-bundles');
+const bundleStock = require('../lib/bundle-stock');
 
 // ── GET /api/retail-admin/meituan/products ─────────────────────────────────
 // All products with their meituan_product_map entries per store.
@@ -558,14 +559,14 @@ router.get('/api/retail-admin/meituan/orders', requireRetailAdmin, (req, res) =>
 router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
+    // Quantity resolved per row rather than joined: a bundle's figure is its
+    // component floor, which lives inside bundle_items JSON. Non-bundle rows
+    // resolve to the same COALESCE the join returned. See lib/bundle-stock.
     const mapped = db.prepare(`
-      SELECT m.product_id, m.retail_store_id, m.store_code,
-             COALESCE(s.physical_qty, 0) AS qty
+      SELECT m.product_id, m.retail_store_id, m.store_code
         FROM meituan_product_map m
-        LEFT JOIN retail_store_stock s
-               ON s.product_id = m.product_id AND s.store_id = m.retail_store_id
        WHERE m.sync_enabled = 1
-    `).all();
+    `).all().map(m => ({ ...m, qty: bundleStock.sellableAt(db, m.retail_store_id, m.product_id) }));
 
     const insert = db.prepare(`
       INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
@@ -1019,12 +1020,13 @@ function csSyncQueueForCell(db, storeCode, open) {
     db.prepare("DELETE FROM meituan_sync_queue WHERE store_code = ? AND status IN ('pending','processing')").run(storeCode);
     return;
   }
+  // Per-row quantity so a bundle re-opens with its component floor, not the
+  // vestigial shelf row. See lib/bundle-stock.
   const mapped = db.prepare(`
-    SELECT m.product_id, m.retail_store_id, m.store_code, COALESCE(s.physical_qty, 0) AS qty
+    SELECT m.product_id, m.retail_store_id, m.store_code
       FROM meituan_product_map m
-      LEFT JOIN retail_store_stock s ON s.store_id = m.retail_store_id AND s.product_id = m.product_id
      WHERE m.store_code = ? AND m.sync_enabled = 1 AND m.meituan_name IS NOT NULL
-  `).all(storeCode);
+  `).all(storeCode).map(m => ({ ...m, qty: bundleStock.sellableAt(db, m.retail_store_id, m.product_id) }));
   const ins = db.prepare(`
     INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
     VALUES (?, ?, ?, ?, 'pending')
