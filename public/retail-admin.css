@@ -11993,3 +11993,237 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   @media (max-width: 760px) {
     #tab-materials-record .mat-fgrid { grid-template-columns: 1fr; }
   }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Recipes (食谱, §29) — #tab-recipes (list) + #tab-recipes-record (record)
+   Painted by public/retail-admin/19-recipes.js.
+
+   Materials' sibling under the same Production switch — structurally the same
+   two-section / full-page-record shape, so most rules below are the mat-*
+   block above with an rcp- name. Kept as its own scoped block rather than
+   reusing mat-* classes directly: every section here mints its own prefix
+   (mat-, mt-, pu-/pu2-, rcp-) so a rule can never reach a section it wasn't
+   written for. Recipes carries more structure than a material — ingredient
+   lines, steps, a cost breakdown — so it also has rules Materials never
+   needed: sub-tabs, a persistent cost/warning summary, and the line lists.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+  #tab-recipes h1, #tab-recipes h3,
+  #tab-recipes-record h1, #tab-recipes-record h3 {
+    font-family: var(--f-sans); font-weight: 500; color: var(--td-text);
+    text-transform: none; letter-spacing: -.01em; margin: 0;
+  }
+
+  /* ── page head ── */
+  #tab-recipes .rcp-pagehead { margin: 2px 0 0; }
+  #tab-recipes .rcp-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em;
+    text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
+  #tab-recipes .rcp-title { font-size: 24px; margin: 0 0 5px; }
+  #tab-recipes .rcp-sub { font-size: 13.5px; color: var(--td-text2); max-width: 64ch; margin: 0; }
+
+  /* ── filters ── */
+  #tab-recipes .rcp-filters { display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; margin: 22px 0 16px; }
+  #tab-recipes .rcp-spacer { margin-left: auto; }
+  #tab-recipes .rcp-srch { position: relative; display: inline-flex; align-items: center; min-width: 260px; }
+  #tab-recipes .rcp-srch .rcp-ic { position: absolute; left: 11px; color: var(--td-text2); pointer-events: none; }
+  #tab-recipes .rcp-srch .rcp-input { padding-left: 34px; }
+  #tab-recipes .rcp-sel { width: auto; min-width: 160px; }
+  #tab-recipes .rcp-check { display: inline-flex; align-items: center; gap: 7px;
+    font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
+
+  /* ── shared controls (both sections) ── */
+  #tab-recipes .rcp-input, #tab-recipes-record .rcp-input {
+    border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface, #fff);
+    padding: 9px 12px; font: 400 14px var(--f-sans); color: var(--td-text); width: 100%; }
+  #tab-recipes .rcp-input:focus, #tab-recipes-record .rcp-input:focus {
+    outline: none; border-color: var(--td-dusk); }
+  #tab-recipes-record textarea.rcp-input { resize: vertical; }
+  #tab-recipes select.rcp-input, #tab-recipes-record select.rcp-input { color-scheme: dark; }
+  :root[data-theme="light"] #tab-recipes select.rcp-input,
+  :root[data-theme="light"] #tab-recipes-record select.rcp-input { color-scheme: light; }
+
+  #tab-recipes .rcp-btn, #tab-recipes-record .rcp-btn {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    background: transparent; border: 1px solid var(--td-border); border-radius: 9px;
+    padding: 8px 14px; font: 400 13.5px var(--f-sans); color: var(--td-text);
+    transition: border-color .2s cubic-bezier(.16,1,.3,1), background .2s cubic-bezier(.16,1,.3,1); }
+  #tab-recipes .rcp-btn:hover, #tab-recipes-record .rcp-btn:hover { border-color: var(--td-text2); }
+  #tab-recipes .rcp-btn.primary, #tab-recipes-record .rcp-btn.primary {
+    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-recipes .rcp-btn.primary:hover, #tab-recipes-record .rcp-btn.primary:hover { background: #232f47; }
+  #tab-recipes .rcp-btn.ghost, #tab-recipes-record .rcp-btn.ghost {
+    border-color: transparent; color: var(--td-text2); }
+  #tab-recipes .rcp-btn.ghost:hover, #tab-recipes-record .rcp-btn.ghost:hover {
+    color: var(--td-text); background: var(--td-raised); }
+  #tab-recipes-record .rcp-btn.danger { border-color: transparent; color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-btn.danger:hover { background: var(--td-brick-tint); }
+  #tab-recipes .rcp-btn.sm, #tab-recipes-record .rcp-btn.sm { padding: 5px 11px; font-size: 13px; }
+  #tab-recipes .rcp-ic, #tab-recipes-record .rcp-ic { display: inline-flex; align-items: center; }
+  #tab-recipes .rcp-ic svg, #tab-recipes-record .rcp-ic svg { width: 14px; height: 14px; display: block; }
+  #tab-recipes-record .rcp-btn svg { width: 15px; height: 15px; }
+
+  #tab-recipes .rcp-card, #tab-recipes-record .rcp-card {
+    background: var(--td-surface, #fff); border: 1px solid var(--td-border);
+    border-radius: 14px; clip-path: inset(0 round 14px); }
+  #tab-recipes .rcp-num, #tab-recipes-record .rcp-num {
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  #tab-recipes .rcp-sub2, #tab-recipes-record .rcp-sub2 {
+    font-size: 12.5px; color: var(--td-text2); margin-top: 2px; }
+  #tab-recipes .rcp-per, #tab-recipes-record .rcp-per {
+    color: var(--td-text2); font-weight: 400; font-size: 12px; }
+
+  /* ── table ── */
+  #tab-recipes .rcp-tblwrap { overflow-x: auto; }
+  #tab-recipes .rcp-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+  #tab-recipes .rcp-tbl th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--td-text2); background: transparent;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--td-border); white-space: nowrap; }
+  #tab-recipes .rcp-tbl td { padding: 13px 16px; border-bottom: 1px solid var(--td-border); vertical-align: middle; }
+  #tab-recipes .rcp-tbl tr:last-child td { border-bottom: none; }
+  #tab-recipes .rcp-tbl tbody tr { cursor: pointer; transition: background .2s cubic-bezier(.16,1,.3,1); }
+  #tab-recipes .rcp-tbl tbody tr:hover { background: var(--td-raised); }
+  #tab-recipes .rcp-tbl .right { text-align: right; }
+  #tab-recipes .rcp-name { font-weight: 500; color: var(--td-text); }
+
+  /* "Backs material" — a quiet identity badge, not a status. Blocked adds the
+     amber treatment (same tokens the missing-cost warning uses below) so a
+     frozen figure reads differently from a live one at a glance in the list. */
+  #tab-recipes .rcp-badge, #tab-recipes-record .rcp-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--td-border); border-radius: 999px; padding: 2px 9px 2px 7px;
+    font-size: 11.5px; color: var(--td-text2); white-space: nowrap; }
+  #tab-recipes .rcp-badge.blocked, #tab-recipes-record .rcp-badge.blocked {
+    border-color: transparent; background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  #tab-recipes .rcp-warnic { color: var(--td-amber-ink); display: inline-flex; }
+  #tab-recipes .rcp-warnic svg { width: 15px; height: 15px; display: block; }
+
+  /* ── empty / loading ── */
+  #tab-recipes .rcp-loading { color: var(--td-text2); padding: 40px 0; text-align: center; }
+  #tab-recipes .rcp-emptyline, #tab-recipes-record .rcp-emptyline {
+    text-align: center; color: var(--td-text2); font-size: 13px; padding: 16px 8px; }
+  #tab-recipes .rcp-empty { text-align: center; padding: 54px 24px 58px; }
+  #tab-recipes .rcp-empty-ico { color: var(--td-text2); margin: 0 auto 6px; }
+  #tab-recipes .rcp-empty-ico svg { width: 34px; height: 34px; margin: 0 auto; }
+  #tab-recipes .rcp-empty h3 { font-size: 17px; margin: 8px 0 6px; }
+  #tab-recipes .rcp-empty p { font-size: 13.5px; color: var(--td-text2); max-width: 46ch; margin: 0 auto; }
+
+  /* ══ THE RECORD — a full page, not a drawer, same takeover mechanism as
+     Materials (body.rcp-viewing mirrors body.mat-viewing). ═══════════════ */
+  body.rcp-viewing main > section { display: none; }
+  body.rcp-viewing main { padding: 56px 0 0; overflow: hidden; }
+  body.rcp-viewing main > section#tab-recipes-record.active {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 56px); min-height: 0; overflow: hidden;
+  }
+  body.rcp-viewing #tab-recipes-record .rcp-scroll { flex: 1; min-height: 0; overflow: auto; }
+  #tab-recipes-record .rcp-page { padding: 22px var(--s6) var(--s6); }
+
+  #tab-recipes-record .rcp-rechead { display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap; margin-bottom: 16px; }
+  #tab-recipes-record .rcp-rectitle { font-size: 21px; }
+  #tab-recipes-record .rcp-recacts { margin-left: auto; display: flex; gap: 9px; }
+
+  /* The persistent summary — cost figures + warnings. Sits above the sub-tabs
+     on purpose (see the HTML comment on #tab-recipes-record): it must read the
+     same whether Details, Ingredients, Steps or Cost & Pricing is open. */
+  #tab-recipes-record .rcp-summary { display: flex; flex-direction: column; gap: 10px;
+    padding: 16px 20px; margin-bottom: 18px;
+    background: var(--td-surface, #fff); border: 1px solid var(--td-border); border-radius: 14px; }
+  #tab-recipes-record .rcp-sumrow { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; }
+  #tab-recipes-record .rcp-sumfig { display: flex; flex-direction: column; gap: 2px; }
+  #tab-recipes-record .rcp-sumfig .lbl { font-size: 11.5px; color: var(--td-text2);
+    text-transform: uppercase; letter-spacing: .06em; }
+  #tab-recipes-record .rcp-sumfig .v { font-size: 19px; font-weight: 600; color: var(--td-text);
+    font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-sumfig .v.dim { color: var(--td-text2); font-weight: 400; font-size: 14px; }
+  /* The warning itself — the "must not read as free" line. Real number, amber
+     text, never a hidden figure and never a bare ¥0.00 in its place. */
+  #tab-recipes-record .rcp-warn { display: flex; align-items: flex-start; gap: 8px;
+    font-size: 13px; color: var(--td-amber-ink); background: var(--td-amber-tint);
+    border-radius: 10px; padding: 10px 12px; }
+  #tab-recipes-record .rcp-warn svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+  #tab-recipes-record .rcp-matline { font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-matline b { color: var(--td-text); font-weight: 500; }
+  #tab-recipes-record .rcp-matline.blocked { color: var(--td-amber-ink); }
+
+  /* ── sub-tabs ── */
+  #tab-recipes-record .rcp-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--td-border);
+    margin-bottom: 18px; }
+  #tab-recipes-record .rcp-subtab { appearance: none; cursor: pointer; background: transparent;
+    border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    padding: 10px 4px; font: 400 13.5px var(--f-sans); color: var(--td-text2);
+    display: inline-flex; align-items: center; gap: 8px; margin-right: 18px; }
+  #tab-recipes-record .rcp-subtab:hover { color: var(--td-text); }
+  #tab-recipes-record .rcp-subtab.on { color: var(--td-text); border-bottom-color: var(--td-text); font-weight: 500; }
+  #tab-recipes-record .rcp-subtab .rcp-badge { padding: 1px 7px; font-size: 11px; }
+
+  #tab-recipes-record .rcp-blk { padding: 22px 24px; }
+  #tab-recipes-record .rcp-blk-h { font-size: 15px; margin: 0 0 16px; }
+  #tab-recipes-record .rcp-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+  #tab-recipes-record .rcp-fgrid + .rcp-fgrid { margin-top: 16px; }
+  #tab-recipes-record .rcp-f { display: flex; flex-direction: column; min-width: 0; }
+  #tab-recipes-record .rcp-f.span2 { grid-column: 1 / -1; }
+  #tab-recipes-record .rcp-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
+  #tab-recipes-record .rcp-f .hint { font-size: 12px; color: var(--td-text2); margin-top: 5px; }
+
+  /* ── ingredient / step lines ── */
+  #tab-recipes-record .rcp-lines { display: flex; flex-direction: column; }
+  #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--td-border); }
+  #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
+  #tab-recipes-record .rcp-line-name { flex: 1 1 auto; min-width: 0; }
+  #tab-recipes-record .rcp-line-name .n { font-weight: 500; color: var(--td-text); font-size: 13.5px; }
+  #tab-recipes-record .rcp-line-name .s { font-size: 12px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-line-name .s.warn { color: var(--td-amber-ink); }
+  #tab-recipes-record .rcp-line .rcp-input { width: auto; }
+  #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }
+  #tab-recipes-record .rcp-line-unit { width: 70px; flex: none; }
+  #tab-recipes-record .rcp-line-cost { width: 90px; flex: none; text-align: right; font-size: 13px;
+    color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-line-rm { flex: none; cursor: pointer; color: var(--td-text2);
+    background: transparent; border: none; padding: 4px; display: inline-flex; }
+  #tab-recipes-record .rcp-line-rm:hover { color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-line-rm svg { width: 16px; height: 16px; }
+
+  /* Ingredient picker — a plain search box that opens a result list beneath
+     it, closer to a combobox than a modal (adding a line is a small, frequent
+     action; it should not leave the page). */
+  #tab-recipes-record .rcp-pickwrap { position: relative; margin-top: 14px; }
+  #tab-recipes-record .rcp-pick { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+    background: var(--td-surface, #fff); border: 1px solid var(--td-border); border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.16); max-height: 260px; overflow: auto; }
+  #tab-recipes-record .rcp-pick-item { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 13.5px; }
+  #tab-recipes-record .rcp-pick-item:hover { background: var(--td-raised); }
+  #tab-recipes-record .rcp-pick-item .s { color: var(--td-text2); font-size: 12px; }
+
+  /* Steps ── numbered cards, a short name plus a longer instructions block. */
+  #tab-recipes-record .rcp-step { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--td-border); }
+  #tab-recipes-record .rcp-step:last-child { border-bottom: none; }
+  #tab-recipes-record .rcp-step-n { flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--td-raised); color: var(--td-text2); font-size: 12.5px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+  #tab-recipes-record .rcp-step-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  #tab-recipes-record .rcp-step-acts { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  #tab-recipes-record .rcp-step-acts button { cursor: pointer; background: transparent; border: none;
+    color: var(--td-text2); padding: 3px; display: inline-flex; }
+  #tab-recipes-record .rcp-step-acts button:hover { color: var(--td-text); }
+  #tab-recipes-record .rcp-step-acts button.rm:hover { color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-step-acts svg { width: 15px; height: 15px; }
+
+  /* Cost & Pricing — breakdown readout, mirrors mat-costline's honesty rule:
+     a figure that can't be computed says why, never a blank or a bare zero. */
+  #tab-recipes-record .rcp-breakdown { display: flex; flex-direction: column; gap: 9px; margin-top: 16px;
+    padding-top: 14px; border-top: 1px solid var(--td-border); }
+  #tab-recipes-record .rcp-bkrow { display: flex; align-items: baseline; justify-content: space-between;
+    font-size: 13.5px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-bkrow b { color: var(--td-text); font-weight: 600;
+    font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-bkrow.total { border-top: 1px solid var(--td-border); padding-top: 9px; margin-top: 2px; }
+  #tab-recipes-record .rcp-bkrow.total b { font-size: 16px; }
+
+  @media (max-width: 760px) {
+    #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
+    #tab-recipes-record .rcp-line { flex-wrap: wrap; }
+  }
