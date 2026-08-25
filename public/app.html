@@ -9710,7 +9710,21 @@ async function _loadProductCtx(id) {
     const cached = (_products || []).find(x => Number(x.id) === Number(id));
     if (cached) Object.assign(p, cached);
   }
-  let costInfo = null;
+  // The linked recipe is fetched for its ALLERGENS, and only for those.
+  //
+  // A fifth copy of the recipe cost formula used to sit here, computing a full
+  // batch/serving/margin/food-cost breakdown into a `costInfo` object that was
+  // returned on `ctx` — and read by nothing. Every render helper on this screen
+  // destructures the fields it needs, and not one of them ever named costInfo;
+  // the product page has never displayed a cost. It was deleted rather than
+  // ported onto lib/recipe-cost.js: broken unreachable code that a later reader
+  // assumes works is worse than no code, and if this screen ever should show a
+  // cost, that is a deliberate decision built fresh on the shared function.
+  //
+  // It also carried two defects, harmless only because nothing read the output:
+  // its missing-cost counter was computed and dropped, and its packaging term
+  // lacked the servings>0?servings:1 guard every other reader has, so an unset
+  // serving count silently zeroed a real packaging cost.
   let allergens = [];
   if (p.recipe_id) {
     try {
@@ -9721,35 +9735,6 @@ async function _loadProductCtx(id) {
         if (recData.success) rec = recData.data;
       }
       if (rec) {
-        let ingTotal = 0;
-        let prodMissing = 0;
-        (rec.ingredients||[]).forEach(i => {
-          if (i.master_free) return;                     // free by design — costs nothing, missing nothing
-          if (i.master_cost && i.qty) ingTotal += i.qty*i.master_cost;
-          else if (i.qty) prodMissing++;                  // no cost and not marked free
-        });
-        const cd = rec.costData||{};
-        const servings = parseFloat(rec.servings)||0;
-        const labourBatch    = parseFloat(cd.labour||0);
-        const packagingBatch = parseFloat(cd.packaging||0)*servings;
-        const overheadBatch  = ingTotal*(parseFloat(cd.overhead_pct||0)/100);
-        const batchCost = ingTotal + labourBatch + packagingBatch + overheadBatch;
-        const cpServ = servings>0?batchCost/servings:null;
-        const sellPrice = parseFloat(p.sell_price||0);
-        const perServ = servings>0 ? {
-          ingredients: ingTotal/servings,
-          labour:      labourBatch/servings,
-          packaging:   packagingBatch/servings,
-          overhead:    overheadBatch/servings,
-        } : null;
-        costInfo = {
-          cpServ,
-          margin: sellPrice>0&&cpServ!==null?sellPrice-cpServ:null,
-          fcPct: sellPrice>0&&cpServ!==null?cpServ/sellPrice*100:null,
-          sellPrice, servings, perServ,
-          recipeName: rec.name_en,
-          ingredientCount: (rec.ingredients||[]).length,
-        };
         const allergenSet = new Set();
         (rec.ingredients||[]).forEach(i => {
           const master = _ingredients.find(m=>m.id===i.ingredient_id||m.sku===i.sku);
@@ -9764,7 +9749,7 @@ async function _loadProductCtx(id) {
   const descCombined = (p.description_en||'') + (p.description_cn ? (p.description_en?'\n\n':'')+p.description_cn : '');
   const safeName = (p.name_en||'').replace(/['"\\]/g,'');
   const zoomCall = p.image_data ? `onclick="zoomImage(this.querySelector('img').src,'${safeName}')"` : '';
-  return { p, costInfo, allergens, freeOfList, allergenEmoji, descCombined, safeName, zoomCall };
+  return { p, allergens, freeOfList, allergenEmoji, descCombined, safeName, zoomCall };
 }
 
 function _renderProdTopBar(ctx) {

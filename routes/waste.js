@@ -5,12 +5,38 @@ const express = require('express');
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+const { computeRecipeCost } = require('../lib/recipe-cost');
 const router = express.Router();
 
 // Resolve a product's "production cost per unit" by walking
 // product → recipe → recipe_ingredients × ingredient.cost_per_unit + cost-sheet.
 // Returns sell_price separately so the caller can fall back when the cost
 // sheet is incomplete.
+//
+// The recipe half is lib/recipe-cost.js — the one derivation the recipe card,
+// the Cost Sheet and the Excel export all read. This function used to run its
+// own queries and its own arithmetic, which is how it came to be the only
+// reader that did not honour `free_by_design`: its ingredient SELECT never
+// asked for the column. That was invisible while every flagged-free ingredient
+// also happened to have cost_per_unit = 0 (measured on production 2026-08-24:
+// 3 flagged rows — Drinking Water, Lemon Zest, Lime Zest — all at 0, so 0 rows
+// affected), and would have become a real divergence the first time someone
+// priced one. Consolidating fixes it as a side effect rather than as a patch.
+//
+// WHAT IS DELIBERATELY DIFFERENT HERE, AND MUST STAY THAT WAY
+// -----------------------------------------------------------
+// 1. PACKAGING IS EXCLUDED. Packaging is recycled when a finished product is
+//    wasted (the box / container is reused on the replacement unit), so
+//    counting it would double-count. This is why the batch total is assembled
+//    from the breakdown's granular fields — ingredientCost + labour +
+//    overheadAmount — instead of taking `batchCost`, which includes packaging.
+//    No flag was added to the shared module for this: the policy belongs to
+//    waste, not to the derivation. If the policy ever changes, add
+//    `+ c.packagingTotal` here.
+// 2. THE SELL-PRICE FALLBACK stays here too. A recipe that cannot produce a
+//    cost falls back to the product's sell price, and `source` records which
+//    path answered so COGS reconciliation can tell them apart. That is a waste
+//    policy, not a costing rule, and the shared module knows nothing about it.
 function computeProductCost(productId) {
   if (!productId) return { cost_per_unit: null, sell_price: 0, source: null };
   const p = db.prepare('SELECT sell_price, recipe_id, name_en FROM products WHERE id = ?').get(productId);
@@ -19,28 +45,16 @@ function computeProductCost(productId) {
   if (!p.recipe_id) {
     return { cost_per_unit: null, sell_price: sellPrice, source: sellPrice > 0 ? 'sell_price' : null };
   }
-  const recipe = db.prepare('SELECT servings FROM recipes WHERE id = ?').get(p.recipe_id);
-  const cd = db.prepare('SELECT labour, packaging, overhead_pct FROM recipe_cost_data WHERE recipe_id = ?').get(p.recipe_id) || {};
-  const ings = db.prepare(`
-    SELECT ri.qty, ri.unit, i.cost_per_unit
-    FROM recipe_ingredients ri
-    LEFT JOIN ingredients i ON i.id = ri.ingredient_id
-    WHERE ri.recipe_id = ?
-  `).all(p.recipe_id);
-
-  let ingTotal = 0;
-  for (const ri of ings) {
-    if (ri.cost_per_unit && ri.qty) ingTotal += ri.qty * ri.cost_per_unit;
+  // id-form: the module loads the recipe, its lines (selecting free_by_design)
+  // and its cost row through the seamed handle. Returns null if the recipe id
+  // points at nothing — a product whose recipe was hard-deleted.
+  const c = computeRecipeCost(p.recipe_id, db);
+  if (!c) {
+    return { cost_per_unit: null, sell_price: sellPrice, source: sellPrice > 0 ? 'sell_price' : null };
   }
-  const labour    = cd.labour       || 0;
-  // Packaging is intentionally EXCLUDED from waste cost — packaging is recycled
-  // when a finished product is wasted (the box / container is reused on the
-  // replacement unit), so accounting it as waste would double-count it. If
-  // that policy ever changes, add it back here as `+ (packaging * servings)`.
-  const overhead  = cd.overhead_pct || 0;
-  const servings  = recipe?.servings || 0;
-  const batchCost = ingTotal + labour + (ingTotal * overhead / 100);
-  const costPerServ = servings > 0 ? batchCost / servings : null;
+  // Packaging-free batch total — see note 1 above.
+  const batchCost = c.ingredientCost + c.labour + c.overheadAmount;
+  const costPerServ = c.servings > 0 ? batchCost / c.servings : null;
 
   if (costPerServ !== null && costPerServ > 0) {
     return { cost_per_unit: costPerServ, sell_price: sellPrice, source: 'recipe' };

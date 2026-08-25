@@ -127,11 +127,32 @@ console.log('\n══ 2 · are the step-1 changes present in the deployed files,
   for (const [frag, what] of gone) {
     assert(!app.includes(frag), `public/app.html — old inline formula gone: ${what}`);
   }
-  // _loadProductCtx()'s dead block is step 2 and is EXPECTED to still be here.
-  // Asserted positively so that when step 2 lands, this line fails and gets
-  // updated deliberately rather than the check quietly meaning nothing.
-  assert(app.includes('fcPct: sellPrice>0&&cpServ!==null?cpServ/sellPrice*100:null,'),
-    'public/app.html — _loadProductCtx dead block still present (step 2 removes it; expected now)');
+  // STEP 2 INVERTED THIS. It previously asserted the dead block was still
+  // PRESENT, so that landing step 2 would fail the check and force it to be
+  // updated deliberately — which is what happened here, rather than the line
+  // being quietly deleted. It now asserts the opposite: the block is gone, and
+  // stays gone.
+  assert(!app.includes('fcPct: sellPrice>0&&cpServ!==null?cpServ/sellPrice*100:null,'),
+    'public/app.html — _loadProductCtx dead cost block is GONE (step 2 removed it)');
+  assert(!/\bcostInfo\b/.test(app.replace(/\/\/[^\n]*/g, '')),
+    'public/app.html — no costInfo binding survives outside comments');
+  // The half of that block that was NOT dead must still work: the product page
+  // reads allergens off the linked recipe.
+  assert(/const allergenSet = new Set\(\);/.test(app),
+    'public/app.html — the allergen derivation the same block carried is still present');
+
+  // Step 2's other half: waste.js no longer carries its own recipe arithmetic.
+  const waste = readIf(deployed('routes/waste.js')) || '';
+  assert(/require\('\.\.\/lib\/recipe-cost'\)/.test(waste),
+    'routes/waste.js — requires the shared derivation');
+  assert(/computeRecipeCost\(p\.recipe_id, db\)/.test(waste),
+    'routes/waste.js — calls it in id-form');
+  assert(!waste.includes('if (ri.cost_per_unit && ri.qty) ingTotal += ri.qty * ri.cost_per_unit;'),
+    'routes/waste.js — the hand-rolled ingredient loop is gone (it was the one reader blind to free_by_design)');
+  assert(/c\.ingredientCost \+ c\.labour \+ c\.overheadAmount/.test(waste),
+    'routes/waste.js — batch total assembled WITHOUT packaging (waste policy preserved)');
+  assert(/source: sellPrice > 0 \? 'sell_price' : null/.test(waste),
+    'routes/waste.js — the sell-price fallback and cost_source tracking are preserved');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
