@@ -4,6 +4,7 @@
 // server — the customer can't change them; that's admin-only.
 
 const api  = require('../../utils/api');
+const diag = require('../../utils/diag');
 
 const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
@@ -37,7 +38,11 @@ const COPY = {
     invited:       'INVITED',
     joined:        'JOINED',
     cardLbl:       'SCAN TO SHOP',
-    cardFoot:      '¥{them} off their first order',
+    // Every line on the card is read by whoever RECEIVES it, not by the
+    // affiliate — 'their first order' named the wrong person. 'New here?'
+    // makes the offer self-selecting, so it also reads correctly to the
+    // affiliate looking at their own card in the app.
+    cardFoot:      'New here? ¥{them} off your first order',
     saveCard:      'SAVE CARD',
     sendWechat:    'SEND ON WECHAT',
     orTheCode:     'OR SEND THE CODE',
@@ -89,7 +94,7 @@ const COPY = {
     invited:       '邀请',
     joined:        '加入',
     cardLbl:       '扫码进店',
-    cardFoot:      '好友首单立减 ¥{them}',
+    cardFoot:      '新朋友首单立减 ¥{them}',
     saveCard:      '保存邀请卡',
     sendWechat:    '发送给微信好友',
     orTheCode:     '或发送邀请码',
@@ -317,88 +322,122 @@ Page({
   // fails: a plain QR is worth more than an error toast.
   async saveCard() {
     const c = this.data.copy;
-    if (!this.data.qrPng) return;
+    // The code is still being minted, or failed to. Say so — a tap that does
+    // nothing at all is the worst answer.
+    if (!this.data.qrPng) {
+      return wx.showToast({
+        title: this.data.qrError ? c.toastSaveFail : c.qrLoading,
+        icon: 'none',
+      });
+    }
     let filePath;
     try {
       filePath = await this.composeCard();
     } catch (e) {
-      console.warn('[affiliate] card compose failed, saving the bare code:', e && e.message);
+      const why = (e && e.message) || 'unknown';
+      console.warn('[affiliate] card compose failed, saving the bare code:', why);
+      // Surface it: without this a compose bug is invisible on a real phone,
+      // which is exactly how the first version shipped broken.
+      try { diag.reportNotice('affiliate: card compose failed → bare code', { why }); } catch (e2) {}
       try { filePath = await this.qrToFile(); }
-      catch (e2) { return wx.showToast({ title: c.toastSaveFail, icon: 'none' }); }
+      catch (e2) {
+        try { diag.reportError('affiliate: save failed outright', null, { why }); } catch (e3) {}
+        return wx.showToast({ title: c.toastSaveFail, icon: 'none' });
+      }
     }
     this.saveToAlbum(filePath);
   },
 
   // Draw the card offscreen and hand back a temp file path.
+  //
+  // Every path below must settle the promise. A throw inside the async exec
+  // callback becomes an unobserved rejection and leaves the promise pending
+  // forever — the caller then awaits a result that never comes and the button
+  // silently does nothing. That is precisely how this shipped broken once, so
+  // the body is wrapped and a watchdog backs it up.
   composeCard() {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const ok   = (v) => { if (!settled) { settled = true; resolve(v); } };
+      const fail = (e) => { if (!settled) { settled = true; reject(e instanceof Error ? e : new Error(String(e))); } };
+      // Canvas work that stalls (a font that never resolves, an image that
+      // neither loads nor errors) must not strand the caller.
+      setTimeout(() => fail(new Error('compose_timeout')), 8000);
+
       wx.createSelectorQuery().in(this).select('#cardCanvas')
         .fields({ node: true, size: true })
         .exec(async (res) => {
-          const node = res && res[0] && res[0].node;
-          if (!node) return reject(new Error('no_canvas_node'));
+          try {
+            const c = this.data.copy;
+            const node = res && res[0] && res[0].node;
+            if (!node) return fail(new Error('no_canvas_node'));
 
-          let qrPath;
-          try { qrPath = await this.qrToFile(); } catch (e) { return reject(e); }
+            const qrPath = await this.qrToFile();
 
-          // The card's own proportions, in the same rpx figures the WXSS uses,
-          // scaled up to a size worth sending: 662rpx wide card -> 1080px.
-          const S = 1080 / 662;
-          const px = (rpx) => rpx * S;
-          const BORDER = px(3), QR = px(400);
-          const W = px(662);
-          const H = px(28) + px(23 * 1.2) + px(24) + QR + px(20) + px(64) + px(8) + px(37) + px(32);
+            // The card's own proportions, in the same rpx figures the WXSS
+            // uses, scaled up to a size worth sending: 662rpx card -> 1080px.
+            const S = 1080 / 662;
+            const px = (rpx) => Math.round(rpx * S);
+            const BORDER = px(3), QR = px(400);
+            const W = px(662);
+            const H = px(28) + px(23 * 1.2) + px(24) + QR + px(20) + px(64) + px(8) + px(37) + px(32);
 
-          const ctx = node.getContext('2d');
-          node.width = W;
-          node.height = H;
+            const ctx = node.getContext('2d');
+            node.width = W;
+            node.height = H;
 
-          // Lime slab + ink keyline — the part that says Roots.
-          ctx.fillStyle = '#CCD900';
-          ctx.fillRect(0, 0, W, H);
-          ctx.strokeStyle = '#1a1a17';
-          ctx.lineWidth = BORDER * 2;
-          ctx.strokeRect(0, 0, W, H);
+            // Lime slab + ink keyline — the part that says Roots.
+            ctx.fillStyle = '#CCD900';
+            ctx.fillRect(0, 0, W, H);
+            ctx.strokeStyle = '#1a1a17';
+            ctx.lineWidth = BORDER * 2;
+            ctx.strokeRect(0, 0, W, H);
 
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          let y = px(28);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            let y = px(28);
 
-          // Label — tracked small caps, forest on lime.
-          ctx.fillStyle = '#365329';
-          ctx.font = `${px(23)}px "Toni Grotesk", sans-serif`;
-          this.drawTracked(ctx, c.cardLbl, W / 2, y, px(23) * 0.22);
-          y += px(23 * 1.2) + px(24);
+            ctx.fillStyle = '#365329';
+            ctx.font = `${px(23)}px "Toni Grotesk", sans-serif`;
+            this.drawTracked(ctx, c.cardLbl, W / 2, y, px(23) * 0.22);
+            y += px(23 * 1.2) + px(24);
 
-          const img = node.createImage();
-          img.onload = () => {
-            ctx.drawImage(img, (W - QR) / 2, y, QR, QR);
-            y += QR + px(20);
+            const img = node.createImage();
+            img.onload = () => {
+              try {
+                ctx.drawImage(img, (W - QR) / 2, y, QR, QR);
+                y += QR + px(20);
 
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#1a1a17';
-            ctx.font = `${px(64)}px "Bear Serif", serif`;
-            ctx.fillText(this.data.code || '', W / 2, y);
-            y += px(64) + px(8);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#1a1a17';
+                ctx.font = `${px(64)}px "Bear Serif", serif`;
+                ctx.fillText(this.data.code || '', W / 2, y);
+                y += px(64) + px(8);
 
-            const foot = this.data.cardFootResolved;
-            if (foot) {
-              ctx.fillStyle = '#365329';
-              ctx.font = `${px(25)}px "Aleo", serif`;
-              ctx.fillText(foot, W / 2, y);
-            }
+                const foot = this.data.cardFootResolved;
+                if (foot) {
+                  ctx.fillStyle = '#365329';
+                  ctx.font = `${px(25)}px "Aleo", serif`;
+                  ctx.fillText(foot, W / 2, y);
+                }
 
-            wx.canvasToTempFilePath({
-              canvas: node,
-              success: (r) => resolve(r.tempFilePath),
-              fail: reject,
-            });
-          };
-          img.onerror = () => reject(new Error('qr_image_load_failed'));
-          img.src = qrPath;
+                wx.canvasToTempFilePath({
+                  canvas: node,
+                  x: 0, y: 0, width: W, height: H,
+                  destWidth: W, destHeight: H,
+                  fileType: 'png',
+                  success: (r) => ok(r.tempFilePath),
+                  fail: (e) => fail(new Error('canvasToTempFilePath: ' + ((e && e.errMsg) || 'failed'))),
+                });
+              } catch (e) { fail(e); }
+            };
+            img.onerror = () => fail(new Error('qr_image_load_failed'));
+            img.src = qrPath;
+          } catch (e) { fail(e); }
         });
     });
   },
+
 
   saveToAlbum(filePath) {
     const c = this.data.copy;
