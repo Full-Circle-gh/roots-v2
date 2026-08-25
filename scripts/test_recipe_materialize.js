@@ -50,7 +50,7 @@ function loadSqlite() {
   process.exit(2);
 }
 const Database = loadSqlite();
-const { materializeNew, materializeLink, unlink, linkedMaterialFor } =
+const { materializeNew, materializeLink, unlink } =
   require(path.join(__dirname, '..', 'lib', 'recipe-materialize'));
 const { costOneRecipe } = require(path.join(__dirname, '..', 'lib', 'recipe-rollup'));
 
