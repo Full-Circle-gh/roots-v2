@@ -116,7 +116,7 @@ a.vnc{background:#2d6cdf;color:#fff}button.go{background:#1f9d55;color:#fff}
 <p>Re-login a channel from your phone. <b>Tap the channel first</b>, then open the screen and log in there.</p>
 ${buttons}
 <div id=msg></div>
-<a class="btn vnc" href="../vnc.html">Open screen (VNC)</a>
+<a class="btn vnc" href="../vnc.html?resize=scale&reconnect=true">Open screen (VNC)</a>
 <p>The window closes itself once the dashboard loads. Sync picks the new session
 up on its own within a minute — no restart needed.</p>
 <script>
