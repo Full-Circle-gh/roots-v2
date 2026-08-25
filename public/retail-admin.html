@@ -4450,7 +4450,7 @@
                        never bought this; that is NOT the same as a cost of 0,
                        so the field stays empty rather than showing 0. Receiving
                        a purchase order overwrites whatever is typed here. -->
-                  <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-margin" style="margin-top:4px;"></div></div>
+                  <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-cost-source" style="margin-top:4px;display:none;"></div><div class="muted" id="pd-margin" style="margin-top:4px;"></div></div>
                   <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
                   <!-- SKU lives here, not on Stock. It is how you identify the
                        product, not a fact about how many you have — and on the
