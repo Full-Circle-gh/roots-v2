@@ -11907,16 +11907,31 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials .mat-per, #tab-materials-record .mat-per {
     color: var(--td-text2); font-weight: 400; font-size: 12px; }
 
-  /* ── table ── */
-  #tab-materials .mat-tblwrap { overflow-x: auto; }
-  #tab-materials .mat-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
-  #tab-materials .mat-tbl th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: .08em;
-    text-transform: uppercase; color: var(--td-text2); background: transparent;
-    padding: 14px 16px 10px; border-bottom: 1px solid var(--td-border); white-space: nowrap; }
-  #tab-materials .mat-tbl td { padding: 13px 16px; border-bottom: 1px solid var(--td-border); vertical-align: middle; }
+  /* ── table — MATCHES #orders-table exactly (retail-admin.html ~L248-324),
+     the product-wide column-header-band component; Orders is its anchor and
+     every table is meant to follow it. Same values, not approximations, and
+     the same fix as Recipes' table for the same reason (public/retail-admin/
+     19-recipes.js's CSS carries the long version of this comment):
+     overflow:visible, not overflow-x:auto — an ancestor with a non-visible
+     value on either axis becomes the sticky th's scrollport, and a visible
+     axis paired with a non-visible one computes BOTH to auto, so
+     overflow-x:auto alone silently pins the header to the CARD's own top
+     (row one) instead of the page's. .mat-card already clips its corners via
+     clip-path rather than overflow:hidden, so this is the only ancestor that
+     needed to change. */
+  #tab-materials .mat-tblwrap { overflow: visible; overflow-x: visible; }
+  #tab-materials .mat-tbl { border-collapse: separate; border-spacing: 0; width: 100%; }
+  #tab-materials .mat-tbl th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-family: var(--f-sans); font-weight: 500; font-size: 13px;
+    letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap; }
+  #tab-materials .mat-tbl td { padding: 13px 10px; border-bottom: 1px solid var(--line); color: var(--text-1);
+    font-size: 13.5px; vertical-align: top; }
   #tab-materials .mat-tbl tr:last-child td { border-bottom: none; }
   #tab-materials .mat-tbl tbody tr { cursor: pointer; transition: background .2s cubic-bezier(.16,1,.3,1); }
-  #tab-materials .mat-tbl tbody tr:hover { background: var(--td-raised); }
+  #tab-materials .mat-tbl tbody tr:hover { background: var(--bg-elev-1); }
   #tab-materials .mat-tbl .right { text-align: right; }
   #tab-materials .mat-name { font-weight: 500; color: var(--td-text); }
   #tab-materials .mat-tag { display: inline-flex; align-items: center;
