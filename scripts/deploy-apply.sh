@@ -184,6 +184,26 @@ for f in "${FILES[@]}"; do
   esac
 done
 
+# A deploy restarts what SHIPPED a change, not what a human deliberately took
+# down. `pm2 restart <name>` doesn't check prior state — it brings a stopped
+# process back the same as an online one — so both bounce functions below must
+# ask first. Only pm2's own "stopped" status counts: that is the one state a
+# human chose (`pm2 stop <name>`) rather than the process falling into on its
+# own. "errored", "launching", "stopping", not-found — anything else — still
+# bounces, because a daemon that crashed by itself must still recover on the
+# next deploy; only a deliberate stop is honoured. Named here once so both
+# bounce_daemon and bounce_holder ask the same question the same way.
+SKIPPED_STOPPED=()
+pm2_is_stopped() {   # $1 = pm2 process name
+  local st
+  st=$(pm2 jlist | PM_NAME="$1" node -e '
+    const d = JSON.parse(require("fs").readFileSync(0));
+    const p = d.find(x => x.name === process.env.PM_NAME);
+    process.stdout.write(p ? p.pm2_env.status : "");
+  ' 2>/dev/null)
+  [ "$st" = "stopped" ]
+}
+
 # ⚠️ The `scripts/*-chrome.js` processes are NOT daemons — they are long-lived
 # browser HOLDERS (shangou-chrome, qingyun-chrome*). Each owns a real logged-in
 # Chrome the daemon then attaches to over CDP. Restarting one throws away a warm,
@@ -223,6 +243,11 @@ bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its s
   if [ ${#procs[@]} -gt 0 ]; then
     echo "=== bounce $key daemon(s) (shipped a file it loads): ${procs[*]} ==="
     for name in "${procs[@]}"; do
+      if pm2_is_stopped "$name"; then
+        echo "  SKIP $name — stopped by an operator; a deploy never un-stops it"
+        SKIPPED_STOPPED+=("$name")
+        continue
+      fi
       pm2 restart "$name" --update-env >/dev/null 2>&1 \
         && echo "  restarted $name" \
         || echo "  WARN: restart of $name failed — bounce it by hand (pm2 restart $name)"
@@ -253,6 +278,11 @@ bounce_holder() {   # $1 = repo path of the holder script
     }' 2>/dev/null || true)
   [ ${#procs[@]} -gt 0 ] || return 0
   for name in "${procs[@]}"; do
+    if pm2_is_stopped "$name"; then
+      echo "  SKIP $name — stopped by an operator; a deploy never un-stops it"
+      SKIPPED_STOPPED+=("$name")
+      continue
+    fi
     echo "=== bounce browser holder $name (its own script shipped) ==="
     pm2 restart "$name" --update-env >/dev/null 2>&1 \
       && echo "  restarted $name — expect a risk-control challenge on the cold session" \
@@ -278,6 +308,16 @@ bounce_daemon meituan   scripts/meituan-daemon.js
 bounce_daemon eleme     scripts/eleme-daemon.js
 bounce_daemon shangou   scripts/shangou-daemon.js
 bounce_daemon gzgrocery scripts/gzgrocery-order-daemon.js
+
+if [ ${#SKIPPED_STOPPED[@]} -gt 0 ]; then
+  # Left visible on purpose: making a stop durable also means a daemon someone
+  # stopped and forgot about stays stopped through every future deploy,
+  # silently, possibly for weeks. That is the right trade against the
+  # alternative (a deploy quietly un-stopping it), but only if it is not also
+  # silent — so it names names, once, right next to the result line every
+  # deploy already ends on.
+  echo "SKIPPED (left stopped — not overridden): ${SKIPPED_STOPPED[*]}"
+fi
 
 rm -rf "$STAGE"
 echo "RESULT=SUCCESS backup=$BK"
