@@ -400,6 +400,17 @@
     const archBtn = document.getElementById('rcp-rec-arch');
     if (archBtn) archBtn.hidden = isNew;
 
+    // §29 step 5 — state-dependent: "Make available as material" when
+    // unlinked, "Linked to material: X" (click to unlink) when linked.
+    // Hidden for a not-yet-saved recipe — nothing to link until it has an id.
+    const mzBtn = document.getElementById('rcp-rec-materialize');
+    if (mzBtn) {
+      mzBtn.hidden = isNew;
+      mzBtn.textContent = m.backsMaterial
+        ? T('Linked to material: ', '已关联物料:') + m.backsMaterial.name_en
+        : T('Make available as material', '设为可用物料');
+    }
+
     const subnav = document.getElementById('rcp-subtabs');
     if (subnav) {
       const missing = liveCost().zeroCostIngredientLines;
@@ -786,4 +797,211 @@
       toast(T('Failed', '操作失败') + ': ' + (e.message || ''), 'err');
     }
   };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  §29 STEP 5 — "Make available as material"
+  // ═══════════════════════════════════════════════════════════════════════
+  // POST/DELETE /api/retail-admin/recipes/:id/materialize (routes/retail-
+  // recipes.js, backed by lib/recipe-materialize.js) is the ONLY client-
+  // reachable path that writes ingredients.source_recipe_id — the Materials
+  // save path refuses that field on purpose. This is a centered modal (built
+  // once, appended to <body>, torn down on close), not a second page — the
+  // same visual system tacet-dialogs.js's askConfirm/askPrompt use
+  // (.tdlg-scrim/.tdlg-modal, already loaded and styled globally), extended
+  // here with the search-and-pick / mode-tab bits this action needs that
+  // those simple text dialogs don't have. Its own .rcp-mz-* classes are
+  // scoped under .rcp-mz-modal, not under #tab-recipes-record — the modal
+  // lives outside that section in the DOM (appended to body), so a rule
+  // scoped by that id would silently apply to nothing.
+  const MZ_KIND_LABEL = {
+    food:      () => T('Food', '食品'),
+    packaging: () => T('Packaging', '包装'),
+    equipment: () => T('Equipment', '设备'),
+    retail:    () => T('Retail', '零售'),
+    other:     () => T('Other', '其他'),
+  };
+
+  window.rcpMaterializeClick = async function () {
+    if (!_rec || !_rec.id) return;
+    if (_rec.backsMaterial) { unlinkFlow(); return; }
+    openMaterializeModal();
+  };
+
+  async function unlinkFlow() {
+    const name = _rec.backsMaterial.name_en;
+    const ok = await askConfirm({
+      titleEn: 'Unlink this material?', titleCn: '取消关联该物料?',
+      bodyEn: `"${name}" stops being backed by this recipe. It is not deleted, and any other recipe already using it keeps using it — its cost just stops updating from here.`,
+      bodyCn: `"${name}" 将不再由本食谱产出。该物料不会被删除,其他正在使用它的食谱不受影响 —— 只是它的成本将不再随本食谱更新。`,
+      confirmEn: 'Unlink', confirmCn: '取消关联', danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api('/api/retail-admin/recipes/' + _rec.id + '/materialize', { method: 'DELETE' });
+      toast(T('Unlinked', '已取消关联'));
+      const fresh = await api('/api/retail-admin/recipes/' + _rec.id);
+      setRecord(fresh.data);
+      paintRecord();
+    } catch (e) {
+      toast(T('Failed', '操作失败') + ': ' + (e.message || ''), 'err');
+    }
+  }
+
+  function openMaterializeModal() {
+    const mz = { mode: 'new', selected: null, results: [], searchTimer: null };
+    const kindOpts = ['food', 'packaging', 'equipment', 'retail', 'other']
+      .map(k => `<option value="${k}"${k === 'food' ? ' selected' : ''}>${esc(MZ_KIND_LABEL[k]())}</option>`).join('');
+
+    const scrim = document.createElement('div');
+    scrim.className = 'tdlg-scrim';
+    scrim.innerHTML = `
+      <div class="tdlg-modal tdlg-neutral rcp-mz-modal">
+        <div class="tdlg-body">
+          <h3 class="tdlg-title">${esc(T('Make available as material', '设为可用物料'))}</h3>
+          <p class="tdlg-msg">${esc(T('Lets another recipe use what this one makes as an ingredient.', '让其他食谱可以将本食谱的产出作为原料使用。'))}</p>
+          <div class="rcp-mz-tabs">
+            <button type="button" class="rcp-mz-tab on" data-t="new">${esc(T('Create new', '新建'))}</button>
+            <button type="button" class="rcp-mz-tab" data-t="link">${esc(T('Link existing', '关联现有'))}</button>
+          </div>
+          <div class="rcp-mz-pane" data-t="new">
+            <div class="tdlg-field"><label for="rcp-mz-name_en">${esc(T('Name (English)', '名称(英文)'))}</label>
+              <input id="rcp-mz-name_en" type="text" value="${esc(_rec.name_en || '')}"></div>
+            <div class="tdlg-field"><label for="rcp-mz-name_cn">${esc(T('Name (中文)', '名称(中文)'))}</label>
+              <input id="rcp-mz-name_cn" type="text" value="${esc(_rec.name_cn || '')}"></div>
+            <div class="tdlg-field"><label>${esc(T('Recipe unit', '配方单位'))}</label>
+              <input type="text" value="g" disabled></div>
+            <div class="tdlg-field"><label for="rcp-mz-sku">${esc(T('SKU (optional)', '货号(可选)'))}</label>
+              <input id="rcp-mz-sku" type="text"></div>
+            <div class="tdlg-field"><label for="rcp-mz-kind">${esc(T('Kind', '类别'))}</label>
+              <select id="rcp-mz-kind">${kindOpts}</select></div>
+          </div>
+          <div class="rcp-mz-pane" data-t="link" hidden>
+            <div class="tdlg-field"><label for="rcp-mz-search">${esc(T('Search materials', '搜索物料'))}</label>
+              <input id="rcp-mz-search" type="text" placeholder="${esc(T('Name or SKU…', '名称或货号…'))}" autocomplete="off"></div>
+            <div id="rcp-mz-results"></div>
+            <div id="rcp-mz-selected"></div>
+          </div>
+        </div>
+        <div class="tdlg-foot">
+          <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Cancel', '取消'))}</button>
+          <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Make available', '设为可用'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(scrim);
+    const lastFocus = document.activeElement;
+    requestAnimationFrame(() => scrim.classList.add('on'));
+    setTimeout(() => { const f = scrim.querySelector('#rcp-mz-name_en'); if (f) f.focus(); }, 40);
+
+    let done = false;
+    function close() {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      scrim.classList.remove('on');
+      setTimeout(() => scrim.remove(), 260);
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
+    document.addEventListener('keydown', onKey);
+    scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', close));
+
+    const submitBtn = scrim.querySelector('[data-submit]');
+    function updateSubmitState() {
+      submitBtn.disabled = mz.mode === 'new'
+        ? !scrim.querySelector('#rcp-mz-name_en').value.trim()
+        : !mz.selected;
+    }
+
+    // ── mode tabs ──
+    scrim.querySelectorAll('.rcp-mz-tab').forEach(b => b.addEventListener('click', () => {
+      mz.mode = b.dataset.t;
+      scrim.querySelectorAll('.rcp-mz-tab').forEach(x => x.classList.toggle('on', x === b));
+      scrim.querySelectorAll('.rcp-mz-pane').forEach(x => { x.hidden = x.dataset.t !== mz.mode; });
+      updateSubmitState();
+    }));
+    scrim.querySelector('#rcp-mz-name_en').addEventListener('input', updateSubmitState);
+
+    // ── search-and-pick (mode='link') ──
+    // GET /api/retail-admin/materials?for_recipe=1 — the filter shipped in
+    // step 3 (excludes packaging/equipment/retail, always includes made
+    // materials). Filtered again here, client-side, to exactly what this
+    // action may legally link: unit='g' and not already linked elsewhere —
+    // the two required guards, applied BEFORE the operator can even pick an
+    // invalid candidate, not just after. The server re-checks both
+    // regardless (never trust the client); this is UX, not the enforcement.
+    function renderResults() {
+      const host = scrim.querySelector('#rcp-mz-results');
+      if (!mz.results.length) { host.innerHTML = ''; return; }
+      host.innerHTML = `<div class="rcp-mz-pick">` + mz.results.slice(0, 8).map(m => `
+        <div class="rcp-mz-pick-item" data-id="${m.id}">
+          <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
+          <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/g' : esc(T('no cost', '无成本'))}</span>
+        </div>`).join('') + `</div>`;
+      host.querySelectorAll('.rcp-mz-pick-item').forEach(el => el.addEventListener('click', () => {
+        mz.selected = mz.results.find(m => m.id === Number(el.dataset.id)) || null;
+        renderSelected();
+        host.innerHTML = '';
+        scrim.querySelector('#rcp-mz-search').value = mz.selected ? mz.selected.name_en : '';
+        updateSubmitState();
+      }));
+    }
+    function renderSelected() {
+      const host = scrim.querySelector('#rcp-mz-selected');
+      if (!mz.selected) { host.innerHTML = ''; return; }
+      const m = mz.selected;
+      // Soft warning — informational, never blocking. buy_price is already in
+      // the search payload, so this needs no extra request; the server also
+      // checks purchase-history-beyond-buy_price at write time and surfaces
+      // that in its own response, toasted after a successful link.
+      const warn = m.buy_price > 0
+        ? `<div class="rcp-mz-warn">${esc(T('This material has a buy price — linking will switch its cost to come from this recipe instead.', '该物料已有采购价 —— 关联后其成本将改为来自本食谱。'))}</div>`
+        : '';
+      host.innerHTML = `<div class="rcp-mz-selline">${esc(T('Selected: ', '已选择:'))}<b>${esc(m.name_en)}</b></div>${warn}`;
+    }
+    scrim.querySelector('#rcp-mz-search').addEventListener('input', (e) => {
+      clearTimeout(mz.searchTimer);
+      mz.selected = null;
+      renderSelected();
+      updateSubmitState();
+      const q = e.target.value.trim();
+      if (!q) { mz.results = []; renderResults(); return; }
+      mz.searchTimer = setTimeout(async () => {
+        try {
+          const j = await api('/api/retail-admin/materials?for_recipe=1&search=' + encodeURIComponent(q));
+          mz.results = (j.data || []).filter(m => (m.unit || 'g') === 'g' && m.source_recipe_id == null);
+        } catch (err) { mz.results = []; }
+        renderResults();
+      }, 220);
+    });
+
+    // ── submit ──
+    submitBtn.addEventListener('click', async () => {
+      const body = mz.mode === 'link'
+        ? { mode: 'link', material_id: mz.selected.id }
+        : {
+            mode: 'new',
+            name_en: scrim.querySelector('#rcp-mz-name_en').value.trim(),
+            name_cn: scrim.querySelector('#rcp-mz-name_cn').value.trim(),
+            sku: scrim.querySelector('#rcp-mz-sku').value.trim(),
+            item_kind: scrim.querySelector('#rcp-mz-kind').value,
+          };
+      submitBtn.disabled = true;
+      try {
+        const j = await api('/api/retail-admin/recipes/' + _rec.id + '/materialize', { method: 'POST', body });
+        close();
+        // The rollup already ran server-side (lib/recipe-materialize.js calls
+        // fireRecompute, never writes a cost directly) — re-fetch so the
+        // record shows the real computed (or correctly blocked) cost on
+        // first paint rather than the blank pre-link state.
+        toast(j.warning || T('Now available as a material', '已设为可用物料'), 'ok', j.warning ? 5000 : undefined);
+        const fresh = await api('/api/retail-admin/recipes/' + _rec.id);
+        setRecord(fresh.data);
+        paintRecord();
+      } catch (e) {
+        submitBtn.disabled = false;
+        const msg = (e.data && e.data.message) || e.message || '';
+        toast(T('Failed', '操作失败') + ': ' + msg, 'err');
+      }
+    });
+  }
 })();
