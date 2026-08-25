@@ -36,14 +36,18 @@ fixture.exec(fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8'));
 
 // schema.sql is only half the story — database.js adds later columns by
 // ALTER TABLE at boot, and the alerts feed reads some of them. Mirror just
-// those five (database.js:29, 35, 36, 59, 69) so the fixture matches a real
-// database. Anything else missing will show up as a loud SqliteError.
+// those six (database.js:29, 35, 36, 59, 69, 426) so the fixture matches a
+// real database. Anything else missing will show up as a loud SqliteError —
+// source_recipe_id joined the list when firePriceAlertsForPO started calling
+// lib/recipe-rollup.js's recompute after a price write-back (§29 step 3):
+// planRollup() reads this column on every call, guarded row or not.
 for (const sql of [
   "ALTER TABLE purchase_orders ADD COLUMN source TEXT DEFAULT 'manual'",
   'ALTER TABLE po_line_items ADD COLUMN lot_number TEXT',
   'ALTER TABLE po_line_items ADD COLUMN expiry_date DATE',
   'ALTER TABLE products ADD COLUMN is_active INTEGER DEFAULT 1',
   'ALTER TABLE products ADD COLUMN stock_qty INTEGER DEFAULT 0',
+  'ALTER TABLE ingredients ADD COLUMN source_recipe_id INTEGER REFERENCES recipes(id)',
 ]) { try { fixture.exec(sql); } catch {} }
 
 // Prime the module cache so `require('../database')` inside the route hands

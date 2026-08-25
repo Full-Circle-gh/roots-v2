@@ -10,6 +10,10 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
+// The nested-recipe recompute (§29 step 3) — fired after a PO price
+// write-back moves a non-linked ingredient's cost, since that can move a
+// linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
+const { fireRecompute } = require('../lib/recipe-rollup');
 const router = express.Router();
 
 // Web Push helpers — fan-out to subscribed devices when a PO event
@@ -129,6 +133,11 @@ function firePriceAlertsForPO(poId, source) {
     try { if (insSkip) insSkip.run(ing.id, poId, reason, item.unit || null, item.cost_per_unit); }
     catch (e) { console.warn('[price write-back] could not record skip:', e.message); }
   };
+  // Set when a line actually moves a non-linked ingredient's cost — checked
+  // once after the loop rather than per-line, so a PO with several priced
+  // lines triggers one recompute pass instead of running the (cheap but not
+  // free) full graph walk once per line.
+  let cpuMoved = false;
   for (const item of items) {
     if (!item.ingredient_id || !item.cost_per_unit) continue;
     const ing = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(item.ingredient_id);
@@ -157,6 +166,7 @@ function firePriceAlertsForPO(poId, source) {
     const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
     if (cpu === null) { skip(ing, item, reason); continue; }
 
+    if (Number(cpu) !== Number(ing.cost_per_unit || 0)) cpuMoved = true;
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
     // The item just priced cleanly, so whatever blocked it before is no longer
     // true — close its open skips. They stay in the table with resolved_at set,
@@ -170,6 +180,10 @@ function firePriceAlertsForPO(poId, source) {
       }
     }
   }
+  // ing.source_recipe_id is already filtered out above (the 'source_recipe_linked'
+  // skip), so every line that reached the UPDATE loop was on a non-linked
+  // ingredient — exactly the trigger condition.
+  if (cpuMoved) fireRecompute(db, { source: 'purchases.po_price_writeback', po_id: poId });
   return { skips };
 }
 

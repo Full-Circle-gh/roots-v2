@@ -5,6 +5,10 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 // storage. See lib/category-text.js for why a pasted Kangxi radical made one
 // category read as two in every report.
 const { storeCategory } = require('../lib/category-text');
+// The nested-recipe recompute (§29 step 3) — fired after a cost change on a
+// non-linked ingredient, since that can move a linked material's
+// recipe-derived cost transitively. See lib/recipe-rollup.js.
+const { fireRecompute } = require('../lib/recipe-rollup');
 const router = express.Router();
 
 // A UNIQUE violation on `sku` is now reachable in a way it was not before:
@@ -131,6 +135,9 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
   const linked   = !!existing.source_recipe_id;
   const nextCpu  = linked ? existing.cost_per_unit : (cost_per_unit || 0);
   const nextBuy  = linked ? existing.buy_price     : (buy_price || 0);
+  // A linked row's cost is pinned to its existing value above, so this can
+  // only be true for the kind of write that actually feeds the rollup graph.
+  const cpuMoved = !linked && Number(nextCpu) !== Number(existing.cost_per_unit || 0);
   try {
     db.prepare(`UPDATE ingredients SET
       name_en=?,name_cn=?,sku=?,category=?,unit=?,buy_unit=?,buy_pack_size=?,pack_contents_qty=?,pack_contents_unit=?,cost_per_unit=?,buy_price=?,
@@ -197,6 +204,7 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
         }
       }
     }
+    if (cpuMoved) fireRecompute(db, { source: 'ingredients.update', ingredient_id: Number(req.params.id) });
     logActivity(req.user.id, req.user.username, 'update', 'ingredient', req.params.id, { name_en, ...(backfilled.lines ? { backfilled } : {}) }, req.ip);
     res.json({ success: true, backfilled });
   } catch(e) {

@@ -9,6 +9,10 @@ const db = seam(require('../database'));
 // The one cost-per-recipe-unit derivation, shared with the PO price write-back
 // and mirroring the ingredient form. See lib/ingredient-cost.js.
 const { deriveCostPerUnit } = require('../lib/ingredient-cost');
+// The nested-recipe recompute (§29 step 3) — fired after the repair sweep
+// moves a non-linked ingredient's cost, since that can move a linked
+// material's recipe-derived cost transitively. See lib/recipe-rollup.js.
+const { fireRecompute } = require('../lib/recipe-rollup');
 const { requireAuth, requireAdmin, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
@@ -397,6 +401,10 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
         if (platformChanged) platformFixed++;
       }
     }
+    // Recompute trigger (§29 step 3), inside the same transaction as the
+    // sweep itself — a failure here rolls back only this pass's own writes
+    // (fireRecompute never throws), never the repairs already made above.
+    if (cpuFixed > 0) fireRecompute(db, { source: 'admin.repair_items' });
   });
   tx();
   logActivity(req.user.id, req.user.username, 'repair_items', 'system', null, { nameFixed, unitFixed, cpuFixed, platformFixed, cpuDeclined }, req.ip);
