@@ -509,21 +509,22 @@ router.get('/api/retail-admin/eleme/status', requireRetailAdmin, (req, res) => {
     const queueError   = db.prepare("SELECT COUNT(*) AS n FROM eleme_sync_queue WHERE status='error'").get()?.n || 0;
     const mappedCount  = db.prepare("SELECT COUNT(*) AS n FROM eleme_product_map WHERE sync_enabled=1").get()?.n || 0;
     // created_at/imported_at are raw SQLite CURRENT_TIMESTAMP (UTC, no zone
-    // marker) — localize to Guangzhou (+8h) here, matching the convention
-    // routes/retail.js's activity ledger uses (datetime(x,'+8 hours')), so the
-    // admin never has to reason about timezones on the display side.
+    // marker) — left as-is here, matching Meituan's convention: the frontend's
+    // elLocalTime()/mtLocalTime() converts UTC → Asia/Shanghai for display.
+    // (Previously this shifted +8h here too, which combined with the client-
+    // side conversion doubled the offset and showed times 8h in the future.)
     const recentStock = db.prepare(`
-      SELECT store_code, event_type, status, detail, error_msg, datetime(created_at,'+8 hours') AS created_at
+      SELECT store_code, event_type, status, detail, error_msg, created_at
         FROM eleme_sync_log WHERE event_type='stock_push'
         ORDER BY created_at DESC LIMIT 25
     `).all();
     const recentSystem = db.prepare(`
-      SELECT store_code, event_type, status, detail, error_msg, datetime(created_at,'+8 hours') AS created_at
+      SELECT store_code, event_type, status, detail, error_msg, created_at
         FROM eleme_sync_log WHERE event_type<>'stock_push'
         ORDER BY created_at DESC LIMIT 8
     `).all();
     const lastOrder = db.prepare(`
-      SELECT eleme_order_id, store_code, datetime(imported_at,'+8 hours') AS imported_at, status
+      SELECT eleme_order_id, store_code, imported_at, status
         FROM eleme_order_import ORDER BY imported_at DESC LIMIT 5
     `).all();
     let stores = [];
