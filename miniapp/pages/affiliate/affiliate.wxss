@@ -72,49 +72,73 @@
 }
 
 /* Referral code card */
-.code-card {
+/* ── The card ──────────────────────────────────────────────────────────
+   Geometry inherited from the old .code-card so the page rhythm is
+   unchanged; only what sits inside it is new. The 小程序码 arrives with a
+   transparent background (routes/retail.js runs lib/wxacode-knockout.js
+   over it), so it prints straight onto the lime — never give it a plate. */
+.card {
   margin: 28rpx 44rpx 0;
   background: var(--lime);
   border: 3rpx solid var(--ink);
   padding: 28rpx 32rpx 32rpx;
 }
-.code-lbl {
+.card-lbl {
   font-size: calc(20rpx * var(--font-scale));
   letter-spacing: 0.22em;
   color: var(--forest);
+  text-align: center;
 }
-.code-lbl .cn {
-  font-size: calc(16rpx * var(--font-scale));
-  letter-spacing: 0.05em;
-  text-transform: none;
+.card-qr {
+  display: block;
+  width: 400rpx;
+  height: 400rpx;
+  margin: 24rpx auto 0;
 }
-.code-row {
+/* Placeholder while WeChat mints the code, sized like the image so the card
+   doesn't jump when it lands. */
+.card-qr-state {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 16rpx;
+  justify-content: center;
+  text-align: center;
+  width: 400rpx;
+  height: 400rpx;
+  margin: 24rpx auto 0;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  border: 3rpx dashed var(--forest);
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--forest);
 }
-.code {
+.card-qr-err { color: var(--ink); }
+.card-code {
   font-size: calc(56rpx * var(--font-scale));
   line-height: 1;
   letter-spacing: -0.01em;
+  text-align: center;
   color: var(--ink);
+  margin-top: 20rpx;
 }
-.code-copy {
-  background: var(--ink);
-  color: var(--lime);
-  padding: 14rpx 22rpx;
+.card-foot {
   font-size: calc(22rpx * var(--font-scale));
-  letter-spacing: 0.08em;
+  line-height: 1.45;
+  color: var(--forest);
+  text-align: center;
+  margin-top: 8rpx;
 }
 
-/* Share row */
-.share-row {
+/* ── Actions ───────────────────────────────────────────────────────────
+   SAVE CARD is the one filled button. The WeChat and Moments rows are
+   outlined: ink, not #1AAD19 — that green fights the lime (56° apart, both
+   near-full saturation) and white on it is 2.98:1, under AA. */
+.btn-row {
   display: flex;
   gap: 12rpx;
-  margin-top: 28rpx;
+  margin: 28rpx 44rpx 0;
 }
-.share {
+.btn {
   flex: 1;
   padding: 20rpx 0;
   display: flex;
@@ -131,24 +155,59 @@
   box-sizing: border-box;
   margin: 0;
 }
-/* The WeChat share affordance must be a <button open-type="share">, which
-   ships default chrome (a ::after hairline border + its own line metrics)
-   that pushes its label off the baseline of the <view> beside it. Strip the
-   border and let the shared flex-centering line both labels up exactly. */
-.share-wechat::after { border: none; }
-.share .cn {
-  font-size: calc(16rpx * var(--font-scale));
-  margin-left: 6rpx;
-  letter-spacing: 0.05em;
-  text-transform: none;
-}
-.share-wechat { background: #1AAD19; color: #fff; }
-.share-moments { background: var(--ink); color: #fff; }
-/* Third, quieter affordance: outlined rather than filled, so WeChat (green)
-   and Moments (ink) keep the primary weight in the row. */
-.share-qr {
+/* A <button open-type="share"> ships its own hairline + line metrics, which
+   push its label off the baseline of the <view> beside it. Same fix the old
+   .share-wechat carried. */
+.btn::after { border: none; }
+.btn-outline {
   background: transparent;
   color: var(--ink);
+}
+.btn.disabled { opacity: 0.4; }
+
+/* ── The typed code, second ────────────────────────────────────────────
+   Label on its own line above the row, so the code and COPY share a
+   baseline. Three different type sizes in one centred flex row cannot. */
+.codeline {
+  margin: 28rpx 44rpx 0;
+  padding: 20rpx 24rpx 24rpx;
+  border: 3rpx dashed rgba(26, 26, 23, 0.35);
+}
+.codeline-lbl {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+.codeline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+.codeline-val {
+  font-size: calc(44rpx * var(--font-scale));
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.codeline-act {
+  background: var(--ink);
+  color: var(--lime);
+  padding: 14rpx 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  flex: none;
+}
+
+/* Offscreen scratch surface for SAVE CARD — must stay in the layout tree
+   (a display:none canvas has no backing store), so it is parked out of view. */
+.card-canvas {
+  position: fixed;
+  left: -9999rpx;
+  top: 0;
+  width: 540px;
+  height: 720px;
 }
 
 /* How it works */
@@ -357,103 +416,4 @@
   font-size: calc(24rpx * var(--font-scale));
   line-height: 1.5;
   color: var(--forest);
-}
-
-/* Modal (share QR / fallback) */
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100;
-}
-.modal {
-  background: #FFFCF7;
-  border: 3rpx solid var(--ink);
-  margin: 0 44rpx;
-  width: 600rpx;
-  padding: 36rpx 32rpx;
-  /* Code + hint + three buttons is a tall stack, and --font-scale can push it
-     past a short screen. Scroll rather than clip CLOSE off the bottom. */
-  max-height: 86vh;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-.modal-kicker {
-  font-size: calc(20rpx * var(--font-scale));
-  letter-spacing: 0.22em;
-  color: var(--olive);
-}
-.modal-title {
-  font-family: var(--f-bear);
-  font-size: calc(36rpx * var(--font-scale));
-  line-height: 1.1;
-  margin-top: 8rpx;
-}
-/* The 小程序码 itself. WeChat draws it on white with its own quiet margin;
-   the plate keeps that margin intact against the modal's cream, which
-   scanners need. */
-.modal-qr {
-  display: block;
-  width: 440rpx;
-  height: 440rpx;
-  margin: 28rpx auto 0;
-  background: #fff;
-  border: 3rpx solid var(--ink);
-  box-sizing: border-box;
-}
-/* Loading / failed stand-in, sized like the image so the modal doesn't jump
-   when the code lands. */
-.modal-qr-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  width: 440rpx;
-  height: 440rpx;
-  margin: 28rpx auto 0;
-  padding: 0 32rpx;
-  background: var(--oat);
-  border: 3rpx dashed var(--ink);
-  box-sizing: border-box;
-  font-size: calc(22rpx * var(--font-scale));
-  line-height: 1.45;
-  color: var(--forest);
-}
-.modal-qr-err { color: var(--berry); }
-.modal-hint {
-  font-size: calc(22rpx * var(--font-scale));
-  line-height: 1.45;
-  color: var(--forest);
-  text-align: center;
-  margin-top: 16rpx;
-}
-.modal-code {
-  font-family: var(--f-bear);
-  font-size: calc(56rpx * var(--font-scale));
-  line-height: 1;
-  margin: 24rpx 0 28rpx;
-  background: var(--lime);
-  padding: 20rpx 24rpx;
-  text-align: center;
-  border: 3rpx solid var(--ink);
-}
-.modal-actions {
-  display: flex; gap: 12rpx;
-}
-.modal-btn {
-  flex: 1;
-  background: var(--ink);
-  color: #fff;
-  padding: 20rpx 0;
-  text-align: center;
-  font-size: calc(22rpx * var(--font-scale));
-  letter-spacing: 0.08em;
-  box-sizing: border-box;
-}
-/* Dismiss sits below the two share actions and must not compete with them. */
-.modal-btn-ghost {
-  margin-top: 12rpx;
-  background: transparent;
-  color: var(--ink);
-  border: 3rpx solid var(--ink);
 }

@@ -18,7 +18,48 @@
       <view class="sub f-aleo">{{taglineResolved}}</view>
     </view>
 
-    <!-- Stats strip -->
+    <!-- The card. The 小程序码 comes back with a transparent background (the
+         server strips WeChat's white logo plate), so it prints directly onto
+         the lime — no white plate, no disc. The code already carries the ROOTS
+         wordmark at its centre, so nothing here repeats it. -->
+    <view class="card">
+      <view class="card-lbl f-toni">{{copy.cardLbl}}</view>
+
+      <view wx:if="{{qrLoading}}" class="card-qr-state f-aleo">{{copy.qrLoading}}</view>
+      <view wx:elif="{{qrError}}" class="card-qr-state card-qr-err f-aleo">{{qrError}}</view>
+      <image wx:elif="{{qrPng}}" class="card-qr" src="{{qrPng}}" mode="aspectFit" show-menu-by-longpress></image>
+
+      <view class="card-code f-bear">{{code || '——'}}</view>
+      <view class="card-foot f-aleo">{{cardFootResolved}}</view>
+    </view>
+
+    <!-- Saving the card is the primary act: the picture is what gets dropped
+         into a chat, and the lime slab is what makes it read as Roots on
+         someone else's screen. -->
+    <view class="btn-row">
+      <view class="btn f-gothic tap {{qrPng ? '' : 'disabled'}}" bindtap="saveCard">{{copy.saveCard}}</view>
+    </view>
+    <view class="btn-row">
+      <button class="btn btn-outline f-gothic tap" open-type="share">
+        <text>{{copy.sendWechat}}</text>
+      </button>
+      <view class="btn btn-outline f-gothic tap" bindtap="shareTimeline">
+        <text>{{copy.moments}}</text>
+      </view>
+    </view>
+
+    <!-- The typed code, kept but second. Label above its own row so the code
+         and COPY share a baseline (mirrors the old .code-row). -->
+    <view class="codeline">
+      <view class="codeline-lbl f-toni">{{copy.orTheCode}}</view>
+      <view class="codeline-row">
+        <view class="codeline-val f-bear">{{code || '——'}}</view>
+        <view class="codeline-act f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
+      </view>
+    </view>
+
+    <!-- Earnings. Demoted from directly under the headline: for almost every
+         affiliate it reads ¥0 / 0 / 0, and a large zero is a poor opening. -->
     <view class="stats">
       <view class="stat">
         <view class="stat-val f-bear">¥{{stats.earned}}</view>
@@ -30,27 +71,7 @@
       </view>
       <view class="stat">
         <view class="stat-val f-bear">{{stats.converted}}</view>
-        <view class="stat-lbl f-toni">{{copy.joined}}</view>
-      </view>
-    </view>
-
-    <!-- Referral code card -->
-    <view class="code-card">
-      <view class="code-lbl f-toni">{{copy.yourCode}}</view>
-      <view class="code-row">
-        <view class="code f-bear">{{code || '——'}}</view>
-        <view class="code-copy f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
-      </view>
-      <view class="share-row">
-        <button class="share share-wechat f-gothic tap" open-type="share">
-          <text>{{copy.wechat}}</text>
-        </button>
-        <view class="share share-moments f-gothic tap" bindtap="shareTimeline">
-          <text>{{copy.moments}}</text>
-        </view>
-        <view class="share share-qr f-gothic tap" bindtap="showQr">
-          <text>{{copy.qr}}</text>
-        </view>
+        <view class="stat-lbl f-toni">{{copy.ordered}}</view>
       </view>
     </view>
 
@@ -113,29 +134,11 @@
 
   </block>
 
-  <!-- Mini-program code modal. The image is WeChat's own 小程序码 for this
-       customer's referral code — scanning it opens the app, not a webpage.
-       show-menu-by-longpress keeps WeChat's "save / send to friend" sheet
-       available on the image alongside the explicit SAVE IMAGE button. -->
-  <view wx:if="{{showQrModal}}" class="modal-backdrop" bindtap="closeQr">
-    <view class="modal" catchtap>
-      <view class="modal-kicker f-toni">{{copy.qrTitle}}</view>
-      <view class="modal-title f-bear">{{shareBodyResolved}}</view>
-
-      <view wx:if="{{qrLoading}}" class="modal-qr-state f-aleo">{{copy.qrLoading}}</view>
-      <view wx:elif="{{qrError}}" class="modal-qr-state modal-qr-err f-aleo">{{qrError}}</view>
-      <image wx:elif="{{qrPng}}" class="modal-qr" src="{{qrPng}}" mode="aspectFit" show-menu-by-longpress></image>
-
-      <view class="modal-hint f-aleo">{{copy.qrHint}}</view>
-      <view class="modal-code f-bear">{{code}}</view>
-
-      <view class="modal-actions">
-        <view wx:if="{{qrPng}}" class="modal-btn f-gothic tap" bindtap="saveQr">{{copy.saveImage}}</view>
-        <view class="modal-btn f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
-      </view>
-      <view class="modal-btn modal-btn-ghost f-gothic tap" bindtap="closeQr">{{copy.close}}</view>
-    </view>
-  </view>
+  <!-- Offscreen scratch surface for SAVE CARD. wx has no "screenshot this
+       view" call, so the shareable picture is redrawn here — lime slab, code,
+       label and all — then exported to the album. Kept in the tree (not
+       display:none) because a hidden canvas has no backing store to draw on. -->
+  <canvas type="2d" id="cardCanvas" class="card-canvas"></canvas>
 
   <popup-manager page="affiliate"></popup-manager>
 </view>

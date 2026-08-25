@@ -36,11 +36,14 @@ const COPY = {
     earned:        'EARNED',
     invited:       'INVITED',
     joined:        'JOINED',
-    yourCode:      'YOUR CODE',
+    cardLbl:       'SCAN TO SHOP',
+    cardFoot:      '¥{them} off their first order',
+    saveCard:      'SAVE CARD',
+    sendWechat:    'SEND ON WECHAT',
+    orTheCode:     'OR SEND THE CODE',
+    ordered:       'ORDERED',
     copy:          'COPY',
-    wechat:        'WECHAT',
     moments:       'MOMENTS',
-    qr:            'QR CODE',
     how:           'HOW IT WORKS',
     how1:          'Share',
     how1sub:       'Send your code',
@@ -59,20 +62,16 @@ const COPY = {
     shareTitle:    'INVITE FRIENDS',
     shareBody:     'Share this code with a friend. They get ¥{them}, you get ¥{you} on their first order.',
     shareBodySolo: 'Share this code with a friend. You get ¥{you} on their first order.',
-    qrTitle:       'YOUR QR CODE',
-    qrHint:        'A friend scans this in WeChat. The app opens for them with your code already applied — they never have to type it.',
     qrLoading:     'Drawing your code…',
-    qrFailed:      "Couldn't draw your code. Pull down to refresh and try again.",
-    saveImage:     'SAVE IMAGE',
-    close:         'CLOSE',
+    qrFailed:      "Couldn't draw your code — pull down to refresh.",
     statusJoined:  'JOINED · ¥{r}',
     statusOrdered: 'ORDERED · ¥{r}',
     statusVoid:    'VOIDED',
     toastCopied:   'Code copied',
     toastApplied:  'Code applied',
     toastShareSoon: 'Tap "..." and pick Moments to share.',
-    toastSaved:     'Saved to photos',
-    toastSaveFail:  "Couldn't save the image",
+    toastSaved:     'Card saved to photos',
+    toastSaveFail:  "Couldn't save the card",
     errAlreadyReferred: 'You already applied a code.',
     errNotFound:        'Code not found.',
     errCannotSelf:      "That's your own code.",
@@ -89,11 +88,14 @@ const COPY = {
     earned:        '已赚',
     invited:       '邀请',
     joined:        '加入',
-    yourCode:      '邀请码',
+    cardLbl:       '扫码进店',
+    cardFoot:      '好友首单立减 ¥{them}',
+    saveCard:      '保存邀请卡',
+    sendWechat:    '发送给微信好友',
+    orTheCode:     '或发送邀请码',
+    ordered:       '已下单',
     copy:          '复制',
-    wechat:        '微信',
     moments:       '朋友圈',
-    qr:            '二维码',
     how:           '流程',
     how1:          '分享',
     how1sub:       '把邀请码发给朋友',
@@ -112,19 +114,15 @@ const COPY = {
     shareTitle:    '邀请好友',
     shareBody:     '把邀请码发给朋友,TA 得 ¥{them},TA 完成首单后你得 ¥{you}。',
     shareBodySolo: '把邀请码发给朋友,TA 完成首单后你得 ¥{you}。',
-    qrTitle:       '我的二维码',
-    qrHint:        '朋友用微信扫码即可进入小程序,邀请码自动生效,无需手动输入。',
     qrLoading:     '正在生成…',
     qrFailed:      '生成失败,请下拉刷新后重试。',
-    saveImage:     '保存图片',
-    close:         '关闭',
     statusJoined:  '加入 · ¥{r}',
     statusOrdered: '已下单 · ¥{r}',
     statusVoid:    '已失效',
     toastCopied:   '已复制',
     toastApplied:  '邀请码已应用',
     toastShareSoon: '点右上角"..."分享到朋友圈',
-    toastSaved:     '已保存到相册',
+    toastSaved:     '邀请卡已保存到相册',
     toastSaveFail:  '保存失败',
     errAlreadyReferred: '你已应用过邀请码。',
     errNotFound:        '邀请码不存在。',
@@ -151,16 +149,14 @@ Page({
     applyError: '',
     stats: { earned: '0.00', total_invites: 0, joined: 0, converted: 0 },
     invites: [],
-    showQrModal: false,
-    // The mini-program code is minted by WeChat, so it costs a round trip —
-    // fetched the first time the customer opens the modal, then kept for the
-    // life of the page.
+    // The mini-program code is minted by WeChat, so it costs a round trip.
+    // It is the centrepiece of the card, so it loads with the page.
     qrPng: '',
     qrLoading: false,
     qrError: '',
     how3subResolved: '',
     taglineResolved: '',
-    shareBodyResolved: '',
+    cardFootResolved: '',
   },
 
   onShow() {
@@ -192,6 +188,9 @@ Page({
       how3subResolved:   copy.how3sub.replace('{r}', y),
       taglineResolved:   sub(split ? copy.tagline   : copy.taglineSolo),
       shareBodyResolved: sub(split ? copy.shareBody : copy.shareBodySolo),
+      // Only shown when the friend actually gets something — otherwise the
+      // card would advertise '¥0 off'.
+      cardFootResolved:  split ? sub(copy.cardFoot) : '',
     };
   },
 
@@ -204,6 +203,7 @@ Page({
       this.setData({ loading: false });
       return;
     }
+    this.loadQr();
     this.setData({ loading: true });
     try {
       const data = await api.get('/api/retail/affiliate');
@@ -264,58 +264,163 @@ Page({
     wx.showToast({ title: this.data.copy.toastShareSoon, icon: 'none', duration: 2500 });
   },
 
-  async showQr() {
-    this.setData({ showQrModal: true });
+  // The card IS the QR, so the code is fetched on load rather than on a tap.
+  // Guarded so a pull-to-refresh doesn't re-mint one we already hold.
+  async loadQr() {
     if (this.data.qrPng || this.data.qrLoading) return;
     this.setData({ qrLoading: true, qrError: '' });
     try {
       const d = await api.get('/api/retail/affiliate/qr');
       this.setData({ qrPng: d.qr || '', qrLoading: false });
     } catch (e) {
-      // Includes the tenant having no WeChat credentials yet (501). Either
-      // way there is no code to show, so say so instead of spinning.
+      // Includes a tenant with no WeChat credentials yet (501). Either way
+      // there is no code to draw, so say so instead of spinning forever.
       this.setData({ qrLoading: false, qrError: this.data.copy.qrFailed });
     }
   },
 
-  closeQr() {
-    this.setData({ showQrModal: false });
+  // Write the code's data URL to a real file. wx.canvasToTempFilePath and
+  // saveImageToPhotosAlbum both need a path, never a base64 string; the
+  // canvas image loader is happier with one too.
+  qrToFile() {
+    return new Promise((resolve, reject) => {
+      const dataUrl = this.data.qrPng;
+      if (!dataUrl) return reject(new Error('no_qr'));
+      const fp = `${wx.env.USER_DATA_PATH}/referral-qr-${this.data.code || 'code'}.png`;
+      wx.getFileSystemManager().writeFile({
+        filePath: fp,
+        data: dataUrl.replace(/^data:image\/\w+;base64,/, ''),
+        encoding: 'base64',
+        success: () => resolve(fp),
+        fail: reject,
+      });
+    });
   },
 
-  // Write the data-URL PNG to the sandbox, then hand that file to the album.
-  // Same shape as the Alipay payment QR (pages/alipay-pay) — wx has no "save
-  // this base64 string" call, a real file path is mandatory.
-  saveQr() {
-    const dataUrl = this.data.qrPng;
-    if (!dataUrl) return;
+  // Canvas has no letter-spacing, and the brand's small caps live or die by
+  // their tracking — so tracked text is drawn a character at a time.
+  drawTracked(ctx, text, cx, y, spacing) {
+    const chars = String(text).split('');
+    const width = chars.reduce((w, ch) => w + ctx.measureText(ch).width + spacing, -spacing);
+    let x = cx - width / 2;
+    for (const ch of chars) {
+      ctx.fillText(ch, x, y);
+      x += ctx.measureText(ch).width + spacing;
+    }
+  },
+
+  // Redraw the card as a picture. What gets forwarded into a chat is this
+  // image, so the lime slab and the code travel together — a bare QR would
+  // arrive on a stranger's screen with nothing saying Roots on it.
+  //
+  // Falls back to saving the code on its own if any part of the canvas path
+  // fails: a plain QR is worth more than an error toast.
+  async saveCard() {
     const c = this.data.copy;
-    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const fp = `${wx.env.USER_DATA_PATH}/referral-qr-${this.data.code || 'code'}.png`;
-    const fs = wx.getFileSystemManager();
-    const doSave = () => {
-      fs.writeFile({
-        filePath: fp, data: base64, encoding: 'base64',
-        success: () => wx.saveImageToPhotosAlbum({
-          filePath: fp,
-          success: () => wx.showToast({ title: c.toastSaved, icon: 'success' }),
-          // Covers the customer declining the album prompt — a toast, not an
-          // error screen.
-          fail:    () => wx.showToast({ title: c.toastSaveFail, icon: 'none' }),
-        }),
-        fail: () => wx.showToast({ title: c.toastSaveFail, icon: 'none' }),
-      });
-    };
+    if (!this.data.qrPng) return;
+    let filePath;
+    try {
+      filePath = await this.composeCard();
+    } catch (e) {
+      console.warn('[affiliate] card compose failed, saving the bare code:', e && e.message);
+      try { filePath = await this.qrToFile(); }
+      catch (e2) { return wx.showToast({ title: c.toastSaveFail, icon: 'none' }); }
+    }
+    this.saveToAlbum(filePath);
+  },
+
+  // Draw the card offscreen and hand back a temp file path.
+  composeCard() {
+    return new Promise((resolve, reject) => {
+      wx.createSelectorQuery().in(this).select('#cardCanvas')
+        .fields({ node: true, size: true })
+        .exec(async (res) => {
+          const node = res && res[0] && res[0].node;
+          if (!node) return reject(new Error('no_canvas_node'));
+
+          let qrPath;
+          try { qrPath = await this.qrToFile(); } catch (e) { return reject(e); }
+
+          // The card's own proportions, in the same rpx figures the WXSS uses,
+          // scaled up to a size worth sending: 662rpx wide card -> 1080px.
+          const S = 1080 / 662;
+          const px = (rpx) => rpx * S;
+          const BORDER = px(3), QR = px(400);
+          const W = px(662);
+          const H = px(28) + px(23 * 1.2) + px(24) + QR + px(20) + px(64) + px(8) + px(37) + px(32);
+
+          const ctx = node.getContext('2d');
+          node.width = W;
+          node.height = H;
+
+          // Lime slab + ink keyline — the part that says Roots.
+          ctx.fillStyle = '#CCD900';
+          ctx.fillRect(0, 0, W, H);
+          ctx.strokeStyle = '#1a1a17';
+          ctx.lineWidth = BORDER * 2;
+          ctx.strokeRect(0, 0, W, H);
+
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          let y = px(28);
+
+          // Label — tracked small caps, forest on lime.
+          ctx.fillStyle = '#365329';
+          ctx.font = `${px(23)}px "Toni Grotesk", sans-serif`;
+          this.drawTracked(ctx, c.cardLbl, W / 2, y, px(23) * 0.22);
+          y += px(23 * 1.2) + px(24);
+
+          const img = node.createImage();
+          img.onload = () => {
+            ctx.drawImage(img, (W - QR) / 2, y, QR, QR);
+            y += QR + px(20);
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1a1a17';
+            ctx.font = `${px(64)}px "Bear Serif", serif`;
+            ctx.fillText(this.data.code || '', W / 2, y);
+            y += px(64) + px(8);
+
+            const foot = this.data.cardFootResolved;
+            if (foot) {
+              ctx.fillStyle = '#365329';
+              ctx.font = `${px(25)}px "Aleo", serif`;
+              ctx.fillText(foot, W / 2, y);
+            }
+
+            wx.canvasToTempFilePath({
+              canvas: node,
+              success: (r) => resolve(r.tempFilePath),
+              fail: reject,
+            });
+          };
+          img.onerror = () => reject(new Error('qr_image_load_failed'));
+          img.src = qrPath;
+        });
+    });
+  },
+
+  saveToAlbum(filePath) {
+    const c = this.data.copy;
+    const doSave = () => wx.saveImageToPhotosAlbum({
+      filePath,
+      success: () => wx.showToast({ title: c.toastSaved, icon: 'success' }),
+      // Covers the customer declining the album prompt — a toast, not an
+      // error screen.
+      fail: () => wx.showToast({ title: c.toastSaveFail, icon: 'none' }),
+    });
     // A previously-refused album permission never re-prompts on its own; send
     // the customer to the settings sheet once, then retry.
     wx.getSetting({
       success: (s) => {
         if (s.authSetting && s.authSetting['scope.writePhotosAlbum'] === false) {
-          wx.openSetting({ success: () => doSave() });
+          wx.openSetting({ success: doSave });
         } else { doSave(); }
       },
       fail: doSave,
     });
   },
+
 
   onApplyInput(e) {
     this.setData({
