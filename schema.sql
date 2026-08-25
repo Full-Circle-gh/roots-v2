@@ -448,7 +448,8 @@ CREATE TABLE IF NOT EXISTS ingredient_cost_skips (
   po_id         INTEGER,
   -- One of a fixed set, stored raw so each can be counted on its own:
   -- no_pack_contents | unit_mismatch | unsupported_recipe_unit |
-  -- no_pack_size | no_price. Display text lives in the Alerts page.
+  -- no_pack_size | no_price | marked_free | source_recipe_linked.
+  -- Display text lives in the Alerts page.
   reason        TEXT NOT NULL,
   line_unit     TEXT,            -- the unit written on the PO line
   line_price    REAL,            -- the price we declined to write

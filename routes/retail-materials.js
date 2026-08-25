@@ -91,7 +91,14 @@ function readBody(b) {
 // cost_per_unit is DERIVED, never taken from the client. deriveCostPerUnit
 // returns null when no divisor can be defended — and null means write nothing,
 // not zero: storing 0 would erase a good cost.
+//
+// A material linked to the recipe that makes it (§29) is derived from that
+// recipe instead, by the recompute pass — not from a buy price it does not
+// really have. Editing pack size or buy price on such a row must leave its
+// cost alone rather than quietly re-deriving it from purchase fields that
+// mean nothing for a made thing.
 function costFor(row, existingCpu) {
+  if (row && row.source_recipe_id) return existingCpu || 0;
   const { cpu } = deriveCostPerUnit(row, row.buy_price);
   return cpu === null ? (existingCpu || 0) : cpu;
 }
@@ -221,7 +228,11 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
       WHERE id=?`)
       .run(b.name_en, b.name_cn, b.sku, b.category, b.unit, b.buy_unit, b.buy_pack_size,
            b.pack_contents_qty, b.pack_contents_unit,
-           costFor(b, existing.cost_per_unit), b.buy_price, b.supplier,
+           // readBody() deliberately never reads source_recipe_id from the
+           // client — a link is not something a material save gets to set — so
+           // the stored value is carried in here for costFor()'s guard to see.
+           costFor({ ...b, source_recipe_id: existing.source_recipe_id }, existing.cost_per_unit),
+           b.buy_price, b.supplier,
            b.allergens, b.notes, b.accounting_category, b.item_kind, b.free_by_design,
            req.params.id);
     // Price history + the >5% alert, exactly as routes/ingredients.js does it.

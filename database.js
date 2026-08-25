@@ -418,6 +418,40 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('seed_item_kind_other_v1');
   }
 } catch (e) { console.error('[migration seed_item_kind_other_v1]', e); }
+// Nested recipes (§29) — a material whose real cost comes from the recipe
+// that makes it, not a purchase price. Nullable: only a made thing is linked;
+// every purchased ingredient stays exactly as it is, unmarked. A recipe backs
+// at most one material — the partial unique index (below) enforces "one
+// record, one identity" rather than leaving it a convention.
+addColumn('ingredients', 'source_recipe_id', 'INTEGER REFERENCES recipes(id)');
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ingredients_source_recipe
+             ON ingredients(source_recipe_id) WHERE source_recipe_id IS NOT NULL`);
+} catch (e) { console.error('[index idx_ingredients_source_recipe]', e); }
+// Link the 27 rows the §29 addendum audit human-confirmed as made, not the
+// naive name/SKU match that found them. HARDCODED ON PURPOSE: 13 of the 40
+// name/SKU collisions that audit started from needed a human override of that
+// exact heuristic (Sumac, seven supplier-sourced powders, Noodle/Beet salad
+// dressing among them) — re-matching by name/SKU at link time would silently
+// overwrite those judgment calls with the thing the audit exists to not
+// trust. This sets source_recipe_id only; it does not touch cost_per_unit,
+// buy_price, or any other column — those are still whatever they were before
+// linking until the (separate, reviewed) recompute pass runs.
+try {
+  const ranLink = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('link_made_materials_v1');
+  if (!ranLink) {
+    // [ingredient_id, recipe_id] — docs/tacet-consolidation-decisions.md §29 addendum.
+    const LINKS = [
+      [239, 57], [575, 19], [623, 37], [616, 92], [617, 40], [613, 62], [620, 45],
+      [612, 11], [621, 44], [619, 38], [624, 93], [615, 21], [622, 46], [572, 15],
+      [574, 16], [581, 24], [578, 25], [587, 36], [586, 50], [590, 51], [584, 53],
+      [588, 54], [589, 58], [591, 61], [603, 86], [618, 94], [627, 103],
+    ];
+    const link = db.prepare('UPDATE ingredients SET source_recipe_id = ? WHERE id = ? AND source_recipe_id IS NULL');
+    for (const [ingredientId, recipeId] of LINKS) link.run(recipeId, ingredientId);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('link_made_materials_v1');
+  }
+} catch (e) { console.error('[migration link_made_materials_v1]', e); }
 // Payment methods used on the supplier form. Stored in the editable
 // categories table so admin can add/remove options without a code change.
 try {

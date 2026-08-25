@@ -23815,6 +23815,7 @@ function _alertKitchenRows(rows) {
 function _alertCostSkipRows(rows) {
   const REASON = {
     marked_free:             { en: 'Marked free by design — price not written', cn: '已标记无需成本：未写入价格' },
+    source_recipe_linked:    { en: 'Made here — cost comes from its recipe', cn: '自制物料：成本来自其配方' },
     no_pack_contents:        { en: 'Pack contents not filled in',     cn: '未填写每包含量' },
     unit_mismatch:           { en: 'Order unit ≠ item buy unit',      cn: '采购单位与物料单位不一致' },
     unsupported_recipe_unit: { en: 'Recipe unit is not g / ml / pcs', cn: '配方单位不是 克/毫升/件' },
@@ -26858,6 +26859,7 @@ async function _alertPushPollInner() {
       body: `${s.ingredient_name || 'Item'} — ${s.ingredient_sku ? '['+s.ingredient_sku+'] ' : ''}${({
         unit_mismatch:           'order unit ≠ item buy unit',
         marked_free:             'marked free by design — price not written',
+        source_recipe_linked:    'made here — cost comes from its recipe',
         no_pack_contents:        'pack contents not filled in',
         unsupported_recipe_unit: 'recipe unit is not g / ml / pcs',
         no_pack_size:            'pack size missing',
