@@ -48,7 +48,9 @@
         <view class="share share-moments f-gothic tap" bindtap="shareTimeline">
           <text>{{copy.moments}}</text>
         </view>
-        <view class="share share-more f-gothic tap" bindtap="showQr">⊞</view>
+        <view class="share share-qr f-gothic tap" bindtap="showQr">
+          <text>{{copy.qr}}</text>
+        </view>
       </view>
     </view>
 
@@ -111,16 +113,27 @@
 
   </block>
 
-  <!-- QR modal -->
+  <!-- Mini-program code modal. The image is WeChat's own 小程序码 for this
+       customer's referral code — scanning it opens the app, not a webpage.
+       show-menu-by-longpress keeps WeChat's "save / send to friend" sheet
+       available on the image alongside the explicit SAVE IMAGE button. -->
   <view wx:if="{{showQrModal}}" class="modal-backdrop" bindtap="closeQr">
     <view class="modal" catchtap>
-      <view class="modal-kicker f-toni">{{copy.shareTitle}}</view>
+      <view class="modal-kicker f-toni">{{copy.qrTitle}}</view>
       <view class="modal-title f-bear">{{shareBodyResolved}}</view>
+
+      <view wx:if="{{qrLoading}}" class="modal-qr-state f-aleo">{{copy.qrLoading}}</view>
+      <view wx:elif="{{qrError}}" class="modal-qr-state modal-qr-err f-aleo">{{qrError}}</view>
+      <image wx:elif="{{qrPng}}" class="modal-qr" src="{{qrPng}}" mode="aspectFit" show-menu-by-longpress></image>
+
+      <view class="modal-hint f-aleo">{{copy.qrHint}}</view>
       <view class="modal-code f-bear">{{code}}</view>
+
       <view class="modal-actions">
+        <view wx:if="{{qrPng}}" class="modal-btn f-gothic tap" bindtap="saveQr">{{copy.saveImage}}</view>
         <view class="modal-btn f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
-        <view class="modal-btn f-gothic tap" bindtap="closeQr">{{copy.close}}</view>
       </view>
+      <view class="modal-btn modal-btn-ghost f-gothic tap" bindtap="closeQr">{{copy.close}}</view>
     </view>
   </view>
 

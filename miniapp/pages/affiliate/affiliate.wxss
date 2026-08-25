@@ -144,11 +144,11 @@
 }
 .share-wechat { background: #1AAD19; color: #fff; }
 .share-moments { background: var(--ink); color: #fff; }
-.share-more {
-  flex: 0 0 80rpx;
+/* Third, quieter affordance: outlined rather than filled, so WeChat (green)
+   and Moments (ink) keep the primary weight in the row. */
+.share-qr {
   background: transparent;
   color: var(--ink);
-  font-size: calc(32rpx * var(--font-scale));
 }
 
 /* How it works */
@@ -372,6 +372,11 @@
   margin: 0 44rpx;
   width: 600rpx;
   padding: 36rpx 32rpx;
+  /* Code + hint + three buttons is a tall stack, and --font-scale can push it
+     past a short screen. Scroll rather than clip CLOSE off the bottom. */
+  max-height: 86vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 .modal-kicker {
   font-size: calc(20rpx * var(--font-scale));
@@ -384,11 +389,49 @@
   line-height: 1.1;
   margin-top: 8rpx;
 }
+/* The 小程序码 itself. WeChat draws it on white with its own quiet margin;
+   the plate keeps that margin intact against the modal's cream, which
+   scanners need. */
+.modal-qr {
+  display: block;
+  width: 440rpx;
+  height: 440rpx;
+  margin: 28rpx auto 0;
+  background: #fff;
+  border: 3rpx solid var(--ink);
+  box-sizing: border-box;
+}
+/* Loading / failed stand-in, sized like the image so the modal doesn't jump
+   when the code lands. */
+.modal-qr-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 440rpx;
+  height: 440rpx;
+  margin: 28rpx auto 0;
+  padding: 0 32rpx;
+  background: var(--oat);
+  border: 3rpx dashed var(--ink);
+  box-sizing: border-box;
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--forest);
+}
+.modal-qr-err { color: var(--berry); }
+.modal-hint {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--forest);
+  text-align: center;
+  margin-top: 16rpx;
+}
 .modal-code {
   font-family: var(--f-bear);
   font-size: calc(56rpx * var(--font-scale));
   line-height: 1;
-  margin: 28rpx 0 28rpx;
+  margin: 24rpx 0 28rpx;
   background: var(--lime);
   padding: 20rpx 24rpx;
   text-align: center;
@@ -405,4 +448,12 @@
   text-align: center;
   font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.08em;
+  box-sizing: border-box;
+}
+/* Dismiss sits below the two share actions and must not compete with them. */
+.modal-btn-ghost {
+  margin-top: 12rpx;
+  background: transparent;
+  color: var(--ink);
+  border: 3rpx solid var(--ink);
 }

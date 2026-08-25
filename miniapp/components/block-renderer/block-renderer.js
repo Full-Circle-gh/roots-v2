@@ -1410,7 +1410,7 @@ Component({
           }
           const defaultTitle = rewardThem > 0
             ? (en ? `Get ¥${rewardYou}. Give ¥${rewardThem}.` : `你得 ¥${rewardYou}，好友得 ¥${rewardThem}。`)
-            : (en ? `Get ¥${rewardYou} per friend.` : `每位好友 ¥${rewardYou}。`);
+            : (en ? `Get ¥${rewardYou} on their first order.` : `好友首单 ¥${rewardYou}。`);
           // Repeat-order revenue share — only worth a line when the admin has
           // actually turned it on (rate > 0).
           const lifetimeLine = lifeRate > 0
@@ -1422,7 +1422,7 @@ Component({
             view,
             kicker:     lang.pick(b.kicker_en, b.kicker_cn, L) || (en ? 'REFER A FRIEND' : '推广计划'),
             title:      lang.pick(b.title_en,  b.title_cn,  L) || defaultTitle,
-            subtitle:   lang.pick(b.subtitle_en, b.subtitle_cn, L) || (en ? 'Share your code — when a friend orders, you both win.' : '分享邀请码,好友下单后双方各得奖励。'),
+            subtitle:   lang.pick(b.subtitle_en, b.subtitle_cn, L) || (en ? 'Share your code — when a friend places their first order, you both win.' : '分享邀请码,好友首单后双方各得奖励。'),
             code,
             codePlaceholder: en ? '——' : '——',
             codeLabel:  en ? 'YOUR CODE' : '邀请码',
@@ -1437,7 +1437,7 @@ Component({
             statHeadline: en ? `¥${earnedNum.toFixed(0)}` : `¥${earnedNum.toFixed(0)}`,
             statSubline:  hasActivity
               ? (en ? `from ${invitedNum} friend${invitedNum === 1 ? '' : 's'}` : `来自 ${invitedNum} 位好友`)
-              : (en ? `¥${rewardYou} per friend who orders` : `每位下单的好友 ¥${rewardYou}`),
+              : (en ? `¥${rewardYou} on a friend’s first order` : `好友首单 ¥${rewardYou}`),
             statCta:    en ? 'INVITE A FRIEND →' : '邀请好友 →',
             // Receipt-view specific decorations
             receiptStub: en ? 'ROOTS · REFER' : 'ROOTS · 推广',

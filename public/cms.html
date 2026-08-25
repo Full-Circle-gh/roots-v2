@@ -8401,7 +8401,7 @@ function makeBlock(type) {
         // Fill these in only to override the auto-generated copy.
         title_en: '', title_cn: '',
         subtitle_en: 'Share your code — when a friend orders, you both win.',
-        subtitle_cn: '分享邀请码,好友下单后双方各得奖励。',
+        subtitle_cn: '分享邀请码,好友首单后双方各得奖励。',
         bg_color: 'lime-leaf', fg_color: 'ink',
         accent_color: 'ink',
         cta_label_en: 'OPEN', cta_label_cn: '查看详情',
@@ -10288,7 +10288,7 @@ function renderBlockBody(b) {
       const afxLifeMonths = Number(afx.lifetimeMonths) || 0;
       const afxDefaultTitle = afxRewardThem > 0
         ? (state.lang === 'cn' ? `你得 ¥${afxRewardYou}，好友得 ¥${afxRewardThem}。` : `Get ¥${afxRewardYou}. Give ¥${afxRewardThem}.`)
-        : (state.lang === 'cn' ? `每位好友 ¥${afxRewardYou}。` : `Get ¥${afxRewardYou} per friend.`);
+        : (state.lang === 'cn' ? `好友首单 ¥${afxRewardYou}。` : `Get ¥${afxRewardYou} on their first order.`);
       // Respects an admin-authored title/subtitle override; otherwise mirrors
       // the current deal so the preview updates the moment settings change.
       const titleHtml = biLabel(t.en, t.cn) || escapeHtml(afxDefaultTitle);

@@ -1680,9 +1680,9 @@
     var kicker = pick(b.kicker_en, b.kicker_cn) || (en ? 'REFER A FRIEND' : '推广计划');
     var defaultTitle = rewardThem > 0
       ? (en ? 'Get ¥' + rewardYou + '. Give ¥' + rewardThem + '.' : '你得 ¥' + rewardYou + '，好友得 ¥' + rewardThem + '。')
-      : (en ? 'Get ¥' + rewardYou + ' per friend.' : '每位好友 ¥' + rewardYou + '。');
+      : (en ? 'Get ¥' + rewardYou + ' on their first order.' : '好友首单 ¥' + rewardYou + '。');
     var title = pick(b.title_en, b.title_cn) || defaultTitle;
-    var subtitle = pick(b.subtitle_en, b.subtitle_cn) || (en ? 'Share your code — when a friend orders, you both win.' : '分享邀请码,好友下单后双方各得奖励。');
+    var subtitle = pick(b.subtitle_en, b.subtitle_cn) || (en ? 'Share your code — when a friend places their first order, you both win.' : '分享邀请码,好友首单后双方各得奖励。');
     // Repeat-order revenue share — only worth a line when the admin has
     // actually turned it on (rate > 0).
     var lifetimeLine = lifeRate > 0
@@ -1720,7 +1720,7 @@
         '<div class="sb-aff-stat-num">¥' + earned.toFixed(0) + '</div>' +
         '<div class="sb-aff-stat-sub">' + escapeHtml(hasActivity
           ? (en ? 'from ' + invited + ' friend' + (invited === 1 ? '' : 's') : '来自 ' + invited + ' 位好友')
-          : (en ? '¥' + rewardYou + ' per friend who orders' : '每位下单的好友 ¥' + rewardYou)) + '</div>' +
+          : (en ? '¥' + rewardYou + ' on a friend’s first order' : '好友首单 ¥' + rewardYou)) + '</div>' +
         (!enabled ? '<div class="sb-aff-stat-disabled">' + disabledMsg + '</div>'
           : code ? '<div class="sb-aff-stat-code-pill">' + escapeHtml(code) + '</div>' +
             '<div class="sb-aff-stat-actions">' + copyBtn('sb-aff-stat-copy') + shareBtn('sb-aff-stat-share') + '</div>'

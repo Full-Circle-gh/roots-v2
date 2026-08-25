@@ -27,8 +27,12 @@ const COPY = {
     kicker:        'AFFILIATE',
     title1:        'Plant seeds.',
     title2:        'Reap rewards',
-    tagline:       '¥{you} for you, ¥{them} for them. Every friend that orders.',
-    taglineSolo:   '¥{you} for every friend that orders.',
+    // The reward fires ONCE, on the invited friend's FIRST paid order —
+    // creditReferralReward voids the referral outright if they had already
+    // bought before. Copy that implies "every order" or "any friend" promises
+    // money that can never arrive.
+    tagline:       '¥{you} for you, ¥{them} for them — on their first order.',
+    taglineSolo:   '¥{you} when a friend places their first order.',
     earned:        'EARNED',
     invited:       'INVITED',
     joined:        'JOINED',
@@ -36,11 +40,12 @@ const COPY = {
     copy:          'COPY',
     wechat:        'WECHAT',
     moments:       'MOMENTS',
+    qr:            'QR CODE',
     how:           'HOW IT WORKS',
     how1:          'Share',
     how1sub:       'Send your code',
     how2:          'They order',
-    how2sub:       'Friend joins + orders',
+    how2sub:       'Their first order',
     how3:          'You earn',
     how3sub:       '¥{r} to your wallet',
     yourInvites:   'YOUR INVITES',
@@ -52,8 +57,13 @@ const COPY = {
     disabledTitle: 'Refer-a-friend is paused.',
     disabledBody:  'Our affiliate program is taking a short break. Check back soon — we will let you know when it returns.',
     shareTitle:    'INVITE FRIENDS',
-    shareBody:     'Share this code with a friend. They get ¥{them}, you get ¥{you} when they order.',
-    shareBodySolo: 'Share this code with a friend. You get ¥{you} when they order.',
+    shareBody:     'Share this code with a friend. They get ¥{them}, you get ¥{you} on their first order.',
+    shareBodySolo: 'Share this code with a friend. You get ¥{you} on their first order.',
+    qrTitle:       'YOUR QR CODE',
+    qrHint:        'A friend scans this in WeChat. The app opens for them with your code already applied — they never have to type it.',
+    qrLoading:     'Drawing your code…',
+    qrFailed:      "Couldn't draw your code. Pull down to refresh and try again.",
+    saveImage:     'SAVE IMAGE',
     close:         'CLOSE',
     statusJoined:  'JOINED · ¥{r}',
     statusOrdered: 'ORDERED · ¥{r}',
@@ -61,6 +71,8 @@ const COPY = {
     toastCopied:   'Code copied',
     toastApplied:  'Code applied',
     toastShareSoon: 'Tap "..." and pick Moments to share.',
+    toastSaved:     'Saved to photos',
+    toastSaveFail:  "Couldn't save the image",
     errAlreadyReferred: 'You already applied a code.',
     errNotFound:        'Code not found.',
     errCannotSelf:      "That's your own code.",
@@ -72,8 +84,8 @@ const COPY = {
     kicker:        '推广计划',
     title1:        '种下种子,',
     title2:        '收获奖励',
-    tagline:       '推荐好友下单,你得 ¥{you},TA 也得 ¥{them}。',
-    taglineSolo:   '每位好友下单,你得 ¥{you}。',
+    tagline:       '好友首单,你得 ¥{you},TA 得 ¥{them}。',
+    taglineSolo:   '好友完成首单,你得 ¥{you}。',
     earned:        '已赚',
     invited:       '邀请',
     joined:        '加入',
@@ -81,11 +93,12 @@ const COPY = {
     copy:          '复制',
     wechat:        '微信',
     moments:       '朋友圈',
+    qr:            '二维码',
     how:           '流程',
     how1:          '分享',
     how1sub:       '把邀请码发给朋友',
     how2:          '下单',
-    how2sub:       '朋友注册并下单',
+    how2sub:       '好友注册并完成首单',
     how3:          '获奖',
     how3sub:       '到账 ¥{r}',
     yourInvites:   '我的邀请',
@@ -97,8 +110,13 @@ const COPY = {
     disabledTitle: '推广计划暂停中。',
     disabledBody:  '我们的推广计划暂时关闭,稍后会重新开放。',
     shareTitle:    '邀请好友',
-    shareBody:     '把邀请码发给朋友,TA 得 ¥{them},TA 下单后你得 ¥{you}。',
-    shareBodySolo: '把邀请码发给朋友,TA 下单后你得 ¥{you}。',
+    shareBody:     '把邀请码发给朋友,TA 得 ¥{them},TA 完成首单后你得 ¥{you}。',
+    shareBodySolo: '把邀请码发给朋友,TA 完成首单后你得 ¥{you}。',
+    qrTitle:       '我的二维码',
+    qrHint:        '朋友用微信扫码即可进入小程序,邀请码自动生效,无需手动输入。',
+    qrLoading:     '正在生成…',
+    qrFailed:      '生成失败,请下拉刷新后重试。',
+    saveImage:     '保存图片',
     close:         '关闭',
     statusJoined:  '加入 · ¥{r}',
     statusOrdered: '已下单 · ¥{r}',
@@ -106,6 +124,8 @@ const COPY = {
     toastCopied:   '已复制',
     toastApplied:  '邀请码已应用',
     toastShareSoon: '点右上角"..."分享到朋友圈',
+    toastSaved:     '已保存到相册',
+    toastSaveFail:  '保存失败',
     errAlreadyReferred: '你已应用过邀请码。',
     errNotFound:        '邀请码不存在。',
     errCannotSelf:      '不能填自己的邀请码。',
@@ -132,6 +152,12 @@ Page({
     stats: { earned: '0.00', total_invites: 0, joined: 0, converted: 0 },
     invites: [],
     showQrModal: false,
+    // The mini-program code is minted by WeChat, so it costs a round trip —
+    // fetched the first time the customer opens the modal, then kept for the
+    // life of the page.
+    qrPng: '',
+    qrLoading: false,
+    qrError: '',
     how3subResolved: '',
     taglineResolved: '',
     shareBodyResolved: '',
@@ -238,12 +264,57 @@ Page({
     wx.showToast({ title: this.data.copy.toastShareSoon, icon: 'none', duration: 2500 });
   },
 
-  showQr() {
+  async showQr() {
     this.setData({ showQrModal: true });
+    if (this.data.qrPng || this.data.qrLoading) return;
+    this.setData({ qrLoading: true, qrError: '' });
+    try {
+      const d = await api.get('/api/retail/affiliate/qr');
+      this.setData({ qrPng: d.qr || '', qrLoading: false });
+    } catch (e) {
+      // Includes the tenant having no WeChat credentials yet (501). Either
+      // way there is no code to show, so say so instead of spinning.
+      this.setData({ qrLoading: false, qrError: this.data.copy.qrFailed });
+    }
   },
 
   closeQr() {
     this.setData({ showQrModal: false });
+  },
+
+  // Write the data-URL PNG to the sandbox, then hand that file to the album.
+  // Same shape as the Alipay payment QR (pages/alipay-pay) — wx has no "save
+  // this base64 string" call, a real file path is mandatory.
+  saveQr() {
+    const dataUrl = this.data.qrPng;
+    if (!dataUrl) return;
+    const c = this.data.copy;
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const fp = `${wx.env.USER_DATA_PATH}/referral-qr-${this.data.code || 'code'}.png`;
+    const fs = wx.getFileSystemManager();
+    const doSave = () => {
+      fs.writeFile({
+        filePath: fp, data: base64, encoding: 'base64',
+        success: () => wx.saveImageToPhotosAlbum({
+          filePath: fp,
+          success: () => wx.showToast({ title: c.toastSaved, icon: 'success' }),
+          // Covers the customer declining the album prompt — a toast, not an
+          // error screen.
+          fail:    () => wx.showToast({ title: c.toastSaveFail, icon: 'none' }),
+        }),
+        fail: () => wx.showToast({ title: c.toastSaveFail, icon: 'none' }),
+      });
+    };
+    // A previously-refused album permission never re-prompts on its own; send
+    // the customer to the settings sheet once, then retry.
+    wx.getSetting({
+      success: (s) => {
+        if (s.authSetting && s.authSetting['scope.writePhotosAlbum'] === false) {
+          wx.openSetting({ success: () => doSave() });
+        } else { doSave(); }
+      },
+      fail: doSave,
+    });
   },
 
   onApplyInput(e) {

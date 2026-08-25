@@ -216,6 +216,10 @@
   .cs-qr-hours{font-size:13px;color:#9b9285;margin-top:6px;}
   .cs-qr-img{width:220px;height:220px;max-width:72vw;max-height:72vw;object-fit:contain;display:block;margin:18px auto 10px;background:#f7f3ee;border-radius:10px;}
   .cs-qr-hint{font-size:12px;color:#9b9285;}
+  /* Referral popup extras (renderAffiliate) — the customer-service QR shows no
+     code under its image, this one does. */
+  .cs-qr-code{font-family:var(--bf-bear);font-size:22px;line-height:1;color:#1a1a17;background:var(--lime);border:2px solid var(--ink);padding:10px 12px;margin:0 0 10px;word-break:break-all;}
+  .cs-qr-wait{display:flex;align-items:center;justify-content:center;text-align:center;width:220px;height:220px;max-width:72vw;max-height:72vw;margin:18px auto 10px;padding:0 16px;background:#f7f3ee;border-radius:10px;font-size:12px;line-height:1.45;color:#9b9285;box-sizing:border-box;}
   .cs-qr-close{margin-top:16px;padding:13px 0;font-family:var(--bf-toni);font-weight:700;font-size:14px;letter-spacing:.04em;color:var(--forest);border-top:1px solid rgba(0,0,0,.08);cursor:pointer;}
 
   @media(max-width:820px){
@@ -3359,7 +3363,7 @@ async function renderMe(){
     addresses: addrPreview||(cn?'点击添加地址':'Tap to add an address'),
     wallet: '¥'+balance.toFixed(2)+' · '+points+(cn?' 积分':' Points'),
     topup: cn?'充值得积分，余额随时用':'Add credit, earn bonus points',
-    affiliate: affThem>0?(cn?`你得 ¥${affYou}，好友得 ¥${affThem}`:`¥${affYou} for you, ¥${affThem} for them`):(cn?`每位好友下单，你得 ¥${affYou}`:`¥${affYou} per friend who orders`),
+    affiliate: affThem>0?(cn?`你得 ¥${affYou}，好友得 ¥${affThem}`:`¥${affYou} for you, ¥${affThem} for them`):(cn?`好友首单，你得 ¥${affYou}`:`¥${affYou} on a friend’s first order`),
     coupons: coupons>0?(coupons+(cn?' 张可用':' active')):'',
     invoices:'',
     favorites: favCount+(cn?' 件已收藏':' saved'),
@@ -4008,17 +4012,17 @@ async function renderAffiliate(){
   const box=v.querySelector('.sp');
   if(!d||d.enabled===false){ box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend','')+`<div class="sp-empty">${cn?'推广计划暂未开放':'The referral program isn’t live yet'}</div>`; return; }
   const st=d.stats||{}; const you=Number(d.reward_per_order)||0, them=Number(d.reward_referee)||0;
-  const tagline=them>0?(cn?`你得 ¥${you}，好友得 ¥${them}`:`¥${you} for you, ¥${them} for them`):(cn?`每位下单好友，你得 ¥${you}`:`¥${you} per friend who orders`);
+  const tagline=them>0?(cn?`你得 ¥${you}，好友得 ¥${them}`:`¥${you} for you, ¥${them} for them`):(cn?`好友首单，你得 ¥${you}`:`¥${you} on a friend’s first order`);
   const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+¥'+(Number(iv.reward_amount)||0).toFixed(0):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
   const youR=String(you);
   const how=`<div class="rf-how"><div class="rf-how-head">${cn?'流程':'HOW IT WORKS'}</div><div class="rf-how-row">`+
     `<div class="rf-how-cell"><div class="rf-how-num">01</div><div class="rf-how-t">${cn?'分享':'Share'}</div><div class="rf-how-sub">${cn?'把邀请码发给朋友':'Send your code'}</div></div>`+
-    `<div class="rf-how-cell"><div class="rf-how-num">02</div><div class="rf-how-t">${cn?'下单':'They order'}</div><div class="rf-how-sub">${cn?'朋友注册并下单':'Friend joins + orders'}</div></div>`+
+    `<div class="rf-how-cell"><div class="rf-how-num">02</div><div class="rf-how-t">${cn?'下单':'They order'}</div><div class="rf-how-sub">${cn?'好友注册并完成首单':'Their first order'}</div></div>`+
     `<div class="rf-how-cell"><div class="rf-how-num">03</div><div class="rf-how-t">${cn?'获奖':'You earn'}</div><div class="rf-how-sub">${cn?('到账 ¥'+youR):('¥'+youR+' to your wallet')}</div></div>`+
     `</div></div>`;
   box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend',tagline)+
     `<div class="rf-stats"><div class="rf-stat"><div class="rf-stat-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="rf-stat-l">${cn?'已赚':'EARNED'}</div></div><div class="rf-stat mid"><div class="rf-stat-v">${Number(st.total_invites)||0}</div><div class="rf-stat-l">${cn?'邀请':'INVITED'}</div></div><div class="rf-stat"><div class="rf-stat-v">${Number(st.converted)||0}</div><div class="rf-stat-l">${cn?'下单':'ORDERED'}</div></div></div>`+
-    (d.code?`<div class="rf-code-card"><div class="rf-code-lbl">${cn?'我的邀请码':'YOUR CODE'}</div><div class="rf-code">${esc(d.code)}</div><div class="rf-share-row"><div class="rf-share" id="afShare">${cn?'分享链接':'SHARE LINK'}</div><div class="rf-share" id="afCopyLink">${cn?'复制链接':'COPY LINK'}</div></div><div class="rf-copycode" id="afCopyCode">${cn?'仅复制邀请码':'COPY CODE ONLY'}</div></div>`:'')+
+    (d.code?`<div class="rf-code-card"><div class="rf-code-lbl">${cn?'我的邀请码':'YOUR CODE'}</div><div class="rf-code">${esc(d.code)}</div><div class="rf-share-row"><div class="rf-share" id="afShare">${cn?'分享':'SHARE'}</div><div class="rf-share" id="afCopyLink">${cn?'复制链接':'COPY LINK'}</div><div class="rf-share" id="afQr">${cn?'二维码':'QR CODE'}</div></div><div class="rf-copycode" id="afCopyCode">${cn?'仅复制邀请码':'COPY CODE ONLY'}</div></div>`:'')+
     how+
     (invites?`<div class="me-section"><div class="me-sec-title">${cn?'我的邀请':'Your invites'}</div><div class="sp-list" style="margin-top:8px">${invites}</div></div>`:'')+
     (!d.referred_by?`<div class="sp-foot"><div class="sp-sub" style="padding:0 0 8px">${cn?'有好友邀请码？':'Got a friend’s code?'}</div><div class="sp-row-in" style="padding:0"><input class="sp-input" id="afCode" placeholder="${cn?'输入邀请码':'Enter code'}"><button class="sp-btn ink" id="afApply">${cn?'应用':'Apply'}</button></div><div class="sp-msg" id="afMsg" style="padding-left:0"></div></div>`:'');
@@ -4033,10 +4037,36 @@ async function renderAffiliate(){
       else { try{ await navigator.clipboard.writeText(refUrl); }catch{} toast(cn?'链接已复制':'Link copied'); } });
     const cl=box.querySelector('#afCopyLink'); if(cl)cl.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(refUrl); }catch{} toast(cn?'链接已复制':'Link copied'); });
     const cc=box.querySelector('#afCopyCode'); if(cc)cc.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(d.code); }catch{} toast(cn?'邀请码已复制':'Code copied'); });
+    const qb=box.querySelector('#afQr'); if(qb)qb.addEventListener('click',()=>afOpenQr(d.code,cn));
   }
   const ap=box.querySelector('#afApply'); if(ap)ap.addEventListener('click',async()=>{ const code=($('#afCode').value||'').trim(); if(!code)return;
     try{ await postJson('/api/retail/affiliate/apply',{code}); toast(cn?'成功！':'Applied!'); renderAffiliate(); }
     catch(e){ const m={already_referred:cn?'你已被推荐':'Already referred',code_not_found:cn?'邀请码不存在':'Code not found',cannot_refer_self:cn?'不能填自己':'Can’t refer yourself',program_disabled:cn?'暂未开放':'Program off',mutual_referral:cn?'对方已邀请你':'Mutual referral'}; $('#afMsg').textContent=m[e.code]||(cn?'应用失败':'Could not apply'); } });
+}
+
+// Referral QR popup. The image is the WeChat 小程序码 for this customer's code
+// — scanning it opens the MINI APP with the referral already attached, so a
+// visitor reading this on a laptop can still hand the code to a phone. Reuses
+// the customer-service QR shell; WeChat mints the image, so it costs a fetch.
+// afQrCache keeps it for the session — the code never changes.
+const afQrCache={};
+async function afOpenQr(code,cn){
+  const bg=document.createElement('div'); bg.className='cs-qr-bg';
+  const hint=cn?'朋友用微信扫码即可进入小程序,邀请码自动生效。长按可保存图片。'
+              :'A friend scans this in WeChat to open the mini app with your code already applied. Long-press to save it.';
+  const body=(inner)=>`<div class="cs-qr-card"><div class="cs-qr-title">${cn?'我的二维码':'Your QR code'}</div>${inner}<div class="cs-qr-code">${esc(code)}</div><div class="cs-qr-hint">${hint}</div><div class="cs-qr-close">${cn?'关闭':'Close'}</div></div>`;
+  bg.innerHTML=body(`<div class="cs-qr-wait">${cn?'正在生成…':'Drawing your code…'}</div>`);
+  bg.addEventListener('click',e=>{ if(e.target===bg||e.target.classList.contains('cs-qr-close')) bg.remove(); });
+  document.body.appendChild(bg);
+  let png=afQrCache[code];
+  if(!png){
+    try{ const r=await api('/api/retail/affiliate/qr'); png=r&&r.qr; if(png) afQrCache[code]=png; }
+    catch(e){ png=''; }
+  }
+  if(!bg.isConnected) return;                       // closed while we waited
+  bg.innerHTML=body(png
+    ?`<img class="cs-qr-img" src="${escAttr(png)}" alt="">`
+    :`<div class="cs-qr-wait">${cn?'生成失败,请稍后重试。':'Couldn’t draw your code. Please try again later.'}</div>`);
 }
 
 // Category badge labels — mirror the mini-app's CAT map so REFUND / REPLY /
