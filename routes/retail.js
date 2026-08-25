@@ -60,6 +60,7 @@ const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-no
 const _emailSender = require('../lib/email-sender'); // credential-gated email for web sign-in codes
 const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web OAuth protocol helpers
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
+const wxaKnockout = require('../lib/wxacode-knockout');  // clears the 小程序码's white logo plate
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
 const { sendOpsAlert } = require('../lib/ops-alert'); // WeCom ops page on auto-shipping-upload failure
 const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every customer-published surface
@@ -17010,6 +17011,97 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
       invites:          affiliateInvitesFor(req.customer.id),
     },
   });
+});
+
+// ── The affiliate's own mini-program code (小程序码) ────────────────────────
+// One customer, one scannable code. A friend scans it in WeChat, the mini app
+// opens at home carrying `scene=r=<CODE>`, and app.js posts that to
+// /api/retail/affiliate/apply below — the SAME endpoint the typed-code box
+// uses. So a scan and a typed code produce one retail_referrals row, one set
+// of guards, and one reward path (creditReferralReward on the first paid
+// order). Nothing downstream needs to know which door the referral came in by.
+//
+// getwxacodeunlimit is quota'd per day and a given code's image never changes,
+// so each one is drawn once and held in memory.
+const _referralQrCache = new Map();   // `${tenantId}:${code}:${env}` → data URL
+const REFERRAL_QR_CACHE_MAX = 2000;
+
+// Which build of the mini program a scanned code opens. WeChat's own default
+// is the released version, which is what a customer-facing code must use —
+// set WECHAT_MINIAPP_ENV_VERSION=trial to test against 体验版 first.
+function miniappEnvVersion() {
+  const v = String(process.env.WECHAT_MINIAPP_ENV_VERSION || '').trim().toLowerCase();
+  return ['release', 'trial', 'develop'].includes(v) ? v : 'release';
+}
+
+// Express 4 leaves a rejected async handler as an unhandled rejection and the
+// request hangs, so EVERY branch here — including the synchronous preamble,
+// where currentTenantId() throws by design on an unidentifiable scope — sits
+// inside the try.
+router.get('/api/retail/affiliate/qr', requireRetailAuth, async (req, res) => {
+  try {
+    const s = affiliateSettings();
+    if (!s.enabled) return res.status(409).json({ success: false, error: 'program_disabled' });
+    // No WeChat credentials (dev / a tenant that hasn't connected yet) — the
+    // client hides the QR affordance rather than showing a broken one.
+    if (getTenantCreds(currentTenantId()).wechat.devMode) {
+      return res.status(501).json({ success: false, error: 'wechat_creds_not_configured' });
+    }
+    const code = ensureReferralCode(req.customer.id);
+    if (!code) return res.status(500).json({ success: false, error: 'no_referral_code' });
+
+    const env = miniappEnvVersion();
+    const key = `${currentTenantId()}:${code}:${env}`;
+    const cached = _referralQrCache.get(key);
+    if (cached) return res.json({ success: true, data: { code, qr: cached } });
+
+    const { resp, json, token } = await wxApiPost('/wxa/getwxacodeunlimit', {
+      // WeChat caps `scene` at 32 chars; `r=` + a referral code is well inside.
+      scene:      `r=${code}`,
+      page:       'pages/home/home',
+      // pages/home/home is registered in app.json, but check_path only passes
+      // against a RELEASED build — leaving it off lets codes be drawn while
+      // testing on a trial build too.
+      check_path: false,
+      env_version: env,
+      width:      430,
+      // Transparent background: the code sits directly on the card's lime
+      // slab, so a baked-in white square would show as a hard edge. WeChat
+      // only honours this by returning a PNG (see the mime sniff below).
+      is_hyaline: true,
+      // ...and with a transparent background WeChat's auto colour is pure
+      // black, which is a shade off every other mark on the page. Pin it to
+      // --ink (#1a1a17) so the code matches the type beside it.
+      auto_color: false,
+      line_color: { r: 26, g: 26, b: 23 },
+    });
+    if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
+    // Success is raw image bytes. A JSON body is always a failure.
+    if (json) {
+      console.error('[affiliate/qr] wxacode refused:', JSON.stringify(json));
+      return res.status(502).json({ success: false, error: 'wxacode_failed', detail: json });
+    }
+    let buf = Buffer.from(await resp.arrayBuffer());
+    // WeChat answers `content-type: image/jpeg` even when is_hyaline made it
+    // send a real RGBA PNG — trusting that header would label transparent
+    // bytes as JPEG. Read the actual magic number instead.
+    const isPng = buf.length > 8 && buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG';
+    const mime  = isPng ? 'image/png' : 'image/jpeg';
+    // is_hyaline clears the OUTER background only; a white disc behind the
+    // centre logo and a white keyline around the WeChat badge both survive it
+    // and would show as patches on the card's lime slab. Returns the buffer
+    // untouched if it can't safely edit the image.
+    if (isPng) buf = wxaKnockout.clearLogoPlate(buf, { r: 26, g: 26, b: 23 });
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    // Crude bound — this only ever holds one small image per active affiliate,
+    // and dropping the lot just means the next scan redraws.
+    if (_referralQrCache.size >= REFERRAL_QR_CACHE_MAX) _referralQrCache.clear();
+    _referralQrCache.set(key, dataUrl);
+    res.json({ success: true, data: { code, qr: dataUrl } });
+  } catch (e) {
+    console.error('[affiliate/qr]', e);
+    res.status(500).json({ success: false, error: 'qr_failed' });
+  }
 });
 
 // Apply a referral code. One-shot per customer; rejected if:

@@ -50,8 +50,11 @@ const COPY_EN = {
   menuMembershipCn: '会员',
   menuAffiliate: 'Refer a friend',
   menuAffiliateCn: '推广计划',
-  affiliateMeta: '¥{you} for you, ¥{them} for them',
-  affiliateMetaSolo: '¥{you} per friend who orders',
+  // .row-meta is a single nowrap line that ellipsis-truncates at roughly 49
+  // latin characters, so the condition is stated short enough to survive a
+  // three-digit reward. Wording matches the affiliate page's own tagline.
+  affiliateMeta: '¥{you} for you, ¥{them} for them — first order',
+  affiliateMetaSolo: '¥{you} on a friend’s first order',
   menuAbout: 'About Roots',
   menuAboutCn: '关于我们',
   aboutMeta: 'Our story',
@@ -120,8 +123,8 @@ const COPY_CN = {
   menuMembershipCn: 'MEMBERSHIP',
   menuAffiliate: '推广计划',
   menuAffiliateCn: 'REFER A FRIEND',
-  affiliateMeta: '你得 ¥{you},好友得 ¥{them}',
-  affiliateMetaSolo: '每位好友下单,你得 ¥{you}',
+  affiliateMeta: '好友首单,你得 ¥{you},TA 得 ¥{them}',
+  affiliateMetaSolo: '好友首单,你得 ¥{you}',
   menuAbout: '关于我们',
   menuAboutCn: 'ABOUT ROOTS',
   aboutMeta: '我们的故事',

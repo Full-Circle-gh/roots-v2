@@ -42,6 +42,9 @@ App({
     this.globalData.sessionStartMs = Date.now();
 
     this.capturePreviewLaunch(options);
+    // Stash a scanned affiliate code before anything async runs, so a slow
+    // config/auth round-trip can't lose it.
+    this.captureReferralLaunch(options);
 
     // Capture the WeChat launch-scene code for traffic attribution.
     track.setScene(options.scene);
@@ -114,6 +117,11 @@ App({
         .catch(e => { console.warn('[onLaunch] silent login failed:', e.message); });
     }
 
+    // 5b. A scanned affiliate code needs a customer to attach to, so it waits
+    //     on auth. On a cold launch from a scan this is the step that registers
+    //     the new customer under the affiliate who owns the code.
+    this.authReady.then(() => this.applyPendingReferral());
+
     // 6. Cart badge from local storage
     cart.updateBadge();
   },
@@ -129,6 +137,13 @@ App({
     track.track(options.path || 'app:show');
 
     diag.setScene(options.scene);
+
+    // Scanning an affiliate's code while the app is already open comes through
+    // here, not onLaunch. Auth is already settled in that case, so it can go
+    // straight out; on a cold start there's no token yet and this no-ops,
+    // leaving onLaunch's authReady hand-off to do it.
+    this.captureReferralLaunch(options);
+    this.applyPendingReferral();
 
     const before = JSON.stringify(this.globalData.preview);
     this.capturePreviewLaunch(options);
@@ -195,11 +210,29 @@ App({
     }
   },
 
+  // Decode the scene string a scanned mini-program code (小程序码) carries.
+  //
+  // At APP level `options.scene` is WeChat's numeric 场景值 (1047 = "scanned a
+  // mini-program code") — the same number track.setScene() records, which is
+  // why it type-guards on `typeof s === 'number'`. The scene STRING the code
+  // was minted with arrives as `options.query.scene`, URL-encoded. Reading it
+  // off `options.scene` yields "1047", which parses to nothing and fails
+  // silently, so both readers below go through here.
+  sceneParams(options) {
+    const raw = options && options.query ? options.query.scene : '';
+    if (!raw) return {};
+    let scene = '';
+    try { scene = decodeURIComponent(String(raw)); } catch (e) { scene = String(raw); }
+    return Object.fromEntries(
+      scene.split('&').map(kv => kv.split('=')).filter(p => p.length === 2)
+    );
+  },
+
   // Read launch options + scene query string and stash preview state on
   // globalData if the right flags are present. Two sources are accepted:
   //   1. options.query.preview_draft = '1' + options.query.preview_token + page
   //      — used by DevTools custom-compile (path = pages/index/index?…).
-  //   2. options.scene = 'dp=1&t=TOKEN&p=PAGE'
+  //   2. scene = 'dp=1&t=TOKEN&p=PAGE'
   //      — used by the wxacode/getUnlimited preview QR.
   // Either path → globalData.preview = { draft: true, token, page }.
   capturePreviewLaunch(options) {
@@ -215,11 +248,7 @@ App({
       return;
     }
     // (2) Preview QR scene — short codes to fit the 32-char scene budget
-    const scene = decodeURIComponent(options.scene || '');
-    if (!scene) return;
-    const parts = Object.fromEntries(
-      scene.split('&').map(kv => kv.split('=')).filter(p => p.length === 2)
-    );
+    const parts = this.sceneParams(options);
     if (parts.dp === '1' && typeof parts.t === 'string') {
       this.globalData.preview = {
         draft: true,
@@ -227,6 +256,57 @@ App({
         page:  parts.p || 'home',
       };
     }
+  },
+
+  // Referral capture. Two doorways, one destination:
+  //   • an affiliate's mini-program code → scene `r=CODE` (this is the scan)
+  //   • a shared card or ?ref= link      → options.query.ref
+  // Both are stashed under `pending_ref`; applyPendingReferral() below turns
+  // that into the real referral once a customer record exists. Stashing rather
+  // than posting straight away matters because on a cold launch from a scan
+  // there is no customer yet — wx.login hasn't run.
+  captureReferralLaunch(options) {
+    if (!options || typeof options !== 'object') return;
+    const q = options.query || {};
+    const fromScene = this.sceneParams(options).r || '';
+    const code = String(fromScene || q.ref || '').toUpperCase().slice(0, 32);
+    if (!code) return;
+    try { wx.setStorageSync('pending_ref', code); } catch (e) {}
+  },
+
+  // Apply a stashed referral code. Deliberately posts to the SAME endpoint the
+  // affiliate page's typed-code box uses, so a scan gets the identical guards
+  // (already referred / own code / mutual / program off) and the identical
+  // reward — the friend is registered under the affiliate either way.
+  applyPendingReferral() {
+    let code = '';
+    try { code = wx.getStorageSync('pending_ref') || ''; } catch (e) {}
+    // No token yet → leave it stashed; the next launch (or onShow) retries.
+    if (!code || !this.globalData.token) return Promise.resolve();
+    if (this._applyingRef) return this._applyingRef;
+
+    const cn = this.globalData.lang === 'cn';
+    const clear = () => { try { wx.removeStorageSync('pending_ref'); } catch (e) {} };
+
+    this._applyingRef = api.post('/api/retail/affiliate/apply', { code })
+      .then(() => {
+        clear();
+        wx.showToast({
+          title: cn ? '已通过好友邀请进入' : "Your friend's invite is applied",
+          icon: 'none',
+          duration: 2200,
+        });
+      })
+      .catch((e) => {
+        // These four can never succeed for this customer, so stop carrying the
+        // code around. Anything else (offline, program paused, a 5xx) keeps it
+        // stashed and retries on the next launch.
+        const spent = ['already_referred', 'code_not_found', 'cannot_refer_self', 'mutual_referral'];
+        if (spent.includes(e && e.message)) clear();
+      })
+      .then(() => { this._applyingRef = null; });
+
+    return this._applyingRef;
   },
 
   applyTabBarTheme(tabBarCfg) {
