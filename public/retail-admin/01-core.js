@@ -729,8 +729,52 @@ window.csChannelToggle = async function (ch, isOpenNow) {
     await csLoad();
   } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
-// One store's cell for a channel (the inline row toggle).
+// "3d ago" / "3mo ago" / "never" — local to this confirm dialog, not tied to
+// the dashboard's server-clock age helpers (dashAgeMins reads DASH_OPS, which
+// this page may never have loaded). A one-off confirmation reading the
+// browser's own clock is fine; nothing here is a live, ticking figure.
+function csAgeText(iso) {
+  if (!iso) return cuT('never touched', '从未更新');
+  const t = new Date(String(iso).replace(' ', 'T') + 'Z').getTime();
+  if (!t || isNaN(t)) return cuT('never touched', '从未更新');
+  const days = Math.floor((Date.now() - t) / 86400000);
+  if (days <= 0) return cuT('today', '今天');
+  if (days === 1) return cuT('1 day ago', '1 天前');
+  if (days < 30) return cuT(days + ' days ago', days + ' 天前');
+  const months = Math.round(days / 30);
+  return cuT(months + (months === 1 ? ' month ago' : ' months ago'), months + ' 个月前');
+}
+// One store's cell for a channel (the inline row toggle). Reopening a channel
+// that pushes a full stock snapshot the moment it comes back on (Meituan
+// today) means the operator is about to publish numbers nobody has necessarily
+// just counted — so before that fires, show what's about to go out and how
+// stale the oldest of it is. Always confirmed, with no freshness check of any
+// kind: the dialog is skipped only when the preview comes back with nothing
+// mapped for that store on that channel, because there is nothing to publish.
 window.csCell = async function (ch, storeCode, open) {
+  if (open) {
+    let prev = null;
+    // Short leash on purpose: this dialog is a courtesy, not a gate, and a
+    // courtesy must never make someone stand and wait. 3s (not the app-wide
+    // 20s api() default) so a bad day falls through quietly to the plain
+    // reopen below instead of reading as a broken toggle.
+    try { prev = await api('/api/retail-admin/channel-status/reopen-preview?channel=' + encodeURIComponent(ch) + '&storeCode=' + encodeURIComponent(storeCode), { timeoutMs: 3000 }); }
+    catch (e) { /* preview failing must never block the toggle itself */ }
+    if (prev && prev.count > 0) {
+      const rows = (prev.items || []).map((it) =>
+        `<div>${escapeHtml(it.name)} — ${escapeHtml(csAgeText(it.updatedAt))}</div>`).join('');
+      const more = prev.count > (prev.items || []).length
+        ? `<div>${escapeHtml(cuT(`and ${prev.count - prev.items.length} more`, `另有 ${prev.count - prev.items.length} 项`))}</div>` : '';
+      const body = escapeHtml(cuT(
+        `Reopening will publish current quantities for ${prev.count} product(s). Oldest first:`,
+        `重新开启将发布 ${prev.count} 项商品的当前库存。最久未更新优先：`))
+        + `<div style="margin-top:8px;text-align:left;font-size:13px">${rows}${more}</div>`;
+      if (!(await askConfirm({
+        title: cuT('Publish current stock to this channel?', '将当前库存发布到该渠道？'),
+        body, confirmLabel: cuT('Publish', '发布'), cancelLabel: cuT('Not yet', '暂不'),
+      }))) return;
+    }
+  }
   try { await api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: ch, storeCode, open } }); await csLoad(); }
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };

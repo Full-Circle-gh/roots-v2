@@ -1081,6 +1081,43 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// What reopening a cell is about to publish — read-only, no side effects. Only
+// Meituan pushes a full snapshot on reopen today (csSyncQueueForCell); every
+// other channel currently just flips channel_status with nothing behind it, so
+// this returns an empty preview for those rather than guessing at a shape that
+// doesn't exist yet. No new column, no recount tracking: "how recently
+// touched" reads straight off retail_store_stock.updated_at, the same column
+// every stock edit already writes — a product with no row at all (never
+// touched at this store) sorts first, ahead of any real timestamp, because
+// that is the least trustworthy number of all.
+router.get('/api/retail-admin/channel-status/reopen-preview', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  const { channel, storeCode } = req.query || {};
+  if (!GRID_CHANNELS.includes(channel) || !storeCode) {
+    return res.status(400).json({ success: false, error: 'channel, storeCode required' });
+  }
+  try {
+    if (channel !== 'meituan') return res.json({ success: true, count: 0, items: [] });
+    const rows = db.prepare(`
+      SELECT COALESCE(NULLIF(TRIM(p.name_en), ''), NULLIF(TRIM(p.name_cn), '')) AS name,
+             p.sku, s.updated_at
+        FROM meituan_product_map m
+        LEFT JOIN retail_store_stock s ON s.store_id = m.retail_store_id AND s.product_id = m.product_id
+        LEFT JOIN store_products p ON p.id = m.product_id
+       WHERE m.store_code = ? AND m.sync_enabled = 1 AND m.meituan_name IS NOT NULL
+       ORDER BY (s.updated_at IS NOT NULL), s.updated_at ASC
+    `).all(storeCode);
+    const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '5', 10) || 5, 1), 50);
+    res.json({
+      success: true,
+      count: rows.length,
+      items: rows.slice(0, previewLimit).map((r) => ({ name: r.name || r.sku || '—', sku: r.sku || null, updatedAt: r.updated_at || null })),
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Set one cell (channel × store).
 router.post('/api/retail-admin/channel-status/cell', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
