@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.77
+# Tacet shared-core consolidation — decisions record, v4.78
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-25 · v4.78 — **CHANNEL SYNC GAINS SIX GOVERNING RULES AS §30.** A one-byte typo in a channel mapping sent a live listing's quantity to a four-figure placeholder against a shelf holding three, for two days, on a product selling twelve orders a month, with no alert at any point — and the survey behind it found the same shape in three other places. The six rules are stated as INTENT AND NAME NO IMPLEMENTATION: no table, column, constant, attempt count or function appears in any of them, because the code they were learned from will be replaced and a rule that names an implementation outlives the reason it named it. Their substance: a change is not synced until the channel confirms it, and our own record of a push is evidence of intent rather than of the channel's state; every channel needs a recovery path reaching any state it can enter, so no failure is terminal; a value binding our record to an external system is selected from what that system supplied, never typed and never composed; where the right target or quantity cannot be determined the system refuses visibly rather than substituting a placeholder; an alarm is clearable by whatever raised it, since one only a human with database access can clear gets ignored and takes the real ones with it; and a pending change whose end state is already true is complete whatever its status says. **RULE 3 IS THE SAME PRINCIPLE AS THE LOCKED-VOCABULARY RULE AND SAYS SO** — `docs/tacet-delivery-vocabulary.md` Rules 4 already forbids composing Chinese and requires copying from its tables, and the two are cross-referenced in both directions of reading so a future reader meets one constraint rather than two unrelated ones: copy from the source, never compose. The evidence — file paths, line ranges, the byte diff and the scale figures — is in the new `docs/eleme-findings.md` and deliberately NOT restated here. Related documents moves from §30 to §31; nothing cross-references either number. New rules that reverse no earlier decision, hence a patch. Docs only; no code changed.
 
 2026-08-25 · v4.77 — **§29 gains an addendum: no automatic test separates a legacy MADE row from a legacy BOUGHT row.** A 40-row audit of Roots' name/SKU collisions between `recipes` and `ingredients` — the concrete case §29's "implied materials row" lifecycle question was written for — tried three independent signals (a live kitchen PO line, the ingredient's buy-unit shape, whether its stored cost divides cleanly from a real pack price) against human-confirmed ground truth, and each one produced at least one wrong answer on Roots' own data: a PO-line absence proved nothing (the visible PO history is only a few weeks deep), the buy-unit shape read a schema default as evidence half the time, and the division signature — the best of the three — could not tell a bought pack price from a made recipe's per-portion cost, because both divide the same way. **The rule this leaves behind:** migration tooling for legacy data must present candidates for a human to confirm, never classify and act on its own judgement. Final split for Roots' 40 rows: 27 made, 13 bought, 0 left ambiguous, all by human confirmation. Docs only; no code changed; no `source_recipe_id` added.
 
@@ -3924,9 +3926,27 @@ A concrete instance of the lifecycle question above: Roots' `recipes` and `ingre
 
 **The rule this leaves behind, for this tenant's remaining legacy rows and for any future tenant's migration:** none of these signals is trustworthy as a silent discriminator, including in combination. Migration tooling built on this classification must surface each candidate for a person to confirm and must not act on its own judgement — the three-signal audit above is evidence for that requirement, not a formula that replaces it.
 
-## 30. Related documents
+## 30. Channel sync — what must stay true
+
+Six rules governing any sync between Tacet and an external system a business sells through. They are stated as intent and name no table, column, constant or function on purpose: the implementations they were learned from will be replaced, and a rule that names one outlives the reason it named it. The evidence is in `docs/eleme-findings.md`, dated 2026-08-25; if that document and these rules disagree, the rules stand and the evidence is stale.
+
+1. A CHANGE IS NOT SYNCED UNTIL THE CHANNEL CONFIRMS IT. Our record of what we sent is evidence of our intent, never evidence of the channel's state. Where a channel can be read back, the read-back is the only proof of success.
+
+2. EVERY CHANNEL MUST HAVE A RECOVERY PATH THAT CAN REACH A TARGET FROM ANY STATE IT CAN ENTER, INCLUDING TOTAL FAILURE. No failure may be terminal.
+
+3. A VALUE THAT BINDS OUR RECORD TO AN EXTERNAL SYSTEM MUST BE SELECTED FROM VALUES THAT SYSTEM SUPPLIED. Never typed by a person, never composed by us. THIS IS THE SAME PRINCIPLE AS THE LOCKED-VOCABULARY RULE: `docs/tacet-delivery-vocabulary.md` Rules 4 — *"CN strings are locked here. Never compose new Chinese; copy from these tables"* — applies it to language, and this rule applies it to identity. Copy from the source, never compose. A reader meeting either should read them as one constraint on two surfaces, not two.
+
+4. WHERE THE CORRECT TARGET OR QUANTITY CANNOT BE DETERMINED, THE SYSTEM REFUSES AND SURFACES THE PROBLEM. It never substitutes a placeholder. A visible failure is always preferable to a fabricated value reaching a customer.
+
+5. AN ALARM MUST BE CLEARABLE BY THE MECHANISM THAT RAISED IT. An alarm that only a human with database access can clear will be ignored, and then so will the ones that matter.
+
+6. A PENDING CHANGE WHOSE DESIRED END STATE IS ALREADY TRUE IS COMPLETE, WHATEVER ITS RECORDED STATUS.
+
+## 31. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
+- docs/tacet-delivery-vocabulary.md — locked delivery/fulfilment wording, v1.2, 2026-08-20. Every delivery word on every surface must come from its tables. Its Rules 4 — never compose new Chinese, copy from these tables — is §30 rule 3 applied to language rather than to identity; the two are one principle.
+- docs/eleme-findings.md — the four channel-sync findings from the 2026-08-25 survey, with file paths and line ranges. The evidence behind §30; three of its four findings are not Eleme-specific.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
 - docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
