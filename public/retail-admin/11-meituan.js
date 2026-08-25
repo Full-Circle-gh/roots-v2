@@ -218,6 +218,11 @@
     const waiting = rows.reduce((a, r) => a + Number(r.pending || 0) + Number(r.processing || 0), 0);
     const cn = document.documentElement.dataset.uiLang === 'cn';
     const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + (mtStoreName(r.code, cn) || r.name)).join(' · ');
+    // The waiting tile's own breakdown — pending + processing, same as the total
+    // above it and the per-store rows below. per('pending') alone used to under-
+    // count here, so a store mid-push (processing > 0) showed a smaller number on
+    // the tile than on its own row just underneath.
+    const perWaiting = rows.map(r => (Number(r.pending || 0) + Number(r.processing || 0)) + ' ' + (mtStoreName(r.code, cn) || r.name)).join(' · ');
 
     // Status line (§1.7): live state, sentence case, tabular, " · " between facts.
     const st = document.getElementById('mt-status');
@@ -250,7 +255,7 @@
         tile(cuT('Live on Meituan', '\u5df2\u4e0a\u67b6\u7f8e\u56e2'), live, per('live'), false) +
         tile(cuT('Not matched', '\u672a\u5339\u914d'), att,
              cuT('stock stays frozen until matched', '\u5339\u914d\u524d\u5e93\u5b58\u4e0d\u4f1a\u66f4\u65b0'), att > 0) +
-        tile(cuT('Stock updates waiting', '\u5f85\u63a8\u9001\u5e93\u5b58'), waiting, per('pending'), false, syncBtn);
+        tile(cuT('Stock updates waiting', '\u5f85\u63a8\u9001\u5e93\u5b58'), waiting, perWaiting, false, syncBtn);
     }
 
     // One line per store: state, the one action that unblocks it, and the

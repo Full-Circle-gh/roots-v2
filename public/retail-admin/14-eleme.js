@@ -127,6 +127,9 @@
     const att = active.filter(elNeedsAttention).length;
     const waiting = rows.reduce((a2, r) => a2 + Number(r.pending || 0) + Number(r.processing || 0), 0);
     const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + elStoreName(r)).join(' \u00b7 ');
+    // Same breakdown the total and the per-store rows use \u2014 pending + processing \u2014
+    // so the tile's sub-line never reads lower than a store's own row underneath it.
+    const perWaiting = rows.map(r => (Number(r.pending || 0) + Number(r.processing || 0)) + ' ' + elStoreName(r)).join(' \u00b7 ');
 
     const st = document.getElementById('el-status');
     if (st) {
@@ -159,7 +162,7 @@
         tile(cuT('Live on Eleme', '已上架饿了么'), live, per('live'), false) +
         tile(cuT('Need attention', '待处理'), att,
              cuT('unmatched, or missing a size', '未匹配，或未选规格'), att > 0) +
-        tile(cuT('Stock updates waiting', '待推送库存'), waiting, per('pending'), false, pushBtn);
+        tile(cuT('Stock updates waiting', '待推送库存'), waiting, perWaiting, false, pushBtn);
     }
 
     // One line per store: state, catalogue freshness, and the one action that

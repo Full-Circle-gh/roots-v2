@@ -1034,10 +1034,19 @@ function csSyncQueueForCell(db, storeCode, open) {
 
 function csSetCell(db, channel, storeCode, open, by) {
   if (channel === 'meituan') {
+    // If the new toggle matches the last CONFIRMED on-box state (is_open), there is
+    // nothing left to apply — clear any stale target_open rather than leaving a
+    // command queued that just re-affirms reality. This is what makes an on-then-off
+    // toggle (before the daemon gets to the first one) drop "applying…" immediately,
+    // instead of leaving a no-op command stuck pending — which otherwise reads as
+    // permanently "applying" whenever the daemon can't log in to clear it itself.
+    const cur = db.prepare('SELECT is_open FROM store_business_status WHERE store_code=?').get(storeCode);
+    const noopToggle = cur && cur.is_open != null && cur.is_open === (open ? 1 : 0);
+    const targetOpen = noopToggle ? null : (open ? 1 : 0);
     db.prepare(`INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(store_code) DO UPDATE SET target_open=excluded.target_open, target_by=excluded.target_by, target_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP`)
-      .run(storeCode, open ? 1 : 0, by);
+      .run(storeCode, targetOpen, by);
     try { csSyncQueueForCell(db, storeCode, open); } catch (e) { /* the toggle itself must still land */ }
   } else {
     db.prepare(`INSERT INTO channel_status (channel, store_code, is_open, updated_at, updated_by)
