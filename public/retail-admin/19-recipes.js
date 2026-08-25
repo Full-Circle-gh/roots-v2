@@ -773,19 +773,54 @@
     }
   };
 
+  // §29 step 6 — names the actual consequence of archiving a recipe that
+  // backs a material, the same way the cycle guard names the actual chain
+  // rather than a generic refusal. Archiving a recipe blocks its own rollup
+  // (lib/recipe-rollup.js costOneRecipe reads recipe.is_active), freezing
+  // the material's cost_per_unit at whatever it last was — every OTHER
+  // recipe still consuming that material keeps reading that frozen number
+  // with no signal anything changed unless this dialog says so up front.
+  // A warning, not a block: the operator can still proceed.
+  function archiveMaterialWarning(rec) {
+    const m = rec.backsMaterial;
+    const consumers = (m && m.consumers) || [];
+    const n = consumers.length;
+    const namesEn = consumers.slice(0, 4).map(c => c.name_en).join(', ') + (n > 4 ? `, +${n - 4}` : '');
+    const namesCn = consumers.slice(0, 4).map(c => c.name_cn || c.name_en).join('、') + (n > 4 ? `等 ${n} 个` : '');
+    const cost = m.cost_per_unit > 0 ? `${moneyU(m.cost_per_unit)}/${m.unit || 'g'}` : null;
+    const usedEn = n > 0 ? `, used by ${n} recipe${n === 1 ? '' : 's'}${namesEn ? ' (' + namesEn + ')' : ''}` : '';
+    const usedCn = n > 0 ? `,被 ${n} 个食谱使用${namesCn ? '(' + namesCn + ')' : ''}` : '';
+    const whoEn = n === 0 ? 'nothing uses it yet, but anything that does' : (n === 1 ? 'that recipe' : 'those recipes');
+    const whoCn = n === 0 ? '目前没有食谱使用它,但之后使用它的食谱' : '这些食谱';
+    return {
+      bodyEn: `"${rec.name_en}" supplies the material "${m.name_en}"${usedEn}. Archiving freezes its cost${cost ? ` at ${cost}` : ''} — ${whoEn} will keep using that number until you bring it back.`,
+      bodyCn: `"${rec.name_en}" 是物料 "${m.name_en}" 的产出来源${usedCn}。归档后其成本将冻结${cost ? `为 ${cost}` : ''} —— ${whoCn}会持续使用该数值,直到你恢复该配方。`,
+    };
+  }
+
   window.rcpArchive = async function () {
     if (!_rec || !_rec.id) return;
     const restoring = _rec.is_active === 0;
-    const ok = restoring
-      ? await askConfirm({
-          titleEn: 'Bring this recipe back?', titleCn: '恢复该食谱?',
-          confirmEn: 'Restore', confirmCn: '恢复',
-        })
-      : await askConfirm({
-          titleEn: 'Archive this recipe?', titleCn: '归档该食谱?',
-          bodyEn: 'You can bring it back later.', bodyCn: '之后可以恢复。',
-          confirmEn: 'Archive', confirmCn: '归档', danger: true,
-        });
+    let ok;
+    if (restoring) {
+      ok = await askConfirm({
+        titleEn: 'Bring this recipe back?', titleCn: '恢复该食谱?',
+        confirmEn: 'Restore', confirmCn: '恢复',
+      });
+    } else if (_rec.backsMaterial) {
+      const w = archiveMaterialWarning(_rec);
+      ok = await askConfirm({
+        titleEn: 'Archive this recipe?', titleCn: '归档该食谱?',
+        bodyEn: w.bodyEn, bodyCn: w.bodyCn,
+        confirmEn: 'Archive anyway', confirmCn: '仍然归档', danger: true,
+      });
+    } else {
+      ok = await askConfirm({
+        titleEn: 'Archive this recipe?', titleCn: '归档该食谱?',
+        bodyEn: 'You can bring it back later.', bodyCn: '之后可以恢复。',
+        confirmEn: 'Archive', confirmCn: '归档', danger: true,
+      });
+    }
     if (!ok) return;
     try {
       await api('/api/retail-admin/recipes/' + _rec.id + '/archive', { method: 'PUT', body: { restore: restoring } });

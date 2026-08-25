@@ -39,6 +39,25 @@
   };
   const kindLabel = k => (KIND_LABEL[k] ? KIND_LABEL[k]() : k);
 
+  // §29 step 6 — same reason strings 19-recipes.js's own BLOCK_REASON uses
+  // (lib/recipe-rollup.js costOneRecipe's reason codes, one for one), so a
+  // made material's "why is my cost frozen" reads identically whichever
+  // record it's read from. Kept as its own small copy rather than a shared
+  // import — this file has no module system, only sequential <script> globals.
+  const SRC_BLOCK_REASON = {
+    recipe_archived:     () => T('This recipe is archived.', '该食谱已归档。'),
+    no_ingredient_lines: () => T('This recipe has no ingredient lines yet.', '该食谱尚无原料明细。'),
+    unpriced_lines:       n => T(`${n} ingredient${n === 1 ? '' : 's'} in this recipe ${n === 1 ? 'is' : 'are'} missing a cost.`,
+                                  `该食谱中有 ${n} 项原料缺少成本。`),
+    no_batch_size:       () => T('This recipe has no batch size set.', '该食谱未设置批量大小。'),
+    no_cost_per_unit:    () => T("This recipe's cost can't be worked out right now.", '该食谱的成本暂无法计算。'),
+  };
+  function srcBlockReasonText(block) {
+    const f = SRC_BLOCK_REASON[block.reason];
+    if (!f) return T("This recipe's cost can't be worked out right now.", '该食谱的成本暂无法计算。');
+    return block.reason === 'unpriced_lines' ? f(block.unpriced) : f();
+  }
+
   // Unit menus. Sourced from lib/ingredient-cost.js when it has loaded, so the
   // form can never offer a unit the shared cost maths cannot divide by.
   const COST = () => (typeof window !== 'undefined' && window.RootsIngredientCost) || null;
@@ -253,7 +272,14 @@
   window.matRecordOpen = async function (id) {
     try {
       const j = await api('/api/retail-admin/materials/' + id);
-      _rec = { row: j.data, priceHistory: j.priceHistory || [], purchases: j.purchases || [], derived: j.derived || {} };
+      _rec = {
+        row: j.data, priceHistory: j.priceHistory || [], purchases: j.purchases || [], derived: j.derived || {},
+        // §29 step 6 — usedByRecipes feeds the archive-warning; sourceRecipe/
+        // sourceRecipeBlock make a made material's "cost comes from a recipe,
+        // and that recipe may be blocked" state actually visible, not just
+        // correct in the row's own source_recipe_id column.
+        usedByRecipes: j.usedByRecipes || [], sourceRecipe: j.sourceRecipe || null, sourceRecipeBlock: j.sourceRecipeBlock || null,
+      };
     } catch (e) {
       toast(T('Could not open that material', '无法打开该物料') + ': ' + (e.message || ''), 'err');
       return;
@@ -272,6 +298,7 @@
         accounting_category: '', item_kind: _kind || 'food', is_active: 1,
       },
       priceHistory: [], purchases: [], derived: {},
+      usedByRecipes: [], sourceRecipe: null, sourceRecipeBlock: null,
     };
     openTakeover();
   };
@@ -399,6 +426,13 @@
               ${esc(T('Free by design (tap water, peel — never costed)', '按设计免费(自来水、果皮等 — 不计成本)'))}
             </label>
             <div class="mat-costline" id="mat-costline">${costPreviewHtml()}</div>
+            ${_rec.sourceRecipe ? `
+            <div class="mat-srcrecipe${_rec.sourceRecipeBlock && !_rec.sourceRecipeBlock.ok ? ' blocked' : ''}">
+              ${esc(T('Made by recipe: ', '产出自食谱:'))}<b>${esc(_rec.sourceRecipe.name_en)}</b>${_rec.sourceRecipe.is_active === 0 ? ' — ' + esc(T('archived', '已归档')) : ''}
+              ${_rec.sourceRecipeBlock && !_rec.sourceRecipeBlock.ok
+                ? `<div class="mat-srcrecipe-why">${esc(T('Cost frozen at its last computed value.', '成本已冻结为最近一次计算的值。'))} ${esc(srcBlockReasonText(_rec.sourceRecipeBlock))}</div>`
+                : ''}
+            </div>` : ''}
           </div>
 
           ${(m.item_kind || 'food') === 'food' ? `
@@ -548,7 +582,10 @@
       // Re-read rather than trust the local copy: cost_per_unit is derived on
       // the server, and the history panel may have gained a row.
       const fresh = await api('/api/retail-admin/materials/' + _rec.row.id);
-      _rec = { row: fresh.data, priceHistory: fresh.priceHistory || [], purchases: fresh.purchases || [], derived: fresh.derived || {} };
+      _rec = {
+        row: fresh.data, priceHistory: fresh.priceHistory || [], purchases: fresh.purchases || [], derived: fresh.derived || {},
+        usedByRecipes: fresh.usedByRecipes || [], sourceRecipe: fresh.sourceRecipe || null, sourceRecipeBlock: fresh.sourceRecipeBlock || null,
+      };
       paintRecord();
     } catch (e) {
       const msg = (e.data && e.data.message) || e.message || '';
@@ -556,20 +593,53 @@
     }
   };
 
+  // §29 step 6 — same shape of gap as the Recipes side, different actual
+  // consequence: archiving a material does NOT freeze or block any cost
+  // computation (lib/recipe-cost.js and lib/recipe-rollup.js never check
+  // ingredients.is_active, only recipes.is_active) — a recipe already
+  // consuming this material keeps reading its live cost_per_unit exactly as
+  // before. What archiving actually does is hide it from this list and from
+  // the recipe ingredient picker (GET /api/retail-admin/materials defaults
+  // to is_active=1), so an operator loses visibility into a material recipes
+  // still depend on, and can't re-add it to a DIFFERENT recipe until it's
+  // brought back. Named here rather than assumed, so the warning says the
+  // true consequence instead of copying the recipe-side "freezes cost" text.
+  function archiveWarningBody(row) {
+    const consumers = (_rec && _rec.usedByRecipes) || [];
+    const n = consumers.length;
+    const namesEn = consumers.slice(0, 4).map(c => c.name_en).join(', ') + (n > 4 ? `, +${n - 4}` : '');
+    const namesCn = consumers.slice(0, 4).map(c => c.name_cn || c.name_en).join('、') + (n > 4 ? `等 ${n} 个` : '');
+    return {
+      bodyEn: `Used by ${n} recipe${n === 1 ? '' : 's'}${namesEn ? ' (' + namesEn + ')' : ''}. Archiving hides "${row.name_en}" from the materials list and the recipe picker — ${n === 1 ? 'that recipe keeps' : 'those recipes keep'} costing with it exactly as before, but you won't be able to add it to a new recipe until you bring it back.`,
+      bodyCn: `被 ${n} 个食谱使用${namesCn ? '(' + namesCn + ')' : ''}。归档后"${row.name_en}"会从物料列表和食谱原料选择器中隐藏 —— ${n === 1 ? '该食谱' : '这些食谱'}仍会照常使用其成本,但在你恢复它之前无法将其添加到新食谱中。`,
+    };
+  }
+
   window.matArchive = async function () {
     if (!_rec || !_rec.row.id) return;
     const restoring = !_rec.row.is_active;
-    const ok = restoring
-      ? await askConfirm({
-          titleEn: 'Bring this material back?', titleCn: '恢复该物料?',
-          confirmEn: 'Restore', confirmCn: '恢复',
-        })
-      : await askConfirm({
-          titleEn: 'Archive this material?', titleCn: '归档该物料?',
-          bodyEn: 'It keeps its SKU and stays on old purchase orders. You can bring it back later.',
-          bodyCn: '其货号会保留,历史采购单不受影响。之后可以恢复。',
-          confirmEn: 'Archive', confirmCn: '归档', danger: true,
-        });
+    const hasConsumers = !restoring && (_rec.usedByRecipes || []).length > 0;
+    let ok;
+    if (restoring) {
+      ok = await askConfirm({
+        titleEn: 'Bring this material back?', titleCn: '恢复该物料?',
+        confirmEn: 'Restore', confirmCn: '恢复',
+      });
+    } else if (hasConsumers) {
+      const w = archiveWarningBody(_rec.row);
+      ok = await askConfirm({
+        titleEn: 'Archive this material?', titleCn: '归档该物料?',
+        bodyEn: w.bodyEn, bodyCn: w.bodyCn,
+        confirmEn: 'Archive anyway', confirmCn: '仍然归档', danger: true,
+      });
+    } else {
+      ok = await askConfirm({
+        titleEn: 'Archive this material?', titleCn: '归档该物料?',
+        bodyEn: 'It keeps its SKU and stays on old purchase orders. You can bring it back later.',
+        bodyCn: '其货号会保留,历史采购单不受影响。之后可以恢复。',
+        confirmEn: 'Archive', confirmCn: '归档', danger: true,
+      });
+    }
     if (!ok) return;
     try {
       await api('/api/retail-admin/materials/' + _rec.row.id + '/archive', { method: 'PUT', body: { restore: restoring } });

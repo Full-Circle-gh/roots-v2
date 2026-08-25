@@ -11996,6 +11996,16 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 600; color: var(--td-text); margin-left: 6px; }
   #tab-materials-record .mat-costwhy { color: var(--td-amber-ink); }
 
+  /* §29 step 6 — a made material's "cost comes from a recipe" made visible,
+     not just correct in ingredients.source_recipe_id. Quiet by default;
+     .blocked switches to the same amber the recipe record's own frozen-cost
+     line uses, so a stale number reads as stale on either side of the
+     relationship. */
+  #tab-materials-record .mat-srcrecipe { margin-top: 10px; font-size: 12.5px; color: var(--td-text2); }
+  #tab-materials-record .mat-srcrecipe b { color: var(--td-text); font-weight: 500; }
+  #tab-materials-record .mat-srcrecipe.blocked { color: var(--td-amber-ink); }
+  #tab-materials-record .mat-srcrecipe-why { margin-top: 3px; }
+
   #tab-materials-record .mat-mini { display: flex; flex-direction: column; }
   #tab-materials-record .mat-minirow { display: flex; align-items: baseline;
     justify-content: space-between; gap: 12px; padding: 8px 0;
