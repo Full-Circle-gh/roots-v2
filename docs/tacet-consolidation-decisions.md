@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.76
+# Tacet shared-core consolidation — decisions record, v4.77
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-25 · v4.77 — **§29 gains an addendum: no automatic test separates a legacy MADE row from a legacy BOUGHT row.** A 40-row audit of Roots' name/SKU collisions between `recipes` and `ingredients` — the concrete case §29's "implied materials row" lifecycle question was written for — tried three independent signals (a live kitchen PO line, the ingredient's buy-unit shape, whether its stored cost divides cleanly from a real pack price) against human-confirmed ground truth, and each one produced at least one wrong answer on Roots' own data: a PO-line absence proved nothing (the visible PO history is only a few weeks deep), the buy-unit shape read a schema default as evidence half the time, and the division signature — the best of the three — could not tell a bought pack price from a made recipe's per-portion cost, because both divide the same way. **The rule this leaves behind:** migration tooling for legacy data must present candidates for a human to confirm, never classify and act on its own judgement. Final split for Roots' 40 rows: 27 made, 13 bought, 0 left ambiguous, all by human confirmation. Docs only; no code changed; no `source_recipe_id` added.
 
 2026-08-25 · v4.76 — **NESTED RECIPES ARE RECORDED AS §29: a made thing is a MATERIAL.** When a recipe's output is used inside another recipe it gets a row in the materials master, costed from its recipe rather than from a purchase price, and the consuming recipes reference it exactly as they reference oats or packaging. **A recipe line always points at exactly one thing and there is no second possible target** — the rejected alternative, a line that could point at either a material or a recipe, would make every reader of a recipe line handle two cases. That is the same branching-implementations shape that produced FIVE divergent copies of the recipe cost formula, consolidated over two steps immediately before this decision was taken (§29's own rationale says so, and the sequencing is the argument): re-introducing a two-target branch straight afterwards would rebuild what it just cost two passes to remove. **The lifecycle of the implied materials row is explicitly NOT decided here** — creation, editing, archiving from either side, and cycle prevention are named as open and deferred to the next planning pass, so a later reader does not mistake the model for a complete design. **Recipes remain cost-only** — no quantity or stock tracking for made things, and no connection to retail Products in this phase — which restates §28's Phase 1 boundary rather than moving it. Related documents moves from §29 to §30; nothing cross-references either number. A new decision that reverses no earlier rule, hence a patch. Docs only; no code changed.
 
@@ -3907,6 +3909,20 @@ The rejected alternative was a recipe line that could point at either a material
 **Consequence, not yet designed:** creating a recipe whose output is used elsewhere implies a materials row exists for it. The lifecycle rules for that row — how it is created, what happens if it is edited or archived from the Materials side, whether it is user-created or implied — are open and are the subject of the next planning pass.
 
 **Scope reminder:** recipes remain cost-only. No quantity or stock tracking for made things. Recipes are not connected to retail Products in this phase.
+
+### §29 addendum — no automatic test separates legacy made from legacy bought
+
+A concrete instance of the lifecycle question above: Roots' `recipes` and `ingredients` tables already collide on name or SKU in 40 places — a recipe and an ingredient sharing a name is exactly what an implied materials row looks like once one exists, so these 40 are the real-world test case for how that row's identity gets sorted out on data that predates this decision.
+
+**Three signals were tried, in this order, each added because the previous one produced a wrong answer:**
+
+1. **A live kitchen PO line for the ingredient.** Strong when present, but its absence proved nothing — the visible PO history only reaches back a few weeks, so a genuinely bought material that hasn't been reordered recently looks identical to one that was never bought at all.
+2. **The ingredient's buy-unit shape** (`buy_unit='g'` with `buy_pack_size=1` reads as a per-gram cost typed by hand; a real measured or container unit with recorded contents reads as a real pack). Better, but `buy_unit` defaults to `'kg'` in the schema — an untouched row reads as bought-shaped for free, so this signal needed a nonzero price paired with it just to be usable, and even then it is reading a data-entry habit, not a fact about the world.
+3. **Whether the stored cost divides cleanly from the buy price against real pack contents**, vs. the price and the cost being the identical number (no division ever happened — a hand-typed per-gram figure copied into both fields). This was the strongest of the three and caught a case (Sumac) the other two missed entirely. It still failed on two rows (Noodle salad dressing, Beet salad dressing) that are made in the kitchen: both were priced per-portion using the same fields a bought pack price would use, and a portion divides exactly like a purchase does. The signal cannot tell those apart.
+
+**Every one of the 40 rows was ultimately settled by a human who knows the kitchen, not by any of the three tests alone.** Final split: 27 made, 13 bought, 0 left ambiguous.
+
+**The rule this leaves behind, for this tenant's remaining legacy rows and for any future tenant's migration:** none of these signals is trustworthy as a silent discriminator, including in combination. Migration tooling built on this classification must surface each candidate for a person to confirm and must not act on its own judgement — the three-signal audit above is evidence for that requirement, not a formula that replaces it.
 
 ## 30. Related documents
 
