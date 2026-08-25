@@ -2608,6 +2608,13 @@
     justify-self: end; white-space: nowrap;
   }
   .pa-col-margin-h { justify-self: end; }
+  /* A cost the recipe owns. Reads as a stated figure rather than an empty box
+     waiting for input — same type and size, just not on a typing surface. The
+     source line beneath it names the recipe, so this only has to say "not
+     yours to type", not explain itself. */
+  #pd-cost.is-derived {
+    background: var(--td-raised); border-style: dashed; cursor: default;
+  }
   .pa-col-stock { font-size: 14px; }
 
   /* Status column — one badge per row answering "can a shopper buy this now".

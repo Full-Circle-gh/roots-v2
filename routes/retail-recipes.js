@@ -29,7 +29,7 @@ const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialF
 // a linked material's recipe-derived cost. Same triggers routes/recipes.js
 // already fires from the kitchen door; a recipe backing a material must stay
 // correct no matter which door saved it.
-const { fireRecompute, backsLinkedMaterial, costOneRecipe } = require('../lib/recipe-rollup');
+const { fireRecompute, backsAnyCostedRow, costOneRecipe } = require('../lib/recipe-rollup');
 
 const router = express.Router();
 
@@ -245,7 +245,7 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     // Recompute trigger (§29 step 3) — same condition the kitchen door checks
     // (routes/recipes.js PUT /:id): batch_size and the ingredient lines just
     // written both feed a linked material's recipe cost.
-    if (backsLinkedMaterial(db, req.params.id)) {
+    if (backsAnyCostedRow(db, req.params.id)) {
       fireRecompute(db, { source: 'retail-recipes.update', recipe_id: Number(req.params.id) });
     }
     res.json({ success: true });
@@ -266,7 +266,7 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
       labour=?,packaging=?,packaging_type_id=?,overhead_pct=?,sell_price=?,target_food_cost=?,updated_at=CURRENT_TIMESTAMP`)
     .run(req.params.id, labour || 0, packaging || 0, packaging_type_id || null, overhead_pct || 0, sell_price || 0, target_food_cost || 30,
          labour || 0, packaging || 0, packaging_type_id || null, overhead_pct || 0, sell_price || 0, target_food_cost || 30);
-  if (backsLinkedMaterial(db, req.params.id)) {
+  if (backsAnyCostedRow(db, req.params.id)) {
     fireRecompute(db, { source: 'retail-recipes.cost_update', recipe_id: Number(req.params.id) });
   }
   res.json({ success: true });

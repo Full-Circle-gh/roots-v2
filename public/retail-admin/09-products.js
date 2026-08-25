@@ -787,6 +787,55 @@ function _paMargin(price, cost) {
   if (!Number.isFinite(c) || c < 0) return null;
   return { money: p - c, pct: ((p - c) / p) * 100 };
 }
+// Is this product's cost owned by a recipe right now? Mirrors the server's
+// recipeOwnsProductCost() exactly: a recipe is named AND Production is on. The
+// feature state is already on the body as `feat-production`, the same signal
+// every other Production-gated screen reads, so there is no second source.
+function _pdRecipeOwnsCost(p) {
+  return !!(p && p.recipe_id != null && document.body.classList.contains('feat-production'));
+}
+// Lock or release the Cost field, and say where the figure came from.
+//
+// READ-ONLY, NOT DISABLED. A disabled input is skipped by the form reader and
+// greys its own text out; readOnly keeps the number legible and copyable while
+// still refusing edits. The operator can still SEE what it costs — that is the
+// point of showing it at all.
+//
+// Turning Production off releases the field with the last figure still in it:
+// nothing is erased, it simply stops tracking the recipe and becomes editable
+// again, which is the pre-recipe behaviour intact.
+function pdApplyCostSource(p) {
+  const inp = document.getElementById('pd-cost');
+  const note = document.getElementById('pd-cost-source');
+  if (!inp) return;
+  const owned = _pdRecipeOwnsCost(p);
+  inp.readOnly = owned;
+  inp.classList.toggle('is-derived', owned);
+  if (!note) return;
+  if (!owned) { note.innerHTML = ''; note.style.display = 'none'; return; }
+  const rname = cuT(p.recipe_name_en || p.recipe_name_cn || '', p.recipe_name_cn || p.recipe_name_en || '')
+                || (cuT('Recipe', '配方') + ' #' + p.recipe_id);
+  note.style.display = '';
+  // The recipe is named AND reachable — the operator can go read why the number
+  // is what it is instead of taking it on trust.
+  note.innerHTML = escapeHtml(cuT('From recipe', '来自配方')) + ' '
+    + '<a href="#" onclick="event.preventDefault();event.stopPropagation();paOpenRecipe(' + Number(p.recipe_id) + ')">'
+    + escapeHtml(rname) + '</a>';
+}
+// Open the linked recipe. The recipe record is a full page on the Production
+// side (`#tab-recipes-record`, opened by rcpRecordOpen) — this hands off to it
+// rather than duplicating any of the recipe UI inside the product editor.
+// goTab first, because rcpRecordOpen renders into a section that has to be the
+// live one; if either is missing the link simply does nothing rather than
+// throwing inside an onclick.
+function paOpenRecipe(recipeId) {
+  const id = Number(recipeId);
+  if (!id) return;
+  try {
+    if (typeof goTab === 'function') goTab('recipes');
+    if (typeof window.rcpRecordOpen === 'function') window.rcpRecordOpen(id);
+  } catch (e) { console.error('[products] could not open recipe', id, e); }
+}
 // The margin line under the editor's Cost field: money difference AND percentage,
 // so neither has to be worked out from the other.
 function pdRenderMargin() {
@@ -2066,6 +2115,7 @@ async function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   // Blank when unknown, never 0 — see pdRenderMargin.
   set('pd-cost', p && p.unit_cost != null ? p.unit_cost : '');
+  pdApplyCostSource(p);
   pdRenderMargin();
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
@@ -4652,7 +4702,12 @@ function pdCollectBody() {
     // which is a thing the operator must be able to do. Unlike sell_price above
     // there is no free-product hazard in clearing it — a null cost just blanks
     // the margin readout. The server refuses to coerce it to 0.
-    unit_cost: g('pd-cost').trim(),
+    //
+    // OMITTED ENTIRELY when a recipe owns the figure. The server drops it in
+    // that case anyway, but not sending it keeps the autosave payload honest
+    // about what the operator actually changed.
+    ...(document.getElementById('pd-cost') && document.getElementById('pd-cost').readOnly
+        ? {} : { unit_cost: g('pd-cost').trim() }),
     low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
     free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),

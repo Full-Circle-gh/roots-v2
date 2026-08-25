@@ -41,6 +41,7 @@ const { requireRetailAdmin } = require('./retail');
 // require resolves the already-cached router with firePriceAlertsForPO
 // attached to it. One alert path, not two.
 const { firePriceAlertsForPO } = require('./purchases');
+const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
 
@@ -115,14 +116,14 @@ function postRetailPOExpenses(poId) {
 // ingredient_price_history / the ±5% alert, which this change does not go near.
 function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
-  if (!po || !po.store_id) return { applied: 0, costed: 0 };
+  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0 };
   const lines = db.prepare(`
     SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
   const readCost   = db.prepare('SELECT unit_cost FROM store_products WHERE id = ?');
   const writeCost  = db.prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-  let applied = 0, costed = 0;
+  let applied = 0, costed = 0, costSkippedRecipe = 0;
   for (const l of lines) {
     // Materials have no stock table (§28) — a material line's "receiving" is
     // the price write-back firePriceAlertsForPO does on the Ordered/Delivered
@@ -156,8 +157,13 @@ function applyReceivedToStock(poId, req) {
     // A line can legitimately carry no price (a freebie, a sample, a not-yet
     // -invoiced delivery), and letting that write 0 or NULL would throw away a
     // real cost and report a 100% margin on the next screen.
+    // A product Roots MAKES takes its cost from its recipe, and the recipe
+    // cascade owns that figure — receiving must not overwrite it with what a
+    // delivery of the ingredients happened to charge. With Production off this
+    // is false and the purchase-order fill below resumes exactly as before.
     const cost = parseFloat(l.cost_per_unit);
-    if (Number.isFinite(cost) && cost > 0) {
+    if (recipeOwnsProductCost(db, l.store_product_id)) { costSkippedRecipe++; }
+    else if (Number.isFinite(cost) && cost > 0) {
       const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
       // Only write on an actual change, so re-saving a received PO does not
       // stamp updated_at or spend an audit row saying nothing happened.
@@ -174,7 +180,7 @@ function applyReceivedToStock(poId, req) {
       }
     }
   }
-  return { applied, costed };
+  return { applied, costed, costSkippedRecipe };
 }
 
 // ═══ Suppliers (shared master — same table the kitchen uses) ═══════════════
@@ -1007,7 +1013,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
-             cost_lines_updated: stock.costed });
+             cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe });
 });
 
 module.exports = router;

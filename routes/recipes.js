@@ -11,7 +11,7 @@ const { checkCycle } = require('../lib/recipe-graph');
 // that backs a linked material (recipe_ingredients lines, batch_size, or
 // recipe_cost_data), since any of those can move that material's
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
-const { fireRecompute, backsLinkedMaterial } = require('../lib/recipe-rollup');
+const { fireRecompute, backsAnyCostedRow } = require('../lib/recipe-rollup');
 const router = express.Router();
 
 // Nested recipes (§29): a line may reference a material that is itself made by
@@ -368,7 +368,7 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
     // handler) and the ingredient lines just written above both feed a
     // linked material's recipe cost, so this fires on every successful save
     // of a recipe that backs one — regardless of which fields were sent.
-    if (backsLinkedMaterial(db, req.params.id)) {
+    if (backsAnyCostedRow(db, req.params.id)) {
       fireRecompute(db, { source: 'recipes.update', recipe_id: Number(req.params.id) });
     }
     logActivity(req.user.id, req.user.username, 'update', 'recipe', req.params.id, { name_en }, req.ip);
@@ -395,7 +395,7 @@ router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), (
          labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30);
   // Recompute trigger (§29 step 3): labour/packaging/overhead feed a linked
   // material's recipe cost exactly like an ingredient line does.
-  if (backsLinkedMaterial(db, req.params.id)) {
+  if (backsAnyCostedRow(db, req.params.id)) {
     fireRecompute(db, { source: 'recipes.cost_update', recipe_id: Number(req.params.id) });
   }
   res.json({ success: true });

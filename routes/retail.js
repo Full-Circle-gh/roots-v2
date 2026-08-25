@@ -16,6 +16,7 @@ const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
 const db = require('../database');
+const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
@@ -20328,7 +20329,14 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const v = parseFloat(body.compare_at_price);
     sets.push('compare_at_price = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
   }
-  if ('unit_cost' in body) {
+  if ('unit_cost' in body && recipeOwnsProductCost(tdb(), id)) {
+    // Recipe-derived: the cascade owns this figure, so a hand-typed value is
+    // dropped rather than saved-then-overwritten on the next recompute (which
+    // would look like the editor silently losing the operator's edit). The
+    // field is already read-only in the UI; this is the server saying the same
+    // thing, so an API caller cannot get a different answer from a screen.
+    // Nothing is nulled — the stored figure stays exactly as the cascade left it.
+  } else if ('unit_cost' in body) {
     // What we pay per unit, goods only. Blank / invalid / negative clears it back
     // to NULL — "unknown", which the margin column renders as an em dash. NOT
     // coerced to 0 like sell_price above: a zero cost and an unknown cost mean
@@ -20462,6 +20470,9 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, unit_cost, stock_qty, low_stock_threshold, ship_modes,
+            recipe_id,
+            (SELECT r.name_en FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_en,
+            (SELECT r.name_cn FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_cn,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
@@ -20619,6 +20630,9 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, unit_cost, stock_qty, low_stock_threshold, ship_modes,
+            recipe_id,
+            (SELECT r.name_en FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_en,
+            (SELECT r.name_cn FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_cn,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,

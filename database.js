@@ -4149,6 +4149,105 @@ try {
   }
 } catch (e) { console.error('[store_products] unit_cost backfill failed:', e); }
 
+// ── One-off: link retail products to the recipe that makes them ──────────────
+//
+// `store_products.recipe_id` already exists — it came across as part of the
+// fork mirror and has been dead on the retail side ever since (zero reads,
+// zero writes in routes/retail.js). This fills it for the products where the
+// mapping is not in doubt, and seeds their unit_cost from that recipe. From
+// then on lib/recipe-rollup keeps the figure current.
+//
+// THE RULE IS WRITTEN OUT RATHER THAN A LIST OF IDS, so it can be checked
+// against the survey instead of taken on trust. A product is linked when ALL of:
+//
+//   * two or more of {exact SKU, exact name_en, exact name_cn} agree — survey
+//     group A. One signal alone (group B, 36 pairs, all SKU-only) is NOT enough
+//     and is left for Ash to confirm by hand.
+//   * exactly ONE recipe qualifies for it. Two qualifying recipes means nobody
+//     knows which is current — that is what excludes both Hummus Asli recipes
+//     (7 / 1-12 and 92 / 1-10), without needing to name them.
+//   * the recipe yields a usable cost: a cost row, and costPerServing > 0.
+//     One serving is one sellable unit, which is why a repack needs no special
+//     case — its recipe carries servings = 1 and batch_size = the pack weight.
+//   * the product is not a sample size `S(...)` or a multipack `(...) X3`.
+//     Their cost is knowable by scaling the base recipe against a free-text
+//     pack weight, and that is a separate decision.
+//
+// THE KITCHEN `products.recipe_id` IS NOT USED AS A SIGNAL ANYWHERE HERE. That
+// data is wrong — kitchen product 23 "81% Hazel Chocolate Spread" points at
+// recipe 46 "Pickle carrot（Do chua）" — and one bad row in four is not a signal.
+//
+// Guarded by _migrations, and additionally idempotent on its own terms
+// (`WHERE recipe_id IS NULL`), so it can never re-point a link an operator has
+// since changed.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('store_products_recipe_link_v1');
+  const haveCols = db.pragma('table_info(store_products)').map(c => c.name);
+  if (!done && haveCols.includes('recipe_id') && haveCols.includes('unit_cost')) {
+    const { computeRecipeCost } = require('./lib/recipe-cost');
+    const norm = s => (s == null ? '' : String(s)).toLowerCase()
+      .replace(/[（(]/g, '(').replace(/[）)]/g, ')')
+      .replace(/[\s ]+/g, ' ').replace(/[.,;:!?'"]/g, '').trim();
+    const skuNorm = s => (s == null ? '' : String(s)).toUpperCase().replace(/[\s（）()]/g, '').trim();
+    // S(1-220) sample sizes and (3-210) X3 multipacks.
+    const isScaledPack = s => /^\s*S\s*[（(]/i.test(String(s || '')) || /[)）]\s*X\s*\d/i.test(String(s || ''));
+
+    const recipes = db.prepare('SELECT id, sku, name_en, name_cn FROM recipes').all();
+    const prods = db.prepare(
+      'SELECT id, sku, name_en, name_cn FROM store_products WHERE COALESCE(is_active,1) = 1 AND recipe_id IS NULL'
+    ).all();
+    const idx = { sku: new Map(), en: new Map(), cn: new Map() };
+    const put = (m, k, v) => { if (k) { if (!m.has(k)) m.set(k, []); m.get(k).push(v); } };
+    for (const p of prods) { put(idx.sku, skuNorm(p.sku), p); put(idx.en, norm(p.name_en), p); put(idx.cn, norm(p.name_cn), p); }
+
+    const byProduct = new Map();          // product id -> Set of qualifying recipe ids
+    for (const r of recipes) {
+      const hits = new Map();
+      const bump = (p, sig) => { if (!hits.has(p.id)) hits.set(p.id, new Set()); hits.get(p.id).add(sig); };
+      for (const p of (idx.sku.get(skuNorm(r.sku)) || [])) bump(p, 'sku');
+      for (const p of (idx.en.get(norm(r.name_en)) || [])) bump(p, 'en');
+      for (const p of (idx.cn.get(norm(r.name_cn)) || [])) bump(p, 'cn');
+      for (const [pid, sigs] of hits) {
+        if (sigs.size < 2) continue;                       // group B and weaker
+        if (!byProduct.has(pid)) byProduct.set(pid, new Set());
+        byProduct.get(pid).add(r.id);
+      }
+    }
+
+    const cost = new Map();
+    const usableCost = rid => {
+      if (!cost.has(rid)) {
+        let c = null;
+        try { c = computeRecipeCost(rid, db); } catch (e) { c = null; }
+        cost.set(rid, c && c.hasCostRow && c.costPerServing != null
+          && Number.isFinite(c.costPerServing) && c.costPerServing > 0 ? c.costPerServing : null);
+      }
+      return cost.get(rid);
+    };
+
+    const linkStmt = db.prepare('UPDATE store_products SET recipe_id = ?, unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND recipe_id IS NULL');
+    let linked = 0, ambiguous = 0, noCost = 0, scaled = 0;
+    const tx = db.transaction(() => {
+      for (const [pid, rids] of byProduct) {
+        if (rids.size > 1) { ambiguous++; continue; }
+        const rid = [...rids][0];
+        const p = prods.find(x => x.id === pid);
+        if (p && isScaledPack(p.sku)) { scaled++; continue; }
+        const cpu = usableCost(rid);
+        if (cpu == null) { noCost++; continue; }
+        linkStmt.run(rid, cpu, pid);
+        linked++;
+      }
+    });
+    tx();
+    const stillNull = db.prepare('SELECT COUNT(*) n FROM store_products WHERE COALESCE(is_active,1)=1 AND unit_cost IS NULL').get().n;
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('store_products_recipe_link_v1');
+    console.log(`[store_products] recipe link: ${linked} product(s) linked + costed from a recipe `
+      + `(skipped ${ambiguous} ambiguous, ${noCost} no usable recipe cost, ${scaled} sample/multipack); `
+      + `${stillNull} active product(s) still have no cost`);
+  }
+} catch (e) { console.error('[store_products] recipe link backfill failed:', e); }
+
 // ─────────────────────────────────────────────────────────────────────────
 // STORE_PRODUCTS seed + FK repoint (one-time, mainDb only, atomic). Forks the
 // live catalog into store_products and repoints the store-OWNED tables' product
