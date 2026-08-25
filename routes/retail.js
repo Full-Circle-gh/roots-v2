@@ -9213,6 +9213,23 @@ function buildOrderFulfillment(orderId) {
   return { total, dispatched, delivered, pending: total - dispatched, rollup };
 }
 
+// Parcel-level delivery rollup, counting a parcel as landed on EITHER signal.
+// The two exist because the pipelines disagree: staff / supplier legs stamp
+// delivered_at, while the kd100 push and the JD trace pull only write
+// tracking_status = 'delivered' and never stamp it. Testing one column alone
+// reads a real arrival as still moving. A parcel with neither signal — including
+// one that has no waybill because nobody has shipped it yet — counts as NOT
+// delivered, which is what keeps a half-shipped order off 'delivered'.
+// total === 0 means the order carries no shipment rows at all (legacy
+// single-parcel); callers fall back to their own order-level rule there.
+function shipmentDeliveryRollup(orderId) {
+  const rows = tdb().prepare(
+    `SELECT delivered_at, tracking_status FROM retail_shipments WHERE order_id = ?`
+  ).all(orderId);
+  const delivered = rows.filter(r => r.delivered_at || r.tracking_status === 'delivered').length;
+  return { total: rows.length, delivered, allDelivered: rows.length > 0 && delivered === rows.length };
+}
+
 // Build a split-package suggestion for one out-of-GZ order. Compares the
 // current shipment bucketing against the optimal split (Ice + air-only
 // items by air, everything else by land) and reports projected freight
@@ -11578,17 +11595,17 @@ async function syncJdTrackingForCustomer(orderId, customerId) {
     }
   }
 
-  // Auto-flip the order to delivered only when EVERY tracked parcel reads
-  // delivered (both pipelines write tracking_status='delivered'). Split orders
-  // with a still-moving parcel stay 'dispatched'.
+  // Auto-flip the order to delivered only when EVERY parcel on it has landed.
+  // Split orders with a still-moving OR still-unshipped parcel stay
+  // 'dispatched'.
   if (o.status === 'dispatched') {
-    const tracked = tdb().prepare(
-      `SELECT tracking_status FROM retail_shipments
-        WHERE order_id = ? AND tracking_number IS NOT NULL AND tracking_number != ''`
-    ).all(o.id);
+    // Every parcel on the order, not only the ones carrying a waybill. Filtering
+    // to tracked rows made an un-shipped parcel invisible to the check, so a
+    // delivered first leg completed an order whose second leg had not left yet.
+    const roll = shipmentDeliveryRollup(o.id);
     let allDelivered;
-    if (tracked.length) {
-      allDelivered = tracked.every(r => r.tracking_status === 'delivered');
+    if (roll.total) {
+      allDelivered = roll.allDelivered;
     } else {
       const fresh = tdb().prepare("SELECT tracking_status FROM retail_orders WHERE id = ?").get(o.id);
       allDelivered = !!(fresh && fresh.tracking_status === 'delivered');
@@ -23747,9 +23764,12 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
 
   // Every parcel landed → complete the order (unlocks the review prompt + the
   // 'delivered' push), unless it's already there.
+  // shipmentDeliveryRollup, not buildOrderFulfillment: the latter reads only
+  // delivered_at, so on a mixed order the kd100/JD legs (which record arrival in
+  // tracking_status alone) never counted and hand-delivering the last supplier
+  // parcel left the order stuck on 'dispatched'.
   let orderStatus = o.status;
-  const f = buildOrderFulfillment(id);
-  if (f.rollup === 'all_delivered' && o.status !== 'delivered') {
+  if (shipmentDeliveryRollup(id).allDelivered && o.status !== 'delivered') {
     const r = tdb().prepare(
       "UPDATE retail_orders SET status = 'delivered', delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status NOT IN ('delivered','cancelled','refunded')"
     ).run(id);
@@ -26118,11 +26138,20 @@ function handleKd100Callback(req, res, tid) {
         tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenarioCode, order.id);
       }
 
-      // If delivered and the order is still 'dispatched', auto-flip to
-      // 'delivered'. This mirrors what staff would do manually and
-      // unlocks the review prompt for the customer. Primary leg only — one
-      // delivered parcel of a split order doesn't mean the whole order arrived.
-      if (isPrimary && parsed.delivered && order.status === 'dispatched') {
+      // A parcel landing can complete the order — but only once EVERY parcel
+      // has. The guard here used to be `isPrimary`, which blocked a SECONDARY
+      // leg from flipping the order but did nothing about the reverse case: the
+      // PRIMARY parcel arriving while a second parcel was still sitting
+      // unshipped flipped the whole order to 'delivered'. The list then read
+      // "Delivered" beside "1 to ship", the customer got an arrival push for a
+      // parcel still on the shelf, and the un-shipped leg fell out of the
+      // fulfilment queue (a terminal order leaves the Paid tab) with nothing
+      // left to put it back. Roll the parcels up instead — any leg may be the
+      // last to land, so a secondary arriving last now completes the order too.
+      // Legacy orders with no shipment rows keep the primary-waybill rule.
+      const roll = shipmentDeliveryRollup(order.id);
+      const orderLanded = roll.total ? roll.allDelivered : (isPrimary && parsed.delivered);
+      if (orderLanded && order.status === 'dispatched') {
         try {
           tdb().prepare(
             "UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'"
