@@ -70,6 +70,5 @@
 
   <cs-button variant="fab" placement="home"></cs-button>
   <popup-manager page="home"></popup-manager>
-  <referral-popup open="{{showReferralPopup}}" affiliate="{{affiliate}}" lang="{{lang}}" bind:close="onReferralPopupClose"></referral-popup>
   <recent-buyers lang="{{lang}}"></recent-buyers>
 </view>

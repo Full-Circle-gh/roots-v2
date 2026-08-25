@@ -40,9 +40,6 @@ Page({
     // block. Only fetched when the layout contains one and the user is authed.
     activeOrder: null,
     affiliate: null,
-    // Drives <referral-popup>. Flipped true at most once per cold start —
-    // see _maybeShowReferralPopup — never re-shown on a later onShow.
-    showReferralPopup: false,
     polls: [],
     // Live top-up packages — feeds the top_up block's tier row. Auth-gated,
     // so only fetched when the layout has a top_up block and the user is authed.
@@ -149,24 +146,6 @@ Page({
       return true;
     }
     return false;
-  },
-
-  // Shows <referral-popup> at most once per cold start — same plain
-  // globalData-flag gate as _gateOnboarding above (globalData resets
-  // naturally on the next cold launch, so no persistent storage needed).
-  // affiliate only ever has a `code` when /api/retail/affiliate resolved for
-  // a signed-in customer, so that alone is proof enough of who's looking.
-  _maybeShowReferralPopup() {
-    const app = getApp();
-    if (app.globalData._referralPopupShown) return;
-    const af = this.data.affiliate;
-    if (!af || af.enabled === false || !af.code) return;
-    app.globalData._referralPopupShown = true;
-    this.setData({ showReferralPopup: true });
-  },
-
-  onReferralPopupClose() {
-    this.setData({ showReferralPopup: false });
   },
 
   onShow() {
@@ -336,7 +315,6 @@ Page({
         themeVars: theme.buildThemeVars(app.globalData.config),
         loading: false,
       });
-      this._maybeShowReferralPopup();
       // Fire-and-forget top-seller fetches for any blocks that need them.
       // Setting topProducts after data lands triggers the block-renderer
       // observer and the products appear in place.
