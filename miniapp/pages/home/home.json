@@ -5,7 +5,8 @@
     "block-renderer": "/components/block-renderer/block-renderer",
     "cs-button": "/components/cs-button/cs-button",
     "popup-manager": "/components/popup-manager/popup-manager",
-    "recent-buyers": "/components/recent-buyers/recent-buyers"
+    "recent-buyers": "/components/recent-buyers/recent-buyers",
+    "referral-popup": "/components/referral-popup/referral-popup"
   },
   "enablePullDownRefresh": true,
   "backgroundColor": "#F2E7DF"
