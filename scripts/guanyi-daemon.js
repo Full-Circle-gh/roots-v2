@@ -38,6 +38,7 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getBrowser, closeAll } = require('../lib/guanyi-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
+const { claimWindow, clearWindow } = require('../lib/alert-latch');
 
 // Defensive: ensure the pickup-inference tables exist even if the deployed
 // database.js predates them (the box is deployed by scp, not a migration run).
@@ -102,8 +103,26 @@ let _lastHealthAt = 0;
 const SESSION_SAVE_MS       = Number(process.env.GUANYI_SESSION_SAVE_MS || 30 * 60_000);
 const SESSION_WARN_MS       = Number(process.env.GUANYI_SESSION_WARN_MS || 72 * 3600_000);
 const SESSION_WARN_EVERY_MS = Number(process.env.GUANYI_SESSION_WARN_EVERY_MS || 12 * 3600_000);
+// Below this the notice stops saying "when convenient" and starts saying "now".
+const SESSION_WARN_NOW_MS   = Number(process.env.GUANYI_SESSION_WARN_NOW_MS || 6 * 3600_000);
 const lastSessionSave = {};   // storeCode -> epochMs of last on-disk refresh
 const lastExpiryWarn  = {};   // storeCode -> epochMs of last "expiring soon" page
+// THE EXPIRY NOTICE IS THE ONE ALERT HERE THAT HAS TO OUTLIVE THE PROCESS.
+// Everything else this daemon pages about is a TRANSITION — the session just
+// died, the proxy just came back — and re-announcing one of those after a
+// restart is honest: the condition is live and a fresh process has no history.
+// "Your login expires on Thursday, do it when convenient" is not a transition.
+// It stays true for days, so an in-memory debounce holds it only until the next
+// start, and on 2026-08-25 this daemon was restarting often enough (the box was
+// also paging about disk >= 85%, which is what takes Chromium down) that the
+// same advisory landed in the ops group roughly every twenty minutes. Once an
+// alert channel does that, it stops being read — including for the alerts that
+// mean the push has actually stopped. lib/alert-latch.js's claimWindow keeps the
+// 12-hour window on disk — next to the latches the other four daemons already
+// persist, and for the same reason — so a restart cannot re-open it. The "~0h"
+// that made it absurd was lib/guanyi-browser.js reading the WAF's rolling cookie
+// as the login's life; that is fixed in sessionExpiry().
+const expiryWarnKey = (storeCode) => `${storeCode}:session_expiring`;
 
 // ── Proxy health gate (mirrors meituan/shangou/qingyun-daemon) ────────────────
 // A dead proxy makes fetchListings() fail exactly the way an expired session
@@ -803,21 +822,38 @@ async function processSessionHealth() {
       const exp = browser.sessionExpiry();
       if (exp) {
         const leftMs = exp.atMs - nowMs;
+        const key = expiryWarnKey(storeCode);
         if (leftMs > 0 && leftMs <= SESSION_WARN_MS) {
           // Once per SESSION_WARN_EVERY_MS while inside the window: this is a
-          // "get to it this week" notice, not something to repeat every minute.
+          // "get to it this week" notice, not something to repeat every minute
+          // — and, because claimWindow keeps that window ON DISK, not something
+          // to repeat every time this process starts either. Both are checked:
+          // the in-memory one is the cheap hot path, the file is what makes the
+          // window mean anything across a restart.
           const last = lastExpiryWarn[storeCode] || 0;
-          if (nowMs - last >= SESSION_WARN_EVERY_MS) {
+          if (nowMs - last >= SESSION_WARN_EVERY_MS
+              && claimWindow('guanyi', key, SESSION_WARN_EVERY_MS,
+                             { store: storeCode, cookie: exp.name, expires: new Date(exp.atMs).toISOString() })) {
             lastExpiryWarn[storeCode] = nowMs;
-            const hrs = Math.round(leftMs / 3600_000);
-            logSync(storeCode, 'session_expiring', 'error', { hours: hrs, cookie: exp.name, at: new Date(exp.atMs).toISOString() });
-            sendOpsAlert(
-              `🟡 管易 ${storeCode} 登录将在约 ${hrs} 小时后过期，请在方便时重新登录（现在同步仍正常）\n` +
-              `Guanyi ${storeCode} login expires in ~${hrs}h — re-login at your convenience from the ops screen; sync is still fine for now.`
-            );
+            const hrs = leftMs / 3600_000;
+            const rounded = Math.max(1, Math.round(hrs));
+            const cn = hrs < 1 ? '不到 1 小时' : `约 ${rounded} 小时`;
+            const en = hrs < 1 ? '<1h' : `~${rounded}h`;
+            log(storeCode, `session expiry warning: ${en} left on cookie ${exp.name} (expires ${new Date(exp.atMs).toISOString()})`);
+            logSync(storeCode, 'session_expiring', 'error', { hours: rounded, cookie: exp.name, at: new Date(exp.atMs).toISOString() });
+            // Never tell someone to take their time about something that is
+            // hours away. Inside SESSION_WARN_NOW_MS the push is about to stop
+            // and the message has to say so — the old text paired "~0h" with
+            // "at your convenience", which is both alarming and useless.
+            sendOpsAlert(leftMs <= SESSION_WARN_NOW_MS
+              ? `🟠 管易 ${storeCode} 登录将在${cn}后过期，请尽快重新登录（过期后库存推送会停止）\n` +
+                `Guanyi ${storeCode} login expires in ${en} — re-login NOW from the ops screen; stock push stops when it goes.`
+              : `🟡 管易 ${storeCode} 登录将在${cn}后过期，请在方便时重新登录（现在同步仍正常）\n` +
+                `Guanyi ${storeCode} login expires in ${en} — re-login at your convenience from the ops screen; sync is still fine for now.`);
           }
         } else if (leftMs > SESSION_WARN_MS) {
           lastExpiryWarn[storeCode] = 0;   // healthy again after a re-login
+          clearWindow('guanyi', key);      // …and the next notice is news, not a repeat
         }
       }
     } catch (e) { log(storeCode, `session expiry check failed: ${e.message}`); }
