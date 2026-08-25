@@ -4259,7 +4259,13 @@ function opsFires(){
   // SELLING stock we don't have; an empty shelf is only an empty shelf.
   for(const c of (o.channel_sync_stale||[])){
     const t=_date(c.oldest_at);
-    const when=t?t.toLocaleTimeString(LANG==='en'?'en-US':'zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+    /* Carry the date when it isn't today — a bare clock time makes a row stuck
+       since another DAY read as newer than one stuck this morning, so the text
+       argues with the oldest-first order the list is actually in. */
+    const sameDay=t&&t.toDateString()===new Date().toDateString();
+    const when=!t?'':(sameDay
+      ?t.toLocaleTimeString(LANG==='en'?'en-US':'zh-CN',{hour:'2-digit',minute:'2-digit'})
+      :t.toLocaleString(LANG==='en'?'en-US':'zh-CN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
     f.push({sev:'amber',icon:'unplug',label:T(c.label+' not syncing',c.label+' 未同步'),
       n:c.waiting_count,
       meta:when?T('stock updates waiting since '+when,'库存更新自 '+when+' 起等待中'):'',

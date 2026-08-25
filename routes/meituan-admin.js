@@ -17,6 +17,11 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const bundleLib = require('../lib/meituan-bundles');
 const bundleStock = require('../lib/bundle-stock');
+// Opening/closing a location on a channel is ONE operation (see lib/store-close):
+// it owns the flag write AND the queued-push clear together, so no route can do
+// half of it. Nothing in this file writes target_open or channel_status.is_open
+// directly any more.
+const { setChannelOpen } = require('../lib/store-close');
 
 // ── GET /api/retail-admin/meituan/products ─────────────────────────────────
 // All products with their meituan_product_map entries per store.
@@ -819,14 +824,9 @@ router.post('/api/retail-admin/meituan/business-status', requireRetailAdmin, exp
     const st = db.prepare('SELECT code FROM retail_stores WHERE code = ? AND is_active = 1').get(storeCode);
     if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
     const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
-    db.prepare(`
-      INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT(store_code) DO UPDATE SET
-        target_open = excluded.target_open, target_by = excluded.target_by,
-        target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-    `).run(storeCode, open ? 1 : 0, by);
+    const r = setChannelOpen(db, { channel: 'meituan', storeCode, open, by });
     res.json({ success: true, storeCode, target: open ? 'open' : 'closed',
+      cleared: r.cleared, refilled: r.refilled,
       note: 'Queued — the sync daemon applies it within ~1 min and refreshes the live status.' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -920,20 +920,27 @@ router.post('/api/retail-admin/store-status/master', requireRetailAdmin, express
     const cur = readOnlineStatus(db);
     const val = { online_open: open, message_en: cur.message_en, message_cn: cur.message_cn };
     const stores = db.prepare('SELECT code FROM retail_stores WHERE is_active = 1').all();
-    // Master flips the whole store: Meituan POI (target_open, daemon-applied) AND
-    // online fulfillment (fulfillment_open, immediate) together.
-    const queueMeituan = db.prepare(`
-      INSERT INTO store_business_status (store_code, target_open, fulfillment_open, target_by, target_at, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    // Master flips the whole store: Meituan POI (via setChannelOpen, which also
+    // deals with that store's queued pushes) AND online fulfillment
+    // (fulfillment_open, immediate) together. fulfillment_open is written here
+    // rather than inside setChannelOpen because it is shop-wide, not per-channel.
+    const setFulfilment = db.prepare(`
+      INSERT INTO store_business_status (store_code, fulfillment_open, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(store_code) DO UPDATE SET
-        target_open = excluded.target_open, fulfillment_open = excluded.fulfillment_open,
-        target_by = excluded.target_by, target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        fulfillment_open = excluded.fulfillment_open, updated_at = CURRENT_TIMESTAMP
     `);
+    let cleared = 0;
     db.transaction(() => {
       writeOnlineStatus(db, val, by);
-      for (const s of stores) queueMeituan.run(s.code, open ? 1 : 0, open ? 1 : 0, by);
+      for (const s of stores) {
+        const r = setChannelOpen(db, { channel: 'meituan', storeCode: s.code, open, by });
+        cleared += r.cleared || 0;
+        setFulfilment.run(s.code, open ? 1 : 0);
+      }
     })();
-    res.json({ success: true, online: val, meituanQueued: stores.map((s) => s.code), target: open ? 'open' : 'closed' });
+    res.json({ success: true, online: val, meituanQueued: stores.map((s) => s.code),
+      target: open ? 'open' : 'closed', cleared });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -953,15 +960,22 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
     const st = db.prepare('SELECT code FROM retail_stores WHERE code = ? AND is_active = 1').get(code);
     if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
     const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
-    db.prepare(`
-      INSERT INTO store_business_status (store_code, target_open, fulfillment_open, target_by, target_at, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT(store_code) DO UPDATE SET
-        target_open = excluded.target_open, fulfillment_open = excluded.fulfillment_open,
-        target_by = excluded.target_by, target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-    `).run(code, open ? 1 : 0, open ? 1 : 0, by);
+    // Meituan POI + its queued pushes go through the one close operation;
+    // fulfillment_open is shop-wide, so it is written alongside rather than
+    // inside it.
+    let r;
+    db.transaction(() => {
+      r = setChannelOpen(db, { channel: 'meituan', storeCode: code, open, by });
+      db.prepare(`
+        INSERT INTO store_business_status (store_code, fulfillment_open, updated_at)
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(store_code) DO UPDATE SET
+          fulfillment_open = excluded.fulfillment_open, updated_at = CURRENT_TIMESTAMP
+      `).run(code, open ? 1 : 0);
+    })();
     res.json({
       success: true, storeCode: code, target: open ? 'open' : 'closed',
+      cleared: r.cleared, refilled: r.refilled,
       note: 'Fulfillment reroute is immediate; the Meituan close applies within ~1 min.',
     });
   } catch (e) {
@@ -1015,47 +1029,11 @@ function csCellOpen(db, channel, storeCode) {
 // switched off will never be wanted. Re-opening queues a fresh FULL push rather
 // than replaying the dropped rows — after a pause only the current stock is
 // worth sending, not a trail of stale intermediate values.
-function csSyncQueueForCell(db, storeCode, open) {
-  if (!open) {
-    db.prepare("DELETE FROM meituan_sync_queue WHERE store_code = ? AND status IN ('pending','processing')").run(storeCode);
-    return;
-  }
-  // Per-row quantity so a bundle re-opens with its component floor, not the
-  // vestigial shelf row. See lib/bundle-stock.
-  const mapped = db.prepare(`
-    SELECT m.product_id, m.retail_store_id, m.store_code
-      FROM meituan_product_map m
-     WHERE m.store_code = ? AND m.sync_enabled = 1 AND m.meituan_name IS NOT NULL
-  `).all(storeCode).map(m => ({ ...m, qty: bundleStock.sellableAt(db, m.retail_store_id, m.product_id) }));
-  const ins = db.prepare(`
-    INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
-    VALUES (?, ?, ?, ?, 'pending')
-  `);
-  for (const m of mapped) ins.run(m.retail_store_id, m.product_id, m.store_code, m.qty);
-}
-
+// The flag write and the queued-push clear are ONE operation now, and it lives in
+// lib/store-close.js — so no route in this file can perform half of it, and none
+// of them writes target_open or channel_status.is_open directly any more.
 function csSetCell(db, channel, storeCode, open, by) {
-  if (channel === 'meituan') {
-    // If the new toggle matches the last CONFIRMED on-box state (is_open), there is
-    // nothing left to apply — clear any stale target_open rather than leaving a
-    // command queued that just re-affirms reality. This is what makes an on-then-off
-    // toggle (before the daemon gets to the first one) drop "applying…" immediately,
-    // instead of leaving a no-op command stuck pending — which otherwise reads as
-    // permanently "applying" whenever the daemon can't log in to clear it itself.
-    const cur = db.prepare('SELECT is_open FROM store_business_status WHERE store_code=?').get(storeCode);
-    const noopToggle = cur && cur.is_open != null && cur.is_open === (open ? 1 : 0);
-    const targetOpen = noopToggle ? null : (open ? 1 : 0);
-    db.prepare(`INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT(store_code) DO UPDATE SET target_open=excluded.target_open, target_by=excluded.target_by, target_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP`)
-      .run(storeCode, targetOpen, by);
-    try { csSyncQueueForCell(db, storeCode, open); } catch (e) { /* the toggle itself must still land */ }
-  } else {
-    db.prepare(`INSERT INTO channel_status (channel, store_code, is_open, updated_at, updated_by)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
-                ON CONFLICT(channel, store_code) DO UPDATE SET is_open=excluded.is_open, updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`)
-      .run(channel, storeCode, open ? 1 : 0, by);
-  }
+  setChannelOpen(db, { channel, storeCode, open, by });
 }
 function csBy(req) { return (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend'; }
 

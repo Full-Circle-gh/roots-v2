@@ -2825,7 +2825,15 @@ function tdAttnRender() {
   for (const c of (DASH_OPS.channel_sync_stale || [])) {
     const t = new Date(String(c.oldest_at || '').replace(' ', 'T') + 'Z');
     const cn = window.cuLang && cuLang() === 'cn';
-    const when = !isNaN(t) ? t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    // A bare clock time is a trap on this row: two channels stuck on different
+    // DAYS read as "02:06 PM" and "11:39 AM", and the older one looks newer —
+    // the rows sort correctly by real age while the text argues they don't.
+    // Carry the date whenever it isn't today, so what the row says and how it
+    // sorts can't disagree.
+    const sameDay = !isNaN(t) && t.toDateString() === new Date(dashNow()).toDateString();
+    const when = isNaN(t) ? ''
+      : (sameDay ? t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+                 : t.toLocaleString(cn ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
     fires.push({
       sev: 'amber', icon: 'plug',
       label: cuT(`${c.label} not syncing`, `${c.label} 未同步`),
