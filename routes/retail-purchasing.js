@@ -105,14 +105,24 @@ function postRetailPOExpenses(poId) {
 // good = qty_received − damaged_qty; apply (good − stock_applied_qty) as a
 // delta through inventory.adjustStock (ledger row + channel sync fan-out).
 // Safe to call repeatedly; corrections move stock in either direction.
+//
+// A PRODUCT line also writes its price back to store_products.unit_cost — the
+// mirror of what firePriceAlertsForPO does for a MATERIAL line, and the reason
+// margin can be shown at all. Last price wins, no averaging: Roots buys and
+// resells, so "cost" means whatever the most recent delivery charged.
+// MATERIAL LINES ARE UNTOUCHED BY THIS — they still `continue` on the very next
+// line and their pricing stays entirely with firePriceAlertsForPO /
+// ingredient_price_history / the ±5% alert, which this change does not go near.
 function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
-  if (!po || !po.store_id) return { applied: 0 };
+  if (!po || !po.store_id) return { applied: 0, costed: 0 };
   const lines = db.prepare(`
-    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en
+    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
-  let applied = 0;
+  const readCost   = db.prepare('SELECT unit_cost FROM store_products WHERE id = ?');
+  const writeCost  = db.prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  let applied = 0, costed = 0;
   for (const l of lines) {
     // Materials have no stock table (§28) — a material line's "receiving" is
     // the price write-back firePriceAlertsForPO does on the Ordered/Delivered
@@ -137,8 +147,34 @@ function applyReceivedToStock(poId, req) {
       applied++;
     }
     db.prepare('UPDATE po_line_items SET stock_applied_qty = ? WHERE id = ?').run(good, l.id);
+
+    // Cost write-back. Deliberately NOT inside the `delta !== 0` branch above: a
+    // correction that re-saves the same quantity at a different price is exactly
+    // the case where the cost moved and the stock did not.
+    //
+    // An unusable price LEAVES THE EXISTING COST ALONE rather than clearing it.
+    // A line can legitimately carry no price (a freebie, a sample, a not-yet
+    // -invoiced delivery), and letting that write 0 or NULL would throw away a
+    // real cost and report a 100% margin on the next screen.
+    const cost = parseFloat(l.cost_per_unit);
+    if (Number.isFinite(cost) && cost > 0) {
+      const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
+      // Only write on an actual change, so re-saving a received PO does not
+      // stamp updated_at or spend an audit row saying nothing happened.
+      if (before === null || Math.abs(before - cost) > 1e-9) {
+        writeCost.run(cost, l.store_product_id);
+        costed++;
+        // The audit trail is activity_log — the same mechanism this module's
+        // header names for every other actor-attributed write here, and the one
+        // that already tolerates a tenant operator with no kitchen users row
+        // (it stores a NULL id and keeps the name). No new mechanism invented.
+        logActivity(req.user?.id || null, actorLabel(req), 'cost_update', 'product', l.store_product_id,
+          { from: before, to: cost, po_id: poId, po_number: po.po_number,
+            line_id: l.id, name: l.name_en, source: 'po_receive' }, req.ip);
+      }
+    }
   }
-  return { applied };
+  return { applied, costed };
 }
 
 // ═══ Suppliers (shared master — same table the kitchen uses) ═══════════════
@@ -970,7 +1006,8 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   if (any_qty) postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
-  res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied });
+  res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
+             cost_lines_updated: stock.costed });
 });
 
 module.exports = router;

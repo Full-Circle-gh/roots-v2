@@ -772,6 +772,34 @@ function _paUnitStock(u) {
   return (u.group ? u.members : [u.p])
     .reduce((s, m) => s + (Number(m.effective_stock) || 0), 0);
 }
+// ── Margin ───────────────────────────────────────────────────────────────────
+// Gross margin on the SELLING price: (price − cost) / price. That is the retail
+// convention and the one that pairs with the price beside it; markup-on-cost
+// would read higher for the same pair and is not what this column means.
+//
+// Returns null whenever the answer is unknown rather than guessing a number.
+// A NULL cost means "we have never bought this", which is NOT a cost of 0 — the
+// whole reason the column is nullable. Every caller renders null as an em dash.
+function _paMargin(price, cost) {
+  if (cost == null || cost === '') return null;
+  const p = Number(price), c = Number(cost);
+  if (!Number.isFinite(p) || p <= 0) return null;   // no price → no margin to state
+  if (!Number.isFinite(c) || c < 0) return null;
+  return { money: p - c, pct: ((p - c) / p) * 100 };
+}
+// The margin line under the editor's Cost field: money difference AND percentage,
+// so neither has to be worked out from the other.
+function pdRenderMargin() {
+  const el = document.getElementById('pd-margin');
+  if (!el) return;
+  const g = id => { const n = document.getElementById(id); return n ? n.value : ''; };
+  const m = _paMargin(g('pd-price'), g('pd-cost').trim());
+  if (!m) { el.textContent = cuT('Margin — add a cost to see it', '毛利 — 填写成本后显示'); return; }
+  const sign = m.money < 0 ? '−' : '';
+  el.textContent = cuT('Margin', '毛利') + ' ' + sign + '¥' + fmt(Math.abs(m.money))
+                 + ' · ' + m.pct.toFixed(1) + '%'
+                 + (m.money < 0 ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
+}
 function _paPriceCell(u) {
   const pr = _paUnitPrices(u);
   if (!pr) return '<span class="pa-col-price pa-col-muted">—</span>';
@@ -780,6 +808,31 @@ function _paPriceCell(u) {
   const short = n => fmt(n).replace(/\.00$/, '');
   const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${short(pr.min)}–${short(pr.max)}`;
   return `<span class="pa-col-price">${body}</span>`;
+}
+// Margin column: PERCENTAGE only. The money difference lives in the editor,
+// beside the two numbers it is drawn from; on a list scanned down a screen the
+// percentage is the comparable figure and a second ¥ column next to Price would
+// read as a second price.
+//
+// Collapses a variant family exactly as _paPriceCell does — one figure when the
+// members agree, a range when they differ — because the members are sizes of one
+// product and a family that shows only its first size's margin is a lie.
+//
+// An unknown cost is an em dash, never 0%. Members with no cost are left out of
+// the range rather than dragged to 100%.
+function _paMarginCell(u) {
+  const ms = (u.group ? u.members : [u.p])
+    .map(m => _paMargin(m.sell_price, m.unit_cost))
+    .filter(Boolean)
+    .map(m => m.pct);
+  if (!ms.length) return '<span class="pa-col-margin pa-col-muted">—</span>';
+  const lo = Math.min(...ms), hi = Math.max(...ms);
+  // One decimal for a single figure; whole numbers across a range, so the cell
+  // stays narrow — the same "drop the noise on a range" rule the price cell uses.
+  const body = Math.abs(hi - lo) < 0.05
+    ? lo.toFixed(1) + '%'
+    : Math.round(lo) + '–' + Math.round(hi) + '%';
+  return `<span class="pa-col-margin${hi < 0 ? ' pa-col-muted' : ''}">${body}</span>`;
 }
 // Stock badge: green = healthy, brass = low (≤5), red = out (0). The number is
 // the family's effective stock; an unpublished product still shows its count.
@@ -1465,11 +1518,11 @@ function paRender() {
       + (reorderActive ? ' pa-reorder' : '')
       + (PA_SELECT_MODE ? ' pa-selecting' : '');
     // Track list, in lockstep with the header and the reorder/select modes:
-    // img · name · category · SKU · [one column per store] · price · status.
+    // img · name · category · SKU · [one column per store] · price · margin · status.
     {
       const stockTracks = (listStores.length ? listStores.map(() => '104px').join(' ') : '104px');
       grid.style.setProperty('--pa-grid',
-        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
+        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 82px 104px`);
     }
     // Snapshot the on-screen unit order as lists of product ids (a variant group
     // moves as one block). paRowDrop reads this to compute the new sequence.
@@ -1488,6 +1541,7 @@ function paRender() {
           ? listStores.map(s => `<span class="pa-col-stock-h">${escapeHtml(_paStoreName(s.id))}</span>`).join('')
           : `<span>${cuT('Stock', '库存')}</span>`}
         <span class="pa-col-price-h">${cuT('Price', '价格')}</span>
+        <span class="pa-col-margin-h">${cuT('Margin', '毛利')}</span>
         <span>${cuT('Status', '状态')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map((u, ui) => {
@@ -1535,6 +1589,7 @@ function paRender() {
             ? listStores.map(s => `<div class="pa-col-stock">${_paStoreStockCell(u, s.id)}</div>`).join('')
             : `<div class="pa-col-stock">${_paStockCell(u)}</div>`}
           ${_paPriceCell(u)}
+          ${_paMarginCell(u)}
           <div class="pa-col-status">${_paStatusCell(u)}</div>
         </div>`;
       }
@@ -2009,6 +2064,9 @@ async function pdOpen(id) {
     } }
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
+  // Blank when unknown, never 0 — see pdRenderMargin.
+  set('pd-cost', p && p.unit_cost != null ? p.unit_cost : '');
+  pdRenderMargin();
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
   set('pd-low-stock', p && p.low_stock_threshold != null ? p.low_stock_threshold : '');
@@ -4590,6 +4648,11 @@ function pdCollectBody() {
     // (the server only writes sell_price when it's present in the body).
     ...(g('pd-price') !== '' ? { sell_price: parseFloat(g('pd-price')) || 0 } : {}),
     compare_at_price: parseFloat(g('pd-compare')) || 0,
+    // Sent even when blank: '' clears the cost back to NULL ("we don't know"),
+    // which is a thing the operator must be able to do. Unlike sell_price above
+    // there is no free-product hazard in clearing it — a null cost just blanks
+    // the margin readout. The server refuses to coerce it to 0.
+    unit_cost: g('pd-cost').trim(),
     low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
     free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
@@ -4775,6 +4838,8 @@ function pdWireAutosave() {
     // The header's shop tag and the Basics switch are one value seen twice —
     // whichever the operator moved, the other has to follow in the same tick.
     if (t.id === 'pd-published') pdRenderHeadTags();
+    // Margin is read off the price/cost pair, so it has to follow either one.
+    if (t.id === 'pd-price' || t.id === 'pd-cost') pdRenderMargin();
     // Editing the description or the Product details boxes makes a built design stale.
     if (t.closest('.pd-rte') || (t.id && t.id.indexOf('pd-fact-') === 0) || t.id === 'pd-name-en' || t.id === 'pd-name-cn' || t.id === 'pd-weight') pdMarkDesignStale();
   };
@@ -4789,6 +4854,7 @@ function pdSnapshot() {
   const ck = el => { const n = document.getElementById(el); return !!(n && n.checked); };
   return {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'), price: g('pd-price'), compare: g('pd-compare'),
+    cost: g('pd-cost'),
     sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: pdFreeOfGet(),
     notes: g('pd-notes'), badge: g('pd-badge'), facts: pdFactsGet(),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
@@ -4805,6 +4871,7 @@ function pdApplySnapshot(s) {
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = v; };
   const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
   set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
+  set('pd-cost', s.cost); pdRenderMargin();
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
   set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
