@@ -4020,7 +4020,14 @@ async function saveProductEdits(){
     }
     state.prodBusy=false; state.productSku=null; render();
     showToast(T('Saved','已保存'));
-    try{ const rows=await api('/products?limit=50'); if(Array.isArray(rows)){ DB.products=rows.map(mapProduct); render(); } }catch(e){}
+    // Re-read the catalogue through its own loader. This used to refetch
+    // `?limit=50` — boot's snapshot, not the catalogue's 500 — so saving one
+    // product's stock replaced the whole shelf with its first fifty rows: a
+    // 200-product shop watched its chips fall to "All 50", categories vanish,
+    // and the product just edited disappear if it sorted past the fiftieth.
+    // Nothing refetched 500 again, so only closing and reopening the app put
+    // the catalogue back.
+    loadCatalogue(true);
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
@@ -5786,8 +5793,12 @@ function sheetCustomer(){
    holds the whole catalogue and narrows it in the browser; so does this — read
    the first time Products is opened, not at boot, because a phone should not
    pay for a screen nobody has looked at. */
-function loadCatalogue(){
-  if(state.catalogueTried) return;
+/* `force` is for AFTER a write: the sheet's save has to put the catalogue back
+   the way it found it, and the only honest way to do that is to read the whole
+   catalogue again — the same 500 this loader asks for, not a fresh, shorter
+   list. See saveProductEdits. */
+function loadCatalogue(force){
+  if(state.catalogueTried&&!force) return;
   state.catalogueTried=true; state.catalogueLoading=true;
   api('/products?limit=500').then(rows=>{
     state.catalogueLoading=false;

@@ -79,4 +79,53 @@ const CASES = [
   ]],
 ];
 
+/* Saving one product's stock used to shrink the whole catalogue.
+ *
+ * The sheet's save ended with a refetch of `/products?limit=50` — boot's
+ * snapshot, taken so Home can count low stock without paying for the shelf —
+ * not the `?limit=500` the catalogue itself is read with. So a shop with two
+ * hundred products changed a count on one of them and watched its chips fall to
+ * "All 50", its categories thin out, and the product it had just edited vanish
+ * if it sorted past the fiftieth. Nothing asked for the full catalogue again,
+ * because loadCatalogue had already run once — only closing and reopening the
+ * app put the shelf back.
+ *
+ * The stub honours ?limit=, exactly as the endpoint does: a fifty-row refetch
+ * really does come back with fifty rows here.
+ */
+const SHELF = `DB.products=[]; for(var i=1;i<=120;i++){ DB.products.push({sku:'P-'+i,_id:i,
+    name:['Product '+i,'产品 '+i],price:'¥10',priceNum:10,status:['Live','在售'],kind:'on',pub:true,
+    stock:200,stockLabel:['200 in stock','库存 200'],cat:'Pantry',hay:'product '+i}); }
+  state.liveProductsLoaded=true;
+  // The catalogue has already been read once — which is what made this stick.
+  state.catalogueTried=true;
+  state.prodStores=[{id:1,name_en:'Tianhe',name_cn:'天河',qty:2}]; state.prodStockReady=true;
+  APP.cmd('tab','products'); state.productSku='P-7'; render();`;
+
+const SERVER = `window.__sent=[];
+  window.fetch=function(u,o){ var url=String(u); window.__sent.push({u:url, m:(o&&o.method)||'GET'});
+    var body={success:true,data:{}};
+    if(url.indexOf('/products?')>=0){
+      var lim=Number((url.match(/limit=(\\d+)/)||[])[1]||500), rows=[];
+      for(var i=1;i<=Math.min(120,lim);i++) rows.push({id:i,name_en:'Product '+i,sku:'P-'+i,
+        sell_price:10,effective_stock:200,is_published:1});
+      body={success:true,data:rows};
+    }
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(body)}}); };`;
+
+// saveProductEdits does not await the catalogue re-read (nothing on screen waits
+// on it), so settle its own promise and then let the re-read land.
+const SAVE = `window.__settle=saveProductEdits().then(function(){
+    return new Promise(function(r){ setTimeout(r,50); }); });`;
+
+CASES.push(["saving one product's stock leaves the rest of the catalogue alone",
+  SHELF + `sheetStep['st_1']=9;` + SERVER + SAVE, [
+  ['the count goes to the store', "window.__sent.some(function(r){return r.u.indexOf('/stores/1/stock/7')>=0 && r.m==='PATCH'})"],
+  ['THE SHELF IS STILL THE WHOLE SHELF', 'DB.products.length === 120'],
+  ['it re-reads the catalogue, all of it', "window.__sent.some(function(r){return r.u.indexOf('/products?limit=500')>=0})"],
+  ['never boot\'s fifty-row snapshot',    "!window.__sent.some(function(r){return /limit=50(\\D|$)/.test(r.u)})"],
+  // The chip the operator was looking at when they hit save.
+  ['so the All chip still counts them all', "document.getElementById('content').innerText.indexOf('120') >= 0"],
+]]);
+
 run('products', CASES);

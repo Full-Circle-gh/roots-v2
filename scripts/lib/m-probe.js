@@ -17,6 +17,12 @@
  *
  * A case is [name, setupJs, [[label, exprJs], …]]. Inside setup and exprs you
  * have the app's own globals plus txt(id) → that element's innerText.
+ *
+ * Checks run in the same tick as the setup, so a setup that fires a WRITE only
+ * ever pins the first request — everything the handler does after its first
+ * `await` has not happened yet. A setup that needs to assert on the far side of
+ * that can set `window.__settle` to a promise (an async handler returns one),
+ * and the checks wait for it to settle first.
  */
 'use strict';
 
@@ -62,15 +68,21 @@ function run(label, cases) {
       var out=[];
       function txt(id){ var el=document.getElementById(id); return el?el.innerText:''; }
       function sheetText(){ var el=document.querySelector('.sheet'); return el?el.innerText:''; }
-      try{ ${setup} }catch(e){ document.title='BAD setup threw: '+e.message; return; }
       var names=${JSON.stringify(checks.map((c) => c[0]))};
       var fns=[${checks.map((c) => `function(){return (${c[1]})}`).join(',')}];
-      for(var i=0;i<fns.length;i++){
-        var ok=false, why='';
-        try{ ok=!!fns[i](); }catch(e){ why=' ('+e.message+')'; }
-        if(!ok) out.push(names[i]+why);
+      function verdict(){
+        for(var i=0;i<fns.length;i++){
+          var ok=false, why='';
+          try{ ok=!!fns[i](); }catch(e){ why=' ('+e.message+')'; }
+          if(!ok) out.push(names[i]+why);
+        }
+        document.title = out.length ? ('BAD '+out.join(' ¦ ')) : 'GOOD';
       }
-      document.title = out.length ? ('BAD '+out.join(' ¦ ')) : 'GOOD';
+      try{ ${setup} }catch(e){ document.title='BAD setup threw: '+e.message; return; }
+      // See __settle above: a write's own promise, so the checks read the state
+      // the handler actually left rather than the state it started from.
+      if(window.__settle&&typeof window.__settle.then==='function') window.__settle.then(verdict,verdict);
+      else verdict();
     },250)});</script>`;
     const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
     fs.writeFileSync(file, src.replace('</body>', harness + '</body>'));
