@@ -382,10 +382,18 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
       }
       const platformChanged = newPlatform !== r.supplier_platform;
 
-      if (unitChanged || cpuChanged || platformChanged || newEn !== r.name_en || newCn !== r.name_cn) {
-        upd.run(newEn || r.name_en, newCn || null, newUnit, newCpu, newPlatform, r.id);
+      // A made material (§29) is costed from its recipe, not from buy_price /
+      // pack size — so this sweep must not re-derive it from purchase fields
+      // that don't describe it. Its name, unit and platform are still repaired
+      // below; only the cost is left to the recompute pass that owns it.
+      const cpuLocked  = !!r.source_recipe_id;
+      const writeCpu   = cpuLocked ? (+r.cost_per_unit || 0) : newCpu;
+      const cpuWillMove = cpuChanged && !cpuLocked;
+
+      if (unitChanged || cpuWillMove || platformChanged || newEn !== r.name_en || newCn !== r.name_cn) {
+        upd.run(newEn || r.name_en, newCn || null, newUnit, writeCpu, newPlatform, r.id);
         if (unitChanged)     unitFixed++;
-        if (cpuChanged)      cpuFixed++;
+        if (cpuWillMove)     cpuFixed++;   // a locked (recipe-costed) row is not a cost "fix"
         if (platformChanged) platformFixed++;
       }
     }

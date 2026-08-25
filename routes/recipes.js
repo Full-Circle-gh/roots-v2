@@ -6,7 +6,41 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const { computeRecipeCost } = require('../lib/recipe-cost');
+const { checkCycle } = require('../lib/recipe-graph');
 const router = express.Router();
+
+// Nested recipes (§29): a line may reference a material that is itself made by
+// another recipe, so a save can close a loop — "this recipe needs its own
+// output to exist". Nothing else in this codebase has had to refuse that
+// before. Checked BEFORE any write, so a rejected save changes nothing.
+//
+// Each line is checked independently against the stored graph, which is
+// sufficient: a loop needs a path back INTO this recipe, and the other new
+// lines on the same save are all edges leading OUT of it.
+//
+// The refusal names the actual chain. "Would create a circular reference" is
+// true and useless; an operator needs to know which link to break.
+function cycleRefusal(recipeId, lines) {
+  const rid = Number(recipeId);
+  for (const ing of (lines || [])) {
+    if (!ing || !ing.ingredient_id) continue;
+    const verdict = checkCycle(db, { recipeId: rid, ingredientId: ing.ingredient_id });
+    if (verdict.ok) continue;
+    const names = verdict.chain.map(id => {
+      const r = db.prepare('SELECT name_en FROM recipes WHERE id = ?').get(id);
+      return (r && r.name_en) || `recipe #${id}`;
+    });
+    const lineName = ing.name_en || `item #${ing.ingredient_id}`;
+    // chain[0] is the recipe that makes the material being added; the last
+    // entry is this recipe. A single-entry chain is the direct self-reference.
+    const how = names.length === 1
+      ? `"${lineName}" is made by this very recipe`
+      : `"${lineName}" is made by ${names.map(n => `"${n}"`).join(', which needs ')}`;
+    return `Can't add "${lineName}" here: ${how}. A recipe can't end up needing its own output. `
+         + `· 无法添加“${lineName}”:配方不能依赖自身产出。`;
+  }
+  return null;
+}
 
 // GET all recipes (favorites first, then alphabetical)
 router.get('/api/recipes', requireAuth, requirePermission('recipes'), (req, res) => {
@@ -308,6 +342,10 @@ router.post('/api/recipes', requireAuth, requirePermission('recipes'), (req, res
 // PUT update recipe
 router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, res) => {
   const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
+  if (ingredients) {
+    const refusal = cycleRefusal(req.params.id, ingredients);
+    if (refusal) return res.status(400).json({ error: refusal });
+  }
   try {
     db.prepare('UPDATE recipes SET name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,image_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
       .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null, req.params.id);
