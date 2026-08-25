@@ -1,0 +1,28 @@
+<!-- One-time "refer a friend" nudge shown on Home, driven by the same
+     affiliate data (give/get amounts + repeat-order %) as the affiliate_block
+     banner — never a fixed/stale offer. bindtap on rp-bg + catchtap="swallow"
+     on rp-card mirrors popup-manager's tap-outside-to-dismiss convention. -->
+<view wx:if="{{open}}" class="rp-bg" bindtap="onClose" catchtouchmove="true">
+  <view class="rp-card" catchtap="swallow">
+    <view class="rp-close" catchtap="onClose">×</view>
+
+    <image class="rp-mascot" src="/assets/brand/ip-crew.png" mode="aspectFit"></image>
+
+    <view class="rp-kicker">{{kicker}}</view>
+    <view class="rp-title f-bear">{{title}}</view>
+    <view class="rp-sub">{{subtitle}}</view>
+
+    <view wx:if="{{bonusLine}}" class="rp-bonus">{{bonusLine}}</view>
+
+    <view class="rp-code-row">
+      <view class="rp-code-pill">
+        <text class="rp-code-lbl">{{codeLabel}}</text>
+        <text class="rp-code-val">{{code}}</text>
+      </view>
+      <view class="rp-copy" catchtap="onCopyTap">{{copyLabel}}</view>
+    </view>
+
+    <button class="rp-cta" open-type="share">{{shareLabel}} →</button>
+    <view class="rp-later" catchtap="onClose">{{laterLabel}}</view>
+  </view>
+</view>
