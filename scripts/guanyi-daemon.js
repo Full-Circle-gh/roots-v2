@@ -18,6 +18,7 @@
 
 const path = require('path');
 const fs   = require('fs');
+const { execFile } = require('child_process');
 const envFile = path.join(__dirname, '../.env');
 try {
   require('dotenv').config({ path: envFile });
@@ -72,6 +73,11 @@ const GUANYI_STORE_CODE  = process.env.GUANYI_STORE_CODE || 'tianhe';
 const RECONCILE_MS       = Number(process.env.GUANYI_RECONCILE_MS || 60_000);   // how often to sample
 const PICKUP_CAP         = Number(process.env.GUANYI_PICKUP_CAP || 50);          // a single drop bigger than this is flagged, not applied
 const SETTLE_TIMEOUT_MS  = Number(process.env.GUANYI_SETTLE_TIMEOUT_MS || 180_000); // give a push this long to settle before trusting drift
+// How many CONSECUTIVE identical bad-read-guard trips before the reading is taken
+// as the new truth and the baselines are re-synced to it (see the guard itself).
+const GUARD_RESYNC_AFTER = Number(process.env.GUANYI_GUARD_RESYNC_AFTER || 5);
+const guardTripStreak = {};   // storeCode -> consecutive trips on an identical reading
+const guardSig        = {};   // storeCode -> that reading's signature
 let _lastReconcileAt = 0;
 
 // ── Session health + auto-heal ────────────────────────────────────────────────
@@ -91,6 +97,54 @@ const loginFailStreak = {};   // storeCode -> consecutive failed probes
 const downFlagged     = {};   // storeCode -> already alerted for this outage
 const healedOnce      = {};   // storeCode -> heal has run since process start
 let _lastHealthAt = 0;
+// Keep the on-disk session in step with the live one (same interval and reasoning
+// as meituan-daemon's SESSION_SAVE_MS), and warn while the login still works.
+const SESSION_SAVE_MS       = Number(process.env.GUANYI_SESSION_SAVE_MS || 30 * 60_000);
+const SESSION_WARN_MS       = Number(process.env.GUANYI_SESSION_WARN_MS || 72 * 3600_000);
+const SESSION_WARN_EVERY_MS = Number(process.env.GUANYI_SESSION_WARN_EVERY_MS || 12 * 3600_000);
+const lastSessionSave = {};   // storeCode -> epochMs of last on-disk refresh
+const lastExpiryWarn  = {};   // storeCode -> epochMs of last "expiring soon" page
+
+// ── Proxy health gate (mirrors meituan/shangou/qingyun-daemon) ────────────────
+// A dead proxy makes fetchListings() fail exactly the way an expired session
+// does — both come back null — so without this gate processSessionHealth blamed
+// EVERY failure on the login and paged ops to burn ~6 min on a manual headed
+// re-login (scripts/guanyi-login.js) even when the real fix was the proxy.
+// Probes exactly what guanyi-browser.js's resolveProxy(storeCode) would launch
+// Chrome on: the failover watchdog's live pick for this channel first (so Guanyi
+// auto-follows the same residential/GZ/direct election Meituan's tianhe channel
+// already makes — see lib/proxy-manager.js), else the static per-store env var.
+// Direct mode (no proxy at all) is always "healthy" — a no-op there.
+const GUANYI_BASE_URL      = 'https://v2.guanyierp.com';
+const PROXY_DOWN_GRACE     = Number(process.env.GUANYI_PROXY_DOWN_GRACE || LOGIN_DOWN_GRACE);
+const proxyFailStreak = {};   // storeCode -> consecutive failed probes
+const proxyDownFlagged = {};  // storeCode -> already alerted for this outage
+function activeProxy(storeCode) {
+  try {
+    const active = require('../lib/proxy-manager').readActive(storeCode);
+    if (active !== undefined) return active; // '' is a valid value (direct)
+  } catch (_) { /* manager optional — fall through to the static env var */ }
+  return (storeCode && process.env[`GUANYI_PROXY_${String(storeCode).toUpperCase()}`])
+    || process.env.GUANYI_PROXY_URL || '';
+}
+function proxyHealthy(storeCode, timeoutSec = 8) {
+  const proxy = activeProxy(storeCode);
+  if (!proxy) return Promise.resolve(true);
+  // curl wants socks5h:// for remote DNS through a SOCKS5 exit — plain socks5://
+  // resolves locally, which fails on a residential path Chrome handles fine.
+  const probeUrl = proxy.startsWith('socks5://') ? 'socks5h://' + proxy.slice(9) : proxy;
+  return new Promise((resolve) => {
+    execFile('curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', probeUrl,
+       '--max-time', String(timeoutSec), `${GUANYI_BASE_URL}/`],
+      { timeout: (timeoutSec + 4) * 1000 },
+      (_err, stdout) => {
+        const code = parseInt(String(stdout).trim(), 10) || 0;
+        resolve(code >= 200 && code < 600);
+      });
+  });
+}
+function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 
 // Don't fire on an exact fixed cadence.
 function jitter(baseMs, frac = 0.3) {
@@ -373,10 +427,70 @@ async function processPickupReconcile() {
         if (b && Number(cur.currentQty) < b.baseline_qty) drops++;
       }
       if (listed >= 10 && (drops > MAX_DROPS || zeros > listed * 0.5)) {
-        log(storeCode, `⚠ BAD-READ GUARD tripped: ${drops} drop(s) / ${zeros} zero(s) of ${listed} listed — skipping cycle, NO decrement (likely a garbage Guanyi listing read).`);
-        logSync(storeCode, 'pickup_guard', 'skip', { drops, zeros, listed, maxDrops: MAX_DROPS });
+        // The guard skips the cycle BEFORE any baseline is touched — which, for a
+        // read that is bad only for a moment, is exactly right. But a baseline left
+        // far behind reality (every push blocked through an outage while gzgrocery
+        // kept selling) trips it on a read that is not garbage at all, and because
+        // the skip also blocks the baseline update, the next cycle sees the same
+        // gap and skips again. Nothing else writes that table, so it never escapes:
+        // observed after 2026-08-25's proxy outage, an identical 141/18/184 every
+        // 60s with no way out but a hand-edited database.
+        //
+        // So: hold the skip while the picture is still MOVING (a real garbage read
+        // flickers — different products, different counts), and take a picture that
+        // is byte-identical for GUARD_RESYNC_AFTER cycles running as the truth. Then
+        // re-baseline to it and NEVER infer a pickup from the gap we jumped: those
+        // units are unaccounted for either way, and inventing a decrement from a
+        // number we just admitted we don't trust is how the guard's own -1863 unit
+        // incident happened. Re-baselining only forfeits inference we never had.
+        const sig = `${drops}/${zeros}/${listed}`;
+        guardTripStreak[storeCode] = guardSig[storeCode] === sig ? (guardTripStreak[storeCode] || 0) + 1 : 1;
+        guardSig[storeCode] = sig;
+        const trips = guardTripStreak[storeCode];
+
+        if (trips < GUARD_RESYNC_AFTER) {
+          log(storeCode, `⚠ BAD-READ GUARD tripped (${trips}/${GUARD_RESYNC_AFTER}): ${drops} drop(s) / ${zeros} zero(s) of ${listed} listed — skipping cycle, NO decrement (likely a garbage Guanyi listing read).`);
+          logSync(storeCode, 'pickup_guard', 'skip', { drops, zeros, listed, maxDrops: MAX_DROPS, trips });
+          continue;
+        }
+
+        const rebase = db.prepare(`INSERT INTO guanyi_pickup_baseline
+            (store_code,product_id,guanyi_sku_id,baseline_qty,acked_push_at,settle_pending,settle_target,updated_at)
+            VALUES (?,?,?,?,?,0,NULL,CURRENT_TIMESTAMP)
+            ON CONFLICT(store_code,product_id) DO UPDATE SET
+              baseline_qty=excluded.baseline_qty, acked_push_at=excluded.acked_push_at,
+              settle_pending=0, settle_target=NULL, updated_at=CURRENT_TIMESTAMP`);
+        const note = db.prepare(`INSERT INTO guanyi_pickup_log
+            (store_code,product_id,guanyi_sku_id,guanyi_name,observed_qty,baseline_qty,drift,inferred_pickup,tianhe_qty,mode,action,note)
+            VALUES (?,?,?,?,?,?,?,NULL,?,?,'resync',?)`);
+        let rebased = 0;
+        const tx = db.transaction(() => {
+          for (const m of items) {
+            const cur = curBySku.get(String(m.guanyi_sku_id));
+            if (!cur || cur.disabled) continue;
+            const b = db.prepare(`SELECT baseline_qty FROM guanyi_pickup_baseline WHERE store_code=? AND product_id=?`).get(storeCode, m.product_id);
+            const observed = Number(cur.currentQty);
+            rebase.run(storeCode, m.product_id, m.guanyi_sku_id, observed, m.last_pushed_at || null);
+            note.run(storeCode, m.product_id, m.guanyi_sku_id, cur.guanyiName || m.guanyi_name || '',
+                     observed, b ? b.baseline_qty : null, b ? observed - b.baseline_qty : null,
+                     m.tianhe_qty, PICKUP_MODE,
+                     `guard re-baseline after ${trips} identical cycles — NO pickup inferred`);
+            rebased++;
+          }
+        });
+        tx();
+        guardTripStreak[storeCode] = 0;
+        guardSig[storeCode] = null;
+        log(storeCode, `⚠ BAD-READ GUARD: same ${sig} for ${trips} cycles — accepted as truth, re-baselined ${rebased} product(s), NO pickup inferred.`);
+        logSync(storeCode, 'pickup_guard', 'resync', { drops, zeros, listed, trips, rebased });
+        sendOpsAlert(
+          `🟠 管易 ${storeCode} 取货推断基准已重置：${rebased} 个商品（连续 ${trips} 次读数一致，未推断任何取货）\n` +
+          `Guanyi ${storeCode} pickup baselines re-synced to live stock — ${rebased} product(s) after ${trips} identical reads; no pickup was inferred from the gap.`
+        );
         continue;
       }
+      guardTripStreak[storeCode] = 0;
+      guardSig[storeCode] = null;
     }
 
     let detected = 0;
@@ -603,6 +717,29 @@ async function processSessionHealth() {
   _lastHealthAt = now;
 
   for (const storeCode of guanyiStoreCodes()) {
+    // Rule out the proxy before blaming the login — a dead proxy fails
+    // fetchListings() the same way an expired session does, and the fix is
+    // completely different (nobody needs to touch a browser for this one).
+    if (!(await proxyHealthy(storeCode))) {
+      proxyFailStreak[storeCode] = (proxyFailStreak[storeCode] || 0) + 1;
+      log(storeCode, `health: proxy unreachable (${proxyFailStreak[storeCode]}/${PROXY_DOWN_GRACE}) — not blaming the session`);
+      if (!proxyDownFlagged[storeCode] && proxyFailStreak[storeCode] >= PROXY_DOWN_GRACE) {
+        proxyDownFlagged[storeCode] = true;
+        logSync(storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Guanyi — stock push paused (not logged out)');
+        sendOpsAlert(
+          `🔴 管易 ${storeCode} 代理掉线，无法连接，库存推送已暂停（未掉登录）\n` +
+          `Guanyi ${storeCode} proxy down (${maskProxy(activeProxy(storeCode))}) — stock push paused, session is NOT logged out, no need to re-run guanyi-login.js`
+        );
+      }
+      continue; // skip the login-fail streak entirely — this isn't a login problem
+    }
+    if (proxyDownFlagged[storeCode]) {
+      proxyDownFlagged[storeCode] = false;
+      logSync(storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — stock push resumed');
+      sendOpsAlert(`✅ 管易 ${storeCode} 代理已恢复，库存推送继续\nGuanyi ${storeCode} proxy recovered — stock push resumed`);
+    }
+    proxyFailStreak[storeCode] = 0;
+
     let listing = null;
     try {
       const browser = await getBrowser(storeCode);
@@ -641,6 +778,49 @@ async function processSessionHealth() {
       healedOnce[storeCode] = true;
       try { autoHeal(storeCode, listing); } catch (e) { log(storeCode, `auto-heal failed: ${e.message}`); }
     }
+
+    // We just proved this session works. Write its CURRENT cookies to disk so a
+    // restart resumes from them rather than from the login-time snapshot, which
+    // is what the file otherwise keeps for ever (see persistSession). Throttled,
+    // console-only — the same shape meituan-daemon uses.
+    const nowMs = Date.now();
+    if (!lastSessionSave[storeCode] || nowMs - lastSessionSave[storeCode] >= SESSION_SAVE_MS) {
+      try {
+        const browser = await getBrowser(storeCode);
+        if (await browser.persistSession()) {
+          lastSessionSave[storeCode] = nowMs;
+          log(storeCode, 'session refreshed on disk');
+        }
+      } catch (e) { log(storeCode, `session refresh failed: ${e.message}`); }
+    }
+
+    // Say it before it happens. Everything else here reports a session that has
+    // ALREADY died, by which point the push is down and someone has to drop what
+    // they are doing; the cookies themselves know roughly when that will be, so
+    // ask them and give the notice while the channel is still working.
+    try {
+      const browser = await getBrowser(storeCode);
+      const exp = browser.sessionExpiry();
+      if (exp) {
+        const leftMs = exp.atMs - nowMs;
+        if (leftMs > 0 && leftMs <= SESSION_WARN_MS) {
+          // Once per SESSION_WARN_EVERY_MS while inside the window: this is a
+          // "get to it this week" notice, not something to repeat every minute.
+          const last = lastExpiryWarn[storeCode] || 0;
+          if (nowMs - last >= SESSION_WARN_EVERY_MS) {
+            lastExpiryWarn[storeCode] = nowMs;
+            const hrs = Math.round(leftMs / 3600_000);
+            logSync(storeCode, 'session_expiring', 'error', { hours: hrs, cookie: exp.name, at: new Date(exp.atMs).toISOString() });
+            sendOpsAlert(
+              `🟡 管易 ${storeCode} 登录将在约 ${hrs} 小时后过期，请在方便时重新登录（现在同步仍正常）\n` +
+              `Guanyi ${storeCode} login expires in ~${hrs}h — re-login at your convenience from the ops screen; sync is still fine for now.`
+            );
+          }
+        } else if (leftMs > SESSION_WARN_MS) {
+          lastExpiryWarn[storeCode] = 0;   // healthy again after a re-login
+        }
+      }
+    } catch (e) { log(storeCode, `session expiry check failed: ${e.message}`); }
   }
 }
 
@@ -648,7 +828,7 @@ async function processSessionHealth() {
 
 async function main() {
   console.log(`[guanyi-daemon] starting (pickup-mode=${PICKUP_MODE}, reconcile=${RECONCILE_MS}ms, cap=${PICKUP_CAP}, ` +
-              `health=${HEALTH_MS}ms grace=${LOGIN_DOWN_GRACE}, autoheal=${AUTOHEAL ? 'on' : 'off'})`);
+              `health=${HEALTH_MS}ms grace=${LOGIN_DOWN_GRACE}, proxyGrace=${PROXY_DOWN_GRACE}, autoheal=${AUTOHEAL ? 'on' : 'off'})`);
   // eslint-disable-next-line no-constant-condition
   while (true) {
     // Health first: it owns the login alert and the heal, and a dead session makes
