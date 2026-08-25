@@ -11101,6 +11101,13 @@
           </button>
           <h1 class="rcp-rectitle" id="rcp-rec-title"></h1>
           <div class="rcp-recacts">
+            <!-- §29 step 5. data-cap is recipes:edit only, matching Save/Archive
+                 — the client's [data-cap] mechanism has no "requires BOTH"
+                 shape. The actual enforcement is server-side and DOES require
+                 materials:edit too (routes/retail-recipes.js
+                 requireMaterialsEditToo) since this writes into the materials
+                 masterlist; this button's visibility is UX, not the gate. -->
+            <button type="button" class="rcp-btn ghost" id="rcp-rec-materialize" data-cap="recipes:edit" onclick="rcpMaterializeClick()"></button>
             <button type="button" class="rcp-btn danger" id="rcp-rec-arch" data-cap="recipes:edit" onclick="rcpArchive()"></button>
             <button type="button" class="rcp-btn primary" id="rcp-rec-save" data-cap="recipes:edit" onclick="rcpSave()"></button>
           </div>

@@ -10,17 +10,21 @@
 // SCOPE (§29 restated): cost-only. No quantity/stock tracking for recipes, and
 // no connection to retail Products or the storefront in this phase.
 //
-// NOT WIRED INTO ANY UI YET. This file ships the API surface only — no rail
-// tab, no JS module, no capability enforcement beyond the door itself. The
-// screen that calls these routes is a later, separate change (the record
-// screen, the line picker, and the "make available as material" action from
-// docs/tacet-consolidation-decisions.md §29 are none of them here).
+// Wired into the retail-admin Recipes screen (public/retail-admin/19-recipes.js)
+// as of step 4. Step 5 adds POST/DELETE .../materialize — the ONLY
+// client-reachable path permitted to write ingredients.source_recipe_id.
+// routes/retail-materials.js's own save path deliberately refuses to read
+// that field from the client (see its readBody()) and stays that way; this
+// file is where the exception lives, guarded and narrow.
 
 const express = require('express');
 const db = require('../database');
 const { requireRetailAdmin } = require('./retail');
 const { computeRecipeCost } = require('../lib/recipe-cost');
 const { checkCycle } = require('../lib/recipe-graph');
+// §29 step 5 — the "make available as material" guards/writes live here, not
+// in this route file, so they can be tested directly. See its own header.
+const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialFor } = require('../lib/recipe-materialize');
 // The nested-recipe recompute (§29 step 3) — fired after a save that can move
 // a linked material's recipe-derived cost. Same triggers routes/recipes.js
 // already fires from the kitchen door; a recipe backing a material must stay
@@ -78,16 +82,6 @@ function readBody(b) {
     batch_size: b.batch_size || null, servings: b.servings || null, serving_size: b.serving_size || null,
     shelf_life: b.shelf_life || null, storage: b.storage || null, notes: b.notes || null,
   };
-}
-
-// A material this recipe backs, if any (§29) — the row the "Backs material: X"
-// display reads. At most one, per the partial unique index on
-// ingredients.source_recipe_id (database.js).
-function linkedMaterial(recipeId) {
-  return db.prepare(
-    `SELECT id, name_en, name_cn, sku, unit, cost_per_unit, item_kind
-       FROM ingredients WHERE source_recipe_id = ?`
-  ).get(recipeId) || null;
 }
 
 // Whether this recipe's OWN rollup would succeed right now, and why not if
@@ -182,7 +176,7 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
   const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   const cost = computeRecipeCost({ recipe, ingredients, costData });
-  const material = linkedMaterial(recipe.id);
+  const material = linkedMaterialFor(db, recipe.id);
   res.json({ success: true, data: {
     ...recipe, ingredients, steps, costData, cost,
     backsMaterial: material, materialBlock: material ? materialBlockState(recipe.id) : null,
@@ -284,6 +278,55 @@ router.put('/api/retail-admin/recipes/:id/archive', requireRetailAdmin, (req, re
   const active = req.body && req.body.restore ? 1 : 0;
   db.prepare('UPDATE recipes SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(active, req.params.id);
   res.json({ success: true, is_active: active });
+});
+
+// ═══ Materialize (§29 step 5) ═══════════════════════════════════════════════
+// "Make available as material" — the one action that turns a recipe's output
+// into a reusable ingredient another recipe can consume. This is the ONLY
+// client-reachable write of ingredients.source_recipe_id anywhere in the app;
+// routes/retail-materials.js's readBody() refuses that field on purpose (see
+// its comment), so there is no other door.
+//
+// Two-cap gate: recipes:edit is already enforced for every route under this
+// prefix by lib/cap-routes.js. This action ALSO creates/edits a row in the
+// materials masterlist, so it additionally requires materials:edit, checked
+// inline here — mirrors routes/retail.js's "also save as a customer" guard
+// (orders:edit alone must not mint a customer). Same three conditions
+// requireRetailAdmin's own enforcement already uses, so this changes nothing
+// while tenant.rbac_enforce is dark and opens no hole the day it is switched on.
+function requireMaterialsEditToo(req, res) {
+  if (req.tenant && req.tenant.rbac_enforce && req.user && req.user.role !== 'owner'
+      && req.caps && !req.caps.has('materials:edit')) {
+    res.status(403).json({ success: false, error: 'forbidden_capability', need: 'materials:edit' });
+    return false;
+  }
+  return true;
+}
+
+// Thin wrappers — all the guard/write logic lives in lib/recipe-materialize.js
+// so it can be tested directly (scripts/test_recipe_materialize.js) rather
+// than through an HTTP layer.
+router.post('/api/retail-admin/recipes/:id/materialize', requireRetailAdmin, (req, res) => {
+  if (!requireMaterialsEditToo(req, res)) return;
+  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const b = req.body || {};
+  const result = b.mode === 'link'
+    ? materializeLink(db, { recipeId: recipe.id, materialId: Number(b.material_id) })
+    : materializeNew(db, { recipeId: recipe.id, name_en: b.name_en || recipe.name_en, name_cn: b.name_cn, sku: b.sku, item_kind: b.item_kind });
+
+  if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
+  res.json({ success: true, material_id: result.material_id, warning: result.warning || null, rollup: result.rollup });
+});
+
+router.delete('/api/retail-admin/recipes/:id/materialize', requireRetailAdmin, (req, res) => {
+  if (!requireMaterialsEditToo(req, res)) return;
+  const recipe = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
+  const result = unlinkMaterial(db, { recipeId: recipe.id });
+  if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
+  res.json({ success: true, material_id: result.material_id });
 });
 
 module.exports = router;
