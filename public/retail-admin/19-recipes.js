@@ -852,57 +852,42 @@
     const kindOpts = ['food', 'packaging', 'equipment', 'retail', 'other']
       .map(k => `<option value="${k}"${k === 'food' ? ' selected' : ''}>${esc(MZ_KIND_LABEL[k]())}</option>`).join('');
 
-    const scrim = document.createElement('div');
-    scrim.className = 'tdlg-scrim';
-    scrim.innerHTML = `
-      <div class="tdlg-modal tdlg-neutral rcp-mz-modal">
-        <div class="tdlg-body">
-          <h3 class="tdlg-title">${esc(T('Make available as material', '设为可用物料'))}</h3>
-          <p class="tdlg-msg">${esc(T('Lets another recipe use what this one makes as an ingredient.', '让其他食谱可以将本食谱的产出作为原料使用。'))}</p>
-          <div class="rcp-mz-tabs">
-            <button type="button" class="rcp-mz-tab on" data-t="new">${esc(T('Create new', '新建'))}</button>
-            <button type="button" class="rcp-mz-tab" data-t="link">${esc(T('Link existing', '关联现有'))}</button>
-          </div>
-          <div class="rcp-mz-pane" data-t="new">
-            <div class="tdlg-field"><label for="rcp-mz-name_en">${esc(T('Name (English)', '名称(英文)'))}</label>
-              <input id="rcp-mz-name_en" type="text" value="${esc(_rec.name_en || '')}"></div>
-            <div class="tdlg-field"><label for="rcp-mz-name_cn">${esc(T('Name (中文)', '名称(中文)'))}</label>
-              <input id="rcp-mz-name_cn" type="text" value="${esc(_rec.name_cn || '')}"></div>
-            <div class="tdlg-field"><label>${esc(T('Recipe unit', '配方单位'))}</label>
-              <input type="text" value="g" disabled></div>
-            <div class="tdlg-field"><label for="rcp-mz-sku">${esc(T('SKU (optional)', '货号(可选)'))}</label>
-              <input id="rcp-mz-sku" type="text"></div>
-            <div class="tdlg-field"><label for="rcp-mz-kind">${esc(T('Kind', '类别'))}</label>
-              <select id="rcp-mz-kind">${kindOpts}</select></div>
-          </div>
-          <div class="rcp-mz-pane" data-t="link" hidden>
-            <div class="tdlg-field"><label for="rcp-mz-search">${esc(T('Search materials', '搜索物料'))}</label>
-              <input id="rcp-mz-search" type="text" placeholder="${esc(T('Name or SKU…', '名称或货号…'))}" autocomplete="off"></div>
-            <div id="rcp-mz-results"></div>
-            <div id="rcp-mz-selected"></div>
-          </div>
-        </div>
-        <div class="tdlg-foot">
-          <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Cancel', '取消'))}</button>
-          <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Make available', '设为可用'))}</button>
-        </div>
+    const bodyHtml = `
+      <h3 class="tdlg-title">${esc(T('Make available as material', '设为可用物料'))}</h3>
+      <p class="tdlg-msg">${esc(T('Lets another recipe use what this one makes as an ingredient.', '让其他食谱可以将本食谱的产出作为原料使用。'))}</p>
+      <div class="rcp-mz-tabs">
+        <button type="button" class="rcp-mz-tab on" data-t="new">${esc(T('Create new', '新建'))}</button>
+        <button type="button" class="rcp-mz-tab" data-t="link">${esc(T('Link existing', '关联现有'))}</button>
+      </div>
+      <div class="rcp-mz-pane" data-t="new">
+        <div class="tdlg-field"><label for="rcp-mz-name_en">${esc(T('Name (English)', '名称(英文)'))}</label>
+          <input id="rcp-mz-name_en" type="text" value="${esc(_rec.name_en || '')}"></div>
+        <div class="tdlg-field"><label for="rcp-mz-name_cn">${esc(T('Name (中文)', '名称(中文)'))}</label>
+          <input id="rcp-mz-name_cn" type="text" value="${esc(_rec.name_cn || '')}"></div>
+        <div class="tdlg-field"><label>${esc(T('Recipe unit', '配方单位'))}</label>
+          <input type="text" value="g" disabled></div>
+        <div class="tdlg-field"><label for="rcp-mz-sku">${esc(T('SKU (optional)', '货号(可选)'))}</label>
+          <input id="rcp-mz-sku" type="text"></div>
+        <div class="tdlg-field"><label for="rcp-mz-kind">${esc(T('Kind', '类别'))}</label>
+          <select id="rcp-mz-kind">${kindOpts}</select></div>
+      </div>
+      <div class="rcp-mz-pane" data-t="link" hidden>
+        <div class="tdlg-field"><label for="rcp-mz-search">${esc(T('Search materials', '搜索物料'))}</label>
+          <input id="rcp-mz-search" type="text" placeholder="${esc(T('Name or SKU…', '名称或货号…'))}" autocomplete="off"></div>
+        <div id="rcp-mz-results"></div>
+        <div id="rcp-mz-selected"></div>
       </div>`;
-    document.body.appendChild(scrim);
-    const lastFocus = document.activeElement;
-    requestAnimationFrame(() => scrim.classList.add('on'));
-    setTimeout(() => { const f = scrim.querySelector('#rcp-mz-name_en'); if (f) f.focus(); }, 40);
-
-    let done = false;
-    function close() {
-      if (done) return; done = true;
-      document.removeEventListener('keydown', onKey);
-      scrim.classList.remove('on');
-      setTimeout(() => scrim.remove(), 260);
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
-    }
-    function onKey(e) { if (e.key === 'Escape') close(); }
-    scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
-    document.addEventListener('keydown', onKey);
+    const footHtml = `
+      <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Cancel', '取消'))}</button>
+      <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Make available', '设为可用'))}</button>`;
+    // Shared shell (public/tacet-dialogs.js askCustom) — same mechanism
+    // askConfirm/askPrompt/askReason use underneath, not a parallel build.
+    // Handles injectStyle() (so .tdlg-scrim/.tdlg-modal are actually styled
+    // and centered the first time ANY dialog opens in a page session, not
+    // only after some other askConfirm has run once), the backdrop, Escape,
+    // outside-click, entrance/exit animation, and focus-restore-on-close.
+    const { scrim, closer } = askCustom('tdlg-neutral rcp-mz-modal', bodyHtml, footHtml, '#rcp-mz-name_en');
+    const close = () => closer(null);
     scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', close));
 
     const submitBtn = scrim.querySelector('[data-submit]');

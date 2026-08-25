@@ -20,6 +20,19 @@
 //     opts also accepts sub|subEn+subCn (a one-line note under the title)
 // Both askPrompt/askReason resolve '' if submitted empty (value is optional
 // unless opts.required is set), null if dismissed (Escape / backdrop / Cancel).
+//   askCustom(kindClass, bodyHtml, footHtml, focusSel) -> { scrim, closer, ready }
+//     The shell the three functions above build on, for a caller whose
+//     content is more than a title/message/one field. kindClass is appended
+//     to the modal's own class list (pass '' for none; 'tdlg-neutral' /
+//     'tdlg-danger' pick the icon-tint variants those two use, irrelevant if
+//     the caller's bodyHtml has no .tdlg-ic). scrim is the mounted DOM node —
+//     query it for the caller's own fields/buttons and wire listeners after
+//     the call. closer(result) closes the dialog and resolves `ready` with
+//     `result`; call it from the caller's own submit handler, not just Cancel.
+//     ALWAYS call this rather than building .tdlg-scrim/.tdlg-modal markup by
+//     hand — this is the only thing that calls injectStyle(), so a hand-built
+//     copy renders unstyled and unpositioned the first time it runs in a page
+//     that hasn't opened a real dialog yet (see its own comment below).
 (function () {
   if (window.askConfirm) return; // already loaded (e.g. two script tags)
 
@@ -44,9 +57,20 @@
         color: var(--text-1, #111A2B);
         transform: translateY(10px) scale(.985); opacity: 0;
         transition: transform 300ms cubic-bezier(.22,.61,.36,1), opacity 300ms cubic-bezier(.22,.61,.36,1);
+        /* The scrim centers this via flex with 24px padding on every side
+           (below) — but with no cap here, content taller than the viewport
+           just overflows past both edges instead of scrolling, since a
+           flex-centered child isn't clipped by its container. askConfirm/
+           askPrompt/askReason never hit this (one or two short fields), but
+           askCustom() callers can have arbitrarily long content, so the cap
+           lives here rather than in each caller. Column layout + .tdlg-body
+           taking the scroll keeps .tdlg-foot's buttons pinned and reachable
+           even when the body scrolls. */
+        max-height: calc(100vh - 48px);
+        display: flex; flex-direction: column;
       }
       .tdlg-scrim.on .tdlg-modal { transform: none; opacity: 1; }
-      .tdlg-body { padding: 22px 22px 20px; }
+      .tdlg-body { padding: 22px 22px 20px; overflow-y: auto; min-height: 0; flex: 1 1 auto; }
       .tdlg-ic { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
       .tdlg-ic svg { width: 19px; height: 19px; }
       .tdlg-modal.tdlg-danger .tdlg-ic { background: var(--tacet-brick-tint, #F6E7E3); color: var(--tacet-brick, #B4533E); }
@@ -208,4 +232,15 @@
   window.askConfirm = askConfirm;
   window.askPrompt = askPrompt;
   window.askReason = askReason;
+  // The shell askConfirm/askPrompt/askReason all build on, exposed directly
+  // for a caller whose content is more than a title/message/one field —
+  // search-and-pick, tabs, several fields (public/retail-admin/19-recipes.js's
+  // materialize modal is the first caller). This is the ONLY thing that calls
+  // injectStyle(): a caller who builds .tdlg-scrim/.tdlg-modal markup by hand
+  // instead of through this function gets unstyled, unpositioned divs the
+  // first time it runs in a page session that hasn't opened a real askConfirm
+  // yet — no centering, no backdrop, no Escape/outside-click/focus-restore.
+  // That is a from-scratch bug, not a coordinate to nudge; the fix is always
+  // to call this, never to re-implement the shell.
+  window.askCustom = openScrim;
 })();
