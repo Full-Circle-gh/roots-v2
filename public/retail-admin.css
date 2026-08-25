@@ -12297,3 +12297,8 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      convention throughout). */
   .rcp-mz-modal .rcp-mz-warn { margin-top: 8px; font-size: 12.5px; color: var(--td-amber-ink, #93601F);
     background: var(--td-amber-tint, #F6EBDA); border-radius: 8px; padding: 8px 10px; }
+  /* Why the submit button is disabled, when it is — min-height reserves the
+     row so the footer doesn't jump the instant the reason clears. Empty
+     (not hidden) when the form is submittable, same "quiet unless needed"
+     shape as everything else in this modal. */
+  .rcp-mz-modal .rcp-mz-hint { margin-top: 10px; font-size: 12px; color: var(--text-2, #58606E); min-height: 15px; }
