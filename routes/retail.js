@@ -51,6 +51,7 @@ const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, curre
 // transaction's own handle — the shape that survives the PostgreSQL cutover.
 const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
+const { channelSyncStale } = require('../lib/channel-sync-stale');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -14638,6 +14639,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // leaves these two counts alone — they read the same in every store view.
   let reviews_unanswered = { count: 0, low: 0, items: [] };
   let feedback_waiting   = { count: 0, items: [] };
+  // Per-channel stock-sync stall — up to one entry per channel whose own
+  // *_sync_queue has an unresolved row sitting past lib/channel-sync-stale.js's
+  // threshold. Empty array is the common case; see that file for the declared
+  // channel list and the open-hours-adjusted age calculation.
+  let channel_sync_stale = [];
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -15381,12 +15387,17 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        ORDER BY waiting_since ASC LIMIT @preview
     `).all({ preview: previewLimit });
     feedback_waiting = { count: fbCount, items: fbItems };
+
+    // ── Channel stock-sync stall ─────────────────────────────────────────
+    // channelSyncStale() already isolates one channel's failure from the
+    // others (a bad table drops just that entry), so no extra try/catch here.
+    channel_sync_stale = channelSyncStale(tdb());
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, channel_sync_stale, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
