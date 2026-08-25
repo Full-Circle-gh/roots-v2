@@ -24,7 +24,7 @@ const { computeRecipeCost } = require('../lib/recipe-cost');
 const { checkCycle } = require('../lib/recipe-graph');
 // §29 step 5 — the "make available as material" guards/writes live here, not
 // in this route file, so they can be tested directly. See its own header.
-const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialFor } = require('../lib/recipe-materialize');
+const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialFor, materialConsumers } = require('../lib/recipe-materialize');
 // The nested-recipe recompute (§29 step 3) — fired after a save that can move
 // a linked material's recipe-derived cost. Same triggers routes/recipes.js
 // already fires from the kitchen door; a recipe backing a material must stay
@@ -177,9 +177,14 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   const cost = computeRecipeCost({ recipe, ingredients, costData });
   const material = linkedMaterialFor(db, recipe.id);
+  // consumers (§29 step 6) — which OTHER active recipes currently use this
+  // material as an ingredient line. Only fetched when there's a material to
+  // report on; feeds the archive-warning's "used by N recipes" — naming the
+  // actual consequence rather than a generic confirm.
   res.json({ success: true, data: {
     ...recipe, ingredients, steps, costData, cost,
-    backsMaterial: material, materialBlock: material ? materialBlockState(recipe.id) : null,
+    backsMaterial: material ? { ...material, consumers: materialConsumers(db, material.id) } : null,
+    materialBlock: material ? materialBlockState(recipe.id) : null,
   } });
 });
 

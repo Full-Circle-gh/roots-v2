@@ -33,7 +33,11 @@ const { requireRetailAdmin } = require('./retail');
 // The nested-recipe recompute (§29 step 3) — fired after a cost change on a
 // non-linked material, since that can move a linked material's
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
-const { fireRecompute } = require('../lib/recipe-rollup');
+const { fireRecompute, costOneRecipe } = require('../lib/recipe-rollup');
+// §29 step 6 — the recipes currently consuming a material, for the
+// archive-warning; shared with routes/retail-recipes.js's own use of the
+// same query on the other side of this relationship.
+const { materialConsumers } = require('../lib/recipe-materialize');
 
 const router = express.Router();
 
@@ -203,7 +207,28 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
   // showing a blank where a number should be.
   const derived = deriveCostPerUnit(row, row.buy_price);
 
-  res.json({ success: true, data: row, priceHistory, purchases, derived });
+  // §29 step 6 — two things the record must SHOW, not just have correct in
+  // the data (docs/tacet-consolidation-decisions.md §29's "flagged stale"
+  // promise is only real if a person can see it):
+  //   usedByRecipes: active recipes consuming this material as an ingredient
+  //     line — feeds the archive-warning ("used by N recipes").
+  //   sourceRecipe / sourceRecipeBlock: when this row IS a made material
+  //     (source_recipe_id set), the recipe that makes it and whether that
+  //     recipe's own rollup is currently blocked — reusing costOneRecipe
+  //     (lib/recipe-rollup.js), the exact function the rollup itself calls,
+  //     so this can never say something the rollup would disagree with.
+  //     null/null when this row is an ordinary purchased material.
+  const usedByRecipes = materialConsumers(db, row.id);
+  let sourceRecipe = null, sourceRecipeBlock = null;
+  if (row.source_recipe_id) {
+    sourceRecipe = db.prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE id = ?').get(row.source_recipe_id);
+    if (sourceRecipe) {
+      const r = costOneRecipe(db, sourceRecipe.id, new Map());
+      sourceRecipeBlock = { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
+    }
+  }
+
+  res.json({ success: true, data: row, priceHistory, purchases, derived, usedByRecipes, sourceRecipe, sourceRecipeBlock });
 });
 
 // ═══ Create ════════════════════════════════════════════════════════════════
