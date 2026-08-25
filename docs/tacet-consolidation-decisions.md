@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.75
+# Tacet shared-core consolidation — decisions record, v4.76
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-25 · v4.76 — **NESTED RECIPES ARE RECORDED AS §29: a made thing is a MATERIAL.** When a recipe's output is used inside another recipe it gets a row in the materials master, costed from its recipe rather than from a purchase price, and the consuming recipes reference it exactly as they reference oats or packaging. **A recipe line always points at exactly one thing and there is no second possible target** — the rejected alternative, a line that could point at either a material or a recipe, would make every reader of a recipe line handle two cases. That is the same branching-implementations shape that produced FIVE divergent copies of the recipe cost formula, consolidated over two steps immediately before this decision was taken (§29's own rationale says so, and the sequencing is the argument): re-introducing a two-target branch straight afterwards would rebuild what it just cost two passes to remove. **The lifecycle of the implied materials row is explicitly NOT decided here** — creation, editing, archiving from either side, and cycle prevention are named as open and deferred to the next planning pass, so a later reader does not mistake the model for a complete design. **Recipes remain cost-only** — no quantity or stock tracking for made things, and no connection to retail Products in this phase — which restates §28's Phase 1 boundary rather than moving it. Related documents moves from §29 to §30; nothing cross-references either number. A new decision that reverses no earlier rule, hence a patch. Docs only; no code changed.
 
 2026-08-24 · v4.75 — the §28 addendum gains a FOURTH point: **Phase 1b — purchase-line creation for materials — is live and verified**, which closes the condition point 2 set. That point ended *"Roots must not be cut over from the kitchen app until this is live and verified"*, and that sentence was the only thing standing between the Materials work and the migration, so the record now says plainly that it no longer stands: **the Roots kitchen-app migration for purchasing may be scheduled.** Merged as PR #69 (82d49b28), deployed on run 1321, and confirmed ON THE BOX rather than in CI — a fixture database proves the logic is right and proves nothing about what is running, which is why the distinction is recorded here at all: health 200, pm2 stable with zero unstable restarts, deployed bytes byte-identical to the commit, the running process started after the new code landed, and the line_conflict guard rejecting against the deployed handler. The Bought-in read path was checked against LIVE data (ingredient #518, 12 kitchen PO lines, unchanged before and after) because dropping the `scope='kitchen'` filter could only have broken the kitchen-scope read, and no fixture can prove it did not. **No live retail PO has carried a material line yet** — the verification was deliberately non-destructive and created nothing in production, stated so that a later reader does not mistake the absence of retail material lines for a defect. Also corrects the addendum's lead-in, which counted three decisions and now covers four. A status record closing a condition an earlier point set, reversing nothing, hence a patch. Docs only; no code changed.
 
@@ -3892,7 +3894,21 @@ Three decisions made after §28 was written, correcting the first build plan. Po
 
 **The Roots kitchen-app migration for purchasing may now be scheduled.**
 
-## 29. Related documents
+## 29. Nested recipes — a made thing is a material
+
+**Decision.** When a recipe's output is used inside another recipe, that output is represented as a MATERIAL, not as a recipe-referencing-a-recipe. A recipe line always points at exactly one thing: a material. There is no second possible target.
+
+Concretely: a bulk sauce cooked once and used in three dishes gets a row in the materials master. Its cost is derived from its recipe rather than from a purchase price. The three dishes' recipes reference it exactly the way they reference oats or packaging — nothing about a recipe line's shape changes.
+
+**Rationale.** This is the "one list" principle already established when it was confirmed that tenants make things which are then used inside other things: a thing that is both made and consumed needs one record, one cost, one identity. Two separate lists force the sauce to be typed twice and the two copies drift.
+
+The rejected alternative was a recipe line that could point at either a material or a recipe. That shape requires every reader of a recipe line to handle two cases — the same branching-implementations pattern that produced five divergent copies of recipe cost math, consolidated at considerable effort immediately before this decision was made. Adding a new two-target branch straight afterwards would reintroduce the problem it just cost two steps to remove.
+
+**Consequence, not yet designed:** creating a recipe whose output is used elsewhere implies a materials row exists for it. The lifecycle rules for that row — how it is created, what happens if it is edited or archived from the Materials side, whether it is user-created or implied — are open and are the subject of the next planning pass.
+
+**Scope reminder:** recipes remain cost-only. No quantity or stock tracking for made things. Recipes are not connected to retail Products in this phase.
+
+## 30. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
