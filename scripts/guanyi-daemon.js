@@ -97,6 +97,13 @@ const loginFailStreak = {};   // storeCode -> consecutive failed probes
 const downFlagged     = {};   // storeCode -> already alerted for this outage
 const healedOnce      = {};   // storeCode -> heal has run since process start
 let _lastHealthAt = 0;
+// Keep the on-disk session in step with the live one (same interval and reasoning
+// as meituan-daemon's SESSION_SAVE_MS), and warn while the login still works.
+const SESSION_SAVE_MS       = Number(process.env.GUANYI_SESSION_SAVE_MS || 30 * 60_000);
+const SESSION_WARN_MS       = Number(process.env.GUANYI_SESSION_WARN_MS || 72 * 3600_000);
+const SESSION_WARN_EVERY_MS = Number(process.env.GUANYI_SESSION_WARN_EVERY_MS || 12 * 3600_000);
+const lastSessionSave = {};   // storeCode -> epochMs of last on-disk refresh
+const lastExpiryWarn  = {};   // storeCode -> epochMs of last "expiring soon" page
 
 // ── Proxy health gate (mirrors meituan/shangou/qingyun-daemon) ────────────────
 // A dead proxy makes fetchListings() fail exactly the way an expired session
@@ -771,6 +778,49 @@ async function processSessionHealth() {
       healedOnce[storeCode] = true;
       try { autoHeal(storeCode, listing); } catch (e) { log(storeCode, `auto-heal failed: ${e.message}`); }
     }
+
+    // We just proved this session works. Write its CURRENT cookies to disk so a
+    // restart resumes from them rather than from the login-time snapshot, which
+    // is what the file otherwise keeps for ever (see persistSession). Throttled,
+    // console-only — the same shape meituan-daemon uses.
+    const nowMs = Date.now();
+    if (!lastSessionSave[storeCode] || nowMs - lastSessionSave[storeCode] >= SESSION_SAVE_MS) {
+      try {
+        const browser = await getBrowser(storeCode);
+        if (await browser.persistSession()) {
+          lastSessionSave[storeCode] = nowMs;
+          log(storeCode, 'session refreshed on disk');
+        }
+      } catch (e) { log(storeCode, `session refresh failed: ${e.message}`); }
+    }
+
+    // Say it before it happens. Everything else here reports a session that has
+    // ALREADY died, by which point the push is down and someone has to drop what
+    // they are doing; the cookies themselves know roughly when that will be, so
+    // ask them and give the notice while the channel is still working.
+    try {
+      const browser = await getBrowser(storeCode);
+      const exp = browser.sessionExpiry();
+      if (exp) {
+        const leftMs = exp.atMs - nowMs;
+        if (leftMs > 0 && leftMs <= SESSION_WARN_MS) {
+          // Once per SESSION_WARN_EVERY_MS while inside the window: this is a
+          // "get to it this week" notice, not something to repeat every minute.
+          const last = lastExpiryWarn[storeCode] || 0;
+          if (nowMs - last >= SESSION_WARN_EVERY_MS) {
+            lastExpiryWarn[storeCode] = nowMs;
+            const hrs = Math.round(leftMs / 3600_000);
+            logSync(storeCode, 'session_expiring', 'error', { hours: hrs, cookie: exp.name, at: new Date(exp.atMs).toISOString() });
+            sendOpsAlert(
+              `🟡 管易 ${storeCode} 登录将在约 ${hrs} 小时后过期，请在方便时重新登录（现在同步仍正常）\n` +
+              `Guanyi ${storeCode} login expires in ~${hrs}h — re-login at your convenience from the ops screen; sync is still fine for now.`
+            );
+          }
+        } else if (leftMs > SESSION_WARN_MS) {
+          lastExpiryWarn[storeCode] = 0;   // healthy again after a re-login
+        }
+      }
+    } catch (e) { log(storeCode, `session expiry check failed: ${e.message}`); }
   }
 }
 
