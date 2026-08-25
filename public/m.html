@@ -4245,6 +4245,27 @@ function opsFires(){
       :oos?T('out of stock','已售罄'):T('running low','库存不足');
     f.push({sev:'amber',icon:'box',label:T('Restock needed','需要补货'),n:oos||low,meta:state_,go:"APP.cmd('tab','products')",mins:null});
   }
+  // Channel stock-sync stall — mirrors the desktop card's new row (see
+  // lib/channel-sync-stale.js). The phone has no per-channel screen to open
+  // (m.html never rebuilt the desktop's channel-admin tabs), so tapping names
+  // the gap instead of faking a destination. No featOn/permission gate: every
+  // role that sees Home should see when a channel stops syncing.
+  //
+  // Mock: the clock the customer's stock might be wrong at, not a duration —
+  // "waiting since 2:15 PM", not "oldest 4h" — same age:false pattern the
+  // Reviews row above uses for its own custom meta line. `mins` stays real so
+  // this still always outranks Restock below (whose mins is deliberately
+  // null, and a fire with no age always sorts last) — a stale channel may be
+  // SELLING stock we don't have; an empty shelf is only an empty shelf.
+  for(const c of (o.channel_sync_stale||[])){
+    const t=_date(c.oldest_at);
+    const when=t?t.toLocaleTimeString(LANG==='en'?'en-US':'zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
+    f.push({sev:'amber',icon:'unplug',label:T(c.label+' not syncing',c.label+' 未同步'),
+      n:c.waiting_count,
+      meta:when?T('stock updates waiting since '+when,'库存更新自 '+when+' 起等待中'):'',
+      age:false,mins:oldestMins([{waiting_since:c.oldest_at}]),
+      go:`showToast(T('Review this on desktop','请在电脑端查看'))`});
+  }
   const rank={brick:0,amber:1};
   f.sort((a,b)=>{
     const s=(rank[a.sev]??9)-(rank[b.sev]??9); if(s) return s;

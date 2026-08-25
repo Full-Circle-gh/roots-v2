@@ -2463,6 +2463,8 @@ const TD_ATTN_ICON = {
   // are recognisably the same thing.
   star:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.27 5.82.85-4.21 4.1.99 5.78L12 16.27 6.8 19l.99-5.78-4.21-4.1 5.82-.85Z"/></svg>',
   chat:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v10l-4-3H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M12 6.5v3"/><path d="M12 12h.01"/></svg>',
+  // A channel that has stopped taking stock updates — an unplugged connector.
+  plug:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"/><path d="M6.5 7h11v4.5a5.5 5.5 0 0 1-11 0Z"/><path d="M12 17v4"/></svg>',
 };
 
 // ── Running-low rolling window ─────────────────────────────────────────────
@@ -2798,6 +2800,43 @@ function tdAttnRender() {
     });
   }
 
+  // Channel stock-sync stall — a sales channel (Meituan / Eleme / GZ Grocery)
+  // has stopped taking our stock pushes: the oldest push in its queue has sat
+  // unresolved past the threshold in lib/channel-sync-stale.js. Up to one row
+  // per channel, usually zero. The declared channel list lives server-side —
+  // this just loops over whatever the endpoint sends, so a fourth channel
+  // needs no change here. `mins` is still the open-hours-adjusted age from the
+  // server (Meituan/Eleme) or plain wall-clock (GZ Grocery) — it drives sort
+  // order exactly like every other fire's age, even though the row's own text
+  // doesn't show it (see noAutoAge below and tdAttnRowHtml's use of it).
+  //
+  // Mock calls for the clock the customer's stock might be wrong at, not a
+  // duration — "waiting since 2:15 PM", never "oldest 4h", and nothing about
+  // sessions/queues/tokens/attempts: the reader needs to know the numbers on
+  // that channel may be wrong, not why. Since `mins` stays a real number, this
+  // still always outranks the Restock row below (whose `mins` is deliberately
+  // null — it has no clock at all — and a fire with no age always sorts last),
+  // which is the ordering the mock settled: a stale channel may be SELLING
+  // stock we don't have; an empty shelf is only an empty shelf.
+  //
+  // No dashCardWants() gate, deliberately: every role that can see the
+  // dashboard should see when a channel stops syncing, not only operators with
+  // a specific capability.
+  for (const c of (DASH_OPS.channel_sync_stale || [])) {
+    const t = new Date(String(c.oldest_at || '').replace(' ', 'T') + 'Z');
+    const cn = window.cuLang && cuLang() === 'cn';
+    const when = !isNaN(t) ? t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+    fires.push({
+      sev: 'amber', icon: 'plug',
+      label: cuT(`${c.label} not syncing`, `${c.label} 未同步`),
+      n: c.waiting_count,
+      mins: dashAgeMins(c.oldest_at),
+      state: when ? cuT(`stock updates waiting since ${when}`, `库存更新自 ${when} 起等待中`) : null,
+      noAutoAge: true,
+      cta: cuT('Open channel', '前往渠道'), go: `goTab('${c.channel}')`,
+    });
+  }
+
   // Severity first, then oldest first, and a fire with no age sorts last —
   // a state cannot be ranked by how long it has waited.
   const sevRank = { brick: 0, amber: 1 };
@@ -2855,7 +2894,11 @@ function tdAttnRowHtml(f) {
   // order) both — the numbers first, because that is what is being checked,
   // then how long it has waited. Comma-joined for the same reason the Restock
   // state uses one: " · " is what the i18n walker splits an EN/CN pair on.
-  const age = f.mins == null ? '' : cuT(`oldest ${dashAgeShort(f.mins)}`, `最久 ${dashAgeShort(f.mins)}`);
+  // noAutoAge: this fire's `mins` is real (it sorts on it) but its own state
+  // text already says everything the row needs to — the channel-sync-stall
+  // row uses this to show a clock instead of a duration without losing its
+  // place in the oldest-first ordering every other fire's `mins` provides.
+  const age = (f.mins == null || f.noAutoAge) ? '' : cuT(`oldest ${dashAgeShort(f.mins)}`, `最久 ${dashAgeShort(f.mins)}`);
   const meta = [f.state || '', age].filter(Boolean).join(', ');
   const chev = '<svg class="td-nchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
   return `<button type="button" class="td-nrow" onclick="${f.go}">
