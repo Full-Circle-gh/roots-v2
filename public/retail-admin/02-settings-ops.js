@@ -1592,15 +1592,22 @@ const FEATURE_CATALOG = [
     desc: 'A phone-first stock app for shop staff — open /stock on a phone and adjust counts without a PC. Each staffer only edits their assigned store. When off, the app shows a closed screen. · 面向门店员工的手机库存应用:在手机上打开 /stock 即可调整库存,无需电脑。每位员工只能编辑其所分配的门店。关闭后应用显示停用页面。' },
   { key: 'kitchenAdd',  en: 'Add Stock (kitchen)', cn: '加库存',     def: true,
     desc: 'A phone app for kitchen/production staff — they search a product, enter how many they just made, and it is added to the shelf count. They never see or recount the current stock. Kitchen-role staff open /stock and get this add view automatically. When off, the app shows a closed screen. · 面向后厨/生产员工的手机应用:搜索商品,输入刚制作的数量,即可加入库存。他们看不到也无需清点现有库存。后厨角色员工打开 /stock 自动进入此“加库存”视图。关闭后应用显示停用页面。' },
-  // Materials (物料) — ON by default, unlike a brand-new optional add-on. Roots
-  // already holds 630+ materials, so shipping this off would hide a tenant's own
-  // existing data the moment it deployed. Revisit the default when real
-  // entitlement billing exists: a tenant who ADDS the module later shouldn't
-  // necessarily get it pre-enabled.
-  { key: 'materials',   en: 'Materials',            cn: '物料',       def: true,
-    desc: 'The list of everything you buy and hold but don\'t sell — ingredients, packaging, equipment, supplies — and what each costs per unit. When off, the Materials tab is hidden from the sidebar. · 你采购并库存但不出售的物品清单 —— 原料、包装、设备、耗材 —— 及其单位成本。关闭后侧边栏不再显示“物料”。',
-    descOn:  'On. Materials is in your sidebar, and every material\'s unit cost is worked out from its pack price. · 已开启:侧边栏显示“物料”,每项物料的单位成本由整包价格折算。',
-    descOff: 'Off. The Materials tab is hidden. Nothing is deleted — your materials are still there when you turn it back on. · 已关闭:“物料”标签已隐藏。数据不会删除,重新开启后仍在。' },
+  // Production (§28) — one switch for Materials AND Recipes; there is no state
+  // where one is on and the other off, so this is not a second FEATURE_CATALOG
+  // entry, it is the 'materials' entry renamed and its copy widened to cover
+  // both screens. Key renamed 'materials' -> 'production' (docs/tacet-
+  // consolidation-decisions.md §28); the stored operator preference is carried
+  // forward by a database.js migration (rename_materials_feature_to_production_v1)
+  // so this rename does not silently flip anyone's saved on/off choice.
+  // ON by default, unlike a brand-new optional add-on. Roots already holds
+  // 630+ materials, so shipping this off would hide a tenant's own existing
+  // data the moment it deployed. Revisit the default when real entitlement
+  // billing exists: a tenant who ADDS the module later shouldn't necessarily
+  // get it pre-enabled.
+  { key: 'production',  en: 'Production',           cn: '生产',       def: true,
+    desc: 'Materials and Recipes — what you buy and hold but don\'t sell, and what you make from it. When off, both tabs are hidden from the sidebar. · 物料与食谱 —— 你采购并库存但不出售的物品,以及用它们制作的东西。关闭后两个标签都会从侧边栏隐藏。',
+    descOn:  'On. Materials and Recipes are in your sidebar. Every material\'s unit cost is worked out from its pack price, and every recipe backed by a material feeds that cost through automatically. · 已开启:侧边栏显示“物料”与“食谱”。每项物料的单位成本由整包价格折算,由物料支撑的每份食谱成本也会自动更新。',
+    descOff: 'Off. The Materials and Recipes tabs are hidden. Nothing is deleted — everything is still there when you turn it back on. · 已关闭:“物料”与“食谱”标签均已隐藏。数据不会删除,重新开启后仍在。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {

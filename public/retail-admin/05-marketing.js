@@ -1290,10 +1290,12 @@ const FEATURE_HOMES = {
   faq:         '#tab-faq',
   quickStock:  '#qs-home',
   kitchenAdd:  '#ka-home',
-  // Materials' own page is a rail tab, not a Settings panel — so its switch
-  // lives in Settings → Operations beside Quick Stock, next to the other two
-  // things a tenant turns on or off wholesale.
-  materials:   '#mat-settings-home',
+  // Materials' own page is a rail tab, not a Settings panel — so the
+  // Production switch lives in Settings → Operations beside Quick Stock, next
+  // to the other two things a tenant turns on or off wholesale. Recipes has
+  // no separate entry here on purpose (§28: one switch, not two) — its rail
+  // tab is gated by the same data-feat="production" attribute as Materials'.
+  production:  '#mat-settings-home',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home

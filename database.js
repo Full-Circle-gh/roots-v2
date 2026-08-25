@@ -452,6 +452,31 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('link_made_materials_v1');
   }
 } catch (e) { console.error('[migration link_made_materials_v1]', e); }
+// The tenant-facing FEATURE_CATALOG switch is renamed 'materials' -> 'production'
+// (it now gates Recipes too, not just the materials masterlist — one switch, no
+// second FEATURE_CATALOG entry). storefront_config stores one row per dotted
+// key (routes/retail.js loadConfig/setPath), so the operator's saved on/off
+// preference lives under the literal key 'features.materials' and would not be
+// found under 'features.production' after the rename — read as unset, which
+// falls back to the catalog default. That default happens to also be true
+// today, so nothing would visibly break for Roots, but relying on that
+// coincidence is wrong: it silently discards an explicit preference and would
+// flip a tenant who had explicitly turned it OFF back ON. Copy the value
+// forward under its own name instead. The old row is left in place rather than
+// deleted — dead, but harmless, and safer to leave than to remove during a
+// step that is supposed to be invisible.
+try {
+  const ranFeatRename = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('rename_materials_feature_to_production_v1');
+  if (!ranFeatRename) {
+    const old = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'features.materials'").get();
+    const already = db.prepare("SELECT 1 FROM storefront_config WHERE key = 'features.production'").get();
+    if (old && !already) {
+      db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('features.production', ?)").run(old.value_json);
+      console.log(`[migration] rename_materials_feature_to_production_v1: carried features.materials=${old.value_json} forward as features.production`);
+    }
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('rename_materials_feature_to_production_v1');
+  }
+} catch (e) { console.error('[migration rename_materials_feature_to_production_v1]', e); }
 // Payment methods used on the supplier form. Stored in the editable
 // categories table so admin can add/remove options without a code change.
 try {

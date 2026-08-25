@@ -1295,9 +1295,11 @@
   <!-- Materials (物料) — what the business buys and holds but doesn't sell.
        Purchasing's sibling: a PO orders a material, the masterlist outlives the
        order. data-feat gates the whole row on the tenant switch (Settings →
-       Operations); when Materials is off the row is gone, not dimmed — the FAQ
-       precedent, because a rail tab that leads nowhere is worse than silence. -->
-  <button data-tab="materials" data-feat="materials" onclick="matInit()" style="order:9">
+       Operations, "Production" — §28: one switch also covers Recipes, so this
+       is data-feat="production", not "materials"); when off the row is gone,
+       not dimmed — the FAQ precedent, because a rail tab that leads nowhere is
+       worse than silence. -->
+  <button data-tab="materials" data-feat="production" onclick="matInit()" style="order:9">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
     Materials · 物料
   </button>
@@ -10127,8 +10129,9 @@
           <!-- The on/off switch (.feat-bar) and the "off" card are injected at
                the top of #mat-settings-home by mountFeatureControls()
                (05-marketing.js), driven by FEATURE_CATALOG/FEATURE_HOMES.
-               Everything below is the "on" content. -->
-          <div id="mat-settings-home" data-feat="materials">
+               Everything below is the "on" content. data-feat="production" —
+               §28: one switch, shared with Recipes, not a materials-only key. -->
+          <div id="mat-settings-home" data-feat="production">
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Materials · 物料</h3>

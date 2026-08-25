@@ -47,7 +47,7 @@ const INGREDIENT_LIST_COLS = `
   supplier, supplier_platform, supplier_link,
   allergens, notes,
   is_active, created_at, updated_at,
-  accounting_category, item_kind,
+  accounting_category, item_kind, source_recipe_id,
   (image_data IS NOT NULL AND image_data != '')        AS has_image,
   (supplier_qr_data IS NOT NULL AND supplier_qr_data != '') AS has_supplier_qr
 `;

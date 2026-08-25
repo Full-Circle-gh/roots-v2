@@ -109,7 +109,7 @@ function costFor(row, existingCpu) {
 
 // ═══ List ══════════════════════════════════════════════════════════════════
 router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
-  const { search, kind, category, supplier, archived } = req.query;
+  const { search, kind, category, supplier, archived, for_recipe } = req.query;
   // Everything EXCEPT the kind filter. The chip row is the kind filter, so its
   // counts have to be taken with every other filter applied and this one not —
   // otherwise a chip reads "Packaging 146" next to a searched table showing two
@@ -119,6 +119,22 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   if (search)   { where += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; base.push(s, s, s); }
   if (category) { where += ' AND category = ?'; base.push(category); }
   if (supplier) { where += ' AND supplier = ?'; base.push(supplier); }
+  // for_recipe=1 — the recipe line picker's eligibility filter (§29). Not the
+  // kitchen picker's plain item_kind='food': packaging is deliberately left
+  // out of BOTH clauses on the OR (not folded into the generic 'food'/'other'
+  // allow-list) because recipe_cost_data.packaging (routes: PUT
+  // /:id/cost) already prices packaging from the standalone packaging_types
+  // table — there is no link between that table and `ingredients`, so an
+  // item_kind='packaging' material appearing here too would give a jar two
+  // uncoordinated cost paths into the same recipe, one of them silent.
+  // 'equipment'/'retail' are excluded as structurally not a recipe input,
+  // matching the kitchen picker's existing intent. A made material
+  // (source_recipe_id set) is always eligible regardless of its own kind —
+  // §29's whole point is that a bulk sauce used in another recipe must be
+  // pickable, independent of how it happens to be tagged.
+  if (for_recipe === '1') {
+    where += ` AND (COALESCE(item_kind,'food') IN ('food','other') OR source_recipe_id IS NOT NULL)`;
+  }
 
   let q = `SELECT ${LIST_COLS} FROM ingredients${where}`;
   const p = base.slice();

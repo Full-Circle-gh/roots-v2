@@ -148,13 +148,15 @@
     return _prodCache[storeId];
   }
   // Materials — not store-scoped stock, so one cache serves every store.
-  // Gated by the 'materials' tenant feature (body.feat-materials, same class
-  // that hides the Materials tab) — a tenant with it off never sees a material
-  // in this picker, even though the API itself has no feature check (matches
-  // the Materials screen's own precedent: server enforces the door, the
-  // tenant-level on/off switch is UI-only, per §28 addendum item 1).
+  // Gated by the 'production' tenant feature (body.feat-production, same
+  // class that hides the Materials/Recipes tabs — renamed from 'materials'
+  // when Recipes joined the same switch, §28) — a tenant with it off never
+  // sees a material in this picker, even though the API itself has no
+  // feature check (matches the Materials screen's own precedent: server
+  // enforces the door, the tenant-level on/off switch is UI-only, per §28
+  // addendum item 1).
   function materialsFeatureOn() {
-    return document.body.classList.contains('feat-materials');
+    return document.body.classList.contains('feat-production');
   }
   async function materials() {
     if (!materialsFeatureOn()) return [];
