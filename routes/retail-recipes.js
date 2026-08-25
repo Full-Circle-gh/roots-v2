@@ -25,7 +25,7 @@ const { checkCycle } = require('../lib/recipe-graph');
 // a linked material's recipe-derived cost. Same triggers routes/recipes.js
 // already fires from the kitchen door; a recipe backing a material must stay
 // correct no matter which door saved it.
-const { fireRecompute, backsLinkedMaterial } = require('../lib/recipe-rollup');
+const { fireRecompute, backsLinkedMaterial, costOneRecipe } = require('../lib/recipe-rollup');
 
 const router = express.Router();
 
@@ -80,14 +80,27 @@ function readBody(b) {
   };
 }
 
-// A material this recipe backs, if any (§29) — the row a future "Linked to
-// material: X" state reads. At most one, per the partial unique index on
+// A material this recipe backs, if any (§29) — the row the "Backs material: X"
+// display reads. At most one, per the partial unique index on
 // ingredients.source_recipe_id (database.js).
 function linkedMaterial(recipeId) {
   return db.prepare(
     `SELECT id, name_en, name_cn, sku, unit, cost_per_unit, item_kind
        FROM ingredients WHERE source_recipe_id = ?`
   ).get(recipeId) || null;
+}
+
+// Whether this recipe's OWN rollup would succeed right now, and why not if
+// not — reuses lib/recipe-rollup.js's costOneRecipe (the exact function
+// planRollup calls per node) rather than re-deriving the block conditions
+// here, so this can never drift from what actually decides a linked
+// material's stored cost. An empty overrides Map is correct for a single
+// recipe read: overrides only matter when cascading through OTHER linked
+// materials this recipe's lines might consume, which is planRollup's job,
+// not a per-recipe status read's.
+function materialBlockState(recipeId) {
+  const r = costOneRecipe(db, recipeId, new Map());
+  return { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
 }
 
 // ═══ List ══════════════════════════════════════════════════════════════════
@@ -122,19 +135,27 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
     }
     const allCost = db.prepare(`SELECT * FROM recipe_cost_data WHERE recipe_id IN (${qs})`).all(...ids);
     costByRecipe = new Map(allCost.map(c => [c.recipe_id, c]));
-    const allMaterials = db.prepare(`SELECT id, name_en, source_recipe_id FROM ingredients WHERE source_recipe_id IN (${qs})`).all(...ids);
+    const allMaterials = db.prepare(`SELECT id, name_en, cost_per_unit, unit, source_recipe_id FROM ingredients WHERE source_recipe_id IN (${qs})`).all(...ids);
     materialByRecipe = new Map(allMaterials.map(m => [m.source_recipe_id, m]));
   }
 
   const rows = recipes.map(r => {
     const c = computeRecipeCost({ recipe: r, ingredients: linesByRecipe.get(r.id) || [], costData: costByRecipe.get(r.id) });
     const material = materialByRecipe.get(r.id);
+    // Blocked state only costs a query for the ~27 recipes that actually back
+    // a material — costOneRecipe is cheap but there is no reason to run it
+    // for the other ~110 rows on every list paint.
     return {
       id: r.id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, category: r.category,
       batch_size: r.batch_size, servings: r.servings, is_active: r.is_active, is_favorite: !!r.is_favorite,
-      costPerServing: c.costPerServing, costPerGram: c.costPerGram,
+      // batchCost is always computable (it needs neither batch_size nor
+      // servings) — the list's cost column falls back to it when neither
+      // per-unit figure can be worked out, which real data shows is common
+      // (3 of the 4 recipes named in the build gate have both unset).
+      batchCost: c.batchCost, costPerServing: c.costPerServing, costPerGram: c.costPerGram,
       zeroCostIngredientLines: c.zeroCostIngredientLines,
-      backsMaterial: material ? { id: material.id, name_en: material.name_en } : null,
+      backsMaterial: material ? { id: material.id, name_en: material.name_en, cost_per_unit: material.cost_per_unit, unit: material.unit } : null,
+      materialBlock: material ? materialBlockState(r.id) : null,
     };
   });
   res.json({ success: true, data: rows });
@@ -161,7 +182,11 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
   const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   const cost = computeRecipeCost({ recipe, ingredients, costData });
-  res.json({ success: true, data: { ...recipe, ingredients, steps, costData, cost, backsMaterial: linkedMaterial(recipe.id) } });
+  const material = linkedMaterial(recipe.id);
+  res.json({ success: true, data: {
+    ...recipe, ingredients, steps, costData, cost,
+    backsMaterial: material, materialBlock: material ? materialBlockState(recipe.id) : null,
+  } });
 });
 
 // ═══ Create ════════════════════════════════════════════════════════════════

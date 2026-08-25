@@ -189,6 +189,7 @@ const TAB_CAP = {
   delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
   activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
+  recipes: 'recipes:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
 // Rail folders, recounted after the gates (§2.5 of the drill-down amendment).
@@ -869,6 +870,8 @@ const RAIL_STANDIN = {
   'orders-new': 'orders',
   // One material is a sub-page of Materials, the same takeover.
   'materials-record': 'materials',
+  // One recipe is a sub-page of Recipes, the same takeover (§29).
+  'recipes-record': 'recipes',
 };
 
 var _railAnimTimer = null;  // var: the helpers below are hoisted and may be

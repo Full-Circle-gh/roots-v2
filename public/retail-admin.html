@@ -1303,6 +1303,14 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
     Materials · 物料
   </button>
+  <!-- Recipes (食谱, §29) — Materials' sibling under the same Production switch
+       (data-feat="production", same as Materials — one switch, no second
+       FEATURE_CATALOG entry). Cost-only in this phase: no quantity/stock
+       tracking, no connection to Products or the storefront. -->
+  <button data-tab="recipes" data-feat="production" onclick="rcpInit()" style="order:9">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18"/><path d="M6.5 22H20v-4H6.5A2.5 2.5 0 0 0 4 20.5v0A2.5 2.5 0 0 0 6.5 22Z"/><path d="M9 7h6M9 10h4"/></svg>
+    Recipes · 食谱
+  </button>
 
   <!-- Content — a FOLDER, not a destination (rail drill-down amendment §2.2,
        2026-07-29). It was "Editor": a group that was also a live tab, the only
@@ -11072,6 +11080,38 @@
     </div>
   </section>
 
+  <!-- ── Recipes (食谱, §29) ──────────────────────────────────────────────
+       Same shape as Materials just above: two sibling sections, the record a
+       full page via the RAIL_STANDIN takeover. Painted by
+       retail-admin/19-recipes.js. The record carries a persistent cost/
+       warning summary (rcp-rec-summary) ABOVE the sub-tabs — it must stay
+       visible no matter which sub-tab is open, since "does this look free"
+       is the one thing this screen must never let a tab hide. -->
+  <section id="tab-recipes">
+    <div id="rcp-root" data-no-i18n></div>
+  </section>
+
+  <section id="tab-recipes-record">
+    <div class="rcp-scroll" id="rcp-rec-scroll">
+      <div class="rcp-page" data-no-i18n>
+        <div class="rcp-rechead">
+          <button type="button" class="rcp-btn ghost sm" onclick="rcpRecordBack()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
+            <span id="rcp-rec-backlbl"></span>
+          </button>
+          <h1 class="rcp-rectitle" id="rcp-rec-title"></h1>
+          <div class="rcp-recacts">
+            <button type="button" class="rcp-btn danger" id="rcp-rec-arch" data-cap="recipes:edit" onclick="rcpArchive()"></button>
+            <button type="button" class="rcp-btn primary" id="rcp-rec-save" data-cap="recipes:edit" onclick="rcpSave()"></button>
+          </div>
+        </div>
+        <div class="rcp-summary" id="rcp-rec-summary"></div>
+        <div class="rcp-subtabs" id="rcp-subtabs"></div>
+        <div id="rcp-rec-body"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="tab-guanyi">
     <h2>gzgrocery 同步 · Guanyi Sync</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -12180,6 +12220,11 @@
      18-materials.js, which reads its unit tables at paint time. -->
 <script src="/lib/ingredient-cost.js"></script>
 <script src="/assets/retail-admin/18-materials.js"></script>
+<!-- The one recipe cost derivation, shared with the server (lib/recipe-cost.js)
+     — same reasoning as ingredient-cost.js just above. Must come before
+     19-recipes.js, which uses it for the live Cost & Pricing preview. -->
+<script src="/lib/recipe-cost.js"></script>
+<script src="/assets/retail-admin/19-recipes.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
