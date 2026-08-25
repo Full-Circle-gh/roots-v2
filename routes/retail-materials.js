@@ -30,6 +30,10 @@ const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
 const { requireRetailAdmin } = require('./retail');
+// The nested-recipe recompute (§29 step 3) — fired after a cost change on a
+// non-linked material, since that can move a linked material's
+// recipe-derived cost transitively. See lib/recipe-rollup.js.
+const { fireRecompute } = require('../lib/recipe-rollup');
 
 const router = express.Router();
 
@@ -220,6 +224,11 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
   if (!b.name_en) b.name_en = existing.name_en;
   if (!b.item_kind) b.item_kind = existing.item_kind || 'food';
   try {
+    // readBody() deliberately never reads source_recipe_id from the client —
+    // a link is not something a material save gets to set — so the stored
+    // value is carried in here for costFor()'s guard to see. Captured once so
+    // the same number both gets written and drives the recompute check below.
+    const writtenCpu = costFor({ ...b, source_recipe_id: existing.source_recipe_id }, existing.cost_per_unit);
     db.prepare(`UPDATE ingredients SET
       name_en=?,name_cn=?,sku=?,category=?,unit=?,buy_unit=?,buy_pack_size=?,
       pack_contents_qty=?,pack_contents_unit=?,cost_per_unit=?,buy_price=?,supplier=?,
@@ -228,10 +237,7 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
       WHERE id=?`)
       .run(b.name_en, b.name_cn, b.sku, b.category, b.unit, b.buy_unit, b.buy_pack_size,
            b.pack_contents_qty, b.pack_contents_unit,
-           // readBody() deliberately never reads source_recipe_id from the
-           // client — a link is not something a material save gets to set — so
-           // the stored value is carried in here for costFor()'s guard to see.
-           costFor({ ...b, source_recipe_id: existing.source_recipe_id }, existing.cost_per_unit),
+           writtenCpu,
            b.buy_price, b.supplier,
            b.allergens, b.notes, b.accounting_category, b.item_kind, b.free_by_design,
            req.params.id);
@@ -249,6 +255,11 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
         }
       }
     }
+    // Recompute trigger (§29 step 3). costFor() already pins a linked row's
+    // cost to its existing value, so this can only be true for the kind of
+    // write that actually feeds the rollup graph.
+    const cpuMoved = !existing.source_recipe_id && Number(writtenCpu) !== Number(existing.cost_per_unit || 0);
+    if (cpuMoved) fireRecompute(db, { source: 'retail-materials.update', ingredient_id: Number(req.params.id) });
     res.json({ success: true });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, req.params.id) });

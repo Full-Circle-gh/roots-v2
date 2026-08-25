@@ -7,6 +7,11 @@ const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const { computeRecipeCost } = require('../lib/recipe-cost');
 const { checkCycle } = require('../lib/recipe-graph');
+// The nested-recipe recompute (§29 step 3) — fired after a save on a recipe
+// that backs a linked material (recipe_ingredients lines, batch_size, or
+// recipe_cost_data), since any of those can move that material's
+// recipe-derived cost transitively. See lib/recipe-rollup.js.
+const { fireRecompute, backsLinkedMaterial } = require('../lib/recipe-rollup');
 const router = express.Router();
 
 // Nested recipes (§29): a line may reference a material that is itself made by
@@ -359,6 +364,13 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(req.params.id, i+1, s.name||null, s.instructions||null));
     }
+    // Recompute trigger (§29 step 3): batch_size (always saved by this
+    // handler) and the ingredient lines just written above both feed a
+    // linked material's recipe cost, so this fires on every successful save
+    // of a recipe that backs one — regardless of which fields were sent.
+    if (backsLinkedMaterial(db, req.params.id)) {
+      fireRecompute(db, { source: 'recipes.update', recipe_id: Number(req.params.id) });
+    }
     logActivity(req.user.id, req.user.username, 'update', 'recipe', req.params.id, { name_en }, req.ip);
     res.json({ success: true });
   } catch(e) {
@@ -381,6 +393,11 @@ router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), (
     ON CONFLICT(recipe_id) DO UPDATE SET labour=?,packaging=?,packaging_type_id=?,overhead_pct=?,sell_price=?,target_food_cost=?,updated_at=CURRENT_TIMESTAMP`)
     .run(req.params.id, labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30,
          labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30);
+  // Recompute trigger (§29 step 3): labour/packaging/overhead feed a linked
+  // material's recipe cost exactly like an ingredient line does.
+  if (backsLinkedMaterial(db, req.params.id)) {
+    fireRecompute(db, { source: 'recipes.cost_update', recipe_id: Number(req.params.id) });
+  }
   res.json({ success: true });
 });
 
