@@ -573,7 +573,17 @@ router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res)
     `);
     let bundleCount = 0;
     const tx = db.transaction(() => {
-      for (const row of mapped) insert.run(row.retail_store_id, row.product_id, row.store_code, row.qty);
+      // Bundles already go through refreshPending (update the existing pending
+      // row's qty in place, only insert if none exists) — this loop was the one
+      // path that didn't, a raw INSERT every call. A queue that's still draining
+      // from click #1 got a full second copy on click #2: every mapped product
+      // duplicated once per click, none of them collapsing until they happened to
+      // land in the same 40-row batch. One store's backlog hit a 4x multiplier
+      // this way — 877 pending for 208 products that actually needed a push.
+      for (const row of mapped) {
+        if (bundleLib.refreshPending(db, { retailStoreId: row.retail_store_id, productId: row.product_id, qty: row.qty })) continue;
+        insert.run(row.retail_store_id, row.product_id, row.store_code, row.qty);
+      }
       bundleCount = bundleLib.enqueueAllBundles(db);
     });
     tx();
