@@ -876,7 +876,8 @@
           <input id="rcp-mz-search" type="text" placeholder="${esc(T('Name or SKU…', '名称或货号…'))}" autocomplete="off"></div>
         <div id="rcp-mz-results"></div>
         <div id="rcp-mz-selected"></div>
-      </div>`;
+      </div>
+      <div class="rcp-mz-hint" id="rcp-mz-hint"></div>`;
     const footHtml = `
       <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Cancel', '取消'))}</button>
       <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Make available', '设为可用'))}</button>`;
@@ -891,11 +892,29 @@
     scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', close));
 
     const submitBtn = scrim.querySelector('[data-submit]');
+    // Evaluated on open AND on every relevant change — not only in response to
+    // typing/picking. The 'new' tab's name field starts PREFILLED from the
+    // recipe (bodyHtml above, value="${_rec.name_en}"), so a version of this
+    // that only ran from an input/change LISTENER never fired for the common
+    // case of
+    // "open the modal, everything already looks right, click Make available"
+    // — the button stayed disabled forever with nothing to explain why, since
+    // it was never actually re-evaluated after the markup's hardcoded
+    // `disabled` attribute rendered. Names the actual missing field rather
+    // than leaving a dead button with no explanation, per the same rule the
+    // server-side guards follow (§29 step 5).
     function updateSubmitState() {
-      submitBtn.disabled = mz.mode === 'new'
-        ? !scrim.querySelector('#rcp-mz-name_en').value.trim()
-        : !mz.selected;
+      let reason = null;
+      if (mz.mode === 'new') {
+        if (!scrim.querySelector('#rcp-mz-name_en').value.trim()) reason = T('An English name is required.', '英文名称为必填项。');
+      } else if (!mz.selected) {
+        reason = T('Pick a material to link.', '请选择一个要关联的物料。');
+      }
+      submitBtn.disabled = !!reason;
+      const hint = scrim.querySelector('#rcp-mz-hint');
+      if (hint) hint.textContent = reason || '';
     }
+    updateSubmitState();
 
     // ── mode tabs ──
     scrim.querySelectorAll('.rcp-mz-tab').forEach(b => b.addEventListener('click', () => {
