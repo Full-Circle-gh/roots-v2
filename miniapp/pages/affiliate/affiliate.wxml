@@ -130,7 +130,6 @@
         <view class="inv-status status-{{item.status}} f-gothic">{{item.statusLabel}}</view>
       </view>
     </view>
-    <view wx:else class="empty f-aleo">{{copy.empty}}</view>
 
   </block>
 

@@ -388,12 +388,6 @@
   border: 1rpx dashed rgba(0,0,0,0.3);
 }
 
-.empty {
-  margin: 40rpx 44rpx 0;
-  text-align: center;
-  color: var(--olive);
-  padding: 60rpx 0;
-}
 
 .disabled-card {
   margin: 60rpx 44rpx;
