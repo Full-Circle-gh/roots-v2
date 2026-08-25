@@ -2600,6 +2600,14 @@
      inherit from .pa-rowhead (700/13.5px) instead of the body's 500/14px —
      "Price" was previously reusing .pa-col-price and picking up its font. */
   .pa-col-price-h { justify-self: end; }
+  /* Margin reads as a companion to Price, so it borrows the price column's
+     alignment and tabular figures but sits a step quieter — it is a derived
+     number, not one the operator typed. Same header/body split as Price above. */
+  .pa-col-margin {
+    font-variant-numeric: tabular-nums; font-size: 14px; color: var(--td-text2);
+    justify-self: end; white-space: nowrap;
+  }
+  .pa-col-margin-h { justify-self: end; }
   .pa-col-stock { font-size: 14px; }
 
   /* Status column — one badge per row answering "can a shopper buy this now".

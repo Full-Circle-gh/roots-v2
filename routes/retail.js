@@ -20035,7 +20035,7 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
 // is also the exact column set written on restore, so capture and restore agree.
 const VERSION_COLUMNS = [
   'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
-  'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
+  'sell_price', 'compare_at_price', 'unit_cost', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
   'is_market', 'is_restock_only', 'is_batch_made', 'oos_policy', 'status', 'is_published',
@@ -20060,7 +20060,7 @@ const VERSION_KEEP = 25;               // newest non-baseline versions kept per 
 // 2026-08-04 left every JSON value untouched.
 const SNAPSHOT_UNIT_KEY = '_money_unit';
 const SNAPSHOT_UNIT = 'yuan';
-const SNAPSHOT_MONEY_COLUMNS = ['sell_price', 'compare_at_price'];
+const SNAPSHOT_MONEY_COLUMNS = ['sell_price', 'compare_at_price', 'unit_cost'];
 
 // Money out of a snapshot, in the unit the application uses. Called at the one
 // site that writes a snapshot back into a column, so the conversion is visible
@@ -20328,6 +20328,19 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const v = parseFloat(body.compare_at_price);
     sets.push('compare_at_price = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
   }
+  if ('unit_cost' in body) {
+    // What we pay per unit, goods only. Blank / invalid / negative clears it back
+    // to NULL — "unknown", which the margin column renders as an em dash. NOT
+    // coerced to 0 like sell_price above: a zero cost and an unknown cost mean
+    // different things here, and 0 would report a 100% margin.
+    //
+    // A hand-edit stands until the next receive writes over it: nothing in this
+    // handler is aware of receiving, and applyReceivedToStock writes on its own
+    // schedule (last price wins).
+    const raw = body.unit_cost;
+    const v = (raw === '' || raw == null) ? NaN : parseFloat(raw);
+    sets.push('unit_cost = ?'); params.push(Number.isFinite(v) && v >= 0 ? v : null);
+  }
   if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
   if ('low_stock_threshold' in body) {
     // Per-product override for the low-stock alert. Blank/invalid → NULL = use
@@ -20448,7 +20461,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, unit_cost, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
@@ -20496,7 +20509,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
     // are still part of the catalogue and the grid counts them.
     const rows = tdb().prepare(
       `SELECT id, sku, barcode, name_en, name_cn, status, is_published,
-              top_category, subcategory, category, weight, sell_price, compare_at_price,
+              top_category, subcategory, category, weight, sell_price, compare_at_price, unit_cost,
               stock_qty, low_stock_threshold,
               variant_group_id, variant_label, variant_label_cn, variant_sort,
               variant_noun_en, variant_noun_cn,
@@ -20545,7 +20558,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
     const head = [
       'ID', 'SKU', 'Barcode', 'Name (EN)', 'Name (CN)', 'Status', 'In shop',
       'Top category', 'Subcategory', 'Legacy category',
-      'Weight / size', 'Price', 'Compare-at price',
+      'Weight / size', 'Price', 'Compare-at price', 'Unit cost',
       'Stock (all stores)', ...stores.map(s => `Stock — ${s.label}`),
       'Fallback stock_qty', 'Low-stock threshold',
       'Variant group', 'Variant (EN)', 'Variant (CN)', 'Variant order',
@@ -20572,7 +20585,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
       lines.push([
         r.id, r.sku, r.barcode, r.name_en, r.name_cn, r.status, yn(r.is_published),
         r.top_category, r.subcategory, r.category,
-        r.weight, r.sell_price, r.compare_at_price,
+        r.weight, r.sell_price, r.compare_at_price, r.unit_cost,
         total, ...perStore,
         r.stock_qty, r.low_stock_threshold,
         r.variant_group_id, r.variant_label, r.variant_label_cn, r.variant_sort,
@@ -20605,7 +20618,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   const id = parseInt(req.params.id, 10);
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, unit_cost, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
@@ -21274,7 +21287,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // instead) and description_blocks (send a has_blocks flag). The per-product
   // editor fetches the real image + blocks on demand.
   let sql = `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size,
-                    sell_price, compare_at_price, stock_qty, ship_modes, image_url,
+                    sell_price, compare_at_price, unit_cost, stock_qty, ship_modes, image_url,
                     -- Effective stock = what the customer shop actually sees
                     -- (sum of per-store physical_qty, falling back to the legacy
                     -- stock_qty only when a product has no per-store rows). The

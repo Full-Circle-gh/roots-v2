@@ -4046,6 +4046,35 @@ try {
   // the hero box falls back to a fixed height + aspectFill (which crops). Backfilled
   // by scripts/backfill_image_aspect.js; recomputed on image save in retail.js.
   addColumn('store_products', 'image_aspect', 'REAL');
+  // What we last PAID for one unit of this product, in yuan, goods only.
+  //
+  // Roots buys and resells most of what it sells, so cost is not derived — it is
+  // whatever the last received purchase-order line charged. Written back by
+  // applyReceivedToStock (routes/retail-purchasing.js) on every receive, last
+  // price wins, no averaging. Hand-editable in the product editor; a manual value
+  // stands until the next receive writes over it.
+  //
+  // NULLABLE ON PURPOSE, AND NOT DEFAULTED TO 0. "We have never bought this" and
+  // "this costs us nothing" are different facts and the margin column has to be
+  // able to tell them apart — a 0 default would silently report 100% margin on
+  // every product nobody has ever purchased. Every read must treat NULL as
+  // unknown and show an em dash rather than a number.
+  //
+  // GOODS ONLY, matching po_line_items.cost_per_unit. The header-level
+  // extra_freight / extra_tax / extra_handling are NOT allocated into it: they
+  // are per-PO, not per-line, and splitting them across lines is a costing
+  // decision nobody has made yet (today they post to Finance as one
+  // "Freight & fees" expense row and are shown as a flat per-unit average in the
+  // purchasing UI, never stored).
+  //
+  // Per ROW, so each variant size carries its own — a 250g and a 500g of the same
+  // product are two store_products rows with two sell_prices and two costs.
+  //
+  // REAL yuan, matching sell_price and po_line_items.cost_per_unit. (The
+  // "money is resolved by schema class" rule pointed at the Postgres census in
+  // scripts/postgres-full-copy/plan.json; that migration was cancelled and the
+  // census deleted, so REAL yuan alongside its neighbours is the live convention.)
+  addColumn('store_products', 'unit_cost', 'REAL');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
@@ -4071,6 +4100,54 @@ try {
   const freed = db.prepare("UPDATE store_products SET sku = NULL WHERE COALESCE(is_active, 1) = 0 AND sku IS NOT NULL").run();
   if (freed.changes) console.log('[store_products] freed', freed.changes, 'sku(s) from deleted rows');
 } catch (e) { console.error('[store_products] schema migration failed:', e); }
+
+// ── One-off: seed unit_cost from the most recent received retail PO line ──────
+//
+// The column arrives empty, but the answer for most products is already in the
+// database — every retail PO line carries what that delivery charged. This walks
+// them once so margin is not blank on day one, and then never runs again.
+//
+// Guarded by _migrations, so it is a no-op on every boot after the first. It is
+// ALSO written to be idempotent on its own terms — `WHERE unit_cost IS NULL` — so
+// re-running it by hand after clearing the guard cannot overwrite a cost that
+// receiving or an operator has since set.
+//
+// "Received" is the same test applyReceivedToStock uses (qty_received present),
+// narrowed to retail-scope POs and to lines that actually name a price. A product
+// nobody has ever bought on a PO keeps NULL, which is the honest answer.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('store_products_unit_cost_backfill_v1');
+  const haveCol = db.pragma('table_info(store_products)').some(c => c.name === 'unit_cost');
+  if (!done && haveCol) {
+    // Most recent by PO date, then line id — the same ordering the per-product
+    // supplier history endpoint uses to answer "what did we pay last time".
+    const info = db.prepare(`
+      UPDATE store_products
+         SET unit_cost = (
+               SELECT pli.cost_per_unit
+                 FROM po_line_items pli
+                 JOIN purchase_orders po ON po.id = pli.po_id
+                WHERE pli.store_product_id = store_products.id
+                  AND COALESCE(po.scope, 'kitchen') = 'retail'
+                  AND pli.qty_received IS NOT NULL
+                  AND COALESCE(pli.cost_per_unit, 0) > 0
+                ORDER BY po.date DESC, pli.id DESC
+                LIMIT 1)
+       WHERE unit_cost IS NULL
+         AND EXISTS (
+               SELECT 1
+                 FROM po_line_items pli
+                 JOIN purchase_orders po ON po.id = pli.po_id
+                WHERE pli.store_product_id = store_products.id
+                  AND COALESCE(po.scope, 'kitchen') = 'retail'
+                  AND pli.qty_received IS NOT NULL
+                  AND COALESCE(pli.cost_per_unit, 0) > 0)
+    `).run();
+    const stillNull = db.prepare('SELECT COUNT(*) n FROM store_products WHERE unit_cost IS NULL').get().n;
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('store_products_unit_cost_backfill_v1');
+    console.log(`[store_products] unit_cost backfill: ${info.changes} row(s) costed from PO history, ${stillNull} left NULL (never purchased on a PO)`);
+  }
+} catch (e) { console.error('[store_products] unit_cost backfill failed:', e); }
 
 // ─────────────────────────────────────────────────────────────────────────
 // STORE_PRODUCTS seed + FK repoint (one-time, mainDb only, atomic). Forks the
