@@ -366,12 +366,25 @@
   // this (recentStock on /eleme/status), nothing rendered it. Resolves
   // product_id against the already-loaded _products list for a readable name;
   // falls back to the SKU/raw id when the product list hasn't loaded yet.
+  // Same fix as Meituan's mtLocalTime: created_at is a bare UTC string out of
+  // SQLite, and slicing it straight showed UTC as if it were local time.
+  function elLocalTime(utcStr) {
+    if (!utcStr) return '';
+    const d = new Date(String(utcStr).replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return String(utcStr).slice(5, 16);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+    return get('month') + '-' + get('day') + ' ' + get('hour') + ':' + get('minute');
+  }
+
   function elRenderPushLog(rows) {
     const box = document.getElementById('el-log-stock');
     if (!box) return;
     if (!rows.length) { box.innerHTML = `<span class="empty">${cuT('Nothing yet', '暂无记录')}</span>`; return; }
     box.innerHTML = rows.map(r => {
-      const t = (r.created_at || '').slice(5, 16);
+      const t = elLocalTime(r.created_at);
       let d = {}; try { d = JSON.parse(r.detail || '{}'); } catch (e) {}
       const prod = _products.find(x => x.id === d.product_id);
       const name = prod ? (prod.name_cn || prod.name_en) : (d.sku || ('#' + d.product_id));
@@ -386,7 +399,7 @@
     if (!box) return;
     if (!rows.length) { box.innerHTML = `<span class="empty">${cuT('Nothing yet', '暂无记录')}</span>`; return; }
     box.innerHTML = rows.map(r => {
-      const t = (r.created_at || '').slice(5, 16);
+      const t = elLocalTime(r.created_at);
       const msg = r.error_msg || r.event_type;
       return `<div class="${r.status === 'error' ? 'bad' : ''}"><span class="t">${t} [${esc(r.store_code || '-')}]</span> ${esc(r.event_type)}: ${esc(msg)}</div>`;
     }).join('');

@@ -306,6 +306,21 @@
                                                    : 'node scripts/meituan-login.js ' + code) + '</code>';
   }
 
+  // created_at comes out of SQLite as a bare "YYYY-MM-DD HH:MM:SS" UTC string
+  // (CURRENT_TIMESTAMP), with no offset — slicing it straight showed UTC as if
+  // it were local and read 8 hours behind for every 广州 operator watching this
+  // panel. Parse it as UTC explicitly, then format in the store's own timezone.
+  function mtLocalTime(utcStr) {
+    if (!utcStr) return '';
+    const d = new Date(String(utcStr).replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return String(utcStr).slice(5, 16);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+    return get('month') + '-' + get('day') + ' ' + get('hour') + ':' + get('minute');
+  }
+
   function mtRenderLog(id, rows, isStock) {
     const box = document.getElementById(id);
     if (!box) return;
@@ -314,7 +329,7 @@
       return;
     }
     box.innerHTML = rows.map(r => {
-      const t = String(r.created_at || '').slice(5, 16);
+      const t = mtLocalTime(r.created_at);
       let d = {};
       try { d = JSON.parse(r.detail || '{}'); } catch (e) { d = {}; }
       const cls = r.status === 'error' ? 'bad' : r.status === 'warn' ? 'warnrow' : '';
