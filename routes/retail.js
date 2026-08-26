@@ -20800,6 +20800,55 @@ router.delete('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, 
   res.json({ success: true, data: { ...row, recipe_name_en: null, recipe_name_cn: null } });
 });
 
+// ═══ Is the recipe behind this cost actually healthy? ══════════════════════
+//
+// THE SAME ALARM THE RECIPE SCREEN RINGS, ON THE SCREEN WHERE THE NUMBER IS
+// READ. A recipe with an unpriced ingredient line still produces a cost — it
+// just produces one that is too low — and Recipes says so on the record and in
+// the list. The product editor showed the figure alone, so the one place an
+// operator reads it while setting a price was the one place that never
+// mentioned it was understated.
+//
+// FACTS, NOT SENTENCES. The route returns what is true of the recipe and the
+// client composes the wording; that keeps the bilingual copy beside the rest of
+// the editor's copy instead of hard-coding English in a JSON payload.
+//
+// Read-only, and null data when nothing is linked. Deliberately NOT folded into
+// the products LIST: costing one recipe is three queries, so doing it for a
+// 200-row page would be 600 — this runs once, when an editor opens a product
+// that actually has a recipe.
+router.get('/api/retail-admin/products/:id/recipe-health', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  const id = Number(req.params.id);
+  const p = tdb().prepare('SELECT id, recipe_id FROM store_products WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ success: false, error: 'not_found' });
+  // No recipe, or Production switched off — the cost is not the recipe's to
+  // own (recipeOwnsProductCost), so there is nothing here to warn about.
+  if (p.recipe_id == null || !productionEnabled(tdb())) {
+    return res.json({ success: true, data: null });
+  }
+  const r = tdb().prepare('SELECT id, name_en, is_active FROM recipes WHERE id = ?').get(p.recipe_id);
+  if (!r) return res.json({ success: true, data: null });
+  let c = null;
+  try { c = computeRecipeCost(p.recipe_id, tdb()); } catch (e) { c = null; }
+  if (!c) return res.json({ success: true, data: null });
+  res.json({ success: true, data: {
+    recipe_id: r.id,
+    // An archived recipe is refused by the rollup (costOneRecipe reads
+    // is_active), so the stored figure can no longer move — worth saying.
+    recipe_active: !!r.is_active,
+    // Lines whose master cost is 0/null and NOT free_by_design. The count comes
+    // from lib/recipe-cost.js, never re-derived in SQL here: a second copy of
+    // "what counts as missing" is exactly how the two screens end up disagreeing
+    // about one recipe.
+    missing: c.zeroCostIngredientLines,
+    ingredient_lines: c.ingredientLines,
+    // What applyProductCosts() would actually write. null (or 0) means the
+    // cascade writes nothing and the Cost field is frozen at whatever is there.
+    cost_per_serving: c.costPerServing,
+  } });
+});
+
 // CSV: the whole catalogue, one row per product, every field an operator can
 // edit — no pagination and no 500-row cap, so this is the "give me everything
 // in a spreadsheet" door. Registered ABOVE /:id on purpose: Express matches in

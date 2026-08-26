@@ -811,6 +811,11 @@ function pdApplyCostSource(p) {
   const owned = _pdRecipeOwnsCost(p);
   inp.readOnly = owned;
   inp.classList.toggle('is-derived', owned);
+  // Whatever Recipes would be warning about this recipe, said here too. Hung
+  // off this function rather than pdOpen because EVERY repaint of the cost
+  // source is also a moment the warning can have changed — opening a product,
+  // linking, changing the link, unlinking — and one call site cannot go stale.
+  pdRecipeHealthPaint(owned ? (p && p.id) : null);
   if (!note) return;
   // A product that has never been saved has no row to link a recipe to, so the
   // line stays empty until it does. Everything below needs an id.
@@ -840,6 +845,83 @@ function pdApplyCostSource(p) {
     + escapeHtml(cuT('Change', '更换')) + '</button>'
     + ' <button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
     + escapeHtml(cuT('Unlink', '取消关联')) + '</button>';
+}
+// ── Is the recipe behind this cost healthy? ─────────────────────────────────
+//
+// THE ALARM BELONGS WHERE THE NUMBER IS READ. A recipe with an unpriced
+// ingredient line still produces a cost — it just produces one that is too low
+// — and Recipes says so on the record and in the list. This is that same
+// warning, on the screen where the operator is setting a price against the
+// figure. Without it the editor showed ¥3.97 with nothing to suggest the real
+// number is higher.
+//
+// SAME WORDS AS THE RECIPE SCREEN, on purpose: an operator who reads
+// "N ingredients missing cost — costs shown are too low" here and then opens
+// the recipe must meet the sentence they already read, not a paraphrase of it.
+//
+// FETCHED, NEVER CARRIED ON THE ROW: the fix happens on the OTHER screen, so a
+// flag cached in the products list would still be warning after the ingredient
+// was priced. One request, and only for a product whose cost a recipe owns.
+const PD_ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
+let _pdHealthSeq = 0;
+function pdRecipeHealthPaint(id) {
+  const host = document.getElementById('pd-cost-alert');
+  if (!host) return;
+  // Clear first and bump the sequence, so a slow answer about the product that
+  // was open a moment ago can never paint over the one that is open now.
+  const mySeq = ++_pdHealthSeq;
+  host.innerHTML = ''; host.style.display = 'none';
+  if (!id) return;
+  fetch('/api/retail-admin/products/' + id + '/recipe-health', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (mySeq !== _pdHealthSeq) return;
+      if (!j || !j.success) throw new Error('load_failed');
+      const d = j.data;
+      if (!d) return;                       // nothing linked, or Production off
+      const pills = [];
+      // ARCHIVED — the rollup refuses to cost an archived recipe, so the figure
+      // in the field has stopped moving. Both halves of this sentence are the
+      // recipe screen's own (BLOCK_REASON.recipe_archived, and the material
+      // line's frozen note); 食谱 is written 配方 to match every other recipe
+      // word in this editor.
+      if (!d.recipe_active) {
+        pills.push(pdCostPill(cuT('This recipe is archived — frozen at its last computed value.',
+                                  '该配方已归档。已冻结为最近一次计算的值。')));
+      }
+      // MISSING INGREDIENT COSTS — the figure is real but understated. Worded
+      // exactly as 19-recipes.js paintSummary() words it.
+      const n = Number(d.missing) || 0;
+      if (n > 0) {
+        pills.push(pdCostPill(cuT(n + ' ingredient' + (n === 1 ? '' : 's') + ' missing cost — costs shown are too low',
+                                  n + ' 项原料缺少成本 — 显示成本偏低')));
+      }
+      // NO COST AT ALL — the cascade writes nothing, so whatever sits in the
+      // field is stale or blank. The same sentence the link modal shows at link
+      // time, which until now was the only moment it was ever said.
+      const cps = Number(d.cost_per_serving);
+      if (d.cost_per_serving == null || !Number.isFinite(cps) || cps <= 0) {
+        pills.push(pdCostPill(cuT('This recipe has no cost yet — it needs servings, a batch size, and a price on every ingredient.',
+                                  '该配方暂无成本 —— 需要填写份数、批量大小，并为每项原料填写价格。')));
+      }
+      if (!pills.length) return;
+      host.innerHTML = pills.join('');
+      host.style.display = '';
+    })
+    .catch(() => {
+      if (mySeq !== _pdHealthSeq) return;
+      // A check that could not run must say so. Silence here would read as
+      // "the recipe is fine", which is the one thing this line exists to stop
+      // the screen from implying.
+      host.innerHTML = '<div class="pd-cost-warn is-quiet">' + escapeHtml(cuT('Couldn’t load the recipe', '无法加载配方')) + '</div>';
+      host.style.display = '';
+    });
+}
+// One warning, as a pill — the shape Recipes uses (retail-admin.css .rcp-warn):
+// a tinted pill that says its piece and stops, never a panel that floods the
+// field it is explaining.
+function pdCostPill(text) {
+  return '<div class="pd-cost-warn">' + PD_ICON_WARN + '<span>' + escapeHtml(text) + '</span></div>';
 }
 // Can a recipe be linked here at all? Recipes only exist as a screen when
 // Production is on, so offering the action with it off would point the operator

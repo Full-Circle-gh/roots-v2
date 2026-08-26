@@ -2630,6 +2630,21 @@
   /* First one on an unlinked product carries the line on its own — no leading
      text to sit beside, so it starts at the margin. */
   #pd-cost-source > .pd-cost-act:first-child { margin-left: 0; }
+  /* What the recipe behind this cost is not telling you. Same pill as the
+     recipe record's warning (.rcp-warn) — one warning shape across both
+     screens, because it is the same warning about the same recipe. Amber, not
+     Brick: the number is not wrong to exist, it is wrong to trust. */
+  #pd-cost-alert { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .pd-cost-warn {
+    display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+    font: 400 12px var(--f-sans); color: var(--td-amber-ink);
+    background: var(--td-amber-tint); border-radius: 999px; padding: 4px 14px;
+  }
+  .pd-cost-warn svg { width: 14px; height: 14px; flex: none; }
+  /* "Couldn't load the recipe" is not a warning about the recipe — it is this
+     line admitting it could not check. It must be visible (silence would read
+     as all-clear) without wearing the colour of a real finding. */
+  .pd-cost-warn.is-quiet { background: var(--td-raised); color: var(--td-text2); }
   .pa-col-stock { font-size: 14px; }
 
   /* Status column — one badge per row answering "can a shopper buy this now".
