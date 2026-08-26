@@ -5378,6 +5378,87 @@ db.exec(`
   );
 `);
 
+// ── Waste (§32) ───────────────────────────────────────────────────────────
+// A waste record is a STOCK MOVEMENT WITH A REASON, not a log kept beside
+// stock. docs/tacet-consolidation-decisions.md §32 and its 2026-08-27 addendum.
+//
+// THIS IS NOT `waste_entries`. That is the kitchen app's table: it moves no
+// stock, and its product_id points at the KITCHEN `products` table rather than
+// the store catalogue — the survey's H1 id-space hazard. §32 rule 2 abandons
+// those rows rather than back-migrating them, and the kitchen screen stays live
+// and untouched until Roots is cut over. This table is the replacement, and the
+// two never meet.
+//
+// TWO SUBJECTS, ONE SHAPE (§32 rule 3). Every row is a material OR a product,
+// never both and never neither. That is enforced by a CHECK rather than by the
+// route, so a second writer cannot invent a third shape. The MATERIAL subject is
+// refused by the API today (§32 addendum point 1): materials have no stock and
+// no ledger, so rule 6 — recording waste moves stock — could not hold for one.
+// The column and the constraint ship now anyway, so the shape is settled while
+// there is still exactly one writer to settle it against.
+//
+// store_product_id REFERENCES store_products. Not `products`. This is the whole
+// reason the kitchen rows are abandoned; pointing it at the kitchen table
+// attributes a loss to a different product with no error.
+//
+// created_by carries NO foreign key, matching retail_stock_ledger.actor_user_id
+// and for the same reason: the actor is a kitchen users(id) OR a backend
+// operator's tenant_users(id), two id spaces that collide. Read the label, never
+// the id alone.
+//
+// cost_total_cents is the RESOLVED TOTAL in whole cents (§32 addendum point 3) —
+// unit cost times quantity, rounded once at entry, never recomputed (§32 rule 9).
+// NULL means the cost could not be established and `is_uncosted` says so out
+// loud; the two are held in step by a CHECK. A zero is never stored (§32 rule
+// 10) — the route resolves a real-but-sub-cent loss up to one cent rather than
+// letting it render as "we didn't know".
+//
+// A void is a REVERSAL ROW, never an edit (§32 rule 11, §20). The reversal
+// carries reverses_waste_id; the original carries voided_by_waste_id back at it.
+// Both directions are stored so neither query depends on the other's index, and
+// a report sums the rows where both are NULL.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS waste_records (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id        INTEGER NOT NULL,
+    subject_type       TEXT    NOT NULL,               -- 'material' | 'product'
+    store_product_id   INTEGER,                        -- set iff subject_type='product'
+    material_id        INTEGER,                        -- set iff subject_type='material'
+    qty                REAL    NOT NULL,
+    unit               TEXT,
+    reason_code        TEXT    NOT NULL,               -- seeded list, §32 rule 7
+    note               TEXT,                           -- required when reason_code='other'
+    cost_total_cents   INTEGER,                        -- NULL = uncosted, never 0
+    is_uncosted        INTEGER NOT NULL DEFAULT 0,
+    business_date      DATE    NOT NULL,               -- resolved in the LOCATION's zone
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by         INTEGER,                        -- no FK: two id spaces
+    created_by_label   TEXT,
+    reverses_waste_id  INTEGER,                        -- set on a reversal row
+    voided_at          DATETIME,
+    voided_by          INTEGER,
+    voided_by_label    TEXT,
+    voided_by_waste_id INTEGER,                        -- the reversal that voided this
+    CHECK (subject_type IN ('material','product')),
+    CHECK (qty > 0),
+    CHECK (
+      (subject_type = 'product'  AND store_product_id IS NOT NULL AND material_id      IS NULL) OR
+      (subject_type = 'material' AND material_id      IS NOT NULL AND store_product_id IS NULL)
+    ),
+    CHECK (cost_total_cents IS NULL OR cost_total_cents > 0),
+    CHECK ((cost_total_cents IS NULL) = (is_uncosted = 1)),
+    FOREIGN KEY (location_id)        REFERENCES retail_stores(id),
+    FOREIGN KEY (store_product_id)   REFERENCES store_products(id),
+    FOREIGN KEY (material_id)        REFERENCES ingredients(id),
+    FOREIGN KEY (reverses_waste_id)  REFERENCES waste_records(id),
+    FOREIGN KEY (voided_by_waste_id) REFERENCES waste_records(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_waste_records_date     ON waste_records(business_date);
+  CREATE INDEX IF NOT EXISTS idx_waste_records_loc_date ON waste_records(location_id, business_date);
+  CREATE INDEX IF NOT EXISTS idx_waste_records_product  ON waste_records(store_product_id);
+  CREATE INDEX IF NOT EXISTS idx_waste_records_reverses ON waste_records(reverses_waste_id);
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
