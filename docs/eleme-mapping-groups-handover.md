@@ -4,8 +4,9 @@ Written 2026-08-26 by the session that built this branch, for whoever resolves i
 against `main` after the channel name-gate lands. That session starts cold. This
 is everything it needs that lives nowhere else.
 
-Status when this was written: **this branch's build is uncommitted** in the
-worktree. Only this note is committed. Nothing has been pushed to `main`.
+Status: the build this describes is committed on this branch at `5ad301dc`,
+unrebased and unresolved, preserved as built. The branch is pushed to origin.
+Nothing has been pushed to `main`, and nothing deploys until something is.
 
 ---
 
@@ -118,12 +119,35 @@ the counts add up to the list.
 
 ## 5. Versions and base
 
-- `main` was `05e33123` when both branches were cut. It is now **`ef8f3b51`**,
-  three commits ahead (the referral merge).
-- One of those three touches `public/sw.js`. Both rebases land on that line.
-- `main` already took **v854** (`v854-referral-selected-mode`).
-- The gate takes **v855**. **This branch takes `v856`.** The working tree
-  currently says `v854-eleme-mapping-groups`, which is stale — change it.
+**Every number in this section is stale by the time you read it. Re-read `main`
+rather than trusting it.** That is not a caveat, it is the observation this
+section exists to pass on: `main` moved twice in the forty minutes between this
+branch being cut and this note being written, once while the note was being
+committed. Other sessions push to `main` continuously. Treat the figures below as
+the shape of the problem, never as the current state.
+
+```bash
+git fetch origin && git log --oneline 05e33123..origin/main
+git show origin/main:public/sw.js | grep '^const CACHE'
+```
+
+The second line is the one that matters: take the next number after whatever it
+says, not the number written here.
+
+What was true on 2026-08-26 at 11:45 +0800:
+
+- `main` was `05e33123` when both branches were cut. It had already moved to
+  `ef8f3b51` (referral merge, three ahead), then to `96370aa1` (search-icon fix,
+  four ahead) minutes later.
+- Commits in that range touch `public/sw.js`. Both rebases land on that line.
+- `main` had taken **v854** (`v854-referral-selected-mode`).
+- On those numbers the gate takes **v855** and this branch **v856**. This branch
+  is committed carrying `v854-eleme-mapping-groups`, which was already stale when
+  committed — it was preserved as built, deliberately, and must be corrected at
+  the rebase.
+
+Also re-check `gh run list` immediately before any push, not once at the start.
+An earlier clear result proves nothing about now, for the same reason.
 
 ## 6. How this was verified, and what to reproduce
 
