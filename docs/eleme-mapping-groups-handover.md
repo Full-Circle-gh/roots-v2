@@ -1,12 +1,14 @@
-# Handover — Eleme mapping groups, resolving against main
+# Handover — Eleme mapping groups
 
-Written 2026-08-26 by the session that built this branch, for whoever resolves it
-against `main` after the channel name-gate lands. That session starts cold. This
-is everything it needs that lives nowhere else.
+Written 2026-08-26 by the session that built this branch. It was written before
+the channel name-gate landed, as a note for whoever would resolve this against
+main cold. **That resolution has since been done, by this session.** What
+follows is kept as the record of what was reconciled and why, not as pending
+work.
 
-Status: the build this describes is committed on this branch at `5ad301dc`,
-unrebased and unresolved, preserved as built. The branch is pushed to origin.
-Nothing has been pushed to `main`, and nothing deploys until something is.
+State: rebased onto `c06d7b03` (the gate, on main). One conflict resolved, one
+silent duplicate removed, one defect found and fixed on the way through. Cache
+string `v857`. Nothing has been pushed to `main`; Ash picks that moment.
 
 ---
 
@@ -52,102 +54,108 @@ Files: `public/retail-admin/14-eleme.js` (+202/−59), `public/retail-admin.css`
 (+21/−0, all `.el-`-only, no shared `.mt-/.el-` rule touched), `public/sw.js`,
 `docs/eleme-findings.md` (+119).
 
-## 2. The four conflict regions, and which survive the gate's amend
+## 2. What the conflict actually was
 
-Measured with a real three-way merge, not predicted. **Normalise line endings
-before merging anything** — all three files are CRLF, and a scratch merge on
-mixed endings reports the whole file as one conflict and tells you nothing.
+Predicted four regions against the gate as first written. The gate then dropped
+its classification half — `elStoreState`, `elNeedsAttention`, `elChipMatch` and
+`EL_CHIPS` went back to byte-identical with main — and the surface shrank to
+**one region of 14 lines**, confirmed by a real three-way merge before the
+rebase and by the rebase itself.
 
-Against the gate commit **as first written** (`679d8074`, before its amend) there
-were four conflicts:
+That region is the panel's label row. The gate grew a Remove action beside the
+"Eleme listing name" label; this branch inserts the row-reason sentence just
+above it. **Both were kept** — they are different things that happen to sit in
+one block.
 
-1. the classifier block — `elGroup`/`elStatesFor` here vs the gate's edit to `elNeedsAttention`
-2. `EL_CHIPS` — four chips here vs the gate's fifth chip
-3. `elStoreState` — full rewrite here vs the gate's splice into the old one
-4. `elPanelStore` — the row-reason sentence here vs the gate's name field and hint
+`docs/eleme-findings.md` and `public/retail-admin.css` auto-merged, and both
+sides survived: findings 1-6 are all present, and the gate's `.el-plbl-row`,
+`.el-plink` and `.el-hint` rules sit alongside this branch's `.el-sw`,
+`.el-pip` and `.el-why`.
 
-The gate is amending to drop its classification half. Once it does, **1, 2 and 3
-resolve cleanly** — this branch replaces base code the gate no longer touches.
-**4 remains**: both sides edit the panel's name-field region, a few lines apart.
-Resolve it by hand and keep both — they are different things in the same block.
+**Normalise line endings before any scratch merge.** These files are CRLF, and
+a merge run on mixed endings reports the whole file as one conflict and tells
+you nothing. That cost an hour once already.
 
-## 3. The hazard git does NOT flag
+## 3. The hazard git did not flag — resolved
 
-Both builds define `elNameKnown`, in different regions of the file. A three-way
-merge keeps **both**, with no conflict marker. The file parses and lints, and the
-later declaration silently wins.
+Both builds defined `elNameKnown`, in different regions. A three-way merge kept
+**both, with no conflict marker**: the file parsed, it linted, and the later
+declaration silently won. This is the thing to remember from the whole episode —
+the dangerous merge was never the one git complained about.
 
-Their contracts differ, and the difference is load-bearing:
-
-- gate: returns `false` when the store's catalogue has not been read
-- this branch: returns `null` when it has not been read, and `elStoreState` tests
-  `=== false` so that an unread catalogue is never treated as evidence
-
-**Resolution: delete this branch's `elNameKnown` and use the gate's.** Then in
-this branch's `elStoreState`, replace
+Resolved by deleting this branch's copy and using the gate's, then asking the
+gate's two questions explicitly at the call site:
 
 ```js
-if (elNameKnown(storeCode, name) === false) {
+if (!elCatalogueRead(storeCode)) { /* no verdict */ }
+if (!elNameKnown(storeCode, name)) { /* listing not found */ }
 ```
 
-with
-
-```js
-if (elCatalogueRead(storeCode) && !elNameKnown(storeCode, name)) {
-```
-
-That is exactly equivalent and uses the gate's own helpers. Do not keep two
-functions with one name.
-
-Optional: this branch also builds `_catNames`, a per-store `Set` of exact listing
-names, filled in `elLoadCatalogue`. The gate's `elNameKnown` re-scans the rows
-array on every call, and it is called once per product per store on every
-repaint. Keeping the Set and having `elNameKnown` read it is a straight win; it
-is not required for correctness.
+The `_catNames` Set this branch built was dropped with it. The gate's
+`elNameKnown` re-scans the rows array per call; at 248 products that is
+measurable but not felt. Reinstating the Set behind the gate's function is a
+free win if this screen ever gets slow.
 
 ## 4. "Name not in catalogue" is a row reason, not a chip
 
-The gate build added a fifth chip labelled "Name not in catalogue". **Ash
-instructed that it be folded into Needs attention and not shipped.** That
-instruction reached this session and not the gate's, which is why it was
-committed there — it was not ignored.
+The gate build first shipped it as a fifth chip. Ash's instruction to fold it
+into Needs attention reached this session and not the gate's, so it was not
+ignored — it had not arrived. The gate dropped it before landing.
 
-In this model the check already lives inside `elStoreState`, and the row prints
-the reason next to the product name. Do not re-add the chip when resolving. The
-grouping is three chips plus All, and every active product is in exactly one, so
-the counts add up to the list.
+In this model the check lives inside `elStoreState` and the row prints the
+reason beside the product name. Do not re-add the chip. Three chips plus All,
+every active product in exactly one, counts adding up to the list.
 
-## 5. Versions and base
+`EL_PENDING_CN` in `14-eleme.js` carries the English strings, tabled in
+`docs/tacet-delivery-vocabulary.md` under "Channel mapping — awaiting a Chinese
+source". They run English on both sides until Ash sources the Chinese. Do not
+compose Chinese — §30 rule 3 and that document's Rule 4.
 
-**Every number in this section is stale by the time you read it. Re-read `main`
-rather than trusting it.** That is not a caveat, it is the observation this
-section exists to pass on: `main` moved twice in the forty minutes between this
-branch being cut and this note being written, once while the note was being
-committed. Other sessions push to `main` continuously. Treat the figures below as
-the shape of the problem, never as the current state.
+
+## 5. Versions and base — settled, and stale the moment you read it
+
+**Re-read `main` rather than trusting any number here.** `main` moved four times
+while this branch was held, once mid-commit. Other sessions push continuously.
 
 ```bash
-git fetch origin && git log --oneline 05e33123..origin/main
-git show origin/main:public/sw.js | grep '^const CACHE'
+git fetch origin && git show origin/main:public/sw.js | grep '^const CACHE'
+gh run list --limit 3     # immediately before pushing, not once at the start
 ```
 
-The second line is the one that matters: take the next number after whatever it
-says, not the number written here.
+What was settled on 2026-08-26: main took v854 (referral), v855 (eligibility
+dialog icon) and v856 (the name gate). **This branch carries `v857`.** The v855
+and v856 figures written in earlier drafts of this note were both stale within
+the hour — which is the point the section is making about itself.
 
-What was true on 2026-08-26 at 11:45 +0800:
+## 5b. The unchecked state, and why it exists
 
-- `main` was `05e33123` when both branches were cut. It had already moved to
-  `ef8f3b51` (referral merge, three ahead), then to `96370aa1` (search-icon fix,
-  four ahead) minutes later.
-- Commits in that range touch `public/sw.js`. Both rebases land on that line.
-- `main` had taken **v854** (`v854-referral-selected-mode`).
-- On those numbers the gate takes **v855** and this branch **v856**. This branch
-  is committed carrying `v854-eleme-mapping-groups`, which was already stale when
-  committed — it was preserved as built, deliberately, and must be corrected at
-  the rebase.
+Found while resolving, in this branch's own code — the same defect class the
+gate had, pointing the other way.
 
-Also re-check `gh run list` immediately before any push, not once at the start.
-An earlier clear result proves nothing about now, for the same reason.
+With no catalogue, this branch's classifier fell through to `Synced`. And a
+catalogue that FAILED to load is indistinguishable from one never read, because
+`elLoadCatalogue`'s catch leaves rows empty either way. Measured against live
+data with the read failing: Needs attention 10 → 6, Synced 191 → **195**, and
+product 195 back behind a green dot. One dropped fetch would have restored the
+exact fault this screen was built to end.
+
+`elStoreState` now returns `k: 'unk'` when `elCatalogueRead` is false, before
+any name test. §30 rule 4: a check that cannot run says so and returns no
+verdict.
+
+Two deliberate choices inside that, both cheap to reverse:
+
+- **`unk` groups with Needs attention, not Synced.** A mapping we cannot check
+  is not one we have checked. It clears itself when the catalogue reads, so the
+  alarm is clearable by the mechanism that raises it.
+- **Its dot stays neutral, not amber.** The cause is one store-level fact,
+  already on the store's own line. 194 amber dots for one dropped fetch is the
+  noise this list exists without.
+
+Degraded mode therefore reads `0 synced · 201 need attention · 47 not on Eleme`.
+That is loud. It is also true, and the alternative is 194 green lies. **Ash has
+not ruled on this split** — it was built this way because it is the safe
+direction and it is 0 products today.
 
 ## 6. How this was verified, and what to reproduce
 
@@ -177,7 +185,16 @@ switch on. Ready-sync-off reads 0 because every sync-off mapping today is also
 broken; No-option-picked reads 0 because finding 4 is not armed. Both are real
 states that happen to be empty.
 
-Re-run this after resolving. Do not carry the numbers above forward as proof —
+Then re-run with the catalogue fetch forced to return `[]`. Expected:
+
+```
+CHIPS      All 248 · Needs attention 201 · Synced 0 · Not on Eleme 47
+```
+
+**Synced must read 0.** Any other number means something claimed a verdict from
+an empty catalogue, which is the defect in §5b coming back.
+
+Do not carry the numbers above forward as proof —
 they were true on 2026-08-26 and the data moves.
 
 ## 7. Do not
