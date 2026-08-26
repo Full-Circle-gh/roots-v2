@@ -13,6 +13,15 @@ fix that followed and it changed code. Finding 16 records what the fix does NOT
 reach, so the gap is not mistaken for closed. Every number below is a read-only
 query against `roots.db`, and the queries are given so they can be re-run.
 
+> **Amended 2026-08-26 — FINDING 11 IS NOW ALSO FIXED.** The sentence above is
+> true of the survey that produced findings 1 to 14 and is no longer true of
+> finding 11's entry, which has since gained a fix of its own (`routes/` and a
+> new `lib/`, no data written). It was fixed ahead of the other thirteen because
+> it was the only one still actively DESTROYING data: every save on Tacet's Cost
+> & Pricing tab discarded a packaging link, and those links are the packaging
+> migration's machine-resolvable input. **The migration's input stopped
+> degrading as of that change.** Amended in place rather than rewritten.
+
 Most of these are not packaging-specific. Finding 1 holds anywhere a derived cost
 is folded into a unit price that is then consumed as an input; finding 4 holds
 anywhere a lookup table's value is copied rather than referenced; finding 6 holds
@@ -640,7 +649,10 @@ has since moved by two to four times, and nothing tells anyone.
 
 ## 11. Every Tacet cost save nulls `packaging_type_id`, and leaves no trace (found 2026-08-26)
 
-Status: **open, and happening now.**
+Status: **FIXED 2026-08-26 — see "The fix" at the end of this finding.** The
+description below is of the fault as it stood. **THE MIGRATION'S INPUT STOPPED
+DEGRADING AS OF THIS CHANGE**; what was already lost before it is a separate
+question, answered under "What was lost, and whether it comes back".
 
 The Tacet recipe editor builds its save payload at
 `public/retail-admin/19-recipes.js:713-722`:
@@ -699,6 +711,122 @@ activity-log entry — confirmed by
 returning **0**. The only evidence a save happened is `updated_at` moving. There
 is no before, no after, and no actor — the same absence §30 rule 7 names on the
 channel side.
+
+### The fix — an absent field is not a cleared field (built 2026-08-26)
+
+**Fixed on the SERVER, not on the screen**, and the choice is the point. The
+client repair — have Tacet send the stored id back untouched — fixes one caller
+of one route. The fault is that a route DELETED A FIELD ON BEING HANDED NOTHING
+ABOUT IT, and that is wrong for every caller, including ones not yet written.
+This is §30 rule 3's worked example applied to a second surface: **a rule
+enforced by the callers of a write is a convention, and a convention is declined
+by whichever caller nobody checked.**
+
+The UPSERT moved out of both cost routes into `lib/recipe-cost-data-write.js`,
+which now owns the one rule:
+
+| what the caller sends | what happens |
+|---|---|
+| **no `packaging_type_id` key** | the stored value is **kept** |
+| the key, empty (`null` / `''` / `0`) | **cleared** — a deliberate unlink |
+| the key with a value | that value is written |
+
+**CLEARING HAD TO KEEP WORKING, AND THE OBVIOUS REPAIR WOULD HAVE BROKEN IT.**
+`COALESCE(incoming, stored)` — one word, passes the regression test — makes an
+explicit NULL indistinguishable from an absent key, so **a packaging link could
+never be removed once set.** That is the trap `lib/meituan-map-write.js:148-162`
+already documents on the mapping side, where the clear is checked FIRST, before
+the gate, so a product with an unverifiable stored name stays removable rather
+than frozen. Same distinction, same reason: a rule meant to protect a value must
+not trap it.
+
+**NOTHING ELSE GAINED PRESERVE-ON-ABSENT SEMANTICS.** An absent `labour` still
+writes 0; an absent `target_food_cost` still writes 30, including the stored-0-
+becomes-30 quirk `lib/recipe-cost.js:248` reads back. Deliberate, and asserted:
+the other five are numbers a form always sends, and making them sticky would mean
+a field cleared to blank could never return to zero.
+
+**The kitchen route was changed too, though it was not the one losing links.**
+The Cost Sheet does send `packaging_type_id` (`public/app.html:8062`), so its
+behaviour is unchanged — but it carried a byte-identical copy of the same
+coalesce, and leaving one route repaired and one not would be two answers to one
+question, waiting to drift.
+
+**Verified against an in-memory fixture, not production**
+(`scripts/test_recipe_cost_data_write.js`, 32 assertions, the write called
+directly rather than through HTTP). The two failure modes were confirmed
+*catchable* by mutating the rule back and re-running: reverting to the original
+coalesce fails 5 assertions, and the COALESCE trap fails 4 — including both
+deliberate-clear cases. A test that passes against the broken code proves
+nothing, which is why both mutants were run.
+
+**One case is there because the repair introduced a new way to fail.** Preserving
+means READING the stored row first, and both routes key that read on
+`req.params.id` — a string, against an `INTEGER` column. Had a string id failed
+to match, the lookup would return nothing, the stored value would read as null,
+and the preserve would quietly become "write null": the original bug through a
+new door, passing every other case in the file. SQLite applies numeric affinity
+to the comparison so it matches, and that is asserted rather than reasoned about.
+
+### What was lost, and whether it comes back
+
+**Not recovered here — nothing was written.** What follows is what the evidence
+can and cannot support.
+
+**There is no audit trail of the destruction itself.** Neither cost route logs
+activity (confirmed above), `recipe_cost_data` is last-write-wins with no history
+table, and `updated_at` is overwritten by the save that did the damage. So
+recovery cannot come from the record of the loss. It has to come from somewhere
+else, and there are three somewheres:
+
+1. **A backup.** The strongest, because it is exact rather than inferred. The box
+   takes an **hourly** local SQLite snapshot (`/root/scripts/roots-backup.sh`)
+   and a nightly off-site copy to OSS with **`RETAIN_DAYS=14`**
+   (`scripts/db-backup.sh:70`). **Recipe 80 lost its link at 07:28:46 on
+   2026-08-26** — the 07:00 snapshot of that same morning holds the answer
+   outright. **Recipe 36 lost its at 07:14:04 on 2026-08-11, which is 15 days
+   back and therefore just OUTSIDE the off-site window**; whether the local
+   hourly tier still reaches it cannot be established from this repository,
+   because `roots-backup.sh` is one of the three untracked scripts that exist
+   only on the box (`docs/tacet-operating-findings.md` §3.4) and its retention
+   is not readable here.
+2. **The number matching exactly one type's cost.** Recipe 80's 1.12 equals
+   `packaging_types` id 2 (`300ml Plastic Box`). This is evidence, not proof, and
+   its weakness is finding 4's: a type's cost can be edited with no timestamp and
+   no log, so today's cost is not necessarily the cost that was copied. It is
+   only conclusive if exactly one of the 44 carries that figure.
+3. **`activity_log`, which is better than finding 4 implies.** The packaging-type
+   CREATE handler records `{ name, cost }` (`routes/lookups.js:87`) — so **the
+   cost each type was born with survives even if the type has since been
+   edited**, for all 56 creates including the 12 later deleted. The UPDATE
+   handler still logs nothing (`:91-99`), so this recovers the original figure,
+   never an intermediate one. **This evidence expires**: `activity_log` is purged
+   on every startup at `ACTIVITY_LOG_RETENTION_DAYS`, default **90**
+   (`database.js:4033-4039`), so the 2026-08-11 creation entries are readable
+   until roughly **2026-11-09** and then are not.
+
+**The rate of loss, and the current count, are not established here.** Two rows
+were recorded on 2026-08-26; whether more were lost between then and this fix
+needs a live query, which this pass did not run:
+
+```sql
+-- Every packaging number with no link, newest loss first.
+SELECT recipe_id, packaging, updated_at
+  FROM recipe_cost_data
+ WHERE COALESCE(packaging,0) > 0 AND packaging_type_id IS NULL
+ ORDER BY updated_at DESC;
+
+-- Is recipe 80's 1.12 unique among the types? (>1 row = not recoverable this way)
+SELECT id, name, cost FROM packaging_types WHERE ABS(cost - 1.12) < 0.0005;
+SELECT id, name, cost FROM packaging_types WHERE ABS(cost - 0.10) < 0.0005;
+
+-- The same question against the cost each type was CREATED with.
+SELECT entity_id, json_extract(details,'$.name') AS name,
+       json_extract(details,'$.cost') AS cost_at_create, created_at
+  FROM activity_log
+ WHERE entity_type = 'packaging_type' AND action = 'create'
+   AND ABS(CAST(json_extract(details,'$.cost') AS REAL) - 1.12) < 0.0005;
+```
 
 ---
 
@@ -1088,6 +1216,10 @@ deplete anything (finding 9), add per-store costs (finding 10), stop the Tacet
 save nulling `packaging_type_id` (finding 11), resolve the naming collision
 (finding 13) or remove `packaging_types` from the wipe list (finding 14).
 
+> **Amended 2026-08-26 — finding 11 is no longer on that list.** It was fixed by
+> a separate, later change (see finding 11's own "The fix"), not by finding 15's.
+> The rest of the sentence stands.
+
 ---
 
 ## Context — what was and was not done on 2026-08-26
@@ -1105,6 +1237,17 @@ save nulling `packaging_type_id` (finding 11), resolve the naming collision
   the rule behind it. **Still nothing was written to production data by this
   session**: the verification ran against a detached fixture, and the corrected
   figures reach production only when one of the ten existing triggers next fires.
+
+- **Finding 11 then changed code too**, in a later pass the same day —
+  `routes/recipes.js`, `routes/retail-recipes.js` and a new
+  `lib/recipe-cost-data-write.js` that both now share. **Again nothing was
+  written to production data**: the write was verified against an in-memory
+  fixture (`scripts/test_recipe_cost_data_write.js`), and the two rows that had
+  already lost their link were deliberately **left alone** — whether the original
+  type is recoverable is set out under finding 11 and the decision is Ash's, not
+  this pass's. **The pass that established recoverability had no database
+  access** and did not run a live query; every count in that section is flagged
+  as needing one.
 
 - **Method.** Queries were run against `roots.db` over SSH using
   `sqlite3 'file:…?mode=ro'`. No application module was loaded against
