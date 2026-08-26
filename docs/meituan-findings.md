@@ -1,9 +1,14 @@
 # meituan — Findings
 
-Nine findings from a read-only survey on 2026-08-26, opened by a dashboard row
-("Meituan not syncing · 4") and ending somewhere else entirely: the badge that
-opened it and the screen it sends you to count two different things, and the
-real exposure was in neither of them.
+Eleven findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing · 4")
+and ending somewhere else entirely: the badge that opened it and the screen it
+sends you to count two different things, and the real exposure was in neither of
+them.
+
+**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10 and 11
+came from a second pass later the same day, and finding 10 SHIPPED A CODE
+CHANGE** — `bc0c6144`, one line in the drift sweep. Read the Context section at
+the end before treating this document as the record of an untouched system.
 
 Finding 1 is first because it is the one worth acting on, not because it was
 found first. It was found last.
@@ -14,7 +19,10 @@ alarm and the screen it links to count different populations; finding 5 holds
 anywhere a reconciliation compares our record against our record; finding 6
 holds anywhere a per-row status is read as a per-target verdict; and findings 7
 and 8 are the Eleme mapping-screen defects (`docs/eleme-findings.md` finding 5)
-found again on a second screen, one of them verbatim.
+found again on a second screen, one of them verbatim; finding 10 holds anywhere a
+self-firing recovery loop selects its targets without asking whether they are
+still in use; and finding 11 holds anywhere a screen auto-applies a match without
+recording that a matcher made it.
 
 `docs/eleme-findings.md` is the companion document and is cross-referenced
 throughout rather than restated. The rules both documents produced are in
@@ -277,6 +285,11 @@ Needs attention (finding 7), where it is indistinguishable from 39 products that
 are simply not sold on Meituan.
 
 ### 254 — the one real signal
+
+> **The cause was found and fixed later the same day — see finding 10.** The
+> drift sweep had no `is_active` filter and this product is archived. Its row is
+> still in the badge and always will be: the fix stops new queue rows, it does
+> not retire the old one.
 
 The badge's only row that means what the badge says it means: a target with a
 mapping, whose stock has not landed. It carries a **2026-06-23** date. See the
@@ -767,11 +780,442 @@ Three small changes, in order of how much they buy:
 
 ---
 
+## 10. The drift sweep had no `is_active` filter, so it chased an archived product for 1551 hours and held the store's alarm shut for 28 days (found and FIXED 2026-08-26)
+
+Status: **fixed on `main` at `bc0c6144`**, deployed, daemons restarted, latch
+observed clearing. The related absences on GZ Grocery are open and untouched.
+
+This is the fault behind finding 3's "254 — the one real signal", and it turned
+out to be worth more than the one product. The wine is the symptom. The alarm is
+the finding.
+
+### The absence
+
+`driftingProducts` (`lib/meituan-drift-sweep.js:66`) selected on
+`m.sync_enabled = 1` and never asked whether the product was still active. So a
+product archived in the catalogue kept being re-queued every two hours, for ever.
+
+Product **254** (Yasmin White 2023, `is_active = 0`, no SKU) is the live case.
+Its Tianhe mapping is row 957, `Recanati Winery Yasmin White - 2023`,
+`sync_enabled = 1`, `last_pushed_qty` and `last_pushed_at` both NULL. It had
+drifted **1551 hours**.
+
+**No operator could have fixed it.** The Meituan screen lists active products
+only — `routes/meituan-admin.js:423` ends `AND p.is_active = 1` — so the row is
+not on the screen to switch off. The fault could only be closed in code.
+
+**The sweep is the only path that re-queues a target on its own.** Every other
+enqueue needs a stock movement, which an archived product does not get, or an
+operator's click:
+
+| Path | Self-firing | Had the filter |
+|---|---|---|
+| drift sweep, `lib/meituan-drift-sweep.js:66` | **yes, every 2h / 30min** | no, now **fixed** |
+| edge enqueue, `lib/meituan-bundles.js:153` | no, needs a stock move | no |
+| "Sync now", `routes/meituan-admin.js:569` | no, operator click | no |
+| reopen refill, `lib/store-close.js:79` | no, operator reopens | no |
+
+### Not one of its 207 queue rows ever pushed
+
+Worth stating because the status column reads as if some did. 254's rows are
+**189 `error`**, and **18 `done` that are retirements, not pushes**:
+
+| status | `last_error` | n |
+|---|---|---|
+| `done` | `retired: pre-fix terminal-error residue` | 13 |
+| `done` | `superseded, duplicate from repeated Sync now clicks, collapsed to latest` | 3 |
+| `done` | `superseded` | 2 |
+| `error` | `transient push failure, retries exhausted` | 188 |
+| `error` | `page.waitForTimeout: … browser has been closed` | 1 |
+
+The drain writes `status='done', last_error='superseded'` when it collapses
+same-target rows (`scripts/meituan-daemon.js:888-891`), and writes
+`last_pushed_qty` / `last_pushed_at` **only** on a genuine `ok`
+(`scripts/meituan-daemon.js:958-960`). Both are NULL on row 957, and
+`meituan_sync_log` holds **zero** `stock_push ok` rows naming the product. So
+"never synced" holds on three independent readings.
+
+> **A `done` row on this channel does not mean a push landed.** It means the row
+> is no longer live, which includes being superseded and includes being retired
+> by hand. Finding 6 says the row is dead and the target is not; this adds that
+> a row can be *retired* without the target ever having been reached.
+
+### The part that matters more than the wine: §30 rule 5 was failing on 天河
+
+`driftingProducts` has three callers, all inside the module, and the filter
+reaches all three:
+
+| Caller | Effect |
+|---|---|
+| `sweepStockDrift` `:191` | the intended one, archived products stop being enqueued |
+| `chronicDrift` `:256` | archived products stop raising the 24h alert |
+| `anyDrift` `:278` | **decides whether the latched alarm may clear** |
+
+`alertChronic` (`:299`) fires once and latches, and its fire branch
+short-circuits on an already-latched key (`if (alerts[key]) continue`). Its clear
+branch needs `alerts[key] && !anyDrift(db, sc)`. Product 254 held `anyDrift`
+permanently true, so:
+
+- the latch could never clear, **and**
+- while latched, **no new chronic drift on 天河 could raise an alert either.**
+
+The evidence is on disk and in the log.
+`data/alert-latch/meituan--drift_tianhe.json` held
+`{"latched_at":"2026-07-29T08:21:46.801Z"}`, closed **28 days**. The last
+`drift_chronic` rows in `meituan_sync_log` are:
+
+```
+10846 | yuexiu | ok    | all listings back in sync         | 2026-07-30 02:46:36
+10703 | tianhe | error | 12 listing(s) drifting over 24h   | 2026-07-29 08:21:46
+10696 | yuexiu | error |  4 listing(s) drifting over 24h   | 2026-07-29 08:21:37
+```
+
+越秀 fired and cleared the next day. 天河 fired and never cleared again.
+
+**§30 rule 5**, *an alarm must be clearable by the mechanism that raised it*, was
+therefore failing on 天河 by construction rather than by accident. One archived
+product with sync left on was enough to silence the store's drift alarm
+entirely. That is a second costume for the same rule finding 2 already puts it
+in, and the more expensive one: finding 2's alarm is merely hard to act on, this
+one could not go off at all.
+
+### The fix
+
+One line, `lib/meituan-drift-sweep.js:116`:
+
+```sql
+AND COALESCE(p.is_active, 1) = 1
+```
+
+`COALESCE`, not a bare `is_active`: unknown reads as ACTIVE, so a mapping whose
+product row has gone missing keeps the behaviour it had rather than being
+silently dropped. Same rule and default as `lib/bundle-stock.js:125`
+`bundlesContaining`, which already carried this filter with the same reasoning:
+*"an `is_active = 0` bundle is not being sold, and pushing for it would resurrect
+a listing the operator archived."*
+
+**Reactivation needs no cleanup.** The read is level-triggered, so the filter is
+re-evaluated every sweep: restore the product and the next cycle sees it again
+and re-queues whatever it missed. No mapping row is touched, `sync_enabled` is
+never moved, no queue row is deleted.
+
+### Verified, then observed
+
+Verified before shipping, headless, driving the real sweep against a fixture cut
+read-only out of production. Baseline on 天河: `chronic 1`, the wine, 1551 hours,
+and stepping past the 2-hour cool-down the sweep's **entire** output was that one
+row. Because that made a null result indistinguishable from a working filter, a
+positive control was added: ten active products forced to drift.
+
+```
+BEFORE  enqueued 12  pids 1,2,3,4,5,9,10,13,16,18,193,254
+AFTER   enqueued 10  pids 1,2,3,4,5,9,10,13,16,18
+dropped 193,254 · added none · active dropped none · chronic 11 to 9
+anyDrift  true to false, and true again the moment 254 is reactivated
+```
+
+Observed after the deploy. `meituan-sync` restarted at **07:27:00.850Z**
+(restart 154 to 155, `online`, no startup error of its own). **Sixteen seconds
+later:**
+
+```
+17597 | tianhe | drift_chronic | ok | all listings back in sync | 2026-08-26 07:27:16
+```
+
+and `data/alert-latch/meituan--drift_tianhe.json` **no longer exists.** The alarm
+that had been jammed for 28 days cleared on the first sweep cycle, on its own,
+exactly as the clear branch is written to. That sweep created no queue row, and
+254's newest row is still the `error` row from 06:32:14, untouched.
+
+### What the fix does NOT do: the badge does not move
+
+Stated plainly because it is the obvious thing to expect and it is wrong. The
+badge counts the newest queue row per target (finding 2), and this change governs
+only what gets **inserted**. 254's newest row is an `error` row, nothing rewrites
+it, so **254 stays in the badge indefinitely.** Measured both ways against the
+same fixture:
+
+```
+PATCHED    4 -> 158/error 315/error 257/error 254/error   (sweep enqueued 0)
+UNPATCHED  4 -> 158/error 315/error 257/error 254/pending (sweep enqueued 1)
+```
+
+The count is **4 either way**. What changed is that 254's row stops flipping
+`error` to `pending` to `error` every two hours and simply sits there. All four
+badge entries are stale rows, findings 3 and 6 already say why for each, and
+**nothing in the code retires them, on Meituan or on Eleme.**
+
+> **Correction to an assumption made in the session that produced this finding.**
+> "Nothing retires dead rows on either channel" was carried over to all three
+> channels. **GZ Grocery does retire its own**, in
+> `scripts/guanyi-daemon.js:693-698`: `autoHeal` selects every `status='error'`
+> row for the store, re-queues each at today's stock, and marks the old row
+> `done` with `last_error='auto-healed, re-queued at current stock'`. That is the
+> mechanism Meituan and Eleme lack, and it is the shape a fix here would take.
+>
+> One qualification, so the claim is not stronger than the data. Meituan rows
+> **have** been retired once: 1,657 of them, all at exactly
+> `2026-06-27 11:44:05`, carrying
+> `last_error='retired: pre-fix terminal-error residue'`, 13 of them 254's. That
+> was a single maintenance action, not a code path. No code retires them.
+
+**Retiring the dead rows is a separate change and was not done.**
+
+### Product 193, the second one, dropped by the same fix
+
+**193, Quinoa Green Lentil Buddha Bowl**, `is_active = 0`, Meituan map row 895
+(`藜麦扁豆杂蔬碗 Quinoa Buddha Bowl`, Tianhe, `sync_enabled = 1`). It is **not**
+drifting, and only by accident: its shelf count is 0 and its `last_pushed_qty` is
+0, so the comparison agrees. Move either number and it becomes 254 with a
+different name.
+
+It was created in the same bulk run as 254, see finding 11, and it is also mapped
+on GZ Grocery (`guanyi_product_map` row 118). The fix drops it from the Meituan
+sweep. **It remains live on the GZ Grocery paths below.**
+
+### The same shape on GZ Grocery: present, unfixed, less dangerous
+
+GZ Grocery has **two** self-firing level-triggered paths, and neither filters
+`is_active`:
+
+- **`reconcile`**, `scripts/guanyi-daemon.js:408`, selects
+  `FROM guanyi_product_map m … WHERE m.sync_enabled = 1 AND m.guanyi_sku_id IS NOT NULL`,
+  on a timer.
+- **`autoHeal`**, `scripts/guanyi-daemon.js:651`, runs on the first healthy probe
+  after start-up and after every recovery, re-enabling mappings the daemon itself
+  switched off and re-queueing every dead row.
+
+Product 193 is mapped there, so the shape is not hypothetical. **It is unfixed,
+deliberately: it was reported before it was widened, and that scope decision was
+not this session's to take.**
+
+**Why it is less dangerous**, which is why it can wait:
+
+1. **It targets a stable value the channel supplied.**
+   `guanyi_product_map.guanyi_sku_id` is an id, not a name, so a stale mapping
+   cannot resolve to a stranger's listing, and §30 rule 3 is satisfied by
+   construction. On Meituan the same staleness is a wrong-target risk (finding 1).
+2. **`autoHeal` retires its own dead rows**, so a permanently-failing GZ Grocery
+   target does not accumulate an unbounded pile of unreachable rows the way 254's
+   207 did.
+3. `reconcile` diffs against Guanyi's live on-hand rather than pushing an absolute
+   our-record number blind.
+
+So the absence is the same and the exposure is not. The ordering in §30 rule 7,
+GZ Grocery least exposed because it targets a stored stable id, holds here too.
+
+### Eleme has the absence but not the mechanism
+
+Both Eleme enqueue paths lack the filter, `lib/eleme-sync.js:42`
+`enqueueProductStock` and `:62` `enqueueAll`, but **neither is self-firing**: one
+needs a stock movement, the other an operator's click on push-all. And **Eleme
+has no drift sweep at all**, which finding 6 already establishes.
+
+So there is nothing on Eleme to re-queue an archived product on a timer. The
+census confirms it costs nothing today: `eleme_product_map` holds **zero** rows
+whose product is inactive (196 active with sync on, 1 active with sync off).
+Meituan held 2 before this fix; GZ Grocery holds 1.
+
+**Nothing was changed on Eleme.**
+
+---
+
+## 11. "Match names" is a third matcher, client-side, unscored and auto-applying, and it wrote the wine mapping (found 2026-08-26)
+
+Status: open. **No code changed.** Recorded separately from finding 10 because it
+is a property of a screen rather than of the sweep, and because it is where
+finding 10's worked example came from.
+
+### Three different matchers, and they are routinely confused
+
+Saying this plainly, because two of them have already been mistaken for each
+other once: `docs/eleme-findings.md` finding 8's correction is exactly that
+mistake, a screen's verdict read as the daemon's behaviour.
+
+| | Where it runs | How it decides | Auto-applies |
+|---|---|---|---|
+| **Match names** `public/retail-admin/11-meituan.js:1168` | **in the operator's browser** | **no score, no threshold**, a ladder of exact/substring tests each requiring a **unique** hit | **yes, silently** |
+| `scripts/eleme-match-products.js:44` | CLI on the box, needs `--apply` | **scores** 0/60/80/95/100 over normalised CJK+Latin cores, 0.85 length-ratio guard | only at `CONFIDENT = 80` (`:69`) |
+| the Meituan daemon `lib/meituan-browser.js:1129-1136` | inside the push | one-directional substring, exact-first, shortest-name tiebreak | resolves a push target |
+
+They are three implementations of one idea and they disagree. Finding 4 replays
+the **daemon's**; this finding is about the **screen's**; neither says anything
+about the other.
+
+### What Match names does, end to end
+
+Button at `public/retail-admin.html:11002`, `onclick="mtOpenMatch()"`. That only
+opens a dialog; the work starts on **Start matching** inside it.
+
+1. `mtMatchStart()` `public/retail-admin/11-meituan.js:1130`
+2. `POST /api/retail-admin/meituan/listings/refresh` to
+   `routes/meituan-admin.js:700`, one `meituan_listing_jobs` row per active store
+3. the daemon scrapes, `scripts/meituan-daemon.js:1141-1216`
+4. polls `GET …/meituan/listings` every 3s, cap 180s, `routes/meituan-admin.js:730`
+5. `mtMatchApply(stores)` `:1206` matches **in the browser**, then per confident
+   match `POST …/meituan/products/:id/map` to `routes/meituan-admin.js:161`
+
+It targets **天河 外卖 only** (`mtOutletStores()` `:1633`), skips inactive products
+(`:1211`), skips mappings that already hold a name (`:1214`), and never moves the
+sync switch (`mtKeepSync` `:976`).
+
+### The ladder, and what "confident" means here
+
+`mtMatchListing` `:1168`, in order, each step requiring exactly one hit:
+
+1. 货号 exact in `_listingSkus`, reason `sku`
+2. `name_cn` exact, reason `exact`
+3. listings **containing** `name_cn`, exactly one, reason `substring`
+4. more than one: disambiguate by `variant_label`, exactly one, reason `variant`;
+   otherwise **`ambiguous`, not applied**
+5. `name_en` lowercased, exactly one containing listing, reason `substring-en`
+6. otherwise `unmatched`
+
+Anything reaching 1 to 5 is **written immediately, with no confirmation**. The
+code says so at `:1204`: *"the dialog itself is the confirmation"*. Only
+`ambiguous` and `unmatched` are put to a human, as chips.
+
+**Uniqueness is doing all the work a score would do elsewhere.** There is no
+notion of a close match, a weak match, or a tie to refuse, only "exactly one
+listing contains this string", which is a different question from "this is the
+right listing". Finding 1 is what that costs when a name is a truncated form of
+its neighbour.
+
+### It wrote 138 mappings in under four minutes, and two of them are finding 10
+
+`mtMatchStart` is the **only** caller of the Meituan `listings/refresh` route, so
+every row of `meituan_listing_jobs` is one press. There are **24 rows across 16
+distinct timestamps**, so 16 presses, from `2026-06-22 14:25:30` to
+`2026-08-24 06:44:59`. One of them, `2026-07-29 08:53:30`, is 32 minutes after
+the chronic-drift alert of finding 10 fired: someone reacted to the alarm by
+pressing this button.
+
+The output is visible in `meituan_product_map` created-at clusters:
+
+```
+2026-06-22 15:42  tianhe  59
+2026-06-22 15:43  tianhe  63   <- row 895, product 193
+2026-06-22 15:44  tianhe  14
+2026-06-22 15:45  tianhe   2   <- row 957, product 254, at 15:45:06
+```
+
+138 rows in under four minutes. **Both of finding 10's archived-product mappings
+were created in this one run**, and neither has been touched since: `updated_at`
+still equals `created_at` on both.
+
+> **The names came from the Paste box, not the scrape. Labelled an inference.**
+>
+> The 天河 scrape job that day is recorded `error`, *"scrape returned null (not
+> logged in)"*, job 1, `2026-06-22 14:25:30`, and the first 天河 `done` job is
+> `2026-06-24 01:37:21`, after. So no successful 天河 scrape existed when the 138
+> rows were written at 15:42, and the listings cache held no 天河 names to match
+> against. The escape hatch `mtOpenPaste` feeds the identical `mtMatchApply`
+> (`:1429`), and it is the only other way to reach that loop.
+>
+> **The inference is that a human pasted a list of titles and the auto-apply took
+> them.** It is not directly recorded, since nothing logs a run (below), and it is
+> the only path the timestamps leave open rather than a proven one.
+
+### The worked example: a name that was never checkable
+
+`Recanati Winery Yasmin White - 2023`, the name Match names wrote onto product
+254, **exists on no 天河 listing. 0 of 267 cached titles.** No exact hit, none
+containing `Yasmin`, none containing `Recanati`.
+
+That is the mapping the drift sweep then chased for 1551 hours (finding 10), and
+it is the clean worked example of what this button can do: a name auto-applied
+with no confirmation, from a source the system never verified, onto a mapping
+nothing afterwards could check. The screen *can* say the name matches nothing,
+`mtNameBad` `:519` renders it amber, but only once the catalogue has been read,
+and saying so changes nothing.
+
+Note the first queue row for 254 is dated `2026-06-23 03:27:06`, which is the
+`2026-06-23` date finding 3 attributes to this product. Both are right: the
+**mapping** is 2026-06-22 15:45:06 and the **first queue row** is 2026-06-23.
+They are different columns, and finding 3's correction was about which product
+owned the date, not which column.
+
+### Nothing logs a run
+
+- **`activity_log` holds zero rows** matching `meituan` or `map`. This is the same
+  absence `docs/eleme-findings.md` finding 8 establishes against 16,252 rows,
+  found again on this channel.
+- The map route `routes/meituan-admin.js:161` **writes no audit entry** of any
+  kind.
+- `meituan_sync_log` around the last press holds only `stock_push` rows.
+
+So there is no record of **who** pressed it, **what changed from and to**, or
+**that a matcher rather than a person chose the name.** The only trace is
+`meituan_listing_jobs` for the press and the timestamps on the rows it wrote for
+the effect.
+
+**§30 rule 7 is unmet here, less severely than on Eleme.** `meituan_name` at
+least stores the chosen title, so the target itself is recoverable; Eleme's
+finding 9 could not even say which listing took a number. What is missing on
+Meituan is narrower: that the choice was *made by a matcher*, and what it
+replaced. Finding 9 of this document records the same rule's other half, the
+column that would record the target id existing and being read by nothing.
+
+### The route has no catalogue gate, so the rule lives in the caller
+
+**Match names itself cannot write a non-catalogue name.** Every string it applies
+comes from `_listings` or `_listingSkus`, and the "Use …" fallback chip runs
+through `mtSuggestionIfListed` `:966`, which composes a name from the product and
+then returns `''` **unless the channel sent that exact string back**.
+
+**But the endpoint it writes through does not check.**
+`routes/meituan-admin.js:161` takes `meituanName`, trims it, and stores it. There
+is no comparison against `meituan_listings` anywhere in that handler. The same
+route backs the free-text field on the row panel,
+`<input type="text" class="mt-name-input" list="mt-listings-dl-…">` at `:846`,
+where a typed name matching nothing is **flagged amber by `mtNameBad` and never
+refused.**
+
+So the catalogue rule is **a property of the caller, not of the route.** §30 rule
+3, *a value binding our record to an external system must be selected from values
+that system supplied*, is enforced by one caller and by nothing underneath it.
+
+### No capability gates it today
+
+- **No `data-cap`** on the button (`public/retail-admin.html:11002`), and **no
+  `can()` anywhere in `public/retail-admin/11-meituan.js`.** The client does not
+  hide it from anyone.
+- Server-side the capabilities exist but are **dormant**. `lib/cap-routes.js:130`
+  maps `POST …/products/N/map` to `meituan:map` and the rest of `/meituan` to
+  `meituan:sync`, but `routes/retail.js:149` only enforces when
+  `tenant.rbac_enforce` is set, and it reads **0**.
+- So **all seven active `tenant_users` pass `requireRetailAdmin`**, including two
+  `kitchen` and one `warehouse` role, and any of them can auto-apply mappings on a
+  live trading channel.
+
+This is `docs/eleme-findings.md`'s reads-open / fail-open shape on a **write**
+that is destructive in the §30 rule 3 sense. **Nothing was changed. It is
+recorded for a decision, not fixed here.**
+---
+
 ## Context — what was and was not done on 2026-08-26
 
-- **Nothing was written.** No mapping was created, edited, hidden or deleted; no
-  queue row was retired, re-queued or cleared; no stock was pushed; no process
-  was started, stopped or restarted. No code changed on this channel.
+> **Amended after findings 10 and 11.** The bullet below was written when this
+> document ended at finding 9 and it was true of that survey. It is no longer
+> true of the day. It is amended in place rather than deleted, so a reader does
+> not carry away a claim the document later contradicts.
+
+- **The survey behind findings 1 to 9 wrote nothing.** No mapping was created,
+  edited, hidden or deleted; no queue row was retired, re-queued or cleared; no
+  stock was pushed; no process was started, stopped or restarted.
+
+- **Finding 10 then changed code and shipped it.** One line in
+  `lib/meituan-drift-sweep.js`, commit `bc0c6144`, pushed to `main` at 07:26 UTC,
+  CI green in 1m08s. Being in `lib/` it restarted the channel daemons:
+  `meituan-sync` 154 → 155, `guanyi-sync` 138 → 139, `eleme-sync` 62 → 63, all
+  `online`. `shangou-sync` was already `stopped` before the deploy and still is.
+  **Still nothing was written to any mapping, queue row or listing** — the change
+  only removes rows from a SELECT.
+
+- **One alarm cleared as a direct result**, 16 seconds after the restart:
+  `drift_chronic ok, all listings back in sync`, and the latch file
+  `data/alert-latch/meituan--drift_tianhe.json` was deleted by the daemon. That
+  was the code doing what it is written to do, not a manual clear.
 
 - **Product 231 cleared itself during the survey**, by the drift sweep and the
   drain doing their ordinary work at 06:32:41 (finding 3). That was the system,
@@ -791,7 +1235,36 @@ Three small changes, in order of how much they buy:
   this window would put an unverified edit on a trading day next to a build that
   had been checked.
 
+### Working note — requiring the app’s modules on production is not read-only
+
+Not a finding; a method note, recorded because it is an easy mistake to repeat
+and it silently invalidates a "read-only" claim.
+
+A probe opened `roots.db` with `better-sqlite3` in `{ readonly: true }` and then
+`require`d `lib/channel-sync-stale.js` to get the badge number from the real
+function. **That require chain is not read-only.** `lib/channel-sync-stale.js`
+pulls in `lib/store-hours.js`, which does `seam(require('../database'))` at module
+load — opening its own **writable** handle to the same file, independently of the
+read-only one. Loading it ran a scheduled retention job, which reported
+`[retention] purged 3 activity_log entries older than 90 days`.
+
+The rows were over-age ones the application deletes on its own schedule, so
+nothing was lost that was not already going. That is not the point. **The point
+is that the read wrote**, and the operator asking for a read-only check would
+have been told the check was read-only.
+
+**The method that is actually read-only** is the one the rest of this document
+and finding 10’s verification used: dump the needed tables out of
+`file:data/roots.db?mode=ro` into a **detached fixture file**, and drive the real
+module against that. A module’s dependency closure is the thing to check first —
+the drift sweep’s is only `lib/meituan-bundles.js` and `lib/bundle-stock.js`, and
+neither touches the app’s database layer, which is why that harness is safe and
+the badge probe was not.
+
 Source: read-only queries of `roots.db` on 2026-08-26 over SSH, the matcher
 replayed against the cached catalogue outside the running process (finding 4's
 caveat applies to every count derived from it), and the code cited above at
-`0ef56667`.
+`0ef56667` for findings 1 to 9. Findings 10 and 11 were read at `2e95078e` and
+finding 10’s fix landed at `bc0c6144`; its post-deploy observations were taken
+against the running system between 07:26 and 07:28 UTC, and its before/after
+selection counts against detached fixtures cut at 07:00 and 07:27 UTC.
