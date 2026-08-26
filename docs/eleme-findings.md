@@ -1,14 +1,15 @@
 # eleme — Findings
 
-Eight findings. The first four come from a read-only survey on 2026-08-25, opened
+Nine findings. The first four come from a read-only survey on 2026-08-25, opened
 by a dashboard row ("Eleme not syncing · 1") and ending in a wrong number on a
 live listing. Findings 5 and 6 were added on 2026-08-26, from the mapping screen
 that survey sent someone to. Most are not Eleme-specific: findings 1 and 4 hold
 on every channel, finding 3 holds anywhere a mapping is stored against an
 external system, finding 5 holds on any screen that counts work, and finding 7
 holds anywhere a cached read is consulted by something that returns a verdict,
-and finding 8 holds anywhere one screen owns both the reversible and the
-destructive way to end the same thing.
+finding 8 holds anywhere one screen owns both the reversible and the
+destructive way to end the same thing, and finding 9 holds anywhere a system
+resolves a target by name and does not record which one it chose.
 
 The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. This
 document is the evidence; that one is the intent. Where they disagree about what
@@ -307,7 +308,11 @@ Two mechanisms combine, neither of them visible from the mapping screen:
    name, the target becomes **the product's own Chinese name** — a string that
    was never checked against the catalogue and never chosen by anyone as a match.
    Eleme matches by name and nothing else (finding 3), so this either resolves to
-   a listing nobody nominated, or to nothing.
+   a listing nobody nominated, or to nothing. **Which of the two is not a coin
+   toss** — the matcher accepts a fragment of a real listing name and takes the
+   first one it finds, so "resolves to a stranger" is the ordinary case, not the
+   unlucky one. Finding 9 records the rule and the one instance of it we can
+   name.
 
 **Observed.** `eleme_product_map` for product 80 (Dried Sour Mango, `4-200`,
 store tianhe) holds `eleme_name` empty and `sync_enabled = 0`. It is also the
@@ -315,7 +320,9 @@ only sync-off row in the table carrying a push: `last_pushed_qty = 25`,
 `last_pushed_at = 2026-08-25 11:21:07`. Queue row 656 was created 11:20:51 and
 finished `done` at 11:21:07 on one attempt. Its name had been one of the
 half-typed fragments finding 3 lists (`芒`), later cleared; clearing the name did
-not stop it pushing, and neither did the switch.
+not stop it pushing, and neither did the switch. **That push resolved** — one
+character matched a real listing and 25 was written to it. Which listing is not
+recorded anywhere; see finding 9.
 
 **So "blank and switched off" is not a safe state**, and the mapping screen must
 not present it as one. It is a live wrong-target risk that happens to be quiet.
@@ -530,9 +537,45 @@ evidence actually supports is narrower and worth stating in those terms:
 
 The four blanked rows also settle a question worth recording: **none of them had a
 name worth keeping.** All four carried the half-typed fragments finding 3 lists —
-`bre`, `brea`, `gra`, `芒` — none of which matched any listing, so not one of the
-four ever resolved a push. Nothing was lost when they were blanked. The
-inference to avoid is that a mapping which once held a name once worked.
+`bre`, `brea`, `gra`, `芒`. Nothing was lost when they were blanked. The inference
+to avoid is that a mapping which once held a name once worked.
+
+> **Correction, 2026-08-26 — left visible on purpose.**
+>
+> This paragraph first read: *"…none of which matched any listing, so not one of
+> the four ever resolved a push."* **That was wrong, and it shipped on `main` in
+> commit `b39c2a6b`.** It is corrected here rather than quietly rewritten, so the
+> fault is not rediscovered later as a fresh finding.
+>
+> **What is actually established:**
+>
+> - **`芒` matched, and it resolved a push of 25.** Recorded on
+>   `eleme_product_map` id 375 at **2026-08-25 11:21:07 UTC** (19:21 +08),
+>   corroborated by `eleme_sync_log` id 724
+>   (`{"product_id":80,"sku":"4-200","qty":25,"spec":null,"units":1}`) and by
+>   `/root/.pm2/logs/eleme-sync-out.log:1890` —
+>   `[eleme:tianhe] stock updated: 芒 → 25`.
+> - Replayed against the live Tianhe catalogue, the four fragments resolve to
+>   **`bre` 0 candidates, `brea` 0, `gra` 2, `芒` 3.**
+> - Map rows **127, 373 and 374 carry `last_pushed_qty` and `last_pushed_at`
+>   NULL**, so no push ever succeeded for those three — `gra` could have resolved
+>   and never did. The PM2 log covers 2026-08-24T00:13:33Z onward and holds
+>   exactly one fragment push in the whole file.
+> - So **1 of the 4 resolved, not 0.** "Nothing was lost when they were blanked"
+>   still holds, on that evidence rather than on the claim that none ever
+>   resolved.
+>
+> **The cause of the error, which is the part worth keeping.** Two different
+> matching rules were treated as one. The admin screen's `elNameKnown`
+> (`public/retail-admin/14-eleme.js`) is an **exact** match against the cached
+> catalogue, so it correctly reports that no listing carries the name `芒`. The
+> daemon's matcher is a **substring match in either direction**
+> (`lib/eleme-browser.js:807-811`), so it finds one anyway. The screen's verdict
+> was carried onto the daemon's behaviour, and the screen had never made a claim
+> about the daemon. Finding 6 already recorded the counter-evidence — the same
+> push, in the same document — and it was not reconciled.
+>
+> The rule itself is finding 9, which is where it belongs.
 
 ### Mapping changes are effectively unaudited
 
@@ -588,6 +631,160 @@ can clear them one at a time, which is better than a migration deciding for him.
 Nine of the ten are the entire Needs attention chip on 天河, one click each; the
 tenth is 越秀's product 134, reachable only because Remove now renders on an
 unconnected store's block.
+
+---
+
+## 9. A mapped name that is a fragment of a real listing resolves, and nothing records where it landed (found 2026-08-26)
+
+Status: open. No code changed. This is the mechanism behind findings 3 and 6 and
+behind finding 8's correction — it is recorded separately because it is a
+property of the push path, not of any one bad mapping, and because the second
+half of it (nothing records the target) is what makes the first half
+uninvestigable after the fact.
+
+### The rule
+
+`lib/eleme-browser.js:807-811`:
+
+```js
+  _findByFuzzyName(name) {
+    for (const [k, v] of this._foodCache) {
+      if (k === name || k.includes(name) || name.includes(k)) return v;
+    }
+    return null;
+  }
+```
+
+Reached at `:838`, when the exact `this._foodCache.get(name)` misses. Three
+things about it matter, and all three are load-bearing:
+
+1. **It matches in either direction.** `k.includes(name)` means a stored name
+   that is a **fragment of** a real listing resolves to that listing. A single
+   character is enough. Nothing warns, nothing logs a doubt, and the push
+   succeeds — which is worse than failing, because a failure is at least a queue
+   row with an error on it.
+
+2. **The first match in cache order wins.** Not the closest, not the longest
+   common prefix, not a refusal when several match — the first one the Map
+   yields. Cache order is `_foodCache` **insertion** order, and that order is
+   recoverable: `catalogueSnapshot()` iterates the Map
+   (`lib/eleme-browser.js:975-977`), and the daemon deletes and re-inserts from
+   it inside one transaction (`scripts/eleme-daemon.js:669-679`), so row-id order
+   in `eleme_catalogue_cache` is the order `_findByFuzzyName` walks.
+
+3. **Eleme has no article number to fall back on.** Findings 3 and 4 establish
+   it: `extCode` is empty on every one of our Eleme items, so the name is the
+   only key there is. Where the name is a fragment, a fragment is the key.
+
+### Nothing stores what a push landed on
+
+This is the half that turns a bug into an unanswerable question.
+
+- `eleme_product_map.last_pushed_qty` and `.last_pushed_at` are written in
+  exactly one place, `scripts/eleme-daemon.js:554-558`, gated on
+  `if (ok && row.map_id)`. They are keyed to **our** product. They record that a
+  push was accepted, and our quantity, and when. They do not record the target.
+- `eleme_sync_log` (`scripts/eleme-daemon.js:561-565`) writes `product_id`,
+  `sku`, `qty`, `spec`, `units`. **No target field.**
+- The PM2 line at `lib/eleme-browser.js:927` prints `label`, which is the string
+  we **searched with**, not the listing that answered. For the incident below it
+  reads `stock updated: 芒 → 25`.
+- Both map columns are **last-write-wins with no history**, and
+  `eleme_catalogue_cache` is fully deleted and re-inserted on every refresh, so
+  it holds no history either (all 204 Tianhe rows carry one timestamp).
+
+**State it plainly: no past push can be traced to a listing after the fact.** Not
+from the database, not from the logs. The only reason the 2026-08-25 incident is
+known at all is that the push key `芒` was too short to be a real name, and
+somebody read the line.
+
+### The one known instance, and what is not known about it
+
+A push of 25 under the key `芒` succeeded at 2026-08-25 11:21:07 UTC and landed on
+exactly one listing. Exactly three Tianhe listings contain 芒:
+
+| cache id | listing | owning product | sync |
+|---|---|---|---|
+| 34297 | 芒果蛋白球 Mango Bites | 238 `3-10` | on |
+| 34303 | 芒果康普茶 Mango Kombucha | 286 `2-120` / 319 `2-130` | on |
+| 34338 | 凯特芒果干 Dehydrated Keitt Mango | 169 `4-210` **Dried Sweet Mango** | on |
+
+**Which one took the 25 is not established.** Note that 凯特芒果干 is the
+legitimate listing of **Dried Sweet Mango, SKU 4-210** — it is not, and never
+was, the listing of Dried Sour Mango `4-200`, whose mapping made this push.
+
+**The inference, labelled as one:** first-match-wins over cache order puts
+**芒果蛋白球 Mango Bites** first and 凯特芒果干 third. But that is **today's**
+order — the 2026-08-26 04:55 scrape — applied to the in-memory cache a
+different process held on 2026-08-25, and the catalogue table keeps no history to
+check it against. Cache order follows Eleme's own category listing and is stable
+unless the merchant reorders, which is a reason to believe it and not a record of
+it. **凯特芒果干 is ranked last of three, not eliminated.**
+
+**No live wrong number remains from this incident.** All three candidate
+listings have owning products with sync on, and all three have pushed since. The
+exposure was long, though: 芒果蛋白球's next push
+(`eleme-sync-out.log:2129`, → 38) falls between 2026-08-26 02:37:18Z and
+03:07:23Z — roughly **15½ hours** after the 25. Eleme has no drift sweep
+(finding 2), so nothing corrects a wrong number except the owning product's own
+next stock change.
+
+### The other channels
+
+The same shape exists elsewhere, but not equally, and the differences are the
+argument for what to do about it:
+
+- **Meituan** — `lib/meituan-browser.js:1129-1136` `_nameMatches`: substring, but
+  **one direction only** (`n.includes(cn)`, plus a lowercased EN test and a
+  `_coreQuery` prefix). A fragment of a real listing still matches. Tempered by
+  an exact-match-first preference and a shortest-name tiebreak at `:1148-1161`,
+  and it runs against search suggestions rather than the whole catalogue.
+- **闪购 shangou** — `lib/shangou-browser.js:195-205`: **code first.** Our 货号 is
+  looked up in `byCode` and the name is consulted only when that misses — exact
+  `spuName === n`, then `spuName.includes(n)`, again one direction.
+- **GZ Grocery** — no name matching in the push path at all. It targets
+  `guanyi_product_map.guanyi_sku_id`, a stored stable id
+  (`scripts/guanyi-daemon.js:409`, `:652`). **A fragment cannot resolve to
+  anything, because names are not the key.**
+
+So the ordering of exposure is Eleme worst (name only, both directions), Meituan
+next (name only, one direction), 闪购 mild (code first), GZ Grocery none. The fix
+Eleme needs is the one GZ Grocery already has, and finding 3 already names it: a
+one-time 货号 backfill so the name stops being the key.
+
+### Bearing on the nine nameless mappings
+
+A nameless mapping does not fail — it pushes against the product's own Chinese
+name (`scripts/eleme-daemon.js:530`, finding 6), and that name then goes through
+this same matcher. Replayed against today's Tianhe catalogue:
+
+- **Eight of the nine resolve to nothing.** A push would fail as transient.
+- **One resolves: product 358, `格兰诺拉脆麦片`**, to `格兰诺拉脆麦片 Crunchy
+  Granola` — its own correct listing, by exact name.
+- Product 80's `云南酸芒果干` resolves to nothing today. It resolved only while it
+  carried the single character.
+
+**This is a fact about today's catalogue, not a property of the code.** A new
+listing whose name contains one of those eight product names — or a rename that
+makes one a fragment of another — changes the answer with no code change, no
+mapping change, and no notice. Do not read "eight of nine are inert" as a
+safety property. It is a measurement with a date on it.
+
+### What would actually fix it
+
+Not a guard on the caller; the callers are already right. Either:
+
+- **the 货号 backfill** — give Eleme items an `extCode` and stop matching on names
+  (findings 3 and 4 both point here), or
+- **refuse instead of guessing** — an inexact match returns no target rather than
+  the first one, which is §30 rule 4 applied to the matcher instead of to a
+  screen. A fragment would then fail loudly, as a queue row with an error, which
+  is what finding 3's two days of silence cost.
+
+And independently of both: **record the target.** A `target_name` on the
+`stock_push` log line would have made this finding a query rather than an
+argument.
+
 ---
 
 ## Context — what was and was not done on 2026-08-25
@@ -661,6 +858,19 @@ and stale about the table as it stands.
   mapping was created, edited or deleted here; no queue row was retired or
   re-queued; no stock was pushed; no process was started, stopped or restarted.
   Finding 8's twelve rows are deliberately left standing.
+
+
+- **Findings 8 and 9 were written after `b39c2a6b` shipped, and 8 carried an
+  error.** The correction is left visible inside finding 8 rather than folded
+  away: the claim that no blanked fragment ever resolved a push was wrong for
+  `芒`, and the reason it was wrong — one matching rule mistaken for another —
+  is the part worth keeping. Finding 9 lifts the matcher out of that correction
+  and records it in its own right.
+
+- **Nothing was written to the database by this pass, and no code changed.** The
+  nine nameless mappings still stand. All of finding 9's evidence is read-only:
+  `roots.db` over SSH, `/root/.pm2/logs/eleme-sync-out.log`, and the matcher
+  replayed against the cached catalogue outside the running process.
 
 Source: read-only queries of `roots.db` on 2026-08-26 over SSH, and the counts
 re-derived from those rows rather than carried forward from the section above.
