@@ -5598,6 +5598,13 @@
      a field and a button rather than only a state. */
   .el-storeline .shopinp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; max-width: 176px; }
   .el-storeline .shopinp::placeholder { color: var(--td-text2); }
+  /* The catalogue row sits with the store lines: same kind of fact, and a
+     refused mapping write points the operator straight at it. Its dot is muted
+     because catalogue age is not a health state - there is no bad colour for
+     it, only an age. */
+  .mt-storeline.mt-catline .dot { background: var(--td-border); }
+  .mt-storeline.mt-catline .st { font-variant-numeric: tabular-nums; }
+
   /* Sync now / Push all stock lives on the tile whose number it changes. */
   .mt-tile .act, .el-tile .act { margin-top: 16px; }
 
