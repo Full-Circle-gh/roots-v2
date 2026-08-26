@@ -1626,6 +1626,7 @@ function renderAffiliateBlock(aff) {
         <label class="stacked">Conversions · 转化数</label>
         <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned · 已赚</span></div>
       </div>
+      ${renderLifetimeEligibility(aff)}
     </div>
     <div class="table-wrap">
       <table>
@@ -1634,6 +1635,66 @@ function renderAffiliateBlock(aff) {
       </table>
     </div>
   `;
+}
+
+// Ongoing repeat-order share — is this customer one of the chosen few?
+//
+// Shown ONLY while the shop is in 'selected' mode. In 'everyone' mode this
+// customer already earns the ongoing share and a per-person switch would be a
+// control that changes nothing — the kind of setting that saves nowhere and
+// teaches the operator a rule that is not real.
+//
+// Strings go through cuT(en, cn) rather than the block's older glued
+// "EN · CN" literals: cuT resolves to ONE language at render time, where a
+// glued literal relies on the i18n walker splitting it afterwards. cuT is
+// already this block's own helper (see the No name fallback below).
+function renderLifetimeEligibility(aff) {
+  if (!aff || aff.lifetime_mode !== 'selected') return '';
+  const on = !!aff.lifetime_eligible;
+  const since = aff.lifetime_eligible_since ? escapeHtml(cuFmtDate(aff.lifetime_eligible_since)) : '';
+  // The date is only the truth about what they earn while the flag is ON. Once
+  // cleared it is history — when they were last chosen — and labelling it
+  // "earning since" would claim they still are.
+  const sub = on
+    ? (since ? cuT(`Earning on friends’ orders paid since ${since}.`, `自 ${since} 起，可从好友已付款订单中获得分成。`)
+             : cuT('Earning on friends’ later orders.', '可从好友之后的订单中获得分成。'))
+    : (since ? cuT(`Not earning the ongoing share. Last chosen ${since}.`, `当前不获得复购分成。上次选定于 ${since}。`)
+             : cuT('Not earning the ongoing share.', '当前不获得复购分成。'));
+  return `
+      <div class="field" style="margin: 0;">
+        <label class="stacked">${cuT('Ongoing share', '复购分成')}</label>
+        <div style="font-size: 13px; padding: 6px 0;">
+          <button class="btn btn-sm" onclick="cuSetLifetimeEligible(${CU_CURRENT.customer.id}, ${on ? 'false' : 'true'}, event)">${
+            on ? cuT('Stop the ongoing share', '停止复购分成')
+               : cuT('Let them earn the ongoing share', '允许获得复购分成')}</button>
+          <div class="muted" style="font-size: 11px; margin-top: 4px; max-width: 44ch;">${sub}</div>
+        </div>
+      </div>`;
+}
+
+// Pick / un-pick from the customer's own record. Same endpoint the Affiliate
+// tab's manage dialog writes, so the two can never disagree about who is in.
+async function cuSetLifetimeEligible(customerId, eligible, ev) {
+  const btn = ev && ev.currentTarget;
+  // cuT, not the titleEn/titleCn pair: askConfirm's pick() GLUES those into
+  // "EN · CN" and leans on the walker to split them again. One language in,
+  // one language out — same call shape afReissueCode's confirmLabel already uses.
+  if (!eligible && !(await askConfirm({
+    title: cuT('Stop this customer earning the ongoing share?', '停止该客户的复购分成？'),
+    body: cuT('They keep the one-time referral reward and everything already paid into their wallet. Only future orders stop earning.',
+              '已发放至钱包的分成和一次性推荐奖励均予保留，仅之后的订单不再产生分成。'),
+    confirmLabel: cuT('Stop the ongoing share', '停止复购分成'),
+  }))) return;
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/retail-admin/affiliate/eligible', { method: 'POST', body: { customerId, eligible } });
+    toast(eligible ? cuT('Now earning the ongoing share', '已开启复购分成')
+                   : cuT('No longer earning the ongoing share', '已停止复购分成'));
+    if (CU_CURRENT?.customer?.id === customerId) cuOpenDetail(customerId);
+  } catch (e) {
+    toast(cuT('Could not change this: ' + e.message, '修改失败：' + e.message), 'err');
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function afReissueCode(customerId, ev) {

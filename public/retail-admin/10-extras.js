@@ -33,7 +33,7 @@
 
 const AFX_PAGE_SIZE = 20;
 const AFX_LIFETIME_START_PCT = 5;      // what "keep rewarding repeat orders" starts at
-const AFX_SAVE_KEYS  = ['rewardPerOrder', 'rewardReferee', 'lifetimeRatePercent', 'lifetimeMonths', 'codePrefix', 'shareImage'];
+const AFX_SAVE_KEYS  = ['rewardPerOrder', 'rewardReferee', 'lifetimeRatePercent', 'lifetimeMonths', 'lifetimeMode', 'codePrefix', 'shareImage'];
 const AFX_MONEY_KEYS = ['rewardPerOrder', 'rewardReferee', 'lifetimeRatePercent', 'lifetimeMonths'];
 
 // Monochrome line icons, never emoji. Sized by the scoped CSS.
@@ -53,6 +53,8 @@ const AFX = {
   saved: null,           // last-saved snapshot, for the dirty compare
   progBusy: false,
   lifeArm: false,        // inline confirm while arming the repeat-order share
+  eligCount: null,       // how many customers are picked for the ongoing share (null = not read yet)
+  eligBusy: false,       // a pick/un-pick write is in flight inside the manage dialog
   rows: [], summary: null, total: 0, page: 1,
   filter: '', query: '',
   ledger: 'loading',     // loading | ok | empty | nomatch | error
@@ -79,6 +81,7 @@ function afxWhy(e) {
     bad_reward:          () => afT('A reward has to be between ¥0 and ¥10,000.', '奖励金额需在 ¥0 到 ¥10,000 之间。'),
     bad_lifetime_rate:   () => afT('The repeat-order share has to be between 0% and 50%.', '复购分成比例需在 0% 到 50% 之间。'),
     bad_lifetime_months: () => afT('The share can last up to 120 months. Use 0 for no end date.', '分成最长 120 个月。设为 0 表示不设期限。'),
+    bad_lifetime_mode:   () => afT('Who earns the repeat-order share could not be saved. Reload the page and set it again.', '复购分成的可获得范围保存失败。请刷新页面后重新设置。'),
     bad_prefix:          () => afT('A code prefix can only use letters, numbers and dashes.', '邀请码前缀只能使用字母、数字和短横线。'),
     bad_share_image:     () => afT('That picture couldn’t be used. Upload it again.', '该图片无法使用,请重新上传。'),
     already_paid:        () => afT('This one has already been rewarded, so it can’t be changed here.', '该记录已发放奖励,无法在此修改。'),
@@ -112,7 +115,7 @@ async function afxLoadOverview() {
 
 // ── settings load / save ────────────────────────────────────────
 function afxBlankCfg() {
-  return { rewardPerOrder: 0, rewardReferee: 0, lifetimeRatePercent: 0, lifetimeMonths: 12, codePrefix: 'ROOTS-', shareImage: '' };
+  return { rewardPerOrder: 0, rewardReferee: 0, lifetimeRatePercent: 0, lifetimeMonths: 12, lifetimeMode: 'everyone', codePrefix: 'ROOTS-', shareImage: '' };
 }
 async function afxLoadSettings() {
   AFX.settingsErr = '';
@@ -126,6 +129,11 @@ async function afxLoadSettings() {
       lifetimeRatePercent: Number(d.lifetimeRatePercent) || 0,
       // 0 is a real, meaningful value here (no end date) — never fall through to 12.
       lifetimeMonths:      d.lifetimeMonths === 0 ? 0 : (Number(d.lifetimeMonths) || 12),
+      // Who earns the ongoing share. Independent of the rate: a shop can sit in
+      // selected mode at 5%, and can also build its picked list while still in
+      // everyone mode. Anything unrecognised reads as 'everyone', which is the
+      // safe direction for a DISPLAY default — the server validates the write.
+      lifetimeMode:        d.lifetimeMode === 'selected' ? 'selected' : 'everyone',
       codePrefix:          String(d.codePrefix || 'ROOTS-').toUpperCase(),
       shareImage:          String(d.shareImage || ''),
     };
@@ -136,6 +144,10 @@ async function afxLoadSettings() {
     AFX.saved = { ...AFX.cfg };
     AFX.settingsErr = afxWhy(e);
   }
+  // Only fetched when the chooser will actually show a count — in everyone mode
+  // the picked list is not on screen and reading it would be a request whose
+  // answer nothing displays.
+  if (AFX.cfg.lifetimeMode === 'selected' && afxLifeOn(AFX.cfg)) afxLoadEligCount();
   afxRenderSettings(); afxRenderOffer(); afxRenderLedger(); afxRenderSaveBar();
 }
 
@@ -149,6 +161,7 @@ async function afxSave() {
   if (AFX.saving || !afxDirty()) return;
   AFX.saving = true; AFX.saveErr = ''; afxRenderSaveBar();
   const before = afxLifeOn(AFX.saved);
+  const modeBefore = AFX.saved.lifetimeMode;
   try {
     const r = await api('/api/retail-admin/affiliate/settings', { method: 'PATCH', body: { ...AFX.cfg } });
     const d = r.data || {};
@@ -159,10 +172,14 @@ async function afxSave() {
     afxRenderSettings(); afxRenderSaveBar();
     setTimeout(() => { AFX.saveSaid = false; afxRenderSaveBar(); }, 2000);
     // The repeat-order share drives a stat tile, a filter pill and a row badge.
-    if (afxLifeOn(AFX.cfg) !== before) {
+    // So does WHO earns it: the three "still earning" figures are all computed
+    // server-side against the saved mode, so a mode change makes every one of
+    // them stale until the ledger is re-read.
+    if (afxLifeOn(AFX.cfg) !== before || AFX.cfg.lifetimeMode !== modeBefore) {
       if (!afxLifeOn(AFX.cfg) && AFX.filter === 'still') { AFX.filter = ''; AFX.page = 1; }
       afxLoadReferrals();
     }
+    if (AFX.cfg.lifetimeMode === 'selected' && afxLifeOn(AFX.cfg)) afxLoadEligCount();
     afxRenderOffer(); afxLoadOverview();
   } catch (e) {
     AFX.saving = false;
@@ -353,12 +370,25 @@ function afxRenderOffer() {
           ',另加好友消费额的 ' + c.lifetimeRatePercent + '%' +
             (Number(c.lifetimeMonths) === 0 ? ',不设期限' : ',持续 ' + c.lifetimeMonths + ' 个月'))
     : '';
+  // In selected mode this sentence would otherwise read as the offer EVERY
+  // customer gets, which is exactly what it stopped being.
+  //
+  // Both halves are CONTINUING CLAUSES — one opens on an em dash, the other on
+  // a comma — so each is spliced in BEFORE its sentence's terminator, not
+  // appended after it. Appended, they read "…for 12 months. — the ongoing
+  // share…" and "…个月。，持续分成…": a full stop with a clause hanging off
+  // it. That also means the two languages cannot share one resolved string, so
+  // the halves stay separate here and each sentence is assembled in full below.
+  // The locked tail above is untouched either way.
+  const sel = life && c.lifetimeMode === 'selected';
+  const qualEn = sel ? ' — the ongoing share for chosen customers only' : '';
+  const qualCn = sel ? '，复购分成仅限指定客户' : '';
   host.innerHTML = `<div class="afx-card" style="margin-top: 24px">
       <div class="afx-offerline">
         <div class="ot">
           <div class="afx-card-lbl" style="margin-bottom: 0">${afT('The offer', '奖励方案')}</div>
-          <div class="h">${afT('Give ¥' + afxMoney(c.rewardReferee) + ', get ¥' + afxMoney(c.rewardPerOrder) + tail + '.',
-                               '给出 ¥' + afxMoney(c.rewardReferee) + ',获得 ¥' + afxMoney(c.rewardPerOrder) + tail + '。')}</div>
+          <div class="h">${afT('Give ¥' + afxMoney(c.rewardReferee) + ', get ¥' + afxMoney(c.rewardPerOrder) + tail + qualEn + '.',
+                               '给出 ¥' + afxMoney(c.rewardReferee) + ',获得 ¥' + afxMoney(c.rewardPerOrder) + tail + qualCn + '。')}</div>
           <div class="s">${afT('Paid into the referrer’s wallet the moment a friend’s first order is marked paid.',
                                '好友首单标记为已付款时,奖励即刻进入推荐人钱包。')}</div>
         </div>
@@ -426,6 +456,30 @@ function afxRenderSettings() {
     ? `<div class="afx-optin-body">${afT('The referrer also earns', '推荐人还可获得好友消费额的')}${afxField('lifetimeRatePercent', c.lifetimeRatePercent, { suffix: '%', label: afT('Share of repeat orders', '复购分成比例') })}${afT('of everything their friend spends, for', '作为分成,持续')}${afxField('lifetimeMonths', c.lifetimeMonths, { label: afT('Months the share lasts', '分成持续月数') })}${afT('months after joining.', '个月(自好友加入起算)。')}
          <div class="afx-note" id="afx-life-note">${afxLifeNote()}</div>
        </div>` : '';
+  // The mode chooser lives UNDER the switch and only while the switch is on:
+  // it answers "who earns it", which is not a question until something is being
+  // earned. Off, it would be a live control over a dormant feature.
+  const modeSel = c.lifetimeMode === 'selected';
+  const modeBlock = life
+    ? `<div class="afx-mode">
+         <div class="ml">${afT('Who earns it', '谁可获得')}</div>
+         <div class="afx-seg">
+           <button class="${modeSel ? '' : 'on'}" data-afx="mode:everyone">${afT('Everyone', '所有人')}</button>
+           <button class="${modeSel ? 'on' : ''}" data-afx="mode:selected">${afT('Selected customers', '指定客户')}</button>
+         </div>
+         ${modeSel
+           ? `<div class="afx-mode-manage">
+                <button class="afx-btn sec sm" data-afx="manage-eligible">${afT('Choose who earns it', '选择可获得的客户')}</button>
+                <span class="mc">${AFX.eligCount === null
+                    ? afT('Counting…', '统计中…')
+                    : (AFX.eligCount === 1 ? afT('1 customer chosen', '已选 1 位客户')
+                                           : afT(AFX.eligCount + ' customers chosen', '已选 ' + AFX.eligCount + ' 位客户'))}</span>
+              </div>
+              <div class="afx-note">${afT('Everyone else still earns the one-time referral reward. Choosing someone starts them earning from that moment — it never pays them for orders placed before you chose them.',
+                  '其他客户仍可获得一次性推荐奖励。选定某位客户后，从选定当刻起开始计算分成，此前的订单不会补发。')}</div>`
+           : `<div class="afx-note">${afT('Any customer who refers a friend earns the ongoing share.', '任何推荐好友的客户都可获得复购分成。')}</div>`}
+       </div>`
+    : '';
   const repeat = `<div class="afx-card">
       <div class="afx-optin">
         <div class="afx-optin-t">
@@ -435,7 +489,7 @@ function afxRenderSettings() {
         </div>
         <button class="afx-sw${life ? ' on' : ''}" role="switch" aria-checked="${life}"
                 aria-label="${afT('Keep rewarding repeat orders', '持续奖励复购')}" data-afx="life"></button>
-      </div>${arm}${lifeBody}</div>`;
+      </div>${arm}${lifeBody}${modeBlock}</div>`;
 
   // ── invite codes ──
   const codes = `<div class="afx-card">
@@ -490,6 +544,142 @@ function afxRenderSettings() {
     </div>`;
 
   host.innerHTML = `<div class="afx-col">${offer}${repeat}${codes}${share}${program}</div>`;
+}
+
+// ── who earns the ongoing share ───────────────────────────────
+// The picked list is a roster, not a setting: each pick writes immediately and
+// is live the moment it lands. It is deliberately NOT held behind the save bar
+// — an operator who builds a list, then hits Discard because they changed their
+// mind about the RATE, must not silently lose the list too.
+async function afxLoadEligCount() {
+  try {
+    const r = await api('/api/retail-admin/affiliate/eligible');
+    AFX.eligCount = Number((r.data || {}).count) || 0;
+  } catch (e) {
+    // A count that could not be read must not render as "0 chosen" — that reads
+    // as a fact about the shop rather than a failed request. null renders as
+    // "Counting…" and the operator can open the dialog, which says more.
+    AFX.eligCount = null;
+  }
+  afxRenderSettings();
+}
+
+// One customer in or out. Returns the fresh count so the caller can repaint
+// without a second read.
+async function afxEligSet(customerId, eligible) {
+  const r = await api('/api/retail-admin/affiliate/eligible', {
+    method: 'POST', body: { customerId, eligible },
+  });
+  AFX.eligCount = Number((r.data || {}).count) || 0;
+  return r.data;
+}
+
+// The manage dialog. askCustom() mounts on <body> at z-2000, which is the only
+// reason this works at all: #tab-affiliate's entrance animation makes it a
+// stacking context, so a modal authored inside the section paints BEHIND the
+// page chrome (the same trap the Customers pop-ups documented and escaped).
+// Every class inside is afxel- prefixed and styled at body level — a
+// '#tab-affiliate .afx-' rule cannot reach here.
+async function afxOpenEligible() {
+  const dlg = askCustom('', `
+    <div class="afxel-wrap">
+      <div>
+        <div class="afxel-h">${afT('Who earns the ongoing share', '谁可获得复购分成')}</div>
+        <div class="afxel-sub">${afT('Only these customers earn a share of their friends’ later orders. Everyone else still earns the one-time referral reward. Each change takes effect straight away.',
+            '仅以下客户可从好友之后的订单中获得分成。其他客户仍可获得一次性推荐奖励。每项更改立即生效。')}</div>
+      </div>
+      <label class="afxel-find">${AFX_I.search}<input data-afxel-q
+        placeholder="${escapeAttr(afT('Find a customer by name, phone or code', '按姓名、手机号或推荐码查找客户'))}"></label>
+      <div class="afxel-list" data-afxel-list></div>
+    </div>`,
+    `<button class="tdlg-btn tdlg-btn--primary" data-afxel-close>${afT('Done', '完成')}</button>`,
+    '[data-afxel-q]');
+
+  const listEl = dlg.scrim.querySelector('[data-afxel-list]');
+  const qEl    = dlg.scrim.querySelector('[data-afxel-q]');
+  let mode = 'chosen';    // 'chosen' = the picked list | 'search' = candidates to add
+  let rows = [];
+  let note = '';
+
+  const nameOf = (r) => escapeHtml(r.nickname || afT('No name', '未填姓名'));
+  const metaOf = (r) => escapeHtml([r.phone, r.referral_code].filter(Boolean).join(' · '));
+
+  function paint() {
+    if (!rows.length) {
+      listEl.innerHTML = `<div class="afxel-empty">${escapeHtml(
+        mode === 'search'
+          ? afT('Nobody found. Try a different name, phone or code.', '未找到客户。请尝试其他姓名、手机号或推荐码。')
+          : afT('Nobody is chosen yet. Search above to add someone.', '尚未选择任何客户。请在上方搜索添加。'))}</div>`;
+      return;
+    }
+    listEl.innerHTML = rows.map(r => `<div class="afxel-row" data-afxel-row="${r.id}">
+        <span class="n">${nameOf(r)}${metaOf(r) ? ` <span class="d">${metaOf(r)}</span>` : ''}</span>
+        <button ${AFX.eligBusy ? 'disabled' : ''} data-afxel-set="${r.id}" data-afxel-on="${mode === 'search' ? '1' : '0'}">${
+          escapeHtml(mode === 'search' ? afT('Add', '添加') : afT('Remove', '移除'))}</button>
+      </div>`).join('') + (note ? `<div class="afxel-empty">${escapeHtml(note)}</div>` : '');
+  }
+
+  async function loadChosen() {
+    mode = 'chosen'; note = '';
+    listEl.innerHTML = `<div class="afxel-empty">${escapeHtml(afT('Loading…', '加载中…'))}</div>`;
+    try {
+      const r = await api('/api/retail-admin/affiliate/eligible');
+      rows = (r.data && r.data.rows) || [];
+      AFX.eligCount = Number((r.data || {}).count) || 0;
+      // Say what was left out rather than showing a short list as if complete.
+      if (r.data && r.data.truncated) note = afT('Showing the ' + rows.length + ' most recently chosen of ' + AFX.eligCount + '.',
+        '共 ' + AFX.eligCount + ' 位，显示最近选定的 ' + rows.length + ' 位。');
+      afxRenderSettings();
+    } catch (e) {
+      rows = [];
+      listEl.innerHTML = `<div class="afxel-empty">${escapeHtml(afxWhy(e))}</div>`;
+      return;
+    }
+    paint();
+  }
+
+  async function search(q) {
+    mode = 'search'; note = '';
+    try {
+      const r = await api('/api/retail-admin/affiliate/eligible/search?q=' + encodeURIComponent(q));
+      rows = r.data || [];
+    } catch (e) { rows = []; note = afxWhy(e); }
+    paint();
+  }
+
+  let t = null;
+  qEl.addEventListener('input', () => {
+    clearTimeout(t);
+    const q = qEl.value.trim();
+    t = setTimeout(() => { if (q.length >= 2) search(q); else loadChosen(); }, 250);
+  });
+
+  listEl.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-afxel-set]');
+    if (!btn || AFX.eligBusy) return;
+    const id = Number(btn.getAttribute('data-afxel-set'));
+    const on = btn.getAttribute('data-afxel-on') === '1';
+    AFX.eligBusy = true; btn.disabled = true;
+    try {
+      await afxEligSet(id, on);
+      // Adding from search removes the row from that list (it is now chosen, and
+      // offering to add them again is a control that can only be wrong).
+      // Removing from the chosen list does the same, for the same reason.
+      rows = rows.filter(r => r.id !== id);
+      afxRenderSettings();
+      paint();
+    } catch (e) {
+      note = afxWhy(e);
+      paint();
+    } finally { AFX.eligBusy = false; }
+  });
+
+  dlg.scrim.querySelector('[data-afxel-close]').addEventListener('click', () => dlg.closer(true));
+  loadChosen();
+  await dlg.ready;
+  // The count on the card is the one figure that must match this dialog, so it
+  // is re-read on close rather than trusted to the running tally.
+  afxLoadEligCount();
 }
 
 function afxRestate() {
@@ -775,6 +965,7 @@ function afxSaveMessage() {
   const bits = [];
   if (afxChanged(['rewardPerOrder', 'rewardReferee'])) bits.push(afT('the offer', '奖励方案'));
   if (afxChanged(['lifetimeRatePercent', 'lifetimeMonths'])) bits.push(afT('the repeat-order share', '复购分成'));
+  if (afxChanged(['lifetimeMode'])) bits.push(afT('who earns the repeat-order share', '复购分成的可获得范围'));
   if (afxChanged(['codePrefix'])) bits.push(afT('invite codes', '邀请码'));
   if (afxChanged(['shareImage'])) bits.push(afT('the share picture', '分享图片'));
   const joined = bits.length <= 1 ? (bits[0] || afT('these settings', '这些设置'))
@@ -864,6 +1055,20 @@ document.addEventListener('click', e => {
     afxRenderSettings(); afxRenderOffer(); afxRenderSaveBar(); return;
   }
   if (a === 'life-cancel') { AFX.lifeArm = false; afxRenderSettings(); return; }
+
+  // Switching mode is an ordinary edit — it goes through the save bar like the
+  // rate and the months do, so an operator can change their mind before it
+  // takes effect. Only the picked LIST writes immediately (see afxEligSet):
+  // that is a roster, not a setting, and holding it behind the same save bar
+  // would let a half-built list be discarded by a Discard aimed at the rate.
+  if (a === 'mode:everyone' || a === 'mode:selected') {
+    const want = a === 'mode:selected' ? 'selected' : 'everyone';
+    if (AFX.cfg.lifetimeMode === want) return;
+    AFX.cfg.lifetimeMode = want;
+    if (want === 'selected' && AFX.eligCount === null) afxLoadEligCount();
+    afxRenderSettings(); afxRenderOffer(); afxRenderSaveBar(); return;
+  }
+  if (a === 'manage-eligible') { afxOpenEligible(); return; }
 
   if (a === 'pic-replace') { $('#afx-share-file').click(); return; }
   if (a === 'pic-remove')  { AFX.cfg.shareImage = ''; afxRenderSettings(); afxRenderSaveBar(); return; }

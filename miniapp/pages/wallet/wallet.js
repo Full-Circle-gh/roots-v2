@@ -182,12 +182,24 @@ Page({
           const parts = formatDateParts(t.paid_at || t.created_at);
           const isReferral = t.payment_method === 'referral_reward';
           const isAdjust   = t.payment_method === 'admin_adjust';
+          // Repeat-order revenue share — the referrer's cut of a friend's later
+          // order, and its reversal when that order is refunded or cancelled.
+          // Both were MISSING here, so every one of them fell through to the
+          // else and rendered as "Top up · ¥X" — telling the customer they had
+          // topped their own wallet up when in fact they had earned something,
+          // and showing a clawback as a NEGATIVE top-up, which is not a thing.
+          const isLifetime = t.payment_method === 'lifetime_commission';
+          const isLifeBack = t.payment_method === 'lifetime_commission_clawback';
           const amount     = Number(t.amount);
           const sign       = amount >= 0 ? '+' : '−';
           const absStr     = Math.abs(amount).toLocaleString(undefined, { maximumFractionDigits: 2 });
           let label, cn, type;
           if (isReferral) {
             label = 'Referral reward'; cn = '推广奖励'; type = 'reward';
+          } else if (isLifetime) {
+            label = 'Repeat-order share'; cn = '复购分成'; type = 'reward';
+          } else if (isLifeBack) {
+            label = 'Repeat-order share reversed'; cn = '复购分成撤销'; type = 'reward';
           } else if (isAdjust) {
             label = amount >= 0 ? 'Adjustment' : 'Clawback'; cn = '系统调整'; type = 'reward';
           } else {

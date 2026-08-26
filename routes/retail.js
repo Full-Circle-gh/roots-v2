@@ -16435,6 +16435,13 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
         referred_by:   referrer,
         invites:       referralsByMe,
         summary:       referralsAgg,
+        // Ongoing repeat-order share. The mode travels with the customer so
+        // the drawer can show the control only where it means something — in
+        // 'everyone' mode this customer already earns it and a per-person
+        // switch there would be a control that changes nothing.
+        lifetime_mode:           affiliateSettings().lifetimeMode,
+        lifetime_eligible:       customer.lifetime_eligible ? 1 : 0,
+        lifetime_eligible_since: customer.lifetime_eligible_since || null,
       },
       diagnostics: {
         device_last_seen: deviceLastSeen,
@@ -16921,6 +16928,18 @@ function affiliateSettings() {
     // After the window closes the referrer simply stops earning on that friend's
     // future orders — nothing is clawed back.
     lifetimeMonths: Number(cfgValue('affiliate.lifetimeMonths', 12)) || 0,
+    // WHO earns the ongoing share, once it is running at all. 'everyone' (the
+    // default, and the behaviour every existing shop already has) = any
+    // referrer earns it. 'selected' = only customers flagged
+    // retail_customers.lifetime_eligible earn it; everyone else still gets the
+    // one-time bounty, which is never mode-gated.
+    //
+    // This is DELIBERATELY independent of lifetimeRatePercent. The rate is the
+    // on/off switch for the feature ("is the ongoing share running at all");
+    // the mode sits underneath it and decides who it runs FOR. A shop in
+    // selected mode at 5% is a real, storable state — reading the mode off a
+    // zero rate would make it unrepresentable.
+    lifetimeMode: cfgValue('affiliate.lifetimeMode', 'everyone') === 'selected' ? 'selected' : 'everyone',
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
     // Optional custom picture for the WeChat share card (the 5:4 thumbnail a
     // customer sees when they forward their invite into a chat). Empty string
@@ -17008,6 +17027,12 @@ function affiliateStatsFor(referrerId) {
 router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
   const s = affiliateSettings();
   const code = ensureReferralCode(req.customer.id);
+  // In 'everyone' mode every customer earns the ongoing share, so eligibility
+  // is not consulted at all and the columns stay irrelevant.
+  const lifetimeEligible = s.lifetimeMode === 'selected'
+    ? !!(tdb().prepare('SELECT lifetime_eligible FROM retail_customers WHERE id = ?').get(req.customer.id) || {}).lifetime_eligible
+    : true;
+  const lifetimeRateForCustomer = lifetimeEligible ? s.lifetimeRatePercent : 0;
   const referredBy = tdb().prepare(
     `SELECT c.id, c.nickname, c.referral_code
        FROM retail_customers me
@@ -17022,8 +17047,29 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
       reward_referee:       s.rewardReferee,
       // Repeat-order revenue share, so the banner can advertise the ongoing
       // % on top of the one-shot bounty above (0 ⇒ that feature is off).
-      lifetime_rate_percent: s.lifetimeRatePercent,
+      //
+      // PERSONALISED, not the shop-wide setting. This endpoint is already a
+      // per-customer view (their code, their stats, who referred them), and in
+      // selected mode a customer who has not been picked earns nothing ongoing
+      // — so for them the rate they earn IS zero, and saying 0 here is the true
+      // answer to "what do I get", not a redaction of the shop's setting.
+      //
+      // Suppressing HERE rather than in each renderer is deliberate. Every
+      // surface that prints this line already hides it when the rate is 0
+      // (mini-app block-renderer, shop/blocks.js), so one server-side change
+      // covers them all — including any surface added later, which cannot
+      // forget a rule it never has to know. It also means the fix is live the
+      // moment this deploys: a renderer-side gate would sit dark in the
+      // mini-app until the next WeChat republish, promising an ongoing share to
+      // customers who cannot earn one for as long as that took.
+      lifetime_rate_percent: lifetimeRateForCustomer,
       lifetime_months:       s.lifetimeMonths,
+      // The mode and this customer's standing in it, stated plainly for any
+      // surface that wants to say something other than nothing. Nothing reads
+      // these today; they exist so a future surface does not have to infer
+      // "not eligible" from a zero that could equally mean "feature off".
+      lifetime_mode:         s.lifetimeMode,
+      lifetime_eligible:     lifetimeEligible ? 1 : 0,
       // Absolutize the share picture so the mini-app can pass WeChat a real
       // URL; already-absolute (http/data:) values pass through untouched.
       share_image:      s.shareImage
@@ -17294,6 +17340,42 @@ function creditLifetimeCommission(orderId) {
     "SELECT 1 FROM retail_orders WHERE customer_id = ? AND id < ? AND paid_at IS NOT NULL LIMIT 1"
   ).get(o.customer_id, orderId);
   if (!earlier) return;                             // first paid order → bounty handles it
+  // SELECTED MODE — who is allowed to earn this, and from when.
+  //
+  // Two conditions, and the second is the whole point. The referrer must be
+  // picked (lifetime_eligible), AND this order must have been paid at or after
+  // the moment they were picked (lifetime_eligible_since). FORWARDS ONLY:
+  // picking someone today must never reach back and pay them for friends they
+  // referred last year. Without the date half, flipping one customer on would
+  // fire a retroactive payout for every past order of every friend they ever
+  // referred, the first time each of those friends ordered again.
+  //
+  // The months window above is unchanged and still applies on top of this: it
+  // counts from the FRIEND's referral_applied_at, this counts from the
+  // REFERRER's eligibility date. Both must pass. They answer different
+  // questions and neither replaces the other.
+  //
+  // A paid order with no paid_at is not something this codebase produces — both
+  // transitions to 'paid' stamp it (markOrderPaid, and inventory's promote
+  // path via COALESCE). The branch exists because the alternative to refusing
+  // is guessing "now", and guessing "now" always resolves in favour of paying:
+  // it would turn an unknown date into a retroactive payout, which is the exact
+  // thing this rule exists to prevent. If it ever fires, that is a bug worth
+  // seeing rather than a commission worth paying.
+  if (s.lifetimeMode === 'selected') {
+    const ref = tdb().prepare(
+      'SELECT lifetime_eligible, lifetime_eligible_since FROM retail_customers WHERE id = ?'
+    ).get(referrerId);
+    if (!ref || !ref.lifetime_eligible) return;     // not picked → bounty only
+    if (!ref.lifetime_eligible_since) return;       // picked with no date: cannot prove forwards-only
+    if (!o.paid_at) {
+      console.warn(`[creditLifetimeCommission] order ${orderId} is paid with no paid_at; refusing a selected-mode commission rather than assuming it was paid now`);
+      return;
+    }
+    const okFrom = tdb().prepare('SELECT julianday(?) >= julianday(?) AS ok')
+      .get(o.paid_at, ref.lifetime_eligible_since);
+    if (!okFrom || !okFrom.ok) return;              // paid before they were picked
+  }
   const base = Number(o.total) || 0;                // net amount actually charged
   const commission = Math.round(base * (rate / 100) * 100) / 100;
   if (!(commission > 0)) return;
@@ -17462,6 +17544,90 @@ try {
 } catch (e) { console.error('[inventory.setOnOrdersCancelled]', e); }
 
 // ─── Affiliate admin ─────────────────────────────────────────────────────
+// ─── Ongoing-share eligibility (selected mode) ────────────────────────
+// Who the shop has picked to earn the repeat-order share. Three endpoints:
+// the picked list (with its count), a search over everyone else to add from,
+// and one write that both picks and un-picks.
+//
+// These are only consulted when `affiliate.lifetimeMode` is 'selected', but
+// they stay readable and writable in 'everyone' mode on purpose: a shop
+// building its list before flipping the mode is the normal way to arrive at
+// selected mode, and refusing the write until the mode is already on would
+// force them to run selected-with-nobody-picked for as long as it took to
+// build the list — a window in which the ongoing share silently pays no one.
+
+// The picked list. Small by design (a hand-picked set), so this is one read
+// with a generous cap rather than a paginated roster — if a shop ever picks
+// more than the cap, the count still tells the truth and the note says so.
+const AFFILIATE_ELIGIBLE_CAP = 500;
+router.get('/api/retail-admin/affiliate/eligible', requireRetailAdmin, (req, res) => {
+  const count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customers WHERE lifetime_eligible = 1').get().n;
+  const rows = tdb().prepare(
+    `SELECT id, nickname, phone, referral_code, lifetime_eligible_since, is_blocked
+       FROM retail_customers
+      WHERE lifetime_eligible = 1
+      ORDER BY lifetime_eligible_since DESC, id DESC
+      LIMIT ?`
+  ).all(AFFILIATE_ELIGIBLE_CAP);
+  res.json({ success: true, data: { count, rows, cap: AFFILIATE_ELIGIBLE_CAP, truncated: count > rows.length } });
+});
+
+// Search everyone NOT already picked, to add from. Deliberately excludes the
+// already-picked (they are on the list above, and offering to add someone
+// twice is a control that can only be wrong) and the blocked (a blocked
+// customer cannot place or refer an order, so picking one is a no-op the
+// operator would have to discover for themselves).
+router.get('/api/retail-admin/affiliate/eligible/search', requireRetailAdmin, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json({ success: true, data: [] });
+  const like = '%' + q + '%';
+  const rows = tdb().prepare(
+    `SELECT id, nickname, phone, referral_code
+       FROM retail_customers
+      WHERE lifetime_eligible = 0 AND is_blocked = 0
+        AND (nickname LIKE ? OR phone LIKE ? OR referral_code LIKE ?)
+      ORDER BY id DESC
+      LIMIT 20`
+  ).all(like, like, like);
+  res.json({ success: true, data: rows });
+});
+
+// Pick / un-pick one customer.
+//
+// Picking STAMPS lifetime_eligible_since with now, every time — including a
+// re-pick of someone previously cleared. That restart is the point: the stamp
+// is the forwards-only cutoff creditLifetimeCommission reads, so a re-pick
+// must not silently inherit an old date and pay for the gap in between.
+//
+// Un-picking clears the flag and LEAVES the timestamp. It is the audit trail
+// of when they were last picked and it is what makes an already-paid
+// commission explicable a year later; blanking it would destroy the only
+// record. Nothing already paid is touched or clawed back — un-picking stops
+// future earnings, it does not reverse past ones.
+router.post('/api/retail-admin/affiliate/eligible', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.body?.customerId, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const eligible = req.body?.eligible === true || req.body?.eligible === 1 || req.body?.eligible === '1';
+  const cust = tdb().prepare('SELECT id, lifetime_eligible FROM retail_customers WHERE id = ?').get(id);
+  if (!cust) return res.status(404).json({ success: false, error: 'not_found' });
+
+  if (eligible) {
+    tdb().prepare(
+      'UPDATE retail_customers SET lifetime_eligible = 1, lifetime_eligible_since = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(id);
+  } else {
+    tdb().prepare('UPDATE retail_customers SET lifetime_eligible = 0 WHERE id = ?').run(id);
+  }
+  const after = tdb().prepare(
+    'SELECT id, nickname, phone, referral_code, lifetime_eligible, lifetime_eligible_since FROM retail_customers WHERE id = ?'
+  ).get(id);
+  logActivity(req.user.id, req.user.username,
+    eligible ? 'affiliate_lifetime_eligible_add' : 'affiliate_lifetime_eligible_remove',
+    'retail_customer', id, { since: after.lifetime_eligible_since }, req.ip);
+  const count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customers WHERE lifetime_eligible = 1').get().n;
+  res.json({ success: true, data: { customer: after, count } });
+});
+
 router.get('/api/retail-admin/affiliate/settings', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: affiliateSettings() });
 });
@@ -17494,6 +17660,14 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     const n = Math.round(Number(b.lifetimeMonths));
     if (!Number.isFinite(n) || n < 0 || n > 120) return res.status(400).json({ success: false, error: 'bad_lifetime_months' });
     writes.push(['affiliate.lifetimeMonths', n]);
+  }
+  if (b.lifetimeMode !== undefined) {
+    // Only the two known modes. Anything else is a client bug, not a value to
+    // coerce silently — an unrecognised mode falling through to 'everyone'
+    // would quietly widen who gets paid.
+    const v = String(b.lifetimeMode);
+    if (v !== 'everyone' && v !== 'selected') return res.status(400).json({ success: false, error: 'bad_lifetime_mode' });
+    writes.push(['affiliate.lifetimeMode', v]);
   }
   if (typeof b.codePrefix === 'string') {
     const p = b.codePrefix.trim().toUpperCase().slice(0, 12);
@@ -17640,12 +17814,21 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
     // whose referrer is still inside the lifetime-share window. With the rate
     // off there is nothing to list, and saying so beats listing every
     // rewarded row under a heading that claims they are still paying.
+    //
+    // SELECTED MODE adds one term to all three: the referrer must be picked.
+    // Note what is NOT here — lifetime_eligible_since. "Still earning" is a
+    // forward-looking claim about the friend's NEXT order, and any future order
+    // is necessarily paid after the referrer was picked, so the forwards-only
+    // date can never exclude one. It belongs in the payout (where a specific
+    // order has a specific paid_at) and nowhere else. Putting it here would
+    // read as "picked recently", which is a different and wrong question.
     const sl = affiliateSettings();
     const slRate   = Number(sl.lifetimeRatePercent) || 0;
     const slMonths = Number(sl.lifetimeMonths) || 0;
     if (slRate > 0) {
       where.push("r.status = 'ordered'");
       if (slMonths > 0) { where.push("r.joined_at >= datetime('now', ?)"); params.push(`-${slMonths} months`); }
+      if (sl.lifetimeMode === 'selected') where.push('cr.lifetime_eligible = 1');
     } else {
       where.push('1 = 0');
     }
@@ -17672,6 +17855,7 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
             r.reward_amount, r.first_paid_order_id, r.joined_at, r.rewarded_at,
             r.voided_at, r.voided_reason,
             cr.nickname AS referrer_nickname, cr.phone AS referrer_phone,
+            cr.lifetime_eligible AS referrer_lifetime_eligible,
             ci.nickname AS invitee_nickname,  ci.phone AS invitee_phone
        FROM retail_referrals r
        JOIN retail_customers cr ON cr.id = r.referrer_id
@@ -17688,10 +17872,12 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
     const s0 = affiliateSettings();
     const rate0 = Number(s0.lifetimeRatePercent) || 0;
     const months0 = Number(s0.lifetimeMonths) || 0;
+    const sel0 = s0.lifetimeMode === 'selected';
     let cutoff = null;
     if (rate0 > 0 && months0 > 0) { cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months0); }
     for (const row of rows) {
       row.lifetime_active = (rate0 > 0 && row.status === 'ordered'
+        && (!sel0 || row.referrer_lifetime_eligible === 1)
         && (months0 === 0 || (cutoff && new Date(String(row.joined_at).replace(' ', 'T')) >= cutoff))) ? 1 : 0;
     }
     // Same predicate as /affiliate/overview's `stuck`: a 'joined' referral whose
@@ -17724,11 +17910,18 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
   // "Still earning" = converted friends whose referrer still earns lifetime
   // share from them: only when the rate is on, and (if a window is set) the
   // friend joined within `months` of now. months = 0 means "forever".
+  //
+  // Selected mode needs the referrer's row, which this count never joined to
+  // before — it only ever looked at retail_referrals. The join is what keeps it
+  // agreeing with the `still` filter and the per-row flag above; without it the
+  // tile would count every rewarded referral while the list under it showed
+  // only the picked ones.
   let still_earning = 0;
   if (rate > 0) {
+    const selOnly = s.lifetimeMode === 'selected' ? ' AND cr.lifetime_eligible = 1' : '';
     still_earning = months > 0
-      ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered' AND joined_at >= datetime('now', ?)`).get(`-${months} months`).n
-      : tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered'`).get().n;
+      ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals r JOIN retail_customers cr ON cr.id = r.referrer_id WHERE r.status = 'ordered' AND r.joined_at >= datetime('now', ?)${selOnly}`).get(`-${months} months`).n
+      : tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals r JOIN retail_customers cr ON cr.id = r.referrer_id WHERE r.status = 'ordered'${selOnly}`).get().n;
   }
 
   // Lifetime commissions actually credited (not clawed back). Older tenants may

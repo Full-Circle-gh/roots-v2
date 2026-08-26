@@ -10292,7 +10292,14 @@ function renderBlockBody(b) {
       // Respects an admin-authored title/subtitle override; otherwise mirrors
       // the current deal so the preview updates the moment settings change.
       const titleHtml = biLabel(t.en, t.cn) || escapeHtml(afxDefaultTitle);
-      const lifetimeLine = afxLifeRate > 0
+      // In selected mode the ongoing line is suppressed here, because this
+      // preview depicts a TYPICAL customer — it already uses a stand-in code
+      // and stand-in stats — and the typical customer in selected mode is not
+      // one of the chosen. Showing the line would preview a screen most
+      // shoppers never see. The editor panel says so in words
+      // (buildAffiliateForm) rather than annotating the canvas, which has to
+      // stay a faithful picture of the block to be worth previewing at all.
+      const lifetimeLine = (afxLifeRate > 0 && afx.lifetimeMode !== 'selected')
         ? (state.lang === 'cn'
             ? `另享好友日后订单 ${afxLifeRate}%${afxLifeMonths > 0 ? `，持续 ${afxLifeMonths} 个月` : '，长期有效'}`
             : `+ ${afxLifeRate}% of their orders for ${afxLifeMonths > 0 ? `${afxLifeMonths} months` : 'life'}`)
@@ -13202,6 +13209,19 @@ function buildAffiliateForm(m, b) {
   const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
   const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
   const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+
+  // Why the preview is missing a line the Affiliate tab says is switched on.
+  if ((state.affiliateSettings || {}).lifetimeMode === 'selected'
+      && Number((state.affiliateSettings || {}).lifetimeRatePercent) > 0) {
+    const n = document.createElement('div');
+    n.className = 'insp-note';
+    // textContent, not innerHTML — and T() resolves to one language, so the
+    // note never renders as a glued EN · CN pair the walker has to unpick.
+    n.textContent = T('The repeat-order share is set to chosen customers only, so the preview leaves it out — that is what everyone else sees. Chosen customers see it added to the block.',
+                      '复购分成当前仅限指定客户，因此预览中不显示——这是其他客户看到的效果。指定客户会看到该内容显示在此区块中。');
+    secLayout.appendChild(n);
+  }
 
   secLayout.appendChild(field(T('Layout', '版式'),
     T('Card — a full card with the code and copy/share buttons (biggest). Strip — one compact line: code + buttons. Stat — a big "¥ earned" number; it shows the customer\'s real total once they have invites. Receipt — a paper look with a dashed, torn edge.', '卡片 — 完整的卡片,带邀请码和复制/分享按钮(最大)。条带 — 紧凑的单行:邀请码 + 按钮。数据 — 大号「已赚 ¥」数字;顾客有邀请后显示其真实总额。收据 — 纸质外观,带虚线锯齿边。'),
