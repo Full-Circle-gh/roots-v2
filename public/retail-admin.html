@@ -8119,6 +8119,45 @@
       /* a row the ledger cannot resolve on its own gets its reason inline */
       #tab-affiliate .afx-why { font-size: 13px; color: var(--td-text2); margin-top: 8px; max-width: 52ch; text-wrap: pretty; white-space: normal; }
 
+      /* ── who earns the ongoing share ──
+         The chooser reuses .afx-seg (the ledger's filter strip) unchanged — same
+         control, same states, one place to change it. Only the row around it is
+         new: a label above, because a bare segment inside a card reads as a
+         filter for the card rather than a setting of it. */
+      #tab-affiliate .afx-mode { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--td-border); }
+      #tab-affiliate .afx-mode .ml { font-size: 13px; font-weight: 500; color: var(--td-text2); margin-bottom: 12px; }
+      #tab-affiliate .afx-mode-manage { display: flex; align-items: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+      #tab-affiliate .afx-mode-manage .mc { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+
+      /* ── the "who earns it" manage dialog ──
+         NOT scoped under #tab-affiliate, and that is not an oversight. This
+         content is mounted by askCustom() (tacet-dialogs.js), which appends its
+         scrim to <body> so the dialog escapes the section's stacking context.
+         A '#tab-affiliate .afxel-x' rule would therefore never match and the
+         dialog would render unstyled. Every class here is afxel- prefixed
+         instead, which is what keeps base retail-admin.css from leaking in
+         (reference-tacet-section-class-collisions) now that the scope cannot. */
+      .afxel-wrap { display: flex; flex-direction: column; gap: 16px; text-align: left; }
+      .afxel-h { font-size: 17px; font-weight: 500; color: var(--td-text, #111A2B); }
+      .afxel-sub { font-size: 13px; color: var(--td-text2, #5C6472); text-wrap: pretty; margin-top: 4px; }
+      .afxel-find { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
+        border: 1px solid var(--td-border, #E4E0D5); border-radius: 8px; background: var(--td-surface, #FFF); }
+      .afxel-find:focus-within { border-color: var(--td-text2, #5C6472); }
+      .afxel-find input { flex: 1; min-width: 0; border: 0; background: none; outline: none;
+        font-family: inherit; font-size: 14px; color: var(--td-text, #111A2B); }
+      .afxel-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--td-border, #E4E0D5); border-radius: 8px; }
+      .afxel-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--td-border, #E4E0D5); }
+      .afxel-row:first-child { border-top: 0; }
+      .afxel-row .n { flex: 1; min-width: 0; font-size: 14px; color: var(--td-text, #111A2B);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .afxel-row .d { font-size: 12px; color: var(--td-text2, #5C6472); font-variant-numeric: tabular-nums; }
+      .afxel-row button { font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+        height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--td-border, #E4E0D5);
+        background: var(--td-surface, #FFF); color: var(--td-text, #111A2B); white-space: nowrap; }
+      .afxel-row button:hover { border-color: var(--td-text2, #5C6472); }
+      .afxel-row button[disabled] { opacity: .45; cursor: not-allowed; }
+      .afxel-empty { padding: 20px 12px; font-size: 13px; color: var(--td-text2, #5C6472); text-align: center; text-wrap: pretty; }
+
       @media (max-width: 720px) {
         #tab-affiliate .afx-savebar { left: 0; }
         #tab-affiliate .afx-savebar-in { padding: 16px; }

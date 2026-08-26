@@ -3639,6 +3639,23 @@ try {
 addColumn('retail_customers', 'referral_code',            'TEXT');
 addColumn('retail_customers', 'referred_by_customer_id',  'INTEGER');
 addColumn('retail_customers', 'referral_applied_at',      'DATETIME');
+// Ongoing (repeat-order) revenue share — WHO earns it, when the program runs
+// in "selected" mode (`affiliate.lifetimeMode`). lifetime_eligible is the
+// shop's pick; lifetime_eligible_since is the moment it was granted and is the
+// FORWARDS-ONLY anchor: creditLifetimeCommission pays only on orders whose
+// paid_at is at or after it, so picking someone today never retroactively pays
+// them for friends they referred last year.
+//
+// Clearing eligibility sets the flag to 0 and LEAVES the timestamp in place —
+// it is the audit trail of when they were last picked, and blanking it would
+// destroy the only record of why past commissions were legitimate. Re-picking
+// someone re-stamps it to the new date, which also (deliberately) restarts the
+// forwards-only cutoff.
+//
+// In "everyone" mode both columns are ignored entirely; the one-time referral
+// bounty never consults them in either mode.
+addColumn('retail_customers', 'lifetime_eligible',        'INTEGER DEFAULT 0');
+addColumn('retail_customers', 'lifetime_eligible_since',  'DATETIME');
 // Provenance — how this customer record was born. NULL/'app' = self-service
 // signup (WeChat / web OAuth / phone-OTP); 'manual' = keyed in by staff via
 // the Mini App Backend (walk-ins, phone orders). created_by is the staff
@@ -3674,6 +3691,10 @@ try {
 } catch (e) { console.error('[migration retail_customers_seen_at_backfill_v1]', e); }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_customers_refcode ON retail_customers(referral_code) WHERE referral_code IS NOT NULL'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_refby ON retail_customers(referred_by_customer_id)'); } catch {}
+// Partial index: the eligible set is small by design (a hand-picked list), so
+// only the picked rows are indexed. Serves both the admin roster read and the
+// per-payout lookup.
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_lifetime_elig ON retail_customers(lifetime_eligible) WHERE lifetime_eligible = 1'); } catch {}
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_referrals (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
