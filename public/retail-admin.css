@@ -12259,6 +12259,26 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-matline { font-size: 13px; color: var(--td-text2); }
   #tab-recipes-record .rcp-matline b { color: var(--td-text); font-weight: 500; }
   #tab-recipes-record .rcp-matline.blocked { color: var(--td-amber-ink); }
+  /* What this recipe makes — the retail products it feeds, one row each with
+     its own price and margin. Same 13px secondary voice as .rcp-matline above:
+     this is a status line under the figures, not a third headline stat. The
+     lead word sits on the first row and the products stack beside it, so one
+     product reads as a sentence and several read as a short list without the
+     word repeating. */
+  #tab-recipes-record .rcp-prodline { display: flex; align-items: baseline; gap: 8px;
+    font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-prodlead { flex: none; }
+  #tab-recipes-record .rcp-proditems { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  #tab-recipes-record .rcp-prodrow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  /* Weight only. The colour and underline are whatever an <a> already is in
+     this admin — the product editor's "From recipe" link (the same jump in the
+     other direction) is a bare anchor too, and the pair should not read as two
+     different kinds of link. */
+  #tab-recipes-record .rcp-prodname { font-weight: 500; }
+  #tab-recipes-record .rcp-prodsize { color: var(--td-text2); }
+  /* Tabular figures so several products' prices and margins line up down the
+     list rather than wandering by digit width. */
+  #tab-recipes-record .rcp-prodfig { font-variant-numeric: tabular-nums; }
 
   /* ── sub-tabs ── */
   #tab-recipes-record .rcp-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--td-border);

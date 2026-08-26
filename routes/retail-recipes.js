@@ -177,6 +177,36 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   const cost = computeRecipeCost({ recipe, ingredients, costData });
   const material = linkedMaterialFor(db, recipe.id);
+  // Which retail products this recipe makes — the reverse of the product
+  // editor's "From recipe" link (that one names the recipe from the product;
+  // this names the products from the recipe). Read-only: the link itself is
+  // owned and edited on the product side, never here.
+  //
+  // ACTIVE ROWS ONLY, and `COALESCE(is_active,1) = 1` rather than
+  // `is_active = 1` because the column is nullable and an older row can carry
+  // NULL meaning "live". Exactly the filter lib/recipe-rollup.js's
+  // loadLinkedProducts() uses to decide which products a recipe may cost, so
+  // the header can never advertise a product the rollup would not write to.
+  // This is load-bearing, not tidiness: two ARCHIVED rows carry a recipe_id
+  // inherited from the fork mirror, and without the filter a recipe with no
+  // live product would claim two.
+  //
+  // Priced per ROW and never blended. One recipe can feed a 150g bag and a 25g
+  // sample at different prices; a single averaged margin across them would be a
+  // number that is true of neither. The client renders one line each.
+  //
+  // Wrapped, exactly as loadLinkedProducts() is: a handle with no storefront has
+  // no store_products, and "this recipe makes nothing we sell" is the right
+  // answer there — not a 500 that takes the whole recipe record down with it.
+  let products = [];
+  try {
+    products = db.prepare(`
+      SELECT id, name_en, name_cn, weight AS size, sell_price, unit_cost
+        FROM store_products
+       WHERE recipe_id = ? AND COALESCE(is_active,1) = 1
+       ORDER BY name_en COLLATE NOCASE, id
+    `).all(recipe.id);
+  } catch (e) { products = []; }
   // consumers (§29 step 6) — which OTHER active recipes currently use this
   // material as an ingredient line. Only fetched when there's a material to
   // report on; feeds the archive-warning's "used by N recipes" — naming the
@@ -185,6 +215,7 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     ...recipe, ingredients, steps, costData, cost,
     backsMaterial: material ? { ...material, consumers: materialConsumers(db, material.id) } : null,
     materialBlock: material ? materialBlockState(recipe.id) : null,
+    products,
   } });
 });
 

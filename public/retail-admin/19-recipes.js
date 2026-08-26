@@ -5,15 +5,24 @@
    fmt, escapeHtml, cuT, can, applyCapGates, goTab, askConfirm) live in
    01-core.js. window.RootsRecipeCost (/lib/recipe-cost.js) must load before
    this file — see the <script> order in retail-admin.html.
+   The record header also reads _paMargin (part 09) for the margin on each
+   product this recipe makes, and dashOpenProductFromFeed (part 03) to open
+   one — both load earlier, and both are reused rather than copied so this
+   screen cannot start quoting a different margin from the Products list.
 
    Recipes generalises the kitchen machinery the same way Materials did —
    same recipes/recipe_ingredients/recipe_steps/recipe_cost_data tables,
    this is the multi-tenant door onto them (routes/retail-recipes.js).
 
-   SCOPE (§29): cost-only. No quantity/stock tracking, no connection to
-   Products or the storefront in this phase. No "make available as material"
-   action yet (that is a later, separate change) — a recipe that does not
-   already back a material simply shows no link affordance.
+   SCOPE (§29): cost-only. No quantity/stock tracking.
+
+   The record header NAMES the retail products this recipe makes, with each
+   one's own price and margin, and links through to the product editor. That
+   direction is READ-ONLY: the link is owned and edited on the product side,
+   and there is deliberately no affordance to change it from here. Each
+   product is priced separately and never blended — one recipe can feed a
+   150g bag and a 25g sample at two prices, and one averaged margin across
+   them would be true of neither.
 
    TWO SCREENS, TWO SECTIONS, same shape as Materials: the list paints into
    #rcp-root inside <section id="tab-recipes">; the record is a FULL PAGE in
@@ -717,8 +726,111 @@
         + `</div>`;
     }
 
+    html += productsHtml();
+
     host.innerHTML = html;
   }
+
+  // ── What this recipe makes, and what it earns ────────────────────────────
+  // The reverse of the product editor's "From recipe" note (that one names the
+  // recipe from the product; this names the products from the recipe). READ
+  // ONLY — the link is owned and edited on the product side. Nothing here
+  // writes it, and there is deliberately no affordance to.
+  //
+  // PRICED PER PRODUCT, NEVER BLENDED. One recipe can feed a 150g bag and a
+  // 25g sample at two different prices; a single averaged margin across them
+  // would be a figure that is true of neither, so each product gets its own
+  // row with its own price and its own margin.
+  //
+  // MAKES NOTHING WE SELL -> RENDERS NOTHING. No empty state, no placeholder:
+  // most recipes back a material rather than a retail product, and a permanent
+  // "no linked product" line on every one of them is clutter, not information.
+  //
+  // recipe_cost_data.target_food_cost is deliberately NOT shown. It exists, and
+  // an actual-versus-target comparison is a report, not a header stat.
+  //
+  // ARCHIVED ROWS ARE ALREADY GONE by the time this runs — the server filters
+  // them (routes/retail-recipes.js), which is where the filter belongs, so a
+  // recipe cannot claim a product the cost rollup would refuse to write to.
+  function productsHtml() {
+    const rows = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
+    if (!rows.length) return '';
+
+    const lead = T('Makes', '产出');
+    const items = rows.map(p => {
+      // ONE name, never EN and CN glued together — the active language's,
+      // falling back to whichever name the product actually carries.
+      const nm = T(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '')
+              || T('Untitled product', '未命名产品');
+      const size = p.size ? `<span class="rcp-prodsize">${esc(p.size)}</span>` : '';
+      // No price recorded is an em dash too, and the row still shows. "Price
+      // but no cost" and "cost but no price" are both half-known, and hiding
+      // either would drop a product this recipe genuinely makes.
+      const price = Number(p.sell_price) > 0 ? money(p.sell_price) : '—';
+
+      // THE SHARED HELPER, NOT A SECOND COPY OF THE ARITHMETIC. _paMargin
+      // (09-products.js) is the gross-on-price margin the Products list and the
+      // product editor already show; re-deriving it here is precisely how a
+      // header and an editor end up quoting different margins for one product.
+      // It returns null whenever the answer is unknown — an unrecorded cost is
+      // NOT a cost of zero — and null renders an em dash. The row still shows:
+      // a product whose margin can't be worked out is still a product this
+      // recipe makes, and hiding it would under-report what the recipe feeds.
+      const m = (typeof _paMargin === 'function') ? _paMargin(p.sell_price, p.unit_cost) : null;
+      // Money and percent joined by " / ", while the facts either side of them
+      // are joined by " · ". Two separators on purpose: at a glance it has to
+      // be obvious that ¥32.98 and 76.7% are one fact stated twice, not two
+      // more items in the list.
+      const margin = m
+        ? (m.money < 0 ? '−' : '') + money(Math.abs(m.money)) + ' / ' + m.pct.toFixed(1) + '%'
+        : '—';
+
+      const link = `<a href="#" class="rcp-prodname" onclick="event.preventDefault();event.stopPropagation();rcpOpenProduct(${Number(p.id)})">${esc(nm)}</a>`;
+      return `<div class="rcp-prodrow">${link}${size}`
+           + `<span class="rcp-prodfig">· ${esc(T('sells', '售价'))} ${esc(price)}`
+           + ` · ${esc(T('margin', '毛利'))} ${esc(margin)}</span></div>`;
+    }).join('');
+
+    // data-no-i18n IS LOAD-BEARING, NOT DECORATION. The runtime bilingual
+    // walker (10-extras.js processNode) rewrites any text node containing
+    // " · " to a single half whenever the left side has no Chinese and the
+    // right side does — which is exactly this row in Chinese ("Crunchy Granola
+    // · 售价 ¥43.00 · …"). Without the opt-out it renders correctly and then
+    // silently swallows everything after the product name on the next
+    // mutation. Every label here is already resolved by T(), so there is
+    // nothing for the walker to do but damage.
+    return `<div class="rcp-prodline" data-no-i18n>`
+         + `<span class="rcp-prodlead">${esc(lead)}</span>`
+         + `<div class="rcp-proditems">${items}</div></div>`;
+  }
+
+  // Open one of those products in its editor. Mirrors paOpenRecipe() in the
+  // other direction and hands off to dashOpenProductFromFeed (03-dashboard.js)
+  // rather than keeping a second copy of its wait-for-the-catalogue poll:
+  // pdOpen() finds its row in PA_PRODUCTS, which is empty until the Products
+  // tab has loaded once, so a bare pdOpen() from here would open a blank
+  // "New product" form.
+  //
+  // The dirty guard is the reason this isn't just an inline call. Clicking any
+  // rail tab while a record is open tears the takeover down through the
+  // capture-phase listener above, WITHOUT asking — fine for a deliberate rail
+  // click, not fine for a link that sits inside the record's own header next to
+  // fields the operator may have just edited. So ask the same question
+  // rcpRecordBack asks, and only then let the teardown happen.
+  window.rcpOpenProduct = async function (productId) {
+    const id = Number(productId);
+    if (!id) return;
+    if (_dirty && !(await askConfirm({
+      titleEn: 'Leave without saving?', titleCn: '未保存就离开?',
+      bodyEn: 'Your changes to this recipe will be lost.', bodyCn: '你对该食谱的更改将丢失。',
+      confirmEn: 'Leave', confirmCn: '离开', danger: true,
+    }))) return;
+    _dirty = false;   // consented once; don't let anything ask a second time
+    if (typeof dashOpenProductFromFeed === 'function') { dashOpenProductFromFeed(id); return; }
+    // No dashboard part loaded (shouldn't happen — it loads first). Fail by
+    // doing nothing visible rather than throwing inside an onclick.
+    console.error('[recipes] cannot open product', id, '- product jump unavailable');
+  };
 
   // ── save ──────────────────────────────────────────────────────────────────
   function val(key) {
