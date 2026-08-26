@@ -568,6 +568,11 @@
     catDone:    'Catalogue updated. Nothing was matched or changed.',
     catFailed:  'Could not read the listings — is the sync service signed in?',
     refusedOne: 'Refused — that name is not in the catalogue. Refresh it and try again.',
+    // Bundle titles. Same gate, same words where the fact is the same; the extra
+    // line is the one the product field never needed — see mtBundleNameCommit.
+    bPick:      'Pick the title from the list. Typing it risks a difference you cannot see.',
+    bMatches:   'Matches a listing on this store.',
+    bStoredBad: 'This stored title matches no listing on this store. It can be left alone, or replaced with one from the list.',
   };
 
   // -- The cached listings as the only source of a delivery name --------------
@@ -1806,8 +1811,14 @@
     const existing = id ? _bundles.find(b => b.id == id) : null;
     const stores = mtUniqueStores();
     _bundleDraft = existing
-      ? { id: existing.id, storeCode: existing.store_code, meituanName: existing.meituan_name, maxQty: existing.max_qty, components: (existing.components || []).map(c => ({ productId: c.product_id, qty: c.qty })) }
-      : { id: null,
+      ? { id: existing.id, storeCode: existing.store_code, meituanName: existing.meituan_name, maxQty: existing.max_qty,
+          // Carried so Save can put it back unchanged. It used to send a hard 1,
+          // so saving a component fix silently switched a paused bundle back on
+          // — the one thing you least want done for you on a bundle whose title
+          // no longer resolves.
+          syncEnabled: Number(existing.sync_enabled) === 0 ? 0 : 1,
+          components: (existing.components || []).map(c => ({ productId: c.product_id, qty: c.qty })) }
+      : { id: null, syncEnabled: 1,
           storeCode: (prefill && prefill.storeCode) || (stores[0] || {}).code || '',
           meituanName: (prefill && prefill.meituanName) || '',
           maxQty: '', components: [] };
@@ -1821,12 +1832,15 @@
           <button class="mt-dlg-x" onclick="mtCloseBundle()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div class="mt-dlg-bd"><div class="mt-form">
           <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
-            <select id="mt-b-store">${_stores.map(s2 => `<option value="${esc(s2.code)}" ${s2.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s2.name || s2.code)}</option>`).join('')}</select>
+            <select id="mt-b-store" onchange="mtBundleStoreChanged()">${_stores.map(s2 => `<option value="${esc(s2.code)}" ${s2.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s2.name || s2.code)}</option>`).join('')}</select>
           </label>
-          <label class="mt-field">${cuT('Meituan bundle title — exactly as it appears on Meituan',
-                                        '\u7f8e\u56e2\u5957\u9910\u540d \u2014 \u4e0e\u7f8e\u56e2\u4e0a\u5b8c\u5168\u4e00\u81f4')}
-            <input id="mt-b-name" value="${esc(_bundleDraft.meituanName)}" placeholder="\u85dc\u9ea6\u6c99\u62c9\u5957\u9910 Quinoa Salad Combo">
+          <label class="mt-field">${cuT('Meituan bundle title — pick it from the list',
+                                        '\u7f8e\u56e2\u5957\u9910\u540d \u2014 \u4ece\u5217\u8868\u4e2d\u9009\u62e9')}
+            <input id="mt-b-name" list="mt-listings-dl-${esc(_bundleDraft.storeCode)}"
+                   value="${esc(_bundleDraft.meituanName)}" placeholder="\u85dc\u9ea6\u6c99\u62c9\u5957\u9910 Quinoa Salad Combo"
+                   oninput="mtBundleNameTyped()" onchange="mtBundleNameCommit()" onblur="mtBundleNameCommit()">
           </label>
+          <div class="mt-sub" id="mt-b-namehint"></div>
           <label class="mt-field">${cuT('Maximum stock cap (optional)', '\u5e93\u5b58\u4e0a\u9650\uff08\u53ef\u9009\uff09')}
             <input id="mt-b-cap" type="number" min="0" class="mt-inp narrow" value="${_bundleDraft.maxQty == null ? '' : _bundleDraft.maxQty}" placeholder="${cuT('none', '\u65e0')}">
           </label>
@@ -1848,6 +1862,7 @@
     ov.addEventListener('click', e => { if (e.target === ov) mtCloseBundle(); });
     mtDlgShow(ov, mtCloseBundle);
     mtRenderBundleComps();
+    mtBundleNameState();
   };
 
   function mtRenderBundleComps() {
@@ -1897,9 +1912,113 @@
   window.mtBundleRemoveComp = function (i) { _bundleDraft.components.splice(i, 1); mtRenderBundleComps(); };
   window.mtCloseBundle = function () { mtDlgHide('mt-bundle-overlay'); _bundleDraft = null; };
 
+  // ── The bundle title gate, client side ─────────────────────────────────────
+  // The same rule as the product field's mtNameCommit, for the same reason: a
+  // title matching no listing does not stop the push, it sends it somewhere
+  // else. The matcher falls back to a truncated form of the name, and for both
+  // bundles that hold a bad title today it lands on ANOTHER product's own
+  // listing. The route refuses such a title too (mapWrite.verifyName); this half
+  // exists so the refusal arrives while the operator is still looking at the
+  // field, rather than as a toast after Save.
+  //
+  // WHY A LIST AND NOT JUST A CHECK ON A FREE FIELD.
+  // A check on its own would not have been enough here. Bundle 2's stored title
+  // differs from its listing by ONE space, and browsers collapse runs of
+  // whitespace when rendering text, so on the bundle list the right title and
+  // the wrong one look identical — an operator retyping by eye has no way to
+  // tell which they have produced, and no way to confirm afterwards that they
+  // got it right. The datalist removes the question instead of asking the
+  // operator to win it: picking inserts the listing's own bytes, so a whitespace
+  // difference cannot be created in the first place. Typing still works and a
+  // typed value is still checked; it simply stops being how the job is done.
+  function mtBundleStoreCode() {
+    const s = document.getElementById('mt-b-store');
+    return (s && s.value) || (_bundleDraft && _bundleDraft.storeCode) || '';
+  }
+
+  function mtBundleHint(text, bad) {
+    const h = document.getElementById('mt-b-namehint');
+    if (!h) return;
+    h.textContent = text || '';
+    h.classList.toggle('mt-bad', !!bad);
+  }
+
+  // Describe what the field holds, changing nothing. Called on open, on every
+  // keystroke and after a commit, so the line under the field is never stale.
+  function mtBundleNameState() {
+    const inp = document.getElementById('mt-b-name');
+    if (!inp || !_bundleDraft) return;
+    const code = mtBundleStoreCode();
+    const v    = inp.value.trim();
+    if (!v) return mtBundleHint(cuT(MT_PENDING_CN.bPick, MT_PENDING_CN.bPick), false);
+    if (!mtCatalogueRead(code)) return mtBundleHint(cuT(MT_PENDING_CN.noneRead, MT_PENDING_CN.noneRead), false);
+    if (mtNameKnown(code, v)) return mtBundleHint(cuT(MT_PENDING_CN.bMatches, MT_PENDING_CN.bMatches), false);
+    // Not in the catalogue. A title the row ALREADY holds gets its own sentence
+    // rather than the one aimed at a bad edit: that is bundle 16, whose listing
+    // was removed from Meituan, and the screen has no business implying the
+    // operator broke a field they have not touched. It still reads as wrong,
+    // because it is — it just reads as a fact about the listing.
+    return mtBundleHint(v === String(_bundleDraft.meituanName || '').trim()
+      ? cuT(MT_PENDING_CN.bStoredBad, MT_PENDING_CN.bStoredBad)
+      : cuT(MT_PENDING_CN.pickIt, MT_PENDING_CN.pickIt), true);
+  }
+
+  // The stores have different catalogues, so the picker has to follow the store.
+  window.mtBundleStoreChanged = function () {
+    const inp = document.getElementById('mt-b-name');
+    if (!inp || !_bundleDraft) return;
+    _bundleDraft.storeCode = mtBundleStoreCode();
+    inp.setAttribute('list', 'mt-listings-dl-' + _bundleDraft.storeCode);
+    mtBundleNameState();
+  };
+
+  window.mtBundleNameTyped = function () { mtBundleNameState(); };
+
+  // The gate. A value that is neither a listing on this store nor the title the
+  // row already held is put back — reverting rather than emptying, exactly as
+  // mtNameCommit does, so a rejected edit cannot quietly leave the bundle
+  // pointing at nothing and stop it syncing without saying so.
+  //
+  // Re-submitting the stored title unchanged is allowed and is not a hole: the
+  // only unverifiable titles that can be stored are ones written before this
+  // gate existed, and it is what keeps bundle 16's components and switch
+  // reachable. The route draws the line in the same place.
+  window.mtBundleNameCommit = function () {
+    const inp = document.getElementById('mt-b-name');
+    if (!inp || !_bundleDraft) return;
+    const code   = mtBundleStoreCode();
+    const typed  = inp.value.trim();
+    const stored = String(_bundleDraft.meituanName || '').trim();
+    // Unchanged. Normalise the field anyway, so padding the operator cannot see
+    // is never left sitting in a box whose whole job is to be exact.
+    if (typed === stored) { if (inp.value !== stored) inp.value = stored; return mtBundleNameState(); }
+
+    // §30 rule 4: with nothing read from this store, mtNameKnown answers false
+    // for EVERY title including the correct one, so this says it cannot check
+    // rather than returning a verdict it has no grounds to reach.
+    if (!mtCatalogueRead(code)) {
+      inp.value = stored;
+      return mtBundleHint(cuT(MT_PENDING_CN.cannotCheck, MT_PENDING_CN.cannotCheck), false);
+    }
+    if (!typed || !mtNameKnown(code, typed)) {
+      inp.value = stored;
+      return mtBundleHint(cuT(MT_PENDING_CN.reverted, MT_PENDING_CN.reverted), true);
+    }
+    // Accepted. Put the trimmed value back in the field as well, so what is on
+    // screen is exactly what Save will send — the field and the record never
+    // differ by padding nobody can see.
+    inp.value = typed;
+    _bundleDraft.meituanName = typed;
+    return mtBundleNameState();
+  };
+
   window.mtSaveBundle = async function () {
     const code  = document.getElementById('mt-b-store').value;
     const store = _stores.find(s => s.code === code);
+    // Commit first: Save can be reached without the field ever blurring (Enter,
+    // or a click straight on the button), and an unchecked value must not be
+    // the one that gets posted.
+    mtBundleNameCommit();
     const name  = document.getElementById('mt-b-name').value.trim();
     const cap   = document.getElementById('mt-b-cap').value;
     if (!store) { toast('Pick a store.', 'error'); return; }
@@ -1912,13 +2031,22 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: _bundleDraft.id, storeId: store.id, storeCode: code, meituanName: name,
-          maxQty: cap === '' ? null : cap, syncEnabled: 1, components: _bundleDraft.components,
+          maxQty: cap === '' ? null : cap,
+          syncEnabled: _bundleDraft.syncEnabled === 0 ? 0 : 1,
+          components: _bundleDraft.components,
         }),
       });
       mtCloseBundle();
       toast('Bundle saved.');
       mtLoadBundles();
     } catch (e) {
+      // The route's refusal is a fact about the catalogue, not a failure of the
+      // save — say which, and leave the dialog open so the title can be picked.
+      if (e && (e.code === 'name_not_in_catalogue' || e.code === 'catalogue_not_read')) {
+        mtBundleHint(e.message, true);
+        toast(cuT(MT_PENDING_CN.refusedOne, MT_PENDING_CN.refusedOne), 'error');
+        return;
+      }
       toast('Save failed: ' + e.message, 'error');
     }
   };
