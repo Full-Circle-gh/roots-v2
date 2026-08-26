@@ -10,6 +10,7 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
+const { nextKitchenPONumber } = require('../lib/po-number');
 // The nested-recipe recompute (§29 step 3) — fired after a PO price
 // write-back moves a non-linked ingredient's cost, since that can move a
 // linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
@@ -317,9 +318,7 @@ router.get('/api/purchases/:id/history', requireAuth, requirePermission('purchas
 // POST create PO
 router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req, res) => {
   const { date, delivery_date, supplier, warehouse, notes, items, source } = req.body;
-  // Generate PO number
-  const count = db.prepare('SELECT COUNT(*) as c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
   try {
     const result = db.prepare('INSERT INTO purchase_orders (po_number,date,delivery_date,status,supplier,warehouse,notes,source,created_by) VALUES (?,?,?,?,?,?,?,?,?)')
       .run(po_number, date, delivery_date||null, 'Requested', supplier||null, warehouse||null, notes||null, source||'manual', req.user.id);
@@ -615,8 +614,7 @@ router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchase
         const lines = db.prepare(`SELECT * FROM po_line_items WHERE po_id = ? AND id IN (${defer.map(()=>'?').join(',')})`).all(poId, ...defer);
         if (lines.length) {
           const today = new Date().toISOString().slice(0, 10);
-          const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-          splitNumber = 'PO-' + String(count + 1).padStart(4, '0');
+          splitNumber = nextKitchenPONumber(db);
           const r = db.prepare(`INSERT INTO purchase_orders
             (po_number, date, delivery_date, status, supplier, warehouse, notes, source, created_by, backorder_of)
             VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
@@ -659,8 +657,7 @@ router.post('/api/purchases/:id/backorder', requireAuth, requirePermission('purc
   if (!lines.length) return res.status(400).json({ error: 'No outstanding qty · 没有缺货项目' });
 
   const today = new Date().toISOString().slice(0, 10);
-  const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO purchase_orders
@@ -707,8 +704,7 @@ router.post('/api/purchases/:id/duplicate', requireAuth, requirePermission('purc
   const items = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order').all(src.id);
 
   const today = new Date().toISOString().slice(0, 10);
-  const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO purchase_orders

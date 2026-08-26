@@ -6,6 +6,7 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { storeCategory } = require('../lib/category-text');
+const { nextKitchenPONumber } = require('../lib/po-number');
 const router = express.Router();
 
 // GET last-ordered qty per ingredient. Used by the kitchen-order autocomplete
@@ -130,8 +131,7 @@ router.post('/api/kitchen/submit', requireAuth, requirePermission('kitchen'), (r
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
 
   // Build a notes string out of per-item notes
   const itemNotes = items
