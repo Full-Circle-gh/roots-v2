@@ -856,8 +856,8 @@ cascade is transitive and that is the proof of it.
 | 616 | Hummus Asli | 0.020614 | 0.014821 | **−28.10 %** |
 | 574 | Whole Sesame Tahini (Unhulled) | 0.019160 | 0.016665 | −13.02 % |
 | 578 | Crunchy Peanut Butter | 0.019024 | 0.016645 | −12.51 % |
-| 612 | Arugula-Basil Pesto | 0.040091 | 0.035531 | −11.38 % |
-| 572 | Cashew Sour Cream | 0.046483 | 0.041351 | −11.04 % |
+| 612 | Arugula-Basil Pesto | 0.040091 | 0.035530 | −11.38 % |
+| 572 | Cashew Sour Cream | 0.046483 | 0.041350 | −11.04 % |
 | 613 | Chick'EN Strips | 0.017895 | 0.016491 | −7.85 % |
 | 617 | Baked Falafel | 0.023804 | 0.022291 | −6.36 % |
 | 588 | Creamy Cashew Butter | 0.074223 | 0.069761 | −6.01 % |
@@ -868,6 +868,18 @@ cascade is transitive and that is the proof of it.
 | **621** | **Sesame tofu** | 0.014400 | 0.014335 | −0.45 % *(inherited only)* |
 
 Every move is downward. No material moved that should not have.
+
+> **Correction, 2026-08-26, made after the deploy against the live result.**
+> Two figures in this table were first published as `0.041351` (572) and
+> `0.035531` (612). **Those were my arithmetic, not the code’s.** The rollup
+> rounds to six decimal places with `Math.round` (`lib/recipe-rollup.js:206`),
+> and the raw values are `0.04134961…` and `0.03553024…`, which round to
+> **0.041350** and **0.035530**. I had rounded the sixth decimal up by hand.
+> Production wrote the correct values; this table did not match them. Corrected
+> in place. The percentages are unaffected.
+>
+> It tightens the corroboration below rather than weakening it: the hand entry
+> of **2026-08-16 reads `0.04135`**, which is the corrected figure exactly.
 
 ### What moved: 7 products, of 75 recipe-linked
 
@@ -922,7 +934,7 @@ costPerServing   10.297727  = store_products.unit_cost for product 347
 
 | material | hand entry, 2026-08-16 | the fix computes | the pre-fix value |
 |---|---|---|---|
-| Cashew Sour Cream | 0.04135 | 0.041351 | 0.046483 |
+| Cashew Sour Cream | 0.04135 | 0.04135 | 0.046483 |
 | Creamy Cashew Butter | 0.06976 | 0.069761 | 0.074223 |
 | Crunchy Peanut Butter | 0.01664 | 0.016645 | 0.019024 |
 | Whole Sesame Tahini | 0.01666 | 0.016665 | 0.019160 |
