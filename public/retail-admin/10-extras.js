@@ -382,7 +382,7 @@ function afxRenderOffer() {
   // The locked tail above is untouched either way.
   const sel = life && c.lifetimeMode === 'selected';
   const qualEn = sel ? ' — the ongoing share for chosen customers only' : '';
-  const qualCn = sel ? '，持续分成仅限指定客户' : '';
+  const qualCn = sel ? '，复购分成仅限指定客户' : '';
   host.innerHTML = `<div class="afx-card" style="margin-top: 24px">
       <div class="afx-offerline">
         <div class="ot">
@@ -477,7 +477,7 @@ function afxRenderSettings() {
               </div>
               <div class="afx-note">${afT('Everyone else still earns the one-time referral reward. Choosing someone starts them earning from that moment — it never pays them for orders placed before you chose them.',
                   '其他客户仍可获得一次性推荐奖励。选定某位客户后，从选定当刻起开始计算分成，此前的订单不会补发。')}</div>`
-           : `<div class="afx-note">${afT('Any customer who refers a friend earns the ongoing share.', '任何推荐好友的客户都可获得持续分成。')}</div>`}
+           : `<div class="afx-note">${afT('Any customer who refers a friend earns the ongoing share.', '任何推荐好友的客户都可获得复购分成。')}</div>`}
        </div>`
     : '';
   const repeat = `<div class="afx-card">
@@ -584,7 +584,7 @@ async function afxOpenEligible() {
   const dlg = askCustom('', `
     <div class="afxel-wrap">
       <div>
-        <div class="afxel-h">${afT('Who earns the ongoing share', '谁可获得持续分成')}</div>
+        <div class="afxel-h">${afT('Who earns the ongoing share', '谁可获得复购分成')}</div>
         <div class="afxel-sub">${afT('Only these customers earn a share of their friends’ later orders. Everyone else still earns the one-time referral reward. Each change takes effect straight away.',
             '仅以下客户可从好友之后的订单中获得分成。其他客户仍可获得一次性推荐奖励。每项更改立即生效。')}</div>
       </div>

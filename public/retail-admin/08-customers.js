@@ -1658,15 +1658,15 @@ function renderLifetimeEligibility(aff) {
   const sub = on
     ? (since ? cuT(`Earning on friends’ orders paid since ${since}.`, `自 ${since} 起，可从好友已付款订单中获得分成。`)
              : cuT('Earning on friends’ later orders.', '可从好友之后的订单中获得分成。'))
-    : (since ? cuT(`Not earning the ongoing share. Last chosen ${since}.`, `当前不获得持续分成。上次选定于 ${since}。`)
-             : cuT('Not earning the ongoing share.', '当前不获得持续分成。'));
+    : (since ? cuT(`Not earning the ongoing share. Last chosen ${since}.`, `当前不获得复购分成。上次选定于 ${since}。`)
+             : cuT('Not earning the ongoing share.', '当前不获得复购分成。'));
   return `
       <div class="field" style="margin: 0;">
-        <label class="stacked">${cuT('Ongoing share', '持续分成')}</label>
+        <label class="stacked">${cuT('Ongoing share', '复购分成')}</label>
         <div style="font-size: 13px; padding: 6px 0;">
           <button class="btn btn-sm" onclick="cuSetLifetimeEligible(${CU_CURRENT.customer.id}, ${on ? 'false' : 'true'}, event)">${
-            on ? cuT('Stop the ongoing share', '停止持续分成')
-               : cuT('Let them earn the ongoing share', '允许获得持续分成')}</button>
+            on ? cuT('Stop the ongoing share', '停止复购分成')
+               : cuT('Let them earn the ongoing share', '允许获得复购分成')}</button>
           <div class="muted" style="font-size: 11px; margin-top: 4px; max-width: 44ch;">${sub}</div>
         </div>
       </div>`;
@@ -1680,16 +1680,16 @@ async function cuSetLifetimeEligible(customerId, eligible, ev) {
   // "EN · CN" and leans on the walker to split them again. One language in,
   // one language out — same call shape afReissueCode's confirmLabel already uses.
   if (!eligible && !(await askConfirm({
-    title: cuT('Stop this customer earning the ongoing share?', '停止该客户的持续分成？'),
+    title: cuT('Stop this customer earning the ongoing share?', '停止该客户的复购分成？'),
     body: cuT('They keep the one-time referral reward and everything already paid into their wallet. Only future orders stop earning.',
               '已发放至钱包的分成和一次性推荐奖励均予保留，仅之后的订单不再产生分成。'),
-    confirmLabel: cuT('Stop the ongoing share', '停止持续分成'),
+    confirmLabel: cuT('Stop the ongoing share', '停止复购分成'),
   }))) return;
   if (btn) btn.disabled = true;
   try {
     await api('/api/retail-admin/affiliate/eligible', { method: 'POST', body: { customerId, eligible } });
-    toast(eligible ? cuT('Now earning the ongoing share', '已开启持续分成')
-                   : cuT('No longer earning the ongoing share', '已停止持续分成'));
+    toast(eligible ? cuT('Now earning the ongoing share', '已开启复购分成')
+                   : cuT('No longer earning the ongoing share', '已停止复购分成'));
     if (CU_CURRENT?.customer?.id === customerId) cuOpenDetail(customerId);
   } catch (e) {
     toast(cuT('Could not change this: ' + e.message, '修改失败：' + e.message), 'err');
