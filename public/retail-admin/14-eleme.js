@@ -15,6 +15,10 @@
   let _elStore  = '';     // store filter: '' = all stores
   let _elSel    = null;   // product id the panel is showing
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
+  // storeCode -> Set of the exact listing names that store supplied. Built once
+  // with the catalogue rather than scanned per row: every product asks whether
+  // its stored name is one of these on every repaint.
+  let _catNames  = {};
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.elAdminInit = async function () {
@@ -123,25 +127,41 @@
   function elRenderHead() {
     const rows = _lastStores || [];
     const active = _products.filter(p => Number(p.is_active) !== 0);
-    const live = active.filter(p => Object.values(p.stores || {}).some(m => m.eleme_name)).length;
-    const att = active.filter(elNeedsAttention).length;
+    // One classifier for the tiles, the chips and the dots, so no two of them
+    // can report different numbers about the same rows.
+    const grp = { att: 0, ok: 0, nomap: 0 };
+    for (const p of active) grp[elGroup(p)]++;
+    const live = grp.ok;
+    const att  = grp.att;
     const waiting = rows.reduce((a2, r) => a2 + Number(r.pending || 0) + Number(r.processing || 0), 0);
-    const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + elStoreName(r)).join(' \u00b7 ');
+    // Per store, from that same classifier rather than the server's own count.
+    // The server counts mappings with the switch on, which includes the ones
+    // resolving to nothing \u2014 that is how a tile reading 191 could sit directly
+    // above a sub-line reading 194.
+    const perSynced = _stores.filter(s => elStoreConnected(s.code)).map(s =>
+      active.filter(p => elStoreState((p.stores || {})[s.code] || null, s.code).k === 'ok').length +
+      ' ' + elStoreName(s)).join(' \u00b7 ');
     // Same breakdown the total and the per-store rows use \u2014 pending + processing \u2014
     // so the tile's sub-line never reads lower than a store's own row underneath it.
     const perWaiting = rows.map(r => (Number(r.pending || 0) + Number(r.processing || 0)) + ' ' + elStoreName(r)).join(' \u00b7 ');
 
     const st = document.getElementById('el-status');
     if (st) {
-      let html = esc(cuT(live + ' live', live + ' \u4e2a\u5df2\u4e0a\u67b6'));
+      // One word per number, and the same word the chip and the tile use. This
+      // line said "live" while the chip said "Synced" and the tile said "Live on
+      // Eleme" for one figure; three names for one number is how a screen stops
+      // being read.
+      let html = esc(cuT(live + ' synced', live + ' \u4e2a\u5df2\u540c\u6b65'));
       if (att) html += ' \u00b7 ' + esc(cuT(att + ' need attention', att + ' \u4e2a\u5f85\u5904\u7406'));
+      if (grp.nomap) html += ' \u00b7 ' + esc(cuT(grp.nomap + ' not on Eleme', grp.nomap + ' \u4e2a\u672a\u4e0a\u67b6'));
       const bad = rows.filter(r => r.blocked);
       if (bad.length) {
         const nm = bad.map(elStoreName);
         html += ' \u00b7 <span class="att">' +
           esc(cuT(nm.join(', ') + ' needs you', nm.join('\u3001') + ' \u9700\u8981\u5904\u7406')) + '</span>';
       } else if (!att) {
-        html += ' \u00b7 ' + esc(cuT('all matched', '\u5168\u90e8\u5df2\u5339\u914d'));
+        // Not "all matched" \u2014 47 of them are not matched and never will be.
+        html += ' \u00b7 ' + esc(cuT('nothing needs you', '\u65e0\u9700\u5904\u7406'));
       }
       st.innerHTML = html;
     }
@@ -159,9 +179,9 @@
                              '为所有已匹配商品排队推送库存')) + '">' +
         esc(cuT('Push all stock', '推送全部库存')) + '</button></div>';
       tiles.innerHTML =
-        tile(cuT('Live on Eleme', '已上架饿了么'), live, per('live'), false) +
+        tile(cuT('Synced', '已同步'), live, perSynced, false) +
         tile(cuT('Need attention', '待处理'), att,
-             cuT('unmatched, or missing a size', '未匹配，或未选规格'), att > 0) +
+             cuT('mapped, but not reaching its listing', '已匹配，但对不上商品'), att > 0) +
         tile(cuT('Stock updates waiting', '待推送库存'), waiting, perWaiting, false, pushBtn);
     }
 
@@ -206,40 +226,75 @@
     }
   }
 
-  // Needs attention: not mapped anywhere, or mapped to a listing that holds
-  // several options with none claimed — on Eleme an option CAN be targeted, so
-  // that second case is a real gap, not a note.
-  function elNeedsAttention(p) {
-    const maps = Object.values(p.stores || {});
-    if (!maps.some(m => m.eleme_name)) return true;
-    return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
+  // ── Which group a product is in ────────────────────────────────────────────
+  // The axis is CAN THIS MAPPING REACH THE RIGHT LISTING — not whether the sync
+  // switch is on. Three groups, every active product in exactly one, so the
+  // chips add up to the list and nothing is hidden or deleted.
+  //
+  // What this replaced counted a product with NO mapping at all as work: 47 of
+  // them — foundation shades, gift sets, things never sold on Eleme — sat in a
+  // "needs attention" count that nothing could ever clear, which is §30 rule 5
+  // written out as a defect. Worse, the one mapping that was genuinely broken
+  // was not in that count at all: it had a name, so it passed both tests, and it
+  // showed a green Synced dot for two days while every push it made resolved to
+  // nothing. See docs/eleme-findings.md finding 5.
+  //
+  // The switch deliberately does NOT decide a group. The drain's SELECT carries
+  // no sync_enabled clause (scripts/eleme-daemon.js), so the flag is read when a
+  // job is QUEUED and never when it is SENT — a row already waiting goes out
+  // after the switch is turned off. "Off" is a fact to report beside a mapping,
+  // never a reason to stop counting it.
+  //
+  // A store with no Eleme shop linked holds no group at all: nothing can be
+  // matched there, its own store line above already says so, and an alarm nobody
+  // can clear is the one that gets ignored.
+  function elGroup(p) {
+    const states = elStatesFor(p);
+    // 'unk' groups with attention, not with Synced. A mapping we cannot check
+    // is not a mapping we have checked, and the honest half of "we cannot tell
+    // you these are right" is that someone should know. It clears itself the
+    // moment the catalogue reads, so the alarm is clearable by the mechanism
+    // that raised it. Its dot stays neutral: the cause is one store-level fact,
+    // not 194 separate faults.
+    if (states.some(s => s.k === 'att' || s.k === 'unk')) return 'att';
+    if (states.some(s => s.k === 'ok' || s.k === 'off')) return 'ok';
+    return 'nomap';
   }
 
-  // -- Chip + store filters ---------------------------------------------------
+  // Every state this product holds on the stores currently shown, connected ones
+  // only. The group, the ordering and the row's note all read this, so a dot and
+  // the chip counting it can never disagree. It is also what makes the store
+  // filter mean something exact: pick a store and the page classifies by that
+  // store alone.
+  function elStatesFor(p) {
+    return elShownStores()
+      .filter(st => elStoreConnected(st.code))
+      .map(st => elStoreState((p.stores || {})[st.code] || null, st.code));
+  }
+
+  // -- Chip filter ------------------------------------------------------------
+  // "Needs an option" is folded into Needs attention: it was a strict subset of
+  // it, it has read 0 since options could be claimed at all, and the row now
+  // prints WHICH problem it has \u2014 which a chip never could.
+  //
+  // The store filter needs no pass of its own any more. elStatesFor already
+  // classifies against the stores on screen, so picking a store re-groups the
+  // whole page by that store instead of leaving a second opinion beside it.
   const EL_CHIPS = [
-    { id: 'all',  en: 'All',            cn: '\u5168\u90e8' },
-    { id: 'att',  en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
-    { id: 'ok',   en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
-    { id: 'size', en: 'Needs an option', cn: '\u5f85\u9009\u89c4\u683c' },
+    { id: 'all',   en: 'All',             cn: '\u5168\u90e8' },
+    { id: 'att',   en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
+    { id: 'ok',    en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
+    { id: 'nomap', en: 'Not on Eleme',    cn: '\u672a\u4e0a\u67b6\u9976\u4e86\u4e48' },
   ];
 
   function elChipMatch(p, id) {
-    const maps = Object.values(p.stores || {});
-    if (id === 'att')  return elNeedsAttention(p);
-    if (id === 'ok')   return maps.some(m => m.eleme_name);
-    if (id === 'size') return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
-    return true;
-  }
-
-  function elStorePass(p) {
-    if (!_elStore) return true;
-    return !!(p.stores || {})[_elStore] || elNeedsAttention(p);
+    return id === 'all' ? true : elGroup(p) === id;
   }
 
   function elRenderChips() {
     const box = document.getElementById('el-chips');
     if (!box) return;
-    const active = _products.filter(p => Number(p.is_active) !== 0).filter(elStorePass);
+    const active = _products.filter(p => Number(p.is_active) !== 0);
     box.innerHTML = EL_CHIPS.map(c => {
       const n = active.filter(p => elChipMatch(p, c.id)).length;
       return '<button class="el-fchip' + (_elFilter === c.id ? ' on' : '') +
@@ -284,7 +339,13 @@
       try {
         const r = await api('/api/retail-admin/eleme/catalogue?storeCode=' + encodeURIComponent(s.code));
         _catalogue[s.code] = { rows: r.data || [], refreshedAt: r.refreshedAt || null };
-      } catch (e) { _catalogue[s.code] = { rows: [], refreshedAt: null }; }
+        _catNames[s.code]  = new Set((r.data || []).map(x => String(x.name || '').trim()));
+      } catch (e) {
+        // Empty, not absent: an empty set means "not checkable" to elNameKnown,
+        // so a failed catalogue read can never turn every mapping amber.
+        _catalogue[s.code] = { rows: [], refreshedAt: null };
+        _catNames[s.code]  = new Set();
+      }
     }
     elRenderCatalogueDatalists();
     elRenderProducts(); // re-render so the name input picks up list= now that options exist
@@ -538,24 +599,97 @@
     return !!(st && st.shop_id && String(st.shop_id).trim());
   }
 
+  // elNameKnown and elCatalogueRead come from the name gate above — one
+  // definition of "is this a real listing name", shared by the field that
+  // refuses to save a name and the state that reports one already stored. This
+  // classifier used to carry its own, returning null for an unread catalogue;
+  // two functions of one name in one file is a merge that parses, lints, and
+  // silently drops one of them. The gate's pair says the same thing in two
+  // calls, so the caller asks both questions explicitly instead.
+  //
+  // Ordered by what can go wrong, worst first, and the sync switch is read LAST
+  // — it changes what a mapping is doing, never whether it is right.
   function elStoreState(map, storeCode) {
+    const has  = !!map;
+    const on   = has && Number(map.sync_enabled) === 1;
+    const name = (has && map.eleme_name) || '';
+    const base = { has, on };
+
     if (storeCode && !elStoreConnected(storeCode)) {
-      return { k: 'none', t: cuT('Store not connected', '门店未关联') };
+      return { ...base, k: 'none', t: cuT('Store not connected', '门店未关联') };
     }
-    if (!map || !map.eleme_name) return { k: 'att', t: cuT('Add name', '待填名称') };
-    if (Number(map.sync_enabled) !== 1) return { k: 'off', t: cuT('Sync off', '已关闭') };
-    // A listing with several sizes and none picked cannot be pushed accurately
-    // — the driver falls back to a rule that writes a made-up number to every
-    // size. That is the one state worth colouring.
+
+    // No mapping row is not a job. The product is not sold here, and it cannot
+    // even be queued — the enqueue path needs a row to find one. This read "Add
+    // name" for as long as the page existed, and 47 of them buried the ten that
+    // were real.
+    if (!has) return { ...base, k: 'none', t: cuT('Not on Eleme', '未上架饶了么') };
+
+    // A mapping with no name still pushes. The drain falls back to the product's
+    // own Chinese name as the target (scripts/eleme-daemon.js), so this is a live
+    // wrong-target risk and not an unfinished form — product 80 sent 25 that way
+    // with this exact shape and the switch off.
+    if (!name) {
+      return { ...base, k: 'att', t: cuT('No listing name', '缺商品名'),
+        why: cuT('This mapping has no Eleme listing name. A push falls back to the product’s own name, so it can land on the wrong listing or on none.',
+                 '该匹配没有饶了么商品名。推送会退回使用商品自身名称，可能对上错误商品或对不上。') };
+    }
+
+    // The check cannot run without a catalogue, so it says so and returns no
+    // verdict. Without this the fall-through below reads "Synced" off an empty
+    // catalogue — and a catalogue that FAILED to load is indistinguishable from
+    // one never read, because elLoadCatalogue's catch leaves rows empty either
+    // way. Measured: with the read failing, Needs attention fell 10 → 6, Synced
+    // rose 191 → 195, and product 195 went back to a green dot. One dropped
+    // fetch would have restored the exact fault this screen was rebuilt to end.
+    //
+    // Neutral, not amber. An unread catalogue is one fact about the STORE, and
+    // the store's own line above already carries it; repeating it as a warning
+    // on every product would be the noise this page exists to stop. The word is
+    // the gate's, from EL_PENDING_CN — English on both sides until Ash sources
+    // the Chinese, per §30 rule 3 and tacet-delivery-vocabulary.md Rule 4.
+    if (!elCatalogueRead(storeCode)) {
+      return { ...base, k: 'unk', t: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked),
+        why: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked) };
+    }
+
+    // Nothing validates a stored name at rest, so this is the check that was
+    // missing: the name is compared against what the store actually supplied.
+    if (!elNameKnown(storeCode, name)) {
+      return { ...base, k: 'att', t: cuT('Listing not found', '找不到该商品'),
+        why: cuT('No listing on this store carries this exact name, so every push resolves to nothing. Pick the name from the list rather than typing it.',
+                 '该门店没有完全同名的商品，每次推送都会落空。请从列表中选择商品名，不要手动输入。') };
+    }
+
+    // A listing with several options and none claimed cannot be pushed
+    // accurately — the driver falls back to a rule that writes a made-up number
+    // to every one of them.
     if (Number(map.specCount || 0) > 1 && !elClaims(map).length) {
-      return { k: 'att', t: cuT('Pick an option', '待选规格') };
+      return { ...base, k: 'att', t: cuT('No option picked', '未选规格'),
+        why: cuT('This listing holds several options and this product claims none, so a push would write a made-up number to every one of them.',
+                 '该商品有多个规格而本商品未认领任何一个，推送会向每个规格写入编造的数量。') };
     }
-    return { k: 'ok', t: cuT('Synced', '已同步') };
+
+    // Right target, switch off. A settled state — and the only one where "off"
+    // is the whole story.
+    if (!on) return { ...base, k: 'off', t: cuT('Ready, sync off', '已就绪 · 同步关闭') };
+    return { ...base, k: 'ok', t: cuT('Synced', '已同步') };
   }
 
-  // The rows the filters leave standing, in list order. The panel and the list
-  // both need this set — the panel to know whether its product is still on
-  // screen, the list to draw it — so it is worked out once.
+  // Work first, and inside the work the mappings that are pushing right now: a
+  // broken mapping with the switch ON is the one telling a customer a wrong
+  // number this minute. Product 195 sat behind a green Synced dot for two days
+  // while its listing read 10000 against a shelf holding 3; this is the rank
+  // that brings that row out at the top instead of eleventh.
+  function elRank(p) {
+    const att = elStatesFor(p).filter(s => s.k === 'att');
+    if (!att.length) return 2;
+    return att.some(s => s.on) ? 0 : 1;
+  }
+
+  // The rows the filters leave standing. The panel and the list both need this
+  // set — the panel to know whether its product is still on screen, the list to
+  // draw it — so it is worked out once.
   function elVisibleList() {
     // Text match covers the SKU and the mapped listing name too — the two
     // things you actually have in front of you when hunting a row.
@@ -563,12 +697,14 @@
     return _products
       .filter(p => Number(p.is_active) !== 0)
       .filter(p => elChipMatch(p, _elFilter))
-      .filter(elStorePass)
       .filter(p => !q
         || (p.name_cn || '').toLowerCase().includes(q)
         || (p.name_en || '').toLowerCase().includes(q)
         || (p.sku || '').toLowerCase().includes(q)
-        || Object.values(p.stores || {}).some(m => (m.eleme_name || '').toLowerCase().includes(q)));
+        || Object.values(p.stores || {}).some(m => (m.eleme_name || '').toLowerCase().includes(q)))
+      // Stable, so everything at the same rank keeps the list's own order. The
+      // array is already a copy — sorting it never touches _products.
+      .sort((a, b) => elRank(a) - elRank(b));
   }
 
   function elRenderProducts() {
@@ -600,16 +736,45 @@
         ? '<img class="el-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
         : '<span class="el-thumb-ph"></span>';
 
-      // One dot per store, in the order the header names them. A dot carries
-      // its store and its state as the row's accessible name, so the list is
-      // readable without the colour.
+      // One cell per store, in the order the header names them: the state as a
+      // dot, and beside it the sync switch as a read-only twin of the one in the
+      // panel. The switch was the single most useful fact about a row and it
+      // took a click to see — 53 products were opened one at a time just to read
+      // it. Read-only on purpose: flipping sync ON from a list arms the next
+      // stock change to push, and one stray click on a broken mapping is exactly
+      // how a wrong number reaches a customer. The panel keeps the only switch
+      // you can actually throw.
+      //
+      // Both carry the store and the state as the row's accessible name, so the
+      // list is readable without the colour and without the shape.
       const say = [];
+      const notes = [];
       const dots = shown.map(st => {
-        const s2 = elStoreState((p.stores || {})[st.code], st.code);
-        say.push(elStoreName(st) + ' ' + s2.t);
-        return '<span class="el-dcell"><span class="el-dot ' + s2.k + '" title="' +
-          esc(elStoreName(st) + ' · ' + s2.t) + '"></span></span>';
+        const s2 = elStoreState((p.stores || {})[st.code] || null, st.code);
+        const sw = s2.has ? (s2.on ? cuT('sync on', '同步开启') : cuT('sync off', '同步关闭')) : '';
+        say.push(elStoreName(st) + ' ' + s2.t + (sw ? ' · ' + sw : ''));
+        if (s2.k === 'att') notes.push({ st, s2 });
+        // No mapping, no switch: there is nothing there to be on or off, and a
+        // greyed control would invite a click that does nothing. Same for a
+        // store with no Eleme shop linked — the switch there is a fact about
+        // nothing, and that store's own line above already says why.
+        const pip = s2.has && s2.k !== 'none'
+          ? '<span class="el-pip' + (s2.on ? ' on' : '') + '" title="' + esc(sw) + '"></span>'
+          : '';
+        return '<span class="el-dcell"><span class="el-sw">' +
+          '<span class="el-dot ' + s2.k + '" title="' + esc(elStoreName(st) + ' · ' + s2.t) + '"></span>' +
+          pip + '</span></span>';
       }).join('');
+
+      // What is wrong, on the row it is wrong about, in the words the panel
+      // uses. A count that says 10 above rows that say nothing sends someone
+      // into all ten of them.
+      const why = notes.length
+        ? '<span class="el-why">' +
+            esc((shown.filter(st => elStoreConnected(st.code)).length > 1
+                  ? elStoreName(notes[0].st) + ' · ' : '') + notes[0].s2.t) +
+            (notes.length > 1 ? esc(' +' + (notes.length - 1)) : '') + '</span>'
+        : '';
 
       return '<button type="button" class="el-lrow' + (p.id === _elSel ? ' sel' : '') + '"' +
         ' data-pid="' + p.id + '" onclick="elSelect(' + p.id + ')"' +
@@ -620,7 +785,7 @@
         '<span class="el-pcell">' + thumb +
         '<span class="el-pname">' + esc(base) +
           (p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>' : '') + '</span>' +
-        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') + '</span>' +
+        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') + why + '</span>' +
         '<span class="el-dots">' + dots + '</span></button>';
     }).join('');
 
@@ -679,8 +844,13 @@
   // One store's block. Every store on Eleme is matched by hand, so every block
   // is editable — there is no read-only twin the way the Meituan page has one.
   function elPanelStore(p, st) {
-    const m      = (p.stores || {})[st.code] || {};
-    const s2     = elStoreState(m, st.code);
+    // `map` is null when this product holds no mapping row on this store at all
+    // — which is a different thing from a row with the name left blank, and the
+    // state below is the only place that tells them apart. Everything after it
+    // reads `m`, the same always-an-object it always read.
+    const map    = (p.stores || {})[st.code] || null;
+    const m      = map || {};
+    const s2     = elStoreState(map, st.code);
     const on     = Number(m.sync_enabled) === 1;
     const name   = m.eleme_name || '';
     const specs  = elSpecsFor(st.code, name);
@@ -716,6 +886,10 @@
     let body =
       '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span>' + toggle + '</div>' +
       '<div class="el-pstate"><span class="el-dot ' + s2.k + '"></span>' + esc(s2.t) + '</div>' +
+      // Why, in a sentence, on the one product in front of you. On-demand help:
+      // it appears only on a mapping that has the problem, never as a standing
+      // paragraph over the whole page.
+      (s2.why ? '<div class="el-sub el-whysub">' + esc(s2.why) + '</div>' : '') +
       '<div class="el-plbl el-plbl-row">' +
         '<span>' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</span>' +
         (name
