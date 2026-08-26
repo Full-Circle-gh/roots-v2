@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.85
+# Tacet shared-core consolidation — decisions record, v4.86
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -9,6 +9,8 @@
 2026-08-26 · v4.84 — **§7 gains an addendum: no conversion without a stated factor.** §7 already requires a per-material ml-to-gram conversion and already says it differs per material, and it has never said what happens when that figure is absent — so the absent case was being answered in the only way an unstated case ever is, by a silent fallback, and the fallback was one millilitre to one gram. **That is true for water and for nothing else**, and it was applied to every liquid: the weight of oils understated, the weight of syrups overstated, in both directions without a mark. The addendum records the refusal rather than the guess. **CONVERSIONS ARE OF TWO KINDS AND MUST NOT BE TREATED ALIKE** — same-dimension conversions (kilograms to grams, pounds to ounces, litres to millilitres) are fixed constants true for every material, which the system supplies and nobody enters; cross-dimension conversions (volume to weight) require a DENSITY, and density is a property of the material rather than of the system, so oil, water and syrup differ, there is no default, and none may be invented. **A cross-dimension unit is therefore offered only where that material carries a density** — absent one the unit is not in the picker at all, and **new lines lacking it are refused AT THE POINT OF ENTRY rather than at save or at cost time**, so the operator meets the constraint while they can still act on it. **LINES ALREADY RECORDED UNDER THE OLD ASSUMPTION ARE NOT SILENTLY RECOSTED**, which is the decision most likely to be mistaken later for an oversight: they keep their existing cost and are marked unconverted, because recosting them would move product costs and therefore margins with no operator action and no notice, and a wrong figure that is visible is preferable to a corrected figure that moved unannounced. They are corrected by hand, one material at a time, with no deadline. **An unconverted line blocks batch-size auto-fill for its recipe**, identical treatment to the count units of the §6 addendum immediately above — where the sum cannot be trusted no sum is offered and the screen states what is missing — which doubles as the migration worklist, since a recipe that will not auto-fill is a recipe still holding an unconverted line. Subject to §0: grams are Roots' base unit and not Tacet's, and a tenant stocking in pounds enters recipe lines in pounds or ounces for identical behaviour, only the letters differing — the rule is one stocking unit per material and no conversion without a stated factor, never a mandated metric system. §7's existing rules are untouched. An addendum adding rules to a section that was silent on the point, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
 
 2026-08-26 · v4.83 — **§6 gains an addendum: where the fixed output number comes from.** §6 has always said that recipe output is FIXED, and it has never said how that number is arrived at — a gap that was about to be filled by whoever built the production screen first, and then treated as settled because it shipped. The addendum records the derivation. **Batch size is seeded from the recipe's own retained lines and stays editable**, the sum being a suggestion rather than a lock; where an operator overrides it the difference is displayed as yield against inputs, which is the only yield-loss record there is, since the override already carries the information a separate loss field would hold. **Every recipe line carries a RETAINED flag, defaulting to yes, and it governs WEIGHT ONLY** — brewing water, blanching or soaking liquid, and a stock used to hydrate a dough and then thrown away consume stock and cost exactly what they cost, and contribute nothing to the batch. The flag has two positions and no partial-retention percentage, because a fraction nobody can measure honestly is a field nobody will fill in honestly; partial absorption is absorbed by the editable batch size instead. **Packaging lines never count toward batch size**, derived from the material's kind rather than from the flag, so there is no operator decision and no second place to get it wrong — §8 still consumes and costs them exactly as it already states. **Servings is derived rather than typed alongside serving size** — batch size ÷ serving size, ROUNDED DOWN, with the remainder shown — because a part portion cannot be sold and cost per serving must never be understated, which leaves the remainder's cost carried by the sellable servings. **§6'S EXISTING RULES ARE UNTOUCHED**, stated plainly so the addendum is not later read as a revision: output is still FIXED, inputs are still recorded as actually used, and a batch still produces exactly the stated amount. **The addendum defers to §7 rather than working around it** — auto-fill runs only where every retained line shares one unit family, and leaves batch size blank for manual entry with the reason on screen where any retained line is a count unit, because units are never converted at recipe level. Subject to §0: weight-based batch sizing is one shape a business may want, and a business whose recipes yield counts rather than weights must be equally well served, with the retained flag and the derived-servings rule applying unchanged. An addendum adding rules to a section that was silent on the point, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
+
+2026-08-26 · v4.86 — **§29 GAINS A RULE: A COST DERIVED FROM MAKING A THING IS NOT AUTOMATICALLY A COST OF USING IT.** §29 made a made thing a material and settled that a recipe line points at exactly one target. What it did not settle is WHICH OF A RECIPE'S COSTS TRAVEL with that material, and the gap was live: packaging was counted twice on every recipe consuming a made material. **The kitchen reality decided it, not the arithmetic.** A batch is part-sold as retail units in serving-sized containers and part-held in bulk for later use as a material; the bulk half goes into reused kitchen tubs that are not a tracked cost. So the retail container belongs to the sellable unit and must not travel. **LABOUR AND OVERHEAD TRAVEL, PACKAGING DOES NOT** — labour on a bulk batch is work genuinely performed and the parent is consuming its product. **Neither labour nor overhead is in live use today** (one recipe carries them and it backs no material), so settling them costs nothing now and settles them before they matter. **OVERHEAD IS EXPLICITLY NOT FINISHED**, and this rule must not be read as having closed it: overhead is a PERCENTAGE OF INGREDIENT COST, so a parent applying its own overhead to a line that already carries the child's COMPOUNDS rather than duplicates. That is a different fault from this one, nothing exercises it today, and it needs its own answer. **WHICH COSTS TRAVEL IS A PROPERTY OF THE COST, NOT OF THE RECIPE** — deciding it once per cost type is cheaper than deciding it per recipe forever, and it is the decision that actually unblocks a fix. **AND THE EXCLUSION BELONGS WHERE THE MATERIAL'S UNIT COST IS DERIVED, NOT WHERE A PARENT READS IT** — waste costing already sets that precedent by excluding packaging at the consumer, and doing the same here would make every consumer re-decide; deriving it once means one place. That is also why the implementation is a declared table of which components travel rather than a subtraction at the one call site: the next cost under question would otherwise land as a second subtraction in a second place with its own arithmetic, and "which costs travel" would have two answers that drift. **A SIDE EFFECT WORTH RECORDING: this repairs waste costing, which was already trying to do the right thing and being defeated.** Waste deliberately rebuilds a packaging-free batch total, but a made material arrived inside the ingredient subtotal with packaging already folded in, so the exclusion was bypassed on 11 recipes. It now holds. The evidence — the mechanism in three lines of code, the eleven materials, the sixteen lines, and the worked example reconciling to `store_products.unit_cost` to the digit — is finding 1 in `docs/packaging-findings.md` and deliberately NOT restated here. A new rule that reverses no earlier decision, hence a patch. **Code changed: `lib/recipe-cost.js` + `lib/recipe-rollup.js`.**
 
 2026-08-26 · v4.85 — **§30 RULE 3 MOVES FROM THE CALLERS TO THE WRITE, AND §30 RULE 7 GETS ITS FIRST PARTIAL IMPLEMENTATION.** The rules are UNTOUCHED; this records an instance and a fix. **The general shape, which is not channel-specific: a rule enforced by the callers of a write is a convention, and a convention is declined by whichever caller nobody checked.** Here the rule "a value binding our record to an external system is selected from values that system supplied" was enforced in the browser by two separate client gates, both correct, and by nothing underneath them. **The caller that declined it was not the one anyone suspected.** The screen refuses a TYPED name that its catalogue does not hold; what it cannot refuse is a catalogue that a person filled in — the paste escape hatch assigns pasted text into the client-side list, after which every client check agrees the pasted string came from the channel, because on the client it now did. 138 mappings were written that way in under four minutes on 2026-06-22, one of them onto a name the store has never reported, which then failed every two hours for two months. **The fix reads a table the operator cannot write to** — only the scraping daemon fills it — so the property holds for every caller, including ones not yet written. No override, no force flag: a name that cannot be verified is refused. **TWO REFUSALS, NOT ONE, and the distinction is §30 rule 4 rather than ergonomics**: "this name is not in the catalogue" is a verdict about the name, and "this store has no catalogue" is a check that could not run, and reporting the second as the first tells an operator their correct name is wrong. **Clearing is NOT gated, and the ordering is load-bearing**: an empty name is a removal rather than a claim about a listing, and gating it would make the one row that fails the check unremovable — a fault that traps its own subject is worse than the one it replaces. **The gate is WRITE-TIME ONLY, with no sweep**: 393 of 394 stored names re-save cleanly, the one that does not keeps its value untouched and is refused only on the next write of it, and if the channel lists that name again the same write is accepted. **A REMEDY MUST NOT BE THE ACTION THAT WAS REFUSED** — the catalogue could previously only be refreshed by running the matcher, which is the thing now gated, so the refresh became its own control that applies nothing. **Rule 7 is now PARTLY met on this channel and the remaining gap is named rather than glossed**: the change, the previous value, the new value and the operator are recorded, but whether a matcher or a person chose the name is CALLER-DECLARED, because nothing server-side can tell them apart — a claim in the trail, not a fact, and recorded as such so a later reader does not treat it as evidence. **A pre-existing audit fault is written down and explicitly NOT fixed**: tenant and kitchen user ids are separate sequences that collide, so an audit row can carry one person's id beside another person's username; read the username, never the id. It affects every route that logs from the tenant realm and belongs to shared middleware. **And a correction: the finding that prompted this was wrong about which caller was open, in a way that reached the brief that commissioned the fix.** The fix was right and its stated reason was not; both the error and its propagation are marked in place in `docs/meituan-findings.md` finding 11 rather than folded away. The evidence — the two refusal codes, the paste mechanism, the 393/394 split, the audit fields and the id collision — is findings 11 and 12 in that document and deliberately NOT restated here. An instance and a fix that reverse no earlier decision, hence a patch. **Code changed: `d7848b62`.**
 
@@ -4039,6 +4041,70 @@ A concrete instance of the lifecycle question above: Roots' `recipes` and `ingre
 **Every one of the 40 rows was ultimately settled by a human who knows the kitchen, not by any of the three tests alone.** Final split: 27 made, 13 bought, 0 left ambiguous.
 
 **The rule this leaves behind, for this tenant's remaining legacy rows and for any future tenant's migration:** none of these signals is trustworthy as a silent discriminator, including in combination. Migration tooling built on this classification must surface each candidate for a person to confirm and must not act on its own judgement — the three-signal audit above is evidence for that requirement, not a formula that replaces it.
+
+### §29 addendum — which of a recipe's costs travel with the material
+
+**A COST DERIVED FROM MAKING A THING IS NOT AUTOMATICALLY A COST OF USING IT.**
+Where the output of one recipe becomes an input to another, only the costs
+incurred in producing the quantity consumed travel with it. Costs incurred in
+SELLING it — packaging, and anything else attaching to a finished sellable unit
+rather than to the material — do not, and must not be carried into a parent that
+never incurs them.
+
+**The kitchen reality this rests on**, confirmed directly rather than inferred: a
+batch is part-sold as retail units in serving-sized containers, and part-held in
+bulk for later use as a material. The bulk half goes into reused kitchen tubs,
+which are not a tracked cost. The retail container is therefore a cost of the
+sellable unit and of nothing else.
+
+**The settled answer:**
+
+| cost | travels with the material? |
+|---|---|
+| ingredients | **yes** — they are the material |
+| labour | **yes** — work on a bulk batch was genuinely performed, and the parent is consuming its product |
+| overhead | **yes**, provisionally — same argument as labour, but see the warning below |
+| packaging | **no** — it belongs to the serving that is sold |
+
+**Labour and overhead are not in live use today.** Exactly one recipe carries
+either, and it backs no material, so both answers are inert. They are settled now
+precisely because settling them costs nothing yet.
+
+> ⚠️ **OVERHEAD IS NOT FINISHED, AND THIS RULE DOES NOT CLOSE IT.** Overhead is a
+> PERCENTAGE OF INGREDIENT COST, not a flat amount. So when a parent applies its
+> own overhead percentage to a line that already carries the child's overhead, it
+> **compounds rather than duplicates** — a different fault from the one this rule
+> fixes, and one this rule's answer does not address. Nothing exercises it today.
+> **It needs its own answer, and nobody should read "overhead travels" as having
+> given one.**
+
+**Two supporting notes, both load-bearing:**
+
+1. **Which costs travel is a property of the COST, not of the recipe.** Deciding
+   it once per cost type is cheaper than deciding it per recipe forever, and it is
+   the decision that actually unblocks a fix. A per-recipe answer would be a
+   setting, and a setting is a thing to get wrong 137 times.
+
+2. **The exclusion belongs where the material's unit cost is DERIVED, not where a
+   parent READS it.** Waste costing already excludes packaging at the consumer and
+   documents why; doing the same here would make every consumer re-decide, and a
+   consumer that forgot would be silently wrong. Deriving it once means one place
+   can be read to learn the answer.
+
+   This is also why the implementation is a **declared table of which components
+   travel** rather than a subtraction at the single call site. The obvious version
+   — subtract packaging where the material cost is read — works today and is a
+   trap: the next cost under question lands as a second subtraction in a second
+   place with its own arithmetic, and "which costs travel" acquires two answers
+   that drift. Written as a table, changing the answer is editing one boolean.
+
+**A side effect worth recording: this repairs waste costing**, which was already
+trying to do the right thing and being defeated. Waste deliberately rebuilds a
+packaging-free batch total, but a made material arrived inside the ingredient
+subtotal with packaging already folded in, so the exclusion was bypassed on every
+recipe consuming one. It now holds without waste changing at all.
+
+Evidence and the worked example: `docs/packaging-findings.md` findings 1 and 15.
 
 ## 30. Channel sync — what must stay true
 
