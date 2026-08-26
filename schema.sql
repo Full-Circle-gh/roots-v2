@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS recipes (
   shelf_life    TEXT,
   storage       TEXT,
   notes         TEXT,
+  -- 'made' | 'repacked'. Filing only: what kind of thing this recipe is, so a
+  -- bulk sack poured into retail bags can be told from something genuinely
+  -- cooked. Stored, never inferred, and editable per recipe -- the one-line
+  -- heuristic the backfill uses (database.js recipe_type_backfill_v1) is a
+  -- starting point, not a truth. NOTHING may gate on this: cost, margin, the
+  -- recipe-to-product link, nested recipes and the material link all behave
+  -- identically whichever value a recipe carries.
+  recipe_type   TEXT DEFAULT 'made',
   is_active     INTEGER DEFAULT 1,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP

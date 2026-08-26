@@ -471,8 +471,8 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO recipes
-      (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+      (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, recipe_type)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       nameEn, nameCn,
       null, // SKU is UNIQUE — let user assign a new one
       src.category,
@@ -481,7 +481,10 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
       // Per-serving size doesn't change when you scale the batch — same portions, just more of them.
       // (v1 scaled it too, but that's a bug. Leaving it unchanged here.)
       src.serving_size,
-      src.shelf_life, src.storage, src.notes, src.image_data
+      src.shelf_life, src.storage, src.notes, src.image_data,
+      // A copy of a repack is a repack. Carried over rather than left to the
+      // column default, which would silently refile it as made.
+      src.recipe_type || 'made'
     );
     const newId = r.lastInsertRowid;
     const insIng = db.prepare(`INSERT INTO recipe_ingredients
