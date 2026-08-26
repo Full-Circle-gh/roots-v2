@@ -12128,6 +12128,29 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes .rcp-check { display: inline-flex; align-items: center; gap: 7px;
     font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
 
+  /* Made / Repacked chips — the Products list's category chips
+     (.pa-chip) in this section's own prefix: full-round pill, hairline, Ink
+     fill when active, and the count as a neutral rounded token rather than a
+     bare number. Same shape, same measurements, nothing new invented. The
+     row sits under the toolbar, where Products puts its own. */
+  #tab-recipes .rcp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+  #tab-recipes .rcp-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+    font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer;
+    transition: background .15s var(--ease-out, ease), border-color .15s var(--ease-out, ease), color .15s var(--ease-out, ease);
+  }
+  #tab-recipes .rcp-chip:hover { border-color: var(--td-text2); color: var(--td-text); }
+  #tab-recipes .rcp-chip.is-on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-recipes .rcp-chip-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 17px; height: 16px; padding: 0 6px; border-radius: 999px;
+    background: var(--td-raised); color: var(--td-text2);
+    font-size: 11px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  #tab-recipes .rcp-chip.is-on .rcp-chip-n { background: rgba(var(--td-heat-rgb), .16); color: var(--td-paper); }
+
   /* ── shared controls (both sections) ── */
   #tab-recipes .rcp-input, #tab-recipes-record .rcp-input {
     border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface, #fff);

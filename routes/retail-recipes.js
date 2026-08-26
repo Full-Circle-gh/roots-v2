@@ -73,6 +73,21 @@ function skuClash(sku, excludeId) {
   };
 }
 
+// Recipe type — the two values recipes.recipe_type may hold, and
+// nothing else. Anything unrecognised is refused rather than stored, so the
+// filter can never meet a third state it has no chip for.
+//
+// `undefined` back means "the client didn't say", which is NOT the same as
+// 'made': the update below leaves the stored value alone in that case, so a
+// caller that predates this field can never quietly reclassify a repack.
+// Create has no such history to protect and defaults to 'made'.
+const RECIPE_TYPES = ['made', 'repacked'];
+function readRecipeType(b) {
+  if (b.recipe_type === undefined || b.recipe_type === null || b.recipe_type === '') return undefined;
+  const v = String(b.recipe_type);
+  return RECIPE_TYPES.includes(v) ? v : undefined;
+}
+
 // The body fields a recipe carries, listed once so create and update read the
 // same set — matches retail-materials.js's readBody() convention.
 function readBody(b) {
@@ -81,6 +96,7 @@ function readBody(b) {
     category: b.category || null,
     batch_size: b.batch_size || null, servings: b.servings || null, serving_size: b.serving_size || null,
     shelf_life: b.shelf_life || null, storage: b.storage || null, notes: b.notes || null,
+    recipe_type: readRecipeType(b),
   };
 }
 
@@ -142,6 +158,12 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
     return {
       id: r.id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, category: r.category,
       batch_size: r.batch_size, servings: r.servings, is_active: r.is_active, is_favorite: !!r.is_favorite,
+      // Filing only — the list's Made/Repacked filter is the only thing that
+      // reads it. Deliberately NOT a server-side WHERE: the filter chips show
+      // a count each, and a count of what the server just filtered out is not
+      // a count anyone can act on. The client filters the rows it already has,
+      // exactly as the Products list does with its category chips.
+      recipe_type: r.recipe_type || 'made',
       // batchCost is always computable (it needs neither batch_size nor
       // servings) — the list's cost column falls back to it when neither
       // per-unit figure can be worked out, which real data shows is common
@@ -226,9 +248,10 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
   const lines = Array.isArray(req.body.ingredients) ? req.body.ingredients : [];
   try {
     const result = db.prepare(`INSERT INTO recipes
-      (name_en,name_cn,sku,category,batch_size,servings,serving_size,shelf_life,storage,notes)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes);
+      (name_en,name_cn,sku,category,batch_size,servings,serving_size,shelf_life,storage,notes,recipe_type)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes,
+           b.recipe_type || 'made');
     const recipeId = result.lastInsertRowid;
     if (lines.length) {
       const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
@@ -261,8 +284,10 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   try {
     db.prepare(`UPDATE recipes SET
       name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,
+      recipe_type=COALESCE(?,recipe_type),
       updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes, req.params.id);
+      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes,
+           b.recipe_type === undefined ? null : b.recipe_type, req.params.id);
     if (lines) {
       db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
       const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');

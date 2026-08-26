@@ -452,6 +452,50 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('link_made_materials_v1');
   }
 } catch (e) { console.error('[migration link_made_materials_v1]', e); }
+// Recipe type — 'made' | 'repacked'. A repacking recipe is a bulk sack
+// bought in and poured into retail packs; a made recipe is something the
+// kitchen actually assembles. Both are recipes, both cost the same way, and
+// the two sit in one list — the type is what lets an operator file and filter
+// them apart.
+//
+// STORED, NOT INFERRED. The backfill below reads line counts once and then
+// never again: the value is the operator's after that, and a recipe whose
+// lines change does not silently change type.
+//
+// FILING ONLY. Nothing gates on this column and nothing may start to. Cost,
+// margin, the recipe-to-product link, nested recipes and the material link
+// all read exactly as they did before it existed — see the same note in
+// schema.sql. Defaulting to 'made' is what keeps that true for a new recipe:
+// nobody is asked to classify anything before they can save.
+addColumn('recipes', 'recipe_type', "TEXT DEFAULT 'made'");
+// One-shot backfill: exactly one ingredient line => repacked, anything else
+// => made. Guarded by _migrations so it runs once and never re-judges a
+// recipe the operator has since corrected by hand — the whole point of
+// storing the value.
+//
+// The rule is a STARTING POINT, not a truth. It is clean for the tenant it
+// was measured against (all 31 single-line recipes there are repacks, and no
+// genuine recipe has fewer than two lines), and it will be wrong somewhere
+// else — a one-line infusion is a real recipe, a two-line repack with a
+// label line is a real repack. That is why the column is editable.
+//
+// Writes recipe_type ONLY. It touches no cost column, no link, no lines.
+try {
+  const ranRecipeType = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('recipe_type_backfill_v1');
+  if (!ranRecipeType) {
+    db.exec('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    const marked = db.prepare(`
+      UPDATE recipes SET recipe_type = 'repacked'
+       WHERE (SELECT COUNT(*) FROM recipe_ingredients ri WHERE ri.recipe_id = recipes.id) = 1
+    `).run();
+    const made = db.prepare("UPDATE recipes SET recipe_type = 'made' WHERE recipe_type IS NULL OR recipe_type = ''").run();
+    const total = db.prepare('SELECT COUNT(*) AS n FROM recipes').get().n;
+    console.log(`[migration recipe_type_backfill_v1] ${total} recipe${total === 1 ? '' : 's'}: `
+      + `${marked.changes} repacked, ${total - marked.changes} made`
+      + (made.changes ? ` (${made.changes} had no value and were set to made)` : ''));
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('recipe_type_backfill_v1');
+  }
+} catch (e) { console.error('[migration recipe_type_backfill_v1]', e); }
 // The tenant-facing FEATURE_CATALOG switch is renamed 'materials' -> 'production'
 // (it now gates Recipes too, not just the materials masterlist — one switch, no
 // second FEATURE_CATALOG entry). storefront_config stores one row per dotted

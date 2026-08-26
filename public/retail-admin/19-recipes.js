@@ -87,12 +87,37 @@
     return reason === 'unpriced_lines' ? f(unpriced) : f();
   };
 
+  // ── Recipe type ───────────────────────────────────────────────────────────
+  // What kind of thing a recipe is, for FILING ONLY. "Made" is something the
+  // kitchen assembles; "Repacked" is bulk bought in and poured into retail
+  // packs. Nothing on this screen or anywhere else behaves differently because
+  // of it — cost, the products a recipe makes, the material it backs and every
+  // nested-recipe rollup read exactly the same whichever value a recipe
+  // carries, and nothing may start gating on it.
+  //
+  // ── Where the Chinese came from ────────────────────────────────
+  // §30 rule 3 and docs/tacet-delivery-vocabulary.md Rule 4 say the same
+  // thing: copy from the source, never compose. Both words below are COPIED
+  // from language already live in this tenant's own data, which is what that
+  // rule protects — the same way 物料 was taken rather than invented:
+  //
+  //   自制  — from the recipe category "Homemade in the Kitchen 厨房自制"
+  //   分装  — from the material 真空袋分装器
+  //
+  // Recorded here so a later reader can check the source rather than assume
+  // these were composed. Confirmed by Ash on 2026-08-26.
+  const RECIPE_TYPES = [
+    ['made',     () => T('Made', '自制')],
+    ['repacked', () => T('Repacked', '分装')],
+  ];
+
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
   let _rows = [];
   let _cats = [];
   let _cat = '';
   let _q = '';
+  let _type = '';          // '' = all | 'made' | 'repacked' — client-side, opens on all
   let _archived = false;
   let _searchTimer = null;
 
@@ -178,7 +203,27 @@
         <label class="rcp-check"><input type="checkbox" ${_archived ? 'checked' : ''} onchange="rcpSetArchived(this.checked)"> ${esc(T('Archived', '已归档'))}</label>
         <span class="rcp-spacer"></span>
         <button class="rcp-btn primary" data-cap="recipes:edit" onclick="rcpRecordNew()"><span class="rcp-ic">${I.plus}</span>${esc(T('New recipe', '新建食谱'))}</button>
-      </div>`;
+      </div>
+      ${typeChips()}`;
+  }
+
+  // Made / Repacked as a row of chips — the same control the Products list
+  // uses for categories (.pa-chip: full-round pill, hairline, Ink fill when
+  // active, the count as a neutral token beside it), minted here under the
+  // rcp- prefix like every other class on this screen.
+  //
+  // OPENS ON ALL, always, for every tenant. There is no default and no
+  // setting: a tenant whose catalogue is mostly repacks must not open their
+  // Recipes list with most of it hidden.
+  function typeChips() {
+    const count = v => (v ? _rows.filter(r => (r.recipe_type || 'made') === v).length : _rows.length);
+    const chip = (val, label) =>
+      `<button type="button" class="rcp-chip${_type === val ? ' is-on' : ''}" onclick="rcpSetType('${val}')">`
+      + `${esc(label)}<span class="rcp-chip-n">${count(val)}</span></button>`;
+    return `<div class="rcp-chips">`
+      + chip('', T('All', '全部'))
+      + RECIPE_TYPES.map(([v, lbl]) => chip(v, lbl())).join('')
+      + `</div>`;
   }
 
   function paintList() {
@@ -211,9 +256,20 @@
     return null;
   }
 
+  // The rows in view — everything the server returned, narrowed by the type
+  // chip. Type is the ONE filter applied client-side (search / category /
+  // archived are all server-side query params): the chips carry a count each,
+  // and those counts have to be counts of rows the server did not already
+  // drop, or they would only ever read 0 for whichever chip is not picked.
+  function rowsInView() {
+    if (!_type) return _rows;
+    return _rows.filter(r => (r.recipe_type || 'made') === _type);
+  }
+
   function tableHtml() {
-    if (!_rows.length) {
-      const blank = _q || _cat;
+    const view = rowsInView();
+    if (!view.length) {
+      const blank = _q || _cat || _type;
       return `
         <div class="rcp-card rcp-empty">
           <div class="rcp-empty-ico">${I.book}</div>
@@ -223,7 +279,7 @@
             : T('A recipe is what you make and what it costs — ingredients, steps, batch size. Add the first one.', '食谱是你制作的东西及其成本 —— 原料、步骤、批量大小。新建第一份。'))}</p>
         </div>`;
     }
-    const rows = _rows.map(rcp => {
+    const rows = view.map(rcp => {
       const pc = primaryCost(rcp);
       const costCell = pc
         ? `<span title="${esc(pc.title)}">${pc.text}</span>`
@@ -265,6 +321,9 @@
       </div>`;
   }
   window.rcpSetCat = function (c) { _cat = c; load(); };
+  // Repaints only — the rows are already here, so there is no fetch and no
+  // flash of “Loading…” between two states of the same list.
+  window.rcpSetType = function (t) { _type = t || ''; paintList(); };
   window.rcpSetArchived = function (on) { _archived = !!on; load(); };
   window.rcpSearch = function (v) {
     _q = v;
@@ -288,7 +347,7 @@
 
   window.rcpRecordNew = function () {
     setRecord({
-      id: null, name_en: '', name_cn: '', sku: '', category: '',
+      id: null, name_en: '', name_cn: '', sku: '', category: '', recipe_type: 'made',
       batch_size: null, servings: null, serving_size: null,
       shelf_life: '', storage: '', notes: '', is_active: 1,
       ingredients: [], steps: [], costData: null, cost: null,
@@ -449,6 +508,9 @@
           ${field(T('Name (English)', '名称(英文)'), input('name_en', m.name_en, 'maxlength="120"'))}
           ${field(T('Name (中文)', '名称(中文)'), input('name_cn', m.name_cn, 'maxlength="120"'))}
           ${field(T('Category', '分类'), select('category', m.category, catOpts))}
+          ${field(T('Type', '类型'), select('recipe_type', m.recipe_type || 'made', RECIPE_TYPES.map(([v, lbl]) => [v, lbl()])),
+                   T('Made here, or bulk bought in and repacked. Filing only — it changes nothing about cost.',
+                     '自制,或整批采购后分装。仅用于归类 —— 不影响成本。'))}
           ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
                    T('Kept forever, even after archiving.', '归档后仍永久保留。'))}
         </div>
@@ -897,6 +959,7 @@
       name_cn: String(val('name_cn') || '').trim(),
       sku: String(val('sku') || '').trim(),
       category: val('category') || '',
+      recipe_type: val('recipe_type') || 'made',
       batch_size: val('batch_size') === '' ? null : Number(val('batch_size')),
       servings: val('servings') === '' ? null : Number(val('servings')),
       serving_size: val('serving_size') === '' ? null : Number(val('serving_size')),
