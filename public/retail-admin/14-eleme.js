@@ -656,7 +656,10 @@
     // Nothing validates a stored name at rest, so this is the check that was
     // missing: the name is compared against what the store actually supplied.
     if (!elNameKnown(storeCode, name)) {
-      return { ...base, k: 'att', t: cuT('Listing not found', '找不到该商品'),
+      // gateSaysIt: the name field below prints its own sentence for exactly
+      // this case, so the panel skips ours and the row keeps it. Two sentences
+      // saying one thing under one heading is the clutter this screen sheds.
+      return { ...base, k: 'att', gateSaysIt: true, t: cuT('Listing not found', '找不到该商品'),
         why: cuT('No listing on this store carries this exact name, so every push resolves to nothing. Pick the name from the list rather than typing it.',
                  '该门店没有完全同名的商品，每次推送都会落空。请从列表中选择商品名，不要手动输入。') };
     }
@@ -889,7 +892,7 @@
       // Why, in a sentence, on the one product in front of you. On-demand help:
       // it appears only on a mapping that has the problem, never as a standing
       // paragraph over the whole page.
-      (s2.why ? '<div class="el-sub el-whysub">' + esc(s2.why) + '</div>' : '') +
+      (s2.why && !s2.gateSaysIt ? '<div class="el-sub el-whysub">' + esc(s2.why) + '</div>' : '') +
       '<div class="el-plbl el-plbl-row">' +
         '<span>' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</span>' +
         (name
