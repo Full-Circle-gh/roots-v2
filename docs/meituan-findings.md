@@ -1,14 +1,21 @@
 # meituan — Findings
 
-Eleven findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing · 4")
+Twelve findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing · 4")
 and ending somewhere else entirely: the badge that opened it and the screen it
 sends you to count two different things, and the real exposure was in neither of
 them.
 
-**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10 and 11
-came from a second pass later the same day, and finding 10 SHIPPED A CODE
-CHANGE** — `bc0c6144`, one line in the drift sweep. Read the Context section at
-the end before treating this document as the record of an untouched system.
+**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10, 11 and
+12 came from later passes the same day, and TWO OF THEM SHIPPED CODE** —
+`bc0c6144` (one line in the drift sweep) and `d7848b62` (the mapping-name gate
+and its audit trail). Read the Context section at the end before treating this
+document as the record of an untouched system.
+
+**Finding 11 carries a correction that was WRONG IN THIS DOCUMENT and was acted
+on before it was caught** — a client-side gate that already existed was reported
+as absent, and the brief commissioning finding 12 repeated the error back. The
+gate was still the right fix; the reasoning given for it was not. Marked in
+place, not folded away.
 
 Finding 1 is first because it is the one worth acting on, not because it was
 found first. It was found last.
@@ -21,8 +28,10 @@ holds anywhere a per-row status is read as a per-target verdict; and findings 7
 and 8 are the Eleme mapping-screen defects (`docs/eleme-findings.md` finding 5)
 found again on a second screen, one of them verbatim; finding 10 holds anywhere a
 self-firing recovery loop selects its targets without asking whether they are
-still in use; and finding 11 holds anywhere a screen auto-applies a match without
-recording that a matcher made it.
+still in use; finding 11 holds anywhere a screen auto-applies a match without
+recording that a matcher made it; and finding 12 holds anywhere a rule about
+external identity is enforced by the callers of a write rather than by the write
+itself.
 
 `docs/eleme-findings.md` is the companion document and is cross-referenced
 throughout rather than restated. The rules both documents produced are in
@@ -1022,9 +1031,14 @@ Meituan held 2 before this fix; GZ Grocery holds 1.
 
 ## 11. "Match names" is a third matcher, client-side, unscored and auto-applying, and it wrote the wine mapping (found 2026-08-26)
 
-Status: open. **No code changed.** Recorded separately from finding 10 because it
-is a property of a screen rather than of the sweep, and because it is where
+Status: the matcher itself is **unchanged**; the route it writes through was
+**gated the same day — finding 12**. Recorded separately from finding 10 because
+it is a property of a screen rather than of the sweep, and because it is where
 finding 10's worked example came from.
+
+> **Line numbers below are as this finding was written**, before finding 12 added
+> ~123 lines to `public/retail-admin/11-meituan.js`. Symbol names are stable;
+> the numbers in the corrected sections at the end of the finding are current.
 
 ### Three different matchers, and they are routinely confused
 
@@ -1156,24 +1170,83 @@ Meituan is narrower: that the choice was *made by a matcher*, and what it
 replaced. Finding 9 of this document records the same rule's other half, the
 column that would record the target id existing and being read by nothing.
 
-### The route has no catalogue gate, so the rule lives in the caller
+### The route had no catalogue gate, so the rule lived in the caller
 
-**Match names itself cannot write a non-catalogue name.** Every string it applies
-comes from `_listings` or `_listingSkus`, and the "Use …" fallback chip runs
-through `mtSuggestionIfListed` `:966`, which composes a name from the product and
-then returns `''` **unless the channel sent that exact string back**.
+Status of this section: **the gate was added on 2026-08-26 — see finding 12.**
+The description below is of the state that produced the fault, and it carries a
+correction that was shipped before it.
 
-**But the endpoint it writes through does not check.**
-`routes/meituan-admin.js:161` takes `meituanName`, trims it, and stores it. There
-is no comparison against `meituan_listings` anywhere in that handler. The same
-route backs the free-text field on the row panel,
-`<input type="text" class="mt-name-input" list="mt-listings-dl-…">` at `:846`,
-where a typed name matching nothing is **flagged amber by `mtNameBad` and never
-refused.**
+**Match names itself cannot write a name that is not in its own `_listings`.**
+Every string it applies comes from `_listings` or `_listingSkus`, and the
+"Use …" fallback chip runs through `mtSuggestionIfListed` `:966`, which composes
+a name from the product and then returns `''` **unless the channel sent that
+exact string back**. The load-bearing words are *its own* — see the correction.
 
-So the catalogue rule is **a property of the caller, not of the route.** §30 rule
-3, *a value binding our record to an external system must be selected from values
-that system supplied*, is enforced by one caller and by nothing underneath it.
+**And the endpoint it wrote through did not check.**
+`routes/meituan-admin.js:161` took `meituanName`, trimmed it, and stored it, with
+no comparison against `meituan_listings` anywhere in the handler.
+
+So the catalogue rule was **a property of the caller, not of the route** — §30
+rule 3, *a value binding our record to an external system must be selected from
+values that system supplied*, enforced by the callers and by nothing underneath
+them.
+
+> **Correction, 2026-08-26 — left visible on purpose**, in the same style as the
+> correction in finding 3 and the one in `docs/eleme-findings.md` finding 8.
+>
+> This section first read: *"The same route backs the free-text field on the row
+> panel … where a typed name matching nothing is **flagged amber by `mtNameBad`
+> and never refused**."* **That was wrong.**
+>
+> - **`mtNameCommit` (`public/retail-admin/11-meituan.js:1569`) already refuses a
+>   typed name the client's catalogue does not hold**, and reverts the field to
+>   the stored value rather than saving. It has done since `c06d7b03`. A typed
+>   non-match never reached the route.
+> - **`mtNameBad` `:603` describes an ALREADY-STORED name**, not one being typed.
+>   It is what paints a stored name amber when the catalogue does not carry it.
+>   The two were conflated: a display rule was read as the commit rule.
+>
+> **This error propagated.** It was reported to Ash in that form, and the brief
+> that commissioned the gate repeated it back — *"the free-text field on the row
+> panel can write a name matching nothing"* — so the fault was carried into the
+> instructions for fixing it. Recorded because that is the interesting part: a
+> wrong finding does not stay in the document it was written in.
+>
+> **What does NOT change:** the route was ungated, and the gate in finding 12 is
+> still the right fix. A client gate is a convention that every caller may
+> decline; a route gate is a property. And the live hole was never typing —
+> it is the paste path, below, which the old text did not name at all.
+
+### The live hole was `mtPasteApply`, and it is how the wine was written
+
+Found while building finding 12's gate. This is the mechanism the section above
+was reaching for and missed.
+
+`_listings` is a **client-side array**, and the Paste escape hatch assigns pasted
+text straight into it — `public/retail-admin/11-meituan.js:1524`:
+
+```js
+    _listings[code] = Array.from(new Set(names));
+```
+
+**After that line every client check agrees the pasted string is a catalogue
+name, because on the client it now is one.** `mtNameKnown` finds it.
+`mtNameCommit` accepts it. `mtMatchListing` matches against it. `mtNameBad` calls
+the stored result fine. Not one of those checks is wrong; they are all reading a
+list that a person filled in.
+
+That is how 2026-06-22 happened. The 天河 scrape had failed that day, so the
+cache held no names, the titles came from the paste box, and 138 mappings were
+written in under four minutes against a list nothing had verified — including
+`Recanati Winery Yasmin White - 2023`, which 天河 has never reported.
+
+**The route gate closes it, and the reason is worth stating precisely: it reads
+`meituan_listings`, and the ONLY writer of that table is the scraping daemon**
+(`scripts/meituan-daemon.js:1183-1195`, which deletes the store's rows and
+re-inserts what the scrape returned; the 闪购 daemon adds to it from its own
+catalogue read at `scripts/shangou-daemon.js:710`). A pasted name cannot reach
+that table from any client path. The gate is not checking a better list — it is
+checking a list the operator cannot write to.
 
 ### No capability gates it today
 
@@ -1191,6 +1264,166 @@ that system supplied*, is enforced by one caller and by nothing underneath it.
 This is `docs/eleme-findings.md`'s reads-open / fail-open shape on a **write**
 that is destructive in the §30 rule 3 sense. **Nothing was changed. It is
 recorded for a decision, not fixed here.**
+---
+
+## 12. The mapping name is now gated at the route, and the write is recorded (built and SHIPPED 2026-08-26)
+
+Status: **shipped on `main` at `d7848b62`**, deployed, CI green, all daemons back
+up. This is the fix for finding 11; that finding is the evidence and this one is
+what was done about it.
+
+### The gate
+
+`lib/meituan-map-write.js` `applyMapName()`, called by
+`routes/meituan-admin.js:175` and by nothing else. **The name must appear in
+`meituan_listings` for that store, byte for byte.** No override, no force flag,
+no bypass parameter.
+
+It sits in `lib/` rather than inline in the handler for one reason: the whole
+behaviour can then be driven headless against a fixture. Requiring the route
+pulls in `routes/retail.js` and the app's database layer, which is not read-only
+— the working note at the end of this document. The lib requires **nothing**, so
+a harness that loads it cannot reach production. The route adds no rule of its
+own.
+
+### Two refusal codes, and why they are not one
+
+| code | when | what it means |
+|---|---|---|
+| `name_not_in_catalogue` | the store has listings, this name is not among them | a verdict about the name |
+| `catalogue_not_read` | the store has **no** listings at all | the check could not run |
+
+Both refuse, and the write is identical in both cases — so the split is not about
+behaviour, it is about what the system is entitled to claim. **§30 rule 4 asks a
+check that cannot run to say so rather than return a verdict.** With an empty
+catalogue the comparison answers "no" for every string including the correct one,
+and reporting that as *your name is wrong* is a verdict the code has no grounds
+to reach. The screen's own `mtNameCommit` already made this distinction
+(`MT_PENDING_CN.cannotCheck` versus `.reverted`); the route now makes the same
+one, so the two surfaces cannot disagree about which fault an operator is
+looking at.
+
+Both carry the catalogue's age and name the remedy. Both are **English on both
+sides**, in a `REFUSAL_PENDING_CN` const mirroring the screen's `MT_PENDING_CN`:
+no sourced Chinese pair exists for either sentence and §30 rule 3 forbids
+composing one. Live, on 2026-08-26:
+
+```
+That name is not one of the listings read from tianhe. The catalogue was last
+read on 2026-08-24 06:46:51 UTC, so it may be out of date — refresh the
+catalogue on the Meituan page, then pick the name from the list.
+```
+
+HTTP **409**, not 400: the request is well formed and the state is what refuses
+it. `{ error, message, catalogue: {count, scrapedAt} }` — the admin `api()`
+helper already renders `"<message> [<code>]"` and hands callers `err.code`, so
+the sentence reaches the operator with no new mechanism.
+
+### Clearing runs BEFORE the gate, deliberately
+
+An empty or whitespace-only name is a **removal**, not a claim about a listing,
+so there is nothing to verify and the gate must not stand in its way. The
+ordering is load-bearing rather than incidental: gating the clear would freeze
+every product whose stored name no longer verifies — which is product 254 today,
+the one row in the estate that fails the check. A fault that makes its own
+subject unremovable is worse than the fault it replaces.
+
+### Write-time only, no sweep
+
+**The gate never reads existing rows and nothing re-checks them.** A stored name
+that does not verify stays exactly as it is — name, switch and `updated_at`
+untouched — and is refused only if someone writes that name again. Product 254
+still holds `Recanati Winery Yasmin White - 2023` with `sync_enabled = 1` and
+`updated_at = 2026-06-22 15:45:06`, before the deploy and after it.
+
+Nor does the gate hold a grudge: if 天河 lists that wine again, the next
+catalogue refresh picks the name up and the same write is accepted. Verified.
+
+**Re-saving all 394 stored names gives 393 accepted and 1 refused**, and the 1 is
+the wine. Nothing else in the estate is affected by the gate's arrival.
+
+### The catalogue got its own refresh
+
+Until now the only way to update `meituan_listings` was to run Match names — the
+thing being gated. That is the wrong shape once a stale catalogue is what refuses
+a write: the operator meets a refusal and the remedy must not be the action that
+was refused. `mtRefreshCatalogue()` enqueues the scrape through the **same**
+route the matcher uses (`POST …/listings/refresh`), polls, reloads the cache, and
+**applies nothing** — it never calls `mtMatchApply`, `mtWriteMap` or the map
+route. Proved by a sha256 over every column of every `meituan_product_map` row,
+identical across both the route's enqueue and the daemon's catalogue replace.
+
+`GET …/listings` now also returns `catalogue: { store_code: {count, scrapedAt} }`,
+and the screen carries a row beneath the store lines saying how many names each
+store reported and when. It could not say that before: on 2026-08-26 天河 was
+267 names from 2026-08-24 and 越秀 203 from 2026-08-23, and nothing on screen
+showed it. The row sits with the store lines rather than in the header because
+§1.7 caps the header at three elements, and because a refusal points there.
+
+**Match names itself was not changed.** Gating the route it writes through was
+enough for this pass; changing the matcher in the same change would have made
+neither half verifiable.
+
+### The write is recorded — §30 rule 7, partly
+
+Finding 11 records that nothing logged a mapping change. Now something does.
+
+**Mechanism: `logActivity` (`middleware/auth.js:43`)** — the audit writer this
+realm already uses (`routes/retail.js` calls it), whose `activity_log` table is
+already backed up and already on a 90-day retention job. A new table would have
+been a second thing to purge, back up and remember to read.
+
+| | |
+|---|---|
+| events | `meituan_map_create`, `meituan_map_name`, `meituan_map_clear` |
+| entity | `meituan_product_map`, id = the product |
+| details | `store_code`, `from`, `to`, `source`, `sync_enabled`, `spec_cleared` |
+| actor | `username` from the session |
+
+`from` and `to` are the point: `meituan_product_map` is last-write-wins with no
+history, which is why product 80's previous name could not be recovered (finding
+3's correction). From now on it can be.
+
+**`source` is CALLER-DECLARED, not established.** The client says `match_names`,
+`manual` or `remove`; **nothing server-side can tell a matcher from a person**,
+because both arrive as the same POST from the same session. It is a claim in the
+trail rather than a fact, and it is recorded that way here so a later reader does
+not treat it as evidence. It is still the difference between knowing and not
+knowing — finding 11 had to reconstruct the answer from row-creation timestamps.
+
+**A refusal writes no audit row.** It is not a change.
+
+### Known, pre-existing, not fixed: `activity_log.user_id` can name the wrong person
+
+Found while testing the audit path. **Not introduced by this change, not fixed by
+it, and not being worked on** — written down so it is not rediscovered as new.
+
+`tenant_users` and `users` are separate id sequences **and they collide**:
+`tenant_users#6` is `warehouse`, `users#6` is `asher`. `logActivity`'s FK guard
+(`middleware/auth.js:50-51`) only checks that *some* `users` row exists for the
+id, so for a colliding id it keeps it, and the row ends up carrying one person's
+id beside another person's username. Where there is no collision (`tenant_users#5`,
+`jass`) the id is correctly nulled and the username kept, which is the documented
+behaviour.
+
+**Read the `username`. Never the `user_id`.** This affects every route that logs
+from the tenant realm, not only this one, which is why fixing it belongs to
+shared middleware and not to a channel change.
+
+### Verification
+
+53 assertions, all passing, headless against a fixture cut read-only out of
+production (394 mappings, 470 listings, 16,255 activity rows): a present name is
+written and audited, an absent one is refused with its reason and writes nothing,
+blanking works including on 254, Match names applies against a current catalogue
+and is refused against a stale or pasted one, the refresh leaves the mapping
+table identical by sha256, and the audit row carries `from` and `to`.
+
+After the deploy, the refusal path was exercised against the **live** database on
+a read-only handle — it returns before any write, so it can be run that way, and
+the acceptance path deliberately was not, because accepting is a write. `芒` —
+the one-character fragment from `docs/eleme-findings.md` finding 9 — is refused.
+
 ---
 
 ## Context — what was and was not done on 2026-08-26
@@ -1216,6 +1449,29 @@ recorded for a decision, not fixed here.**
   `drift_chronic ok, all listings back in sync`, and the latch file
   `data/alert-latch/meituan--drift_tianhe.json` was deleted by the daemon. That
   was the code doing what it is written to do, not a manual clear.
+
+- **Finding 12 then shipped a second code change**, `d7848b62`, at 08:26 UTC —
+  the mapping-name gate, the standalone catalogue refresh and the audit entry.
+  CI green in 1m29s. `roots-v2` 1603 → 1604 and healthy on the deploy's own
+  probes (`/api/retail/categories`, `/config`, `/products` all 200). Being a
+  `lib/` file it bounced every channel daemon — `meituan-sync` 156 → 157,
+  `guanyi-sync` 140 → 141, `eleme-sync` 64 → 65, `gzgrocery-orders` 138 → 139,
+  `qingyun-sync` and `qingyun-sync-yuexiu` 215 → 216, `proxy-watchdog` 57 → 58 —
+  all back `online`, no startup error of their own. `shangou-sync` was named by
+  the installer and deliberately NOT restarted: it was stopped by hand and the
+  deploy honours that. **None of those daemons loads the new file**; the
+  installer's trigger is a `lib/*` prefix match, which is coarse rather than
+  wrong.
+
+- **Still nothing was written to any mapping.** Product 254 holds the same name,
+  the same `sync_enabled` and the same `updated_at` before and after both
+  deploys. The gate is write-time only, and the refusal path was the only half
+  exercised against live data — deliberately, because accepting is a write.
+
+- **No audit entry exists yet.** `activity_log` held zero `meituan_map%` rows
+  before the deploy and zero after it, because no operator changed a mapping in
+  the window. The path is verified against a fixture, not by a live occurrence,
+  and that distinction is left standing rather than manufactured.
 
 - **Product 231 cleared itself during the survey**, by the drift sweep and the
   drain doing their ordinary work at 06:32:41 (finding 3). That was the system,
