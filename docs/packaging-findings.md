@@ -1,6 +1,6 @@
 # packaging — Findings
 
-Sixteen findings, opened 2026-08-26 by a simple question — *what does packaging
+Seventeen findings, opened 2026-08-26 by a simple question — *what does packaging
 cost us* — and ending in a number that was counted twice on eleven materials and
 sixteen recipe lines.
 
@@ -1219,6 +1219,110 @@ save nulling `packaging_type_id` (finding 11), resolve the naming collision
 > **Amended 2026-08-26 — finding 11 is no longer on that list.** It was fixed by
 > a separate, later change (see finding 11's own "The fix"), not by finding 15's.
 > The rest of the sentence stands.
+
+---
+
+## 17. A BLOCKED material never catches up, so finding 15's fix does not reach it (found 2026-08-26)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.**
+
+**THIS IS A STALE-INPUT CONSEQUENCE OF BLOCKING, NOT AN INCOMPLETE EXCLUSION.**
+Stated first because the symptom is identical to the one finding 15 closed, and a
+reader meeting it will reasonably conclude the fix did not work. It did.
+Packaging is removed where a made material's unit cost is DERIVED
+(`lib/recipe-cost.js:184` → `lib/recipe-rollup.js:174`), so every consumer
+inherits the correction and `routes/waste.js:56`'s exclusion is complete. What
+follows is about a material the corrected derivation **never runs for**.
+
+`lib/recipe-rollup.js:205-216` — when `costOneRecipe` refuses, `planRollup`
+records the material in `blocked[]`, sets its override to `null`, and `continue`s:
+
+```js
+    if (!result.ok) {
+      overrides.set(mat.ingredient_id, { cpu: null });
+      …
+      blocked.push({ … oldCpu: mat.cost_per_unit });
+      continue;
+    }
+```
+
+**No write happens on that branch, and that is correct** — it is the rule
+`lib/recipe-rollup.js:20-28` states as *"BLOCKED NODES STOP THE CASCADE, THEY DO
+NOT ZERO IT"*, which is what stops a blocked material reading as free. The
+consequence is the part worth recording: **the row keeps whatever
+`cost_per_unit` it already had, indefinitely, and nothing marks it as stale.**
+
+**So a material blocked since before `c86ef74e` still holds a
+packaging-inclusive figure**, and a wasted product whose recipe consumes it is
+costed with that packaging included. Not because the exclusion is incomplete, but
+because the corrected derivation has never been allowed to run for that material.
+The block is the cause; the stale number is the symptom.
+
+**Seven conditions block, not the four most often named:**
+
+| reason | line |
+|---|---|
+| `recipe_missing` | `:132` |
+| `recipe_archived` | `:133` |
+| `no_ingredient_lines` | `:145` |
+| `unpriced_lines` | `:147` |
+| `unreconciled_units` | `:162` |
+| `no_batch_size` | `:164` |
+| `no_cost_per_unit` | `:173` |
+
+**The count is UNKNOWN and UNMEASURED.** No database was opened for this finding —
+the container it was written in holds no copy of `roots.db` and no route to the
+box. How many linked materials are blocked, how many of those were last written
+before `c86ef74e`, and whether any is consumed by a recipe backing a product that
+is actually wasted, are all open. **The clearing case is open too**: a block that
+lifts causes the next trigger to write the corrected figure, so this self-heals
+per material at an unknown rate.
+
+### How to measure it — and how NOT to
+
+> ⚠️ **DO NOT REQUIRE THE APPLICATION'S MODULES AGAINST PRODUCTION TO ANSWER
+> THIS.** `require('./database')` is not a read: `database.js:4033-4039` runs
+> **`DELETE FROM activity_log WHERE created_at < …`** at module load, on every
+> load, gated only by `ACTIVITY_LOG_RETENTION_DAYS` (default 90). **A "read-only"
+> diagnostic that pulls in the app has already purged the activity log once.**
+> That log is currently the only surviving record of what each packaging type
+> cost when it was created (`routes/lookups.js:87`), which finding 11 depends on
+> for recovery — so the tool used to measure this finding can destroy the
+> evidence another one needs. The same hazard is recorded in
+> `docs/meituan-findings.md`'s working note.
+
+Two safe routes, both of which avoid loading any application module:
+
+1. **`sqlite3 -readonly` against production**, or equivalently
+   `sqlite3 'file:…?mode=ro'`. Read the candidates directly; derive nothing:
+
+```sql
+-- Linked materials, with when each was last written. Any row whose
+-- updated_at predates c86ef74e (2026-08-26 17:30:56 +0800) is a candidate.
+SELECT id, name_en, sku, cost_per_unit, source_recipe_id, updated_at
+  FROM ingredients
+ WHERE source_recipe_id IS NOT NULL
+ ORDER BY updated_at;
+
+-- Which of those a wasted product could actually reach.
+SELECT DISTINCT p.id, p.name_en
+  FROM products p
+  JOIN recipe_ingredients ri ON ri.recipe_id = p.recipe_id
+  JOIN ingredients i         ON i.id = ri.ingredient_id
+ WHERE i.source_recipe_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM waste_entries w WHERE w.product_id = p.id);
+```
+
+2. **A detached fixture against a restored backup** — restore a snapshot into a
+   throwaway file and run `planRollup` there, where requiring the app is
+   harmless because the activity log being purged is a copy. `blocked[]` is the
+   answer directly, with each material's `reason` and `oldCpu` already on it, and
+   `scripts/rollup_made_material_costs.js` already drives exactly this in
+   dry-run.
+
+**Neither route writes to production, and route 2 is the only one that can name
+the reason per material** — the SQL in route 1 finds candidates by date, not by
+block state, so it over-reports.
 
 ---
 
