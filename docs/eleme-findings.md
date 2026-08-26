@@ -99,7 +99,35 @@ delay. On Eleme a failure is permanent.
 
 ## 3. Nothing validates a channel mapping name when it is created (found 2026-08-25)
 
-Status: open. Mapping deliberately left unfixed — see Context below.
+Status: partly closed on the screen, open everywhere else, as of 2026-08-26.
+Mapping deliberately left unfixed — see Context below.
+
+**The creation path is now gated, in the browser only.** The admin name field
+on both channels accepts a value only when it exactly matches a name in the
+cached catalogue for that store; anything else reverts the field to what it
+held and is not saved. Nothing is auto-cleared: emptying the field would trade
+a wrong-name fault for a missing-name fault, which is harder to notice.
+`public/retail-admin/14-eleme.js` `elNameCommit`, `public/retail-admin/11-meituan.js`
+`mtNameCommit`. A stored name that matches no listing is named as such under
+the field on both screens, and on Meituan it also changes the row's state away
+from "Synced". On Eleme that state change is deliberately absent for now: the
+list's classification is being rebuilt around three groups on
+`claude/eleme-three-group-split-7f6d32`, which will carry it as a reason on the
+row, so this change leaves `elStoreState` untouched rather than colliding with
+it. **Product 195 therefore still reads "Synced" in the Eleme list** until that
+build lands; the panel tells the truth about it today.
+
+Where no catalogue has been read, neither screen judges a name at all — not in
+the list, not under the field, and not on save. A save attempted in that state
+is refused and says both halves out loud: the check could not run, and nothing
+was saved (§30 rule 4).
+
+**The gate is front-end only and is NOT the fix.** `POST
+/api/retail-admin/eleme/products/:id/map` and its Meituan twin still accept any
+string, so anything that is not this screen — a direct call, a future importer,
+a script — can still create a mapping that was never checked against the
+catalogue. Nor does anything yet validate a stored name at rest or when the
+catalogue is re-read. Read this status as "one door closed", not as closed.
 
 `eleme_product_map` row id 61 (product 195, `4-650`, Smooth Sesame Tahini
 (Hulled), store tianhe) was created 2026-08-23 06:31:19 carrying
