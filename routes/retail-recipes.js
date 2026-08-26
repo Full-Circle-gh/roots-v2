@@ -30,6 +30,7 @@ const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialF
 // already fires from the kitchen door; a recipe backing a material must stay
 // correct no matter which door saved it.
 const { fireRecompute, backsAnyCostedRow, costOneRecipe } = require('../lib/recipe-rollup');
+const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
 
 const router = express.Router();
 
@@ -315,13 +316,14 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
 router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) => {
   const existing = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const { labour, packaging, packaging_type_id, overhead_pct, sell_price, target_food_cost } = req.body || {};
-  db.prepare(`INSERT INTO recipe_cost_data (recipe_id,labour,packaging,packaging_type_id,overhead_pct,sell_price,target_food_cost,updated_at)
-      VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(recipe_id) DO UPDATE SET
-      labour=?,packaging=?,packaging_type_id=?,overhead_pct=?,sell_price=?,target_food_cost=?,updated_at=CURRENT_TIMESTAMP`)
-    .run(req.params.id, labour || 0, packaging || 0, packaging_type_id || null, overhead_pct || 0, sell_price || 0, target_food_cost || 30,
-         labour || 0, packaging || 0, packaging_type_id || null, overhead_pct || 0, sell_price || 0, target_food_cost || 30);
+  // THIS SCREEN HAS NO PACKAGING-TYPE PICKER, so its payload never carries
+  // `packaging_type_id` — and the write underneath keeps the stored one rather
+  // than coalescing the missing key to NULL. That is the whole of finding 11:
+  // every save here used to keep the packaging NUMBER and discard which
+  // packaging it was, quietly deleting the packaging migration's input one
+  // recipe at a time. The absent/cleared distinction lives in the lib so it
+  // holds for the kitchen route and for any caller not yet written.
+  saveRecipeCostData(db, req.params.id, req.body);
   if (backsAnyCostedRow(db, req.params.id)) {
     fireRecompute(db, { source: 'retail-recipes.cost_update', recipe_id: Number(req.params.id) });
   }

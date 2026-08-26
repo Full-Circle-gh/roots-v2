@@ -12,6 +12,7 @@ const { checkCycle } = require('../lib/recipe-graph');
 // recipe_cost_data), since any of those can move that material's
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute, backsAnyCostedRow } = require('../lib/recipe-rollup');
+const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
 const router = express.Router();
 
 // Nested recipes (§29): a line may reference a material that is itself made by
@@ -388,11 +389,12 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
 
 // PUT update cost data
 router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), (req, res) => {
-  const { labour, packaging, packaging_type_id, overhead_pct, sell_price, target_food_cost } = req.body;
-  db.prepare(`INSERT INTO recipe_cost_data (recipe_id,labour,packaging,packaging_type_id,overhead_pct,sell_price,target_food_cost,updated_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(recipe_id) DO UPDATE SET labour=?,packaging=?,packaging_type_id=?,overhead_pct=?,sell_price=?,target_food_cost=?,updated_at=CURRENT_TIMESTAMP`)
-    .run(req.params.id, labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30,
-         labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30);
+  // The Cost Sheet DOES send `packaging_type_id` (public/app.html:8062 — the
+  // picked type, or a literal null when nothing is selected), so this route's
+  // behaviour is unchanged: a picked type is written, a cleared picker still
+  // clears. It shares the write with Tacet's cost route so the absent-key rule
+  // is one rule rather than two copies — see lib/recipe-cost-data-write.js.
+  saveRecipeCostData(db, req.params.id, req.body);
   // Recompute trigger (§29 step 3): labour/packaging/overhead feed a linked
   // material's recipe cost exactly like an ingredient line does.
   if (backsAnyCostedRow(db, req.params.id)) {
