@@ -456,6 +456,40 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
   const isScaled = scale && scale > 0 && Math.abs(scale - 1) > 0.001;
   const round1 = v => v == null ? v : Math.round(v * 10) / 10;
 
+  // Servings is a COUNT OF SELLABLE PORTIONS, so it rounds DOWN, never to
+  // nearest. Rounding up invents a portion that cannot be sold, and since cost
+  // per serving is batch cost / servings, an overstated serving count
+  // understates cost per serving and overstates margin.
+  //
+  // floor() alone is not enough. 45 * 1.4 is 62.99999999999999 in binary
+  // floating point, which floors to 62 and loses a whole serving — the very
+  // error this is meant to prevent. Snapping the product to 6 decimal places
+  // first restores the intended integer before the floor sees it.
+  const floorServings = (n, k) => Math.floor(Number((n * k).toFixed(6)));
+
+  // A scale that leaves under one serving is REFUSED, not clamped to 1 and not
+  // stored as 0. Clamping would claim a portion that does not exist, and a
+  // stored 0 is indistinguishable from "no servings recorded" downstream:
+  // lib/recipe-cost.js guards on `servings > 0`, so cost per serving, margin
+  // and suggested sell price would all silently read as unrecorded rather than
+  // wrong. Refusing while the operator is still at the scaler is the visible
+  // failure the recorded rules ask for.
+  if (isScaled && src.servings && floorServings(src.servings, scale) < 1) {
+    // Smallest k with servings * k >= 1, rounded UP so the figure quoted
+    // actually clears the floor (1/3 = 0.333 still floors to 0; 0.334 does not).
+    const minScale = Math.ceil((1 / src.servings) * 1000) / 1000;
+    const n = v => String(Number(v.toFixed(3)));
+    // At 1 serving the smallest working scale is 1 — i.e. no scale-down exists,
+    // so quoting "at least 1" would read as an instruction when it is a dead
+    // end. Say that plainly instead of naming a minimum the scaler rejects.
+    const advice = minScale >= 1
+      ? 'A 1-serving recipe cannot be scaled down at all — scale up instead.'
+      : `Scale by at least ${n(minScale)} to keep one serving, or scale up instead.`;
+    return res.status(400).json({
+      error: `Scaling by ${n(scale)} would leave less than one serving — this recipe makes ${src.servings} serving${src.servings === 1 ? '' : 's'}, and ${src.servings} x ${n(scale)} is under 1. ${advice}`,
+    });
+  }
+
   // Name: " (copy)" for plain duplicates; "(<scaledBatch>g)" for scaled — the
   // batch size makes the variant immediately recognisable in the recipe list.
   let nameEn, nameCn;
@@ -477,7 +511,7 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
       null, // SKU is UNIQUE — let user assign a new one
       src.category,
       isScaled && src.batch_size   ? Math.round(src.batch_size * scale)   : src.batch_size,
-      isScaled && src.servings     ? Math.round(src.servings * scale)     : src.servings,
+      isScaled && src.servings     ? floorServings(src.servings, scale)   : src.servings,
       // Per-serving size doesn't change when you scale the batch — same portions, just more of them.
       // (v1 scaled it too, but that's a bug. Leaving it unchanged here.)
       src.serving_size,
