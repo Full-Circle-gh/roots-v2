@@ -1,11 +1,12 @@
 # eleme — Findings
 
-Six findings. The first four come from a read-only survey on 2026-08-25, opened
+Seven findings. The first four come from a read-only survey on 2026-08-25, opened
 by a dashboard row ("Eleme not syncing · 1") and ending in a wrong number on a
 live listing. Findings 5 and 6 were added on 2026-08-26, from the mapping screen
 that survey sent someone to. Most are not Eleme-specific: findings 1 and 4 hold
 on every channel, finding 3 holds anywhere a mapping is stored against an
-external system, and finding 5 holds on any screen that counts work.
+external system, finding 5 holds on any screen that counts work, and finding 7
+holds anywhere a cached read is consulted by something that returns a verdict.
 
 The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. This
 document is the evidence; that one is the intent. Where they disagree about what
@@ -326,6 +327,93 @@ than guess a target. Not done.
 
 ---
 
+## 7. A check with an empty input returns a verdict instead of refusing (found 2026-08-26)
+
+Status: FIXED 2026-08-26 in all three known places. The condition that keeps
+producing it is NOT fixed and probably cannot be — see "Why it recurs" below.
+
+This is not findings 3, 4 or 6 in another costume. Those are about **names** —
+a name typed wrong, a name absent, a target that cannot be identified. This one
+is about a **check that cannot run and answers anyway**. It appeared three times
+in one day, in three separate pieces of code, written by two people who had each
+already read the rule it breaks.
+
+### The shared condition
+
+The admin screen reads the Eleme catalogue into `_catalogue[storeCode]` in
+`public/retail-admin/14-eleme.js`. When the fetch throws, the catch stores
+`{ rows: [] }`.
+
+**A failed read is therefore indistinguishable from a store nobody has read**
+— empty rows, both times, no flag saying which. Every consumer sees the same
+thing: nothing. And "nothing" is one keystroke away from "no match", which is a
+verdict. That is the whole fault, and it is why it keeps arriving in new code
+rather than staying fixed: nothing about the empty array announces that it is
+not an answer.
+
+### The three instances
+
+**1. The save gate.** `elNameCommit` refused every name typed on a store with no
+catalogue, correct ones included, with "Not in the catalogue — not saved" and no
+way forward. `elNameKnown` answers `false` for every name when there are no rows
+to match against. Unreachable only because 越秀 holds no shop id, so the field
+never rendered there; linking one would have made it reachable immediately,
+before the first catalogue read, and it would have read as the feature simply
+not working on a new store.
+
+**2. The match counter.** `elMatchCount` counted 0 matches against a catalogue it
+had never seen and printed "No matches" under the field — an assertion about
+listings nobody had looked at.
+
+**3. The classifier — the worst of the three.** `elStoreState` fell through an
+unanswerable name check to its final branch and returned `Synced`. Measured
+against live data with the catalogue read forced to fail: **Needs attention
+10 → 6, Synced 191 → 195, and product 195 back behind a green dot** — the exact
+state finding 5 exists to end, restored in full by one dropped fetch.
+
+### Why the third one is the dangerous one
+
+The first needs a store with no shop id. The second is visible nonsense under a
+field someone is looking at. The third needs **one failed HTTP request**, says
+nothing at all, and **repairs itself on the next successful poll**.
+
+A fault that heals before anyone can look at it cannot be investigated from a
+report. Nobody would have filed one: the screen would have read 195 synced for a
+few minutes and then read 191 again, and the wrong number would have gone out to
+a live listing in between with no trace anywhere that a check had been skipped.
+
+### The fix, and the rule it comes from
+
+§30 rule 4: where the correct answer cannot be determined the system refuses and
+surfaces the problem, never substituting. Applied here as: **every consumer of
+the catalogue asks `elCatalogueRead(storeCode)` first and declines to judge when
+it is false.** The save gate says the check could not run and nothing was saved;
+the counter says nothing; the classifier returns a state of its own —
+"Name not checked" — that groups with Needs attention rather than Synced and
+draws a neutral dot rather than an amber one.
+
+The grouping is deliberate and was ruled on: **if it cannot be verified it is not
+verified.** Synced has to mean checked and good or the word is worth nothing. The
+dot is neutral for the mirror reason: amber asserts something is wrong with that
+mapping, and what is actually known is only that nobody could look.
+
+### Why it recurs, and what to do about the next one
+
+The three fixes are three guards. None of them stops a fourth consumer being
+written next month that reads `_catalogue[code].rows`, finds it empty, and draws
+a conclusion — because the empty array still does not say why it is empty.
+
+The durable fix is to make absence unrepresentable as an answer: hold read state
+alongside the rows (never-read / failed / read-at) so a consumer cannot get to
+the rows without passing the question, or return a value that throws rather than
+compares. Not done, and deliberately not done today — it changes a shape three
+live surfaces depend on, on a trading day.
+
+Until then, the standing rule for this file: **anything that consults the
+catalogue asks whether it was read before asking what is in it.**
+
+---
+
 ## Context — what was and was not done on 2026-08-25
 
 - **Product 195's Eleme listing was corrected to 3 by hand in the merchant app**
@@ -355,6 +443,11 @@ Source: read-only surveys of `roots.db` on 2026-08-25 via
 - **Nothing was written.** No mapping was created, edited, hidden or deleted; no
   queue row was retired or re-queued; no stock was pushed; no process was
   started, stopped or restarted. The rows are correct; only the labelling changed.
+
+- **Finding 7 was found in this branch's own classifier** and fixed there, after
+  the same fault had already been fixed twice that morning in the name gate. All
+  three fixes are guards on consumers; the shape that produces the fault is
+  unchanged and is recorded as open in that finding.
 
 - **Finding 6 was left unfixed on purpose.** It is a daemon change, and product
   195's mapping is still deliberately wrong (see the 2026-08-25 context above) —

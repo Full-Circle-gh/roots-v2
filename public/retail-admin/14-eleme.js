@@ -15,10 +15,6 @@
   let _elStore  = '';     // store filter: '' = all stores
   let _elSel    = null;   // product id the panel is showing
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
-  // storeCode -> Set of the exact listing names that store supplied. Built once
-  // with the catalogue rather than scanned per row: every product asks whether
-  // its stored name is one of these on every repaint.
-  let _catNames  = {};
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.elAdminInit = async function () {
@@ -339,12 +335,15 @@
       try {
         const r = await api('/api/retail-admin/eleme/catalogue?storeCode=' + encodeURIComponent(s.code));
         _catalogue[s.code] = { rows: r.data || [], refreshedAt: r.refreshedAt || null };
-        _catNames[s.code]  = new Set((r.data || []).map(x => String(x.name || '').trim()));
       } catch (e) {
-        // Empty, not absent: an empty set means "not checkable" to elNameKnown,
-        // so a failed catalogue read can never turn every mapping amber.
+        // A FAILED read lands here looking exactly like a store nobody has read
+        // yet: empty rows, both times. Nothing downstream can tell them apart,
+        // and three separate checks have now been written that quietly treated
+        // this emptiness as an answer — see docs/eleme-findings.md finding 7.
+        // The rule that keeps it safe is on the readers, not here: everything
+        // that consults the catalogue asks elCatalogueRead first and declines to
+        // judge when it is false.
         _catalogue[s.code] = { rows: [], refreshedAt: null };
-        _catNames[s.code]  = new Set();
       }
     }
     elRenderCatalogueDatalists();
