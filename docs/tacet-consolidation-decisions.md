@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.83
+# Tacet shared-core consolidation — decisions record, v4.84
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-26 · v4.84 — **§7 gains an addendum: no conversion without a stated factor.** §7 already requires a per-material ml-to-gram conversion and already says it differs per material, and it has never said what happens when that figure is absent — so the absent case was being answered in the only way an unstated case ever is, by a silent fallback, and the fallback was one millilitre to one gram. **That is true for water and for nothing else**, and it was applied to every liquid: the weight of oils understated, the weight of syrups overstated, in both directions without a mark. The addendum records the refusal rather than the guess. **CONVERSIONS ARE OF TWO KINDS AND MUST NOT BE TREATED ALIKE** — same-dimension conversions (kilograms to grams, pounds to ounces, litres to millilitres) are fixed constants true for every material, which the system supplies and nobody enters; cross-dimension conversions (volume to weight) require a DENSITY, and density is a property of the material rather than of the system, so oil, water and syrup differ, there is no default, and none may be invented. **A cross-dimension unit is therefore offered only where that material carries a density** — absent one the unit is not in the picker at all, and **new lines lacking it are refused AT THE POINT OF ENTRY rather than at save or at cost time**, so the operator meets the constraint while they can still act on it. **LINES ALREADY RECORDED UNDER THE OLD ASSUMPTION ARE NOT SILENTLY RECOSTED**, which is the decision most likely to be mistaken later for an oversight: they keep their existing cost and are marked unconverted, because recosting them would move product costs and therefore margins with no operator action and no notice, and a wrong figure that is visible is preferable to a corrected figure that moved unannounced. They are corrected by hand, one material at a time, with no deadline. **An unconverted line blocks batch-size auto-fill for its recipe**, identical treatment to the count units of the §6 addendum immediately above — where the sum cannot be trusted no sum is offered and the screen states what is missing — which doubles as the migration worklist, since a recipe that will not auto-fill is a recipe still holding an unconverted line. Subject to §0: grams are Roots' base unit and not Tacet's, and a tenant stocking in pounds enters recipe lines in pounds or ounces for identical behaviour, only the letters differing — the rule is one stocking unit per material and no conversion without a stated factor, never a mandated metric system. §7's existing rules are untouched. An addendum adding rules to a section that was silent on the point, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
 
 2026-08-26 · v4.83 — **§6 gains an addendum: where the fixed output number comes from.** §6 has always said that recipe output is FIXED, and it has never said how that number is arrived at — a gap that was about to be filled by whoever built the production screen first, and then treated as settled because it shipped. The addendum records the derivation. **Batch size is seeded from the recipe's own retained lines and stays editable**, the sum being a suggestion rather than a lock; where an operator overrides it the difference is displayed as yield against inputs, which is the only yield-loss record there is, since the override already carries the information a separate loss field would hold. **Every recipe line carries a RETAINED flag, defaulting to yes, and it governs WEIGHT ONLY** — brewing water, blanching or soaking liquid, and a stock used to hydrate a dough and then thrown away consume stock and cost exactly what they cost, and contribute nothing to the batch. The flag has two positions and no partial-retention percentage, because a fraction nobody can measure honestly is a field nobody will fill in honestly; partial absorption is absorbed by the editable batch size instead. **Packaging lines never count toward batch size**, derived from the material's kind rather than from the flag, so there is no operator decision and no second place to get it wrong — §8 still consumes and costs them exactly as it already states. **Servings is derived rather than typed alongside serving size** — batch size ÷ serving size, ROUNDED DOWN, with the remainder shown — because a part portion cannot be sold and cost per serving must never be understated, which leaves the remainder's cost carried by the sellable servings. **§6'S EXISTING RULES ARE UNTOUCHED**, stated plainly so the addendum is not later read as a revision: output is still FIXED, inputs are still recorded as actually used, and a batch still produces exactly the stated amount. **The addendum defers to §7 rather than working around it** — auto-fill runs only where every retained line shares one unit family, and leaves batch size blank for manual entry with the reason on screen where any retained line is a count unit, because units are never converted at recipe level. Subject to §0: weight-based batch sizing is one shape a business may want, and a business whose recipes yield counts rather than weights must be equally well served, with the retained flag and the derived-servings rule applying unchanged. An addendum adding rules to a section that was silent on the point, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
 
@@ -382,6 +384,52 @@ flag and the derived-servings rule apply unchanged, only the unit differs.
 - SUBJECT TO §0: units of measure are per business. Grams and kilograms are Roots' choice, not Tacet's default. A business working in pounds and ounces must be equally well served.
 
 > ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** Read *item* as MATERIAL throughout (§28, 2026-08-24). **The unit model is untouched** — one stocking unit per material, purchasing in any unit with a stored conversion, recipes always in the stocking unit. One open question this section does not settle is recorded in §28: whether a purchased quantity converts to a stocked quantity at all. Nothing in the code does that conversion today.
+
+### §7 addendum — no conversion without a stated factor (decided 2026-08-26)
+
+§7 requires a per-material ml-to-gram conversion and says it differs per material. It does
+not say what happens when that figure is absent. The answer is that the system refuses the
+conversion rather than guessing it.
+
+**Unit conversions are of two kinds and must not be treated alike.**
+
+SAME DIMENSION — kilograms to grams, pounds to ounces, litres to millilitres. Fixed
+constants, true for every material. The system supplies these; nobody enters them.
+
+CROSS DIMENSION — volume to weight. Requires a density, and density is a property of the
+material, not of the system. Oil, water and syrup differ. There is no default and none may
+be invented.
+
+**1. A cross-dimension unit is offered only where that material carries a density.**
+
+Absent a recorded density, the unit is not in the picker. The system does not silently
+treat one millilitre as one gram. That assumption is true for water alone and was
+previously applied to every liquid, understating the weight of oils and overstating the
+weight of syrups.
+
+**2. New cross-dimension lines without a density are refused at entry.**
+
+The refusal is at the point of entry, not at save or at cost time, so the operator learns
+the constraint while they can still act on it.
+
+**3. Lines already recorded under the old assumption keep their existing cost and are
+marked as unconverted.**
+
+They are NOT silently recosted. Recosting them would move product costs, and therefore
+margins, with no operator action and no notice. A wrong figure that is visible is
+preferable to a corrected figure that moved unannounced. They are corrected by hand, one
+material at a time, with no deadline.
+
+**4. An unconverted line blocks batch-size auto-fill for its recipe.**
+
+Identical treatment to count units under the §6 addendum: where the sum cannot be trusted,
+no sum is offered and the screen states what is missing. This doubles as the migration
+worklist — a recipe that will not auto-fill is a recipe still holding an unconverted line.
+
+**Subject to §0.** Grams are Roots' base unit, not Tacet's. A tenant stocking in pounds
+enters recipe lines in pounds or ounces and receives identical behaviour; only the letters
+differ. The rule is one stocking unit per material and no conversion without a stated
+factor — never a mandated metric system.
 
 ## 8. Packaging
 
