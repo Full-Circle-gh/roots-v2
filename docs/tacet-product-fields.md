@@ -54,7 +54,7 @@ Three columns. All three physically exist on `store_products` and no store code 
 
 | Name | Type · default | Tables | Defined | Server writes | Server reads | Frontend | Purpose | Dead? |
 |---|---|---|---|---|---|---|---|---|
-| `recipe_id` | INTEGER · none | both | `schema.sql:142` | `routes/products.js:307` (create/update field list), `routes/products.js:766` (bulk import) | `routes/products.js:8, 152, 179-207` (derives allergens + inlines the recipe cost block), `routes/admin.js`, `routes/waste.js` | `public/app.html` — inline edit `data-field="recipe_id"`, create form `pf_recipe` (`public/app.html:15211`) | "linked recipe (for cost calc)" — `schema.sql:142` | **DEAD on `store_products`** — zero reads/writes anywhere in store code |
+| `recipe_id` | INTEGER · none | both | `schema.sql:142` | `routes/products.js:307` (create/update field list), `routes/products.js:766` (bulk import) | `routes/products.js:8, 152, 179-207` (derives allergens + inlines the recipe cost block), `routes/admin.js`, `routes/waste.js` | `public/app.html` — inline edit `data-field="recipe_id"`, create form `pf_recipe` (`public/app.html:15211`) | "linked recipe (for cost calc)" — `schema.sql:142` | Was DEAD on `store_products` at survey time; **live since §29** — see the AMENDED note in section C (cost) |
 | `label_data` | TEXT · none | both | `schema.sql:151`, re-added `database.js:28` | `routes/products.js:307`; `public/app.html` `iedSaveField(…,'label_data')` | `routes/products.js:11` | `public/app.html` only (12 references, the label printer) | "base64 data URI" of the printed product label — `schema.sql:151` | **DEAD on `store_products`** |
 | `external_id` | INTEGER · none | both | `database.js:67` | `routes/products.js:307, 370`; `scripts/import_products.js`, `scripts/fix_products_swap.js`, `scripts/apply_name_suggestions.js`, `scripts/seed_variant_groups.js`, `scripts/import_miniapp.js` | `routes/products.js:13, 36` | none | "holds the upstream ID so we can re-sync without losing the link" — `database.js:61-63` | **PARTIALLY DEAD** — returned by the API, rendered by no screen. DEAD on `store_products` |
 
@@ -300,6 +300,19 @@ Cost reaches a product only **indirectly**, through `recipe_id` → `recipes` �
 (`schema.sql:122-133`), joined at `routes/products.js:201-207` and used by `routes/waste.js`
 (`SELECT sell_price, recipe_id …`) to value waste. A product with no `recipe_id` — which is every row
 in `store_products`, since `recipe_id` is dead there — **has no cost at all**.
+
+> **AMENDED 2026-08-26 — `store_products` now has a cost of its own, two ways.**
+> `store_products.unit_cost` is a real column, written by purchase-order receiving and by hand in
+> the product editor; margin is computed from it (`public/retail-admin/09-products.js` `_paMargin`).
+> `store_products.recipe_id` is no longer dead either: §29 made it a live cost source, and
+> `lib/recipe-rollup.js` `applyProductCosts()` writes `unit_cost` from the linked recipe's
+> `costPerServing` on every recipe save. When a product names a recipe and Production is on, the
+> recipe **owns** the figure — the editor's Cost field goes read-only and the PATCH handler drops a
+> hand-typed value (`recipeOwnsProductCost()` is the one place that decides this).
+> The link itself is filled two ways: the one-time backfill in `database.js`
+> (`store_products_recipe_link_v1`, links only where two of {SKU, `name_en`, `name_cn`} agree), and
+> by hand through `PUT/DELETE /api/retail-admin/products/:id/recipe-link` — the only
+> client-reachable write of the column, driven by the product editor's "Link a recipe" picker.
 
 Margin is therefore not computable on the store side today. `docs/tacet-consolidation-decisions.md`
 §23 Open questions records the COST METHOD decision as still open, and it would have to be settled

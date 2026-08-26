@@ -16,7 +16,13 @@ const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
 const db = require('../database');
-const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
+const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
+// Read-only cost maths, used by the recipe-link endpoint to say whether the
+// recipe an operator just picked can actually yield a figure — the same
+// function applyProductCosts() decides that with, so the answer the modal
+// reports and the answer the cascade acts on can never disagree.
+const { computeRecipeCost } = require('../lib/recipe-cost');
+const { productionEnabled } = require('../lib/features');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
@@ -20698,6 +20704,100 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   }
   if (row) row.options = loadProductOptions(id);
   res.json({ success: true, data: row });
+});
+
+// ═══ Which recipe a product's cost comes from ══════════════════════════════
+//
+// THE HAND-PATH THE BACKFILL ASSUMED EXISTED. `store_products.recipe_id` was
+// first filled by the one-time link pass in database.js, which links only where
+// two of {SKU, name_en, name_cn} agree exactly and leaves everything weaker
+// "for Ash to confirm by hand" — but nothing in the app could write that column,
+// so 45 active products sit beside a same-SKU recipe with no way to connect
+// them. Zhoug (product SKU 1-225, recipe #80 same SKU) matches on SKU alone:
+// the recipe's English name is missing an "i" and its Chinese name lacks the
+// "（Zhoug）" suffix. The rule is right to be strict; what was missing is the
+// door. This is that door, and it is the ONLY client-reachable write of
+// store_products.recipe_id — routes/retail-recipes.js deliberately keeps the
+// link read-only on the recipe side ("owned and edited on the product side").
+//
+// DELIBERATELY NOT A COLUMN IN THE PATCH HANDLER. Linking is not a field edit:
+// it hands ownership of unit_cost to the cascade, so it must run the recompute
+// and report what that recompute could and could not do. Folding it into the
+// generic autosave body would make every keystroke a potential re-link and give
+// the operator nowhere to read the outcome.
+router.put('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, express.json(), (req, res) => {
+  const id = Number(req.params.id);
+  const recipeId = Number(req.body && req.body.recipe_id);
+  const p = tdb().prepare('SELECT id, name_en, recipe_id, COALESCE(is_active,1) AS is_active FROM store_products WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ success: false, error: 'not_found' });
+  const r = tdb().prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE id = ?').get(recipeId);
+  if (!r) return res.status(404).json({ success: false, error: 'recipe_not_found', message: 'That recipe no longer exists.' });
+  // An archived recipe is not a cost source: lib/recipe-rollup.js's costOneRecipe
+  // reads recipe.is_active and refuses to cost one, so a link to it would lock
+  // the Cost field to a figure that could never update. Refused here rather than
+  // accepted-then-silently-blocked.
+  if (!r.is_active) {
+    return res.status(400).json({ success: false, error: 'recipe_archived',
+      message: `"${r.name_en}" is archived. Restore it first, or pick a live recipe.` });
+  }
+
+  tdb().prepare('UPDATE store_products SET recipe_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(recipeId, id);
+  // The cascade owns unit_cost from here — it writes the figure, this handler
+  // never does. A recipe that cannot yield a cost leaves the stored figure
+  // untouched (never 0, never nulled), which is why the warning below reports
+  // the block instead of the response pretending a cost arrived.
+  fireRecompute(tdb(), { source: 'products.recipe_link', product_id: id, recipe_id: recipeId });
+
+  // Say plainly when the link is real but the number cannot follow yet. Both
+  // conditions are read the same way applyProductCosts() reads them, so the
+  // modal can never claim a cost the cascade would refuse to write.
+  let warning = null;
+  if (!p.is_active) {
+    // loadLinkedProducts() reads active rows only, so an archived product is
+    // linked but not costed. Said out loud rather than left to look broken.
+    warning = 'Linked. This product is archived, so its cost will not update until you restore it.';
+  } else if (!productionEnabled(tdb())) {
+    warning = 'Linked. Production is switched off, so the cost will not update until you turn it back on.';
+  } else {
+    let c = null;
+    try { c = computeRecipeCost(recipeId, tdb()); } catch (e) { c = null; }
+    const usable = c && c.costPerServing != null && Number.isFinite(c.costPerServing) && c.costPerServing > 0;
+    if (!usable) {
+      warning = `Linked, but "${r.name_en}" has no cost yet — it needs servings, a batch size, and a price on every ingredient.`;
+    }
+  }
+
+  logActivity(req.user.id, req.user.username, 'update', 'product_retail', id,
+    { fields: ['recipe_id'], name: p.name_en, recipe_id: recipeId, recipe: r.name_en }, req.ip);
+
+  const row = tdb().prepare(
+    `SELECT id, recipe_id, unit_cost,
+            (SELECT r.name_en FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_en,
+            (SELECT r.name_cn FROM recipes r WHERE r.id = store_products.recipe_id) AS recipe_name_cn
+       FROM store_products WHERE id = ?`
+  ).get(id);
+  res.json({ success: true, data: row, warning });
+});
+
+// Unlink — the product stops tracking the recipe and the Cost field is handed
+// back to purchase-order receiving and manual entry.
+//
+// THE LAST FIGURE STAYS ON THE ROW. Nothing is nulled, exactly as turning
+// Production off doesn't erase (lib/recipe-rollup.js applyProductCosts): the
+// number was true when it was written, and destroying costing history is not
+// what "stop tracking this recipe" means. The operator can clear it by hand
+// afterwards, which is now possible again because the field unlocks.
+router.delete('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const p = tdb().prepare('SELECT id, name_en, recipe_id FROM store_products WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ success: false, error: 'not_found' });
+  if (p.recipe_id != null) {
+    tdb().prepare('UPDATE store_products SET recipe_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    logActivity(req.user.id, req.user.username, 'update', 'product_retail', id,
+      { fields: ['recipe_id'], name: p.name_en, unlinked_recipe_id: p.recipe_id }, req.ip);
+  }
+  const row = tdb().prepare('SELECT id, recipe_id, unit_cost FROM store_products WHERE id = ?').get(id);
+  res.json({ success: true, data: { ...row, recipe_name_en: null, recipe_name_cn: null } });
 });
 
 // CSV: the whole catalogue, one row per product, every field an operator can
