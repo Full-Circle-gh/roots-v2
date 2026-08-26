@@ -1608,6 +1608,24 @@ const FEATURE_CATALOG = [
     desc: 'Materials and Recipes — what you buy and hold but don\'t sell, and what you make from it. When off, both tabs are hidden from the sidebar. · 物料与食谱 —— 你采购并库存但不出售的物品,以及用它们制作的东西。关闭后两个标签都会从侧边栏隐藏。',
     descOn:  'On. Materials and Recipes are in your sidebar. Every material\'s unit cost is worked out from its pack price, and every recipe backed by a material feeds that cost through automatically. · 已开启:侧边栏显示“物料”与“食谱”。每项物料的单位成本由整包价格折算,由物料支撑的每份食谱成本也会自动更新。',
     descOff: 'Off. The Materials and Recipes tabs are hidden. Nothing is deleted — everything is still there when you turn it back on. · 已关闭:“物料”与“食谱”标签均已隐藏。数据不会删除,重新开启后仍在。' },
+  // Waste (损耗, §32) — its OWN switch, deliberately NOT folded into
+  // Production. §32 rule 4: a pure retail account that makes nothing still
+  // wastes finished stock — a dropped jar, a case damaged in transit, a
+  // short-dated line pulled off the shelf — so gating waste behind a module
+  // about MAKING things would take it away from exactly the businesses that
+  // need it and own no recipes. ON by default, matching the server-side reader
+  // in routes/retail-waste.js (an absent config row means never-touched, which
+  // is on).
+  //
+  // The description is ENGLISH ONLY and that is not an oversight: no Chinese
+  // source for it exists in this repo and §32's brief forbids composing one.
+  // It carries no " · " separator, so the i18n walker leaves it alone and it
+  // renders in English in both languages until Ash supplies the pair. Listed
+  // in the PR.
+  { key: 'waste',       en: 'Waste',                cn: '损耗',       def: true,
+    desc: 'Recording waste moves stock: the on-hand count goes down and the sales channels are told. Voiding an entry puts the stock back. When off, the Waste tab is hidden and nothing can be recorded.',
+    descOn:  'On. Staff can record what was lost and why, and every entry moves the shelf count.',
+    descOff: 'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved.' },
 ];
 let ENTITLEMENTS = {};
 (async () => {
