@@ -2572,14 +2572,16 @@
 
        col        %     px  room  need  binding constraint             slack
        select      4   39.8    26    16  the 16px box (own padding)      +10
-       Product    30  298.2   274   ~41  30px photo + 11px gap       ellipses
+       Product    29  288.3   264   ~41  30px photo + 11px gap       ellipses
        Category   12  119.3    95    95  "Spreads ＆ Dips"                +0
        SKU        10   99.4    75    67  "CHECKOUT" — letters, not digits +8
        Tianhe      9   89.5    65    38  the "Out" pill (the box flexes) +27
        Yuexiu      9   89.5    65    38  same                            +27
        Price       8   79.5    55    49  "¥999.00"                        +6
        Margin      8   79.5    55    47  "48–92%", a variant range        +8
-       Status     10   99.4    75   ~76  the "Sold out" badge             +0
+       Status     11  109.3    85    81  the "Disabled" badge — the WIDEST
+                                         of the three, and the only one
+                                         carrying a 1px border            +4
 
      Product is the ONLY absorber and it is the only cell meant to ellipse.
 
@@ -2615,35 +2617,35 @@
      block. Measured, not assumed. paRender emits the grip col, th and td only
      while reordering is armed, and the rule below sizes it when they exist. */
   #pa-table col.pa-c-sel    { width:  4%; }
-  #pa-table col.pa-c-name   { width: 30%; }
+  #pa-table col.pa-c-name   { width: 29%; }
   #pa-table col.pa-c-cat    { width: 12%; }
   #pa-table col.pa-c-sku    { width: 10%; }
   #pa-table col.pa-c-price  { width:  8%; }
   #pa-table col.pa-c-margin { width:  8%; }
-  #pa-table col.pa-c-status { width: 10%; }
+  #pa-table col.pa-c-status { width: 11%; }
   /* One combined Stock column (a single-store tenant): the whole 18% remainder
      would go to a count, so Product takes it back and Stock lands on 9% — the
      same width a store column gets, so the two shapes read alike. */
-  #pa-table[data-stores="1"] col.pa-c-name { width: 39%; }
+  #pa-table[data-stores="1"] col.pa-c-name { width: 38%; }
   /* 3 stores → 7% a column (70px), 4 → 6.5% (65px), 5 → 6.4% (64px), all clear
      of the 62px floor. Product funds the most because it is the one that
      ellipses; Category and SKU give up their own slack after it, and past three
      stores they start ellipsing their widest values too. */
-  #pa-table[data-stores="3"] col.pa-c-name { width: 27%; }
-  #pa-table[data-stores="4"] col.pa-c-name { width: 24%; }
+  #pa-table[data-stores="3"] col.pa-c-name { width: 26%; }
+  #pa-table[data-stores="4"] col.pa-c-name { width: 23%; }
   #pa-table[data-stores="4"] col.pa-c-cat  { width: 11%; }
   #pa-table[data-stores="4"] col.pa-c-sku  { width:  9%; }
-  #pa-table[data-stores="5"] col.pa-c-name { width: 20%; }
+  #pa-table[data-stores="5"] col.pa-c-name { width: 19%; }
   #pa-table[data-stores="5"] col.pa-c-cat  { width: 10%; }
   #pa-table[data-stores="5"] col.pa-c-sku  { width:  8%; }
   /* Reordering slides a grip column in at the front. Product funds it, so the
      stock block does not move as the mode is flipped on and off. */
   #pa-table.pa-reorder col.pa-c-grip { width: 3%; }
-  #pa-table.pa-reorder col.pa-c-name { width: 27%; }
-  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 36%; }
-  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 24%; }
-  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 21%; }
-  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 17%; }
+  #pa-table.pa-reorder col.pa-c-name { width: 26%; }
+  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 35%; }
+  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 23%; }
+  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 20%; }
+  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 16%; }
 
   /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component and Orders is its
      anchor (§1.13a rule 3). Every value here is the spec's, not a per-page
@@ -2705,9 +2707,19 @@
   #pa-table td.pa-c-stock,
   #pa-table td.pa-c-status { white-space: nowrap; }
   /* Numeric columns are right-aligned and tabular, header included, so the
-     figures line up and the label sits over its own column. */
+     figures line up and the label sits over its own column.
+     Status joins them, and it is NOT a numeric column — it is the LAST one.
+     A percentage layout widens every column together, so a fixed-size pill in
+     the trailing column strands a gap that grows with the monitor: at 1400px
+     Status holds 140px for a 76px badge and the row trails off into 50-odd
+     empty pixels before the card's edge. Right-aligned, the badge sits on the
+     card's own edge at every width, the three right-hand columns share one
+     edge, and the slack falls INSIDE the row where it reads as spacing rather
+     than as an unfinished row. The badges rag left instead of right, which
+     costs nothing: a pill has no leading digit to line up. */
   #pa-table :is(th, td).pa-c-price,
-  #pa-table :is(th, td).pa-c-margin { text-align: right; }
+  #pa-table :is(th, td).pa-c-margin,
+  #pa-table :is(th, td).pa-c-status { text-align: right; }
   #pa-table td.pa-c-price {
     font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap;
   }
