@@ -15,6 +15,15 @@ The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. Th
 document is the evidence; that one is the intent. Where they disagree about what
 the code does, this one is stale and should be re-checked against the code.
 
+`docs/meituan-findings.md` is the companion, from a survey on 2026-08-26 of the
+channel this document only cross-checks. Several findings here have a Meituan
+twin recorded there rather than restated: finding 1's terminal rows (Meituan
+finding 6, where they are terminal per row and not per target), finding 5's
+mapping-screen counts (Meituan finding 7, the same `ok` defect verbatim),
+finding 7's head tile (Meituan finding 7 again, still unfixed), and finding 9's
+matcher (Meituan finding 1, which is the same shape still live and measured at
+133 of 393).
+
 ---
 
 ## 1. A failed sync row is terminal, on every channel (found 2026-08-25)
@@ -636,15 +645,52 @@ unconnected store's block.
 
 ## 9. A mapped name that is a fragment of a real listing resolves, and nothing records where it landed (found 2026-08-26)
 
-Status: open. No code changed. This is the mechanism behind findings 3 and 6 and
-behind finding 8's correction — it is recorded separately because it is a
-property of the push path, not of any one bad mapping, and because the second
-half of it (nothing records the target) is what makes the first half
-uninvestigable after the fact.
+Status: **CLOSED on Eleme in `0a66800d`, 2026-08-26** — both halves. The
+substring branch is gone and the target is now recorded. **Open on Meituan**, in
+both halves and worse in the first: `docs/meituan-findings.md` findings 1 and 9.
+This is the mechanism behind findings 3 and 6 and behind finding 8's correction
+— it is recorded separately because it is a property of the push path, not of
+any one bad mapping, and because the second half of it (nothing records the
+target) is what makes the first half uninvestigable after the fact.
 
-### The rule
+> **Correction, 2026-08-26 — tense only, left visible on purpose.**
+>
+> **This finding was written in the present tense and is now historical.** It
+> shipped that way, and everything below the two "As of" notes describes Eleme's
+> push path **as it stood before `0a66800d`**, not as it stands.
+>
+> `0a66800d` — *"A fragment is not a match, and the target gets written down"* —
+> did both things this finding asked for:
+>
+> - **`_findByFuzzyName` was deleted.** A stored name must now BE a listing name.
+>   The comment standing in its place at `lib/eleme-browser.js:804-823` records
+>   why, and points back here.
+> - **The target is written down.** `eleme_product_map.item_id` — declared since
+>   the table was created and NULL on every row — now holds the listing each push
+>   landed on, and the log line carries `target_name` and `target_item_id`
+>   beside it. §30 rule 7.
+> - **A name the catalogue does not carry no longer wears the transient shape.**
+>   It refuses once, non-retrying, with a sentence that reaches
+>   `eleme_sync_queue.last_error`. An **empty** catalogue stays transient on
+>   purpose — with no rows there is nothing to judge a name against, which is
+>   finding 7's rule.
+>
+> Measured before the branch was removed: all 194 named mappings resolved on the
+> exact branch and none depended on the fallback, so nothing stopped resolving.
+> Seven sat one Eleme rename away from a neighbour whose name contained theirs.
+>
+> **The evidence below is kept rather than rewritten**, because the incident it
+> explains is still the reason §30 rule 7 exists, and because
+> `docs/meituan-findings.md` finding 1 is the same shape still live on another
+> channel. Read it as a record of what was, and read the seven near-misses
+> against Meituan's 133.
 
-`lib/eleme-browser.js:807-811`:
+### The rule — as it stood until `0a66800d`
+
+**As of `0a66800d` (2026-08-26) this code no longer exists.** It is quoted here
+because it is what produced the incident below.
+
+`lib/eleme-browser.js:807-811`, before the change:
 
 ```js
   _findByFuzzyName(name) {
@@ -655,28 +701,36 @@ uninvestigable after the fact.
   }
 ```
 
-Reached at `:838`, when the exact `this._foodCache.get(name)` misses. Three
-things about it matter, and all three are load-bearing:
+It was reached at `:838`, when the exact `this._foodCache.get(name)` missed.
+Three things about it mattered, and all three were load-bearing:
 
-1. **It matches in either direction.** `k.includes(name)` means a stored name
-   that is a **fragment of** a real listing resolves to that listing. A single
-   character is enough. Nothing warns, nothing logs a doubt, and the push
-   succeeds — which is worse than failing, because a failure is at least a queue
+1. **It matched in either direction.** `k.includes(name)` meant a stored name
+   that was a **fragment of** a real listing resolved to that listing. A single
+   character was enough. Nothing warned, nothing logged a doubt, and the push
+   succeeded — which is worse than failing, because a failure is at least a queue
    row with an error on it.
 
-2. **The first match in cache order wins.** Not the closest, not the longest
-   common prefix, not a refusal when several match — the first one the Map
-   yields. Cache order is `_foodCache` **insertion** order, and that order is
+2. **The first match in cache order won.** Not the closest, not the longest
+   common prefix, not a refusal when several matched — the first one the Map
+   yielded. Cache order was `_foodCache` **insertion** order, and that order is
    recoverable: `catalogueSnapshot()` iterates the Map
    (`lib/eleme-browser.js:975-977`), and the daemon deletes and re-inserts from
    it inside one transaction (`scripts/eleme-daemon.js:669-679`), so row-id order
-   in `eleme_catalogue_cache` is the order `_findByFuzzyName` walks.
+   in `eleme_catalogue_cache` is the order `_findByFuzzyName` walked.
 
 3. **Eleme has no article number to fall back on.** Findings 3 and 4 establish
    it: `extCode` is empty on every one of our Eleme items, so the name is the
-   only key there is. Where the name is a fragment, a fragment is the key.
+   only key there is. Where the name was a fragment, a fragment was the key.
+   **This one is still true** — `0a66800d` removed the loose branch, it did not
+   give Eleme a 货号. The name is still the only key; it must now match exactly.
 
-### Nothing stores what a push landed on
+### Nothing stored what a push landed on
+
+**As of `0a66800d` (2026-08-26) this half is closed too**: `eleme_product_map.item_id`
+holds the listing each push lands on, and the sync log carries `target_name` and
+`target_item_id`. What follows is the state that made the 2026-08-25 incident
+unanswerable, and it is the state Meituan is still in
+(`docs/meituan-findings.md` finding 9).
 
 This is the half that turns a bug into an unanswerable question.
 
@@ -739,6 +793,34 @@ argument for what to do about it:
   `_coreQuery` prefix). A fragment of a real listing still matches. Tempered by
   an exact-match-first preference and a shortest-name tiebreak at `:1148-1161`,
   and it runs against search suggestions rather than the whole catalogue.
+
+  > **Correction, 2026-08-26 — this bullet understates Meituan.** *"A
+  > `_coreQuery` prefix"* is written as a footnote to the one-direction
+  > substring rule. It is the other way round: `_coreQuery`
+  > (`lib/meituan-browser.js:1111`) truncates our name to its **leading
+  > same-script run** before the containment test, so the arm that reads as
+  > *"the candidate must contain our whole name"* in practice reads *"the
+  > candidate must contain our name's leading run"* — which every size variant
+  > of a product shares by construction.
+  >
+  > Measured: **133 of 393 named mappings would land on a neighbour** if their
+  > own listing were renamed or removed. **1** through whole-name containment —
+  > the arm this bullet describes — and **132** through the truncation.
+  > `docs/meituan-findings.md` finding 1 has the arm breakdown, the families
+  > (coconut yogurt, the nut lines, nut butters, chia, kombucha pairs, foaming
+  > hand soap) and the truncation stubs (`Whole`, `Sun`, `Caca`).
+  >
+  > *"Tempered by … a shortest-name tiebreak"* does not hold among size
+  > variants either: the tiebreak was written to prefer a base product over a
+  > 套餐 combo sharing its prefix, and among four pack sizes it picks whichever
+  > the merchant named most tersely. It makes the choice deterministic, not
+  > right.
+  >
+  > **The ordering below has since been rewritten on the strength of this**, on
+  > Ash's ruling — see the second correction under it. The same correction and
+  > the same rewrite are recorded against
+  > `docs/tacet-consolidation-decisions.md` §30, which carries this ordering as
+  > its own.
 - **闪购 shangou** — `lib/shangou-browser.js:195-205`: **code first.** Our 货号 is
   looked up in `byCode` and the name is consulted only when that misses — exact
   `spuName === n`, then `spuName.includes(n)`, again one direction.
@@ -747,10 +829,88 @@ argument for what to do about it:
   (`scripts/guanyi-daemon.js:409`, `:652`). **A fragment cannot resolve to
   anything, because names are not the key.**
 
-So the ordering of exposure is Eleme worst (name only, both directions), Meituan
-next (name only, one direction), 闪购 mild (code first), GZ Grocery none. The fix
-Eleme needs is the one GZ Grocery already has, and finding 3 already names it: a
-one-time 货号 backfill so the name stops being the key.
+So the ordering of **standing exposure** — the word is defined immediately below,
+because it was the ambiguous part of this line before — is **Meituan worst, then
+Eleme, then 闪购, then GZ Grocery.** The fix Meituan and Eleme both need is the
+one GZ Grocery already has, and finding 3 already names it: a one-time 货号
+backfill so the name stops being the key.
+
+**What this orders by, said out loud, because two bases give two answers.** It
+orders by **standing exposure: how many of our mappings are one external edit
+away from a silent wrong write, and whether anything downstream would catch one
+if it happened.** It does **not** order by how badly a matching rule could
+misbehave in the abstract. That second basis would put Eleme first, on the
+strength of the both-directions rule — and that rule was removed in `0a66800d`,
+so it would be ranking code that no longer exists.
+
+- **Meituan — worst.** `_nameMatches` truncates our name through `_coreQuery`
+  before the containment test, so **133 of 393 named mappings resolve onto a
+  neighbour** the moment their own listing is renamed or delisted. Nothing
+  downstream catches it: the drift sweep compares our record against our own
+  shelf count and never reads the channel's stock, and no push record says which
+  listing answered. `docs/meituan-findings.md` findings 1, 5 and 9.
+- **Eleme — second.** Still name-only and still with no 货号, so the name is the
+  only key there is. But it now refuses an inexact name rather than taking one
+  (`0a66800d`), and it writes `eleme_product_map.item_id` plus `target_name` and
+  `target_item_id` on the log line, so a mislanding would be answerable
+  afterwards. **Seven mappings sit one rename away from a neighbour whose name
+  contains theirs** — the fallback's would-be catch, measured before it was
+  removed.
+- **闪购 — mild.** Code first: our 货号 is looked up in `byCode` and the name is
+  consulted only when that misses.
+- **GZ Grocery — none.** No name matching in the push path at all.
+
+**The two at the top are unlike each other, and the difference matters more than
+the order.** Read the order without it and the wrong lesson gets drawn:
+
+- **Meituan's exposure is latent.** Zero mappings use the loose branch today —
+  all 393 that resolve, resolve on the exact branch. It fires only on a
+  merchant-side rename or delist, and at that moment 133 of 393 land on a
+  neighbour.
+- **Eleme's was live.** A fragment resolved and wrote, at least once: 25 units
+  under the key `芒` on 2026-08-25, onto one of three listings, and which one is
+  still not established.
+- **Meituan's damage is worse when it fires.** `_coreQuery` collapses a family of
+  **size variants** onto one key, and a size variant is the expensive kind of
+  wrong target: a mis-resolve **swaps two live stock numbers** — the sibling that
+  took the push, and our own product, which believes it pushed and did not — and
+  both figures stay plausible, so nobody looks. Eleme's rule could reach anything
+  containing the fragment, related or not; where it reached an unrelated listing
+  the resulting number was obviously wrong on an obviously wrong listing, which
+  is the failure mode somebody notices. **Wider is not the same as worse.**
+
+So **Eleme has already done harm and can no longer do it that way; Meituan has
+not yet done harm and would do more of it.** Both sentences are true, of
+different questions. The ordering answers the first one, which is why the basis
+is written down rather than left to be inferred.
+
+> **Correction, 2026-08-26 — the ordering above was rewritten. Marked, not
+> silently replaced.**
+>
+> **It previously read:** *"So the ordering of exposure is Eleme worst (name
+> only, both directions), Meituan next (name only, one direction), 闪购 mild
+> (code first), GZ Grocery none."* That shipped, and it was left standing
+> through one earlier pass while the question was put to Ash. He ruled on it;
+> this is the rewrite.
+>
+> **Two facts moved it, and neither is a change of opinion:**
+>
+> 1. **Eleme's both-directions branch no longer exists** (`0a66800d`,
+>    2026-08-26). The fact that put Eleme first was a property of code that has
+>    since been deleted, so the old line describes a rule rather than a system.
+> 2. **Meituan's exposure was measured and is larger on both counts** — 133
+>    exposed mappings against Eleme's seven, and nothing downstream that would
+>    catch a mislanding, where Eleme now records the target it landed on.
+>
+> **The basis is now stated in the text**, which is the third change and the one
+> that keeps this from happening again. The old line said "ordering of exposure"
+> and left "exposure" to the reader; on one reading of it Eleme still ranks
+> first. Naming the basis settles which question is being answered instead of
+> leaving two answers to compete.
+>
+> The identical rewrite and the identical mark are in
+> `docs/tacet-consolidation-decisions.md` §30, which carries this ordering as its
+> own, done in the same pass so the two cannot drift apart.
 
 ### Bearing on the nine nameless mappings
 
@@ -772,18 +932,26 @@ safety property. It is a measurement with a date on it.
 
 ### What would actually fix it
 
+**Written before the fix. `0a66800d` took the second option and did the last
+paragraph, on 2026-08-26.** Kept as written because the reasoning is what
+`docs/meituan-findings.md` finding 1 needs to reach for next, on a channel where
+none of it is done.
+
 Not a guard on the caller; the callers are already right. Either:
 
 - **the 货号 backfill** — give Eleme items an `extCode` and stop matching on names
-  (findings 3 and 4 both point here), or
+  (findings 3 and 4 both point here) — **not done, and still the better fix**; or
 - **refuse instead of guessing** — an inexact match returns no target rather than
   the first one, which is §30 rule 4 applied to the matcher instead of to a
   screen. A fragment would then fail loudly, as a queue row with an error, which
-  is what finding 3's two days of silence cost.
+  is what finding 3's two days of silence cost. — **DONE, `0a66800d`.** It also
+  stopped a not-in-catalogue name wearing the transient shape, so it fails once
+  rather than burning three attempts.
 
 And independently of both: **record the target.** A `target_name` on the
 `stock_push` log line would have made this finding a query rather than an
-argument.
+argument. — **DONE, `0a66800d`**: `eleme_product_map.item_id` plus `target_name`
+and `target_item_id` on the log line.
 
 ---
 
