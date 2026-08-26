@@ -316,6 +316,41 @@ addColumn('invoices', 'store_id', 'INTEGER');
 addColumn('invoices', 'due_date', 'DATE');
 addColumn('invoices', 'paid_at',  'DATETIME');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_scope ON invoices(scope)'); } catch {}
+// Supplier invoices come to Tacet — the guard, and why it moves no rows.
+//
+// The Tacet invoice screen reads by tenant_id and by nothing else (scope is
+// stamped on create and never filtered on read), because everything Roots is
+// chasing sits on kitchen-scope POs. So the 10 existing invoices do not need
+// to be moved, re-scoped or copied: they already carry tenant_id 1, and they
+// become visible in Tacet the moment that read exists. Re-scoping them to
+// 'retail' would be a lie about where they came from, and — now that
+// routes/finance.js filters scope='kitchen' — would also silently remove them
+// from the kitchen screen Jing still uses.
+//
+// What this DOES do is close the two holes that would make a row invisible to
+// a tenant-scoped read: a NULL tenant_id (nobody's) or a NULL/blank scope
+// (nowhere's). Both are 0 on live data today; the guard exists so a row
+// restored from an older backup, or written by something that predates these
+// columns, cannot land unreachable.
+//
+// Idempotent via _migrations, and reversible in principle: it only ever fills
+// a NULL, so the pre-state of any row it touches is recorded by the count it
+// logs. It writes nothing else — no amount, no allocation, no link.
+try {
+  const ranInvTenancy = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('invoices_tenant_scope_normalise_v1');
+  if (!ranInvTenancy) {
+    db.exec('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    const tFixed = db.prepare('UPDATE invoices SET tenant_id = 1 WHERE tenant_id IS NULL').run().changes;
+    const sFixed = db.prepare("UPDATE invoices SET scope = 'kitchen' WHERE scope IS NULL OR TRIM(scope) = ''").run().changes;
+    const byScope = db.prepare("SELECT COALESCE(scope,'?') AS scope, COUNT(*) AS n FROM invoices GROUP BY 1").all()
+      .map(r => `${r.n} ${r.scope}`).join(', ');
+    const total = db.prepare('SELECT COUNT(*) AS n FROM invoices').get().n;
+    const links = db.prepare('SELECT COUNT(*) AS n FROM invoice_lines').get().n;
+    console.log(`[migration invoices_tenant_scope_normalise_v1] ${total} invoice${total === 1 ? '' : 's'} (${byScope}), ${links} allocation link${links === 1 ? '' : 's'}; `
+      + `${tFixed} tenant_id filled, ${sFixed} scope filled — no rows moved`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('invoices_tenant_scope_normalise_v1');
+  }
+} catch (e) { console.error('[migration invoices_tenant_scope_normalise_v1]', e); }
 
 // Landed cost — freight / tax / handling carried on the PO header, on top of
 // the line goods. Posts to Finance as one "Freight & fees" expense line and

@@ -425,12 +425,32 @@ router.get('/api/finance/invoice-summary', requireAuth, requirePermission('finan
 // buying orders.
 // ─────────────────────────────────────────────────────────────────────────
 
+// KITCHEN ONLY -- the scope guard, and why it exists.
+//
+// `invoices` is shared with Tacet's supplier-invoice screen, which stamps
+// scope='retail'. This file has had no scope filter, so every Tacet invoice
+// appeared in this kitchen list and could be edited or deleted from it. That
+// is not hypothetical: on 2026-07-15 a Tacet bill (invoice 22, AMMEX Gloves
+// Store, Y300) was created there, and on 2026-08-08 it was deleted from THIS
+// screen as row 7 of a seven-row cleanup sweep, by a user with no way to tell
+// it apart from the kitchen rows either side of it. activity_log still holds
+// both halves: a `retail_bill` create with no matching `retail_bill` delete,
+// and an `invoice` delete on the same id.
+//
+// COALESCE(scope,'kitchen') rather than scope='kitchen' -- the column was added
+// after these rows existed, so a pre-scope row is a kitchen row.
+//
+// Deliberately NOT a tenant filter as well. This file has no tenant handling
+// anywhere; adding one is a bigger change than a safety fix should carry, and
+// every invoice here today is tenant 1. Reported as open, not fixed here.
+const KITCHEN_SCOPE = "COALESCE(scope,'kitchen') = 'kitchen'";
+
 // GET /api/finance/invoices?month=&supplier= — list invoices + their
 // linked line items.
 router.get('/api/finance/invoices', requireAuth, requirePermission('finance'), (req, res) => {
   const month    = (req.query.month || '').trim();
   const supplier = (req.query.supplier || '').trim();
-  let q = 'SELECT * FROM invoices WHERE 1=1';
+  let q = `SELECT * FROM invoices WHERE ${KITCHEN_SCOPE}`;
   const params = [];
   if (month)    { q += " AND substr(date, 1, 7) = ?"; params.push(month); }
   if (supplier) { q += ' AND LOWER(supplier) LIKE LOWER(?)'; params.push('%' + supplier + '%'); }
@@ -464,7 +484,7 @@ router.get('/api/finance/invoices', requireAuth, requirePermission('finance'), (
 
 // GET /api/finance/invoices/:id — one invoice with all linked line items.
 router.get('/api/finance/invoices/:id', requireAuth, requirePermission('finance'), (req, res) => {
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  const inv = db.prepare(`SELECT * FROM invoices WHERE id = ? AND ${KITCHEN_SCOPE}`).get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found · 未找到' });
   const lines = db.prepare(`
     SELECT il.id AS link_id, il.allocated_amount,
@@ -560,7 +580,7 @@ router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), 
 
 // PUT /api/finance/invoices/:id — replace header + diff link list.
 router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'), (req, res) => {
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  const inv = db.prepare(`SELECT * FROM invoices WHERE id = ? AND ${KITCHEN_SCOPE}`).get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found · 未找到' });
   const { supplier, invoice_number, amount, date, notes, links } = req.body || {};
   try {
@@ -613,7 +633,7 @@ router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
 // DELETE /api/finance/invoices/:id — drops the invoice + all its links
 // (FK ON DELETE CASCADE handles invoice_lines cleanup).
 router.delete('/api/finance/invoices/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
-  const r = db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
+  const r = db.prepare(`DELETE FROM invoices WHERE id = ? AND ${KITCHEN_SCOPE}`).run(req.params.id);
   if (r.changes === 0) return res.status(404).json({ error: 'Not found · 未找到' });
   logActivity(req.user.id, req.user.username, 'delete', 'invoice', req.params.id, null, req.ip);
   res.json({ success: true });
