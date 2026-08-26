@@ -17,6 +17,11 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const bundleLib = require('../lib/meituan-bundles');
 const bundleStock = require('../lib/bundle-stock');
+// The mapping-name gate and its audit payload. Lives in lib/ so the whole
+// behaviour can be driven headless against a fixture; this route adds no rule
+// of its own beyond turning the result into a response.
+const mapWrite = require('../lib/meituan-map-write');
+const { logActivity } = require('../middleware/auth');
 // Opening/closing a location on a channel is ONE operation (see lib/store-close):
 // it owns the flag write AND the queued-push clear together, so no route can do
 // half of it. Nothing in this file writes target_open or channel_status.is_open
@@ -158,55 +163,49 @@ router.get('/api/retail-admin/meituan/stores', requireRetailAdmin, (req, res) =>
 
 // ── POST /api/retail-admin/meituan/products/:id/map ───────────────────────
 // Upsert a product's meituan mapping for one store. Empty name → delete.
+//
+// THE NAME MUST BE ONE THE CHANNEL REPORTED. The check is in
+// lib/meituan-map-write.js and runs here rather than in the caller, so it holds
+// for Match names, for the row panel's field, for the paste path and for
+// anything written later. There is no override and no force flag: an
+// unverifiable name is refused. See docs/meituan-findings.md finding 11.
+//
+// Clearing a name is a removal, not a claim about a listing, so it is not
+// gated — a product whose stored name no longer verifies stays removable.
 router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const productId = parseInt(req.params.id);
-  const { storeId, storeCode, meituanName, syncEnabled } = req.body || {};
+  const { storeId, storeCode, meituanName, syncEnabled, source } = req.body || {};
   if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
 
   try {
-    if (!meituanName || meituanName.trim() === '') {
-      db.prepare('DELETE FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?')
-        .run(productId, storeId);
-      return res.json({ success: true, deleted: true });
+    const r = mapWrite.applyMapName(db, {
+      productId, storeId, storeCode, meituanName, syncEnabled,
+      // Caller-declared, and recorded as such. The client says whether the
+      // string came from Match names or from a person; nothing server-side can
+      // tell those apart, so this is a claim in the audit trail rather than a
+      // fact — which is still infinitely more than the nothing recorded before.
+      source: typeof source === 'string' && source ? source : 'unknown',
+      audit: (entry) => {
+        try {
+          logActivity(req.user && req.user.id, (req.user && req.user.username) || 'unknown',
+            entry.action, 'meituan_product_map', entry.productId,
+            { store_code: entry.storeCode, from: entry.from, to: entry.to,
+              source: entry.source, sync_enabled: entry.syncEnabled,
+              spec_cleared: entry.specCleared, rows: entry.rows },
+            req.ip);
+        } catch (_) { /* the mapping change already happened; the log is best-effort */ }
+      },
+    });
+
+    // 409, not 400: the request is well formed and the STATE is what refuses it.
+    // `message` reaches the operator through the admin api() helper, which
+    // renders "<message> [<code>]" and hands the caller err.code for branching.
+    if (!r.ok) {
+      return res.status(409).json({ success: false, error: r.code,
+                                    message: r.message, catalogue: r.catalogue });
     }
-
-    // A chosen 规格 belongs to the listing it was chosen on. Point the product at
-    // a different listing and every option claim is about a listing it no longer
-    // syncs to, so drop them rather than push stock at a stranger's option.
-    // Same rule as eleme-admin.js mergeMapFields().
-    const name = meituanName.trim();
-    const cur = db.prepare(
-      `SELECT meituan_name FROM meituan_product_map
-        WHERE product_id = ? AND retail_store_id = ?
-        ORDER BY spec_key = '' DESC, id LIMIT 1`
-    ).get(productId, storeId);
-    const renamed = cur && String(cur.meituan_name || '').trim() !== name;
-
-    db.transaction(() => {
-      if (renamed) {
-        db.prepare(`DELETE FROM meituan_product_map
-                     WHERE product_id = ? AND retail_store_id = ? AND spec_key <> ''`)
-          .run(productId, storeId);
-      }
-      // The name and the switch belong to the product on this store, so they go
-      // to every claim it still holds.
-      db.prepare(`UPDATE meituan_product_map
-                     SET meituan_name = ?, store_code = ?, sync_enabled = ?, updated_at = CURRENT_TIMESTAMP
-                   WHERE product_id = ? AND retail_store_id = ?`)
-        .run(name, storeCode, syncEnabled ? 1 : 0, productId, storeId);
-      const left = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?')
-                     .get(productId, storeId).n;
-      if (!left) {
-        db.prepare(`
-          INSERT INTO meituan_product_map
-            (product_id, retail_store_id, store_code, meituan_name, spec_key, units_per_pack, sync_enabled, updated_at)
-          VALUES (?, ?, ?, ?, '', 1, ?, CURRENT_TIMESTAMP)
-        `).run(productId, storeId, storeCode, name, syncEnabled ? 1 : 0);
-      }
-    })();
-
-    res.json({ success: true, specCleared: !!renamed });
+    res.json({ success: true, deleted: !!r.deleted, specCleared: !!r.specCleared });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -766,7 +765,17 @@ router.get('/api/retail-admin/meituan/listings', requireRetailAdmin, (req, res) 
       `SELECT COUNT(*) AS n FROM meituan_listing_jobs WHERE status IN ('pending','processing')`
     ).get()?.n || 0;
 
-    res.json({ success: true, listings, skus, jobs, running });
+    // How many names each store's catalogue holds and when they were read.
+    // The screen had no way to say this, so "the catalogue is two days old" was
+    // not a thing an operator could find out — which matters now that a stale
+    // catalogue is what refuses a mapping write.
+    const catalogue = {};
+    for (const row of db.prepare(
+      `SELECT store_code, COUNT(*) AS n, MAX(scraped_at) AS at
+         FROM meituan_listings GROUP BY store_code`
+    ).all()) catalogue[row.store_code] = { count: Number(row.n || 0), scrapedAt: row.at || null };
+
+    res.json({ success: true, listings, skus, jobs, running, catalogue });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

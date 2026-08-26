@@ -496,6 +496,7 @@
     `;
     try { applyCapGates(); } catch (_) {}
     paintSummary();
+    paintBreakdown();
   }
 
   // ── Details ──────────────────────────────────────────────────────────────
@@ -725,11 +726,19 @@
     return c.computeRecipeCost({ recipe: draftDetails(), ingredients: _lines, costData: draftCostData() });
   }
 
+  // The breakdown has to be painted from the DOM, so it can only be filled
+  // AFTER costTab()'s inputs are mounted — never inside costTab() itself,
+  // which is still just a string at that point. paintRecord() calls this on
+  // open; without it the block stayed blank until the first keystroke.
+  function paintBreakdown() {
+    const bk = document.getElementById('rcp-breakdown');
+    if (bk) bk.innerHTML = breakdownHtml(liveCost());
+  }
+
   window.rcpRecompute = function () {
     _dirty = true;
     paintSummary();
-    const bk = document.getElementById('rcp-breakdown');
-    if (bk) bk.innerHTML = breakdownHtml(liveCost());
+    paintBreakdown();
   };
 
   function breakdownHtml(c) {
