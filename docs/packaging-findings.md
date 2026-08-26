@@ -1,6 +1,6 @@
 # packaging — Findings
 
-Seventeen findings, opened 2026-08-26 by a simple question — *what does packaging
+Nineteen findings, opened 2026-08-26 by a simple question — *what does packaging
 cost us* — and ending in a number that was counted twice on eleven materials and
 sixteen recipe lines.
 
@@ -12,6 +12,14 @@ in this document is structure, and the structure is mostly defensible.
 fix that followed and it changed code. Finding 16 records what the fix does NOT
 reach, so the gap is not mistaken for closed. Every number below is a read-only
 query against `roots.db`, and the queries are given so they can be re-run.
+
+**Findings 17, 18 and 19 shipped nothing and wrote nothing either, and none of
+the three opened a database** — each is read from the code, and each carries the
+read-only SQL that would verify it rather than the answer. **Findings 18 and 19
+are the outliers of this document in subject**: 18 is a recipe-IDENTITY defect
+and 19 is an unsourced figure in a decision record, and both are filed here only
+because checking §31's worked example and its cost estimate surfaced them. Read
+their opening paragraphs before citing either as a packaging finding.
 
 > **Amended 2026-08-26 — FINDING 11 IS NOW ALSO FIXED.** The sentence above is
 > true of the survey that produced findings 1 to 14 and is no longer true of
@@ -1325,6 +1333,316 @@ the reason per material** — the SQL in route 1 finds candidates by date, not b
 block state, so it over-reports.
 
 ---
+
+## 18. Two recipes are named Hummus Asli, so its products link to neither — and nothing says so (found 2026-08-27)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.**
+
+**THIS IS A RECIPE-IDENTITY DEFECT, NOT A PACKAGING ONE.** Stated first so it is
+not read as belonging to this document's subject: nothing about packaging causes
+it, nothing about packaging is needed to fix it, and it would be exactly as true
+in a system with no packaging model at all. **It is filed here only because
+§31's rule 2 offered Hummus Asli as a worked example, and checking the example
+surfaced it.** Whoever owns recipe identity owns this; this entry is the record,
+not the claim on it.
+
+### Two recipes, one name, differing only by SKU
+
+`database.js:4267-4268`, in the comment above the one-off product→recipe link:
+
+```js
+//     knows which is current — that is what excludes both Hummus Asli recipes
+//     (7 / 1-12 and 92 / 1-10), without needing to name them.
+```
+
+Recipe **7** (SKU `1-12`) and recipe **92** (SKU `1-10`) share **both**
+`name_en` and `name_cn`. The only field that separates them is the SKU.
+
+### Why sharing both names is exactly the case the matcher cannot resolve
+
+`database.js:4263` states the rule the linker enforces:
+
+```js
+//   * two or more of {exact SKU, exact name_en, exact name_cn} agree — survey
+//     group A. One signal alone (group B, 36 pairs, all SKU-only) is NOT enough
+```
+
+and `:4311` enforces it — `if (sigs.size < 2) continue;`.
+
+**Two of three must agree, and the SKUs differ, so SKU can serve for neither
+recipe.** That leaves `name_en` and `name_cn` as the only signals available, and
+both are required. But both are what the two recipes SHARE — so any product
+matching one recipe on both names matches the other on both names too, and
+**both qualify**. The rule that was written to demand more evidence produces, on
+this family, two equally-evidenced answers. Nothing in the data prefers either.
+
+### The product is then dropped silently
+
+`database.js:4332`:
+
+```js
+        if (rids.size > 1) { ambiguous++; continue; }
+```
+
+`continue` — no write, no log line, no row marked. The product keeps
+`recipe_id IS NULL` and `unit_cost` untouched. The only trace is a counter, in
+the migration's own console line, `database.js:4345-4346`:
+
+```js
+    console.log(`[store_products] recipe link: ${linked} product(s) linked + costed from a recipe `
+      + `(skipped ${ambiguous} ambiguous, ${noCost} no usable recipe cost, ${scaled} sample/multipack); `
+```
+
+**That is server stdout at migration time, seen once by whoever was watching the
+boot.** No warning reaches any user, no screen names the products, and the
+counter does not say WHICH products or WHICH recipes collided. A reader of the
+catalogue afterwards sees products with no recipe and no reason given.
+
+### What this means for §31
+
+**The affected products therefore hold NO recipe link at all** — not a link to
+the wrong recipe, not a shared link, none. So Hummus Asli is not §31 rule 2's
+shape (one recipe, several products packed differently); **it is the case rules
+7 and 8 exist for** — a product that must be able to carry packaging with no
+recipe anywhere in the picture. Rule 2 has been corrected accordingly
+(`docs/tacet-consolidation-decisions.md` §31, v4.93); Crunchy Granola remains
+that rule's only worked example.
+
+### The 300ml box attributed to it was recipe 9's
+
+§31 rule 2 said Hummus Asli sat "on one recipe carrying a single 300ml box".
+Recipe 7's packaging link is not a 300ml box and is not a link:
+
+```sql
+SELECT recipe_id, packaging, packaging_type_id, typeof(packaging_type_id)
+  FROM recipe_cost_data WHERE recipe_id = 7;
+-- 7 | 1.0 | pt1778315688913 | text
+```
+
+**`'pt1778315688913'` is a client-generated string id sitting in an `INTEGER`
+column, and it matches no `packaging_types` row** — finding 7 records it as an
+orphan. The `300ml Plastic Box` / `300毫升塑料瓶` is `packaging_types` id 2 and
+belongs to **recipe 9**, per `packaging-findings.md:314-315`. The box was
+attributed to the wrong recipe.
+
+### UNVERIFIED — no database was opened for this finding
+
+**That recipes 7 and 92 both still exist, and still share both `name_en` and
+`name_cn`, is NOT a live read.** `database.js:4267` is a claim made by whoever
+wrote that migration, at the time they wrote it. Either recipe may since have
+been renamed, re-SKU'd, archived or deleted, in which case the family is no
+longer ambiguous and the products may have linked on a later run — though the
+migration is `_migrations`-guarded and does not re-run, so a link would have to
+come from somewhere else. **Everything above about the MATCHING RULE is read
+from the code and is verified; everything about the two rows is not.**
+
+### How to verify it — read-only
+
+The finding 17 constraint applies unchanged and is not optional here:
+**`sqlite3 -readonly` only, no application modules, and never
+`require('./database')`** — `database.js:4033-4039` runs
+`DELETE FROM activity_log WHERE created_at < …` at module load, so requiring the
+app to "read" the database purges the activity log that finding 11's recovery
+depends on. Loading `database.js` would additionally attempt this very
+migration.
+
+```sh
+sqlite3 -readonly roots.db        # or: sqlite3 'file:roots.db?mode=ro'
+```
+
+```sql
+-- 1. Do both rows still exist, and do they still collide on both names?
+SELECT id, sku, name_en, name_cn
+  FROM recipes
+ WHERE id IN (7, 92)
+ ORDER BY id;
+
+-- 2. The collision without naming ids — every name pair carried by more than
+--    one recipe. Hummus Asli should appear; anything else here is the same
+--    defect on another family.
+SELECT name_en, name_cn, COUNT(*) AS n, GROUP_CONCAT(id) AS recipe_ids,
+       GROUP_CONCAT(sku) AS skus
+  FROM recipes
+ GROUP BY name_en, name_cn
+HAVING COUNT(*) > 1
+ ORDER BY n DESC, name_en;
+
+-- 3. The products that lost their link to it. Unlinked actives whose own
+--    name matches a recipe name — the population the ambiguous counter hid.
+SELECT sp.id, sp.sku, sp.name_en, sp.name_cn, sp.recipe_id, sp.unit_cost
+  FROM store_products sp
+ WHERE COALESCE(sp.is_active,1) = 1
+   AND sp.recipe_id IS NULL
+   AND EXISTS (SELECT 1 FROM recipes r
+                WHERE r.name_en = sp.name_en OR r.name_cn = sp.name_cn)
+ ORDER BY sp.name_en, sp.sku;
+
+-- 4. Recipe 7's orphan type id, and whether it resolves. Expect no row from
+--    the join half.
+SELECT c.recipe_id, c.packaging, c.packaging_type_id,
+       typeof(c.packaging_type_id) AS ty,
+       (SELECT COUNT(*) FROM packaging_types t
+         WHERE CAST(t.id AS TEXT) = CAST(c.packaging_type_id AS TEXT)) AS resolves
+  FROM recipe_cost_data c
+ WHERE c.recipe_id IN (7, 9, 92);
+```
+
+Query 3 over-reports by design: it finds unlinked products whose name matches
+*any* recipe, which includes products skipped for the other three reasons in the
+counter (`noCost`, `scaled`) as well as the ambiguous ones. **Narrowing it to the
+ambiguous set alone requires re-running the matcher's own logic, and that must
+not be done by importing the app** — read the four fields and apply the
+two-of-three rule by hand, or use finding 17's route 2, a detached fixture
+against a restored backup.
+
+---
+
+## 19. The "65 margins" figure has no measured source, and the operative number is smaller (found 2026-08-27)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.
+No number is corrected here, because no number was measured here.**
+
+§31's consequences state:
+
+> **65 products carry a packaging figure through their recipe today, and each one
+> needs its packaging picked once.** That one-time pass is **the real cost of this
+> change** — not the code.
+
+**Sixty-five is the budget for the pass §31 calls the real cost of the change,
+and it appears in exactly two places, both of which are §31 itself:**
+
+| where | what it is |
+|---|---|
+| `docs/tacet-consolidation-decisions.md:4244` | §31's consequences — the claim |
+| `docs/tacet-consolidation-decisions.md:19` | v4.88's changelog entry — the same claim, restating the section |
+
+*(Both were `:4240` and `:17` until v4.93's own entry and rule-2 correction shifted
+them by four and two lines respectively. The line numbers move; the count of two
+does not — grep `65 products` if they have drifted again.)*
+
+No query, no survey line, and no finding in this document produces it. The
+counted figures this survey *did* produce are finding 6's — 93 cost rows with
+`packaging > 0`, 10 explicitly zero, 34 recipes with no cost row — and those are
+counts of RECIPES, not of products. **65 is not derivable from them**, because
+the recipe→product fan-out is exactly what nobody has counted: one recipe backs
+several products (that is rule 2's whole subject), and some products link to no
+recipe at all (finding 18). **It is recorded here as unsourced, not as wrong.**
+
+### The operative number is NOT 65
+
+Even taken at face value, 65 is the wrong number for the decision it is being
+spent on. **A product that already shows an em dash in its margin column for want
+of a sell price has no margin to move**, whatever packaging is picked for it.
+`public/retail-admin/09-products.js:786`:
+
+```js
+  if (!Number.isFinite(p) || p <= 0) return null;   // no price → no margin to state
+```
+
+and `:1165` renders that null:
+
+```js
+  if (!ms.length) return '<span class="pa-col-margin pa-col-muted">—</span>';
+```
+
+So the number that matters is **65 minus the products already rendering an em
+dash** — and it is that smaller number, not 65, that §31 rule 9's third-state
+rendering decision turns on. Rule 9 requires unknown, explicit-no-packaging and a
+figure to be three distinguishable states; the cost of showing the unknown state
+is paid per product whose margin cell would visibly change. **A product with no
+sell price shows an em dash before the change and an em dash after it.** Sizing
+the rendering decision against 65 sizes it against a population that includes
+rows the decision cannot reach.
+
+### Pin the population BEFORE running either query
+
+Both queries below are unrunnable as *definitions* until three things are
+settled, and the two figures will not agree with each other or with 65 unless
+the same choices are made for both:
+
+1. **Archived in or out.** `status = 'Active'` means "not archived"
+   (`routes/retail.js:14733`), and it is independent of `is_published`. An
+   archived product is not being sold and arguably needs no pass; an unpublished
+   but active one may be published tomorrow. 65 states which of the three
+   populations it counted: it does not.
+2. **Whether `packaging = 0` counts as needing the pass.** Finding 6 counts 10
+   cost rows at an explicit zero and 34 recipes with no cost row at all, and
+   finding 6's whole point is that today those two are indistinguishable on
+   screen. Under §31 rule 9 they are different facts — one is "no packaging",
+   the other is "unknown" — so whether the zeros need an operator to confirm
+   them is a rule-9 question, not a counting question, and it must be answered
+   first.
+3. **Which product table.** `store_products` is the retail catalogue §31 is
+   about; kitchen `products` is a separate id space with its own `recipe_id`,
+   which `database.js:4276-4278` records as unreliable ("one bad row in four").
+   The queries below read `store_products` only.
+
+Answer those three, then run both. **Do not reconcile the results against 65** —
+65 has no method behind it to reconcile with.
+
+### The two queries — read-only
+
+Finding 17's constraint again, unchanged: **`sqlite3 -readonly`, no application
+modules, never `require('./database')`** (`database.js:4033-4039` purges the
+activity log at module load).
+
+```sh
+sqlite3 -readonly roots.db        # or: sqlite3 'file:roots.db?mode=ro'
+```
+
+```sql
+-- (a) THE GROSS POPULATION — products carrying a packaging figure through their
+--     recipe. This is the claim 65 makes. Adjust the two pinned choices in
+--     place: drop the status filter to include archived; change `> 0` to
+--     `>= 0` to count explicit zeros as needing the pass.
+SELECT COUNT(*) AS gross
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0;
+
+-- (b) THE OPERATIVE POPULATION — the same set, minus every product whose margin
+--     already renders as an em dash for want of a sell price. Mirrors
+--     _paMargin() at public/retail-admin/09-products.js:786: a margin exists
+--     only where sell_price is finite and > 0.
+SELECT COUNT(*) AS operative
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0
+   AND sp.sell_price IS NOT NULL
+   AND CAST(sp.sell_price AS REAL) > 0;
+
+-- (c) The difference, itemised — the products (b) drops. Worth reading rather
+--     than counting: a product with a recipe, a packaging figure and no sell
+--     price is its own question.
+SELECT sp.id, sp.sku, sp.name_en, sp.sell_price, sp.status, c.packaging
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0
+   AND (sp.sell_price IS NULL OR CAST(sp.sell_price AS REAL) <= 0)
+ ORDER BY sp.name_en;
+```
+
+**Neither query is a substitute for the third pinned choice.** Query (a) with
+`> 0` silently adopts the answer "explicit zeros do not need the pass"; that is a
+decision under rule 9 and it should be made deliberately, not inherited from a
+comparison operator.
+
+### 65 is left standing in §31
+
+**Deliberately.** It has not been changed, because replacing an unsourced number
+with a second unsourced number is not an improvement, and no database was opened
+for this finding. §31's v4.93 entry records the gap and points here. When the
+queries above are run against a pinned population, §31's consequence bullet can
+be corrected from a measurement.
+
+---
+
 
 ## Context — what was and was not done on 2026-08-26
 
