@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.86
+# Tacet shared-core consolidation — decisions record, v4.87
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-26 · v4.87 — **§6 GAINS A SECOND ADDENDUM: WHAT BECOMES OF A RECIPE THAT CANNOT DERIVE, AND WHICH FIGURE GOVERNS UNTIL IT CAN.** The first addendum made servings derived and left two questions it did not have to answer at the time: what happens to a recipe that cannot produce a derived figure, and which of the three existing numbers wins where they disagree. **Both were settled from a survey of LIVE DATA before any build began, not from the model.** What the survey found is why the rule reads as it does: batch size, servings and serving size are three independently typed fields with nothing reconciling them; **servings is the number the system actually trusts**, because production logs multiply it by batch count; **serving size is inert** — stored, displayed, and read by no derivation at all; and **23 of 137 live recipes carry no servings figure**. **DERIVING REQUIRES A SERVING SIZE, AND ABSENT ONE THE STORED SERVINGS STANDS.** The recipe keeps its typed figure, that figure stays authoritative, and the recipe is marked UNCONVERTED — not blanked, not guessed at, and not derived from a serving size invented to make the sum work. **An unconverted recipe blocks batch-size auto-fill exactly as an unconverted unit line does**, which is deliberate rather than convenient: one unconverted state with two causes — a missing density under the §7 addendum, or a missing serving size here — with the screen naming which, so an operator does not learn two vocabularies for one situation. **NOTHING IS RECOSTED WITHOUT AN OPERATOR ACTING**, and the reason is sharper than it was a day ago: cost per serving now paints on open rather than on the first keystroke (`6d26a0f7`), so a figure that moved would move in front of an operator who did not ask for it — and cost per serving reaches product cost and therefore margin. Where all three figures exist and disagree, stored servings governs until someone sets the serving size on that recipe, per recipe, by hand, with no deadline and no bulk script. **ZERO SERVINGS IS NOT A VALUE** — zero means "computed to zero" where absent means "not yet known", only absent is meaningful, zero is unreachable through any interface and no live recipe holds one, and it must not return as a sentinel, a default, or a cleared-field value. **A CONSUMER OF THE CHANGING NUMBER IS NAMED SO IT IS NOT MET LATE**: `routes/production.js` multiplies stored servings by batch count to record what was made, and must be checked against the derived figure BEFORE servings becomes derived anywhere, not after. Subject to §0: a tenant whose recipes yield counts rather than portions has no serving size to record and is permanently and legitimately unconverted — **unconverted is a resting state, not a fault, and must never be presented as an error.** §6's existing rules and the first addendum are both untouched. An addendum answering questions an earlier addendum left open, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
 
 2026-08-26 · v4.84 — **§7 gains an addendum: no conversion without a stated factor.** §7 already requires a per-material ml-to-gram conversion and already says it differs per material, and it has never said what happens when that figure is absent — so the absent case was being answered in the only way an unstated case ever is, by a silent fallback, and the fallback was one millilitre to one gram. **That is true for water and for nothing else**, and it was applied to every liquid: the weight of oils understated, the weight of syrups overstated, in both directions without a mark. The addendum records the refusal rather than the guess. **CONVERSIONS ARE OF TWO KINDS AND MUST NOT BE TREATED ALIKE** — same-dimension conversions (kilograms to grams, pounds to ounces, litres to millilitres) are fixed constants true for every material, which the system supplies and nobody enters; cross-dimension conversions (volume to weight) require a DENSITY, and density is a property of the material rather than of the system, so oil, water and syrup differ, there is no default, and none may be invented. **A cross-dimension unit is therefore offered only where that material carries a density** — absent one the unit is not in the picker at all, and **new lines lacking it are refused AT THE POINT OF ENTRY rather than at save or at cost time**, so the operator meets the constraint while they can still act on it. **LINES ALREADY RECORDED UNDER THE OLD ASSUMPTION ARE NOT SILENTLY RECOSTED**, which is the decision most likely to be mistaken later for an oversight: they keep their existing cost and are marked unconverted, because recosting them would move product costs and therefore margins with no operator action and no notice, and a wrong figure that is visible is preferable to a corrected figure that moved unannounced. They are corrected by hand, one material at a time, with no deadline. **An unconverted line blocks batch-size auto-fill for its recipe**, identical treatment to the count units of the §6 addendum immediately above — where the sum cannot be trusted no sum is offered and the screen states what is missing — which doubles as the migration worklist, since a recipe that will not auto-fill is a recipe still holding an unconverted line. Subject to §0: grams are Roots' base unit and not Tacet's, and a tenant stocking in pounds enters recipe lines in pounds or ounces for identical behaviour, only the letters differing — the rule is one stocking unit per material and no conversion without a stated factor, never a mandated metric system. §7's existing rules are untouched. An addendum adding rules to a section that was silent on the point, reversing and contradicting nothing, hence a patch. Docs only; no code changed.
 
@@ -377,6 +379,54 @@ non-retained lines from cost.
 **Subject to §0.** Weight-based batch sizing is one shape a business may want. A business
 whose recipes yield counts rather than weights must be equally well served; the retained
 flag and the derived-servings rule apply unchanged, only the unit differs.
+
+### §6 second addendum — what happens to recipes that cannot derive (decided 2026-08-26)
+
+The first addendum makes servings a derived figure. It does not say what becomes of
+recipes that cannot produce one, nor which number wins where the existing three disagree.
+Both were found by survey of live data before any build began.
+
+**The situation the rule has to survive.** Batch size, servings and serving size are three
+independently typed fields today with nothing reconciling them. Servings is the number the
+system trusts: production logs multiply it by batch count. Serving size is inert — stored,
+displayed, read by nothing. Of 137 live recipes, 23 carry no servings figure at all.
+
+**1. Deriving requires a serving size. Absent one, the stored servings stands.**
+
+Where serving size is empty, the recipe keeps its typed servings, that figure remains
+authoritative, and the recipe is marked UNCONVERTED. It is not blanked, not guessed at,
+and not derived from a serving size invented for the purpose.
+
+**2. An unconverted recipe blocks batch-size auto-fill, exactly as an unconverted unit
+line does.**
+
+One unconverted state, two causes — a missing density under the §7 addendum, or a missing
+serving size here. The screen names which. This is deliberately the same mechanism: an
+operator should not have to learn two vocabularies for one situation.
+
+**3. Nothing is recosted without an operator acting.**
+
+Where a recipe carries all three figures and they disagree, the stored servings continues
+to govern until someone sets the serving size on that recipe. Conversion is per recipe, by
+hand, with no deadline and no bulk script. Cost per serving now paints on open rather than
+on keystroke, so any figure that moved would move in front of an operator who did not ask
+for it — and cost per serving reaches product cost and therefore margin.
+
+**4. Zero servings is not a value.**
+
+Zero means "computed to zero"; absent means "not yet known". Only absent is meaningful.
+Zero is unreachable through any interface and no live recipe holds one. It must not be
+reintroduced as a sentinel, a default, or a cleared-field value.
+
+**5. Production reads the figure that is changing.**
+
+`routes/production.js` multiplies stored servings by batch count to record what was made.
+It is a consumer of the number this addendum makes derived, and must be checked against
+the derived figure before servings becomes derived anywhere — not after.
+
+**Subject to §0.** A tenant whose recipes yield counts rather than portions has no serving
+size to record and is permanently and legitimately unconverted. Unconverted is a resting
+state, not a fault, and must never be presented as an error.
 
 ## 7. Units
 
