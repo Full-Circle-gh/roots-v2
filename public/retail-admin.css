@@ -2469,39 +2469,26 @@
   .pa-grid-compact .pa-card-sub  { font-size: 10px; }
   .pa-grid-compact .pa-pill { height: 18px; font-size: 8px; padding: 0 6px; }
 
-  /* ── Compact row list (shown while the editor is docked beside it) ─────── */
-  .pa-list { display: flex; flex-direction: column; gap: 6px; }
-  .pa-row {
-    display: flex; align-items: center; gap: var(--s3);
-    padding: 8px 12px;
-    background: var(--td-surface); border: 1px solid var(--td-border);
-    border-radius: 8px; cursor: pointer;
-    transition: border-color .18s cubic-bezier(.16,1,.3,1), transform .18s cubic-bezier(.16,1,.3,1);
-  }
-  .pa-row:hover { border-color: var(--td-text2); transform: translateY(-1px); }
+  /* ── The Product cell — photo beside the name, one line ──────────────────
+        This used to be `.pa-row`, a flex CARD, for the narrow list that sat
+        beside the docked editor. That list is gone (the editor is a drawer over
+        the top and the catalogue keeps the full column at every width), and a
+        `display:flex` rule still matching `.pa-row` would now take the table
+        apart, because .pa-row names the <tr>. So the card shape is deleted
+        rather than left lying beside a table that reuses its class names.
+        30px photo, 11px gap: #cu-table's identity cell exactly, so a product
+        row and a customer row read as the same component. */
+  .pa-prod { display: flex; align-items: center; gap: 11px; min-width: 0; }
   .pa-row-img {
-    width: 44px; height: 44px; flex-shrink: 0;
-    border-radius: 10px; overflow: hidden;
+    width: 30px; height: 30px; flex-shrink: 0;
+    border-radius: 8px; overflow: hidden;
     background: var(--td-raised); border: 1px solid var(--td-border);
     display: flex; align-items: center; justify-content: center; color: var(--td-text2);
   }
   .pa-row-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .pa-row-img svg { width: 20px; height: 20px; opacity: .5; }
-  .pa-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .pa-row-name { font-size: 15px; font-weight: 500; color: var(--td-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pa-row-sub  { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pa-row-sub .pa-row-meta { font-family: var(--f-sans); font-size: 12.5px; color: var(--td-text2); letter-spacing: 0; }
-  .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
-
-  /* Slim two-line row (docked list): 30px photo · name on top · muted SKU line
-     underneath. One language only; stays narrow so the editor pane gets the room,
-     while the SKU is readable without a hover. */
-  .pa-row-1l { padding: 7px 12px; gap: var(--s2); }
-  .pa-row-1l .pa-row-img { width: 30px; height: 30px; border-radius: 7px; }
-  .pa-row-1l .pa-row-img svg { width: 15px; height: 15px; }
-  .pa-row-1l .pa-row-name { font-size: 13.5px; line-height: 1.3; }
-  .pa-row-1l .pa-row-sub { font-size: 11px; line-height: 1.25; }
-  .pa-row-1l .pa-row-meta { font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pa-row-img svg { width: 15px; height: 15px; opacity: .5; }
+  .pa-row-main { flex: 1; min-width: 0; }
+  .pa-row-name { font-size: 14px; font-weight: 500; color: var(--td-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* "Available on the shop" switch — sage when live, quiet when not. */
   .pa-shop-toggle {
@@ -2531,83 +2518,205 @@
   .pa-card-shop { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
   .pa-card-shop-lbl { font-size: 12px; color: var(--td-text2); }
 
-  /* ── Overview table (.pa-list-rich) — the landing list. Photo · name ·
-        category · SKU · stock · price · shop. Real columns, quiet hairlines. ── */
-  .pa-list-rich {
-    gap: 0;
+  /* ══ THE CATALOGUE TABLE (#pa-table) ═══════════════════════════════════════
+        Photo · name · category · SKU · one column per store · price · margin ·
+        status. A real <table>, table-layout:fixed, one classed <col> per
+        column — the shape #orders-table and #cu-table both carry (§1.19), and
+        the reason this stopped being a CSS grid.
+
+        What was wrong with the grid: its track list was written inline per
+        render, with Category on minmax(110px,0.8fr) and SKU on
+        minmax(90px,0.7fr). Two columns holding four-to-fifteen characters each
+        also held an `fr` share, so every pixel a wide monitor added went to the
+        two columns with the least in them. The row read as a set of islands
+        with canyons between them, and the gap between any two values changed
+        with the window. That is the exact defect §1.19 exists to stop.
+
+        Everything below that is a TREATMENT rather than a width is Orders' —
+        Orders is the anchor for table shape the same way it is for the band.
+        The values are its values, restated on --td-* tokens because the
+        catalogue is one native Tacet layer and never re-states legacy names. ══ */
+
+  /* The card. 🔴 It clips with clip-path, DELIBERATELY NOT overflow. An
+     `overflow` in EITHER axis (hidden, auto, even overflow-x alone, which
+     computes the other axis to auto) makes this the sticky band's scrollport,
+     and the band then parks itself 56px down from the card's own top — sitting
+     squarely on row one. That shipped on Customers once; the full finding is on
+     `#tab-customers .list-card` in retail-admin.html. Nothing between the band
+     and the page scroller may take an overflow.
+     Because the card clips, the header cells and the last row draw NO corner of
+     their own — one element owns the shape, by construction. */
+  .pa-listcard {
+    margin-top: 16px;
     background: var(--td-surface);
     border: 1px solid var(--td-border);
-    /* Top corners square, matching .pa-rowhead's now-square top (see below) —
-       with no overflow:hidden a rounded top here would poke out past the
-       header's straight edge. Bottom stays rounded via .pa-row:last-child. */
-    border-radius: 0 0 14px 14px;
-    /* No overflow:hidden — .pa-rowhead is position:sticky and needs the
-       viewport (not this box) as its containing block, else it would be
-       trapped inside the list instead of locking under the topbar. Corners
-       are rounded on the header/last row instead. */
-    margin-top: 16px;
+    border-radius: 14px;
+    overflow: visible;
+    clip-path: inset(0 round 14px);
   }
-  .pa-list-rich .pa-row, .pa-rowhead {
-    display: grid;
-    /* Leading 34px is the always-on select checkbox column. Rest of the track
-       list is set inline per render (paRender) — img · name · category ·
-       SKU · one column per store · price. Fallback keeps the old single-stock
-       shape for safety. */
-    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px);
-    align-items: center; gap: var(--s3);
-  }
-  .pa-list-rich .pa-row {
-    background: transparent;
-    border: none; border-bottom: 1px solid var(--td-border); border-radius: 0;
-    padding: 12px 18px; transform: none;
-  }
-  /* Hover is a tint of the theme's own ink, not a jump to the raised surface —
-     the raised fill is what a SELECTED row wears, and having both meant a
-     hovered row was indistinguishable from the open one. */
-  .pa-list-rich .pa-row:hover { transform: none; background: rgba(var(--td-heat-rgb), .035); border-color: var(--td-border); }
-  .pa-list-rich .pa-row:last-child { border-bottom: none; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
-  /* The open product: raised fill plus an ink edge down its leading side, so
-     which row the dock is showing survives a glance at the far column. */
-  .pa-list-rich .pa-row.is-selected { background: var(--td-raised); box-shadow: inset 3px 0 0 0 var(--td-text); }
-  .pa-list-rich .pa-row.is-selected:hover { background: var(--td-raised); }
-  .pa-rowhead {
-    padding: 12px 18px; background: var(--td-raised);
-    border-bottom: 1px solid var(--td-border);
-    /* Square top, not rounded: once stuck it's pinned flush under the topbar
-       (top:56px = exact topbar height, no gap) — a rounded top edge there
-       reads as a floating pill instead of an attached bar. */
-    font-size: 13px; letter-spacing: 0; text-transform: none;
-    color: var(--td-text2); font-weight: 500;
+  #pa-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+
+  /* ── Pinned column widths — PERCENTAGES SUMMING TO 100 ─────────────────────
+     🔴 Do NOT reach for clamp()/min()/max()/calc() to express a floor here.
+     Under table-layout:fixed a math function on a col width is IGNORED and the
+     column silently falls back to auto — Orders shipped that idea and its table
+     split itself into ten equal parts. See #orders-table's own width block for
+     the measurements, and for why the two-declaration "safety net" does nothing.
+
+     MEASURED at 996px — the content column a 1280px window leaves once the rail
+     and the gutters are taken out — in a browser, against the widest REAL value
+     each column holds (read out of the live catalogue, not guessed) and the
+     widest header in BOTH languages (§1.11). Cells carry 24px of padding, so
+     `room` is the column minus that. English sets every header floor here: 分类
+     measures 26px where "Category" measures 54.
+
+       col        %     px  room  need  binding constraint             slack
+       select      4   39.8    26    16  the 16px box (own padding)      +10
+       Product    30  298.2   274   ~41  30px photo + 11px gap       ellipses
+       Category   12  119.3    95    95  "Spreads ＆ Dips"                +0
+       SKU        10   99.4    75    67  "CHECKOUT" — letters, not digits +8
+       Tianhe      9   89.5    65    38  the "Out" pill (the box flexes) +27
+       Yuexiu      9   89.5    65    38  same                            +27
+       Price       8   79.5    55    49  "¥999.00"                        +6
+       Margin      8   79.5    55    47  "48–92%", a variant range        +8
+       Status     10   99.4    75   ~76  the "Sold out" badge             +0
+
+     Product is the ONLY absorber and it is the only cell meant to ellipse.
+
+     ⚠️ SKU has THREE outliers the column does not try to hold: a bundle whose
+     SKU is `（7-500）+（7-501）+（7-505）+（7-506）` at 31 characters, and two others
+     at 23 and 15. 244 of the 278 SKUs are four or five characters and the
+     widest ordinary ones are `2-150-d2` and `CHECKOUT`; sizing to 31 would
+     spend a quarter of the table on three rows. Those three ellipse, visibly,
+     with a "…" — which is why this column is `text-overflow: ellipsis` rather
+     than a bare nowrap that would spill under Tianhe without saying so.
+
+     🔴 THE STOCK COLUMNS ARE THE ONE DELIBERATE EXCEPTION, and it is NOT the
+     Customers "widthless column eats the monitor" bug. Their COUNT is a tenant
+     fact — one column per live store — not a design constant, so no fixed set
+     of percentages can name them. Every other column states a percentage and
+     the stock columns, N identical siblings, divide the remainder equally,
+     which is exactly the arrangement wanted. The stated columns sum to 82, so
+     the stock block is 18%: 9% each at two stores. What broke Customers was ONE
+     ellipsing content column left width-less, taking 100% of a wide monitor's
+     slack while eight others stood still. N identical columns splitting a
+     stated block is the opposite shape, and every boundary still widens
+     together.
+
+     `data-stores` is how CSS knows how much to leave. Past two stores Product
+     and the two text columns give room back so a stock column still clears its
+     62px floor; paRender clamps the attribute at 5, so a tenant with more
+     stores reuses the 5-store set and the columns keep narrowing rather than
+     falling off a cliff.
+
+     🔴 `width: 0%` on a col is NOT how you switch a column off — the browser
+     reads it as width-less and the column joins the equal-division pool, which
+     is why the grip column at 0% measured 6% and stole a third of the stock
+     block. Measured, not assumed. paRender emits the grip col, th and td only
+     while reordering is armed, and the rule below sizes it when they exist. */
+  #pa-table col.pa-c-sel    { width:  4%; }
+  #pa-table col.pa-c-name   { width: 30%; }
+  #pa-table col.pa-c-cat    { width: 12%; }
+  #pa-table col.pa-c-sku    { width: 10%; }
+  #pa-table col.pa-c-price  { width:  8%; }
+  #pa-table col.pa-c-margin { width:  8%; }
+  #pa-table col.pa-c-status { width: 10%; }
+  /* One combined Stock column (a single-store tenant): the whole 18% remainder
+     would go to a count, so Product takes it back and Stock lands on 9% — the
+     same width a store column gets, so the two shapes read alike. */
+  #pa-table[data-stores="1"] col.pa-c-name { width: 39%; }
+  /* 3 stores → 7% a column (70px), 4 → 6.5% (65px), 5 → 6.4% (64px), all clear
+     of the 62px floor. Product funds the most because it is the one that
+     ellipses; Category and SKU give up their own slack after it, and past three
+     stores they start ellipsing their widest values too. */
+  #pa-table[data-stores="3"] col.pa-c-name { width: 27%; }
+  #pa-table[data-stores="4"] col.pa-c-name { width: 24%; }
+  #pa-table[data-stores="4"] col.pa-c-cat  { width: 11%; }
+  #pa-table[data-stores="4"] col.pa-c-sku  { width:  9%; }
+  #pa-table[data-stores="5"] col.pa-c-name { width: 20%; }
+  #pa-table[data-stores="5"] col.pa-c-cat  { width: 10%; }
+  #pa-table[data-stores="5"] col.pa-c-sku  { width:  8%; }
+  /* Reordering slides a grip column in at the front. Product funds it, so the
+     stock block does not move as the mode is flipped on and off. */
+  #pa-table.pa-reorder col.pa-c-grip { width: 3%; }
+  #pa-table.pa-reorder col.pa-c-name { width: 27%; }
+  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 36%; }
+  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 24%; }
+  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 21%; }
+  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 17%; }
+
+  /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component and Orders is its
+     anchor (§1.13a rule 3). Every value here is the spec's, not a per-page
+     choice: 13px/500 in --td-text on --td-header, padding 10px 12px, a 1px
+     --td-border hairline, single-line labels, no radius. It was 13px/500 in
+     --td-text2 on --td-raised — a fourth reading of a component that already
+     has one. If any of it needs to change, it changes in Orders first and every
+     table follows.
+     Only `top` is local: 56px is the locked topbar's height — the same figure
+     the expanded editor's #pd-pp-bar pins at. z-index 5 sits under the topbar's
+     12 and over the rows, and the fill is fully opaque so a selected or hovered
+     row passing underneath cannot bleed through. */
+  #pa-table thead th {
     position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-family: var(--f-sans); font-weight: 500; font-size: 13px;
+    letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
   }
-  .pa-list-rich .pa-row-img { width: 44px; height: 44px; border-radius: 10px; }
-  .pa-list-rich .pa-row-name { font-size: 15px; font-weight: 500; }
-  .pa-col-cat {
-    font-size: 14px; color: var(--td-text);
+  #pa-table thead th:first-child,
+  #pa-table thead th:last-child { border-radius: 0; }
+
+  /* Rows. 12px horizontal, matching the band, so a value sits directly under
+     its own label — Orders runs 10px on the cell against the band's 12px and
+     offsets every column by 2px, which is a wart it chose not to fix rather
+     than a value to copy. `middle`, not Orders' `top`: the tallest thing in
+     this row is a 30px photo beside ONE line of text, not a stack. */
+  #pa-table tbody td {
+    padding: 13px 12px; border-bottom: 1px solid var(--td-border);
+    font-size: 13.5px; color: var(--td-text); vertical-align: middle;
+  }
+  #pa-table tbody tr:last-child td { border-bottom: none; }
+  #pa-table tbody tr.pa-row { cursor: pointer; }
+  /* Hover is a tint of the theme's own ink, not a jump to the raised surface —
+     the raised fill is what an OPEN row wears, and having both meant a hovered
+     row was indistinguishable from the one the editor is showing. */
+  #pa-table tbody tr.pa-row:hover td { background: rgba(var(--td-heat-rgb), .035); }
+  /* The open product: raised fill plus an ink edge down its leading side, so
+     which row the editor is showing survives a glance at the far column. The
+     edge is an inset SHADOW, never a border — a border would add 3px to the row
+     box and make the whole list twitch sideways as products are opened. */
+  #pa-table tbody tr.pa-row.is-selected td { background: var(--td-raised); }
+  #pa-table tbody tr.pa-row.is-selected td:first-child { box-shadow: inset 3px 0 0 0 var(--td-text); }
+
+  /* ── The cells ─────────────────────────────────────────────────────────── */
+  /* The two control columns pay their own padding: 4% is 40px, and the band's
+     12px each side would leave a 16px box exactly 16px, with no slack at all. */
+  #pa-table :is(th, td).pa-c-sel  { padding-left: 10px; padding-right: 4px; }
+  #pa-table :is(th, td).pa-c-grip { padding-left: 0; padding-right: 0; }
+  #pa-table td.pa-c-name { overflow: hidden; }
+  #pa-table td.pa-c-cat {
+    color: var(--td-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .pa-col-sku {
-    font-family: var(--f-sans); font-size: 13px; color: var(--td-text2); letter-spacing: 0;
-    font-variant-numeric: tabular-nums;
+  #pa-table td.pa-c-sku {
+    color: var(--td-text2); font-variant-numeric: tabular-nums;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #pa-table td.pa-c-stock,
+  #pa-table td.pa-c-status { white-space: nowrap; }
+  /* Numeric columns are right-aligned and tabular, header included, so the
+     figures line up and the label sits over its own column. */
+  #pa-table :is(th, td).pa-c-price,
+  #pa-table :is(th, td).pa-c-margin { text-align: right; }
+  #pa-table td.pa-c-price {
+    font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  /* Margin reads as a companion to Price — same alignment and figures, one step
+     quieter, because it is derived rather than typed. */
+  #pa-table td.pa-c-margin {
+    color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap;
   }
   .pa-col-muted { color: var(--td-text2); }
-  .pa-col-price {
-    font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500; color: var(--td-text);
-    justify-self: end; white-space: nowrap;
-  }
-  /* Header-only: alignment matches the body's price column, but weight/size
-     inherit from .pa-rowhead (700/13.5px) instead of the body's 500/14px —
-     "Price" was previously reusing .pa-col-price and picking up its font. */
-  .pa-col-price-h { justify-self: end; }
-  /* Margin reads as a companion to Price, so it borrows the price column's
-     alignment and tabular figures but sits a step quieter — it is a derived
-     number, not one the operator typed. Same header/body split as Price above. */
-  .pa-col-margin {
-    font-variant-numeric: tabular-nums; font-size: 14px; color: var(--td-text2);
-    justify-self: end; white-space: nowrap;
-  }
-  .pa-col-margin-h { justify-self: end; }
   /* A cost the recipe owns. Reads as a stated figure rather than an empty box
      waiting for input — same type and size, just not on a typing surface. The
      source line beneath it names the recipe, so this only has to say "not
@@ -2630,13 +2739,11 @@
   /* First one on an unlinked product carries the line on its own — no leading
      text to sit beside, so it starts at the margin. */
   #pd-cost-source > .pd-cost-act:first-child { margin-left: 0; }
-  .pa-col-stock { font-size: 14px; }
 
   /* Status column — one badge per row answering "can a shopper buy this now".
      Tinted grounds carry the meaning (sage live · amber sold out · plain
      disabled); the dot is the same ink as the text so the badge reads as one
      token rather than a pill with a signal stuck to it. */
-  .pa-col-status { min-width: 0; }
   .pa-badge {
     display: inline-flex; align-items: center; gap: 6px;
     height: 23px; padding: 0 10px; border-radius: 999px;
@@ -2658,7 +2765,7 @@
   .pa-stock.is-out .pa-stock-dot { background: var(--td-brick); }
   /* Editable per-store stock — replaces the pill when one store is picked. */
   .pa-stock-input {
-    width: 72px; padding: 5px 8px; text-align: right;
+    width: 100%; max-width: 78px; padding: 5px 8px; text-align: right;
     font: 400 13px var(--f-sans); font-variant-numeric: tabular-nums;
     border: 1px solid var(--td-border); border-radius: 7px;
     background: var(--td-surface); color: var(--td-text);
@@ -2677,24 +2784,15 @@
      column (Tianhe · Yuexiu …). Centre the pair under their headers, and edge
      the boxes amber when low / brick when sold out (the save-confirm sage flash
      still wins while it shows). */
-  .pa-multistock .pa-col-stock,
-  .pa-multistock .pa-col-stock-h { justify-self: center; text-align: center; }
-  .pa-multistock .pa-stock-input { text-align: center; }
+  #pa-table.pa-multistock :is(th, td).pa-c-stock { text-align: center; }
+  #pa-table.pa-multistock .pa-stock-input { text-align: center; }
   .pa-stock-input.is-low:not(.is-saved):not(.is-err) { border-color: var(--td-amber); color: var(--td-amber); }
   .pa-stock-input.is-out:not(.is-saved):not(.is-err) { border-color: var(--td-brick); color: var(--td-brick); }
-
-  /* Shop column: centre the toggle under its header. */
-  .pa-list-rich .pa-row-pills { justify-content: center; }
-  .pa-rowhead .pa-col-shop { text-align: center; }
 
   /* ── Drag-to-reorder (single category, list overview) ──────────────────────
      A grip column slides in at the front; dragging a row's grip rewrites the
      store-page order (store_products.sort_order, which the shop grid sorts by).
      Only the grip starts a drag — the rest of the row still clicks to edit. */
-  .pa-list-rich.pa-reorder .pa-row,
-  .pa-list-rich.pa-reorder .pa-rowhead {
-    grid-template-columns: 34px 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px);
-  }
   .pa-grip {
     display: flex; align-items: center; justify-content: center;
     cursor: grab; color: var(--td-text2); user-select: none; align-self: center;
@@ -2718,10 +2816,10 @@
   /* Once select mode is armed the whole row handles the toggle, so the box
      becomes display-only (its own click would double-fire the row's). Before
      that the box is the only thing that ticks, so it stays clickable. */
-  .pa-list-rich.pa-selecting .pa-row .pa-selbox input { pointer-events: none; }
-  .pa-list-rich.pa-selecting .pa-row { cursor: pointer; }
-  .pa-list-rich .pa-row.is-sel { background: var(--td-raised); }
-  .pa-list-rich .pa-row.is-sel:hover { background: var(--td-raised); box-shadow: inset 2px 0 0 0 var(--td-text); }
+  #pa-table.pa-selecting tr.pa-row .pa-selbox input { pointer-events: none; }
+  #pa-table.pa-selecting tr.pa-row { cursor: pointer; }
+  #pa-table tr.pa-row.is-sel td { background: var(--td-raised); }
+  #pa-table tr.pa-row.is-sel:hover td:first-child { box-shadow: inset 2px 0 0 0 var(--td-text); }
   /* ── Add-product split button (toolbar) ─────────────────────────────────
      One control: the main face starts the step-by-step wizard; the caret
      drops a small menu with both ways to add. */
@@ -3210,7 +3308,7 @@
      stops saying which product you are in and whether it saved (§1.7 — the
      page header is never scrolled away).
 
-     `top: 56px` is the exact topbar height, the same figure .pa-rowhead uses
+     `top: 56px` is the exact topbar height, the same figure #pa-table's band uses
      two thousand lines up; the bar pins flush under it with no gap, so it is
      square-topped rather than rounded — a rounded edge there reads as a
      floating pill instead of an attached bar.
