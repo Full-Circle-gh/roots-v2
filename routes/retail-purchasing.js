@@ -610,6 +610,19 @@ function lineStatus(row) {
 // supplier data, surfaced here so someone chasing a 发票 can act on the row
 // without leaving the screen. The QR itself is fetched on demand (it is a
 // base64 blob) — this only reports whether one exists.
+// Supplier names are stored as one free-text string, so a lot of the live ones
+// read "Dry Fruit 果干" — both languages glued into a single label. The suppliers
+// master keeps them apart (name / name_cn), so hand the 中文 name alongside the
+// stored one and let the screen show whichever language it is currently in.
+function supplierCnByName(tid) {
+  const m = new Map();
+  for (const r of db.prepare(
+    'SELECT name, name_cn FROM suppliers WHERE COALESCE(tenant_id,1) = ?').all(tid)) {
+    if (r.name_cn && r.name_cn.trim()) m.set(r.name, r.name_cn.trim());
+  }
+  return m;
+}
+
 function reachByName(tid) {
   const rows = db.prepare(
     'SELECT id, name, channel_type, channel_link, channel_qr_data IS NOT NULL AS has_qr FROM suppliers WHERE COALESCE(tenant_id,1) = ?'
@@ -686,6 +699,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
 
   const allocated = allocatedByLine(rows.map(r => r.line_id));
   const reach = reachByName(tid);
+  const supCn = supplierCnByName(tid);
   const bySup = new Map();
   const totals = { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, line_count: rows.length };
 
@@ -709,6 +723,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   // and sorts with it; a supplier who is fully invoiced has nothing to chase.
   const groups = [...bySup.values()].map(g => ({
     supplier: g.supplier,
+    supplier_cn: supCn.get(g.supplier) || null,
     total: round2(g.total),
     fully_invoiced: round2(g.fully_invoiced),
     partially_invoiced: round2(g.partially_invoiced),
@@ -747,6 +762,7 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
      WHERE il.invoice_id = ?
      ORDER BY po.date DESC, pli.id`);
   const today = gzToday();
+  const supCn = supplierCnByName(tid);
   const data = invs.map(inv => {
     const lines = linkStmt.all(inv.id);
     const seen = new Map();
@@ -754,6 +770,7 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
     const allocated = round2(lines.reduce((s, l) => s + (l.allocated_amount || 0), 0));
     return {
       ...inv, lines, pos: [...seen.values()], allocated,
+      supplier_cn: supCn.get(inv.supplier) || null,
       // Surfaced, never corrected. Live invoice 25 is allocated exactly half
       // its header amount; the screen says so rather than quietly reconciling.
       unallocated: round2((inv.amount || 0) - allocated),
@@ -1042,11 +1059,25 @@ function lineConflict(items) {
   return (items || []).some(item => item.store_product_id && item.ingredient_id);
 }
 
-function insertLineItems(poId, items, headerSupplier) {
+function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
      expense_category, supplier_name, purchase_channel, invoice_status, note, sort_order)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  // On an edit (reuseExisting), a line the payload names by id is UPDATED in
+  // place rather than dropped and re-inserted. invoice_lines.line_id is ON
+  // DELETE CASCADE, so re-inserting used to take the supplier-invoice
+  // allocations with it — the kitchen twin of this path (routes/purchases.js)
+  // lost a live ¥848.24 link exactly that way, and nothing on either screen
+  // said so afterwards.
+  const updateItem = db.prepare(`UPDATE po_line_items SET
+     store_product_id=?, ingredient_id=?, name_en=?, name_cn=?, sku=?, qty=?, unit=?, cost_per_unit=?,
+     total_cost=?, expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?, note=?, sort_order=?
+     WHERE id=? AND po_id=?`);
+  const existing = reuseExisting
+    ? new Set(db.prepare('SELECT id FROM po_line_items WHERE po_id = ?').all(poId).map(r => r.id))
+    : new Set();
+  const kept = new Set();
   // Material lines default unit + supplier from the ingredient master, same
   // fallback order the kitchen insert path uses (routes/purchases.js). Unit
   // matters beyond display: firePriceAlertsForPO refuses to write back a price
@@ -1067,14 +1098,32 @@ function insertLineItems(poId, items, headerSupplier) {
         if (!item.supplier_name && !headerSupplier && ing.supplier && ing.supplier.trim()) supplierName = ing.supplier.trim();
       }
     }
-    insertItem.run(
-      poId, item.store_product_id || null, item.ingredient_id || null,
+    const cols = [
+      item.store_product_id || null, item.ingredient_id || null,
       item.name_en || '', item.name_cn || null, item.sku || null,
       qty, unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
       supplierName, item.purchase_channel || null, status,
       (item.note || '').trim() || null, i,
-    );
+    ];
+    const lineId = parseInt(item.id, 10);
+    if (lineId > 0 && existing.has(lineId)) {
+      updateItem.run(...cols, lineId, poId);
+      kept.add(lineId);
+    } else {
+      insertItem.run(poId, ...cols);
+    }
   });
+  // Only the lines the buyer actually removed are dropped. Their allocations
+  // still cascade away — that is the buyer's own decision — but the caller now
+  // gets told, so it can be recorded rather than vanish silently.
+  const dropped = [...existing].filter(id => !kept.has(id));
+  if (!dropped.length) return { dropped: 0, orphaned_links: 0, orphaned_amount: 0 };
+  const marks = dropped.map(() => '?').join(',');
+  const orphaned = db.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(allocated_amount),0) AS amount
+       FROM invoice_lines WHERE line_id IN (${marks})`).get(...dropped);
+  db.prepare(`DELETE FROM po_line_items WHERE po_id = ? AND id IN (${marks})`).run(poId, ...dropped);
+  return { dropped: dropped.length, orphaned_links: orphaned.n, orphaned_amount: orphaned.amount };
 }
 
 router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (req, res) => {
@@ -1122,14 +1171,14 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
     return res.status(400).json({ success: false, error: 'store_required' });
   }
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
+  let lineDiff = null;
   const tx = db.transaction(() => {
     db.prepare(`
       UPDATE purchase_orders SET date = ?, delivery_date = ?, supplier = ?, notes = ?, store_id = ?,
              updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(date || po.date, delivery_date || null, supplier || null, notes || null, storeId, po.id);
     if (Array.isArray(items)) {
-      db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
-      insertLineItems(po.id, items, supplier);
+      lineDiff = insertLineItems(po.id, items, supplier, true);
     }
   });
   tx();
@@ -1141,6 +1190,9 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   }
   postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'update', 'purchase_order', po.id, { scope: 'retail' }, req.ip);
+  if (lineDiff && lineDiff.orphaned_links) {
+    logActivity(req.user.id, req.user.username, 'invoice_links_dropped', 'purchase_order', po.id, lineDiff, req.ip);
+  }
   res.json({ success: true });
 });
 
