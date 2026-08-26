@@ -5711,6 +5711,24 @@
   .el-why { flex: none; margin-left: 8px; font: 400 13px var(--f-sans); color: var(--td-amber-ink); white-space: nowrap; }
   .el-whysub { color: var(--td-amber-ink); }
 
+  /* The panel's sync switch, and the words beside it when it cannot be thrown.
+     .el-only on purpose: the toggle itself is a shared .mt-/.el- rule and stays
+     untouched, so nothing here can reach the Meituan panel.
+
+     A switch that is unavailable and silent is its own small version of a check
+     that will not say why, so the reason travels with the control rather than
+     living in a title attribute a disabled input swallows. The two sit in one
+     box because the header row is space-between and a third loose child would
+     drift into the middle of it.
+
+     Dimmed rather than hidden: the switch is where the operator expects it, and
+     what is missing is a name, not the feature. Reduced contrast is the point —
+     it is deliberately quieter than the note that explains it. */
+  .el-swrow  { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+  .el-swnote { font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
+  .el-panel .toggle-label.el-swoff { opacity: .45; }
+  .el-panel .toggle-label.el-swoff input { cursor: not-allowed; }
+
   .mt-pcell, .el-pcell { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
   .mt-thumb, .el-thumb { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
   .mt-thumb-ph, .el-thumb-ph { width: 32px; height: 32px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }

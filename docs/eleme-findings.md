@@ -1,12 +1,14 @@
 # eleme — Findings
 
-Seven findings. The first four come from a read-only survey on 2026-08-25, opened
+Eight findings. The first four come from a read-only survey on 2026-08-25, opened
 by a dashboard row ("Eleme not syncing · 1") and ending in a wrong number on a
 live listing. Findings 5 and 6 were added on 2026-08-26, from the mapping screen
 that survey sent someone to. Most are not Eleme-specific: findings 1 and 4 hold
 on every channel, finding 3 holds anywhere a mapping is stored against an
 external system, finding 5 holds on any screen that counts work, and finding 7
-holds anywhere a cached read is consulted by something that returns a verdict.
+holds anywhere a cached read is consulted by something that returns a verdict,
+and finding 8 holds anywhere one screen owns both the reversible and the
+destructive way to end the same thing.
 
 The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. This
 document is the evidence; that one is the intent. Where they disagree about what
@@ -454,6 +456,140 @@ catalogue asks whether it was read before asking what is in it.**
 
 ---
 
+## 8. The two controls that end a mapping both produced the same broken row (found 2026-08-26)
+
+Status: FIXED 2026-08-26 in `public/retail-admin/14-eleme.js`. The twelve rows it
+made are NOT cleaned up — that is deliberate, see "The twelve" below. The audit
+gap this finding rests on is open and is not fixed by this change.
+
+Findings 3 and 6 describe what a nameless mapping does. This one is about where
+they come from, and the answer is that the screen made them. Both of the panel's
+two ways to stop a product syncing converged on the same row shape — a mapping
+with no listing name — and that shape is finding 6 by construction.
+
+### The switch created one
+
+`elToggleSync` sent `syncEnabled: 1` with `elemeName: (cur && cur.eleme_name) ||
+null` to `POST /api/retail-admin/eleme/products/:id/map`. On a product holding no
+mapping row there is no `cur`, so the name went out as `null` — and that route
+upserts: `routes/eleme-admin.js:319-330` inserts a row when the product has none.
+Switching sync on therefore **created a mapping**, nameless, armed, in one click.
+Nothing asked which listing it was for, because the switch is not the control
+that asks that.
+
+### Remove made one out of a working mapping
+
+`elRemoveName` called `elSetElemeName(…, '')`, which sends `elemeName: null`. That
+is not a delete. `mergeMapFields` at `routes/eleme-admin.js:180` resolves it to
+`null` and the UPDATE at `:324-329` writes it onto the row, which survives. The
+product keeps its mapping, keeps its place in the queue's reach, and loses only
+the one field that says where a push should land.
+
+Then the button disappeared: it rendered only when `name` was set. So the control
+manufactured exactly the state it claimed to delete, and removed the only way to
+see that it had.
+
+### What the table holds
+
+Twelve nameless rows existed on 2026-08-26 before Ash deleted two of them by hand.
+Ten remain. Every one carries `sync_enabled = 0`, so none is pushing today; product
+80 (finding 6) is proof that the switch is not what stops them.
+
+The four that were named first are distinguishable by their timestamps — created
+on 2026-08-23/24, then edited again in a 2026-08-26 02:36–04:03 window, days
+later:
+
+| map id | product | sku | created | blanked |
+|---|---|---|---|---|
+| 127 | 256 Whole-Wheat Pita (Frozen) | 3-251 | 2026-08-23 08:14:08 | 2026-08-26 04:01:45 |
+| 373 | 255 Buckwheat Bread (GF, Sliced) | 3-252 | 2026-08-23 16:43:46 | 2026-08-26 04:02:27 |
+| 374 | 358 Crunchy Granola | S(4-240) | 2026-08-23 16:43:57 | 2026-08-26 04:02:51 |
+| 375 | 80 Dried Sour Mango | 4-200 | 2026-08-24 06:58:07 | 2026-08-26 02:36:54 |
+
+The remaining six were never touched after creation — `updated_at` is 5 to 37
+seconds after `created_at` on five of them and 48 minutes on the sixth, and none
+was edited again. Earliest is map id 172 (product 141, Pure Creatine Monohydrate),
+created **2026-08-23 08:19:58**. With the two Ash deleted, that is **8 of the 12
+from the switch and 4 from Remove**.
+
+### The inference, and what it rests on
+
+**This is read off create/edit gaps, not off a record of what happened.** No row
+anywhere says "the switch created this" or "Remove blanked this". What the
+evidence actually supports is narrower and worth stating in those terms:
+
+- Six rows were nameless within seconds of creation and never edited again. The
+  switch is the only control that writes a row without writing a name, so the
+  switch is the only path that fits — but the fit is the argument, not a log line.
+- Four rows were edited days after creation, in one 87-minute window, and came
+  out nameless. That is the shape Remove leaves and the window matches a cleanup
+  Ash describes making.
+- **The two deleted rows can no longer be checked at all.** They were read before
+  the DELETE and counted as switch-created; the row was the only record of them,
+  so deleting it deleted the evidence. That is the audit gap demonstrating itself.
+
+The four blanked rows also settle a question worth recording: **none of them had a
+name worth keeping.** All four carried the half-typed fragments finding 3 lists —
+`bre`, `brea`, `gra`, `芒` — none of which matched any listing, so not one of the
+four ever resolved a push. Nothing was lost when they were blanked. The
+inference to avoid is that a mapping which once held a name once worked.
+
+### Mapping changes are effectively unaudited
+
+`activity_log` held **16,252 rows** on 2026-08-26 and **three** that mention Eleme
+at all — ids 11635, 11638 and 15468, all `create income` entries booking channel
+revenue (2026-07-11 and 2026-08-06). **None of them is a mapping change.** Not one
+mapping create, rename, blanking, switch flip or delete has ever been recorded,
+on any channel.
+
+So the only trace a mapping change leaves is the row it lands on, which the next
+change overwrites and a delete removes. Every count in this finding was
+reconstructed from `created_at` and `updated_at` on rows that happened to survive,
+and the reconstruction is only possible while they do.
+
+**Not this build's job, and recorded rather than fixed.** It is a write to a
+shared table on a trading day and it belongs with the other channels' mapping
+paths, not bolted onto one screen. But it is the reason this finding is an
+argument from timestamps instead of a report.
+
+### The fix
+
+Two controls, two meanings, neither able to produce the other's mess.
+
+- **The sync switch cannot create a mapping.** It is unavailable until a listing
+  name has been picked — greyed, with "Pick a listing name first" beside it, so
+  the reason is on screen rather than left to a tooltip a disabled input
+  swallows. Naming and arming stay two separate acts in that order, which is
+  also how the name field already behaved: saving a name has never switched sync
+  on. The guard is in `elToggleSync` as well as in the markup, because a stale
+  click on a repainting page must not be the thing that inserts a row.
+  - The switch stays live when it is already ON, whatever the name says. A
+    disabled switch on an armed nameless mapping would trap it in the pushing
+    state with no way to stop it from this screen — worse than being able to arm
+    it. Zero rows today, and product 80 is why that is not the same as never.
+- **Remove deletes the mapping row.** `remove: true`, the route's own delete
+  branch. The product returns to Not on Eleme — the same state as the 47 that
+  were never mapped, not a quieter fourth kind of mapping. The confirm stays and
+  now says where the product lands and names the other door: switch sync off to
+  keep the name and the options.
+- **Remove renders whenever a row exists, named or not** — including on a store
+  with no Eleme shop linked, which is otherwise a block with no controls at all.
+  越秀 holds exactly one mapping row, product 134 (NOW Foods Double-Strength,
+  `5-30`), nameless since 2026-08-23 and unreachable from the screen for its
+  whole life. Under the old rule it stayed unreachable.
+
+The classification is untouched: All 248 · Needs attention 9 · Synced 192 · Not on
+Eleme 47, before and after, and 0 Synced with the catalogue read forced to fail.
+
+### The twelve
+
+Deliberately not cleaned up here. Once Remove works they are reachable and Ash
+can clear them one at a time, which is better than a migration deciding for him.
+Nine of the ten are the entire Needs attention chip on 天河, one click each; the
+tenth is 越秀's product 134, reachable only because Remove now renders on an
+unconnected store's block.
+---
+
 ## Context — what was and was not done on 2026-08-25
 
 - **Product 195's Eleme listing was corrected to 3 by hand in the merchant app**
@@ -495,3 +631,36 @@ Source: read-only surveys of `roots.db` on 2026-08-25 via
 
 Source: read-only queries of `roots.db` on 2026-08-26 over SSH, plus the code
 cited above at `05e33123`.
+
+## Context — later on 2026-08-26, after the groups shipped
+
+Three things changed in the data after the section above was written, all by Ash,
+none by this session. The section above is correct about the moment it describes
+and stale about the table as it stands.
+
+- **Product 195's name was corrected, and its first push landed.**
+  `eleme_product_map` id 61 now carries `中东生芝麻酱(去皮) Hulled SesameTahini`,
+  which the catalogue holds — the capital `S` of finding 3 is gone. Updated
+  2026-08-26 04:23:54; `last_pushed_qty = 3` at 04:26:32, against `NULL` for the
+  three days before it. The listing is single-box (`specCount = 1`), so finding
+  4's guess branch is not reachable for this product and the caution recorded in
+  the 2026-08-25 context — *"correcting the name would re-open an automated push
+  path while finding 4 remains open"* — does not apply to it. **That caution is
+  now spent, for product 195 only.** Finding 4 is still open for every multi-box
+  listing.
+  - The row therefore reads Synced and means it, which is the first time this
+    screen's green dot has been true about this product.
+
+- **Two nameless mappings were deleted by hand**, `changes()` = 2. They were the
+  pair created accidentally while testing the switch. The chips moved to
+  All 248 · Needs attention 9 · Synced 192 · Not on Eleme 47 and have been
+  re-measured against live data at that figure. Their rows were the only record
+  they ever existed — see finding 8.
+
+- **Nothing else was written, and nothing was written by this session.** No
+  mapping was created, edited or deleted here; no queue row was retired or
+  re-queued; no stock was pushed; no process was started, stopped or restarted.
+  Finding 8's twelve rows are deliberately left standing.
+
+Source: read-only queries of `roots.db` on 2026-08-26 over SSH, and the counts
+re-derived from those rows rather than carried forward from the section above.

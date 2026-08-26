@@ -859,18 +859,72 @@
     const claims = elClaims(m);
     const cached = ((_catalogue[st.code] || {}).rows || []).length;
 
+    // Remove is the only control that renders on EVERY block, including the two
+    // below that render nothing else — a store with no shop linked, and a
+    // mapping with no name. A row that exists and cannot be reached from the
+    // screen is a row only a migration can clear, and 越秀 holds exactly such a
+    // row today: product 134, nameless, on a store with no shop id, invisible
+    // since 2026-08-23. The rule is `s2.has`, not `name`.
+    const removeBtn = s2.has
+      ? '<button type="button" class="el-plink" onclick="elRemoveMapping(' + p.id + ', ' + st.id +
+        ", '" + esc(st.code) + "')\">" + esc(cuT('Remove', '移除')) + '</button>'
+      : '';
+
     if (!elStoreConnected(st.code)) {
       return '<div class="el-pblock">' +
         '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span></div>' +
         '<div class="el-pstate"><span class="el-dot ' + s2.k + '"></span>' + esc(s2.t) + '</div>' +
         '<div class="el-sub">' + esc(cuT('Nothing can be matched here until this store has an Eleme shop linked — the store line above the tabs takes the shop id.',
                                          '关联饿了么店铺后才能在此匹配 — 请在上方门店行填写店铺ID。')) + '</div>' +
+        // Only when there is something to remove. On the 47 products that hold
+        // no row on this store the block stays exactly as it was.
+        (removeBtn
+          ? '<div class="el-plbl el-plbl-row">' +
+              '<span>' + esc(cuT('This product still holds a mapping here', '该商品在此仍有匹配记录')) + '</span>' +
+              removeBtn +
+            '</div>'
+          : '') +
         '</div>';
     }
 
-    const toggle = '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '同步开关')) + '">' +
-      '<input type="checkbox" ' + (on ? 'checked' : '') +
-      ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>";
+    // ── The switch cannot be reached before a name is ─────────────────────
+    // Sync on with no listing name is not a state worth having an exit from:
+    // the drain substitutes the product's own Chinese name as the push target
+    // (scripts/eleme-daemon.js, findings 6), so arming a nameless mapping aims
+    // a real stock number at a listing nobody nominated. The switch used to
+    // create that state itself — flipping it on with no row present inserted
+    // one, nameless, because /map upserts. Eight of the twelve nameless rows on
+    // the table came from exactly that. So the state has no exit because it has
+    // no entrance: pick the name, then arm it. Two acts, in that order, which is
+    // also how the name field already behaves (saving a name has never switched
+    // sync on — elSetElemeName passes the existing flag through).
+    //
+    // `!on` is the safety half and is not optional. Disabling a switch that is
+    // ON would trap a nameless mapping in the pushing state with no way to stop
+    // it from this screen — the one thing worse than being able to arm it.
+    // Product 80 pushed 25 in exactly that shape, so it is not hypothetical;
+    // it is zero rows today only because someone already turned it off.
+    const armable    = !!name;
+    const swDisabled = !armable && !on;
+    // Never a bare dead control. The reason sits beside the switch as words, at
+    // the moment and place the operator reaches for it — a title attribute is
+    // not an answer (a disabled input often swallows it, and it is unreachable
+    // by keyboard or by touch), and the sentence under the name field explains
+    // how to pick a name, not why this is greyed.
+    //
+    // Note and switch travel together in one box: the header row is
+    // space-between, and a third loose child would push the note into the
+    // middle of the row, reading as a caption on the store name.
+    const toggle = '<span class="el-swrow">' +
+      (swDisabled
+        ? '<span class="el-swnote">' + esc(cuT('Pick a listing name first', '请先选择商品名')) + '</span>'
+        : '') +
+      '<label class="toggle-label' + (swDisabled ? ' el-swoff' : '') + '" title="' +
+        esc(swDisabled ? cuT('Sync cannot be switched on until this mapping names an Eleme listing.',
+                             '未选择饿了么商品名前无法开启同步。')
+                       : cuT('Sync on / off', '同步开关')) + '">' +
+      '<input type="checkbox" ' + (on ? 'checked' : '') + (swDisabled ? ' disabled' : '') +
+      ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label></span>";
 
     // The name field is a picker over the real catalogue, and only a value
     // from it is ever stored. It USED to be plain free text with a datalist
@@ -881,9 +935,11 @@
     //
     // Labelled, so no placeholder - the placeholder used to BE the label on the
     // table, and keeping both says the same words twice. The Remove action is
-    // beside the label rather than under the field: it appears only when there
-    // is a name to remove, and emptying the field by hand cannot do its job
-    // (an empty field is not a catalogue value, so it reverts like any other).
+    // beside the label rather than under the field, and it now renders whenever
+    // a mapping ROW exists rather than whenever a NAME does. The old rule made
+    // the twelve nameless rows unreachable: Remove blanked the name, the row
+    // survived, and Remove then hid itself because there was no name left to
+    // show it — it manufactured the one state it could not then clear.
     const nameArgs = 'this, ' + p.id + ', ' + st.id + ", '" + esc(st.code) + "'";
     let body =
       '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span>' + toggle + '</div>' +
@@ -894,10 +950,7 @@
       (s2.why && !s2.gateSaysIt ? '<div class="el-sub el-whysub">' + esc(s2.why) + '</div>' : '') +
       '<div class="el-plbl el-plbl-row">' +
         '<span>' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</span>' +
-        (name
-          ? '<button type="button" class="el-plink" onclick="elRemoveName(' + p.id + ', ' + st.id +
-            ", '" + esc(st.code) + "')\">" + esc(cuT('Remove', '移除')) + '</button>'
-          : '') +
+        removeBtn +
       '</div>' +
       '<input type="text" class="el-name-input" data-no-i18n' +
         ' list="el-catalogue-dl-' + esc(st.code) + '"' +
@@ -1007,9 +1060,24 @@
     return '<div class="el-pblock">' + body + '</div>';
   }
 
+  // The switch, and the half of the split that is reversible: off keeps the row
+  // and the listing name, so turning it back on restores exactly what was there.
+  // Nothing here deletes; deleting is elRemoveMapping, which asks first.
   window.elToggleSync = async function (productId, storeId, storeCode, on) {
     const p = _products.find(x => x.id === productId);
     const cur = p && (p.stores || {})[storeCode];
+    // The panel will not render an armable switch without a name, but the
+    // handler is a window global on a page that repaints under itself — a stale
+    // click landing after a repaint must not be the thing that inserts a
+    // nameless row. Refusing here rather than trusting the disabled attribute is
+    // the same reason /map's own guard is not enough for the screen: the check
+    // belongs wherever the write is.
+    if (on && !((cur && cur.eleme_name) || '').trim()) {
+      if (window.toast) toast(cuT('Pick a listing name before switching sync on.',
+                                  '请先选择商品名再开启同步。'), 'err');
+      elRenderProducts();
+      return;
+    }
     try {
       // Pass the existing eleme_name through — the map POST upserts the whole
       // row, so omitting it here would silently null out an override the
@@ -1114,7 +1182,9 @@
     // An empty field is not a catalogue value either, so it reverts like any
     // other non-match. Unmapping is the Remove action beside the label, which
     // asks first - a stray backspace should not be able to stop a product
-    // syncing.
+    // syncing. It matters more now than it did: emptying the field here would
+    // leave a nameless row, and a nameless row is the one state the switch above
+    // can no longer arm and the daemon still pushes.
     if (!typed || !elNameKnown(storeCode, typed)) {
       input.value = stored;
       const hint = document.getElementById('el-hint-' + storeId);
@@ -1130,25 +1200,79 @@
     finally { delete input.dataset.busy; }
   };
 
-  // Unmapping, on purpose and out loud. The confirm exists because removing a
-  // name stops this product pushing to Eleme, which is exactly the silent
-  // failure the revert above refuses to cause by accident.
-  window.elRemoveName = async function (productId, storeId, storeCode) {
-    const stored = elStoredName(productId, storeCode);
-    if (!stored) return;
-    const label = cuT('Remove', '\u79fb\u9664');
-    if (!(await askConfirm({ title: label, body: stored, confirmLabel: label, danger: true }))) return;
-    await elSetElemeName(productId, storeId, storeCode, '');
+  // Unmapping, on purpose and out loud \u2014 and it now unmaps.
+  //
+  // It used to call elSetElemeName(\u2026, '') , which blanks eleme_name and leaves
+  // the row standing. That is the nameless state: a mapping the daemon still
+  // reads, still pushes, and still aims at the product's own Chinese name
+  // (finding 6). Then Remove hid itself, because it only rendered when a name
+  // was set \u2014 so the control manufactured exactly the thing it claimed to
+  // delete, and removed the only way to see it. Four rows on the table were
+  // made this way, three of them in one 66-second window on 2026-08-26.
+  //
+  // Now it deletes the row. The product returns to Not on Eleme, which is the
+  // state of the 47 products that were never mapped \u2014 not a fourth, quieter
+  // kind of mapping. Together with the switch this is the whole point of the
+  // change: OFF is reversible and keeps everything, REMOVE is destructive and
+  // keeps nothing, and the two no longer do the same half-thing.
+  window.elRemoveMapping = async function (productId, storeId, storeCode) {
+    const p = _products.find(x => x.id === Number(productId));
+    const cur = p && (p.stores || {})[storeCode];
+    // Nothing to remove is not an error; the button should not have been there.
+    if (!cur) return;
+
+    const stored = (cur.eleme_name || '').trim();
+    const label  = cuT('Remove', '\u79fb\u9664');
+    // The dialog says what is deleted and what the product becomes. A confirm
+    // that only echoes a name teaches nothing about the difference between this
+    // and the switch \u2014 and on a nameless row there is no name to echo, which is
+    // most of what is removable today.
+    const body =
+      '<div style="text-align:left">' +
+      (stored
+        ? '<div data-no-i18n style="font-weight:500">' + esc(stored) + '</div>'
+        : '<div>' + esc(cuT('This mapping carries no listing name.', '\u8be5\u5339\u914d\u6ca1\u6709\u5546\u54c1\u540d\u3002')) + '</div>') +
+      '<div style="margin-top:8px">' + esc(cuT(
+        'The mapping is deleted and this product goes back to Not on Eleme. Nothing is pushed. ' +
+        'To stop syncing but keep the name and the options, switch sync off instead.',
+        '\u5c06\u5220\u9664\u8be5\u5339\u914d\uff0c\u5546\u54c1\u56de\u5230\u300c\u672a\u4e0a\u67b6\u997f\u4e86\u4e48\u300d\u3002\u4e0d\u4f1a\u63a8\u9001\u4efb\u4f55\u5e93\u5b58\u3002' +
+        '\u82e5\u53ea\u60f3\u505c\u6b62\u540c\u6b65\u5e76\u4fdd\u7559\u5546\u54c1\u540d\u4e0e\u89c4\u683c\uff0c\u8bf7\u6539\u4e3a\u5173\u95ed\u540c\u6b65\u5f00\u5173\u3002')) + '</div></div>';
+
+    if (!(await askConfirm({ title: label, body, confirmLabel: label, danger: true }))) return;
+
+    try {
+      // `remove: true` is the route's own delete branch \u2014 it drops every row for
+      // this product on this store, which is right: the option claims are rows
+      // of the same mapping, not a separate thing that could survive it.
+      await api('/api/retail-admin/eleme/products/' + productId + '/map', {
+        method: 'POST',
+        body: { storeId, storeCode, remove: true },
+      });
+      if (p && p.stores) {
+        delete p.stores[storeCode];
+        // The options this product held are free again, so the other products'
+        // pickers stop saying "claimed by another product" about them.
+        const owners = _optionOwners[storeCode] || {};
+        for (const k of Object.keys(owners)) {
+          if (Number(owners[k].product_id) === Number(productId)) delete owners[k];
+        }
+      }
+      elRenderProducts();
+      if (window.toast) toast(cuT('Mapping removed', '\u5df2\u5220\u9664\u5339\u914d'));
+    } catch (e) { elLoadProducts(); }
   };
 
   // Save a product's Eleme listing-name override for one store.
   //
-  // Reached only through elNameCommit and elRemoveName above, never from the
-  // field directly: by the time a name arrives here it is either one of the
-  // catalogue's own strings or empty. Note it already leaves sync_enabled
-  // exactly where it was - a new mapping starts off, and correcting a name
-  // has never been able to start pushing. Meituan's mtSaveMap sent 1 and now
-  // matches this.
+  // Reached only through elNameCommit above, never from the field directly: by
+  // the time a name arrives here it is one of the catalogue's own strings.
+  // Nothing calls it with an empty value any more — elNameCommit reverts an
+  // empty field rather than saving it, and Remove deletes the row instead of
+  // blanking it, which is what that call used to be for. Note it leaves
+  // sync_enabled exactly where it was - a new mapping starts off, and
+  // correcting a name has never been able to start pushing. Naming and arming
+  // are two acts, in that order, and the switch now enforces the order from the
+  // other end. Meituan's mtSaveMap sent 1 and now matches this.
   window.elSetElemeName = async function (productId, storeId, storeCode, value) {
     const name = value.trim();
     const p = _products.find(x => x.id === productId);
