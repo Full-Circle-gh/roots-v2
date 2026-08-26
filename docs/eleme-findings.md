@@ -397,6 +397,46 @@ verified.** Synced has to mean checked and good or the word is worth nothing. Th
 dot is neutral for the mirror reason: amber asserts something is wrong with that
 mapping, and what is actually known is only that nobody could look.
 
+### Checked on Meituan: the classifier is clean, the tile is not
+
+Read-only check on 2026-08-26, because the same cache shape exists on the
+Meituan screen and the fault had already appeared there twice.
+
+**`mtStoreState` does NOT have this fault.** `public/retail-admin/11-meituan.js`
+tests `mtCatalogueRead(storeCode)` before any name check and returns
+"Name not checked" when it is false, ahead of both the switch and the option
+test — the same shape as the Eleme classifier now uses. `mtMatchCount` and the
+Meituan save path are guarded too. Three of the four Meituan consumers are
+right.
+
+**The fourth is `mtRenderHead`**, and it is a fourth instance:
+
+```js
+const live = active.filter(p => Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+```
+
+A name — any name — counts as live. The figure never consults the listings
+cache, so it cannot be wrong about an empty one; it simply never asks. With the
+cache unread every mapping counts as live, which is this finding exactly. With
+the cache read it is finding 5's fault instead: a count that measures something
+other than what its word claims.
+
+**It is disagreeing with its own dots right now.** On 2026-08-26 the Tianhe
+listings cache held 267 rows, last scraped 2026-08-24 06:46. Of 212 named
+mappings on that store, **11 carry a name the cache does not hold — 8 of them
+with `sync_enabled = 1`.** Every one of those 11 draws an amber
+"Name not in catalogue" dot in the list and is counted inside the
+"Live on Meituan" tile above it, at the same moment. Two of the 11 are visibly
+the same class as finding 3 — `云南玉芒干云南玉芒干 …` and
+`Old FashOld Fashioned Oats …`, both a fragment pasted over itself.
+
+Yuexiu shows 0 of 187, as expected: it names itself from 货号 and is skipped by
+the name checks on purpose.
+
+Not fixed. It was found while an Eleme change was finished and waiting to ship,
+and changing the Meituan head in that window would have put an unrelated,
+unverified edit into a build that was already checked. Recorded here instead.
+
 ### Why it recurs, and what to do about the next one
 
 The three fixes are three guards. None of them stops a fourth consumer being
