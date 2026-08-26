@@ -48,10 +48,14 @@
   const _supCache = {};      // store_product_id → { suppliers[], last } price list
   let _pickP = null;         // product the supplier popover is open for
   let _pickInfo = null;      // its loaded price list
-  let _bills = [];           // recorded retail bills
-  let _outstanding = [];     // PO lines awaiting an invoice, grouped by supplier
-  let _billSum = null;       // bills KPI + AP aging
-  let _billDraft = null;     // the record-a-bill modal's working state
+  let _invOut = null;        // supplier groups + KPI totals + aging, from the server
+  let _invList = [];         // the recorded-invoice ledger
+  let _invDraft = null;      // the add/edit invoice modal's working state
+  let _invMonth = '';        // 'YYYY-MM' or '' for all
+  let _invSearch = '';       // supplier / item / SKU / PO number
+  let _invSearchTimer = null;
+  let _invFocusQ = false;    // keep the caret in the search box across a repaint
+  const _invExpanded = new Set();  // supplier groups whose lines are open
   let _reorder = [];         // low-stock groups, by preferred supplier + store
   let _ph = null;            // loaded price-history for one product
   let _phBack = 'orders';    // screen to return to from price history
@@ -78,6 +82,8 @@
     send:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
     star:   '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.8.6-5.1 4.5 1.5 6.7L12 17l-6 3.6 1.5-6.7-5.1-4.5 6.8-.6z"/></svg>',
     print:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>',
+    chevRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+    chevDown:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
   };
 
   // ── status → plain word + pill tone ───────────────────────────────────────
@@ -186,7 +192,7 @@
     else if (_screen === 'suppliers') paintSuppliers();
     else if (_screen === 'supplier')  paintSupplier();
     else if (_screen === 'import')    paintImport();
-    else if (_screen === 'bills')     paintBills();
+    else if (_screen === 'invoices')  paintInvoices();
     else if (_screen === 'reorder')   paintReorder();
     else if (_screen === 'pricehist') paintPriceHistory();
     try { applyCapGates(); } catch (_) {}
@@ -201,18 +207,18 @@
 
   // ── Tacet page-head + sub-nav (replaces the dead Full Circle .pa-pagetitle) ──
   // Rendered at the top of every ledger screen so Purchasing carries its own
-  // Tacet identity. Tabs grow as screens ship (Bills / Reorder land next).
+  // Tacet identity.
   const PU_TABS = [
     ['orders',    () => T('Orders', '采购单')],
     ['suppliers', () => T('Suppliers', '供应商')],
-    ['bills',     () => T('Bills', '账单')],
+    ['invoices',  () => T('Invoices', '发票')],
     ['reorder',   () => T('Reorder', '补货')],
   ];
   function puChrome(active) {
     const meta = {
       orders:    [T('Orders', '采购单'),   T('Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.', '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。')],
       suppliers: [T('Suppliers', '供应商'), T('Who you buy from — contacts, payment terms and their paperwork, all in one place.', '你的供货来源 —— 联系人、付款条件和资质文件,集中在一处。')],
-      bills:     [T('Bills', '账单'),       T('Match suppliers’ invoices to what you ordered, and keep an eye on what’s due.', '将供应商发票与采购内容对上,并留意到期应付。')],
+      invoices:  [T('Invoices', '发票'),   T('Which suppliers still owe you a 发票, and for how much. Record one and match it to the lines it covers.', '哪些供应商还未开票、金额多少。登记发票并与对应采购明细匹配。')],
       reorder:   [T('Reorder', '补货'),      T('Products running low across your stores, grouped by who you’d order them from.', '各门店库存偏低的商品,按常用供应商归类。')],
     };
     const [title, sub] = meta[active] || meta.orders;
@@ -228,7 +234,7 @@
   }
   window.puTab = function (tab) {
     if (tab === 'suppliers') { _screen = 'suppliers'; _supSeg = 'active'; _showDisabled = false; }
-    else if (tab === 'bills') { _screen = 'bills'; }
+    else if (tab === 'invoices') { _screen = 'invoices'; }
     else if (tab === 'reorder') { _screen = 'reorder'; }
     else { _screen = 'orders'; }
     paint();
@@ -1091,104 +1097,322 @@
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  BILLS — supplier invoices, matched to what we ordered (+ AP)
+  //  INVOICES 发票 — chasing what suppliers still owe us on paper
   // ═══════════════════════════════════════════════════════════════════════════
-  async function loadBills()       { try { const r = await api('/api/retail-admin/bills'); _bills = r.data || []; } catch (_) { _bills = []; } }
-  async function loadOutstanding() { try { const r = await api('/api/retail-admin/bills/outstanding'); _outstanding = r.data || []; } catch (_) { _outstanding = []; } }
-  async function loadBillSummary() { try { const r = await api('/api/retail-admin/bills/summary'); _billSum = r.data || null; } catch (_) { _billSum = null; } }
-  const outstandingFor = sup => (_outstanding.find(g => g.supplier === sup)?.lines) || [];
+  // ORGANISED AROUND THE CHASE, not around accounts payable. Roots' job here
+  // is "who still hasn't sent us a 发票, and for how much" — so the screen is
+  // grouped by supplier, expandable to the lines, with AWAITING as the
+  // headline. The due-date / paid / aging fields are kept and still shown,
+  // because another tenant may genuinely be tracking payables, but they sit in
+  // a secondary strip rather than organising the page.
+  //
+  // Every figure comes from the server computed per line at read time
+  // (routes/retail-purchasing.js lineStatus) — nothing here stores or caches a
+  // state, and po_line_items.invoice_status is never read.
+  //
+  // TENANT-SCOPED, NOT SCOPE-SCOPED. The rows this screen shows sit on
+  // kitchen-scope POs, which is the whole point: that is where Roots' unpaid
+  // paperwork lives. Invoices created here are stamped scope='retail' so the
+  // kitchen screen can no longer delete them — which it did, once, to a real
+  // row (see the note in routes/finance.js).
+  const INV_META = {
+    fully_invoiced:      () => ({ label: T('Fully invoiced', '已开票'),  cls: 'sage'  }),
+    partially_invoiced:  () => ({ label: T('Partial', '部分开票'),        cls: 'amber' }),
+    awaiting:            () => ({ label: T('Awaiting', '待开票'),         cls: 'brick' }),
+    no_invoice_expected: () => ({ label: T('No invoice', '不开发票'),      cls: 'grey'  }),
+  };
 
-  function paintBills() {
-    root().innerHTML = `
-      ${puChrome('bills')}
-      <div class="pu2-head">
-        <span class="spacer"></span>
-        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puBillNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Record a bill', '登记账单'))}</button>
-      </div>
-      <div id="pu2-bills-body"><div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div></div>`;
+  async function loadInvOutstanding() {
+    const qs = new URLSearchParams();
+    if (_invMonth)  qs.set('month', _invMonth);
+    if (_invSearch) qs.set('q', _invSearch);
+    try { const r = await api('/api/retail-admin/purchasing/invoices/outstanding?' + qs); _invOut = r.data || null; }
+    catch (_) { _invOut = null; }
+  }
+  async function loadInvList() {
+    const qs = new URLSearchParams();
+    if (_invMonth)  qs.set('month', _invMonth);
+    if (_invSearch) qs.set('q', _invSearch);
+    try { const r = await api('/api/retail-admin/purchasing/invoices?' + qs); _invList = r.data || []; }
+    catch (_) { _invList = []; }
+  }
+  const invGroup = sup => (_invOut && _invOut.groups.find(g => g.supplier === sup)) || null;
+  const invLinesFor = sup => (invGroup(sup) || {}).lines || [];
+
+  function paintInvoices() {
+    root().innerHTML = `${puChrome('invoices')}<div id="pu2-inv-body"><div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div></div>`;
     try { applyCapGates(); } catch (_) {}
     (async () => {
-      await Promise.all([loadBillSummary(), loadOutstanding(), loadBills()]);
-      if (_screen === 'bills') renderBillsBody();
+      await Promise.all([loadInvOutstanding(), loadInvList()]);
+      if (_screen === 'invoices') renderInvBody();
     })();
   }
 
-  function renderBillsBody() {
-    const host = document.getElementById('pu2-bills-body');
+  async function invReload() {
+    await Promise.all([loadInvOutstanding(), loadInvList()]);
+    if (_screen === 'invoices') renderInvBody();
+  }
+
+  // Months offered are the ones actually present in what came back, so the
+  // picker can never offer an empty month.
+  function invMonthOptions() {
+    const seen = new Set();
+    (_invOut ? _invOut.groups : []).forEach(g => g.lines.forEach(l => { if (l.date) seen.add(l.date.slice(0, 7)); }));
+    (_invList || []).forEach(i => { if (i.date) seen.add(i.date.slice(0, 7)); });
+    if (_invMonth) seen.add(_invMonth);
+    return [...seen].sort().reverse();
+  }
+
+  function renderInvBody() {
+    const host = document.getElementById('pu2-inv-body');
     if (!host) return;
-    const s = _billSum || { purchased: 0, billed: 0, awaiting: 0, aging: {} };
-    const ag = s.aging || {};
-    const nothing = !s.purchased && !_bills.length && !_outstanding.length;
-    if (nothing) {
+    const tot = (_invOut && _invOut.totals) || { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, line_count: 0 };
+    const aging = (_invOut && _invOut.aging) || { notDue: 0, dueSoon: 0, overdue: 0, overdueCount: 0 };
+    const groups = (_invOut && _invOut.groups) || [];
+    const filtered = !!(_invMonth || _invSearch);
+
+    if (!groups.length && !(_invList || []).length && !filtered) {
       host.innerHTML = `<div class="pu2-card"><div class="pu2-empty">
         <div class="pu2-empty-ico">${I.box}</div>
-        <h3>${esc(T('No bills yet', '还没有账单'))}</h3>
-        <p>${esc(T('When a supplier sends an invoice, record it here and match it to the orders it covers. Until then, anything you’ve ordered shows as awaiting a bill.', '供应商开票后,在此登记并与对应采购单匹配。在此之前,已下单内容会显示为待开票。'))}</p>
-        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puBillNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Record a bill', '登记账单'))}</button>
+        <h3>${esc(T('No invoices yet', '暂无发票'))}</h3>
+        <p>${esc(T('When a supplier sends a 发票, record it here and match it to the lines it covers. Until then, anything you’ve ordered shows as awaiting one.', '供应商开票后,在此登记并与对应采购明细匹配。在此之前,已下单内容会显示为待开票。'))}</p>
+        <button class="pu2-btn primary" data-cap="purchasing:invoices" onclick="puInvNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add invoice', '添加发票'))}</button>
       </div></div>`;
       try { applyCapGates(); } catch (_) {}
       return;
     }
-    const pct = s.purchased ? Math.round((s.billed / s.purchased) * 100) + '%' : '—';
-    const kpi = (lab, val, foot, cls) => `<div class="pu2-card pu2-metric"><div class="lab">${esc(lab)}</div><div class="big pu2-num${cls ? ' ' + cls : ''}">${val}</div><div class="foot">${esc(foot || '')}</div></div>`;
+
+    const monthOpts = ['<option value="">' + esc(T('All months', '全部月份')) + '</option>']
+      .concat(invMonthOptions().map(m => `<option value="${esc(m)}"${_invMonth === m ? ' selected' : ''}>${esc(m)}</option>`)).join('');
+    const kpi = (key, val, foot) => {
+      const m = INV_META[key]();
+      return `<div class="pu2-card pu2-metric pu2-invkpi ${m.cls}"><div class="lab">${esc(m.label)}</div><div class="big pu2-num">${money(val)}</div><div class="foot">${esc(foot || '')}</div></div>`;
+    };
+
     host.innerHTML = `
-      <div class="pu2-metricrow">
-        ${kpi(T('Purchased', '采购'), money(s.purchased), T('this month', '本月'))}
-        ${kpi(T('Billed', '已开票'), money(s.billed), pct)}
-        ${kpi(T('Awaiting invoice', '待开票'), money(s.awaiting), '')}
-        ${kpi(T('Overdue to pay', '逾期应付'), money(ag.overdue || 0), (ag.overdueCount || 0) + ' ' + T('bills', '张'), (ag.overdue > 0 ? 'bad' : ''))}
+      <div class="pu2-invfilters">
+        <select class="pu2-input pu2-invsel" onchange="puInvMonth(this.value)">${monthOpts}</select>
+        <input class="pu2-input pu2-invq" type="search" id="pu2-invq" value="${esc(_invSearch)}"
+               placeholder="${esc(T('Supplier, item or SKU', '供应商、产品或货号'))}" oninput="puInvSearch(this.value)">
+        ${filtered ? `<button class="pu2-btn ghost sm" onclick="puInvClear()">${esc(T('Clear', '清除'))}</button>` : ''}
+        <span class="spacer"></span>
+        <button class="pu2-btn primary" data-cap="purchasing:invoices" onclick="puInvNew()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add invoice', '添加发票'))}</button>
       </div>
-      <div class="pu2-billcols">
-        <div>
-          <div class="pu2-kicker">${esc(T('Awaiting an invoice — by supplier', '待开票 —— 按供应商'))}</div>
-          <div class="pu2-card" id="pu2-outstanding"></div>
-        </div>
-        <div>
-          <div class="pu2-kicker">${esc(T('Bills recorded', '已登记账单'))}</div>
-          <div class="pu2-card" id="pu2-billsledger"></div>
-        </div>
-      </div>`;
-    renderOutstanding();
-    renderBillsLedger();
+
+      <div class="pu2-metricrow pu2-invrow">
+        <div class="pu2-card pu2-metric"><div class="lab">${esc(T('Total purchases', '采购总额'))}</div><div class="big pu2-num">${money(tot.total)}</div><div class="foot">${tot.line_count} ${esc(T('lines', '条明细'))}</div></div>
+        ${kpi('fully_invoiced', tot.fully_invoiced)}
+        ${kpi('partially_invoiced', tot.partially_invoiced)}
+        ${kpi('awaiting', tot.awaiting, T('chase these', '需跟进'))}
+        ${kpi('no_invoice_expected', tot.no_invoice_expected)}
+      </div>
+
+      ${(aging.overdue || aging.dueSoon || aging.notDue) ? `
+      <div class="pu2-agingstrip">
+        <span class="pu2-mut">${esc(T('Of what you’ve recorded', '已登记发票中'))}:</span>
+        ${aging.overdue ? `<span class="pu2-pill brick"><span class="dot"></span>${esc(T('Overdue', '逾期'))} ${money(aging.overdue)} · ${aging.overdueCount}</span>` : ''}
+        ${aging.dueSoon ? `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Due soon', '即将到期'))} ${money(aging.dueSoon)}</span>` : ''}
+        ${aging.notDue ? `<span class="pu2-pill grey">${esc(T('Not due', '未到期'))} ${money(aging.notDue)}</span>` : ''}
+      </div>` : ''}
+
+      <div class="pu2-kicker">${esc(T('By supplier', '按供应商'))}</div>
+      <div class="pu2-card" id="pu2-invgroups"></div>
+
+      <div class="pu2-kicker">${esc(T('Invoices recorded', '已登记发票'))}</div>
+      <div class="pu2-card" id="pu2-invledger"></div>`;
+
+    renderInvGroups();
+    renderInvLedger();
+    const q = document.getElementById('pu2-invq');
+    if (q && _invFocusQ) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
     try { applyCapGates(); } catch (_) {}
   }
 
-  function renderOutstanding() {
-    const el = document.getElementById('pu2-outstanding');
-    if (!el) return;
-    if (!_outstanding.length) { el.innerHTML = `<div class="pu2-emptyline">${esc(T('Nothing awaiting a bill.', '没有待开票内容。'))}</div>`; return; }
-    el.innerHTML = _outstanding.map((g, i) => `
-      <div class="pu2-osrow">
-        <div>
-          <b>${esc(g.supplier || T('Unspecified', '未指定'))}</b>
-          <div class="sub pu2-num">${esc(T('total', '合计'))} ${money(g.total)} · ${esc(T('awaiting', '待开票'))} ${money(g.outstanding)}${g.covered > 0.01 ? ' · 🟡 ' + esc(T('partly billed', '部分开票')) : ''}</div>
-        </div>
-        <button class="pu2-btn sm" data-cap="purchasing:edit" onclick="puBillNew(${i})">${esc(T('Record a bill', '登记账单'))}</button>
-      </div>`).join('');
+  // The Reach chip — the supplier's own channel, so a 发票 can be chased from
+  // the row. taobao / alibaba / website open the link, phone dials, WeChat
+  // opens the QR when one is on file. Not invoice data; supplier data.
+  function invReachChip(reach) {
+    if (!reach || !reach.type) return `<span class="pu2-mut">—</span>`;
+    const meta = {
+      taobao:  T('Taobao', '淘宝'), alibaba: T('Alibaba', '阿里巴巴'),
+      website: T('Website', '网站'), phone: T('Phone', '电话'),
+      wechat:  T('WeChat', '微信'),  other: T('Channel', '渠道'),
+    }[reach.type] || reach.type;
+    if (reach.type === 'wechat' || (!reach.link && reach.has_qr)) {
+      return reach.has_qr
+        ? `<button type="button" class="pu2-reach" onclick="event.stopPropagation();puInvReachQR(${reach.supplier_id})">${esc(meta)} →</button>`
+        : `<span class="pu2-reach flat">${esc(meta)}</span>`;
+    }
+    if (reach.link) {
+      let href = String(reach.link).trim();
+      if (reach.type === 'phone') href = 'tel:' + href.replace(/[^\d+]/g, '');
+      else if (!/^[a-z][a-z0-9+.\-]*:/i.test(href)) href = 'https://' + href.replace(/^\/+/, '');
+      return `<a class="pu2-reach" href="${esc(href)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="${esc(reach.link)}">${esc(meta)} →</a>`;
+    }
+    return `<span class="pu2-reach flat">${esc(meta)}</span>`;
   }
 
-  function renderBillsLedger() {
-    const el = document.getElementById('pu2-billsledger');
+  window.puInvReachQR = async function (supplierId) {
+    try {
+      const r = await api('/api/retail-admin/suppliers/' + supplierId + '/channel-qr');
+      billHost().innerHTML = `
+        <div class="pu2-scrim" onclick="puInvCloseModal()"></div>
+        <div class="pu2-modal pu2-qrmodal">
+          <div class="pu2-modal-head"><div><h2>${esc(r.data.name)}</h2><div class="sub">${esc(T('Scan to reach them', '扫码联系'))}</div></div>
+            <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puInvCloseModal()">✕</button></div>
+          <div class="pu2-modal-body" style="text-align:center"><img src="${esc(r.data.qr)}" alt="" style="max-width:280px;width:100%;border-radius:10px"></div>
+        </div>`;
+    } catch (e) { toast(T('No QR on file', '暂无二维码'), 'err'); }
+  };
+
+  function renderInvGroups() {
+    const el = document.getElementById('pu2-invgroups');
     if (!el) return;
-    if (!_bills.length) { el.innerHTML = `<div class="pu2-emptyline">${esc(T('No bills recorded yet.', '还没有登记账单。'))}</div>`; return; }
-    el.innerHTML = `<table class="pu2-tbl"><tbody>${_bills.map(b => {
-      const due = b.paid ? `<span class="pu2-pill sage">${esc(T('Paid', '已付'))}</span>`
-        : b.overdue ? `<span class="pu2-pill brick"><span class="dot"></span>${esc(T('Overdue', '逾期'))}</span>`
-        : b.due_date ? `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Due', '应付'))} ${esc(b.due_date)}</span>`
+    const groups = (_invOut && _invOut.groups) || [];
+    if (!groups.length) {
+      el.innerHTML = `<div class="pu2-emptyline">${esc(_invMonth || _invSearch ? T('Nothing matches those filters.', '没有匹配的内容。') : T('Nothing awaiting an invoice.', '没有待开票内容。'))}</div>`;
+      return;
+    }
+    const cell = (v, key) => v > 0.005
+      ? `<td class="right pu2-num ${INV_META[key]().cls}-t">${money(v)}</td>`
+      : `<td class="right pu2-mut">—</td>`;
+    el.innerHTML = `<table class="pu2-tbl pu2-invtbl"><thead><tr>
+        <th class="arrowcol"></th>
+        <th>${esc(T('Supplier', '供应商'))}</th>
+        <th>${esc(T('Reach', '联系'))}</th>
+        <th class="right">${esc(T('Total', '合计'))}</th>
+        <th class="right">${esc(T('Fully invoiced', '已开票'))}</th>
+        <th class="right">${esc(T('Partial', '部分开票'))}</th>
+        <th class="right">${esc(T('Awaiting', '待开票'))}</th>
+        <th class="right">${esc(T('No invoice', '不开发票'))}</th>
+        <th></th>
+      </tr></thead><tbody>
+      ${groups.map((g, i) => {
+        // A search result opens every group — the operator asked to see inside.
+        const open = !!_invSearch || _invExpanded.has(g.supplier);
+        const chase = (g.awaiting || 0) + (g.partially_invoiced || 0);
+        const key = esc(g.supplier).replace(/'/g, "\\'");
+        return `
+          <tr class="grow" onclick="puInvToggleGroup('${key}')">
+            <td class="arrowcol">${open ? I.chevDown : I.chevRight}</td>
+            <td><b>${esc(g.supplier)}</b><div class="sub">${g.line_count} ${esc(T('lines', '条明细'))} · ${g.po_numbers.length} ${esc(T('orders', '张采购单'))}</div></td>
+            <td onclick="event.stopPropagation()">${invReachChip(g.reach)}</td>
+            <td class="right pu2-num"><b>${money(g.total)}</b></td>
+            ${cell(g.fully_invoiced, 'fully_invoiced')}
+            ${cell(g.partially_invoiced, 'partially_invoiced')}
+            ${cell(g.awaiting, 'awaiting')}
+            ${cell(g.no_invoice_expected, 'no_invoice_expected')}
+            <td class="right" onclick="event.stopPropagation()">
+              ${g.supplier === '未指定 Unspecified'
+                ? `<span class="pu2-mut sm">${esc(T('Set a supplier on these lines first', '请先为这些明细设置供应商'))}</span>`
+                : (chase > 0.005
+                    ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvNew(${i})">${esc(T('Add invoice', '添加发票'))}</button>`
+                    : `<span class="pu2-mut sm">${esc(T('All invoiced', '已全部开票'))}</span>`)}
+            </td>
+          </tr>
+          <tr class="drill" ${open ? '' : 'hidden'}><td colspan="9">${invLinesHtml(g)}</td></tr>`;
+      }).join('')}
+      </tbody></table>`;
+    try { applyCapGates(); } catch (_) {}
+  }
+
+  // The lines inside one supplier, grouped by the buying order they sit on so
+  // the PO-level "no invoice" mark has somewhere honest to live.
+  function invLinesHtml(g) {
+    const byPo = new Map();
+    for (const l of g.lines) {
+      if (!byPo.has(l.po_number)) byPo.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, date: l.date, po_no_invoice: l.po_no_invoice, lines: [] });
+      byPo.get(l.po_number).lines.push(l);
+    }
+    return `<div class="pu2-invlines">${[...byPo.values()].map(po => `
+      <div class="pogrp">
+        <span class="pu2-mono">${esc(po.po_number)}</span>
+        <span class="pu2-mut">${esc(po.date || '')}</span>
+        <span class="spacer"></span>
+        ${po.po_no_invoice
+          ? `<span class="pu2-pill grey">${esc(T('No invoice', '不开发票'))}</span>
+             <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore', '恢复'))}</button>`
+          : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This whole order will never have an invoice — cash or market', '整单不会开发票 —— 现金或市场采购'))}" onclick="puInvNoInvoicePO(${po.po_id}, true)">${esc(T('No invoice for this order', '整单不开发票'))}</button>`}
+      </div>
+      ${po.lines.map(l => {
+        const m = INV_META[l.status]();
+        return `<div class="lrow">
+          <div class="nm">${nameLabel(l)}${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}</div>
+          <span class="pu2-num">${money(l.amount)}</span>
+          <span class="pu2-num pu2-mut">${l.covered > 0.005 ? esc(T('invoiced', '已开票')) + ' ' + money(l.covered) : ''}</span>
+          <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
+          <span class="act">${l.po_no_invoice ? ''
+            : l.line_no_invoice
+              ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore', '恢复'))}</button>`
+              : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This line will never have an invoice', '该明细不会开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},true)">${esc(T('No invoice', '不开发票'))}</button>`}</span>
+        </div>`;
+      }).join('')}`).join('')}</div>`;
+  }
+
+  function renderInvLedger() {
+    const el = document.getElementById('pu2-invledger');
+    if (!el) return;
+    if (!(_invList || []).length) {
+      el.innerHTML = `<div class="pu2-emptyline">${esc(_invMonth || _invSearch ? T('No invoices match those filters.', '没有匹配的发票。') : T('No invoices recorded yet.', '还没有登记发票。'))}</div>`;
+      return;
+    }
+    el.innerHTML = `<table class="pu2-tbl"><tbody>${_invList.map(inv => {
+      const due = inv.paid ? `<span class="pu2-pill sage">${esc(T('Paid', '已付'))}</span>`
+        : inv.overdue ? `<span class="pu2-pill brick"><span class="dot"></span>${esc(T('Overdue', '逾期'))}</span>`
+        : inv.due_date ? `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Due', '应付'))} ${esc(inv.due_date)}</span>`
         : `<span class="pu2-pill grey">${esc(T('No due date', '无到期'))}</span>`;
+      const pos = (inv.pos || []).map(p => p.po_number).join(', ');
+      // An invoice whose allocations don't add up to its own header says so.
+      // Live invoice 25 is short by exactly half; the screen reports that
+      // rather than quietly reconciling it.
+      const gap = Math.abs(inv.unallocated) > 0.005
+        ? `<span class="pu2-pill amber" title="${esc(T('The lines ticked on this invoice don’t add up to its total', '该发票已勾选明细金额与发票总额不符'))}"><span class="dot"></span>${money(Math.abs(inv.unallocated))} ${esc(inv.unallocated > 0 ? T('unallocated', '未分配') : T('over', '超出'))}</span>`
+        : '';
       return `<tr>
-        <td><b>${esc(b.supplier)}</b>${b.invoice_number ? `<div class="sub pu2-mono">${esc(b.invoice_number)}</div>` : ''}<div class="sub pu2-num">${esc(b.date)}${b.po_numbers ? ' · ' + esc(b.po_numbers) : ''}</div></td>
-        <td class="right pu2-num">${money(b.amount)}</td>
+        <td><b>${esc(inv.supplier)}</b>${inv.invoice_number ? `<div class="sub pu2-mono">${esc(inv.invoice_number)}</div>` : ''}
+            <div class="sub pu2-num">${esc(inv.date)}${pos ? ' · ' + esc(pos) : ''}</div></td>
+        <td class="right pu2-num">${money(inv.amount)}${gap ? '<div class="sub">' + gap + '</div>' : ''}</td>
         <td>${due}</td>
         <td class="right" style="white-space:nowrap">
-          ${b.paid ? `<button class="pu2-btn ghost sm" data-cap="purchasing:edit" onclick="puBillPaid(${b.id},false)">${esc(T('Undo', '撤销'))}</button>` : `<button class="pu2-btn sm" data-cap="purchasing:edit" onclick="puBillPaid(${b.id},true)">${esc(T('Mark paid', '标记已付'))}</button>`}
-          <button class="pu2-btn ghost sm danger" data-cap="purchasing:edit" title="${esc(T('Delete', '删除'))}" onclick="puBillDelete(${b.id})">✕</button>
+          <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvEdit(${inv.id})">${esc(T('Edit', '编辑'))}</button>
+          ${inv.paid
+            ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvPaid(${inv.id},false)">${esc(T('Undo', '撤销'))}</button>`
+            : `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvPaid(${inv.id},true)">${esc(T('Mark paid', '标记已付'))}</button>`}
+          <button class="pu2-btn ghost sm danger" data-cap="purchasing:invoices" title="${esc(T('Delete', '删除'))}" onclick="puInvDelete(${inv.id})">✕</button>
         </td>
       </tr>`;
     }).join('')}</tbody></table>`;
+    try { applyCapGates(); } catch (_) {}
   }
 
-  // ── record-a-bill modal ─────────────────────────────────────────────────────
+  // ── filters ────────────────────────────────────────────────────────────────
+  window.puInvMonth = async function (m) { _invMonth = m || ''; _invFocusQ = false; await invReload(); };
+  window.puInvSearch = function (v) {
+    _invSearch = v; _invFocusQ = true;
+    clearTimeout(_invSearchTimer);
+    _invSearchTimer = setTimeout(invReload, 250);
+  };
+  window.puInvClear = async function () { _invMonth = ''; _invSearch = ''; _invFocusQ = false; await invReload(); };
+  window.puInvToggleGroup = function (sup) {
+    if (_invExpanded.has(sup)) _invExpanded.delete(sup); else _invExpanded.add(sup);
+    renderInvGroups();
+  };
+
+  // ── the no-invoice mark, both levels ──────────────────────────────────────
+  window.puInvNoInvoicePO = async function (poId, flag) {
+    try {
+      await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
+      await invReload();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puInvNoInvoiceLine = async function (poId, lineId, flag) {
+    try {
+      await api(`/api/retail-admin/purchasing/po/${poId}/line/${lineId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
+      await invReload();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+
+  // ── the invoice modal — the same form for a new one and an edit ───────────
   function billHost() {
     // Mounted as a sibling of #pu2-root inside the pane; CSS is keyed on
     // #pu2-modal-host so it survives paint() rewrites of #pu2-root and never
@@ -1201,168 +1425,198 @@
     }
     return h;
   }
-  window.puBillNew = function (supIdx) {
-    const sup = (typeof supIdx === 'number' && _outstanding[supIdx]) ? _outstanding[supIdx].supplier : '';
-    _billDraft = { supplier: sup || '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
-    renderBillModal();
-  };
-  window.puBillClose = function () {
-    _billDraft = null;
+  window.puInvCloseModal = function () {
+    _invDraft = null;
     const h = document.getElementById('pu2-modal-host');
     if (h) h.innerHTML = '';
   };
-  function billSupplierList() {
+  window.puInvNew = function (groupIdx) {
+    const groups = (_invOut && _invOut.groups) || [];
+    const sup = (typeof groupIdx === 'number' && groups[groupIdx]) ? groups[groupIdx].supplier : '';
+    _invDraft = { id: null, supplier: sup && sup !== '未指定 Unspecified' ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
+    renderInvModal();
+  };
+  // Editing loads the invoice's OWN allocations into the draft, so the lines it
+  // already covers arrive ticked. The server's headroom check ignores this
+  // invoice's own rows, which is what lets an unchanged invoice be re-saved.
+  window.puInvEdit = async function (id) {
+    try {
+      const r = await api('/api/retail-admin/purchasing/invoices/' + id);
+      const inv = r.data;
+      const alloc = {};
+      (inv.lines || []).forEach(l => { alloc[l.line_id] = Number((l.allocated_amount || 0).toFixed(2)); });
+      _invDraft = {
+        id: inv.id, supplier: inv.supplier, invoice_number: inv.invoice_number || '',
+        date: inv.date, due_date: inv.due_date || '', amount: inv.amount, notes: inv.notes || '',
+        alloc, ownLines: inv.lines || [],
+      };
+      renderInvModal();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  function invSupplierList() {
     const names = new Set();
-    _outstanding.forEach(g => { if (g.supplier) names.add(g.supplier); });
+    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== '未指定 Unspecified') names.add(g.supplier); });
     _suppliers.filter(s => s.is_active).forEach(s => names.add(s.name));
+    if (_invDraft && _invDraft.supplier) names.add(_invDraft.supplier);
     return [...names].sort((a, b) => a.localeCompare(b));
   }
-  function billAllocated() {
-    const d = _billDraft; if (!d) return 0;
+  function invAllocated() {
+    const d = _invDraft; if (!d) return 0;
     return Object.values(d.alloc).reduce((s, v) => s + (parseFloat(v) || 0), 0);
   }
-  function renderBillModal() {
-    const d = _billDraft; if (!d) return;
-    const lines = outstandingFor(d.supplier);
-    // group outstanding lines by PO for display
+  // The lines the modal can allocate against: everything still open for this
+  // supplier, PLUS the lines this invoice already covers (which are no longer
+  // "open" precisely because this invoice covers them, and would otherwise
+  // vanish from the form the moment you opened it to edit).
+  function invModalLines() {
+    const d = _invDraft; if (!d) return [];
+    const open = invLinesFor(d.supplier).filter(l => l.status !== 'no_invoice_expected');
+    const seen = new Set(open.map(l => l.line_id));
+    const own = (d.ownLines || []).filter(l => !seen.has(l.line_id)).map(l => ({
+      line_id: l.line_id, name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
+      po_number: l.po_number, date: l.po_date,
+      amount: Math.round(((l.qty || 0) * (l.cost_per_unit || 0)) * 100) / 100,
+      outstanding: 0,
+    }));
+    return [...open, ...own];
+  }
+  function renderInvModal() {
+    const d = _invDraft; if (!d) return;
+    const lines = invModalLines();
     const byPo = new Map();
     lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
-    const allocated = billAllocated();
-    const amt = parseFloat(d.amount) || 0;
-    const diff = amt - allocated;
-    const badge = Math.abs(diff) < 0.01
-      ? `<span class="pu2-pill sage"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${esc(T('nothing left over', '正好'))}</span>`
-      : diff > 0
-        ? `<span class="pu2-pill grey">${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(diff)} ${esc(T('unallocated', '未分配'))}</span>`
-        : `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(-diff)} ${esc(T('over the bill', '超出账单'))}</span>`;
     const supOpts = ['<option value="">' + esc(T('Choose a supplier', '选择供应商')) + '</option>']
-      .concat(billSupplierList().map(n => `<option value="${esc(n)}"${n === d.supplier ? ' selected' : ''}>${esc(n)}</option>`)).join('');
+      .concat(invSupplierList().map(n => `<option value="${esc(n)}"${n === d.supplier ? ' selected' : ''}>${esc(n)}</option>`)).join('');
     const allocRows = lines.length
       ? [...byPo.entries()].map(([po, ls]) => `
           <div class="pu2-pogrp">${esc(po)}</div>
           ${ls.map(l => {
             const on = d.alloc[l.line_id] != null;
+            const own = (d.ownLines || []).some(x => x.line_id === l.line_id);
+            const headroom = (l.outstanding || 0) + (own ? (parseFloat(d.alloc[l.line_id]) || 0) : 0);
             return `<div class="pu2-allocrow">
-              <span class="pu2-chk${on ? ' on' : ''}" onclick="puBillToggle(${l.line_id})">${on ? I.check : ''}</span>
+              <span class="pu2-chk${on ? ' on' : ''}" onclick="puInvToggle(${l.line_id})">${on ? I.check : ''}</span>
               <div>${nameLabel(l)}${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}</div>
-              <div class="pu2-num pu2-mut">${money(l.outstanding)} ${esc(T('open', '待开'))}</div>
-              <input type="number" min="0" step="0.01" class="pu2-input pu2-num pu2-allocin" data-line="${l.line_id}" value="${on ? esc(d.alloc[l.line_id]) : ''}" placeholder="0" oninput="puBillAlloc(${l.line_id}, this.value)">
+              <div class="pu2-num pu2-mut">${money(headroom)} ${esc(T('open', '待开'))}</div>
+              <input type="number" min="0" step="0.01" class="pu2-input pu2-num pu2-allocin" data-line="${l.line_id}" value="${on ? esc(d.alloc[l.line_id]) : ''}" placeholder="0" oninput="puInvAlloc(${l.line_id}, this.value)">
             </div>`;
           }).join('')}`).join('')
-      : `<div class="pu2-emptyline">${esc(d.supplier ? T('No open lines for this supplier — you can still record the bill.', '该供应商暂无待开票明细 —— 仍可登记账单。') : T('Pick a supplier to see what’s open.', '选择供应商以查看待开票明细。'))}</div>`;
+      : `<div class="pu2-emptyline">${esc(d.supplier ? T('No open lines for this supplier — you can still record the invoice.', '该供应商暂无待开票明细 —— 仍可登记发票。') : T('Pick a supplier to see what’s open.', '选择供应商以查看待开票明细。'))}</div>`;
     billHost().innerHTML = `
-      <div class="pu2-scrim" onclick="puBillClose()"></div>
+      <div class="pu2-scrim" onclick="puInvCloseModal()"></div>
       <div class="pu2-modal">
         <div class="pu2-modal-head">
-          <div><h2>${esc(T('Record a bill', '登记账单'))}</h2><div class="sub">${esc(T('Match a supplier’s invoice to the orders it covers.', '将供应商发票匹配到对应采购单。'))}</div></div>
-          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puBillClose()">✕</button>
+          <div><h2>${esc(d.id ? T('Edit invoice', '编辑发票') : T('Add invoice', '添加发票'))}</h2>
+               <div class="sub">${esc(T('Match a supplier’s invoice to the lines it covers.', '将供应商发票匹配到对应采购明细。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puInvCloseModal()">✕</button>
         </div>
         <div class="pu2-modal-body">
           <div class="pu2-fgrid three">
-            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puBillField('supplier', this.value)">${supOpts}</select></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puBillField('invoice_number', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Amount ¥', '金额 ¥'))}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puBillField('amount', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puBillField('date', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Due date', '到期日'))}</span><input class="pu2-input" type="date" value="${esc(d.due_date)}" onchange="puBillField('due_date', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Note', '备注'))}</span><input class="pu2-input" value="${esc(d.notes)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puBillField('notes', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puInvField('supplier', this.value)">${supOpts}</select></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('invoice_number', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Amount ¥', '金额 ¥'))}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puInvField('date', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Due date', '到期日'))}</span><input class="pu2-input" type="date" value="${esc(d.due_date)}" onchange="puInvField('due_date', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Note', '备注'))}</span><input class="pu2-input" value="${esc(d.notes)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('notes', this.value)"></label>
           </div>
           <div class="pu2-alloc-head">
             <span class="pu2-kicker" style="margin:0">${esc(T('What it covers', '涵盖内容'))}</span>
-            <button class="pu2-btn sm" style="margin-left:auto" onclick="puBillAutoMatch()">${esc(T('Match to amount', '按金额匹配'))}</button>
+            <button class="pu2-btn sm" style="margin-left:auto" onclick="puInvAutoMatch()">${esc(T('Match to amount', '按金额匹配'))}</button>
           </div>
           <div class="pu2-alloclist">${allocRows}</div>
         </div>
         <div class="pu2-modal-foot">
-          <span id="pu2-allocbadge">${badge}</span>
+          <span id="pu2-allocbadge">${invBadgeHtml()}</span>
           <span class="spacer"></span>
-          <button class="pu2-btn ghost" onclick="puBillClose()">${esc(T('Cancel', '取消'))}</button>
-          <button class="pu2-btn primary" onclick="puBillSave()">${esc(T('Save bill', '保存账单'))}</button>
+          <button class="pu2-btn ghost" onclick="puInvCloseModal()">${esc(T('Cancel', '取消'))}</button>
+          <button class="pu2-btn primary" onclick="puInvSave()">${esc(d.id ? T('Save changes', '保存更改') : T('Save invoice', '保存发票'))}</button>
         </div>
       </div>`;
   }
+  function invBadgeHtml() {
+    const allocated = invAllocated();
+    const amt = parseFloat((_invDraft || {}).amount) || 0;
+    const diff = amt - allocated;
+    if (Math.abs(diff) < 0.01) return `<span class="pu2-pill sage"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${esc(T('nothing left over', '正好'))}</span>`;
+    if (diff > 0) return `<span class="pu2-pill grey">${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(diff)} ${esc(T('unallocated', '未分配'))}</span>`;
+    return `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(-diff)} ${esc(T('over the invoice', '超出发票'))}</span>`;
+  }
   // Live badge refresh WITHOUT re-rendering the modal — so typing in the amount
   // or an allocation field never loses focus mid-keystroke.
-  function updateBillBadge() {
+  function updateInvBadge() {
     const b = document.getElementById('pu2-allocbadge');
-    if (!b || !_billDraft) return;
-    const allocated = billAllocated();
-    const amt = parseFloat(_billDraft.amount) || 0;
-    const diff = amt - allocated;
-    b.innerHTML = Math.abs(diff) < 0.01
-      ? `<span class="pu2-pill sage"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${esc(T('nothing left over', '正好'))}</span>`
-      : diff > 0 ? `<span class="pu2-pill grey">${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(diff)} ${esc(T('unallocated', '未分配'))}</span>`
-      : `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Allocated', '已分配'))} ${money(allocated)}</span> <span class="pu2-mut">${money(-diff)} ${esc(T('over the bill', '超出账单'))}</span>`;
+    if (b && _invDraft) b.innerHTML = invBadgeHtml();
   }
-  window.puBillField = function (field, val) {
-    if (!_billDraft) return;
-    _billDraft[field] = val;
-    if (field === 'supplier') { _billDraft.alloc = {}; renderBillModal(); }   // structural → re-render
-    else if (field === 'amount') updateBillBadge();                            // live, keep focus
+  window.puInvField = function (field, val) {
+    if (!_invDraft) return;
+    _invDraft[field] = val;
+    if (field === 'supplier') { _invDraft.alloc = {}; renderInvModal(); }   // structural → re-render
+    else updateInvBadge();
   };
-  window.puBillToggle = function (lineId) {
-    if (!_billDraft) return;
-    if (_billDraft.alloc[lineId] != null) delete _billDraft.alloc[lineId];
+  window.puInvToggle = function (lineId) {
+    if (!_invDraft) return;
+    if (_invDraft.alloc[lineId] != null) delete _invDraft.alloc[lineId];
     else {
-      const l = outstandingFor(_billDraft.supplier).find(x => x.line_id === lineId);
-      _billDraft.alloc[lineId] = l ? Number(l.outstanding.toFixed(2)) : 0;
+      const l = invModalLines().find(x => x.line_id === lineId);
+      _invDraft.alloc[lineId] = l ? Number((l.outstanding || 0).toFixed(2)) : 0;
     }
-    renderBillModal();
+    renderInvModal();
   };
-  window.puBillAlloc = function (lineId, val) {
-    if (!_billDraft) return;
-    if (val === '' || val == null) delete _billDraft.alloc[lineId];
-    else _billDraft.alloc[lineId] = val;
-    updateBillBadge();
+  window.puInvAlloc = function (lineId, val) {
+    if (!_invDraft) return;
+    if (val === '' || val == null) delete _invDraft.alloc[lineId];
+    else _invDraft.alloc[lineId] = val;
+    updateInvBadge();
   };
-  window.puBillAutoMatch = function () {
-    if (!_billDraft) return;
-    let target = parseFloat(_billDraft.amount) || 0;
-    _billDraft.alloc = {};
+  window.puInvAutoMatch = function () {
+    if (!_invDraft) return;
+    let target = parseFloat(_invDraft.amount) || 0;
+    _invDraft.alloc = {};
     if (target > 0) {
-      for (const l of outstandingFor(_billDraft.supplier)) {
+      for (const l of invModalLines()) {
         if (target <= 0.01) break;
-        const take = Math.min(target, l.outstanding);
-        if (take > 0.01) { _billDraft.alloc[l.line_id] = Number(take.toFixed(2)); target -= take; }
+        const take = Math.min(target, l.outstanding || 0);
+        if (take > 0.01) { _invDraft.alloc[l.line_id] = Number(take.toFixed(2)); target -= take; }
       }
     }
-    renderBillModal();
+    renderInvModal();
   };
-  window.puBillSave = async function () {
-    const d = _billDraft; if (!d) return;
+  window.puInvSave = async function () {
+    const d = _invDraft; if (!d) return;
     if (!d.supplier) { toast(T('Choose a supplier', '请选择供应商'), 'err'); return; }
-    if (!(parseFloat(d.amount) > 0)) { toast(T('Enter the bill amount', '请输入账单金额'), 'err'); return; }
+    if (!(parseFloat(d.amount) > 0)) { toast(T('Enter the invoice amount', '请输入发票金额'), 'err'); return; }
     const links = Object.entries(d.alloc)
       .map(([line_id, allocated_amount]) => ({ line_id: parseInt(line_id, 10), allocated_amount: parseFloat(allocated_amount) || 0 }))
       .filter(l => l.allocated_amount > 0);
+    const body = {
+      supplier: d.supplier, invoice_number: d.invoice_number || null, amount: parseFloat(d.amount),
+      date: d.date, due_date: d.due_date || null, notes: d.notes || null, links,
+    };
     try {
-      await api('/api/retail-admin/bills', { method: 'POST', body: {
-        supplier: d.supplier, invoice_number: d.invoice_number || null, amount: parseFloat(d.amount),
-        date: d.date, due_date: d.due_date || null, notes: d.notes || null, links,
-      } });
-      toast(T('Bill recorded ✓', '账单已登记 ✓'), 'ok');
-      puBillClose();
-      await Promise.all([loadBillSummary(), loadOutstanding(), loadBills()]);
-      if (_screen === 'bills') renderBillsBody();
+      if (d.id) await api('/api/retail-admin/purchasing/invoices/' + d.id, { method: 'PUT', body });
+      else      await api('/api/retail-admin/purchasing/invoices', { method: 'POST', body });
+      toast(d.id ? T('Saved ✓', '已保存 ✓') : T('Invoice recorded ✓', '发票已登记 ✓'), 'ok');
+      puInvCloseModal();
+      await invReload();
     } catch (e) { toast(e.message, 'err'); }
   };
-  window.puBillPaid = async function (id, paid) {
+  window.puInvPaid = async function (id, paid) {
     try {
-      await api('/api/retail-admin/bills/' + id + '/paid', { method: 'PUT', body: { paid } });
-      await Promise.all([loadBillSummary(), loadBills()]);
-      if (_screen === 'bills') renderBillsBody();
+      await api('/api/retail-admin/purchasing/invoices/' + id + '/paid', { method: 'PUT', body: { paid } });
+      await invReload();
     } catch (e) { toast(e.message, 'err'); }
   };
-  window.puBillDelete = async function (id) {
+  window.puInvDelete = async function (id) {
     if (!(await askConfirm({
-      title: T('Delete this bill?', '确定删除该账单?'),
-      confirmLabel: T('Delete bill', '删除账单'),
+      title: T('Delete this invoice?', '确定删除该发票?'),
+      body: T('The lines it covers go back to awaiting an invoice.', '其涵盖的采购明细将恢复为待开票。'),
+      confirmLabel: T('Delete invoice', '删除发票'),
       danger: true,
     }))) return;
     try {
-      await api('/api/retail-admin/bills/' + id, { method: 'DELETE' });
+      await api('/api/retail-admin/purchasing/invoices/' + id, { method: 'DELETE' });
       toast(T('Deleted', '已删除'), 'ok');
-      await Promise.all([loadBillSummary(), loadOutstanding(), loadBills()]);
-      if (_screen === 'bills') renderBillsBody();
+      await invReload();
     } catch (e) { toast(e.message, 'err'); }
   };
 
@@ -1549,7 +1803,7 @@
         body.innerHTML = `<tr><td colspan="5"><div class="pu2-empty">
           <div class="pu2-empty-ico">${I.box}</div>
           <h3>${esc(T('No suppliers yet', '还没有供应商'))}</h3>
-          <p>${esc(T('Add the businesses you buy from. Once they’re here, every order and bill can lean on them — and each product remembers who sells it and for how much.', '添加你的供货商。加入后,采购单和账单都能用上它们 —— 每件商品也会记住由谁供货、价格多少。'))}</p>
+          <p>${esc(T('Add the businesses you buy from. Once they’re here, every order and invoice can lean on them — and each product remembers who sells it and for how much.', '添加你的供货商。加入后,采购单和发票都能用上它们 —— 每件商品也会记住由谁供货、价格多少。'))}</p>
           <div class="pu2-actions" style="justify-content:center">
             <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add your first supplier', '添加第一个供应商'))}</button>
             <button class="pu2-btn" data-cap="purchasing:edit" onclick="puImportOpen()"><span class="pu2-ic">${I.up}</span>${esc(T('Import from a spreadsheet', '从表格导入'))}</button>
@@ -1657,7 +1911,7 @@
     return `<div class="pu2-metricrow" style="margin:0 0 16px">
       ${tile(T('Orders', '采购单'), sc.order_count || 0, sc.last_date ? T('last', '最近') + ' ' + sc.last_date : T('none yet', '暂无'))}
       ${tile(T('Spend, all time', '累计采购'), money(sc.spend || 0), '')}
-      ${tile(T('Owed now', '当前应付'), money(sc.owed || 0), (sc.owed_count || 0) + ' ' + T('bills', '张账单'))}
+      ${tile(T('Owed now', '当前应付'), money(sc.owed || 0), (sc.owed_count || 0) + ' ' + T('invoices', '张发票'))}
       ${tile(T('Products', '商品'), sc.product_count || 0, T('bought before', '曾采购'))}
     </div>`;
   }

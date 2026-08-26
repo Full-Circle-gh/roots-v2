@@ -241,9 +241,13 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   // together with nothing to tell them apart. Reading the bill amounts as a
   // plain column and summing them here keeps invoices.amount identifiable all
   // the way to the boundary. `spend` needs nothing; its column never changes
-  // unit. The bill count comes from the rows we already read.
+  // unit. The invoice count comes from the rows we already read.
   const owedRows = db.prepare(
-    `SELECT amount FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL ORDER BY id`
+    // Tenant-scoped, NOT scope-scoped — the same rule the invoice screen
+    // follows. Filtering to scope='retail' here would report ¥0 owed for
+    // every supplier, because every invoice on this tenant is a kitchen-scope
+    // row and that is exactly where the unpaid paperwork lives.
+    `SELECT amount FROM invoices WHERE COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL ORDER BY id`
   ).all(s.name);
   const owed = owedRows.reduce((sum, r) => sum + (r.amount || 0), 0);
   const priceList = db.prepare(`
@@ -532,27 +536,46 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
   } });
 });
 
-// ═══ RETAIL BILLS (supplier invoices) ═══════════════════════════════════════
-// Retail port of the kitchen invoice tracker: record a supplier's invoice and
-// allocate it across the retail PO lines it covers, with due-date / paid / AP
-// aging on top. Everything is scoped to retail (invoices.scope='retail') and
-// linked to retail PO lines, so kitchen bills never appear here and vice versa.
-const BILL_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
+// ═══ SUPPLIER INVOICES 发票 ══════════════════════════════════════════════════
+// What Roots actually does here is CHASE MISSING 发票 — not run accounts
+// payable. So this screen is organised the way the kitchen one is: grouped by
+// supplier, expandable to the lines, with "awaiting" as the headline figure.
+// The due-date / paid / aging fields the earlier Bills port built are kept and
+// still served — another tenant may be tracking payables — but they are
+// secondary here, never the organising principle.
+//
+// TENANT-SCOPED ONLY. Every read and write is filtered by tenant_id and by
+// nothing else. `scope` is stamped on create ('retail') and is never a filter
+// on read: everything Roots is chasing sits on kitchen-scope POs (66 of 67),
+// so a scope-filtered screen would show an empty page. The kitchen's own
+// routes/finance.js now filters scope='kitchen', and that is what keeps an
+// invoice created here out of reach of that screen's delete.
+//
+// THE LINK IS AT PO LINE LEVEL. invoice_lines(invoice_id, line_id) with a
+// per-link allocated_amount, many-to-many in both directions. A kitchen PO is
+// a mixed shopping list whose lines each carry their own supplier, so a
+// PO-level link would attribute one supplier's invoice to another's goods.
+//
+// THE FOUR STATES ARE COMPUTED, NEVER STORED — see lineStatus() below.
+// po_line_items.invoice_status is a second, contradictory, STORED mechanism
+// that this screen has never used and must not start using: all 232 live lines
+// read 'not_received'. It is left exactly as it is. invoice_pos is dead with
+// 0 rows and is likewise left alone.
+const INV_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
 const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+const INV_UNSPECIFIED = '未指定 Unspecified';
 
-// How much of a PO line has already been billed.
-//
-// invoice_lines.allocated_amount is a whole-cent integer in Postgres, while a
-// line's own value is qty x po_line_items.cost_per_unit — a decimal amount that
-// stays decimal. Every caller below puts one beside the other. Summed inside
-// SQL the allocations arrive as a bare scalar with no column left to say which
-// unit built it; selected as a plain column and summed here, each side is still
-// identifiable at the point the two meet.
-const allocatedForLine = (lineId) => db
-  .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id=? ORDER BY id')
-  .all(lineId)
-  .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
+// Supplier resolution chain, most-specific first: the line's own supplier, the
+// PO header's, the linked item's master supplier, then a literal fallback.
+// Character-for-character the chain routes/finance.js uses, so the two screens
+// can never group the same line under different suppliers.
+const SUPPLIER_EXPR = `COALESCE(
+    NULLIF(TRIM(pli.supplier_name),''),
+    NULLIF(TRIM(po.supplier),''),
+    NULLIF(TRIM(ing.supplier),''),
+    '${INV_UNSPECIFIED}'
+  )`;
 
 // The same read for a whole page of lines, keyed by line_id. Lines with no
 // allocation are absent from the map rather than present as 0, so the caller
@@ -569,166 +592,342 @@ const allocatedByLine = (lineIds) => {
   return out;
 };
 
-// Outstanding retail PO lines grouped by supplier — "who are we still awaiting
-// an invoice from, and for how much?"
-router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res) => {
-  const month = (req.query.month || '').trim();
-  const supplier = (req.query.supplier || '').trim();
-  const params = [];
-  const tid = Number(currentTenantId()) || 1;
-  let where = `COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${BILL_PO_STATUSES}
-    AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0`;
-  if (month)    { where += ' AND substr(po.date,1,7)=?'; params.push(month.slice(0, 7)); }
-  if (supplier) { where += " AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'')=?"; params.push(supplier); }
-  // Neither money figure is built inside SQL. `line_total` was the product of
-  // two decimal columns and `covered` a SUM over a whole-cent column; computed
-  // in the database they came back as two scalars in one row, in two units,
-  // with nothing to tell them apart. qty and cost_per_unit are read as the plain
-  // columns they are and multiplied below, and the allocations are read and
-  // summed the same way.
-  const rows = db.prepare(`
-    SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.cost_per_unit,
-           po.id AS po_id, po.po_number, po.date,
-           COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'') AS supplier
-      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
-     WHERE ${where}
-     ORDER BY supplier, po.date DESC, pli.id`).all(...params);
-  const allocated = allocatedByLine(rows.map(r => r.line_id));
-  const bySup = new Map();
-  for (const r of rows) {
-    r.line_total = (r.qty || 0) * (r.cost_per_unit || 0);
-    r.covered = allocated.get(r.line_id) || 0;
-    r.outstanding = Math.max(0, r.line_total - r.covered);
-    r.status = r.covered <= 0.01 ? 'awaiting' : (r.covered + 0.01 >= r.line_total ? 'fully' : 'partial');
-    if (!bySup.has(r.supplier)) bySup.set(r.supplier, { supplier: r.supplier || null, total: 0, covered: 0, outstanding: 0, lines: [] });
-    const g = bySup.get(r.supplier);
-    g.total += r.line_total; g.covered += r.covered; g.outstanding += r.outstanding; g.lines.push(r);
-  }
-  const groups = [...bySup.values()].filter(g => g.outstanding > 0.01).sort((a, b) => b.outstanding - a.outstanding);
-  res.json({ success: true, data: groups });
-});
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
-// KPI + AP aging for the retail Bills header.
-router.get('/api/retail-admin/bills/summary', requireRetailAdmin, (req, res) => {
-  const month = (req.query.month || gzToday().slice(0, 7)).slice(0, 7);
-  const tid = Number(currentTenantId()) || 1;
-  // `purchased` and `billed` are read in two statements rather than one because
-  // they come from columns that do not share a unit: po_line_items.cost_per_unit
-  // is a decimal amount, while invoice_lines.allocated_amount is a whole-cent
-  // integer in Postgres. Summed together in one query they arrive as two scales
-  // in one row with nothing to tell them apart. Read separately — and with the
-  // allocation rows selected as a plain column rather than pre-summed in SQL —
-  // each side is a single identifiable unit before the two meet below.
-  const billScope = `COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid}
-       AND po.status IN ${BILL_PO_STATUSES}
-       AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0
-       AND substr(po.date,1,7)=?`;
-  const purchased = (db.prepare(`
-    SELECT COALESCE(SUM(pli.qty*pli.cost_per_unit),0) AS purchased
-      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
-     WHERE ${billScope}`).get(month) || {}).purchased || 0;
-  const billed = db.prepare(`
-    SELECT il.allocated_amount AS allocated_amount
-      FROM invoice_lines il
-      JOIN po_line_items pli ON pli.id = il.line_id
-      JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE ${billScope}`).all(month)
-    .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
-  const awaiting = Math.max(0, purchased - billed);
+// The four states, computed per line at read time. Same order of tests as
+// routes/finance.js: the no-invoice mark wins over everything, because a line
+// nobody will ever get a 发票 for is not "awaiting" one no matter what has
+// been allocated against it.
+function lineStatus(row) {
+  if (row.line_no_invoice || row.po_no_invoice) return 'no_invoice_expected';
+  if (row.covered >= row.amount && row.amount > 0) return 'fully_invoiced';
+  if (row.covered > 0) return 'partially_invoiced';
+  return 'awaiting';
+}
+
+// Reach — the supplier's own contact channel, keyed by name because that is
+// the only thing an invoice or a PO line carries. Not invoice data; general
+// supplier data, surfaced here so someone chasing a 发票 can act on the row
+// without leaving the screen. The QR itself is fetched on demand (it is a
+// base64 blob) — this only reports whether one exists.
+function reachByName(tid) {
+  const rows = db.prepare(
+    'SELECT id, name, channel_type, channel_link, channel_qr_data IS NOT NULL AS has_qr FROM suppliers WHERE COALESCE(tenant_id,1) = ?'
+  ).all(tid);
+  const m = new Map();
+  for (const r of rows) {
+    m.set(r.name, { supplier_id: r.id, type: r.channel_type || null, link: r.channel_link || null, has_qr: !!r.has_qr });
+  }
+  return m;
+}
+
+// Payables aging — kept from the Bills port and still served, secondary to the
+// chase. Unpaid invoices only; a due date in the past is overdue.
+function agingFor(tid) {
   const today = gzToday();
   const soon = new Date(Date.now() + 8 * 3600 * 1000 + 7 * 86400 * 1000).toISOString().slice(0, 10);
-  const bills = db.prepare(`SELECT amount, due_date, paid_at FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND paid_at IS NULL`).all();
+  const rows = db.prepare('SELECT amount, due_date FROM invoices WHERE COALESCE(tenant_id,1) = ? AND paid_at IS NULL').all(tid);
   let notDue = 0, dueSoon = 0, overdue = 0, overdueCount = 0;
-  for (const b of bills) {
+  for (const b of rows) {
     const amt = b.amount || 0;
     if (!b.due_date) { notDue += amt; continue; }
     if (b.due_date < today) { overdue += amt; overdueCount++; }
     else if (b.due_date <= soon) dueSoon += amt;
     else notDue += amt;
   }
-  res.json({ success: true, data: { month, purchased, billed, awaiting, aging: { notDue, dueSoon, overdue, overdueCount } } });
-});
+  return { notDue: round2(notDue), dueSoon: round2(dueSoon), overdue: round2(overdue), overdueCount };
+}
 
-// Recorded retail bills ledger.
-router.get('/api/retail-admin/bills', requireRetailAdmin, (req, res) => {
+// GET .../invoices/outstanding?month=&q=&supplier=
+// Every line on a placed PO for this tenant, with its computed state, grouped
+// by supplier. This is the action-item view: "who do we still need a 发票 from?"
+//
+// no_invoice_expected lines are INCLUDED, as a state. The earlier Bills port
+// filtered them out of the query entirely, which is why it could never show a
+// "No invoice" figure — that is ¥6,797 of real classification on live data.
+router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdmin, (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const invs = db.prepare(`SELECT * FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} ORDER BY date DESC, id DESC`).all();
-  const linkStmt = db.prepare(`
-    SELECT COUNT(DISTINCT po.id) AS po_count, GROUP_CONCAT(DISTINCT po.po_number) AS po_numbers,
-           COALESCE(SUM(il.allocated_amount),0) AS allocated
-      FROM invoice_lines il JOIN po_line_items pli ON pli.id=il.line_id JOIN purchase_orders po ON po.id=pli.po_id
-     WHERE il.invoice_id=?`);
-  const today = gzToday();
-  for (const inv of invs) {
-    const l = linkStmt.get(inv.id) || {};
-    inv.po_count = l.po_count || 0;
-    inv.po_numbers = l.po_numbers || '';
-    inv.allocated = l.allocated || 0;
-    inv.paid = !!inv.paid_at;
-    inv.overdue = !inv.paid_at && !!inv.due_date && inv.due_date < today;
+  const month = (req.query.month || '').trim().slice(0, 7);
+  const supplier = (req.query.supplier || '').trim();
+  const search = (req.query.q || '').trim();
+  const params = [];
+  let where = `COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${INV_PO_STATUSES}`;
+  if (month) { where += ' AND substr(po.date,1,7) = ?'; params.push(month); }
+  if (supplier) {
+    if (supplier === INV_UNSPECIFIED) {
+      where += ` AND NULLIF(TRIM(pli.supplier_name),'') IS NULL
+                 AND NULLIF(TRIM(po.supplier),'')       IS NULL
+                 AND NULLIF(TRIM(ing.supplier),'')      IS NULL`;
+    } else {
+      where += ` AND ${SUPPLIER_EXPR} = ?`; params.push(supplier);
+    }
   }
-  res.json({ success: true, data: invs });
+  if (search) {
+    const t = '%' + search + '%';
+    where += ` AND (
+        LOWER(${SUPPLIER_EXPR})            LIKE LOWER(?)
+     OR LOWER(COALESCE(pli.name_en,''))    LIKE LOWER(?)
+     OR LOWER(COALESCE(pli.name_cn,''))    LIKE LOWER(?)
+     OR LOWER(COALESCE(pli.sku,''))        LIKE LOWER(?)
+     OR LOWER(COALESCE(po.po_number,''))   LIKE LOWER(?))`;
+    params.push(t, t, t, t, t);
+  }
+  const rows = db.prepare(`
+    SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
+           pli.no_invoice_expected AS line_no_invoice,
+           po.id AS po_id, po.po_number, po.date, po.status,
+           po.no_invoice_expected AS po_no_invoice,
+           ${SUPPLIER_EXPR} AS supplier
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+      LEFT JOIN ingredients ing ON ing.id = pli.ingredient_id
+     WHERE ${where}
+     ORDER BY po.date DESC, pli.sort_order, pli.id`).all(...params);
+
+  const allocated = allocatedByLine(rows.map(r => r.line_id));
+  const reach = reachByName(tid);
+  const bySup = new Map();
+  const totals = { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, line_count: rows.length };
+
+  for (const r of rows) {
+    r.amount = round2((r.qty || 0) * (r.cost_per_unit || 0));
+    r.covered = round2(allocated.get(r.line_id) || 0);
+    r.outstanding = round2(Math.max(0, r.amount - r.covered));
+    r.status = lineStatus(r);
+    r.line_no_invoice = !!r.line_no_invoice;
+    r.po_no_invoice = !!r.po_no_invoice;
+    if (!bySup.has(r.supplier)) bySup.set(r.supplier, {
+      supplier: r.supplier, total: 0, fully_invoiced: 0, partially_invoiced: 0,
+      awaiting: 0, no_invoice_expected: 0, lines: [],
+    });
+    const g = bySup.get(r.supplier);
+    g.total += r.amount; g[r.status] += r.amount; g.lines.push(r);
+    totals.total += r.amount; totals[r.status] += r.amount;
+  }
+
+  // Awaiting first, because awaiting is the job. Partial counts as unfinished
+  // and sorts with it; a supplier who is fully invoiced has nothing to chase.
+  const groups = [...bySup.values()].map(g => ({
+    supplier: g.supplier,
+    total: round2(g.total),
+    fully_invoiced: round2(g.fully_invoiced),
+    partially_invoiced: round2(g.partially_invoiced),
+    awaiting: round2(g.awaiting),
+    no_invoice_expected: round2(g.no_invoice_expected),
+    line_count: g.lines.length,
+    po_numbers: [...new Set(g.lines.map(l => l.po_number))],
+    reach: reach.get(g.supplier) || null,
+    lines: g.lines,
+  })).sort((a, b) => (b.awaiting + b.partially_invoiced) - (a.awaiting + a.partially_invoiced) || b.total - a.total);
+
+  for (const k of Object.keys(totals)) if (k !== 'line_count') totals[k] = round2(totals[k]);
+  res.json({ success: true, data: { month: month || null, groups, totals, aging: agingFor(tid) } });
 });
 
-// Create a retail bill + allocate across the lines it covers.
-router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req, res) => {
+// The recorded-invoice ledger for this tenant.
+router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const month = (req.query.month || '').trim().slice(0, 7);
+  const search = (req.query.q || '').trim();
+  const params = [tid];
+  let where = 'COALESCE(tenant_id,1) = ?';
+  if (month)  { where += ' AND substr(date,1,7) = ?'; params.push(month); }
+  if (search) {
+    where += " AND (LOWER(supplier) LIKE LOWER(?) OR LOWER(COALESCE(invoice_number,'')) LIKE LOWER(?))";
+    const t = '%' + search + '%'; params.push(t, t);
+  }
+  const invs = db.prepare(`SELECT * FROM invoices WHERE ${where} ORDER BY date DESC, id DESC`).all(...params);
+  const linkStmt = db.prepare(`
+    SELECT il.id AS link_id, il.allocated_amount, pli.id AS line_id,
+           pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
+           po.id AS po_id, po.po_number, po.date AS po_date, po.status
+      FROM invoice_lines il
+      JOIN po_line_items pli ON pli.id = il.line_id
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE il.invoice_id = ?
+     ORDER BY po.date DESC, pli.id`);
+  const today = gzToday();
+  const data = invs.map(inv => {
+    const lines = linkStmt.all(inv.id);
+    const seen = new Map();
+    for (const l of lines) if (!seen.has(l.po_number)) seen.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, po_date: l.po_date, status: l.status });
+    const allocated = round2(lines.reduce((s, l) => s + (l.allocated_amount || 0), 0));
+    return {
+      ...inv, lines, pos: [...seen.values()], allocated,
+      // Surfaced, never corrected. Live invoice 25 is allocated exactly half
+      // its header amount; the screen says so rather than quietly reconciling.
+      unallocated: round2((inv.amount || 0) - allocated),
+      paid: !!inv.paid_at,
+      overdue: !inv.paid_at && !!inv.due_date && inv.due_date < today,
+    };
+  });
+  res.json({ success: true, data });
+});
+
+router.get('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
+  const lines = db.prepare(`
+    SELECT il.id AS link_id, il.allocated_amount, pli.id AS line_id,
+           pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
+           po.id AS po_id, po.po_number, po.date AS po_date, po.status
+      FROM invoice_lines il
+      JOIN po_line_items pli ON pli.id = il.line_id
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE il.invoice_id = ? ORDER BY po.date DESC, pli.id`).all(inv.id);
+  const allocated = round2(lines.reduce((s, l) => s + (l.allocated_amount || 0), 0));
+  res.json({ success: true, data: { ...inv, lines, allocated, unallocated: round2((inv.amount || 0) - allocated), paid: !!inv.paid_at } });
+});
+
+// What this same request has already written for this invoice/line pair.
+const allocatedForThisRequest = (invoiceId, lineId) => db
+  .prepare('SELECT allocated_amount FROM invoice_lines WHERE invoice_id = ? AND line_id = ?')
+  .all(invoiceId, lineId)
+  .reduce((s, r) => s + (r.allocated_amount || 0), 0);
+
+// Shared allocation writer for create and update.
+//
+// `skipInvoiceId` is what makes an EDIT possible: the remaining headroom on a
+// line has to ignore this invoice's own previous allocation, or re-saving an
+// unchanged invoice would refuse itself as over-allocated. Create passes null.
+function writeLinks(invoiceId, links, skipInvoiceId) {
+  const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
+  const lineInfo = db.prepare('SELECT id, qty, cost_per_unit FROM po_line_items WHERE id = ?');
+  const priorFor = (lineId) => db
+    .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id = ? AND invoice_id != ? ORDER BY id')
+    .all(lineId, skipInvoiceId || -1)
+    .reduce((s, r) => s + (r.allocated_amount || 0), 0);
+  for (const l of (Array.isArray(links) ? links : [])) {
+    const lineId = parseInt(l.line_id, 10);
+    const alloc = parseFloat(l.allocated_amount) || 0;
+    if (!(lineId > 0) || !(alloc > 0)) continue;
+    const info = lineInfo.get(lineId);
+    if (!info) throw new Error(`line ${lineId} not found`);
+    const lineTotal = (info.qty || 0) * (info.cost_per_unit || 0);
+    // Read inside the loop so an earlier link to this same line in this same
+    // request is already counted.
+    const remaining = Math.max(0, lineTotal - priorFor(lineId) - allocatedForThisRequest(invoiceId, lineId));
+    if (alloc > remaining + 0.01) throw new Error(`line ${lineId} over-allocated`);
+    insertLink.run(invoiceId, lineId, alloc);
+  }
+}
+
+router.post('/api/retail-admin/purchasing/invoices', requireRetailAdmin, express.json(), (req, res) => {
   const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
   if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
-  const insertInv = db.prepare(`INSERT INTO invoices (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date, tenant_id)
-    VALUES (?,?,?,?,?,NULL,'retail',?,?,?)`);
-  const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
-  const lineInfo = db.prepare(`
-    SELECT pli.id, pli.qty, pli.cost_per_unit
-      FROM po_line_items pli WHERE pli.id=?`);
+  const tid = Number(currentTenantId()) || 1;
   try {
     let id;
-    const tx = db.transaction(() => {
-      const r = insertInv.run(String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
-        parseFloat(amount), date, notes || null, store_id ? parseInt(store_id, 10) : null, due_date || null, Number(currentTenantId()) || 1);
+    db.transaction(() => {
+      // scope is stamped here and never read back as a filter. Its one job is
+      // to keep this invoice out of the kitchen screen's reach.
+      const r = db.prepare(`INSERT INTO invoices
+        (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date, tenant_id)
+        VALUES (?,?,?,?,?,?,'retail',?,?,?)`).run(
+        String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
+        parseFloat(amount), date, notes || null, (req.user && req.user.id) || null,
+        store_id ? parseInt(store_id, 10) : null, due_date || null, tid);
       id = r.lastInsertRowid;
-      if (Array.isArray(links)) {
-        for (const l of links) {
-          const lineId = parseInt(l.line_id, 10);
-          const alloc = parseFloat(l.allocated_amount) || 0;
-          if (!(lineId > 0) || !(alloc > 0)) continue;
-          const info = lineInfo.get(lineId);
-          if (!info) throw new Error(`line ${lineId} not found`);
-          // Read inside the loop, so an earlier link to this same line in this
-          // same request is already counted — as it was when the sum was a
-          // correlated subquery on the row above.
-          const lineTotal = (info.qty || 0) * (info.cost_per_unit || 0);
-          const remaining = Math.max(0, lineTotal - allocatedForLine(lineId));
-          if (alloc > remaining + 0.01) throw new Error(`line ${lineId} over-allocated`);
-          insertLink.run(id, lineId, alloc);
-        }
-      }
-    });
-    tx();
-    logActivity(req.user.id, req.user.username, 'create', 'retail_bill', id, { supplier, amount }, req.ip);
+      writeLinks(id, links, null);
+    })();
+    logActivity(req.user.id, req.user.username, 'create', 'supplier_invoice', id, { supplier, amount }, req.ip);
     res.json({ success: true, id });
   } catch (e) {
-    console.error('[retail bill create]', e);
-    res.status(500).json({ success: false, error: e.message });
+    console.error('[supplier invoice create]', e);
+    res.status(400).json({ success: false, error: e.message });
   }
 });
 
-// Mark a bill paid / unpaid.
-router.put('/api/retail-admin/bills/:id/paid', requireRetailAdmin, express.json(), (req, res) => {
-  const inv = db.prepare("SELECT * FROM invoices WHERE id=? AND scope='retail' AND COALESCE(tenant_id,1)=?").get(req.params.id, Number(currentTenantId()) || 1);
+// Edit an invoice and re-diff its allocations. The Bills port had no edit path
+// at all — a wrong amount or a mis-picked line meant delete and re-enter.
+router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
+  const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
+  if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
+  if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
+  if (!date) return res.status(400).json({ success: false, error: 'date_required' });
+  try {
+    db.transaction(() => {
+      db.prepare(`UPDATE invoices SET supplier=?, invoice_number=?, amount=?, date=?, due_date=?, store_id=?, notes=?,
+                  updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+        String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
+        parseFloat(amount), date, due_date || null,
+        store_id ? parseInt(store_id, 10) : inv.store_id, notes || null, inv.id);
+      // Replace-then-rewrite, with the headroom check ignoring this invoice's
+      // own rows (skipInvoiceId), so an unchanged re-save is always accepted.
+      if (links !== undefined) {
+        db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
+        writeLinks(inv.id, links, inv.id);
+      }
+    })();
+    logActivity(req.user.id, req.user.username, 'update', 'supplier_invoice', inv.id, { supplier, amount }, req.ip);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[supplier invoice update]', e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.put('/api/retail-admin/purchasing/invoices/:id/paid', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
   const paid = (req.body && req.body.paid === false) ? null : gzNow();
   db.prepare('UPDATE invoices SET paid_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(paid, inv.id);
+  // This write had no activity_log entry at all, so a payment state could move
+  // with nothing recording who moved it.
+  logActivity(req.user.id, req.user.username, paid ? 'mark_paid' : 'mark_unpaid', 'supplier_invoice', inv.id, { paid_at: paid }, req.ip);
   res.json({ success: true, paid: !!paid });
 });
 
-// Delete a bill (invoice_lines cascade).
-router.delete('/api/retail-admin/bills/:id', requireRetailAdmin, (req, res) => {
-  const r = db.prepare("DELETE FROM invoices WHERE id=? AND scope='retail' AND COALESCE(tenant_id,1)=?").run(req.params.id, Number(currentTenantId()) || 1);
+router.delete('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const r = db.prepare('DELETE FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(req.params.id, tid);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
-  logActivity(req.user.id, req.user.username, 'delete', 'retail_bill', req.params.id, null, req.ip);
+  logActivity(req.user.id, req.user.username, 'delete', 'supplier_invoice', req.params.id, null, req.ip);
   res.json({ success: true });
+});
+
+// ── "No invoice expected" 不开发票 ───────────────────────────────────────────
+// The mark that says a purchase will never have a 发票 — cash, a market stall,
+// a supplier who simply does not issue them. Tacet had no way to set this at
+// all; it classifies ¥6,797 of live purchasing today. Two levels, either of
+// which suppresses a line, because a buying order can be entirely cash OR
+// carry one cash line among invoiced ones. A toggle, never destructive.
+router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const po = db.prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  const flag = !!(req.body && req.body.no_invoice_expected);
+  db.prepare('UPDATE purchase_orders SET no_invoice_expected = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(flag ? 1 : 0, po.id);
+  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id, { no_invoice_expected: flag }, req.ip);
+  res.json({ success: true, no_invoice_expected: flag });
+});
+
+router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const line = db.prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+                            WHERE pli.id = ? AND pli.po_id = ? AND COALESCE(po.tenant_id,1) = ?`)
+    .get(req.params.lineId, req.params.id, tid);
+  if (!line) return res.status(404).json({ success: false, error: 'not_found' });
+  const flag = !!(req.body && req.body.no_invoice_expected);
+  db.prepare('UPDATE po_line_items SET no_invoice_expected = ? WHERE id = ?').run(flag ? 1 : 0, line.id);
+  logActivity(req.user.id, req.user.username, 'line_no_invoice_toggle', 'po_line_item', line.id, { no_invoice_expected: flag }, req.ip);
+  res.json({ success: true, no_invoice_expected: flag });
+});
+
+// The Reach chip's QR, fetched only when someone clicks it — it is a base64
+// blob and has no business riding along in every supplier list read.
+router.get('/api/retail-admin/suppliers/:id/channel-qr', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const s = db.prepare('SELECT name, channel_qr_data FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  if (!s || !s.channel_qr_data) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: { name: s.name, qr: s.channel_qr_data } });
 });
 
 // ═══ REORDER ════════════════════════════════════════════════════════════════
