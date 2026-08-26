@@ -10235,6 +10235,10 @@
   #prod-view-purchasing .pu2-invfilters .spacer { flex: 1; }
   #prod-view-purchasing .pu2-invsel { width: auto; min-width: 150px; }
   #prod-view-purchasing .pu2-invq { width: 300px; max-width: 100%; }
+  /* By supplier / Recorded are one segmented view, not two stacked sections.
+     The card carries the vertical room the two retired section labels used to
+     give it (.pu2-kicker's 30px top), so nothing else on the screen moves. */
+  #prod-view-purchasing .pu2-invsection { margin-top: 30px; }
   #prod-view-purchasing .pu2-metricrow.pu2-invrow { grid-template-columns: repeat(5, 1fr); }
   #prod-view-purchasing .pu2-invkpi.sage  .big { color: var(--td-sage-ink); }
   #prod-view-purchasing .pu2-invkpi.amber .big { color: var(--td-amber-ink); }
