@@ -12240,45 +12240,85 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   /* The persistent summary — cost figures + warnings. Sits above the sub-tabs
      on purpose (see the HTML comment on #tab-recipes-record): it must read the
      same whether Details, Ingredients, Steps or Cost & Pricing is open. */
-  #tab-recipes-record .rcp-summary { display: flex; flex-direction: column; gap: 10px;
-    padding: 16px 20px; margin-bottom: 18px;
+  /* Tacet pass 2026-08-26. Every value below is on the licensed scales — six
+     type steps (24/18/30/15/13, no half-pixels), two weights (400/500), the
+     4·8·16·24·32·48 space scale, 14px cards / 999px pills. What this replaced
+     broke nine of those rules at once: uppercase eyebrows (§1.6 bans them
+     outright, and §1.7 retired the pattern), 11.5px, 19px and 14px type,
+     weight 600, 16/20 padding with 22/10/2 gaps, and a 10px radius. */
+  #tab-recipes-record .rcp-summary { display: flex; flex-direction: column; gap: 24px;
+    padding: 24px; margin-bottom: 24px;
     background: var(--td-surface, #fff); border: 1px solid var(--td-border); border-radius: 14px; }
-  #tab-recipes-record .rcp-sumrow { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; }
-  #tab-recipes-record .rcp-sumfig { display: flex; flex-direction: column; gap: 2px; }
-  #tab-recipes-record .rcp-sumfig .lbl { font-size: 11.5px; color: var(--td-text2);
-    text-transform: uppercase; letter-spacing: .06em; }
-  #tab-recipes-record .rcp-sumfig .v { font-size: 19px; font-weight: 600; color: var(--td-text);
+  /* flex-start, not baseline: the margin figure carries a second, smaller
+     number beside it, and baseline alignment would hang the whole row off it. */
+  #tab-recipes-record .rcp-sumrow { display: flex; align-items: flex-start; gap: 48px; flex-wrap: wrap; }
+  #tab-recipes-record .rcp-sumfig { display: flex; flex-direction: column; gap: 4px; }
+  #tab-recipes-record .rcp-sumfig .lbl { font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-sumfig .v { font-size: 30px; font-weight: 500; color: var(--td-text);
+    font-variant-numeric: tabular-nums; line-height: 1.2; }
+  /* The "no batch size or servings" stand-in is prose, not a figure — body
+     size, so it never pretends to be a number. */
+  #tab-recipes-record .rcp-sumfig .v.dim { color: var(--td-text2); font-weight: 400; font-size: 15px; }
+  /* The hairline is the idea: left of it is what the recipe COSTS, right of it
+     is what it EARNS. One row, because it is one arc. */
+  #tab-recipes-record .rcp-sumdiv { width: 1px; align-self: stretch; background: var(--td-border); }
+  #tab-recipes-record .rcp-summarg { display: flex; align-items: baseline; gap: 8px; }
+  #tab-recipes-record .rcp-summarg .pct { font-size: 15px; color: var(--td-text2);
     font-variant-numeric: tabular-nums; }
-  #tab-recipes-record .rcp-sumfig .v.dim { color: var(--td-text2); font-weight: 400; font-size: 14px; }
-  /* The warning itself — the "must not read as free" line. Real number, amber
-     text, never a hidden figure and never a bare ¥0.00 in its place. */
-  #tab-recipes-record .rcp-warn { display: flex; align-items: flex-start; gap: 8px;
-    font-size: 13px; color: var(--td-amber-ink); background: var(--td-amber-tint);
-    border-radius: 10px; padding: 10px 12px; }
-  #tab-recipes-record .rcp-warn svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+  /* Selling below cost is an error, not a warning — Brick, on both figures. */
+  #tab-recipes-record .rcp-summarg.neg .v,
+  #tab-recipes-record .rcp-summarg.neg .pct { color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-hr { height: 1px; background: var(--td-border); }
+  /* Warnings are PILLS, not panels. A whole card flooded with tint competes
+     with everything else on the page; a pill says the same thing and stops.
+     Text on a tint is always the -ink variant. */
+  #tab-recipes-record .rcp-warns { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  #tab-recipes-record .rcp-warn { display: inline-flex; align-items: center; gap: 8px;
+    align-self: flex-start; font-size: 13px; color: var(--td-amber-ink);
+    background: var(--td-amber-tint); border-radius: 999px; padding: 4px 16px; }
+  #tab-recipes-record .rcp-warn.err { color: var(--td-brick-ink); background: var(--td-brick-tint); }
+  #tab-recipes-record .rcp-warn svg { width: 16px; height: 16px; flex: none; }
+  /* A material is internal plumbing, not a sellable thing — subordinate to the
+     product line above it, and it says so by staying a caption. */
   #tab-recipes-record .rcp-matline { font-size: 13px; color: var(--td-text2); }
   #tab-recipes-record .rcp-matline b { color: var(--td-text); font-weight: 500; }
   #tab-recipes-record .rcp-matline.blocked { color: var(--td-amber-ink); }
-  /* What this recipe makes — the retail products it feeds, one row each with
-     its own price and margin. Same 13px secondary voice as .rcp-matline above:
-     this is a status line under the figures, not a third headline stat. The
-     lead word sits on the first row and the products stack beside it, so one
-     product reads as a sentence and several read as a short list without the
-     word repeating. */
+  /* ── what the recipe becomes ─────────────────────────────────────────────
+     Two shapes, because the data genuinely has two shapes. ONE product: its
+     price and margin are recipe-level facts, so they sit up in the metric row
+     and this line carries identity only. SEVERAL: no single figure is true of
+     the recipe, so the figures come back down here as right-aligned tabular
+     COLUMNS — which is what actually lets a 150g bag and a 25g sample be
+     compared, and is the whole reason they are listed separately. */
+  #tab-recipes-record .rcp-outputs { display: flex; flex-direction: column; gap: 8px; }
   #tab-recipes-record .rcp-prodline { display: flex; align-items: baseline; gap: 8px;
-    font-size: 13px; color: var(--td-text2); }
-  #tab-recipes-record .rcp-prodlead { flex: none; }
-  #tab-recipes-record .rcp-proditems { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  #tab-recipes-record .rcp-prodrow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  /* Weight only. The colour and underline are whatever an <a> already is in
-     this admin — the product editor's "From recipe" link (the same jump in the
-     other direction) is a bare anchor too, and the pair should not read as two
-     different kinds of link. */
-  #tab-recipes-record .rcp-prodname { font-weight: 500; }
-  #tab-recipes-record .rcp-prodsize { color: var(--td-text2); }
-  /* Tabular figures so several products' prices and margins line up down the
-     list rather than wandering by digit width. */
-  #tab-recipes-record .rcp-prodfig { font-variant-numeric: tabular-nums; }
+    flex-wrap: wrap; font-size: 15px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-prodsize { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  /* Not Dusk (that means "Tacet acted") and never the browser's default blue,
+     which is what a bare <a> rendered on a Paper-and-Ink page. Ink on a
+     hairline that firms up on hover. */
+  #tab-recipes-record .rcp-prodname { color: var(--td-text); font-weight: 500;
+    text-decoration: none; border-bottom: 1px solid var(--td-border); }
+  #tab-recipes-record .rcp-prodname:hover { border-bottom-color: var(--td-text); }
+  #tab-recipes-record .rcp-prodrow { display: flex; align-items: baseline; gap: 24px; font-size: 15px; }
+  #tab-recipes-record .rcp-prodrow .nm { flex-grow: 1; display: flex; align-items: baseline; gap: 8px;
+    flex-wrap: wrap; min-width: 0; }
+  #tab-recipes-record .rcp-prodrow .sells,
+  #tab-recipes-record .rcp-prodrow .marg { text-align: right; flex: none;
+    color: var(--td-text); font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-prodrow .sells { width: 108px; }
+  #tab-recipes-record .rcp-prodrow .marg  { width: 168px; }
+  #tab-recipes-record .rcp-prodrow .marg .pct { color: var(--td-text2); }
+  #tab-recipes-record .rcp-prodrow .marg.neg,
+  #tab-recipes-record .rcp-prodrow .marg.neg .pct { color: var(--td-brick-ink); }
+  /* An unknown margin is an em dash in the quiet tone — never 0%, and never a
+     hidden row: a product whose margin cannot be worked out is still a product
+     this recipe makes. */
+  #tab-recipes-record .rcp-prodrow .marg.non { color: var(--td-text2); }
+  #tab-recipes-record .rcp-prodhead { font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-prodhead .nm,
+  #tab-recipes-record .rcp-prodhead .sells,
+  #tab-recipes-record .rcp-prodhead .marg { color: var(--td-text2); }
 
   /* ── sub-tabs ── */
   #tab-recipes-record .rcp-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--td-border);

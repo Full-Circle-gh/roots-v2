@@ -697,38 +697,85 @@
       ? { lbl: T('Cost per serving', '每份成本'), v: money(c.costPerServing) }
       : (c.costPerGram != null ? { lbl: T('Cost per gram', '每克成本'), v: moneyU(c.costPerGram) } : null);
 
+    // ONE product means its price and margin are facts about the recipe, so
+    // they belong in the metric row beside the costs — cost, price, what's
+    // left, one arc, read in one pass. SEVERAL products means no single figure
+    // is true of the recipe, so the row stays cost-only and the figures go
+    // down into columns instead (productsHtml below). The data has two shapes;
+    // so does the card.
+    const prods = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
+    const solo = prods.length === 1 ? prods[0] : null;
+    const soloM = solo ? margeOf(solo) : null;
+
     let html = `<div class="rcp-sumrow">
       <div class="rcp-sumfig"><span class="lbl">${esc(T('Batch cost', '整批成本'))}</span><span class="v">${money(c.batchCost)}</span></div>
       ${primary ? `<div class="rcp-sumfig"><span class="lbl">${esc(primary.lbl)}</span><span class="v">${primary.v}</span></div>`
                 : `<div class="rcp-sumfig"><span class="lbl">${esc(T('Per-unit cost', '单位成本'))}</span><span class="v dim">${esc(T('No batch size or servings recorded', '未记录批量大小或份数'))}</span></div>`}
+      ${solo ? `<i class="rcp-sumdiv"></i>
+      <div class="rcp-sumfig"><span class="lbl">${esc(T('Sells for', '售价'))}</span><span class="v">${esc(Number(solo.sell_price) > 0 ? money(solo.sell_price) : '—')}</span></div>
+      <div class="rcp-sumfig"><span class="lbl">${esc(T('Margin', '毛利'))}</span>
+        <span class="rcp-summarg${soloM && soloM.money < 0 ? ' neg' : ''}">
+          <span class="v">${esc(soloM ? (soloM.money < 0 ? '−' : '') + money(Math.abs(soloM.money)) : '—')}</span>
+          ${soloM ? `<span class="pct">${esc(pctTxt(soloM))}</span>` : ''}
+        </span></div>` : ''}
     </div>`;
 
-    // The warning — real number above, honest reason here. Never swap the
-    // number out; only ever add this alongside it.
+    // The warnings — real number above, honest reason here. Never swap the
+    // number out; only ever add these alongside it. Pills, not panels: a whole
+    // card flooded with tint competes with everything else on the page.
+    const warns = [];
     if (missing) {
-      html += `<div class="rcp-warn">${I.warn}<span>${esc(T(
+      warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
         `${c.zeroCostIngredientLines} ingredient${c.zeroCostIngredientLines === 1 ? '' : 's'} missing cost — costs shown are too low`,
-        `${c.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`))}</span></div>`;
+        `${c.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`))}</span></div>`);
     }
-
-    // Backs material — no link/materialize affordance (that ships later);
-    // this is a read-only status line. Blocked shows the frozen figure PLUS
-    // why, so it never reads as simply "the material costs ¥0".
-    if (_rec.backsMaterial) {
-      const mb = _rec.materialBlock;
-      const blocked = mb && !mb.ok;
-      const cpu = _rec.backsMaterial.cost_per_unit;
-      const unitTxt = _rec.backsMaterial.unit || 'g';
-      const costTxt = cpu > 0 ? `${moneyU(cpu)}/${esc(unitTxt)}` : T('not yet costed', '尚未计算成本');
-      html += `<div class="rcp-matline${blocked ? ' blocked' : ''}">`
-        + esc(T('Backs material: ', '产出为物料:')) + `<b>${esc(_rec.backsMaterial.name_en)}</b> — ${costTxt}`
-        + (blocked ? ` — ${esc(T('frozen at its last computed value.', '已冻结为最近一次计算的值。'))} ${esc(blockReasonText(mb.reason, mb.unpriced))}` : '')
-        + `</div>`;
+    // Selling below cost is an error, not a warning, and it is worth saying in
+    // words as well as in Brick — a minus sign on a figure is easy to skim past.
+    if (soloM && soloM.money < 0) {
+      warns.push(`<div class="rcp-warn err">${I.warn}<span>${esc(T(
+        'Selling below cost', '低于成本销售'))}</span></div>`);
     }
+    if (warns.length) html += `<div class="rcp-warns">${warns.join('')}</div>`;
 
-    html += productsHtml();
+    // Everything past the hairline is what the recipe BECOMES: the products it
+    // makes first (the commercial fact), then the material it stocks (internal
+    // plumbing, and a caption so it reads that way). No outputs at all means no
+    // hairline — there is nothing to divide.
+    const outputs = productsHtml() + materialHtml();
+    if (outputs) html += `<div class="rcp-hr"></div><div class="rcp-outputs">${outputs}</div>`;
 
     host.innerHTML = html;
+  }
+
+  // Margin for one product row, via the SHARED helper (_paMargin, part 09) —
+  // the same gross-on-price figure the Products list and the product editor
+  // show. Never re-derived here: a second copy of this arithmetic is exactly
+  // how a header and an editor end up quoting different margins for one
+  // product. null whenever the answer is unknown; every caller renders that as
+  // an em dash, never as 0%.
+  function margeOf(p) {
+    return (typeof _paMargin === 'function') ? _paMargin(p.sell_price, p.unit_cost) : null;
+  }
+  // One minus sign, the typographic one, on BOTH halves of a negative margin.
+  // toFixed() emits an ASCII hyphen, so a below-cost row otherwise reads
+  // "−¥2.09  -52.1%" — two different dashes on one figure.
+  function pctTxt(m) {
+    return (m.money < 0 ? '−' : '') + Math.abs(m.pct).toFixed(1) + '%';
+  }
+
+  // Backs material — a read-only status line. Blocked shows the frozen figure
+  // PLUS why, so it never reads as simply "the material costs ¥0".
+  function materialHtml() {
+    if (!_rec || !_rec.backsMaterial) return '';
+    const mb = _rec.materialBlock;
+    const blocked = mb && !mb.ok;
+    const cpu = _rec.backsMaterial.cost_per_unit;
+    const unitTxt = _rec.backsMaterial.unit || 'g';
+    const costTxt = cpu > 0 ? `${moneyU(cpu)}/${esc(unitTxt)}` : T('not yet costed', '尚未计算成本');
+    return `<div class="rcp-matline${blocked ? ' blocked' : ''}">`
+      + esc(T('Also stocked as a material: ', '同时作为物料备货:')) + `<b>${esc(_rec.backsMaterial.name_en)}</b> — ${costTxt}`
+      + (blocked ? ` — ${esc(T('frozen at its last computed value.', '已冻结为最近一次计算的值。'))} ${esc(blockReasonText(mb.reason, mb.unpriced))}` : '')
+      + `</div>`;
   }
 
   // ── What this recipe makes, and what it earns ────────────────────────────
@@ -752,56 +799,63 @@
   // ARCHIVED ROWS ARE ALREADY GONE by the time this runs — the server filters
   // them (routes/retail-recipes.js), which is where the filter belongs, so a
   // recipe cannot claim a product the cost rollup would refuse to write to.
+  // What this recipe makes. MAKES NOTHING WE SELL -> RENDERS NOTHING: no empty
+  // state, no placeholder. Most recipes back a material rather than a retail
+  // product, and a permanent "no linked product" row on every one of them is
+  // clutter, not information.
+  //
+  // ARCHIVED ROWS ARE ALREADY GONE by the time this runs — the server filters
+  // them (routes/retail-recipes.js), which is where that belongs.
+  //
+  // data-no-i18n on every row: the runtime bilingual walker (10-extras.js)
+  // rewrites text nodes it reads as "EN · CN" pairs, and it runs async on the
+  // next mutation, so a render looks right and then silently loses half of
+  // itself ~800ms later. Every label here is already resolved by T() and the
+  // product names are proper nouns, so there is nothing for the walker to do
+  // but damage. Keep the attribute even when a row carries no separator today.
   function productsHtml() {
     const rows = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
     if (!rows.length) return '';
 
-    const lead = T('Makes', '产出');
-    const items = rows.map(p => {
-      // ONE name, never EN and CN glued together — the active language's,
-      // falling back to whichever name the product actually carries.
-      const nm = T(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '')
-              || T('Untitled product', '未命名产品');
-      const size = p.size ? `<span class="rcp-prodsize">${esc(p.size)}</span>` : '';
-      // No price recorded is an em dash too, and the row still shows. "Price
-      // but no cost" and "cost but no price" are both half-known, and hiding
-      // either would drop a product this recipe genuinely makes.
+    // ONE name, never EN and CN glued together — the active language's,
+    // falling back to whichever name the product actually carries.
+    const nameOf = p => T(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '')
+                     || T('Untitled product', '未命名产品');
+    const link = p => `<a href="#" class="rcp-prodname" onclick="event.preventDefault();event.stopPropagation();rcpOpenProduct(${Number(p.id)})">${esc(nameOf(p))}</a>`;
+    const size = p => p.size ? `<span class="rcp-prodsize">${esc(p.size)}</span>` : '';
+
+    // ── one product: identity only ──────────────────────────────────────
+    // Its price and margin are already up in the metric row, where they read
+    // as facts about the recipe. Repeating them here would say the same thing
+    // twice in two different voices.
+    if (rows.length === 1) {
+      return `<div class="rcp-prodline" data-no-i18n><span>${esc(T('Makes', '产出'))}</span>`
+           + link(rows[0]) + size(rows[0]) + `</div>`;
+    }
+
+    // ── several products: columns ───────────────────────────────────────
+    // Right-aligned and tabular so the sizes can actually be compared, which
+    // is the entire reason they are listed separately rather than blended.
+    const head = `<div class="rcp-prodrow rcp-prodhead" data-no-i18n>`
+      + `<span class="nm">${esc(T('Makes', '产出'))}</span>`
+      + `<span class="sells">${esc(T('Sells', '售价'))}</span>`
+      + `<span class="marg">${esc(T('Margin', '毛利'))}</span></div>`;
+
+    const body = rows.map(p => {
       const price = Number(p.sell_price) > 0 ? money(p.sell_price) : '—';
-
-      // THE SHARED HELPER, NOT A SECOND COPY OF THE ARITHMETIC. _paMargin
-      // (09-products.js) is the gross-on-price margin the Products list and the
-      // product editor already show; re-deriving it here is precisely how a
-      // header and an editor end up quoting different margins for one product.
-      // It returns null whenever the answer is unknown — an unrecorded cost is
-      // NOT a cost of zero — and null renders an em dash. The row still shows:
-      // a product whose margin can't be worked out is still a product this
-      // recipe makes, and hiding it would under-report what the recipe feeds.
-      const m = (typeof _paMargin === 'function') ? _paMargin(p.sell_price, p.unit_cost) : null;
-      // Money and percent joined by " / ", while the facts either side of them
-      // are joined by " · ". Two separators on purpose: at a glance it has to
-      // be obvious that ¥32.98 and 76.7% are one fact stated twice, not two
-      // more items in the list.
-      const margin = m
-        ? (m.money < 0 ? '−' : '') + money(Math.abs(m.money)) + ' / ' + m.pct.toFixed(1) + '%'
+      const m = margeOf(p);
+      const cls = m ? (m.money < 0 ? ' neg' : '') : ' non';
+      const fig = m
+        ? (m.money < 0 ? '−' : '') + money(Math.abs(m.money))
+          + ` <span class="pct">${esc(pctTxt(m))}</span>`
         : '—';
-
-      const link = `<a href="#" class="rcp-prodname" onclick="event.preventDefault();event.stopPropagation();rcpOpenProduct(${Number(p.id)})">${esc(nm)}</a>`;
-      return `<div class="rcp-prodrow">${link}${size}`
-           + `<span class="rcp-prodfig">· ${esc(T('sells', '售价'))} ${esc(price)}`
-           + ` · ${esc(T('margin', '毛利'))} ${esc(margin)}</span></div>`;
+      return `<div class="rcp-prodrow" data-no-i18n>`
+           + `<span class="nm">${link(p)}${size(p)}</span>`
+           + `<span class="sells">${esc(price)}</span>`
+           + `<span class="marg${cls}">${fig}</span></div>`;
     }).join('');
 
-    // data-no-i18n IS LOAD-BEARING, NOT DECORATION. The runtime bilingual
-    // walker (10-extras.js processNode) rewrites any text node containing
-    // " · " to a single half whenever the left side has no Chinese and the
-    // right side does — which is exactly this row in Chinese ("Crunchy Granola
-    // · 售价 ¥43.00 · …"). Without the opt-out it renders correctly and then
-    // silently swallows everything after the product name on the next
-    // mutation. Every label here is already resolved by T(), so there is
-    // nothing for the walker to do but damage.
-    return `<div class="rcp-prodline" data-no-i18n>`
-         + `<span class="rcp-prodlead">${esc(lead)}</span>`
-         + `<div class="rcp-proditems">${items}</div></div>`;
+    return head + body;
   }
 
   // Open one of those products in its editor. Mirrors paOpenRecipe() in the
