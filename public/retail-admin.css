@@ -2615,6 +2615,21 @@
   #pd-cost.is-derived {
     background: var(--td-raised); border-style: dashed; cursor: default;
   }
+  /* Link / Change / Unlink, on the source line under the Cost field. A text
+     button, not a filled one: it sits inside a field's helper line, where a
+     real button would out-weigh the field it explains. Underlined on hover
+     only, so the resting line still reads as a sentence rather than a row of
+     controls. */
+  .pd-cost-act {
+    appearance: none; background: none; border: 0; padding: 0; margin: 0 0 0 8px;
+    font: 400 12px var(--f-sans); color: var(--td-text2);
+    text-decoration: underline; text-decoration-color: transparent;
+    text-underline-offset: 2px; cursor: pointer;
+  }
+  .pd-cost-act:hover { color: var(--td-text); text-decoration-color: currentColor; }
+  /* First one on an unlinked product carries the line on its own — no leading
+     text to sit beside, so it starts at the margin. */
+  #pd-cost-source > .pd-cost-act:first-child { margin-left: 0; }
   .pa-col-stock { font-size: 14px; }
 
   /* Status column — one badge per row answering "can a shopper buy this now".
@@ -12527,3 +12542,28 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      (not hidden) when the form is submittable, same "quiet unless needed"
      shape as everything else in this modal. */
   .rcp-mz-modal .rcp-mz-hint { margin-top: 10px; font-size: 12px; color: var(--text-2, #58606E); min-height: 15px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   "Link a recipe" modal — 09-products.js pdRecipeLinkOpen(). The product-side
+   half of the same idea as the materialize modal above: that one says which
+   material a recipe makes, this one says which recipe a product's cost comes
+   from. Same shell (askCustom), same reasons it is not scoped to a section id
+   — it is appended to <body>, so .pdrl-modal scopes it instead.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+  .pdrl-modal .pdrl-pick { margin-top: 8px; border: 1px solid var(--line, #E4E0D5); border-radius: 10px;
+    max-height: 220px; overflow: auto; }
+  .pdrl-modal .pdrl-pick-item { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  .pdrl-modal .pdrl-pick-item:hover { background: var(--bg-app, #FBF9F4); }
+  .pdrl-modal .pdrl-pick-item .s { color: var(--text-2, #58606E); font-size: 12px; }
+  .pdrl-modal .pdrl-empty { margin-top: 8px; font-size: 12.5px; color: var(--text-2, #58606E); }
+
+  .pdrl-modal .pdrl-selline { margin-top: 12px; font-size: 13px; color: var(--text-2, #58606E); }
+  .pdrl-modal .pdrl-selline b { color: var(--text-1, #111A2B); font-weight: 500; }
+  /* A recipe that cannot yet be costed — informational, never a reason the
+     submit button disables. Same amber tokens (and same fallback convention)
+     the materialize modal's own warning uses. */
+  .pdrl-modal .pdrl-warn { margin-top: 8px; font-size: 12.5px; color: var(--td-amber-ink, #93601F);
+    background: var(--td-amber-tint, #F6EBDA); border-radius: 8px; padding: 8px 10px; }
+  .pdrl-modal .pdrl-hint { margin-top: 10px; font-size: 12px; color: var(--text-2, #58606E); min-height: 15px; }

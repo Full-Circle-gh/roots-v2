@@ -812,15 +812,221 @@ function pdApplyCostSource(p) {
   inp.readOnly = owned;
   inp.classList.toggle('is-derived', owned);
   if (!note) return;
-  if (!owned) { note.innerHTML = ''; note.style.display = 'none'; return; }
+  // A product that has never been saved has no row to link a recipe to, so the
+  // line stays empty until it does. Everything below needs an id.
+  const linkable = _pdCanLinkRecipe() && !!(p && p.id);
+  if (!owned && !linkable) { note.innerHTML = ''; note.style.display = 'none'; return; }
+  note.style.display = '';
+  if (!owned) {
+    // UNLINKED, AND SAYING SO IS THE POINT. Cost sat blank on 45 products whose
+    // recipe was fully priced, with nothing on screen to suggest the two could
+    // be connected — the one-time backfill (database.js) links only where two
+    // of {SKU, name_en, name_cn} match exactly, and the "confirm the rest by
+    // hand" path it assumed was never built. This is it.
+    note.innerHTML = '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+      + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button>';
+    return;
+  }
   const rname = cuT(p.recipe_name_en || p.recipe_name_cn || '', p.recipe_name_cn || p.recipe_name_en || '')
                 || (cuT('Recipe', '配方') + ' #' + p.recipe_id);
-  note.style.display = '';
   // The recipe is named AND reachable — the operator can go read why the number
-  // is what it is instead of taking it on trust.
+  // is what it is instead of taking it on trust. Change/Unlink sit beside it
+  // because a wrong link is exactly as likely as a missing one, and the field
+  // itself is read-only now: without these there is no way back out.
   note.innerHTML = escapeHtml(cuT('From recipe', '来自配方')) + ' '
     + '<a href="#" onclick="event.preventDefault();event.stopPropagation();paOpenRecipe(' + Number(p.recipe_id) + ')">'
-    + escapeHtml(rname) + '</a>';
+    + escapeHtml(rname) + '</a>'
+    + ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+    + escapeHtml(cuT('Change', '更换')) + '</button>'
+    + ' <button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
+    + escapeHtml(cuT('Unlink', '取消关联')) + '</button>';
+}
+// Can a recipe be linked here at all? Recipes only exist as a screen when
+// Production is on, so offering the action with it off would point the operator
+// at a section that isn't there — and the cascade would write nothing anyway.
+function _pdCanLinkRecipe() {
+  return document.body.classList.contains('feat-production');
+}
+// ── Pick the recipe this product's cost comes from ───────────────────────
+//
+// PREFILLED WITH THE PRODUCT'S OWN SKU, because that is the signal that
+// identifies the right recipe in nearly every unlinked case: the backfill's
+// group B was "SKU matches, nothing else does" — a typo in the recipe's English
+// name or a suffix on its Chinese one. Opening the modal therefore usually
+// shows the one right answer already on screen, and the operator's whole job is
+// to confirm it. Still a search box, not an auto-link: confirming a match a
+// human can see is the entire reason this is a hand-path.
+//
+// Centered modal via askCustom (public/tacet-dialogs.js) — the same shell
+// 19-recipes.js's materialize modal uses, so this is not a second dialog build.
+async function pdRecipeLinkOpen() {
+  const id = Number(document.getElementById('pd-id').value || 0);
+  if (!id) return;
+  const p = (PA_PRODUCTS || []).find(x => x.id === id);
+  if (!p) return;
+  // Flush a pending autosave FIRST. It may still be carrying a hand-typed cost
+  // from before the link; letting it land afterwards would overwrite the figure
+  // the cascade is about to write. (The server drops unit_cost once a recipe
+  // owns it, so this is belt-and-braces — but the ordering is free.)
+  if (_pdAutoTimer) {
+    clearTimeout(_pdAutoTimer); _pdAutoTimer = null;
+    try { await pdAutoSaveNow(); } catch (e) {}
+  }
+
+  const st = { results: [], selected: null, timer: null, loading: false };
+  const bodyHtml =
+    '<h3 class="tdlg-title">' + escapeHtml(cuT('Link a recipe', '关联配方')) + '</h3>'
+    + '<p class="tdlg-msg">' + escapeHtml(cuT(
+        'The cost of this product is then worked out from the recipe, and updates whenever the recipe does.',
+        '关联后，本产品的成本将由该配方计算得出，并随配方更新。')) + '</p>'
+    + '<div class="tdlg-field"><label for="pdrl-search">' + escapeHtml(cuT('Search recipes', '搜索配方')) + '</label>'
+    + '<input id="pdrl-search" type="text" autocomplete="off" placeholder="'
+    + escapeHtml(cuT('Name or SKU…', '名称或货号…')) + '" value="' + escapeHtml(p.sku || '') + '"></div>'
+    + '<div id="pdrl-results"></div>'
+    + '<div id="pdrl-selected"></div>'
+    + '<div class="pdrl-hint" id="pdrl-hint"></div>';
+  const footHtml =
+    '<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>' + escapeHtml(cuT('Cancel', '取消')) + '</button>'
+    + '<button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>'
+    + escapeHtml(cuT('Link', '关联')) + '</button>';
+  const { scrim, closer } = askCustom('tdlg-neutral pdrl-modal', bodyHtml, footHtml, '#pdrl-search');
+  const close = () => closer(null);
+  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', close));
+  const submitBtn = scrim.querySelector('[data-submit]');
+  const searchEl = scrim.querySelector('#pdrl-search');
+
+  // Cost per serving IS the cost of one sellable unit — the same figure
+  // lib/recipe-rollup.js's applyProductCosts writes — so this column shows the
+  // operator the number they are about to adopt, not a batch total they would
+  // have to divide. A recipe that can't produce one is labelled rather than
+  // hidden: it is still the right recipe, it just needs finishing first.
+  const costLabel = r => (r.costPerServing != null && Number.isFinite(r.costPerServing) && r.costPerServing > 0)
+    ? '¥' + fmt(r.costPerServing)
+    : cuT('no cost yet', '暂无成本');
+  function renderResults() {
+    const host = scrim.querySelector('#pdrl-results');
+    if (st.loading) { host.innerHTML = '<div class="pdrl-empty">' + escapeHtml(cuT('Searching…', '搜索中…')) + '</div>'; return; }
+    if (!st.results.length) {
+      host.innerHTML = searchEl.value.trim()
+        ? '<div class="pdrl-empty">' + escapeHtml(cuT('No recipe matches that.', '没有匹配的配方。')) + '</div>' : '';
+      return;
+    }
+    host.innerHTML = '<div class="pdrl-pick">' + st.results.slice(0, 8).map(r =>
+        '<div class="pdrl-pick-item" data-id="' + r.id + '">'
+      + '<span>' + escapeHtml(r.name_en || r.name_cn || '')
+      + (r.sku ? ' <span class="s">' + escapeHtml(r.sku) + '</span>' : '') + '</span>'
+      + '<span class="s">' + escapeHtml(costLabel(r)) + '</span></div>').join('') + '</div>';
+    host.querySelectorAll('.pdrl-pick-item').forEach(el => el.addEventListener('click', () => {
+      st.selected = st.results.find(r => r.id === Number(el.dataset.id)) || null;
+      host.innerHTML = '';
+      searchEl.value = st.selected ? (st.selected.name_en || st.selected.name_cn || '') : '';
+      renderSelected(); updateSubmitState();
+    }));
+  }
+  function renderSelected() {
+    const host = scrim.querySelector('#pdrl-selected');
+    if (!st.selected) { host.innerHTML = ''; return; }
+    const r = st.selected;
+    const usable = r.costPerServing != null && Number.isFinite(r.costPerServing) && r.costPerServing > 0;
+    // Soft warning, never blocking — the same shape as the materialize modal's.
+    // Linking a recipe that can't yet be costed is a legitimate thing to do; it
+    // just must not look like it produced a number.
+    const warn = usable ? ''
+      : '<div class="pdrl-warn">' + escapeHtml(cuT(
+          'This recipe has no cost yet — it needs servings, a batch size, and a price on every ingredient. The link is saved either way, and the cost appears as soon as the recipe can be costed.',
+          '该配方暂无成本 —— 需要填写份数、批量大小，并为每项原料填写价格。关联仍会保存，配方可计算成本后即会显示。')) + '</div>';
+    host.innerHTML = '<div class="pdrl-selline">' + escapeHtml(cuT('Selected: ', '已选择：'))
+      + '<b>' + escapeHtml(r.name_en || r.name_cn || '') + '</b>'
+      + (usable ? ' — ' + escapeHtml(cuT('cost', '成本') + ' ¥' + fmt(r.costPerServing)) : '')
+      + '</div>' + warn;
+  }
+  function updateSubmitState() {
+    const reason = st.selected ? null : cuT('Pick a recipe to link.', '请选择要关联的配方。');
+    submitBtn.disabled = !!reason;
+    const hint = scrim.querySelector('#pdrl-hint');
+    if (hint) hint.textContent = reason || '';
+  }
+  async function runSearch() {
+    const q = searchEl.value.trim();
+    if (!q) { st.results = []; st.loading = false; renderResults(); return; }
+    st.loading = true; renderResults();
+    try {
+      const j = await api('/api/retail-admin/recipes?search=' + encodeURIComponent(q));
+      // Already linked to THIS product is not a candidate — picking it again
+      // would be a no-op the operator can't tell from a failure.
+      st.results = (j.data || []).filter(r => r.id !== p.recipe_id);
+    } catch (e) { st.results = []; }
+    st.loading = false;
+    renderResults();
+  }
+  searchEl.addEventListener('input', () => {
+    clearTimeout(st.timer);
+    st.selected = null; renderSelected(); updateSubmitState();
+    st.timer = setTimeout(runSearch, 220);
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    if (!st.selected) return;
+    submitBtn.disabled = true;
+    try {
+      const j = await api('/api/retail-admin/products/' + id + '/recipe-link',
+        { method: 'PUT', body: { recipe_id: st.selected.id } });
+      close();
+      pdRecipeLinkApplied(id, j.data);
+      // The server's warning names the one thing that stops the number arriving
+      // (Production off, or a recipe that can't be costed yet) — carried through
+      // verbatim rather than replaced by a generic "done".
+      toast(j.warning || cuT('Cost now comes from the recipe', '成本已改为来自配方'),
+        'ok', j.warning ? 6000 : undefined);
+    } catch (e) {
+      submitBtn.disabled = false;
+      toast(cuT('Could not link', '关联失败') + ': ' + ((e && e.message) || ''), 'err');
+    }
+  });
+
+  updateSubmitState();
+  // The SKU is already in the box — search on it immediately, so the match this
+  // was built for is on screen before the operator types anything.
+  runSearch();
+}
+// Fold a link/unlink response back into the loaded editor and the list cache.
+// Same convention pdSaveCore uses after a PATCH: merge the returned columns
+// onto the cached row, then repaint from that row — never patch the DOM and the
+// cache separately and hope they agree.
+function pdRecipeLinkApplied(id, data) {
+  if (!data) return;
+  const i = (PA_PRODUCTS || []).findIndex(x => x.id === Number(id));
+  const row = i >= 0 ? (PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...data }) : null;
+  // Only repaint the editor if it is still showing this product — the operator
+  // may have moved on while the request was in flight.
+  if (Number(document.getElementById('pd-id').value || 0) === Number(id)) {
+    const inp = document.getElementById('pd-cost');
+    if (inp) inp.value = data.unit_cost != null ? data.unit_cost : '';
+    pdApplyCostSource(row || data);
+    pdRenderMargin();
+  }
+  try { paRender(); paApplyRowSelection(); } catch (e) {}
+}
+// Hand the Cost field back to purchase-order receiving and manual entry.
+// Confirmed rather than instant: the figure stops tracking the recipe, which is
+// not something to discover later from a stale number.
+async function pdRecipeUnlink() {
+  const id = Number(document.getElementById('pd-id').value || 0);
+  if (!id) return;
+  const ok = await askConfirm({
+    titleEn: 'Stop taking the cost from this recipe?', titleCn: '不再从该配方获取成本？',
+    bodyEn: 'The last figure stays on the product and the Cost field becomes editable again. The recipe is not changed.',
+    bodyCn: '最近一次计算出的成本会保留在产品上，成本字段将恢复为可编辑。配方本身不会改变。',
+    confirmEn: 'Unlink', confirmCn: '取消关联',
+  });
+  if (!ok) return;
+  try {
+    const j = await api('/api/retail-admin/products/' + id + '/recipe-link', { method: 'DELETE' });
+    pdRecipeLinkApplied(id, j.data);
+    toast(cuT('Unlinked', '已取消关联'));
+  } catch (e) {
+    toast(cuT('Could not unlink', '取消关联失败') + ': ' + ((e && e.message) || ''), 'err');
+  }
 }
 // Open the linked recipe. The recipe record is a full page on the Production
 // side (`#tab-recipes-record`, opened by rcpRecordOpen) — this hands off to it
@@ -4926,7 +5132,12 @@ function pdApplySnapshot(s) {
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = v; };
   const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
   set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
-  set('pd-cost', s.cost); pdRenderMargin();
+  // Cost is skipped while a recipe owns it: that figure was never part of the
+  // form this snapshot came from (the field is read-only and the autosave omits
+  // it), so restoring the pre-link number would put a stale value on screen that
+  // no save would ever correct.
+  { const c = document.getElementById('pd-cost'); if (c && !c.readOnly) set('pd-cost', s.cost); }
+  pdRenderMargin();
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
   set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
