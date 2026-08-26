@@ -10,6 +10,7 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
+const { nextKitchenPONumber } = require('../lib/po-number');
 // The nested-recipe recompute (§29 step 3) — fired after a PO price
 // write-back moves a non-linked ingredient's cost, since that can move a
 // linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
@@ -317,9 +318,7 @@ router.get('/api/purchases/:id/history', requireAuth, requirePermission('purchas
 // POST create PO
 router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req, res) => {
   const { date, delivery_date, supplier, warehouse, notes, items, source } = req.body;
-  // Generate PO number
-  const count = db.prepare('SELECT COUNT(*) as c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
   try {
     const result = db.prepare('INSERT INTO purchase_orders (po_number,date,delivery_date,status,supplier,warehouse,notes,source,created_by) VALUES (?,?,?,?,?,?,?,?,?)')
       .run(po_number, date, delivery_date||null, 'Requested', supplier||null, warehouse||null, notes||null, source||'manual', req.user.id);
@@ -366,11 +365,24 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
   db.prepare('UPDATE purchase_orders SET date=?,delivery_date=?,status=?,supplier=?,warehouse=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(date, delivery_date||null, status||'Requested', supplier||null, warehouse||null, notes||null, req.params.id);
   if (items) {
-    db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(req.params.id);
+    // Editing the lines used to be DELETE-all + INSERT-all, which handed every
+    // surviving line a brand-new id. invoice_lines.line_id is ON DELETE
+    // CASCADE, so a routine PO edit silently took the supplier-invoice
+    // allocations down with it — live PO-0048 lost its ¥848.24 link this way
+    // and invoice 25 has read half-allocated ever since, with nothing on the
+    // screen to say why. A line the payload names by id is UPDATED in place
+    // instead, so everything hanging off that id survives the edit.
+    const existing = new Set(
+      db.prepare('SELECT id FROM po_line_items WHERE po_id = ?').all(req.params.id).map(r => r.id));
+    const kept = new Set();
     const insertItem = db.prepare(`INSERT INTO po_line_items
       (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
        supplier_name, purchase_channel, invoice_status, note, sort_order)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    const updateItem = db.prepare(`UPDATE po_line_items SET
+       ingredient_id=?, name_en=?, name_cn=?, sku=?, qty=?, unit=?, cost_per_unit=?, total_cost=?,
+       expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?, note=?, sort_order=?
+       WHERE id=? AND po_id=?`);
     const VALID_STATUS = new Set(['not_received','received','no_invoice']);
     const ingSupplierStmt = db.prepare('SELECT supplier FROM ingredients WHERE id = ?');
     items.forEach((item, i) => {
@@ -383,13 +395,35 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
         const ing = ingSupplierStmt.get(item.ingredient_id);
         if (ing && ing.supplier && ing.supplier.trim()) lineSupplier = ing.supplier.trim();
       }
-      insertItem.run(
-        req.params.id, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
+      const cols = [
+        item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
         item.qty||0, item.unit || null, item.cost_per_unit||0, total, storeCategory(db, item.expense_category),
         lineSupplier, item.purchase_channel || null,
-        status, (item.note||'').trim() || null, i
-      );
+        status, (item.note||'').trim() || null, i,
+      ];
+      const lineId = parseInt(item.id, 10);
+      if (lineId > 0 && existing.has(lineId)) {
+        updateItem.run(...cols, lineId, req.params.id);
+        kept.add(lineId);
+      } else {
+        insertItem.run(req.params.id, ...cols);
+      }
     });
+    // Only the lines the buyer actually removed are dropped. Their invoice
+    // allocations still cascade away — that is the buyer's own decision — but
+    // it is now recorded rather than silent.
+    const dropped = [...existing].filter(id => !kept.has(id));
+    if (dropped.length) {
+      const marks = dropped.map(() => '?').join(',');
+      const orphaned = db.prepare(
+        `SELECT COUNT(*) AS n, COALESCE(SUM(allocated_amount),0) AS amount
+           FROM invoice_lines WHERE line_id IN (${marks})`).get(...dropped);
+      db.prepare(`DELETE FROM po_line_items WHERE po_id = ? AND id IN (${marks})`).run(req.params.id, ...dropped);
+      if (orphaned.n) {
+        logActivity(req.user.id, req.user.username, 'invoice_links_dropped', 'purchase_order', req.params.id,
+          { lines: dropped.length, links: orphaned.n, amount: orphaned.amount }, req.ip);
+      }
+    }
     // Fire price-history records + alerts on Ordered/Delivered/Confirmed.
     // Was previously gated on Delivered/Confirmed only — but most POs sit
     // at "Ordered" and never get explicitly delivered (the team just
@@ -580,8 +614,7 @@ router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchase
         const lines = db.prepare(`SELECT * FROM po_line_items WHERE po_id = ? AND id IN (${defer.map(()=>'?').join(',')})`).all(poId, ...defer);
         if (lines.length) {
           const today = new Date().toISOString().slice(0, 10);
-          const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-          splitNumber = 'PO-' + String(count + 1).padStart(4, '0');
+          splitNumber = nextKitchenPONumber(db);
           const r = db.prepare(`INSERT INTO purchase_orders
             (po_number, date, delivery_date, status, supplier, warehouse, notes, source, created_by, backorder_of)
             VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
@@ -624,8 +657,7 @@ router.post('/api/purchases/:id/backorder', requireAuth, requirePermission('purc
   if (!lines.length) return res.status(400).json({ error: 'No outstanding qty · 没有缺货项目' });
 
   const today = new Date().toISOString().slice(0, 10);
-  const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO purchase_orders
@@ -672,8 +704,7 @@ router.post('/api/purchases/:id/duplicate', requireAuth, requirePermission('purc
   const items = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order').all(src.id);
 
   const today = new Date().toISOString().slice(0, 10);
-  const count = db.prepare('SELECT COUNT(*) AS c FROM purchase_orders').get().c;
-  const po_number = 'PO-' + String(count + 1).padStart(4, '0');
+  const po_number = nextKitchenPONumber(db);
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO purchase_orders

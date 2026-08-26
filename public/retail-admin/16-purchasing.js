@@ -31,6 +31,29 @@
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
   const money = n => '¥' + fmt(Number(n) || 0);
+  // A supplier is stored as ONE free-text name, and most of the live ones glue
+  // both languages into it — "Dry Fruit 果干". Split the stored string at its
+  // language boundary (first 中文 character to last, the rest is the English
+  // half) so a screen never shows both at once. A name written in only one
+  // language has no boundary and survives whole in both.
+  const CJK_CHAR = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+  function supSplit(name) {
+    const raw = String(name == null ? '' : name).trim();
+    let first = -1, last = -1;
+    for (let i = 0; i < raw.length; i++) {
+      if (CJK_CHAR.test(raw[i])) { if (first < 0) first = i; last = i; }
+    }
+    if (first < 0) return { en: raw, cn: raw };
+    const trim = t => t.replace(/^[\s·\-–—/,|]+|[\s·\-–—/,|]+$/g, '').trim();
+    const cn = trim(raw.slice(first, last + 1));
+    const en = trim((raw.slice(0, first) + ' ' + raw.slice(last + 1)).replace(/\s{2,}/g, ' '));
+    return { en: en || raw, cn: cn || raw };
+  }
+  // nameCn, when the suppliers master holds one, always wins over the split.
+  function supName(name, nameCn) {
+    const half = supSplit(name);
+    return T(half.en, (nameCn && String(nameCn).trim()) || half.cn);
+  }
   // "Today" in the store's clock (GZ = UTC+8) so a delivery due today never
   // reads as late just because the browser is on UTC.
   const todayGz = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -378,6 +401,12 @@
           delivery_date: po.delivery_date || '', supplier: po.supplier || '',
           store_id: po.store_id, notes: po.notes || '',
           items: (po.items || []).map(i => ({
+            // The line's own row id travels with it so a save UPDATES that row
+            // instead of replacing it. Without it the server has to re-insert,
+            // and invoice_lines.line_id (ON DELETE CASCADE) loses this line's
+            // supplier-invoice allocation. Rows added in the wizard have none,
+            // which is exactly how the server tells new from existing.
+            id: i.id,
             store_product_id: i.store_product_id, ingredient_id: i.ingredient_id,
             name_en: i.name_en, name_cn: i.name_cn,
             sku: i.sku, qty: i.qty, unit: i.unit, cost_per_unit: i.cost_per_unit,
@@ -422,7 +451,7 @@
   function supplierOptions(selected) {
     return `<option value="">${esc(T('No supplier — mixed / one-off', '不指定 —— 混合/一次性'))}</option>` + _suppliers
       .filter(s => s.is_active || s.name === selected)
-      .map(s => `<option value="${esc(s.name)}"${s.name === selected ? ' selected' : ''}>${esc(s.name)}${s.name_cn ? ' · ' + esc(s.name_cn) : ''}</option>`)
+      .map(s => `<option value="${esc(s.name)}"${s.name === selected ? ' selected' : ''}>${esc(supName(s.name, s.name_cn))}</option>`)
       .join('');
   }
   function storeOptions(selected) {
@@ -798,6 +827,7 @@
       store_id: _edit.store_id,
       notes: _edit.notes || null,
       items: _edit.items.map(it => ({
+        id: it.id || null,
         store_product_id: it.store_product_id, ingredient_id: it.ingredient_id,
         name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
         qty: parseFloat(it.qty) || 0, unit: it.unit || 'pcs',
@@ -1295,7 +1325,7 @@
         return `
           <tr class="grow" onclick="puInvToggleGroup('${key}')">
             <td class="arrowcol">${open ? I.chevDown : I.chevRight}</td>
-            <td><b>${esc(g.supplier)}</b><div class="sub">${g.line_count} ${esc(T('lines', '条明细'))} · ${g.po_numbers.length} ${esc(T('orders', '张采购单'))}</div></td>
+            <td><b>${esc(supName(g.supplier, g.supplier_cn))}</b><div class="sub">${g.line_count} ${esc(T('lines', '条明细'))} · ${g.po_numbers.length} ${esc(T('orders', '张采购单'))}</div></td>
             <td onclick="event.stopPropagation()">${invReachChip(g.reach)}</td>
             <td class="right pu2-num"><b>${money(g.total)}</b></td>
             ${cell(g.fully_invoiced, 'fully_invoiced')}
@@ -1369,7 +1399,7 @@
         ? `<span class="pu2-pill amber" title="${esc(T('The lines ticked on this invoice don’t add up to its total', '该发票已勾选明细金额与发票总额不符'))}"><span class="dot"></span>${money(Math.abs(inv.unallocated))} ${esc(inv.unallocated > 0 ? T('unallocated', '未分配') : T('over', '超出'))}</span>`
         : '';
       return `<tr>
-        <td><b>${esc(inv.supplier)}</b>${inv.invoice_number ? `<div class="sub pu2-mono">${esc(inv.invoice_number)}</div>` : ''}
+        <td><b>${esc(supName(inv.supplier, inv.supplier_cn))}</b>${inv.invoice_number ? `<div class="sub pu2-mono">${esc(inv.invoice_number)}</div>` : ''}
             <div class="sub pu2-num">${esc(inv.date)}${pos ? ' · ' + esc(pos) : ''}</div></td>
         <td class="right pu2-num">${money(inv.amount)}${gap ? '<div class="sub">' + gap + '</div>' : ''}</td>
         <td>${due}</td>
@@ -1453,12 +1483,17 @@
       renderInvModal();
     } catch (e) { toast(e.message, 'err'); }
   };
+  // The stored name stays the option's VALUE — it is the key every filter and
+  // every save round-trips on. Only the label follows the current language.
   function invSupplierList() {
+    const cn = new Map();
+    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier_cn) cn.set(g.supplier, g.supplier_cn); });
+    _suppliers.forEach(s => { if (s.name_cn) cn.set(s.name, s.name_cn); });
     const names = new Set();
     ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== '未指定 Unspecified') names.add(g.supplier); });
     _suppliers.filter(s => s.is_active).forEach(s => names.add(s.name));
     if (_invDraft && _invDraft.supplier) names.add(_invDraft.supplier);
-    return [...names].sort((a, b) => a.localeCompare(b));
+    return [...names].sort((a, b) => a.localeCompare(b)).map(n => ({ name: n, label: supName(n, cn.get(n)) }));
   }
   function invAllocated() {
     const d = _invDraft; if (!d) return 0;
@@ -1486,7 +1521,7 @@
     const byPo = new Map();
     lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
     const supOpts = ['<option value="">' + esc(T('Choose a supplier', '选择供应商')) + '</option>']
-      .concat(invSupplierList().map(n => `<option value="${esc(n)}"${n === d.supplier ? ' selected' : ''}>${esc(n)}</option>`)).join('');
+      .concat(invSupplierList().map(o => `<option value="${esc(o.name)}"${o.name === d.supplier ? ' selected' : ''}>${esc(o.label)}</option>`)).join('');
     const allocRows = lines.length
       ? [...byPo.entries()].map(([po, ls]) => `
           <div class="pu2-pogrp">${esc(po)}</div>
@@ -1819,7 +1854,7 @@
       const files = s.doc_count ? `${s.doc_count} ${esc(T('files on record', '份资质文件'))}` : '';
       const sub = [s.products_supplied ? esc(s.products_supplied) : '', files].filter(Boolean).join(' · ');
       return `<tr onclick="puOpenSupplier(${s.id})">
-        <td><b>${esc(s.name)}</b>${s.name_cn ? ` · ${esc(s.name_cn)}` : ''}${sub ? `<div class="sub">${sub}</div>` : ''}</td>
+        <td><b>${esc(supName(s.name, s.name_cn))}</b>${sub ? `<div class="sub">${sub}</div>` : ''}</td>
         <td>${esc(s.contact_name || '—')}${s.contact_phone ? `<div class="sub pu2-num">${esc(s.contact_phone)}</div>` : ''}</td>
         <td>${pay.length ? esc(pay[0]) : '—'}${pay[1] ? `<div class="sub">${esc(pay[1])}</div>` : ''}</td>
         <td class="right pu2-num">${s.po_count || 0}${s.last_po_date ? `<div class="sub">${esc(s.last_po_date)}</div>` : ''}</td>
@@ -1852,7 +1887,7 @@
     root().innerHTML = `
       <div class="pu2-wizhead">
         ${backBtn(T('Suppliers', '供应商'), 'puBackSuppliers()')}
-        <h1>${s.id ? esc(s.name) : esc(T('New supplier', '新建供应商'))}</h1>
+        <h1>${s.id ? esc(supName(s.name, s.name_cn)) : esc(T('New supplier', '新建供应商'))}</h1>
         ${s.id && !s.is_active ? `<span class="pu2-pill grey">${esc(T('Disabled', '已停用'))}</span>` : ''}
         ${s.id ? `<span class="spacer"></span><button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrderFor(${s.id})">${esc(T('New order', '新建采购单'))}</button>` : ''}
       </div>
