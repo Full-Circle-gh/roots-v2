@@ -212,6 +212,10 @@
   function elNeedsAttention(p) {
     const maps = Object.values(p.stores || {});
     if (!maps.some(m => m.eleme_name)) return true;
+    // A name no listing carries is attention too, or the amber dot the list
+    // draws for it would not be counted by the chip that claims to count
+    // amber dots.
+    if (Object.keys(p.stores || {}).some(code => elNameBad(p.stores[code], code))) return true;
     return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
   }
 
@@ -221,6 +225,10 @@
     { id: 'att',  en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
     { id: 'ok',   en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
     { id: 'size', en: 'Needs an option', cn: '\u5f85\u9009\u89c4\u683c' },
+    // The mappings holding a name Eleme has never heard of, in one click.
+    // Only the ones we can prove: a store whose catalogue has not been read
+    // contributes nothing to this count.
+    { id: 'bad',  en: 'Name not in catalogue', cn: 'Name not in catalogue' },
   ];
 
   function elChipMatch(p, id) {
@@ -228,6 +236,7 @@
     if (id === 'att')  return elNeedsAttention(p);
     if (id === 'ok')   return maps.some(m => m.eleme_name);
     if (id === 'size') return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
+    if (id === 'bad')  return Object.keys(p.stores || {}).some(code => elNameBad(p.stores[code], code));
     return true;
   }
 
@@ -289,6 +298,76 @@
     elRenderCatalogueDatalists();
     elRenderProducts(); // re-render so the name input picks up list= now that options exist
   };
+
+  // ── Strings still awaiting a Chinese source ─────────────────────────
+  // §30 rule 3 and docs/tacet-delivery-vocabulary.md Rule 4 say the same thing:
+  // copy from the source, never compose. That holds for our own Chinese too.
+  // None of the four below exists as a pair anywhere in this repo or in the
+  // locked vocabulary, so they run English-only on both sides until they are
+  // sourced. They are tabled as a request in that document, under "Channel
+  // mapping - awaiting a Chinese source"; filling the CN column there is four
+  // edits here, and Meituan's MT_PENDING_CN carries the same keys:
+  //
+  //   EL_PENDING_CN.notInCat   'Name not in catalogue'
+  //   EL_PENDING_CN.notChecked 'Name not checked'
+  //   EL_PENDING_CN.pickIt     'This name matches no listing on this store. Pick one from the list.'
+  //   EL_PENDING_CN.reverted   'Not in the catalogue — not saved.'
+  //
+  // Every other string on this change reuses a pair that already exists:
+  // 'No matches' / '无匹配', 'Remove' / '移除', and the catalogue-not-read
+  // sentence already on this screen.
+  const EL_PENDING_CN = {
+    notInCat:   'Name not in catalogue',
+    notChecked: 'Name not checked',
+    pickIt:     'This name matches no listing on this store. Pick one from the list.',
+    reverted:   'Not in the catalogue — not saved.',
+  };
+
+  // ── The catalogue as the only source of a listing name ────────────────
+  // The field used to be free text with a datalist beside it, which suggests
+  // and constrains nothing: a single character typed into product 80 saved,
+  // and the push path then matched it loosely onto a different product's
+  // listing. A name is now accepted only when it is one of these strings.
+  //
+  // Exact, not fuzzy, and deliberately NOT a check on how the value arrived:
+  // no browser reports a datalist pick reliably, and a pasted name that is
+  // right is right. What matters is that the string came from Eleme.
+  function elCatalogueRows(storeCode) {
+    return (_catalogue[storeCode] && _catalogue[storeCode].rows) || [];
+  }
+
+  // Whether the catalogue has been read at all. Nothing about a stored name
+  // can be said before this is true — see elStoreState.
+  function elCatalogueRead(storeCode) {
+    return elCatalogueRows(storeCode).length > 0;
+  }
+
+  // Exact match against a real listing name. Trimmed on both sides because
+  // that is what elSpecsFor already keys on; byte-exact otherwise, which is
+  // the point — one capital letter was enough to fail every push for two days.
+  function elNameKnown(storeCode, name) {
+    const key = String(name || '').trim();
+    if (!key) return false;
+    return elCatalogueRows(storeCode).some(r => String(r.name || '').trim() === key);
+  }
+
+  // A stored name we can positively say is wrong: the catalogue has been read,
+  // and this is not in it. An unread catalogue is not evidence of anything.
+  function elNameBad(map, storeCode) {
+    return !!(map && map.eleme_name && elCatalogueRead(storeCode) &&
+              !elNameKnown(storeCode, map.eleme_name));
+  }
+
+  // How many listings the dropdown is showing for what has been typed.
+  // Case-insensitive substring, because that is what the browser's own
+  // datalist does — a different rule here would count one thing while the
+  // list in front of the operator showed another.
+  function elMatchCount(storeCode, typed) {
+    const q = String(typed || '').trim().toLowerCase();
+    if (!q) return -1;                       // nothing typed: nothing to say
+    return elCatalogueRows(storeCode)
+      .filter(r => String(r.name || '').toLowerCase().includes(q)).length;
+  }
 
   // Every size (规格) behind one Eleme listing name, from the cached catalogue.
   // One listing can hold "小" and "大" behind a single name — that is exactly the
@@ -468,6 +547,25 @@
       return { k: 'none', t: cuT('Store not connected', '门店未关联') };
     }
     if (!map || !map.eleme_name) return { k: 'att', t: cuT('Add name', '待填名称') };
+
+    // Both name checks sit BEFORE the switch, on purpose. A name that matches
+    // no listing is wrong whether or not pushing is on, and four of the five
+    // known-bad mappings found on 2026-08-25 are switched off - reading those
+    // as 'Sync off' describes the switch and hides the defect. Product 195 is
+    // the same fault the other way round: name set, switch on, one size, so
+    // this function called it 'Synced' while every push since 23 August
+    // resolved to nothing.
+    if (!elCatalogueRead(storeCode)) {
+      // The check cannot run, so it says so, and never that all is well.
+      // Neutral rather than amber: an unread catalogue is one fact about the
+      // STORE, already stated on the store's own line, and amber here would
+      // repeat it as a warning dot on every product - the noise this page was
+      // rebuilt to stop. Quiet in the list, explicit in the panel.
+      return { k: 'none', t: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked) };
+    }
+    if (!elNameKnown(storeCode, map.eleme_name)) {
+      return { k: 'att', t: cuT(EL_PENDING_CN.notInCat, EL_PENDING_CN.notInCat) };
+    }
     if (Number(map.sync_enabled) !== 1) return { k: 'off', t: cuT('Sync off', '已关闭') };
     // A listing with several sizes and none picked cannot be pushed accurately
     // — the driver falls back to a rule that writes a made-up number to every
@@ -625,18 +723,40 @@
       '<input type="checkbox" ' + (on ? 'checked' : '') +
       ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>";
 
-    // The name field is an autocomplete against the real catalogue, not free
-    // text: a hand-typed name once used a curly apostrophe and silently failed
-    // every push. Labelled, so no placeholder — the placeholder used to BE the
-    // label on the table, and keeping both says the same words twice.
+    // The name field is a picker over the real catalogue, and only a value
+    // from it is ever stored. It USED to be plain free text with a datalist
+    // beside it - a datalist suggests and constrains nothing - and the comment
+    // that stood here claimed otherwise. A single character typed into product
+    // 80 saved, and the push path then matched it loosely onto a different
+    // product's listing. elNameCommit below is what makes the claim true.
+    //
+    // Labelled, so no placeholder - the placeholder used to BE the label on the
+    // table, and keeping both says the same words twice. The Remove action is
+    // beside the label rather than under the field: it appears only when there
+    // is a name to remove, and emptying the field by hand cannot do its job
+    // (an empty field is not a catalogue value, so it reverts like any other).
+    const nameArgs = 'this, ' + p.id + ', ' + st.id + ", '" + esc(st.code) + "'";
     let body =
       '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span>' + toggle + '</div>' +
       '<div class="el-pstate"><span class="el-dot ' + s2.k + '"></span>' + esc(s2.t) + '</div>' +
-      '<div class="el-plbl">' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</div>' +
+      '<div class="el-plbl el-plbl-row">' +
+        '<span>' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</span>' +
+        (name
+          ? '<button type="button" class="el-plink" onclick="elRemoveName(' + p.id + ', ' + st.id +
+            ", '" + esc(st.code) + "')\">" + esc(cuT('Remove', '移除')) + '</button>'
+          : '') +
+      '</div>' +
       '<input type="text" class="el-name-input" data-no-i18n' +
         ' list="el-catalogue-dl-' + esc(st.code) + '"' +
         ' value="' + esc(name) + '"' +
-        ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">";
+        ' oninput="elNameTyped(' + nameArgs + ')"' +
+        ' onchange="elNameCommit(' + nameArgs + ')"' +
+        ' onblur="elNameCommit(' + nameArgs + ')"' +
+        ' onkeydown="elNameKey(event)">' +
+      // Filled by elNameTyped as the operator types. Empty on paint: a count
+      // of what matches is only worth saying once there is something to match
+      // against, and the zero case is the only one it says out loud.
+      '<div class="el-sub el-hint" id="el-hint-' + st.id + '"></div>';
 
     // One-time help, on the products that need it rather than standing above
     // the whole page: Eleme listings carry no article number, so the name IS
@@ -648,6 +768,21 @@
               '饿了么商品没有货号,只能按商品名精确匹配 — 请从该门店已读取的 ' + cached + ' 个商品中选择。')
         : cuT('No catalogue has been read from this store yet, so there is nothing to pick from.',
               '尚未读取该门店的商品目录,暂无可选项。')) + '</div>';
+    } else if (!cached) {
+      // A name is stored and there is nothing to check it against. Say that,
+      // and say nothing at all about whether it is right - the same sentence
+      // the store line already uses for the same fact, so the two agree.
+      body += '<div class="el-sub">' + esc(cuT(
+        'no catalogue read yet, so nothing can be matched here',
+        '尚未读取商品目录，无法匹配')) + '</div>';
+    } else if (!elNameKnown(st.code, name)) {
+      // The one case the screen could not say before: a stored name that no
+      // listing on this store carries. It read as 'Synced' on product 195
+      // for two days. Nothing is corrected or cleared here - the picker is
+      // right above, and which listing this product is remains a person's
+      // call.
+      body += '<div class="el-sub el-bad">' +
+        esc(cuT(EL_PENDING_CN.pickIt, EL_PENDING_CN.pickIt)) + '</div>';
     }
 
     // Which options of the listing this product is, and how many units each one
@@ -751,10 +886,89 @@
     } catch (e) { elLoadProducts(); }
   };
 
-  // Save a product's Eleme listing-name override for one store. Deliberately
-  // does NOT change sync_enabled — typing a name shouldn't silently turn
-  // pushing on for a product the operator hasn't reviewed yet; the checkbox
-  // stays the only way to do that.
+  // -- The gate: only a catalogue value ever reaches the field ----------------
+  // What the field must revert TO, read back from the loaded products rather
+  // than stashed on the element: a repaint between paint and blur cannot then
+  // make the two disagree.
+  function elStoredName(productId, storeCode) {
+    const p = _products.find(x => x.id === Number(productId));
+    const m = p && (p.stores || {})[storeCode];
+    return (m && m.eleme_name) || '';
+  }
+
+  window.elNameKey = function (e) { if (e && e.key === 'Enter') e.target.blur(); };
+
+  // Typing filters the browser's own dropdown and does nothing else - it never
+  // sets the stored value. The one thing it writes is the line under the field,
+  // and only when the filter has come up empty: typing four matches and typing
+  // zero matches used to look identical, and zero is the answer that matters.
+  // It is the true answer for a product that is not on Eleme at all.
+  //
+  // A count when there ARE matches is left unsaid; they are on screen already.
+  window.elNameTyped = function (input, productId, storeId, storeCode) {
+    const hint = document.getElementById('el-hint-' + storeId);
+    if (!hint) return;
+    const n = elMatchCount(storeCode, input.value);
+    // -1 is an empty field: nothing typed, so nothing to report either way.
+    hint.textContent = n === 0 ? cuT('No matches', '\u65e0\u5339\u914d') : '';
+    hint.classList.toggle('el-bad', n === 0);
+  };
+
+  // The gate. Every save goes through here, and a value that is not in the
+  // catalogue is not stored - it is put back to what the field held.
+  //
+  // Reverting rather than emptying is the point. Emptying trades a wrong-name
+  // fault for a missing-name fault: the product quietly stops syncing and
+  // nothing anywhere says so, which is the harder of the two to notice. The
+  // good value stays; only the typing is discarded.
+  //
+  // Runs on change AND on blur, because neither alone covers every way a field
+  // is left. `busy` is what stops the pair double-saving: change fires first,
+  // blur follows before the await settles, and finds the flag set.
+  window.elNameCommit = async function (input, productId, storeId, storeCode) {
+    if (input.dataset.busy) return;
+    const typed  = input.value.trim();
+    const stored = elStoredName(productId, storeCode);
+    if (typed === stored) { elNameTyped(input, productId, storeId, storeCode); return; }
+
+    // An empty field is not a catalogue value either, so it reverts like any
+    // other non-match. Unmapping is the Remove action beside the label, which
+    // asks first - a stray backspace should not be able to stop a product
+    // syncing.
+    if (!typed || !elNameKnown(storeCode, typed)) {
+      input.value = stored;
+      const hint = document.getElementById('el-hint-' + storeId);
+      if (hint) {
+        hint.textContent = cuT(EL_PENDING_CN.reverted, EL_PENDING_CN.reverted);
+        hint.classList.add('el-bad');
+      }
+      return;
+    }
+
+    input.dataset.busy = '1';
+    try { await elSetElemeName(productId, storeId, storeCode, typed); }
+    finally { delete input.dataset.busy; }
+  };
+
+  // Unmapping, on purpose and out loud. The confirm exists because removing a
+  // name stops this product pushing to Eleme, which is exactly the silent
+  // failure the revert above refuses to cause by accident.
+  window.elRemoveName = async function (productId, storeId, storeCode) {
+    const stored = elStoredName(productId, storeCode);
+    if (!stored) return;
+    const label = cuT('Remove', '\u79fb\u9664');
+    if (!(await askConfirm({ title: label, body: stored, confirmLabel: label, danger: true }))) return;
+    await elSetElemeName(productId, storeId, storeCode, '');
+  };
+
+  // Save a product's Eleme listing-name override for one store.
+  //
+  // Reached only through elNameCommit and elRemoveName above, never from the
+  // field directly: by the time a name arrives here it is either one of the
+  // catalogue's own strings or empty. Note it already leaves sync_enabled
+  // exactly where it was - a new mapping starts off, and correcting a name
+  // has never been able to start pushing. Meituan's mtSaveMap sent 1 and now
+  // matches this.
   window.elSetElemeName = async function (productId, storeId, storeCode, value) {
     const name = value.trim();
     const p = _products.find(x => x.id === productId);

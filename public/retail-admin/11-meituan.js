@@ -391,6 +391,9 @@
     { id: 'att', en: 'Needs attention', cn: '待处理' },
     { id: 'ok',  en: 'Synced',          cn: '已同步' },
     { id: 'ms',  en: 'Has options',     cn: '有选项' },
+    // The mappings holding a name Meituan has never sent us, in one click.
+    // Only the ones we can prove, and only on the editable store.
+    { id: 'bad', en: 'Name not in catalogue', cn: 'Name not in catalogue' },
   ];
 
   function mtChipMatch(p, id) {
@@ -398,6 +401,7 @@
     if (id === 'att') return mtNeedsAttention(p);
     if (id === 'ok')  return maps.some(m => m.meituan_name);
     if (id === 'ms')  return maps.some(m => Number(m.specCount || 0) > 1);
+    if (id === 'bad') return !!(_storeA && mtNameBad((p.stores || {})[_storeA.code], _storeA.code));
     return true;
   }
 
@@ -460,8 +464,71 @@
       _listingSkus = (r && r.skus) || {};
     } catch (e) { /* leave whatever _listings already had */ }
     mtRenderListingDatalists();
+    // The name checks in mtStoreState read this cache, so a list painted
+    // before it arrived is showing 'Name not checked' for a reason that has
+    // since gone away. Repaint, the way elLoadCatalogue does.
+    if (_products.length) mtFilterProducts();
   }
 
+  // -- Strings still awaiting a Chinese source --------------------------------
+  // Same four as 14-eleme.js, same reason: no pair for any of them exists in
+  // this repo or in docs/tacet-delivery-vocabulary.md, and §30 rule 3 says copy
+  // from the source rather than compose - which holds for our own Chinese too.
+  // English on both sides until they are sourced. They are tabled as a request
+  // in that document, under "Channel mapping - awaiting a Chinese source".
+  // `noneRead` is Meituan's alone: Eleme had a sourced pair for it already.
+  const MT_PENDING_CN = {
+    notInCat:   'Name not in catalogue',
+    notChecked: 'Name not checked',
+    pickIt:     'This name matches no listing on this store. Pick one from the list.',
+    reverted:   'Not in the catalogue \u2014 not saved.',
+    noneRead:   'no listings read from this store yet, so nothing can be checked here',
+  };
+
+  // -- The cached listings as the only source of a delivery name --------------
+  // The field was free text with a datalist beside it, which suggests and
+  // constrains nothing. Same defect as Eleme's, and the same fix: a name is
+  // accepted only when it is one of the strings scraped from the channel.
+  //
+  // Exact, and deliberately NOT a check on how the value arrived - no browser
+  // reports a datalist pick reliably, and a pasted name that is right is right.
+  // What matters is that the string came from Meituan.
+  function mtListingNames(storeCode) {
+    return (_listings && _listings[storeCode]) || [];
+  }
+
+  // Whether a scrape has landed for this store. Nothing about a stored name can
+  // be said before this is true - see mtStoreState.
+  function mtCatalogueRead(storeCode) {
+    return mtListingNames(storeCode).length > 0;
+  }
+
+  function mtNameKnown(storeCode, name) {
+    const key = String(name || '').trim();
+    if (!key) return false;
+    return mtListingNames(storeCode).some(n => String(n || '').trim() === key);
+  }
+
+  // A stored name we can positively say is wrong: the listings have been read,
+  // and this is not among them. An unread cache is not evidence of anything.
+  //
+  // Only ever asked about the editable store. 越秀 闪购 sets its own name from
+  // 货号 and its name is source-derived by construction; checking it against a
+  // scrape that may be thin would invent amber where there is no fault.
+  function mtNameBad(map, storeCode) {
+    return !!(map && map.meituan_name && mtCatalogueRead(storeCode) &&
+              !mtNameKnown(storeCode, map.meituan_name));
+  }
+
+  // How many listings the dropdown is showing for what has been typed.
+  // Case-insensitive substring, matching what the browser's own datalist does -
+  // a different rule here would count one thing while the list in front of the
+  // operator showed another.
+  function mtMatchCount(storeCode, typed) {
+    const q = String(typed || '').trim().toLowerCase();
+    if (!q) return -1;
+    return mtListingNames(storeCode).filter(n => String(n || '').toLowerCase().includes(q)).length;
+  }
   // One <datalist> per store (their catalogues differ) — datalists have no
   // visible presence, so they live in a hidden container appended once.
   function mtRenderListingDatalists() {
@@ -518,6 +585,10 @@
     const a = _storeA && p.stores && p.stores[_storeA.code] && p.stores[_storeA.code].meituan_name;
     const b = _storeB && p.stores && p.stores[_storeB.code] && p.stores[_storeB.code].meituan_name;
     if (!a && !b) return true;
+    // A name no listing carries is attention too, or the amber dot the list
+    // draws for it would not be counted by the chip that claims to count
+    // amber dots. Editable store only, for the reason in mtNameBad.
+    if (_storeA && mtNameBad((p.stores || {})[_storeA.code], _storeA.code)) return true;
     return Object.values(p.stores || {}).some(mtNeedsSpec);
   }
 
@@ -557,10 +628,27 @@
   // it here and stock stays frozen until they do. 越秀 闪购 links itself by
   // 货号, so "not linked" there is a fact about the listing, not a job on this
   // page: neutral, never amber.
-  function mtStoreState(map, editable) {
+  function mtStoreState(map, editable, storeCode) {
     if (!map || !map.meituan_name) {
       return editable ? { k: 'att',  t: cuT('Add name', '待填名称') }
                       : { k: 'none', t: cuT('Not linked', '未关联') };
+    }
+
+    // Both name checks sit BEFORE the switch, and on the editable store only.
+    // A name that matches no listing is wrong whether or not pushing is on, so
+    // reading such a row as 'Sync off' would describe the switch and hide the
+    // defect. 越秀 闪购 is skipped on purpose: it names itself from 货号, so its
+    // name came from the channel already.
+    if (editable) {
+      if (!mtCatalogueRead(storeCode)) {
+        // The check cannot run, so it says so, and never that all is well.
+        // Neutral rather than amber: an unread cache is one fact about the
+        // store, and amber here would repeat it on every product.
+        return { k: 'none', t: cuT(MT_PENDING_CN.notChecked, MT_PENDING_CN.notChecked) };
+      }
+      if (!mtNameKnown(storeCode, map.meituan_name)) {
+        return { k: 'att', t: cuT(MT_PENDING_CN.notInCat, MT_PENDING_CN.notInCat) };
+      }
     }
     if (map.sync_enabled === 0)  return { k: 'off', t: cuT('Sync off', '已关闭') };
     if (mtNeedsSpec(map))        return { k: 'att', t: cuT('Pick an option', '待选规格') };
@@ -632,7 +720,7 @@
       const dots = [[storeA, showA, true], [storeB, showB, false]].map(([st, show, editable]) => {
         if (!show) return '';
         if (!st) return '<span class="mt-dcell"></span>';
-        const s = mtStoreState((p.stores || {})[st.code], editable);
+        const s = mtStoreState((p.stores || {})[st.code], editable, st.code);
         const who = mtStoreName(st.code, cn) || st.name;
         say.push(who + ' ' + s.t);
         return '<span class="mt-dcell"><span class="mt-dot ' + s.k + '" title="' + esc(who + ' · ' + s.t) + '"></span></span>';
@@ -715,7 +803,7 @@
   function mtPanelStore(p, store, editable) {
     const cn   = document.documentElement.dataset.uiLang === 'cn';
     const map  = (p.stores || {})[store.code] || {};
-    const s    = mtStoreState(map, editable);
+    const s    = mtStoreState(map, editable, store.code);
     const who  = mtStoreName(store.code, cn) || store.name;
     const last = mtLast(map);
 
@@ -735,13 +823,42 @@
       body =
         '<div class="mt-pbh"><span class="nm">' + esc(who) + '</span>' + toggle + '</div>' +
         '<div class="mt-pstate"><span class="mt-dot ' + s.k + '"></span>' + esc(s.t) + '</div>' +
+        // The name field is a picker over the scraped listings, and only a
+        // value from them is ever stored - mtNameCommit is what enforces it.
         // Labelled, so no placeholder: the placeholder used to BE the label on
-        // the table, and keeping both said the same words twice.
-        '<div class="mt-plbl">' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '</div>' +
+        // the table, and keeping both said the same words twice. The Remove
+        // action sits on the label row and appears only while there is a name
+        // to remove; emptying the field by hand cannot do its job, because an
+        // empty field is not a catalogue value and so reverts like any other.
+        '<div class="mt-plbl mt-plbl-row">' +
+          '<span>' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '</span>' +
+          (hasName
+            ? '<button type="button" class="mt-plink" onclick="mtRemoveName(this)"' +
+              ' data-pid="' + p.id + '" data-store-id="' + store.id +
+              '" data-store-code="' + esc(store.code) + '">' +
+              esc(cuT('Remove', '移除')) + '</button>'
+            : '') +
+        '</div>' +
         '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(store.code) + '"' +
         ' value="' + esc(map.meituan_name || '') + '"' +
         ' data-pid="' + p.id + '" data-store-id="' + store.id + '" data-store-code="' + esc(store.code) + '"' +
-        ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
+        ' oninput="mtNameTyped(this)" onchange="mtNameCommit(this)"' +
+        ' onblur="mtNameCommit(this)" onkeydown="mtNameKey(event)">' +
+        // Filled by mtNameTyped as the operator types, and only when the
+        // filter has come up empty. Empty on paint, and an empty one is
+        // display:none, so it costs no space.
+        '<div class="mt-sub mt-hint" id="mt-hint-' + store.id + '"></div>' +
+        // What the screen could not say before: a stored name no listing on
+        // this store carries, or no listings read to check it against. Neither
+        // corrects anything - which listing a product is stays a person's call.
+        (!hasName ? ''
+          : !mtCatalogueRead(store.code)
+            ? '<div class="mt-sub">' + esc(cuT(
+                MT_PENDING_CN.noneRead, MT_PENDING_CN.noneRead)) + '</div>'
+          : !mtNameKnown(store.code, map.meituan_name)
+            ? '<div class="mt-sub mt-bad">' +
+              esc(cuT(MT_PENDING_CN.pickIt, MT_PENDING_CN.pickIt)) + '</div>'
+          : '') +
         // A listing can hold several 规格 (see mtIsShared): a shared listing
         // gets the picker, an add-on listing gets a sentence saying what the
         // rule already does with it.
@@ -823,11 +940,40 @@
   // variants — stay distinguishable. The push daemon matches by name_cn
   // substring (lib/meituan-browser.js), so a name_cn-prefixed value still
   // matches. Used as the per-product fallback chip in the Match-names dialog.
+  // A name COMPOSED from our own product name and variant - the other half of
+  // what §30 rule 3 forbids: never typed and never composed. It is kept
+  // because it is often right, but it is no longer offered on its own word.
   function mtSuggestName(p) {
     const base = (p.name_cn || p.name_en || '').trim();
     if (!base) return '';
     const v = (p.variant_label || '').trim();
     return v ? `${base}（${v}）` : base;
+  }
+
+  // The composed name, but only when the channel turns out to have sent us
+  // exactly that string - at which point it is a real listing name and the
+  // fact that we happened to compose it is no longer interesting.
+  //
+  // Everything else returns '', and the review list already draws a 'Use ...'
+  // button only for a truthy suggestion and already drops falsy ones from the
+  // bulk apply. So a composed name that matches nothing is hidden rather than
+  // offered - the gate would refuse it on commit anyway, and a button that
+  // silently does nothing reads as broken.
+  function mtSuggestionIfListed(p, storeCode) {
+    const n = mtSuggestName(p);
+    return mtNameKnown(storeCode, n) ? n : '';
+  }
+
+  // The sync switch's existing value for one mapping, or off when there is no
+  // mapping yet. Setting or correcting a NAME never moves it - not from the
+  // field, and not from the Match-names dialog: confirming a match says the
+  // listing is the right one, it does not say pushing should start. Every
+  // writer below reads this so the three of them cannot drift apart.
+  function mtKeepSync(pid, storeCode) {
+    const p = _products.find(x => x.id == pid);
+    const m = p && (p.stores || {})[storeCode];
+    if (!m) return 0;
+    return m.sync_enabled === 0 ? 0 : 1;
   }
 
   function mtUniqueStores() {
@@ -1069,7 +1215,7 @@
         const m = mtMatchListing(p, store.code);
         const base = { pid: p.id, storeId: store.id, storeCode: store.code,
                        storeName: store.name || store.code, label: mtProductLabel(p),
-                       suggestion: mtSuggestName(p) };
+                       suggestion: mtSuggestionIfListed(p, store.code) };
         if (m.name) targets.push({ p, store, name: m.name });
         else if (m.reason === 'ambiguous') _review.ambiguous.push({ ...base, candidates: m.candidates });
         else if (m.reason !== 'no-listings') _review.unmatched.push({ ...base });
@@ -1080,13 +1226,14 @@
     let done = 0, failed = 0;
     for (const t of targets) {
       try {
+        const keep = mtKeepSync(t.p.id, t.store.code);
         await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: keep }),
         });
         if (!t.p.stores) t.p.stores = {};
-        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
+        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: keep };
         done++;
       } catch (e) {
         failed++;
@@ -1108,16 +1255,17 @@
   }
 
   async function mtApplyReviewName(pid, storeId, storeCode, name) {
+    const keep = mtKeepSync(pid, storeCode);
     const product = _products.find(p => p.id == pid);
     try {
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: 1 }),
+        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: keep }),
       });
       if (product) {
         if (!product.stores) product.stores = {};
-        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: keep };
       }
       return true;
     } catch (e) {
@@ -1278,44 +1426,118 @@
     await mtMatchApply([store]);
   };
 
-  // ── Save mapping ────────────────────────────────────────────────────────────
-  window.mtSaveMap = async function (input) {
-    const pid       = input.dataset.pid;
-    const storeId   = input.dataset.storeId;
-    const storeCode = input.dataset.storeCode;
-    const name      = input.value.trim();
+  // -- The gate: only a scraped listing name ever reaches the field -----------
+  // What the field must revert TO, read back from the loaded products rather
+  // than stashed on the element, so a repaint between paint and blur cannot
+  // make the two disagree.
+  function mtStoredName(pid, storeCode) {
+    const p = _products.find(x => x.id == pid);
+    const m = p && (p.stores || {})[storeCode];
+    return (m && m.meituan_name) || '';
+  }
 
-    // Skip if unchanged (compare with cached value)
+  window.mtNameKey = function (e) { if (e && e.key === 'Enter') e.target.blur(); };
+
+  // Typing filters the browser's own dropdown and does nothing else - it never
+  // sets the stored value. The one thing it writes is the line under the field,
+  // and only when the filter has come up empty: typing four matches and typing
+  // zero matches used to look identical, and zero is the answer that matters.
+  window.mtNameTyped = function (input) {
+    const hint = document.getElementById('mt-hint-' + input.dataset.storeId);
+    if (!hint) return;
+    const n = mtMatchCount(input.dataset.storeCode, input.value);
+    // -1 is an empty field: nothing typed, so nothing to report either way.
+    hint.textContent = n === 0 ? cuT('No matches', '\u65e0\u5339\u914d') : '';
+    hint.classList.toggle('mt-bad', n === 0);
+  };
+
+  // The gate. Every save from this field goes through here, and a value that is
+  // not one of the scraped listing names is not stored - it is put back to what
+  // the field held.
+  //
+  // Reverting rather than emptying is the point. Emptying trades a wrong-name
+  // fault for a missing-name fault: the product quietly stops syncing and
+  // nothing says so, which is the harder of the two to notice.
+  //
+  // Runs on change AND on blur, because neither alone covers every way a field
+  // is left; `busy` is what stops the pair double-saving.
+  window.mtNameCommit = async function (input) {
+    if (input.dataset.busy) return;
+    const storeCode = input.dataset.storeCode;
+    const typed     = input.value.trim();
+    const stored    = mtStoredName(input.dataset.pid, storeCode);
+    if (typed === stored) { mtNameTyped(input); return; }
+
+    // An empty field is not a listing name either, so it reverts like any other
+    // non-match. Unmapping is the Remove action on the label row, which asks
+    // first - a stray backspace should not be able to stop a product syncing.
+    if (!typed || !mtNameKnown(storeCode, typed)) {
+      input.value = stored;
+      const hint = document.getElementById('mt-hint-' + input.dataset.storeId);
+      if (hint) {
+        hint.textContent = cuT(MT_PENDING_CN.reverted, MT_PENDING_CN.reverted);
+        hint.classList.add('mt-bad');
+      }
+      return;
+    }
+
+    input.dataset.busy = '1';
+    input.style.opacity = '0.5';
+    try { await mtWriteMap(input.dataset.pid, input.dataset.storeId, storeCode, typed); }
+    finally { delete input.dataset.busy; input.style.opacity = ''; }
+  };
+
+  // Unmapping, on purpose and out loud. The confirm exists because removing a
+  // name stops this product pushing to Meituan, which is exactly the silent
+  // failure the revert above refuses to cause by accident.
+  window.mtRemoveName = async function (btn) {
+    const d = btn.dataset;
+    const stored = mtStoredName(d.pid, d.storeCode);
+    if (!stored) return;
+    const label = cuT('Remove', '\u79fb\u9664');
+    if (!(await askConfirm({ title: label, body: stored, confirmLabel: label, danger: true }))) return;
+    await mtWriteMap(d.pid, d.storeId, d.storeCode, '');
+  };
+
+  // -- Save mapping ----------------------------------------------------------
+  // Reached only through the gate above: by the time a name arrives here it is
+  // either one of the channel's own strings or empty.
+  //
+  // syncEnabled is no longer sent as 1; it comes from mtKeepSync, as it does in
+  // the Match-names dialog's two writers. Setting or correcting a name changes
+  // the name and nothing else - the switch stays where the operator left it,
+  // and a mapping made here starts OFF, the way 14-eleme.js has always done it.
+  // Fixing a wrong name should never be the thing that starts pushing.
+  async function mtWriteMap(pid, storeId, storeCode, name) {
     const product  = _products.find(p => p.id == pid);
     const existing = product?.stores?.[storeCode];
     if ((existing?.meituan_name || '') === name) return;
+    const syncEnabled = mtKeepSync(pid, storeCode);
 
-    input.style.opacity = '0.5';
     try {
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled: 1 }),
+        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled }),
       });
-      // Update local cache, then repaint so the Tianhe status pill (Synced /
-      // Add name) and the sync toggle reflect the new mapping. A chosen 规格
-      // belonged to the old listing — the route drops it, so drop it here too
-      // rather than show a picker holding an option this listing never had.
+      // Update local cache, then repaint so the Tianhe status pill and the sync
+      // toggle reflect the new mapping. A chosen 规格 belonged to the old
+      // listing - the route drops it, so drop it here too rather than show a
+      // picker holding an option this listing never had.
       if (product) {
         if (!product.stores) product.stores = {};
         if (name) {
           product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name,
-                                        sync_enabled: 1, claims: [], specSkuId: null, specLabel: null };
+                                        sync_enabled: syncEnabled, claims: [], specSkuId: null, specLabel: null };
         } else {
           delete product.stores[storeCode];
         }
       }
       mtFilterProducts();
     } catch (e) {
-      toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
+      toast(cuT('Save failed: ', '\u4fdd\u5b58\u5931\u8d25:') + e.message, 'error');
     }
-    input.style.opacity = '';
-  };
+  }
 
   // ── Which options on a shared listing, and what each one sells ──────────────
   // Claim an option for this product, or release it. Several at once is a

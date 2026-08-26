@@ -5729,6 +5729,18 @@
   .mt-sub, .el-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b, .el-sub b { font-weight: 500; color: var(--td-text); }
 
+  /* The listing-name field's label row carries the Remove action on its right:
+     it exists only while there is a name to remove, and emptying the field by
+     hand cannot do its job (an empty field is not a catalogue value, so it
+     reverts). One rule set for both prefixes, like every rule above it. */
+  .mt-plbl-row, .el-plbl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .mt-plink, .el-plink { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); background: none; border: 0; padding: 0; cursor: pointer; }
+  .mt-plink:hover, .el-plink:hover { color: var(--td-text); text-decoration: underline; }
+  /* The live line under the field. It speaks only when the filter has come up
+     empty or a value was refused, so an empty one takes no space at all. */
+  .mt-hint:empty, .el-hint:empty { display: none; }
+  .mt-sub.mt-bad, .el-sub.el-bad, .mt-hint.mt-bad, .el-hint.el-bad { color: var(--td-amber-ink); }
+
   /* Which 规格 of a shared listing this product is — one row per option, on both
      channels, because both hang the same structure off one listing name. A row
      is a claim: ticked = this product's, with how many units one sale of it

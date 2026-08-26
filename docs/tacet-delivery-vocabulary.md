@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.2 · 2026-08-20 · adds the admin form-caption table. Locked by Ash. Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.3 · 2026-08-26 · adds the channel-mapping request section, which holds NO locked strings — five English strings are waiting on Ash for their Chinese and are unlocked until he supplies it. The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -129,6 +129,41 @@ The numeral is part of the string, so it is only correct while the block asks fo
 ## Tracking codes and scenarios
 
 The nine `tracking_status` codes and seven `tracking_scenario` entries in `lib/tracking.js` are the canon, labels included. Surfaces must render `label_en`/`label_cn` verbatim; the admin's private relabels of scenarios are defects. `已签收` remains the CN for courier `delivered` (signed for) — it is a carrier fact, distinct from the order-status `已送达`.
+
+## Channel mapping — awaiting a Chinese source (REQUEST, not locked)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This section is that amendment, opened rather than closed: the
+five strings below are running English-on-both-sides in the product right now,
+because composing their Chinese is exactly what Rule 4 forbids and no existing
+pair covers them.
+
+They came in with the Eleme and Meituan mapping-name gate on 2026-08-26
+(`docs/tacet-consolidation-decisions.md` §30 rule 3, which cross-references Rule
+4 here: copy from the source, never compose). The screens report a mapping name
+that no channel listing carries, and refuse to claim anything when there is no
+catalogue to check against.
+
+**Ash to supply the CN column.** Filling it is five edits in the product, all of
+them inside `EL_PENDING_CN` in `public/retail-admin/14-eleme.js` and
+`MT_PENDING_CN` in `public/retail-admin/11-meituan.js` — one constant per screen.
+Eleme carries the first four; Meituan carries all five, because Eleme already
+had a sourced pair for `noneRead` and reuses it. Where both carry a key the
+wording is deliberately identical, so one CN string serves both channels.
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `notInCat` | Name not in catalogue |  | State word and filter chip: this mapping holds a name no listing on this store carries. Amber. Replaces the "Synced" this case used to read. |
+| `notChecked` | Name not checked |  | State word: a name is stored and no catalogue has been read, so the check could not run. Neutral, never all-clear. |
+| `pickIt` | This name matches no listing on this store. Pick one from the list. |  | Panel line under the field, on a mapping whose stored name is not in the catalogue. |
+| `reverted` | Not in the catalogue — not saved. |  | Line under the field when a typed value was refused and the field put back to what it held. |
+| `noneRead` | no listings read from this store yet, so nothing can be checked here |  | Panel line, Meituan only: a name is stored and no listings have been scraped. Eleme's half of this reuses the pair already on that screen, `no catalogue read yet, so nothing can be matched here` / `尚未读取商品目录，无法匹配`. |
+
+Everything else on that change reuses a pair that already exists in the admin —
+`No matches` / `无匹配` and `Remove` / `移除` — and needs nothing here.
+
+Sentence case, no exclamation marks, and `notInCat` doubles as a filter-chip
+label, so it wants to stay short enough to sit in a chip beside a count.
 
 ## Deferred — recorded, not in scope of this lock
 
