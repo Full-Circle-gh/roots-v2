@@ -11,6 +11,8 @@
   let _storeB    = null; // 越秀
   let _listings  = {};   // { store_code: [real Meituan listing names] }
   let _listingSkus = {}; // { store_code: { 货号: listing_name } } — from the scrape only
+  let _catalogue = {};   // { store_code: { count, scrapedAt } } — how old the names are
+  let _catRefreshing = false; // a standalone catalogue refresh is in flight
   let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
   let _bundles   = [];   // meituan-only bundles with components + computed stock
   let _bundleDraft = null; // working copy while the bundle editor modal is open
@@ -288,7 +290,11 @@
             '<span class="st">' + esc(state) + '</span>' +
             (st.blocked && !off ? mtFixAction(st.code) : '') +
           '</div>';
-      }).join('');
+      }).join('') +
+      // Sits with the store lines because it is the same kind of fact — a per
+      // store state the operator acts on — and because a refusal points here.
+      '<div class="mt-storeline mt-catline" id="mt-catline"></div>';
+      mtRenderCatalogueLine();
     }
 
     function tile(k, v, sub, warn, extra) {
@@ -297,6 +303,74 @@
         '<div class="s">' + esc(sub) + '</div>' + (extra || '') + '</div>';
     }
   }
+
+  // ── The catalogue: how old the names are, and how to read them again ──────
+  // Until now the ONLY way to refresh meituan_listings was to run Match names,
+  // which also applies mappings — so "I just want current names" meant running
+  // the matcher. That is the wrong shape now that a stale catalogue is what
+  // refuses a write: the operator hits a refusal and the remedy has to be
+  // something other than the thing that was refused.
+  //
+  // Same route the matcher uses (POST …/listings/refresh) rather than a second
+  // path — it only enqueues a scrape job per store, and applying is the
+  // matcher's own separate step.
+  function mtRenderCatalogueLine() {
+    const host = document.getElementById('mt-catline');
+    if (!host) return;
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const per = (_stores || []).map(s => {
+      const c = _catalogue[s.code];
+      const when = c && c.scrapedAt
+        ? fmtAgo(c.scrapedAt)
+        : cuT(MT_PENDING_CN.catNever, MT_PENDING_CN.catNever);
+      const n = (c && c.count) || 0;
+      return (mtStoreName(s.code, cn) || s.code) + ' ' + n + ' · ' + when;
+    }).join('  \u00b7  ');
+    host.innerHTML =
+      '<span class="dot"></span>' +
+      '<span class="nm">' + esc(cuT(MT_PENDING_CN.catLabel, MT_PENDING_CN.catLabel)) + '</span>' +
+      '<span class="st">' + esc(per || cuT(MT_PENDING_CN.catNever, MT_PENDING_CN.catNever)) + '</span>' +
+      '<button class="btn btn-sm" id="mt-cat-btn" onclick="mtRefreshCatalogue()"' +
+      (_catRefreshing ? ' disabled' : '') +
+      ' title="' + esc(cuT(MT_PENDING_CN.catHint, MT_PENDING_CN.catHint)) + '">' +
+      esc(_catRefreshing ? cuT(MT_PENDING_CN.catReading, MT_PENDING_CN.catReading)
+                         : cuT(MT_PENDING_CN.catRefresh, MT_PENDING_CN.catRefresh)) +
+      '</button>';
+  }
+
+  // Enqueue the scrape, poll until no job is running, reload the cache. It
+  // applies NOTHING: mtMatchApply is never called from here, which is the whole
+  // difference between this and Match names.
+  window.mtRefreshCatalogue = async function () {
+    if (_catRefreshing) return;
+    _catRefreshing = true;
+    mtRenderCatalogueLine();
+    try {
+      await api('/api/retail-admin/meituan/listings/refresh', { method: 'POST' });
+      const t0 = Date.now();
+      let data = null;
+      while (Date.now() - t0 < 180000) {
+        await new Promise(res => setTimeout(res, 3000));
+        data = await api('/api/retail-admin/meituan/listings');
+        if (!data.running) break;
+      }
+      if (data) {
+        _listings    = data.listings  || {};
+        _listingSkus = data.skus      || {};
+        _catalogue   = data.catalogue || {};
+        mtRenderListingDatalists();
+        if (_products.length) mtFilterProducts();
+      }
+      const total = Object.values(_listings).reduce((a, b) => a + b.length, 0);
+      if (!total) throw new Error(cuT(MT_PENDING_CN.catFailed, MT_PENDING_CN.catFailed));
+      toast(cuT(MT_PENDING_CN.catDone, MT_PENDING_CN.catDone), 'success');
+    } catch (e) {
+      toast(cuT(MT_PENDING_CN.catFailed, MT_PENDING_CN.catFailed) + ' ' + e.message, 'error');
+    } finally {
+      _catRefreshing = false;
+      mtRenderCatalogueLine();
+    }
+  };
 
   // Signing a store back in needs a human at a browser on the box, so this is
   // the guided wizard when it is loaded and the command to run when it is not.
@@ -462,7 +536,9 @@
       const r = await api('/api/retail-admin/meituan/listings');
       _listings    = (r && r.listings) || {};
       _listingSkus = (r && r.skus) || {};
+      _catalogue   = (r && r.catalogue) || {};
     } catch (e) { /* leave whatever _listings already had */ }
+    mtRenderCatalogueLine();
     mtRenderListingDatalists();
     // The name checks in mtStoreState read this cache, so a list painted
     // before it arrived is showing 'Name not checked' for a reason that has
@@ -484,6 +560,14 @@
     reverted:   'Not in the catalogue \u2014 not saved.',
     cannotCheck: 'The catalogue has not been read from this store yet, so this name cannot be checked — nothing was saved.',
     noneRead:   'no listings read from this store yet, so nothing can be checked here',
+    catNever:   'never read',
+    catLabel:   'Listing names read from Meituan',
+    catRefresh: 'Refresh catalogue',
+    catReading: 'Reading…',
+    catHint:    'Reads the current listing names. Changes nothing and matches nothing.',
+    catDone:    'Catalogue updated. Nothing was matched or changed.',
+    catFailed:  'Could not read the listings — is the sync service signed in?',
+    refusedOne: 'Refused — that name is not in the catalogue. Refresh it and try again.',
   };
 
   // -- The cached listings as the only source of a delivery name --------------
@@ -990,7 +1074,7 @@
   // match, then shows only what needs a human: ambiguous titles as tappable
   // chips, unmatched products with a suggested-name fallback. Paste stays as
   // the escape hatch when the scrape can't reach Meituan.
-  let _match = { stage: 'intro', applied: 0, failed: 0, running: false };
+  let _match = { stage: 'intro', applied: 0, failed: 0, refused: 0, running: false };
 
   /* §1.13: a dialog closes on ✕ and on Esc. The listener is per-overlay and
      comes off with it, so nothing accumulates across opens. `guard` lets the
@@ -1019,7 +1103,7 @@
 
   window.mtOpenMatch = function () {
     if (document.getElementById('mt-match-overlay')) return;
-    _match = { stage: 'intro', applied: 0, failed: 0, running: false };
+    _match = { stage: 'intro', applied: 0, failed: 0, refused: 0, running: false };
     const ov = document.createElement('div');
     ov.id = 'mt-match-overlay';
     ov.className = 'mt-ovl';
@@ -1088,6 +1172,13 @@
       html += `<p class="mt-progsub">${esc(cuT(
         _match.failed + ' failed to save — try again in a minute.',
         _match.failed + ' \u4e2a\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'))}</p>`;
+    }
+    // Refusals get their own line and their own remedy. Retrying changes
+    // nothing; reading the catalogue again is the only thing that can.
+    if (_match.refused) {
+      const refusedTxt = _match.refused + ' were refused — those names are not in the catalogue read from this store. '
+                       + 'Refresh the catalogue on the Meituan page, then run this again.';
+      html += `<p class="mt-progsub mt-bad">${esc(cuT(refusedTxt, refusedTxt))}</p>`;
     }
     if (amb.length) {
       html += `<div><div class="mt-pickhd">${esc(cuT(
@@ -1228,19 +1319,26 @@
     }
 
     let done = 0, failed = 0;
+    _match.refused = 0;
     for (const t of targets) {
       try {
         const keep = mtKeepSync(t.p.id, t.store.code);
         await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: keep }),
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name,
+                                 syncEnabled: keep, source: 'match_names' }),
         });
         if (!t.p.stores) t.p.stores = {};
         t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: keep };
         done++;
       } catch (e) {
-        failed++;
+        // A refusal is not a failure to save — it is the gate working, and it
+        // means this run matched against names the server has never seen (a
+        // stale cache, or the paste box). Counted apart so the dialog can say
+        // so instead of advising a retry that will be refused identically.
+        if (e && (e.code === 'name_not_in_catalogue' || e.code === 'catalogue_not_read')) _match.refused++;
+        else failed++;
       }
       const p = document.getElementById('mt-match-prog');
       if (p) p.textContent = cuT(`Matching… ${done + failed}/${targets.length}`, `匹配中… ${done + failed}/${targets.length}`);
@@ -1265,7 +1363,8 @@
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: keep }),
+        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: keep,
+                               source: 'match_names' }),
       });
       if (product) {
         if (!product.stores) product.stores = {};
@@ -1273,7 +1372,8 @@
       }
       return true;
     } catch (e) {
-      toast('Save failed: ' + e.message, 'error');
+      toast(e && (e.code === 'name_not_in_catalogue' || e.code === 'catalogue_not_read')
+        ? e.message : ('Save failed: ' + e.message), 'error');
       return false;
     }
   }
@@ -1317,7 +1417,7 @@
   // mtClearAll), then land back on the dialog's intro stage.
   window.mtMatchStartOver = async function () {
     await mtClearAll();
-    _match = { stage: 'intro', applied: 0, failed: 0, running: false };
+    _match = { stage: 'intro', applied: 0, failed: 0, refused: 0, running: false };
     _review = { ambiguous: [], unmatched: [] };
     mtMatchRender();
   };
@@ -1353,7 +1453,8 @@
         await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.code, meituanName: '', syncEnabled: 0 }),
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.code, meituanName: '', syncEnabled: 0,
+                                 source: 'remove' }),
         });
         if (t.p.stores) delete t.p.stores[t.code];
         done++;
@@ -1542,7 +1643,10 @@
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled }),
+        // Clearing and setting are different acts and the audit trail should
+        // not have to infer which from the payload.
+        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled,
+                               source: name ? 'manual' : 'remove' }),
       });
       // Update local cache, then repaint so the Tianhe status pill and the sync
       // toggle reflect the new mapping. A chosen 规格 belonged to the old
@@ -1559,7 +1663,15 @@
       }
       mtFilterProducts();
     } catch (e) {
-      toast(cuT('Save failed: ', '\u4fdd\u5b58\u5931\u8d25:') + e.message, 'error');
+      // The route refuses a name the catalogue does not carry. Say what to do
+      // about it rather than reporting a bare failure — the message the server
+      // sends already names the remedy, and api() has put it in e.message.
+      if (e && (e.code === 'name_not_in_catalogue' || e.code === 'catalogue_not_read')) {
+        toast(e.message, 'error');
+        mtLoadListingsCache();   // the client's copy is what went stale; re-read it
+      } else {
+        toast(cuT('Save failed: ', '\u4fdd\u5b58\u5931\u8d25:') + e.message, 'error');
+      }
     }
   }
 
