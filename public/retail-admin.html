@@ -8143,6 +8143,16 @@
       .afxel-find { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
         border: 1px solid var(--td-border, #E4E0D5); border-radius: 8px; background: var(--td-surface, #FFF); }
       .afxel-find:focus-within { border-color: var(--td-text2, #5C6472); }
+      /* Every icon in this dialog is a 16px inline glyph. The rule is written
+         against .afxel-wrap rather than one control because the whole reason
+         this block exists is that the dialog sits OUTSIDE #tab-affiliate: the
+         AFX_I icons carry a viewBox and no width/height, so they are sized
+         entirely by CSS, and on the tab that sizing comes from
+         '#tab-affiliate .afx-search svg' — a selector that cannot reach a node
+         mounted on <body>. Without a rule here the SVG has no intrinsic size,
+         fills its flex line, and paints as a full-dialog magnifier. Covering
+         the wrapper means the next icon added to this dialog cannot repeat it. */
+      .afxel-wrap svg { width: 16px; height: 16px; flex: none; color: var(--td-text2, #5C6472); }
       .afxel-find input { flex: 1; min-width: 0; border: 0; background: none; outline: none;
         font-family: inherit; font-size: 14px; color: var(--td-text, #111A2B); }
       .afxel-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--td-border, #E4E0D5); border-radius: 8px; }
