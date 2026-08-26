@@ -1,15 +1,24 @@
 # meituan — Findings
 
-Twelve findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing · 4")
-and ending somewhere else entirely: the badge that opened it and the screen it
-sends you to count two different things, and the real exposure was in neither of
-them.
+Eighteen findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing ·
+4") and ending somewhere else entirely: the badge that opened it and the screen
+it sends you to count two different things, and the real exposure was in neither
+of them.
 
-**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10, 11 and
-12 came from later passes the same day, and TWO OF THEM SHIPPED CODE** —
-`bc0c6144` (one line in the drift sweep) and `d7848b62` (the mapping-name gate
-and its audit trail). Read the Context section at the end before treating this
-document as the record of an untouched system.
+**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10 to 18
+came from later passes the same day, and THREE OF THEM SHIPPED CODE** —
+`bc0c6144` (one line in the drift sweep), `d7848b62` (the mapping-name gate and
+its audit trail) and `693209e3` (the same gate on bundle titles). Read the
+Context section at the end before treating this document as the record of an
+untouched system.
+
+**Findings 13 to 18 came from a second survey that started where finding 1
+stopped**, and the first thing it found is that finding 1's replay had never
+covered the bundles. Two of them are resolving onto another product's listing
+today — not latently, now — and the number they write has been right by
+coincidence. Finding 13 is that. Finding 15 is the one that changes what any
+fix can be built on: the offline replay and production disagree about how many
+mappings use the loose branch, and production is the higher number.
 
 **Finding 11 carries a correction that was WRONG IN THIS DOCUMENT and was acted
 on before it was caught** — a client-side gate that already existed was reported
@@ -32,6 +41,17 @@ still in use; finding 11 holds anywhere a screen auto-applies a match without
 recording that a matcher made it; and finding 12 holds anywhere a rule about
 external identity is enforced by the callers of a write rather than by the write
 itself.
+
+The later ones generalise further. Finding 13 holds anywhere two writers reach
+one target and agree by arithmetic rather than by design — the fault is invisible
+for exactly as long as the coincidence lasts, and nothing announces when it ends.
+Finding 14 holds anywhere a rule is moved to the write and one of the writes is
+missed, and its divergence holds anywhere a single form carries a gated field and
+several ungated ones. Finding 15 holds anywhere a check is verified against a
+stored copy of a thing rather than the thing. Finding 16 holds anywhere a
+wholesale replace is guarded only against emptiness. Finding 17 holds anywhere a
+composite's name contains its parts' names. Finding 18 holds anywhere a rule is
+tightened in the place everyone reads and left alone in the place nobody does.
 
 `docs/eleme-findings.md` is the companion document and is cross-referenced
 throughout rather than restated. The rules both documents produced are in
@@ -1426,6 +1446,454 @@ the one-character fragment from `docs/eleme-findings.md` finding 9 — is refuse
 
 ---
 
+## 13. Two bundles push their stock onto other products' listings, and the number has been right by coincidence (found 2026-08-26)
+
+Status: open on the data. **Live, not latent** — this is finding 1's damage
+happening, not finding 1's blast radius measured. The gate in finding 14 stops
+new ones from being typed; these two are still in the table and still resolving
+onto a neighbour every cycle.
+
+`meituan_bundles` is Meituan's own combo concept — 19 rows, all 天河 — and a
+bundle is pushed through exactly the same driver as a product:
+`batchUpdateStock` → `updateStock` → `_sugFromCapture`, with `targetCn` set to
+the bundle's title and `targetEn` and `sku` both null
+(`scripts/meituan-daemon.js:917`). **Finding 4's replay covered
+`meituan_product_map` and never touched them**, which is why this sat under a
+survey that had already read the matcher twice.
+
+Replayed the same way: **17 resolve exactly. Two do not.**
+
+| bundle | stored title | resolves to | who owns that listing |
+|---|---|---|---|
+| **2** | `纯素咸芝士+玉米片Nachos + Creamy Dip` | `【速冻】纯素咸芝士酱 Frozen Nachos Dip` | product 9, SKU `3-230` |
+| **16** | `藜麦沙拉+南瓜汤 Quinoa Salad+Pumpkin Soup（～630g）` | `素食藜麦沙拉 Quinoa Salad` | product 196, SKU `1-300` |
+
+Both through `_coreQuery` (`lib/meituan-browser.js:1111`) into `_nameMatches`
+`:1132`, resolved by the shortest-name tiebreak at `:1159-1161`. Both were
+pushing on the morning of 2026-08-26 — bundle 2 at 8, bundle 16 at 3, both at
+09:28.
+
+### Bundle 2 is one space
+
+Its listing does exist. It is `纯素咸芝士+玉米片Nachos␣␣+ Creamy Dip`, with
+**two** interior spaces where the stored title has one — 45 bytes against 44,
+differing by exactly one `0x20` after `Nachos` and nothing else. Every space in
+both strings is a plain ASCII `U+0020`; there is no NBSP and no fullwidth space
+involved.
+
+The exact test is `String(x.name).trim() === cnT` at
+`lib/meituan-browser.js:1150`. `trim()` removes surrounding whitespace and does
+not collapse interior whitespace, so **the exact branch can never fire for
+bundle 2**, live or offline, for as long as that title is stored. It falls
+through to the core `纯素咸芝士`, which the dip's listing also contains, and the
+shortest name wins.
+
+### Bundle 16's listing was removed from Meituan
+
+It is not in the 271-listing catalogue read at **2026-08-26 09:01:55** — a fresh
+read, via the API path (`tagList` + `getSpuListCommon` per category), not the DOM
+fallback.
+
+But it existed and it sold. Five Meituan orders carry the line
+`藜麦沙拉+南瓜汤 Quinoa Salad+Pumpkin Soup（～630g） (加热Yes)` between
+2026-06-30 and 2026-07-20, under a title matching the bundle's byte for byte
+(the ` (加热Yes)` is the order's attribute suffix, not part of the title).
+
+And the spu numbering places it. 天河 holds a contiguous family of nine combo
+listings, spu `21219302743` through `21219302752`, and **exactly one number is
+missing — `21219302748`** — sitting between `罗勒鸡肉卷 Pesto Wrap+Kombucha`
+(…747) and the nachos combo (…749). Bundle 16's is the hole. Nothing has sold on
+it in 37 days.
+
+So the listing was **removed** — deleted or moved to the recycle bin, which the
+scrape cannot see because it passes `inRecycleBin: 0`. That cannot be proved from
+stored data; what can be said is that a fresh full-category read taken today does
+not contain it and its spu id is a gap in an unbroken run. **A catalogue refresh
+will not bring it back unless the merchant restores the listing first — and
+running the refresh is exactly how to tell which world we are in.**
+
+### Why a wrong number has been invisible
+
+This is the part worth carrying elsewhere.
+
+- Bundle 2 = Nacho Cheese Dip **8** + Tortilla Chips **15** → floor **8**. It
+  lands on the dip's listing, and product 9 pushes **8** to that same listing.
+- Bundle 16 = Quinoa Salad **3** + Roasted Pumpkin Soup **112** → floor **3**. It
+  lands on the salad's listing, and product 196 pushes **3** to that same
+  listing.
+
+**The bundle writes the correct number only for as long as the product that owns
+the listing it lands on is the scarcer component.** Nothing enforces that, and
+nothing would notice when it stopped being true. The margins:
+
+- **Bundle 2 — margin 7.** Tortilla Chips falling from 15 to 7 or below makes the
+  chips the floor, and the bundle then writes the chips' count onto product 9's
+  live listing while product 9 writes 8. Last write wins, so neither figure is
+  reliably the one that survives. A restock of the dip past 15 does the same
+  thing from the other side. Chips have sold 8 units across 7 orders since
+  2026-07-01, so this is weeks away rather than days — but it is the one that
+  moves.
+- **Bundle 16 — margin 109.** The soup would have to fall from 112 to 2 or below.
+  Effectively never, so bundle 16 will go on being invisibly correct, for
+  entirely the wrong reason, indefinitely.
+
+Nothing downstream catches either. The drift sweep compares our record against
+our record (finding 5). The push record does not say where the push landed
+(finding 9). The driver's own log line names the BUNDLE, not the target —
+`stock updated: 纯素咸芝士+玉米片Nachos + Creamy Dip → 8` is what a mis-landed
+push prints, and it is indistinguishable from a correct one.
+
+### The combo listing nothing writes to
+
+`纯素咸芝士+玉米片Nachos␣␣+ Creamy Dip`, spu `21219302749`, as read at
+09:01:55 on 2026-08-26:
+
+```
+{"id":37518213698,"spec":"1人份","stock":98,"maxStock":99,"price":98,
+ "autoRefresh":0,"skuCode":"","boxNum":1,"boxPrice":0,"stockMode":0}
+```
+
+**98 units at ¥98, against a cap of 99, with auto-replenish off.** Nothing on our
+side has ever pushed 98 — bundle 2's pushes across 28 days of process log are 3,
+4, 5, 8 and 9. It is a number someone set once and which has stood ever since,
+precisely because our pushes have been going to the dip.
+
+**Whether it is on-shelf cannot be established from stored data, and that is
+worth stating rather than guessing.** The catalogue scrape passes
+`tabStatus: -1`, which deliberately includes off-shelf listings, and it stores
+only the sku payload — the spu's sale status is read and discarded
+(`lib/meituan-browser.js:1541-1556`). Against it: the combo has **never been
+ordered**, zero lines across 1,844 `meituan_orders` rows and 211 Meituan
+`retail_orders` going back to 2026-06-25. A listing showing 98 in stock for two
+months with no sale is as consistent with off-shelf as with live-and-unpopular.
+One look at the listing on Meituan settles it, and nothing in the database will.
+
+### And one bundle does nothing at all
+
+**Bundle 3** — `美式豆泥蔬沙拉套餐Chickpeas Salad Combo`, sync on, title verifies
+— has **no components**. `enqueueBundle` returns null for a bundle with no
+components, so it has never pushed and never will. Not a fault; a row that looks
+live on the screen and is inert.
+
+---
+
+## 14. `meituan_bundles.meituan_name` had none of the four protections the product field had, and that is how both were typed in (found and FIXED 2026-08-26)
+
+Status: **fixed on `main` at `693209e3`**, deployed, CI green in 1m35s.
+
+Finding 12 moved the mapping-name rule to the write, where no caller could
+decline it. It moved it to **one** write. The other table whose name column means
+"a listing on this store" was left exactly as it had been.
+
+### What the product field had, and the bundle field did not
+
+| | product mapping name | bundle title |
+|---|---|---|
+| datalist of real listing names | `11-meituan.js:930` | — |
+| client commit that reverts a non-catalogue value | `mtNameCommit` `:1569` | — |
+| server refusal | `applyMapName` via `d7848b62` | — |
+| audit entry on the write | `logActivity` `meituan-admin.js:191` | — |
+
+The route took the string, trimmed it, and wrote it
+(`routes/meituan-admin.js:641-645`). The client checked that it was non-empty
+(`mtSaveBundle`). That was the whole of it, on both sides. **A title matching
+nothing could be typed and saved silently, and that is how bundle 2's one space
+and bundle 16's dead listing both came to be stored.**
+
+### The fix
+
+**One rule, one copy.** `verifyName(db, storeCode, name)` comes out of
+`applyMapName` into `lib/meituan-map-write.js` as an exported function and is
+called by both routes. `applyMapName`'s inline gate was 19 lines; it is now two.
+The two refusal codes, their messages and the `catalogue` payload are unchanged,
+so the map route answers exactly as it did — verified below and again after the
+deploy.
+
+The bundle route returns the same 409 shape, so the client's `e.code` branches
+and the `api()` helper's `"<message> [<code>]"` rendering already work, and it
+now writes a `logActivity` entry (`meituan_bundle_name` / `meituan_bundle_create`,
+carrying `from` → `to`). `meituan_bundles` was last-write-wins with no history —
+the same shape `meituan_product_map` had before `d7848b62`, and the same reason
+bundle 2's original title could not be recovered.
+
+### The one place the shape differs from the map route, and why
+
+**The bundle route gates a title that is NEW or moved to another store. A title
+re-submitted exactly as stored is not gated.** The map route gates every name
+write including an unchanged one. That divergence is deliberate and structural.
+
+On the map route, a name and its switch are separate concerns with separate
+actions, and clearing is checked *before* the gate — which is what keeps product
+254 removable rather than frozen. **On the bundle route a single POST carries the
+title, the cap, the switch and the components together.** Gating an unchanged
+title would freeze all four with it: bundle 16, whose listing is gone and whose
+stored name can never verify again, could not be switched off, re-capped, or have
+a component corrected. That is the trap §30 rule 4 warns about — a check that
+refuses the remedy along with the fault.
+
+The exemption is not a hole. The only titles that can pass unchecked are ones
+already in the table, and every path that could put one there is now gated. What
+it does mean is that **the gate does not retroactively refuse the two bad titles
+already stored** — bundles 2 and 16 still have to be corrected by hand.
+
+### The screen, and the whitespace problem the product field never had
+
+The field gets the listings datalist, a commit that reverts anything not in the
+catalogue, and a line under it saying which of three states it is in.
+
+A check alone would not have been enough here, and this is the part worth
+carrying. **Bundle 2's title differs from its listing by one space, and browsers
+collapse runs of whitespace when they render text**, so on the bundle list the
+right title and the wrong one drew identically. An operator retyping by eye could
+neither produce the correct title reliably nor confirm afterwards that they had.
+So the answer was to make typing unnecessary rather than to make the operator win
+a fight they cannot see: **picking from the datalist inserts the listing's own
+bytes**, and a whitespace difference cannot be created that way. Typing still
+works and a typed value is still checked; it simply stopped being how the job is
+done. `.mt-brow .bn` also gets `white-space: pre-wrap`, so a doubled space is
+**visible** in the list — which is how the correction gets confirmed by looking.
+
+Both commit branches normalise the field to the trimmed value, so what is on
+screen is always exactly what Save will send.
+
+### `mtSaveBundle` was sending a hard `syncEnabled: 1`
+
+Found while wiring the above and fixed in the same commit. Every bundle save sent
+`syncEnabled: 1` regardless of the row's actual state, so **saving a component
+fix silently switched a paused bundle back on** — the one thing you least want
+done for you on a bundle whose title no longer resolves. It now sends the row's
+own flag.
+
+**There is still no on/off switch in the bundle editor.** The route accepts
+`syncEnabled` and always has; the screen has never offered a control for it. So
+"turn this bundle off" is an API-only operation today, and from the screen the
+only way to stop a bundle pushing is Delete. Recorded because an earlier draft of
+this survey said the screen could turn a bundle off, and it cannot.
+
+### Verified
+
+Against a detached snapshot with the real route mounted in express — the three
+modules that would open the live database (`lib/tenant-db`, `routes/retail`,
+`middleware/auth`, all of which `require('../database')`) placed in
+`require.cache` first, so `../database` is never evaluated.
+
+- The corrected two-space title is accepted and stored byte for byte; the audit
+  entry carries `from` → `to`.
+- The one-space title is refused, `name_not_in_catalogue`, message and catalogue
+  state reaching the caller, nothing written.
+- An unread store answers `catalogue_not_read`, not a verdict.
+- Bundle 16's switch, cap and components all save while its title does not
+  verify; changing its title to another bad one is refused; deleting it works.
+- All 19 bundles re-save under their own stored titles — 19 accepted, 0 refused,
+  no sync flag flipped. With any title altered by one character, 0 accepted, 19
+  refused.
+- All 398 named mappings replayed through the real `applyMapName`: **397
+  accepted, 1 refused — map 957, the wine.** The same answer as before the
+  change. Clearing is still ungated.
+
+The client half was checked the same way, the new functions lifted verbatim by
+name out of `11-meituan.js` and run against the real 271/203 listing names: the
+corrected title accepted, the one-space title reverted, an emptied field reverted
+rather than unnaming the bundle, bundle 16's own title left alone and labelled as
+a fact about the listing rather than a typing error, an empty catalogue answering
+"cannot check" and not amber, and a 天河 listing refused on 越秀.
+
+**The two routes share no write path.** The bundle handler writes only
+`meituan_bundles` and `meituan_bundle_components`; `meituan_product_map` appears
+in that block once, in a comment. The only shared code is `verifyName`, which is
+two SELECTs and writes nothing.
+
+---
+
+## 15. Offline, zero of 398 mappings use a loose branch. Live, three do. (found 2026-08-26)
+
+Status: open, and it is the finding that decides the shape of any exact-only
+rule. **It corrects finding 4's licence, not its arithmetic.**
+
+Finding 4 replayed every named mapping against the stored catalogue and found 393
+of 394 resolving on the exact branch and none on the loose one, and stated the
+caveat that the live candidate pool is `searchSugByName` and could not be
+replayed. That caveat has now been tested against the process log, and the two
+answers differ.
+
+**Offline, re-run 2026-08-26 against 398 named mappings** (four more than finding
+4 saw), both stores, with two independent pool models that agreed on all 398:
+**397 exact, 1 resolving to nothing (map 957, the wine), zero loose.**
+
+**Live, from 28 days of `meituan-sync` process log, three mappings resolve only
+through the fallback arm**, and all three fired within 33 hours of the reading:
+
+| map | product | SKU | stored name | `_coreQuery` | term that worked | resolves to |
+|---|---|---|---|---|---|---|
+| 819 | 10 Olive N' Cream | `1-80` | `OliveN‘Cream 地中海橄榄酱` | `OliveN` | `地中海橄榄酱` | its own listing |
+| 817 | 139 Cacao Nibs | `2-310` | `Caca0 Nibs 可可粒` | `Caca` | `可可粒` | its own listing |
+| 873 | 79 Za'atar | `4-630` | `Za‘atar绿百里香粉` | `Za` | `绿百里香粉` | its own listing |
+
+(A fourth, `Old FashOld Fashioned Oats 传统快熟燕麦ioned Oats 传统快熟燕麦`, fired
+16 times through 2026-08-25 and has since been removed from the table.)
+
+All three resolve **correctly** — each fallback term is carried by exactly one
+listing, and the log line prints the resolved name, which equals the stored name.
+
+### Why the two readings disagree
+
+All three stored names are byte-identical rows in `meituan_listings`, so the
+exact branch fires against the stored catalogue. **It does not fire live, because
+the live suggest returns nothing at all for their first search term.** Those terms
+are `OliveN`, `Caca` and `Za` — `_coreQuery` truncations produced by a curly
+apostrophe (`U+2018`) and a digit sitting inside the leading Latin run. The
+resolver then tries the longest run of each other script (`_searchTerms`
+`:1176-1191`) and matches under `requireToken` (`:1156-1157`), which is the loose
+arm.
+
+Crowding is not the mechanism, and it was the obvious hypothesis. Across all 398,
+the number of catalogue listings containing the first term is p50 = 1, p90 = 2,
+max = 9. Nothing is plausibly pushing an exact listing out of a capped suggest
+response. **The disagreement is that suggest returns nothing for certain terms**,
+not that it returns too much.
+
+### What "exact" would have to mean
+
+This is the reason to record the split rather than the three rows.
+
+- **Exact against the suggest response** is the right shape. It is the only test
+  available at the point of the write, and it **fails closed**: `_sugFromCapture`
+  returns null on an empty capture (`:1146`) and, without the loose branch, on
+  any capture holding no identical name, and null becomes
+  `{ ok: false, transient: true }` at `:875` with no `_apiSetSku` call. A failed
+  or partial suggest cannot produce a write. That is strictly safer than today,
+  where "suggest returned a sibling but not the exact listing" is precisely the
+  case the loose branch resolves, wrongly.
+- **Exact against the stored `meituan_listings`** is the wrong shape for the push
+  path. Those three mappings resolve live and would keep resolving; a
+  stored-catalogue gate would tell them nothing is wrong, while the same gate
+  would refuse names that genuinely exist whenever the cache is stale or partial
+  — see finding 16, which is not hypothetical.
+- The three would survive an exact test applied on the **fallback** term as well
+  as the first, because the candidate they land on carries their name byte for
+  byte. What is loose about them is the search term, not the comparison.
+
+The stored catalogue and the live suggest are different endpoints and neither is
+derivable from the other: the catalogue is `tagList` + `getSpuListCommon` walked
+per category (`:1504-1531`), and the resolver's pool is `searchSugByName` typed
+into the merchant search box (`:998-1007`). No suggest response is stored
+anywhere.
+
+---
+
+## 16. The stored catalogue has twice held a partial read as though it were the whole store (found 2026-08-26)
+
+Status: open. Finding 15 is why this matters — it is the reason a gate against
+`meituan_listings` cannot sit in the push path.
+
+`meituan_listings` is replaced wholesale per store: `DELETE` then `INSERT`, in one
+transaction, at `scripts/meituan-daemon.js:1183-1186`. Its only guard is
+`if (!names.length)` at `:1176` — **zero**. A read that comes back short passes
+and replaces the entire cache.
+
+Twice on record:
+
+- **2026-07-29, job 16: `result_count = 2`** for a store holding 265 listings.
+  The DOM fallback saw two pinned notices and nothing else. The next 天河 scrape
+  was **2026-08-23**. **The cache held 2 of 265 for 25 days.** A gate reading that
+  table in that window would have refused 263 of 265 real names.
+- **2026-08-23 10:46, job 17: `result_count = 0`, status `done`.** The cache was
+  genuinely emptied, for the fifteen minutes until job 18 restored 265.
+
+**The zero-guard landed on 2026-08-23 in `48e1037c` — after the first of these —
+and would not have caught it, because 2 is not 0.** It catches the second and
+nothing between.
+
+越秀's half of the table comes through a different path with no guard at all:
+`scripts/shangou-daemon.js:713-719` deletes the store's listings inside the
+transaction, and `getProducts` (`lib/shangou-browser.js:128-158`) throws only if
+page 1 fails — a code-0 reply with an empty `productList` returns `[]`, and the
+cache is wiped to nothing.
+
+Freshness, for the same reason: 天河's catalogue refreshes **only when an operator
+clicks Refresh** — 17 scrapes in two months — and it grew 265 → 266 → 267 → 271
+across 2026-08-23 to 08-26, six new listings in three days, while the cache sat
+still between clicks. 越秀's is written by the 闪购 auto-map, last successful
+2026-08-23 02:45, with an error on 08-25 and a job left `pending` since 08-26
+08:38.
+
+**The write-time gate is a different question and is not affected.** Finding 12
+and finding 14 both check a name a person is choosing right now, and both split
+`catalogue_not_read` from `name_not_in_catalogue` so an unread cache says it
+cannot check rather than returning a verdict. That split is correct — but it
+splits at zero, and **2 of 265 reads as "read"**.
+
+---
+
+## 17. The 19 bundles as a shape: 11 would land on a product's own listing, 2 on each other, 6 would refuse (found 2026-08-26)
+
+Status: open. Recorded as a shape, because two bad rows read as an accident and
+this is not one.
+
+Finding 1 asked of each mapping: if its own listing were renamed or removed
+tomorrow, would the resolver refuse or land somewhere else? Asked of the 19
+bundles, against the 271-listing catalogue:
+
+| outcome | bundles |
+|---|---|
+| lands on a **product's own listing** | **11** — 2 (→ product 9), 4 (→ 194 Labneh), 8 (→ 210 Falafel Wrap), 9 (→ 360 Hummus Asli), 11 (→ 194), 12 (→ 5 Green Chili Dip), 13 (→ 16 Turkish Salad), 14 (→ 360), 16 (→ 196), 18 (→ 42 Tofu Banh Mi), 19 (→ 220 Pesto Wrap) |
+| lands on **another bundle's listing** | **2** — 7 and 22, `冷拌荞麦面套餐Buckwheat Noodles Combo` and `冷面沙拉套餐 Buckwheat Noodles Combo`, near-twin combos that would take each other |
+| **refuses** | **6** — 3, 5, 10, 15, 17, 20 |
+
+Two of the eleven are not counterfactual: bundles 2 and 16 are there now
+(finding 13).
+
+The reason the rate is so much higher than finding 1's — 13 of 19 against 133 of
+393 — is structural rather than bad luck. **A combo's title contains its
+components' names by construction.** `藜麦沙拉+南瓜汤` reduces to `藜麦沙拉`,
+which the plain salad's listing contains; `Labneh + Pita Bread` reduces to
+`Labneh`, which the Labneh listing contains. A bundle's `_coreQuery` output is
+almost always a component's name, and a component's listing is almost always
+shorter than the combo's, so the shortest-name tiebreak hands the push to it.
+
+The same run re-measured finding 1's number against today's data — 398 mappings,
+271 + 203 listings — and got **133 again**: 75 天河 (57 `_coreQuery`, 17
+`requireToken`, 1 whole-CN-name) and 58 越秀 (45 / 13). Same total as finding 1,
+different day, four more mappings.
+
+**But 58 of those 133 are 越秀, which does not use this matcher at all.** 越秀 is
+闪购 and pushes by 货号 through `lib/shangou-browser.js:191-228`, falling back to
+exact-then-plain-substring on the whole name with no `_coreQuery`
+(`MEITUAN_SKIP_STORES=yuexiu`, `SHANGOU_STORES=yuexiu`). So the live latent
+exposure of finding 1 is **75 mappings plus 13 bundles**, not 133. Finding 1's
+figure should be read as a measurement of both stores' data, not of both stores'
+risk.
+
+---
+
+## 18. `_skusFromSpuList` is a second loose match in the push path, with no exact-first preference and no tiebreak (found 2026-08-26)
+
+Status: open. Recorded because an exact-only rule confined to `_sugFromCapture`
+would leave it standing, and it is the one nobody is looking at.
+
+`_nameMatches` is called from three places. Two are the resolver everyone reads.
+The third is the **sku** step: `lib/meituan-browser.js:1252`, inside
+`_skusFromSpuList`:
+
+```js
+      let v = spuId ? vos.find(x => String(x.id) === String(spuId)) : null;
+      if (!v) v = vos.find(x => this._nameMatches(x.name, cn, en));
+```
+
+It matches by spuId first, so the name arm fires only when the resolved spuId is
+absent from the `getSpuListCommon` capture — a category that loaded short, a
+listing that moved category between the two calls. But when it does fire it picks
+a spu by the same truncated-core rule, over a payload holding a whole category,
+and **it has neither of the two things that make `_sugFromCapture` survivable**:
+no exact-name preference tried first, and no shortest-name tiebreak. It is a
+plain `Array.find` — first match in payload order.
+
+The two remaining uses, `_skuFromCapture` and `_extractSku` (`:1265-1290`), are
+reached only from `scripts/meituan-set-stock.js` and
+`scripts/meituan-test-libstock.js`. The daemon never calls them.
+
+---
+
 ## Context — what was and was not done on 2026-08-26
 
 > **Amended after findings 10 and 11.** The bullet below was written when this
@@ -1491,6 +1959,33 @@ the one-character fragment from `docs/eleme-findings.md` finding 9 — is refuse
   this window would put an unverified edit on a trading day next to a build that
   had been checked.
 
+- **Finding 14 then shipped a third code change**, `693209e3`, at 12:15 UTC — the
+  bundle-title gate, `verifyName` shared out of `applyMapName`, the datalist and
+  commit on the bundle field, `white-space: pre-wrap` on the bundle list, and the
+  `syncEnabled: 1` fix. CI green in 1m35s. Every process came back `online`:
+  `roots-v2` 1611 → 1612, `meituan-sync` 159 → 160, `guanyi-sync` 143 → 144,
+  `eleme-sync` 67 → 68, `gzgrocery-orders` 141 → 142, `qingyun-sync` and
+  `qingyun-sync-yuexiu` 218 → 219, `proxy-watchdog` 60 → 61. No startup error of
+  its own — the only stderr lines after the restart are the standing ones
+  (`ALIPAY is not configured`, the `pack-claims` duplicate-option warning, the
+  `price write-back` skips). `shangou-sync` was `stopped` before the deploy and
+  still is, as it has been all day.
+
+- **Nothing was written to any bundle, mapping or listing by this pass either.**
+  Bundle 2 still holds its one-space title, bundle 16 is still `sync_enabled = 1`,
+  and the table still holds 19 rows. The post-deploy checks ran the DEPLOYED route
+  file — md5-matched to the one on the box — against a fresh snapshot, and the
+  only calls that write ran against the snapshot. The refusal path, which writes
+  nothing by construction, was the only half exercised against anything live.
+  Same discipline as finding 12's, and the same reason.
+
+- **The gate does not fix the two bad rows.** It refuses a title that is new or
+  moved; bundles 2 and 16 hold titles written before it existed, so
+  re-submitting them unchanged still passes. That is what keeps bundle 16
+  editable (finding 14) and it means the correction is still a job for a person:
+  bundle 2 needs its title re-picked from the list, and bundle 16 has no title to
+  pick until its listing comes back.
+
 ### Working note — requiring the app’s modules on production is not read-only
 
 Not a finding; a method note, recorded because it is an easy mistake to repeat
@@ -1519,8 +2014,16 @@ the badge probe was not.
 
 Source: read-only queries of `roots.db` on 2026-08-26 over SSH, the matcher
 replayed against the cached catalogue outside the running process (finding 4's
-caveat applies to every count derived from it), and the code cited above at
+caveat applies to every count derived from it — and finding 15 is what that
+caveat turned out to be worth), and the code cited above at
 `0ef56667` for findings 1 to 9. Findings 10 and 11 were read at `2e95078e` and
 finding 10’s fix landed at `bc0c6144`; its post-deploy observations were taken
 against the running system between 07:26 and 07:28 UTC, and its before/after
 selection counts against detached fixtures cut at 07:00 and 07:27 UTC.
+
+Findings 13 to 18 were read at `832308a4` against fixtures cut at 17:32, 17:59
+and 19:47 UTC and, after the deploy, at 20:20 UTC. The live/offline split in
+finding 15 comes from `~/.pm2/logs/meituan-sync-out.log`, 21,860 lines spanning
+2026-07-29 to 2026-08-26 — the only record anywhere of what the resolver actually
+matched, and the reason finding 4's caveat could be tested at all rather than
+only stated. Finding 14's fix landed at `693209e3`.
