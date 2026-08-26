@@ -1,9 +1,11 @@
 # eleme — Findings
 
-Four findings from a read-only survey on 2026-08-25, opened by a dashboard row
-("Eleme not syncing · 1") and ending in a wrong number on a live listing. Three
-of the four are not Eleme-specific: findings 1 and 4 hold on every channel, and
-finding 3 holds anywhere a mapping is stored against an external system.
+Six findings. The first four come from a read-only survey on 2026-08-25, opened
+by a dashboard row ("Eleme not syncing · 1") and ending in a wrong number on a
+live listing. Findings 5 and 6 were added on 2026-08-26, from the mapping screen
+that survey sent someone to. Most are not Eleme-specific: findings 1 and 4 hold
+on every channel, finding 3 holds anywhere a mapping is stored against an
+external system, and finding 5 holds on any screen that counts work.
 
 The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. This
 document is the evidence; that one is the intent. Where they disagree about what
@@ -207,6 +209,95 @@ never has.
 
 ---
 
+## 5. The mapping screen counted the wrong rows, and hid the right one (found 2026-08-26)
+
+Status: FIXED 2026-08-26 in `public/retail-admin/14-eleme.js`. Data unchanged —
+no mapping was written, hidden or deleted; only what the screen says about them.
+
+The Eleme mapping screen read **"Needs attention 53"** against 248 active
+products. All 53 were checked by hand. Every one had sync off, and most were
+foundation shades, gift sets and household kits — things never sold on Eleme at
+all.
+
+**52 of the 53 were not work, and 47 of them could never become work.** The old
+test was two lines:
+
+```js
+if (!maps.some(m => m.eleme_name)) return true;   // no listing name anywhere
+return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
+```
+
+A product with no `eleme_product_map` row at all has no name, so it passed the
+first line and was counted. 47 of the 53 were exactly that. Such a product cannot
+be queued by any path — `lib/eleme-sync.js:46` needs a map row to find one — so
+it is not a job that has not been done, it is a product that is not sold here.
+It would have sat in that count forever. That is §30 rule 5 written out as a
+defect: the alarm had no mechanism that could clear it.
+
+**The one real problem was not in the 53. It was showing green.** Product 195
+(finding 3) has a listing name, so it passed line one. Its name matches no
+listing, so the `specCount` sub-query at `routes/eleme-admin.js:217` — which
+joins the catalogue **on that exact name** — returned `NULL`, so it passed line
+two as well. It therefore fell through to `elStoreState`'s final branch and
+rendered as **`{ k: 'ok', t: 'Synced' }`**: a green dot, the word Synced, and
+`last_pushed_qty` still `NULL` because not one push had ever landed. Anyone
+working the 53 by hand would never have reached it.
+
+That is §30 rule 1 rendered as pixels. `sync_enabled = 1` is our record of our
+own intent; the screen showed it as the channel's state.
+
+**Counts on 2026-08-26, read-only.** Old test: 53 need attention, of 248. New
+test — grouped by whether a mapping can reach the right listing, over connected
+stores only: **10 need attention, 191 synced, 47 not on this channel**, which
+partitions all 248 exactly. The 10 break down as 6 mappings with a blank name and
+4 whose name matches no listing; 0 with options unclaimed, consistent with
+finding 4 not being armed. Of the 10, exactly one has sync on: product 195.
+
+---
+
+## 6. A mapping with no listing name pushes against the product's own name (found 2026-08-26)
+
+Status: open. No code changed. This is a **distinct fault from finding 3** —
+that one is a stored name that is wrong by one byte; this one is a stored name
+that is absent, and the absence is filled in rather than refused.
+
+Two mechanisms combine, neither of them visible from the mapping screen:
+
+1. **The drain never reads the sync switch.** The select at
+   `scripts/eleme-daemon.js:476` filters on `q.status` and `q.attempts` and
+   nothing else. `sync_enabled` is read in exactly one place —
+   `lib/eleme-sync.js:46`, when a job is **queued**. A row already waiting when
+   the switch is turned off still goes out. The switch is a tap on the inlet, not
+   a valve on the outlet.
+
+2. **A missing name is substituted, not refused.**
+   `scripts/eleme-daemon.js:530` builds each push as
+   `targetCn: row.map_eleme_name || row.name_cn`. When the mapping carries no
+   name, the target becomes **the product's own Chinese name** — a string that
+   was never checked against the catalogue and never chosen by anyone as a match.
+   Eleme matches by name and nothing else (finding 3), so this either resolves to
+   a listing nobody nominated, or to nothing.
+
+**Observed.** `eleme_product_map` for product 80 (Dried Sour Mango, `4-200`,
+store tianhe) holds `eleme_name` empty and `sync_enabled = 0`. It is also the
+only sync-off row in the table carrying a push: `last_pushed_qty = 25`,
+`last_pushed_at = 2026-08-25 11:21:07`. Queue row 656 was created 11:20:51 and
+finished `done` at 11:21:07 on one attempt. Its name had been one of the
+half-typed fragments finding 3 lists (`芒`), later cleared; clearing the name did
+not stop it pushing, and neither did the switch.
+
+**So "blank and switched off" is not a safe state**, and the mapping screen must
+not present it as one. It is a live wrong-target risk that happens to be quiet.
+Finding 5's replacement groups it under Needs attention for this reason, with the
+switch reported beside it rather than deciding it.
+
+The fix belongs in the daemon, not the screen: §30 rule 4 — where the correct
+target cannot be determined the system refuses and surfaces the problem, it never
+substitutes. A queue row whose mapping carries no name should fail visibly rather
+than guess a target. Not done.
+
+---
+
 ## Context — what was and was not done on 2026-08-25
 
 - **Product 195's Eleme listing was corrected to 3 by hand in the merchant app**
@@ -223,3 +314,23 @@ never has.
 
 Source: read-only surveys of `roots.db` on 2026-08-25 via
 `.github/workflows/ro-query.yml`, plus the code cited above at `4cc2b1d1`.
+
+## Context — what was and was not done on 2026-08-26
+
+- **The mapping screen's grouping was replaced** — finding 5. Three groups that
+  partition every active product: Needs attention, Synced, Not on Eleme. The
+  sync switch is reported on each row as a read-only marker and no longer decides
+  any group. Rows needing attention sort first, and inside them the ones still
+  pushing sort above the ones that are not, so product 195 is the first row on
+  the page instead of absent from the count.
+
+- **Nothing was written.** No mapping was created, edited, hidden or deleted; no
+  queue row was retired or re-queued; no stock was pushed; no process was
+  started, stopped or restarted. The rows are correct; only the labelling changed.
+
+- **Finding 6 was left unfixed on purpose.** It is a daemon change, and product
+  195's mapping is still deliberately wrong (see the 2026-08-25 context above) —
+  the same reason applies.
+
+Source: read-only queries of `roots.db` on 2026-08-26 over SSH, plus the code
+cited above at `05e33123`.
