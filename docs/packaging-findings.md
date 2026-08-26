@@ -1,18 +1,17 @@
 # packaging — Findings
 
-Fourteen findings from a read-only survey on 2026-08-26, opened by a simple
-question — *what does packaging cost us* — and ending in a number that is counted
-twice on eleven materials and sixteen recipe lines, live, today.
+Sixteen findings, opened 2026-08-26 by a simple question — *what does packaging
+cost us* — and ending in a number that was counted twice on eleven materials and
+sixteen recipe lines.
 
-**Finding 1 is first because it is the one worth acting on.** Everything else in
-this document is structure, and the structure is mostly defensible; finding 1 is
-a wrong number reaching `store_products.unit_cost` and the Tacet margin column
-right now.
+**Finding 1 is first because it was the one worth acting on. It has since been
+FIXED** — see finding 15 for what was changed and what it moved. Everything else
+in this document is structure, and the structure is mostly defensible.
 
-**Nothing was written.** No recipe, cost row, packaging type, material or product
-was created, edited or deleted; no code changed. Every number below is a
-read-only query against `roots.db`, and the queries are given so they can be
-re-run.
+**Findings 1 to 14 were a read-only survey and wrote nothing.** Finding 15 is the
+fix that followed and it changed code. Finding 16 records what the fix does NOT
+reach, so the gap is not mistaken for closed. Every number below is a read-only
+query against `roots.db`, and the queries are given so they can be re-run.
 
 Most of these are not packaging-specific. Finding 1 holds anywhere a derived cost
 is folded into a unit price that is then consumed as an input; finding 4 holds
@@ -35,7 +34,12 @@ corrected in place — see findings 4 and 5.
 
 ## 1. Packaging is counted twice on any recipe that consumes a made material, and it is live (found 2026-08-26)
 
-Status: **open. No code changed.** This is the headline.
+Status: **FIXED 2026-08-26 — see finding 15.** The description below is of the
+fault as it stood; the figures in it are the pre-fix figures and are left as they
+were measured, because finding 15's table is the before-and-after and needs a
+before to point at.
+
+This was the headline.
 
 ### The mechanism, in three lines of code
 
@@ -792,11 +796,293 @@ SELECT action, COUNT(*), MIN(created_at), MAX(created_at)
 
 ---
 
+## 15. The fix: packaging no longer travels with a material (built 2026-08-26)
+
+Status: **built and verified. Not yet deployed at the time of writing.** This is
+finding 1's answer. The rule it implements is `docs/tacet-consolidation-decisions.md`
+§29's addendum.
+
+### What decided it — the kitchen, not the arithmetic
+
+A batch is **part-sold** as retail units in serving-sized containers and
+**part-held in bulk** for later use as a material. The bulk half goes into reused
+kitchen tubs, which are not a tracked cost. So the retail container is a cost of
+the sellable unit and of nothing else — and carrying it into a parent recipe
+charges that parent for boxes that were never bought.
+
+### Written as a declared table, not a subtraction
+
+`lib/recipe-cost.js` now states the answer once:
+
+```js
+const MATERIAL_COST_COMPONENTS = Object.freeze({
+  ingredients: true,
+  labour:      true,
+  overhead:    true,
+  packaging:   false,
+});
+```
+
+and derives a second figure from it beside the sale figure:
+
+```js
+  const materialBatchCost =
+      (M.ingredients ? ingredientCost : 0) + (M.labour   ? labour         : 0)
+    + (M.overhead    ? overheadAmount : 0) + (M.packaging ? packagingTotal : 0);
+  const materialCostPerGram = batchSize > 0 ? materialBatchCost / batchSize : null;
+```
+
+`lib/recipe-rollup.js` reads `materialCostPerGram` where it read `costPerGram`.
+
+**Why a table and not `batchCost - packagingTotal` at the one call site.** The
+subtraction works today and is a trap: the next cost under question is overhead,
+and it would land as a second subtraction in a second place with its own
+arithmetic — at which point "which costs travel" has two answers that drift.
+Written this way, changing the answer is editing one boolean.
+
+**`costPerGram` is unchanged and still returned.** It is what the batch actually
+cost per gram, several screens show it as exactly that, and conflating the two
+would put a number on screen that is true of nothing.
+
+### What moved: 14 materials
+
+Eleven whose own recipe carries packaging, and **three that carry none of their
+own and correct anyway**, because a material they consume was corrected. The
+cascade is transitive and that is the proof of it.
+
+| id | material | before | after | drop |
+|---|---|---|---|---|
+| 615 | Pickled Onions | 0.013376 | 0.008289 | **−38.03 %** |
+| 616 | Hummus Asli | 0.020614 | 0.014821 | **−28.10 %** |
+| 574 | Whole Sesame Tahini (Unhulled) | 0.019160 | 0.016665 | −13.02 % |
+| 578 | Crunchy Peanut Butter | 0.019024 | 0.016645 | −12.51 % |
+| 612 | Arugula-Basil Pesto | 0.040091 | 0.035531 | −11.38 % |
+| 572 | Cashew Sour Cream | 0.046483 | 0.041351 | −11.04 % |
+| 613 | Chick'EN Strips | 0.017895 | 0.016491 | −7.85 % |
+| 617 | Baked Falafel | 0.023804 | 0.022291 | −6.36 % |
+| 588 | Creamy Cashew Butter | 0.074223 | 0.069761 | −6.01 % |
+| 634 | Crunchy Granola | 0.066353 | 0.063705 | −3.99 % |
+| 587 | Beet salad dressing | 0.060201 | 0.058163 | −3.39 % |
+| **581** | **Noodle salad dressing** | 0.034121 | 0.033609 | −1.50 % *(inherited only)* |
+| **619** | **Tofu wrap sauce** | 0.019506 | 0.018940 | −2.90 % *(inherited only)* |
+| **621** | **Sesame tofu** | 0.014400 | 0.014335 | −0.45 % *(inherited only)* |
+
+Every move is downward. No material moved that should not have.
+
+### What moved: 7 products, of 75 recipe-linked
+
+| id | product | before | after | drop |
+|---|---|---|---|---|
+| 347 | Garlic Dill Sour Cream | 11.367102 | 10.297727 | **−9.41 %** |
+| 210 | Falafel Wrap | 7.392295 | 6.745476 | **−8.75 %** |
+| 9 | Nacho Cheese Dip | 9.270428 | 8.923383 | −3.74 % |
+| 71 | Beet Salad | 9.542650 | 9.440750 | −1.07 % |
+| 42 | Tofu Banh Mi Wrap | 6.276001 | 6.243151 | −0.52 % |
+| 203 | Chickpea Salad | 6.123505 | 6.092658 | −0.50 % |
+| 66 | Thai Buckwheat Noodle Salad | 9.996110 | 9.964366 | −0.32 % |
+
+The other 68 do not move, and a product moves **only** when its recipe consumes a
+corrected material — asserted, not assumed.
+
+### The nine dual-purpose products do not move at all
+
+A product is dual-purpose when its recipe **also** backs a linked material — the
+same batch part-sold and part-held. These are where the two costings meet, so a
+mistake would surface here first:
+
+| product | recipe | material |
+|---|---|---|
+| 78 Pickled Onions | 21 | 615 |
+| 100 Baked Falafel | 40 | 617 |
+| 101 Seitan | 51 | 590 |
+| 189 Whole Sesame Tahini | 16 | 574 |
+| 199 Creamy Cashew Butter | 54 | 588 |
+| 212 Chick'EN Strips | 62 | 613 |
+| 226 Crunchy Granola | 14 | 634 |
+| 234 Arugula-Basil Pesto | 11 | 612 |
+| 348 Crunchy Peanut Butter | 25 | 578 |
+
+**Every one keeps its `unit_cost` unchanged while its material side drops.** That
+is the split doing exactly what it is for: the jar on the shelf still carries its
+jar, and the same sauce ladled into a wrap no longer does.
+
+### Recipe 9, the worked example, after
+
+```
+ingredientCost  110.13272   (was 122.9652 — the ¥12.83 phantom is gone)
+packagingTotal   13.44      (real, unchanged — this batch IS boxed)
+batchCost       123.57272
+costPerServing   10.297727  = store_products.unit_cost for product 347
+```
+
+### Independent corroboration nobody planned
+
+`ingredient_price_history` holds seven hand-entered per-gram figures recorded by
+`jing` on **2026-08-16**. Four can be cross-checked against the fix:
+
+| material | hand entry, 2026-08-16 | the fix computes | the pre-fix value |
+|---|---|---|---|
+| Cashew Sour Cream | 0.04135 | 0.041351 | 0.046483 |
+| Creamy Cashew Butter | 0.06976 | 0.069761 | 0.074223 |
+| Crunchy Peanut Butter | 0.01664 | 0.016645 | 0.019024 |
+| Whole Sesame Tahini | 0.01666 | 0.016665 | 0.019160 |
+
+**A person working these out by hand ten days ago arrived at the packaging-free
+figures, not the packaging-inclusive ones.** The rollup never reads price history,
+so this is genuinely independent. It is corroboration of the answer, not evidence
+used to reach it.
+
+### Verification
+
+33 assertions, all passing, against a fixture cut read-only out of production and
+driving the real modules — the old tree and the new tree over identical copies:
+
+- the 14 materials move to the figures above and nothing else moves;
+- exactly 7 products move, and the 9 dual-purpose ones do not;
+- **the sale path is byte-identical** — 137 recipes × 12 fields (`batchCost`,
+  `costPerServing`, `costPerGram`, `marginPerServing`, `foodCostPct`,
+  `suggestedSellPrice`, `packagingTotal`, `ingredientCost`, `labour`,
+  `overheadAmount`, `hasCostRow`, `zeroCostIngredientLines`) with **zero**
+  differences;
+- the three inherited-only materials correct, and a two-hop chain (recipe 23 →
+  Noodle salad dressing #581 → Crunchy Peanut Butter #578) lands on the
+  table-derived figure rather than on batch-cost-over-size;
+- the blocked set, the dependency order and the cycle check are unchanged;
+- **the cascade is stable** — run 1 writes 14 materials + 7 products, runs 2 and 3
+  write **zero**. The same gate PR #78 used.
+
+### It reaches production through the existing triggers, with no manual pass
+
+`applyRollup` **re-plans the entire graph** on every call — not just the recipe
+that triggered it — so the first trigger of any kind corrects all 14 materials and
+all 7 products in one transaction. The ten live trigger points from PR #78:
+
+| trigger | site |
+|---|---|
+| `admin.repair_items` | `routes/admin.js:407` |
+| `ingredients.update` | `routes/ingredients.js:207` |
+| `purchases.po_price_writeback` | `routes/purchases.js:187` |
+| `recipes.update` | `routes/recipes.js:372` |
+| `recipes.cost_update` | `routes/recipes.js:399` |
+| `retail-materials.update` | `routes/retail-materials.js:303` |
+| `retail-recipes.update` | `routes/retail-recipes.js:305` |
+| `retail-recipes.cost_update` | `routes/retail-recipes.js:326` |
+| `products.recipe_link` | `routes/retail.js:20749` |
+| `materialize_new` / `materialize_link` | `lib/recipe-materialize.js:79`, `:141` |
+
+**The deploy's own restart is NOT a trigger.** The only boot-time path that
+computes recipe costs (`database.js:4287-4321`) is a one-time migration guarded by
+`_migrations` — `store_products_recipe_link_v1` is already recorded as run — and
+additionally scoped `WHERE recipe_id IS NULL`. So nothing fires on start, and the
+stale figures stand until a person acts.
+
+**What the first trigger will be, on the evidence:** a material price edit or a
+purchase-order price write-back. Over the last seven days `ingredients.updated_at`
+moved 135 times and `purchase_orders.updated_at` 12 times, both most recently at
+`2026-08-26 09:09:46` — minutes before this was written. `recipes` moved 61 times
+and `recipe_cost_data` 36. In practice this corrects itself within hours of
+deploy, not days; `admin.repair_items` is the button if it needs forcing.
+
+---
+
+## 16. What the fix does not reach (found 2026-08-26)
+
+Status: open. Recorded rather than fixed, so neither gap is mistaken for closed.
+
+### Price history keeps two incompatible definitions, and the fix leaves both
+
+`ingredient_price_history` is **append-only** and holds **18 rows** for made
+materials. They are in two different units, and nothing in the row says which:
+
+| when | rows | shape | example |
+|---|---|---|---|
+| 2026-08-07 → 2026-08-11 | **11** | per jar / per pack | Cashew Sour Cream **6.62** |
+| 2026-08-16 | **7** | per gram | Cashew Sour Cream **0.04135** |
+
+Same material, same column, same `source`, a 160× difference in magnitude, and no
+discriminator. `buy_unit` does not separate them; `notes` is empty on all 18.
+
+> **Correction to the brief that commissioned this work.** It described the split
+> as *"ten packaging-inclusive from the rollup, four packaging-free from the
+> 2026-08-16 hand entries"*. **The rollup writes no price history at all** — no
+> `INSERT INTO ingredient_price_history` exists in `lib/recipe-rollup.js` or
+> anywhere else outside `routes/ingredients.js`, and **all 18 rows carry
+> `source = 'manual'` and `recorded_by = 'jing'`.** The real split is 11 and 7,
+> both hand-entered. The finding is unchanged in substance and slightly worse in
+> detail: there is not even a `source` value to tell the two definitions apart.
+
+**The fix leaves every one of them.** It writes `ingredients.cost_per_unit` and
+nothing else; history is append-only and is not rewritten. So after the fix the
+history holds per-jar figures, packaging-inclusive per-gram figures, and
+packaging-free per-gram figures, all indistinguishable. Anything reading it as a
+series — `routes/ai.js` `price_history` and `compute_margin`'s mover detection
+(`:2325-2328`) both do — is comparing numbers that do not mean the same thing.
+
+### Waste costing's packaging exclusion was defeated — and this fix CLOSES it
+
+Stated plainly because the answer is not the one the shape of the question
+suggests.
+
+`routes/waste.js:56` deliberately rebuilds a packaging-free batch total:
+
+```js
+  // Packaging-free batch total — see note 1 above.
+  const batchCost = c.ingredientCost + c.labour + c.overheadAmount;
+```
+
+and its reasoning is sound (`:28-35`): packaging is reused when a finished unit is
+wasted, so counting it would double-count.
+
+**It was being defeated.** Excluding `packagingTotal` removes only the recipe's
+OWN packaging. A made material arrived inside `c.ingredientCost` with the child
+recipe's packaging already folded into its `cost_per_unit`, and no subtraction at
+this level could see it. Waste was asking the right question of a number that had
+already been contaminated one level down.
+
+**Option A closes it, and closes it without waste changing at all** — because the
+contamination is removed at the source. Measured on recipe 9:
+
+```
+waste figure BEFORE : 10.247102 per serving
+waste figure AFTER  :  9.177727 per serving
+difference          :  1.069375  — exactly the packaging waste meant to exclude
+                                   and did not
+```
+
+**11 recipes were affected.** After the fix, `waste.js`'s exclusion means what it
+says for the first time. This is a repair it gets for free, and it is worth
+recording as evidence for §29's second supporting note: waste excluded at the
+CONSUMER and was defeated; deriving the exclusion at the SOURCE is what made it
+hold.
+
+### Everything else in findings 2 to 14 is untouched
+
+The fix changes which costs travel with a material. It does not give products a
+packaging field (finding 2), join `packaging_types` to materials (findings 3, 12),
+make the typed cost a reference (finding 4), clean the materials master (finding
+5), distinguish a missing cost row from a zero one (finding 6), allow more than
+one packaging type per recipe (finding 7), correct the two AI tools (finding 8),
+deplete anything (finding 9), add per-store costs (finding 10), stop the Tacet
+save nulling `packaging_type_id` (finding 11), resolve the naming collision
+(finding 13) or remove `packaging_types` from the wipe list (finding 14).
+
+---
+
 ## Context — what was and was not done on 2026-08-26
 
-- **Nothing was written and no code changed.** Every figure above is from a
-  read-only query or from reading the source. No recipe, cost row, packaging
-  type, material, product or purchase order was modified.
+> **Amended after findings 15 and 16.** The bullet below was written when this
+> document ended at finding 14 and it was true of that survey. A later pass the
+> same day changed code. Amended in place rather than deleted.
+
+- **The survey behind findings 1 to 14 wrote nothing and changed no code.** Every
+  figure in them is from a read-only query or from reading the source. No recipe,
+  cost row, packaging type, material, product or purchase order was modified.
+
+- **Finding 15 then changed code** — `lib/recipe-cost.js` and
+  `lib/recipe-rollup.js` — and `docs/tacet-consolidation-decisions.md` §29 gained
+  the rule behind it. **Still nothing was written to production data by this
+  session**: the verification ran against a detached fixture, and the corrected
+  figures reach production only when one of the ten existing triggers next fires.
 
 - **Method.** Queries were run against `roots.db` over SSH using
   `sqlite3 'file:…?mode=ro'`. No application module was loaded against
