@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.6 · 2026-08-08
+# Tacet desktop patterns — v4.7 · 2026-08-26
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1591,6 +1591,8 @@ grep -n 'isHTMLRequest\|stale-while-revalidate' public/sw.js   # which branch se
 
 *Recorded 2026-08-03: a suppliers commit shipped `public/app.html` with no bump and was called one push from invisible. It was not — HTML is network-first, so that one was always fine. The claim was wrong and the rule is right; what makes it right is the grep above, not the assumption that prompted it.*
 
+**Any change that adds or modifies a file under `lib/` restarts every channel daemon.** `deploy-apply.sh` sets `SHARED_TOUCHED` on `lib/*` or `database.js` and bounces the daemons without analysing the require graph — deliberately, so that separate pm2 processes cannot silently run stale shared code while the deploy reports success. A daemon does not have to load the file to be restarted by it. Before merging a PR that touches `lib/`, confirm a daemon restart is safe at that moment: check whether a channel push or sweep is mid-run, and whether any daemon is intentionally stopped and must stay stopped.
+
 **Per-page checklist**
 
 *Brand*
@@ -1709,6 +1711,20 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.7 · 2026-08-26.*
+
+**v4.7 changes — one rule added, in §7. Like v4.2's, it governs what ships with a commit, not how a page is built. No page rule added, removed or altered.**
+
+### §7 — a `lib/` change restarts every channel daemon
+
+`deploy-apply.sh` sets `SHARED_TOUCHED` on any file matching `lib/*` or `database.js`, and every channel daemon bounces on that flag **without analysing the require graph**. The coarseness is deliberate and argued in the script: the daemons are separate pm2 processes that `pm2 restart roots-v2` does not reload, so a shared file shipped under them would otherwise keep running stale while the deploy reported SUCCESS.
+
+**The rule is here because the obvious check gives the wrong answer.** Grepping for which daemons `require()` the changed file is the natural way to ask "will this touch the daemons", and it under-reports: a daemon does not have to load the file to be restarted by it. That was measured, not predicted — a commit adding one server-only `lib/` file, with no daemon requiring it, bounced six daemon processes on deploy. Recorded so the next reader checks the flag rather than the imports.
+
+**What the rule asks for is a timing check, not an approval.** The restart is correct behaviour and nothing here suggests avoiding it; what it asks is that the person merging knows it is about to happen, so a bounce does not land mid-push or mid-sweep — and so a daemon someone deliberately stopped is not assumed to be coming back. (`deploy-apply.sh` does honour a stop, and says so by name in its output.)
 
 ---
 
