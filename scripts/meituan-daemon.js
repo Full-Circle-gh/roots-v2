@@ -944,32 +944,68 @@ async function processStockQueue(stores) {
       // Record what each BOX did, then decide each QUEUE ROW once: a row that fed
       // three boxes is only done when all three took the number, and must stay
       // pending if any of them still needs another go.
-      const verdicts = new Map(); // queue row id -> { row, ok, transient }
+      const verdicts = new Map(); // queue row id -> { row, ok, transient, reason }
       for (const res of results) {
-        const { row, isBundle, newQty, ok, transient } = res;
-        const v = verdicts.get(row.id) || { row, ok: true, transient: false };
+        const { row, isBundle, newQty, ok, transient, reason, spuId, targetName, skuIds } = res;
+        const v = verdicts.get(row.id) || { row, ok: true, transient: false, reason: null };
         v.ok = v.ok && !!ok;
         if (!ok && transient) v.transient = true;
+        // First reason wins: a row feeding several boxes fails for one stated
+        // cause or none, and a list of them reads as noise on a screen.
+        if (!ok && !v.reason && reason) v.reason = reason;
         verdicts.set(row.id, v);
         if (ok) {
+          // The mapped name we ASKED for, next to the listing that ANSWERED.
+          // Equal under the exact rule; a pair that disagrees is the mis-target
+          // this channel could not see before (docs/meituan-findings.md findings
+          // 9 and 13), so it gets its own line rather than a silent row.
+          const mappedName = isBundle ? row.meituan_name : (row.map_meituan_name || row.name_cn);
+          const mismatch = !!(targetName && mappedName &&
+                              String(targetName).trim() !== String(mappedName).trim());
+          if (mismatch) {
+            log(storeCode, `TARGET MISMATCH: asked for ${JSON.stringify(mappedName)}, ` +
+                           `wrote to ${JSON.stringify(targetName)} (spu ${spuId})`);
+          }
           if (isBundle) {
+            // meituan_bundles has no spu column, so a bundle's target lives in the
+            // log line only. Adding one is a schema change and this pass is not
+            // the place for it.
             db.prepare(`UPDATE meituan_bundles SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
               .run(newQty, row.bundle_id);
           } else if (row.map_id) {
-            db.prepare(`UPDATE meituan_product_map SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
-              .run(newQty, row.map_id);
+            // meituan_spu_id has existed since the table shipped, was populated on
+            // 32 rows by two one-off scripts and read by nothing. It now records
+            // the listing this push actually reached. Written only on a SUCCESS —
+            // a failed push has no target to record — and via COALESCE so a driver
+            // that somehow returns no spu leaves the stored one standing rather
+            // than blanking it.
+            db.prepare(`UPDATE meituan_product_map
+                           SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP,
+                               meituan_spu_id=COALESCE(?, meituan_spu_id)
+                         WHERE id=?`)
+              .run(newQty, spuId || null, row.map_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
             { name_en: isBundle ? row.meituan_name : row.name_en,
               name_cn: isBundle ? row.meituan_name : row.name_cn,
               spec: isBundle ? null : (row.map_spec_label || null),
               units: isBundle ? null : (Number(row.map_units) || 1),
-              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle });
+              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle,
+              // §30 rule 7. product_id is here because without it the Activity row
+              // cannot name the product and falls back to a bare SKU; the rest is
+              // the target, which nothing on this channel used to record at all.
+              product_id: isBundle ? null : row.product_id,
+              bundle_id: isBundle ? row.bundle_id : null,
+              mapped_name: mappedName || null,
+              target_name: targetName || null,
+              target_spu_id: spuId || null,
+              sku_id: Array.isArray(skuIds) ? skuIds.join(',') : null,
+              target_mismatch: mismatch || undefined });
         }
       }
 
       for (const res of Array.from(verdicts.values())) {
-        const { row, ok, transient } = res;
+        const { row, ok, transient, reason } = res;
         const isBundle = !!row.bundle_id;
         // The shelf count, not one box's share of it: this verdict covers every
         // box the row fed, and naming one of their numbers would read as the
@@ -999,16 +1035,34 @@ async function processStockQueue(stores) {
           db.prepare(`UPDATE meituan_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`)
             .run(row.id);
         } else {
-          // Genuine API rejection, or transient retries exhausted → terminal.
-          // Surface the exhausted case too so a chronically-flaky listing isn't
-          // left silently drifting (the failure the old code hid on attempt 1).
+          // Genuine API rejection, a stated refusal, or transient retries
+          // exhausted → terminal. Surface the exhausted case too so a
+          // chronically-flaky listing is not left silently drifting (the failure
+          // the old code hid on attempt 1).
+          //
+          // `reason` is the driver's own sentence when it had one — a name no
+          // listing carries, or an option that has gone. Both are terminal on the
+          // FIRST attempt: retrying cannot mend either, and the row used to spend
+          // three attempts arriving at the same place while saying nothing an
+          // operator could act on until the last of them.
+          //
+          // English on both sides, per §30 rule 3 — no sourced pair exists for
+          // these sentences and none is composed. The two bilingual strings below
+          // are pairs that already existed and are kept for the cases they cover.
+          const why = reason
+            || (transient ? 'transient push failure — retries exhausted' : 'browser update failed');
           db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
-            .run(transient ? 'transient push failure — retries exhausted' : 'browser update failed', row.id);
+            .run(why, row.id);
           logSync(storeCode, 'stock_push', 'error',
             { name_en: isBundle ? row.meituan_name : row.name_en,
               name_cn: isBundle ? row.meituan_name : row.name_cn,
-              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle },
-            transient ? 'update failed after retries · 多次重试仍失败' : 'browser update failed · 更新失败');
+              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle,
+              product_id: isBundle ? null : row.product_id,
+              bundle_id: isBundle ? row.bundle_id : null,
+              mapped_name: isBundle ? row.meituan_name : (row.map_meituan_name || row.name_cn) },
+            reason ? why
+                   : (transient ? 'update failed after retries · 多次重试仍失败'
+                                : 'browser update failed · 更新失败'));
         }
       }
     } catch (err) {
