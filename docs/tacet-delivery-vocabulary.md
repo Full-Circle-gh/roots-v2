@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.3 · 2026-08-26 · adds the channel-mapping request section, which holds NO locked strings — six English strings are waiting on Ash for their Chinese and are unlocked until he supplies it. The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.4 · 2026-08-26 · adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -172,6 +172,50 @@ Everything else on that change reuses a pair that already exists in the admin �
 
 Sentence case, no exclamation marks, and `notInCat` doubles as a filter-chip
 label, so it wants to stay short enough to sit in a chip beside a count.
+
+## Recipe line units — awaiting a Chinese source (REQUEST, not locked)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is a second such amendment, opened rather than closed.
+
+THE CONCEPT NEEDING A PAIR. A recipe line is counted in a unit that measures a
+different kind of thing than its material's stocking unit — 160 ml of an oil
+stocked in grams — so that line's cost cannot be worked out and is left out of
+the recipe total. The material's own cost is fine.
+
+It arrives with the §7 addendum's refusal to convert without a stated factor
+(`docs/tacet-consolidation-decisions.md` §7 addendum): volume to weight needs a
+density, density is a property of the material, and there is no default. 82 live
+lines across 36 recipes are in this state today.
+
+TWO EXISTING PAIRS WERE CONSIDERED AND REJECTED, recorded so the search is not
+repeated. `Order unit ≠ item buy unit · 采购单位与物料单位不一致` is PO-time and
+about the BUY unit, saying nothing about a recipe line or an excluded cost.
+`Recipe unit is not g / ml / pcs · 配方单位不是 克/毫升/件` is the unsupported-unit
+case, but these units ARE valid — they simply measure different things. Either
+would be untrue on this screen.
+
+THREE DISTINCTIONS THE CHINESE MUST PRESERVE, because losing any one of them
+turns a refusal into a defect report:
+
+1. UNKNOWN, not missing and not zero. The cost has not gone away and is not nil;
+   it cannot be worked out. A word meaning "missing" would send an operator to
+   look for a price that is already there.
+2. THE LINE is at fault, not the material. The material's cost is good. Copy that
+   blames the material sends the fix to the wrong record.
+3. The total is INCOMPLETE, not wrong. Everything shown is correct; something is
+   absent from it.
+
+WHERE IT IS USED. One string, the `.rcp-warn` pill on the Recipes record screen
+(`public/retail-admin/19-recipes.js`), naming how many lines are affected. The
+rollup's own blocked-reason copy needs nothing new — both BLOCK_REASON maps fall
+an unmapped reason through to `This recipe's cost can't be worked out right
+now. · 该食谱的成本暂无法计算。`, which is true for this case.
+
+**Ash to supply the CN column.** Filling it is one edit in the product. Until it
+is filled the pill does not ship: the accounting change that drops 34 recipes'
+ingredient cost is held behind it, because dropping a cost with nothing on screen
+explaining why is worse than the wrong number it replaces.
 
 ## Deferred — recorded, not in scope of this lock
 
