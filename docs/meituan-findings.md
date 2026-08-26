@@ -32,6 +32,15 @@ system and are not.
 Status: open. No code changed. **Latent, not live** — every one of the 133 is
 resolving correctly today. Read this as a measured blast radius, not an incident.
 
+**This finding is why Meituan now ranks worst of the four channels for standing
+exposure**, ahead of Eleme, in `docs/tacet-consolidation-decisions.md` §30 and
+in `docs/eleme-findings.md` finding 9 (rewritten 2026-08-26, v4.81). The
+latent/live distinction above is recorded alongside that order, because without
+it the order reads as though Meituan has been going wrong and Eleme has not,
+which is the opposite of what happened: Eleme's matcher wrote to a wrong listing
+at least once, Meituan's never has, and Meituan's would do more damage when it
+does.
+
 ### What was measured
 
 Of 394 mappings carrying a name, 393 resolve to their own listing on the exact

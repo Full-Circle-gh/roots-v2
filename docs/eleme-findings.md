@@ -816,8 +816,9 @@ argument for what to do about it:
   > the merchant named most tersely. It makes the choice deterministic, not
   > right.
   >
-  > **The ordering below is left exactly as written**, pending Ash's word. The
-  > same correction and the same reservation are recorded against
+  > **The ordering below has since been rewritten on the strength of this**, on
+  > Ash's ruling — see the second correction under it. The same correction and
+  > the same rewrite are recorded against
   > `docs/tacet-consolidation-decisions.md` §30, which carries this ordering as
   > its own.
 - **闪购 shangou** — `lib/shangou-browser.js:195-205`: **code first.** Our 货号 is
@@ -828,25 +829,88 @@ argument for what to do about it:
   (`scripts/guanyi-daemon.js:409`, `:652`). **A fragment cannot resolve to
   anything, because names are not the key.**
 
-So the ordering of exposure is Eleme worst (name only, both directions), Meituan
-next (name only, one direction), 闪购 mild (code first), GZ Grocery none. The fix
-Eleme needs is the one GZ Grocery already has, and finding 3 already names it: a
-one-time 货号 backfill so the name stops being the key.
+So the ordering of **standing exposure** — the word is defined immediately below,
+because it was the ambiguous part of this line before — is **Meituan worst, then
+Eleme, then 闪购, then GZ Grocery.** The fix Meituan and Eleme both need is the
+one GZ Grocery already has, and finding 3 already names it: a one-time 货号
+backfill so the name stops being the key.
 
-> **Two things have since happened to that ordering, and it is deliberately not
-> rewritten here.** Recorded 2026-08-26, awaiting a decision.
+**What this orders by, said out loud, because two bases give two answers.** It
+orders by **standing exposure: how many of our mappings are one external edit
+away from a silent wrong write, and whether anything downstream would catch one
+if it happened.** It does **not** order by how badly a matching rule could
+misbehave in the abstract. That second basis would put Eleme first, on the
+strength of the both-directions rule — and that rule was removed in `0a66800d`,
+so it would be ranking code that no longer exists.
+
+- **Meituan — worst.** `_nameMatches` truncates our name through `_coreQuery`
+  before the containment test, so **133 of 393 named mappings resolve onto a
+  neighbour** the moment their own listing is renamed or delisted. Nothing
+  downstream catches it: the drift sweep compares our record against our own
+  shelf count and never reads the channel's stock, and no push record says which
+  listing answered. `docs/meituan-findings.md` findings 1, 5 and 9.
+- **Eleme — second.** Still name-only and still with no 货号, so the name is the
+  only key there is. But it now refuses an inexact name rather than taking one
+  (`0a66800d`), and it writes `eleme_product_map.item_id` plus `target_name` and
+  `target_item_id` on the log line, so a mislanding would be answerable
+  afterwards. **Seven mappings sit one rename away from a neighbour whose name
+  contains theirs** — the fallback's would-be catch, measured before it was
+  removed.
+- **闪购 — mild.** Code first: our 货号 is looked up in `byCode` and the name is
+  consulted only when that misses.
+- **GZ Grocery — none.** No name matching in the push path at all.
+
+**The two at the top are unlike each other, and the difference matters more than
+the order.** Read the order without it and the wrong lesson gets drawn:
+
+- **Meituan's exposure is latent.** Zero mappings use the loose branch today —
+  all 393 that resolve, resolve on the exact branch. It fires only on a
+  merchant-side rename or delist, and at that moment 133 of 393 land on a
+  neighbour.
+- **Eleme's was live.** A fragment resolved and wrote, at least once: 25 units
+  under the key `芒` on 2026-08-25, onto one of three listings, and which one is
+  still not established.
+- **Meituan's damage is worse when it fires.** `_coreQuery` collapses a family of
+  **size variants** onto one key, and a size variant is the expensive kind of
+  wrong target: a mis-resolve **swaps two live stock numbers** — the sibling that
+  took the push, and our own product, which believes it pushed and did not — and
+  both figures stay plausible, so nobody looks. Eleme's rule could reach anything
+  containing the fragment, related or not; where it reached an unrelated listing
+  the resulting number was obviously wrong on an obviously wrong listing, which
+  is the failure mode somebody notices. **Wider is not the same as worse.**
+
+So **Eleme has already done harm and can no longer do it that way; Meituan has
+not yet done harm and would do more of it.** Both sentences are true, of
+different questions. The ordering answers the first one, which is why the basis
+is written down rather than left to be inferred.
+
+> **Correction, 2026-08-26 — the ordering above was rewritten. Marked, not
+> silently replaced.**
 >
-> 1. **Eleme's both-directions branch is gone** (`0a66800d`), so the fact that
->    put Eleme first no longer describes the code. Eleme still matches on names
->    and still has no 货号 — the backfill above is still the right fix — but it
->    now refuses an inexact name instead of taking one.
-> 2. **Meituan's exposure was measured and is larger than this line implies** —
->    133 of 393, through `_coreQuery` rather than through the arm named above.
->    See the correction on the Meituan bullet.
+> **It previously read:** *"So the ordering of exposure is Eleme worst (name
+> only, both directions), Meituan next (name only, one direction), 闪购 mild
+> (code first), GZ Grocery none."* That shipped, and it was left standing
+> through one earlier pass while the question was put to Ash. He ruled on it;
+> this is the rewrite.
 >
-> Whether the ordering itself should change is a judgement about intent, not a
-> fact about the code, and it belongs with §30. It is left as written until Ash
-> rules on it, in both documents, so the two cannot drift apart in the meantime.
+> **Two facts moved it, and neither is a change of opinion:**
+>
+> 1. **Eleme's both-directions branch no longer exists** (`0a66800d`,
+>    2026-08-26). The fact that put Eleme first was a property of code that has
+>    since been deleted, so the old line describes a rule rather than a system.
+> 2. **Meituan's exposure was measured and is larger on both counts** — 133
+>    exposed mappings against Eleme's seven, and nothing downstream that would
+>    catch a mislanding, where Eleme now records the target it landed on.
+>
+> **The basis is now stated in the text**, which is the third change and the one
+> that keeps this from happening again. The old line said "ordering of exposure"
+> and left "exposure" to the reader; on one reading of it Eleme still ranks
+> first. Naming the basis settles which question is being answered instead of
+> leaving two answers to compete.
+>
+> The identical rewrite and the identical mark are in
+> `docs/tacet-consolidation-decisions.md` §30, which carries this ordering as its
+> own, done in the same pass so the two cannot drift apart.
 
 ### Bearing on the nine nameless mappings
 
