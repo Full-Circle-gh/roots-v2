@@ -78,6 +78,13 @@
   let _invSearch = '';       // supplier / item / SKU / PO number
   let _invSearchTimer = null;
   let _invFocusQ = false;    // keep the caret in the search box across a repaint
+  // Which of the screen's two lists is showing. They used to be stacked, and
+  // with 78 supplier groups live the recorded-invoice ledger sat some 3600px
+  // down the page — the operator scrolled the whole chase list every time they
+  // wanted to edit an invoice they had just entered. §1.7's test says a switch
+  // between two different KINDS of thing is a sub-view, so this is a segmented
+  // control, in the same toolbar slot the Orders screen already uses for one.
+  let _invView = 'suppliers';  // suppliers | recorded
   const _invExpanded = new Set();  // supplier groups whose lines are open
   let _reorder = [];         // low-stock groups, by preferred supplier + store
   let _ph = null;            // loaded price-history for one product
@@ -1221,6 +1228,10 @@
 
     host.innerHTML = `
       <div class="pu2-invfilters">
+        <span class="pu2-segbar">
+          <span class="pu2-seg${_invView === 'suppliers' ? ' on' : ''}" onclick="puInvView('suppliers')">${esc(T('By supplier', '按供应商'))} <span class="n pu2-num">${groups.length}</span></span>
+          <span class="pu2-seg${_invView === 'recorded' ? ' on' : ''}" onclick="puInvView('recorded')">${esc(T('Recorded', '已登记'))} <span class="n pu2-num">${(_invList || []).length}</span></span>
+        </span>
         <select class="pu2-input pu2-invsel" onchange="puInvMonth(this.value)">${monthOpts}</select>
         <input class="pu2-input pu2-invq" type="search" id="pu2-invq" value="${esc(_invSearch)}"
                placeholder="${esc(T('Supplier, item or SKU', '供应商、产品或货号'))}" oninput="puInvSearch(this.value)">
@@ -1245,12 +1256,12 @@
         ${aging.notDue ? `<span class="pu2-pill grey">${esc(T('Not due', '未到期'))} ${money(aging.notDue)}</span>` : ''}
       </div>` : ''}
 
-      <div class="pu2-kicker">${esc(T('By supplier', '按供应商'))}</div>
-      <div class="pu2-card" id="pu2-invgroups"></div>
+      <div class="pu2-invsection">${_invView === 'recorded'
+        ? '<div class="pu2-card" id="pu2-invledger"></div>'
+        : '<div class="pu2-card" id="pu2-invgroups"></div>'}</div>`;
 
-      <div class="pu2-kicker">${esc(T('Invoices recorded', '已登记发票'))}</div>
-      <div class="pu2-card" id="pu2-invledger"></div>`;
-
+    // Both renderers already no-op when their host isn't on the page, so the
+    // inactive one costs nothing and neither has to know which view is showing.
     renderInvGroups();
     renderInvLedger();
     const q = document.getElementById('pu2-invq');
@@ -1421,6 +1432,11 @@
     _invSearch = v; _invFocusQ = true;
     clearTimeout(_invSearchTimer);
     _invSearchTimer = setTimeout(invReload, 250);
+  };
+  window.puInvView = function (v) {
+    if (_invView === v) return;
+    _invView = v;
+    renderInvBody();
   };
   window.puInvClear = async function () { _invMonth = ''; _invSearch = ''; _invFocusQ = false; await invReload(); };
   window.puInvToggleGroup = function (sup) {
