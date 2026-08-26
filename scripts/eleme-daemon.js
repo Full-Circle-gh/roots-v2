@@ -544,29 +544,46 @@ async function processStockQueue(stores) {
       // Record what each BOX did, then decide each QUEUE ROW once: a row that fed
       // three boxes is only done when all three took the number, and must stay
       // pending if any of them still needs another go.
-      const verdicts = new Map(); // queue row id -> { row, ok, transient }
+      const verdicts = new Map(); // queue row id -> { row, ok, transient, reason }
       for (const res of results) {
         const { row, newQty, ok, transient } = res;
-        const v = verdicts.get(row.id) || { row, ok: true, transient: false };
+        const v = verdicts.get(row.id) || { row, ok: true, transient: false, reason: null };
         v.ok = v.ok && !!ok;
         if (!ok && transient) v.transient = true;
+        // First refusal that explained itself speaks for the row. A row feeding
+        // three boxes could in principle collect several; the first is the one
+        // an operator needs, and they are the same sentence in practice.
+        if (!ok && res.reason && !v.reason) v.reason = res.reason;
         verdicts.set(row.id, v);
         if (ok && row.map_id) {
+          // item_id has existed since the table was created (database.js) as the
+          // "cached Eleme item id" and was NULL on every row, written by nothing.
+          // It is the column §30 rule 7 asks for, so it is finally filled: WHICH
+          // listing this push landed on, not merely that one succeeded.
+          //
+          // COALESCE so a push that somehow arrives without an id leaves the
+          // last known one standing rather than blanking it — a missing value is
+          // not evidence that the old one was wrong.
           db.prepare(`UPDATE eleme_product_map
-                         SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
+                         SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP,
+                             item_id = COALESCE(?, item_id)
                        WHERE id=?`)
-            .run(newQty, row.map_id);
+            .run(newQty, res.targetItemId || null, row.map_id);
         }
         if (ok) {
+          // The map columns are last-write-wins and carry no history, so the map
+          // alone can never answer a question about a PAST push — which is
+          // exactly what finding 9 ran into. The log is the half that keeps it.
           logSync(storeCode, 'stock_push', 'ok', {
             product_id: row.product_id, sku: row.sku, qty: newQty,
             spec: row.map_spec_name || null, units: Number(row.map_units) || 1,
+            target_name: res.targetName || null, target_item_id: res.targetItemId || null,
           });
         }
       }
 
       for (const res of Array.from(verdicts.values())) {
-        const { row, ok, transient } = res;
+        const { row, ok, transient, reason } = res;
         // The shelf count, not one box's share of it: this verdict covers every
         // box the row fed, and naming one of their numbers would read as the
         // whole row's.
@@ -587,10 +604,27 @@ async function processStockQueue(stores) {
           // the retry query and the terminal-error branch below.
           db.prepare(`UPDATE eleme_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`).run(row.id);
         } else {
+          // `reason` is a refusal that explained itself — today that is a name
+          // the catalogue does not carry. It reaches BOTH places an operator can
+          // read: last_error on the queue row, and error_msg on the sync log,
+          // which the Eleme tab's push panel renders in red
+          // (public/retail-admin/14-eleme.js elRenderPushLog).
+          //
+          // It also arrives on the FIRST attempt rather than the third. An
+          // unresolvable name is not transient, so it never enters the retry
+          // branch above, and the row no longer spends ~36 seconds pretending a
+          // config error might be a network blip.
+          //
+          // The bilingual pairs below are unchanged; the new sentence is English
+          // on both sides because no Chinese for it exists yet and §30 rule 3
+          // forbids composing one.
+          const why = transient ? 'transient push failure — retries exhausted'
+                                : (reason || 'browser update failed');
           db.prepare(`UPDATE eleme_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
-            .run(transient ? 'transient push failure — retries exhausted' : 'browser update failed', row.id);
+            .run(why, row.id);
           logSync(storeCode, 'stock_push', 'error', { product_id: row.product_id, sku: row.sku, qty: newQty },
-            transient ? 'update failed after retries · 多次重试仍失败' : 'browser update failed · 更新失败');
+            transient ? 'update failed after retries · 多次重试仍失败'
+                      : (reason || 'browser update failed · 更新失败'));
         }
       }
     } catch (err) {
