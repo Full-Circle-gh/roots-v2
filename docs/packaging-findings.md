@@ -27,6 +27,16 @@ The rules both documents answer to are in `docs/tacet-consolidation-decisions.md
 this document and the code disagree, this document is stale and should be
 re-checked against the code.
 
+> **Added 2026-08-26, after §31 was written.** This document is now also the
+> evidence behind **§31 (product unit cost — contents plus packaging)**, which
+> settles that a product's cost is its contents plus its packaging, that
+> packaging attaches to the PRODUCT as a LIST of ordinary materials, and that an
+> empty list means unknown rather than zero. It draws on findings 2, 3, 4, 6, 9
+> and 12. **The sentence above still holds — no rule is proposed here** — and the
+> closing note at the foot of this document, that whether §29 or §30 should gain
+> a line is a decision rather than a finding, is left standing as written: §31 is
+> the answer that was given to it, recorded in the document that owns decisions.
+
 Two of the claims that opened this survey did not survive it, and both are
 corrected in place — see findings 4 and 5.
 
