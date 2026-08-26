@@ -5992,7 +5992,11 @@
   .mt-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; }
   .mt-brow { display: flex; align-items: center; gap: 16px; padding: 16px 24px; }
   .mt-brow + .mt-brow { border-top: 1px solid var(--td-border); }
-  .mt-brow .bn { font-weight: 500; }
+  /* pre-wrap, so a doubled space in a listing title is VISIBLE here. Bundle 2
+     differed from its listing by one space and this row collapsed it, so the
+     wrong title and the right one rendered identically and the fix could not
+     be confirmed by looking. See docs/meituan-findings.md. */
+  .mt-brow .bn { font-weight: 500; white-space: pre-wrap; }
   .mt-brow .bs { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
   .mt-brow .bg { flex: 1; }
 

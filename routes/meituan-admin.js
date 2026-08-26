@@ -625,6 +625,30 @@ router.get('/api/retail-admin/meituan/bundles', requireRetailAdmin, (req, res) =
 
 // Upsert a bundle + its components. body: { id?, storeId, storeCode, meituanName,
 // maxQty?, syncEnabled?, components: [{ productId, qty }] }
+//
+// THE BUNDLE TITLE MUST BE ONE THE CHANNEL REPORTED, on the same rule and
+// through the same code as a product's mapping name — mapWrite.verifyName.
+// Until 2026-08-26 this route took the string, trimmed it and wrote it, with no
+// datalist and no client check either, which is how two bundles came to hold
+// titles no listing carries: bundle 2 differs from its listing by ONE space and
+// bundle 16's listing no longer exists. Both resolve through the matcher's loose
+// branch onto a DIFFERENT product's listing, and 11 of 19 bundles would do the
+// same if their combo listing were ever renamed. See docs/meituan-findings.md.
+//
+// WHAT IS GATED IS A NAME THAT CHANGES, not every save.
+// This is the one place the rule is shaped differently from the map route, and
+// the reason is structural rather than a softening. On the map route a name and
+// its switch are separate concerns with separate actions — Remove is ungated, so
+// a product holding an unverifiable name (254) stays reachable. Here one POST
+// carries the title, the cap, the switch and the components, so gating an
+// unchanged title would freeze everything else about the row with it: bundle 16,
+// whose listing is gone and whose stored name can never verify again, could not
+// be switched off, re-costed or have a component fixed. That is the trap §30
+// rule 4 warns about — a check that refuses the remedy along with the fault.
+// So: a title that is new, or moved to another store, is verified. A title
+// re-submitted exactly as stored is not a fresh claim about a listing and is
+// left alone. Nothing unverifiable can ENTER the table this way, because the
+// only names that pass unchecked are ones already in it.
 router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const { id, storeId, storeCode, meituanName, maxQty, syncEnabled, components } = req.body || {};
@@ -633,7 +657,29 @@ router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.jso
   }
   const sync = syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0);
   const cap  = (maxQty === undefined || maxQty === null || maxQty === '') ? null : parseInt(maxQty, 10);
+  const name = meituanName.trim();
   try {
+    // Read before anything changes, so the audit entry can carry the previous
+    // title. meituan_bundles is last-write-wins with no history, the same shape
+    // meituan_product_map had before d7848b62 — and the same reason a mapping's
+    // former name could not be recovered when it mattered.
+    const cur = id
+      ? db.prepare('SELECT meituan_name, store_code FROM meituan_bundles WHERE id = ?').get(parseInt(id, 10))
+      : null;
+    const prev = cur ? String(cur.meituan_name || '').trim() : null;
+    const nameIsNew = !(cur && prev === name && cur.store_code === storeCode);
+
+    if (nameIsNew) {
+      const refusal = mapWrite.verifyName(db, storeCode, name);
+      // 409, not 400: the request is well formed and the STATE is what refuses
+      // it. Same shape the map route returns, so the client's `e.code` branches
+      // and the api() helper's "<message> [<code>]" rendering both work here.
+      if (refusal) {
+        return res.status(409).json({ success: false, error: refusal.code,
+                                      message: refusal.message, catalogue: refusal.catalogue });
+      }
+    }
+
     const tx = db.transaction(() => {
       let bundleId = id ? parseInt(id, 10) : null;
       if (bundleId) {
@@ -641,7 +687,7 @@ router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.jso
           UPDATE meituan_bundles
              SET meituan_name=?, store_code=?, retail_store_id=?, max_qty=?, sync_enabled=?, updated_at=CURRENT_TIMESTAMP
            WHERE id=?
-        `).run(meituanName.trim(), storeCode, storeId, cap, sync, bundleId);
+        `).run(name, storeCode, storeId, cap, sync, bundleId);
       } else {
         db.prepare(`
           INSERT INTO meituan_bundles (retail_store_id, store_code, meituan_name, max_qty, sync_enabled)
@@ -649,9 +695,9 @@ router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.jso
           ON CONFLICT(retail_store_id, meituan_name) DO UPDATE SET
             store_code=excluded.store_code, max_qty=excluded.max_qty,
             sync_enabled=excluded.sync_enabled, updated_at=CURRENT_TIMESTAMP
-        `).run(storeId, storeCode, meituanName.trim(), cap, sync);
+        `).run(storeId, storeCode, name, cap, sync);
         bundleId = db.prepare('SELECT id FROM meituan_bundles WHERE retail_store_id=? AND meituan_name=?')
-          .get(storeId, meituanName.trim()).id;
+          .get(storeId, name).id;
       }
       db.prepare('DELETE FROM meituan_bundle_components WHERE bundle_id=?').run(bundleId);
       const ins = db.prepare('INSERT OR IGNORE INTO meituan_bundle_components (bundle_id, product_id, qty) VALUES (?, ?, ?)');
@@ -661,6 +707,20 @@ router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.jso
       return bundleId;
     });
     const bundleId = tx();
+
+    // Recorded only when the title actually moved, and carrying what it moved
+    // FROM: "someone changed this bundle's listing" is the fact no one could
+    // establish about bundles 2 and 16 after the event.
+    if (nameIsNew) {
+      try {
+        logActivity(req.user && req.user.id, (req.user && req.user.username) || 'unknown',
+          prev == null ? 'meituan_bundle_create' : 'meituan_bundle_name',
+          'meituan_bundles', bundleId,
+          { store_code: storeCode, from: prev, to: name, sync_enabled: sync },
+          req.ip);
+      } catch (_) { /* the bundle change already happened; the log is best-effort */ }
+    }
+
     res.json({ success: true, id: bundleId });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
