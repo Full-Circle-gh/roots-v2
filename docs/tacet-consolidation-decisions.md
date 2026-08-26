@@ -316,6 +316,60 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - Consequence, accepted: if a real batch under-yields, stock reads high. A stock recount is therefore required on the production side, matching the recount the store side already has.
 - Packaging is consumed by production like any other input. A packing step consumes bulk item plus jar, lid and label and produces a product. Cost rolls up through it; no separate cost sheet exists.
 
+### §6 addendum — how batch size and servings are arrived at (decided 2026-08-26)
+
+§6 states that recipe output is fixed. It does not say where that number comes from.
+It comes from the recipe's own lines, seeded automatically and then editable.
+
+**Input weight is not output weight.** Three things separate them: materials that are
+used and then discarded, cooking loss, and packaging. Each is handled differently.
+
+**1. Every recipe line carries a RETAINED flag. Default yes.**
+
+A line marked not-retained is used during production and does not end up in the batch.
+Brewing water, blanching or soaking liquid, and a stock used to hydrate a dough and then
+thrown away are all not-retained. The line still consumes stock and still costs exactly
+what it cost. It contributes no weight.
+
+The flag has two positions only. There is no partial-retention percentage — a fraction
+nobody can measure honestly is a field nobody will fill in honestly. Partial absorption
+is absorbed by the editable batch size below.
+
+**2. Packaging lines never count toward batch size.**
+
+Derived from the material's kind, not from the flag. No operator decision, no second
+place to get it wrong. Packaging is consumed and costed by the batch exactly as §8
+already states; it simply is not part of the batch's yield.
+
+**3. Batch size is auto-filled from the retained lines, and remains editable.**
+
+The sum is a suggestion, not a lock. Where the operator overrides it, the difference is
+displayed as yield against inputs. This is the only yield-loss record; no separate loss
+field exists, because the override already carries the information.
+
+Auto-fill runs only when every retained line shares one unit family. If any retained line
+is a count unit — pieces, bags, bottles — batch size is left blank for manual entry and
+the screen says why. Units are never converted to make the sum work. This follows §7:
+recipes use the material's stocking unit, with no conversion at recipe level.
+
+**4. Servings is derived, not typed alongside serving size.**
+
+Servings = batch size ÷ serving size, ROUNDED DOWN to a whole number, with the remainder
+shown. Rounded down because a part portion cannot be sold, and because cost per serving
+must never be understated. The remainder's cost is therefore carried by the sellable
+servings, which is correct.
+
+Serving size and servings are two views of one number. Whichever the operator enters last
+computes the other. Both are bound to batch size.
+
+**Cost is untouched by all of the above.** The retained flag governs weight only. A
+discarded stock costs what it cost and rolls up in full. Do not "correct" this to exclude
+non-retained lines from cost.
+
+**Subject to §0.** Weight-based batch sizing is one shape a business may want. A business
+whose recipes yield counts rather than weights must be equally well served; the retained
+flag and the derived-servings rule apply unchanged, only the unit differs.
+
 ## 7. Units
 
 - Every item has ONE stocking unit. Its stock is always counted in that unit.
