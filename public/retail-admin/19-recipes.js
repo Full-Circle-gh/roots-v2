@@ -521,7 +521,7 @@
         <div class="rcp-fgrid">
           ${field(T('Batch size (g)', '批量大小(克)'), input('batch_size', m.batch_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
                    T('Total grams the whole batch makes. Needed to work out cost per gram.', '整批的总克数,用于折算每克成本。'))}
-          ${field(T('Servings', '份数'), input('servings', m.servings, 'type="number" min="0" step="1"', 'rcpRecompute()'),
+          ${field(T('Servings', '份数'), input('servings', m.servings, 'type="number" min="1" step="1"', 'rcpRecompute()'),
                    T('Needed to work out cost per serving.', '用于折算每份成本。'))}
           ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"'))}
           ${field(T('Shelf life', '保质期'), input('shelf_life', m.shelf_life, 'maxlength="60"'))}
