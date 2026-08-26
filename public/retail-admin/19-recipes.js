@@ -55,6 +55,7 @@
     ? escapeHtml
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+
   const money = n => '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2));
   // Cost PER GRAM is often sub-cent (¥0.0114) — the plain 2dp money() would
   // round it to ¥0.01 and lose the figure entirely on a screen whose whole
@@ -800,6 +801,21 @@
         `${c.zeroCostIngredientLines} ingredient${c.zeroCostIngredientLines === 1 ? '' : 's'} missing cost — costs shown are too low`,
         `${c.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`))}</span></div>`);
     }
+    // A line whose unit cannot be reconciled with its material's stocking unit
+    // (§7 addendum). Deliberately its own pill and not folded into the one
+    // above: those materials are NOT missing a cost, they have a good one that
+    // this line's quantity cannot be multiplied by. Same amber pill — the
+    // figure is not wrong to exist, it is wrong to trust — and never Brick,
+    // because nothing is broken; a number is unknown.
+    // HELD — needs a sourced CN pair before it can ship. The concept has no
+    // entry in docs/tacet-delivery-vocabulary.md (that document is delivery
+    // vocabulary only) and no shipped pair covers it: the nearest two,
+    // '采购单位与物料单位不一致' and '配方单位不是 克/毫升/件', describe different
+    // facts and would be untrue here. Rule 4 forbids composing one.
+    // if (c.unreconciledUnitLines > 0) {
+    //   warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
+    //     `${n} line...`, `<CN PAIR NEEDED>`))}</span></div>`);
+    // }
     // Selling below cost is an error, not a warning, and it is worth saying in
     // words as well as in Brick — a minus sign on a figure is easy to skim past.
     if (soloM && soloM.money < 0) {
