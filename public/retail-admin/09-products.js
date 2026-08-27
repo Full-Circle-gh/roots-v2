@@ -3276,7 +3276,13 @@ function vaRender() {
     `<span class="pd-var-head" style="margin:0">${cuT('Variants', '规格')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!VA_OPEN) { box.innerHTML = toggle; return; }
-  const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span><span>${cuT('Name', '名称')}</span>` +
+  // NAME and LABEL are two columns, not one. The column that used to be headed
+  // "Name" held the variant TAG (variant_label / variant_label_cn) — the word
+  // the shopper picks, "Big" / "大". The row's own product name was in a title=
+  // tooltip and nowhere else, so a sibling whose name disagrees with the rest of
+  // its family was invisible on the one screen that lists the family.
+  const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span>` +
+    `<span>${cuT('Name', '名称')}</span><span>${cuT('Label', '规格标签')}</span>` +
     `<span>${cuT('SKU', '货号')}</span><span>${cuT('Weight', '规格')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
@@ -3303,9 +3309,22 @@ function vaRender() {
     const photo = v.self
       ? `<button type="button" class="${photoCls}" style="${thumbStyle}" title="${cuT('Main photo — edit it in the gallery above', '主图 — 在上方图库中编辑')}" onclick="vaPhotoGallery()">${v.img ? '' : '＋'}</button>`
       : `<button type="button" class="${photoCls}" data-vid="${v.id}" style="${thumbStyle}" title="${shared ? cuT('Shared from another variant — click to give this one its own photo', '与其他规格共用 — 点击为本规格设置专属图片') : (v.img ? cuT('Change this variant’s photo', '更换此规格的图片') : cuT('Add a photo for this variant', '为此规格添加图片'))}" onclick="vaPhotoPick(${v.id})">${v.img ? '' : '＋'}</button>`;
-    // Variant option name is split EN/CN (never glued) — one input per language,
+    // The row's OWN product name (store_products.name_en / name_cn), read-only,
+    // and the way into that row's own editor — one click, the same paOpenEdit()
+    // a standalone card uses.
+    //
+    // NOT EDITABLE HERE, ON PURPOSE. The sibling's own editor is the single
+    // writer for a name (paOpenEdit → pdOpen → PATCH), so there is one field per
+    // fact rather than two that can disagree, and vaPersistSiblings still
+    // carries no name. The self row is the product already open in the form
+    // above — it gets the text without the click-through, because that click
+    // would re-open the editor the operator is already standing in.
+    const rowName = v.self
+      ? `<span class="va-rowname va-rowname-self" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}</span>`
+      : `<button type="button" class="va-rowname" title="${escapeAttr(v.name + '\n' + cuT('Edit this variant', '编辑此规格'))}" onclick="paOpenEdit(${v.id})">${escapeHtml(v.name)}</button>`;
+    // Variant option LABEL is split EN/CN (never glued) — one input per language,
     // stacked, so "Big 200g" and "大" are stored & shown separately.
-    const label = `<div class="va-name" title="${escapeAttr(v.name)}">` +
+    const label = `<div class="va-name">` +
       `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" oninput="vaLabel(${v.id}, 'en', this.value)">` +
       `<input class="va-label va-label-cn" type="text" value="${escapeAttr(v.label_cn || '')}" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" oninput="vaLabel(${v.id}, 'cn', this.value)">` +
       `</div>`;
@@ -3317,7 +3336,7 @@ function vaRender() {
       // The opened product. Its quick fields are editable here too, mirrored into
       // the main form inputs above so the normal Save persists them (see
       // vaSelfField).
-      return rowOpen + grip + photo + label +
+      return rowOpen + grip + photo + rowName + label +
         `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
         `<input class="va-label va-wt" type="text" value="${escapeAttr(v.size || '')}" placeholder="${cuT('e.g. 200 g', '如 200克')}" title="${cuT('Size / weight shown on the size picker', '规格选择器上显示的规格 / 净重')}" oninput="vaSelfField('weight', this.value)">` +
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
@@ -3334,7 +3353,7 @@ function vaRender() {
           : `<button type="button" class="va-x" title="${cuT('Delete this product', '删除此产品')}" onclick="vaRemoveSelf()">✕</button>`) +
         `</div>`;
     }
-    return rowOpen + grip + photo + label +
+    return rowOpen + grip + photo + rowName + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-label va-wt" type="text" value="${escapeAttr(v.size || '')}" placeholder="${cuT('e.g. 200 g', '如 200克')}" title="${cuT('Size / weight shown on the size picker', '规格选择器上显示的规格 / 净重')}" oninput="vaField(${v.id}, 'weight', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
