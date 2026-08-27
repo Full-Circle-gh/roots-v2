@@ -5459,6 +5459,32 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_waste_records_reverses ON waste_records(reverses_waste_id);
 `);
 
+// Automatic recipe materialization (§29's third addendum, decided
+// 2026-08-27) records here whenever it CANNOT write — a recipe's name (or,
+// on the create path, its SKU) collides with an existing ingredients row and
+// no automatic signal is trusted to tell a legacy MADE row from a legacy
+// BOUGHT one apart (§29's first addendum, same section). One open row per
+// recipe: recordCollision() in lib/recipe-materialize.js will not insert a
+// second one while an earlier one is still unresolved, so the count here is
+// never a queue depth, only a fact of whether the recipe is currently
+// blocked. resolved_at is stamped by resolveOpenCollisions() the moment the
+// block clears — a later save whose name no longer collides, or a human
+// choosing materializeLink/materializeNew directly — mirroring
+// ingredient_cost_skips.resolved_at's convention exactly.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS recipe_materialize_collisions (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_id               INTEGER NOT NULL,
+    candidate_ingredient_id INTEGER,              -- NULL only if the owner could not be resolved
+    reason                  TEXT NOT NULL DEFAULT 'name_collision',
+    created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at             DATETIME,
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidate_ingredient_id) REFERENCES ingredients(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_recipe_materialize_collisions_recipe ON recipe_materialize_collisions(recipe_id);
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;

@@ -73,6 +73,13 @@ function makeDb() {
       overhead_pct REAL DEFAULT 0, sell_price REAL DEFAULT 0, target_food_cost REAL DEFAULT 30,
       updated_at TEXT);
     CREATE TABLE po_line_items (id INTEGER PRIMARY KEY AUTOINCREMENT, ingredient_id INTEGER);
+    -- materializeNew/materializeLink's success paths call resolveOpenCollisions()
+    -- as of the §29 auto-materialize addendum (2026-08-27) — see
+    -- scripts/test_recipe_materialize_auto.js for that mechanism's own tests.
+    CREATE TABLE recipe_materialize_collisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, recipe_id INTEGER NOT NULL,
+      candidate_ingredient_id INTEGER, reason TEXT NOT NULL DEFAULT 'name_collision',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, resolved_at TEXT);
   `);
   return db;
 }

@@ -12,10 +12,20 @@
 //
 // Wired into the retail-admin Recipes screen (public/retail-admin/19-recipes.js)
 // as of step 4. Step 5 adds POST/DELETE .../materialize — the ONLY
-// client-reachable path permitted to write ingredients.source_recipe_id.
+// CLIENT-DIRECTED path (a client body naming a specific material_id or a
+// specific new-material name) permitted to write ingredients.source_recipe_id.
 // routes/retail-materials.js's own save path deliberately refuses to read
 // that field from the client (see its readBody()) and stays that way; this
 // file is where the exception lives, guarded and narrow.
+//
+// A SECOND, INDIRECT PATH EXISTS AS OF §29's third addendum (2026-08-27):
+// every successful POST/PUT here also calls lib/recipe-materialize.js's
+// ensureMaterialized(), which can create a new source_recipe_id-linked row
+// with no material_id or name ever supplied by the client — the recipe's own
+// name is not something a client "directs" the way materializeLink's
+// material_id choice is. It is still the same file, the same guards
+// (materializeNew underneath), and the same refusal-on-ambiguity discipline;
+// it is not a third door.
 
 const express = require('express');
 const db = require('../database');
@@ -24,7 +34,7 @@ const { computeRecipeCost } = require('../lib/recipe-cost');
 const { checkCycle } = require('../lib/recipe-graph');
 // §29 step 5 — the "make available as material" guards/writes live here, not
 // in this route file, so they can be tested directly. See its own header.
-const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialFor, materialConsumers } = require('../lib/recipe-materialize');
+const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialFor, materialConsumers, ensureMaterialized } = require('../lib/recipe-materialize');
 // The nested-recipe recompute (§29 step 3) — fired after a save that can move
 // a linked material's recipe-derived cost. Same triggers routes/recipes.js
 // already fires from the kitchen door; a recipe backing a material must stay
@@ -185,6 +195,28 @@ router.get('/api/retail-admin/recipes/meta/categories', requireRetailAdmin, (req
   res.json({ success: true, data: rows.map(r => r.category) });
 });
 
+// Open collisions from automatic materialization (§29's third addendum) — the
+// data source for a human to resolve one, via materializeLink/materializeNew
+// below. Registered here, ahead of GET /:id, for the same reason
+// meta/categories is: a literal path segment must be matched before the
+// parameterized route or it is shadowed and never reached. Read-only; no
+// screen consumes this yet (Step 3 of the build-lines work,
+// docs/tacet-product-build-lines-design.md, is a separate PR), but the rows
+// are real from the moment auto-materialize first refuses to guess.
+router.get('/api/retail-admin/recipes/materialize-collisions', requireRetailAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT c.id, c.recipe_id, c.candidate_ingredient_id, c.reason, c.created_at,
+           r.name_en AS recipe_name_en, r.name_cn AS recipe_name_cn, r.sku AS recipe_sku,
+           i.name_en AS candidate_name_en, i.name_cn AS candidate_name_cn, i.sku AS candidate_sku
+      FROM recipe_materialize_collisions c
+      JOIN recipes r ON r.id = c.recipe_id
+      LEFT JOIN ingredients i ON i.id = c.candidate_ingredient_id
+     WHERE c.resolved_at IS NULL
+     ORDER BY c.created_at ASC
+  `).all();
+  res.json({ success: true, data: rows });
+});
+
 // ═══ One recipe ════════════════════════════════════════════════════════════
 router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
@@ -263,7 +295,10 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(recipeId, i + 1, s.name || null, s.instructions || null));
     }
-    res.json({ success: true, id: recipeId });
+    // §29's third addendum: a recipe's output always has a materials row,
+    // whether or not anything uses it yet. Never blocks the save.
+    const materialize = ensureMaterialized(db, recipeId);
+    res.json({ success: true, id: recipeId, materialize });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, null) });
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });
@@ -305,7 +340,10 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     if (backsAnyCostedRow(db, req.params.id)) {
       fireRecompute(db, { source: 'retail-recipes.update', recipe_id: Number(req.params.id) });
     }
-    res.json({ success: true });
+    // §29's third addendum — after the name/SKU write and the recompute, so
+    // a rename that clears a collision is picked up this same request.
+    const materialize = ensureMaterialized(db, req.params.id);
+    res.json({ success: true, materialize });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, req.params.id) });
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });

@@ -13,6 +13,11 @@ const { checkCycle } = require('../lib/recipe-graph');
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute, backsAnyCostedRow } = require('../lib/recipe-rollup');
 const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
+// Automatic materialization (§29's third addendum, 2026-08-27): every
+// successful create/update calls this so a recipe's output always has a
+// materials row. See lib/recipe-materialize.js's own comment for the three
+// outcomes and why a name collision writes nothing.
+const { ensureMaterialized } = require('../lib/recipe-materialize');
 const router = express.Router();
 
 // Nested recipes (§29): a line may reference a material that is itself made by
@@ -328,8 +333,12 @@ router.post('/api/recipes', requireAuth, requirePermission('recipes'), (req, res
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(recipeId, i+1, s.name||null, s.instructions||null));
     }
+    // §29's third addendum: a recipe's output always has a materials row,
+    // whether or not anything uses it yet. Never blocks the save — a
+    // collision is recorded, not thrown.
+    const materialize = ensureMaterialized(db, recipeId);
     logActivity(req.user.id, req.user.username, 'create', 'recipe', recipeId, { name_en }, req.ip);
-    res.json({ success: true, id: recipeId });
+    res.json({ success: true, id: recipeId, materialize });
   } catch(e) {
     if (e.message.includes('UNIQUE') && /sku/i.test(e.message)) {
       const owner = sku ? db.prepare('SELECT id, name_en, is_active FROM recipes WHERE sku = ?').get(sku) : null;
@@ -372,8 +381,12 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
     if (backsAnyCostedRow(db, req.params.id)) {
       fireRecompute(db, { source: 'recipes.update', recipe_id: Number(req.params.id) });
     }
+    // §29's third addendum — run after the name/SKU write above, and after
+    // the recompute, so a rename that clears a collision is picked up by
+    // this same request rather than needing a second save.
+    const materialize = ensureMaterialized(db, req.params.id);
     logActivity(req.user.id, req.user.username, 'update', 'recipe', req.params.id, { name_en }, req.ip);
-    res.json({ success: true });
+    res.json({ success: true, materialize });
   } catch(e) {
     if (e.message.includes('UNIQUE') && /sku/i.test(e.message)) {
       const owner = sku ? db.prepare('SELECT id, name_en, is_active FROM recipes WHERE sku = ? AND id != ?').get(sku, req.params.id) : null;
