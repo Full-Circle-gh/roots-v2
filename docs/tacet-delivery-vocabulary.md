@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.4 · 2026-08-26 · adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -134,7 +134,7 @@ The nine `tracking_status` codes and seven `tracking_scenario` entries in `lib/t
 
 Rule 4 says never compose new Chinese and that additions require an amendment to
 this document. This section is that amendment, opened rather than closed: the
-five strings below are running English-on-both-sides in the product right now,
+six strings below are running English-on-both-sides in the product right now,
 because composing their Chinese is exactly what Rule 4 forbids and no existing
 pair covers them.
 
@@ -235,6 +235,63 @@ recipe beside the other cost warnings, not once per offending line.
 **DO NOT CONFUSE WITH UNCONVERTED**, which is the §6 addendum's state for a recipe
 with a blank serving size. Different state, different screen region, different
 cause.
+
+## Receipt reversal refused — purchasing (LOCKED 2026-08-27)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the third such amendment, opened and closed the same day.
+It is also the first entry here that is not about an order leaving the business:
+it is about goods arriving and a receipt being taken back. The section was
+created because no existing one fits — the tables above cover order delivery,
+the two request sections cover channel mapping and recipe line units, and none of
+them speaks about stock.
+
+THE CONCEPT NEEDING A PAIR. A purchase receipt is reversed by asserting the goods
+never arrived. That is only true while the goods are still on the shelf. Where
+some have already been sold or consumed, the reversal cannot be honest, so it is
+refused outright — no clamping to zero, no partial return, nothing written at
+all. The operator is told which products block it and by how much.
+
+THE DECISION IT REPORTS. `docs/tacet-consolidation-decisions.md` records the
+receiving path's state; the rule this string speaks for is that a reversal tests
+every line against current stock BEFORE it writes anything, and aborts before the
+first write if any line would drive a count below zero. A partial reversal is
+worse than a refusal, because it leaves stock and the order records disagreeing
+with no sign that they do.
+
+**THE PAIR — minted by Ash, 2026-08-27, locked.**
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `undoBlocked` | Some of these goods have already left stock, so this delivery cannot be undone — nothing was changed. | 部分货品已出库，此次收货无法撤销 — 未作任何更改。 | Headline on a refused receipt reversal. Names the reason and states that the operation wrote nothing. |
+
+**ONE STRING, THREE ENTRY POINTS.** It serves Undo receiving, Back to draft and
+Cancel order alike. All three ask for the same thing — that a receipt be taken
+back — and all three are refused on the same test, so all three report the same
+fact in the same words. **They must not diverge.** Three wordings for one
+condition would read as three different conditions, and an operator comparing two
+screens would go looking for a difference that does not exist.
+
+**BOTH HALVES ALWAYS, NEITHER DROPPED FOR BREVITY.** The string carries two
+facts: the operation was REFUSED, and NOTHING WAS WRITTEN. Neither may be
+shortened away, in either language. Dropping the first turns a refusal into a
+vague complaint; dropping the second leaves the operator to guess whether the
+order is now half-reversed, which is the exact anxiety the refusal exists to
+prevent. This follows the same requirement `cannotCheck` carries in the
+channel-mapping section above, and for the same reason.
+
+**THE PER-PRODUCT LINES BENEATH IT ARE NOT MINTED HERE.** Each blocking product
+renders under the headline using the pair already live on the purchasing screen,
+`${n} short` / `${n} 短缺` (`public/retail-admin/16-purchasing.js`, the receive
+toast). That pair is reused unchanged and is deliberately NOT re-minted in this
+document — it already exists in the product, in context, and writing it here too
+would give one string two definition sites, against Rule 6.
+
+Sentence case, no exclamation marks. The em dash before the second half is part
+of both strings and is not a substitute for a full stop.
+
+**APPROVED BY ASH, 2026-08-27.** Both halves of the pair are his; nothing in this
+section was composed.
 
 ## Deferred — recorded, not in scope of this lock
 

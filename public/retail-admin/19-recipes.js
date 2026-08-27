@@ -621,6 +621,11 @@
         <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
         <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/' + esc(m.unit || '') : esc(T('no cost', '无成本'))}</span>
       </div>`).join('') + `</div>`;
+    // The list opens below the box, which on a full page can be the bottom of
+    // the scrollport. 'nearest' scrolls the minimum that makes it visible and
+    // no-ops once it already is, so it does not jump on every keystroke.
+    const list = host.querySelector('.rcp-pick');
+    if (list && list.scrollIntoView) list.scrollIntoView({ block: 'nearest' });
   }
   window.rcpPickAdd = function (id) {
     const m = _pickResults.find(x => x.id === id);
