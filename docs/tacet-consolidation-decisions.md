@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.94
+# Tacet shared-core consolidation — decisions record, v4.95
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-27 · v4.95 — **§29 GAINS A FOURTH ADDENDUM: A MATERIALIZED RECIPE'S COST YIELDS TO ITS MATERIAL'S OWN PURCHASE PRICE.** §29's core text says a linked material's cost is derived from its recipe rather than a purchase price — true of a recipe materialized as a brand-new material (`materializeNew()`, no purchase history) and **no longer true once that recipe is instead linked to a material that already had one** (`materializeLink()`, an existing `ingredients` row with its own `buy_price`). This narrows the original sentence rather than reversing it. **RATIONALE: THE MATERIAL WAS BOUGHT, AND THAT IS WHAT IT COST.** Where a recipe and a bought material are the same physical thing, the recipe describes what was done to it — repacked, portioned, relabelled — not where it came from; costing the event from the recipe instead of the purchase would price a bag of bought powder by what the kitchen scale says rather than what the supplier invoiced. **NOT A HYPOTHETICAL — IT IS THE PATTERN A SAME-DAY READ-ONLY AUDIT SURFACED.** Running `ensureMaterialized()`'s exact check across all 137 recipes (no writes) found 16 that would collide with an existing, unlinked material; 11 are one repeated shape — a recipe named identically to a bought raw material, the Organic Powder family plus Sumac, Extra Virgin Coconut Oil and Coconut Flakes — plus BioCurcumin+ (Organic) colliding on SKU rather than name. Once a human links one of those to its bought material, the rollup must not then quietly replace the supplier's price with the recipe's. **THE DETECTION MECHANISM IS DELIBERATELY NOT DECIDED HERE** — `buy_price > 0`, which materialize action made the link, or another signal, is left to whichever PR touches `lib/recipe-rollup.js`'s write path (§4 of the plan, Step 4), the same way the first §29 addendum deferred its own mechanism. **THE 16 COLLISIONS THEMSELVES ARE NOT RESOLVED BY THIS ADDENDUM AND ARE NOT BEING RESOLVED IN CODE** — Ash clears them by hand; this only settles what must happen to cost once one of them is linked. A narrowing addendum that reverses no rule, hence a patch. Docs only; no code changed.
 
 2026-08-27 · v4.94 — **§31 GAINS AN ADDENDUM: A BUILD LINE IS THE PRODUCT'S ONLY COST SOURCE. §29 GAINS A THIRD: SAVING A RECIPE ALWAYS MATERIALIZES ITS OUTPUT.** Two decisions closing the two open questions `docs/tacet-product-build-lines-design.md` (Step 1 of the product bill-of-materials build) raised rather than guessed at. **FIRST: ONCE A PRODUCT HAS A BUILD LIST, `store_products.recipe_id` IS NOT CONSULTED FOR COST BY ANYTHING.** The two do not coexist — a product has exactly one cost source, and the reason is §29's own: a target that could be either of two things means every reader handles two cases, the same shape that produced five divergent copies of the recipe cost formula before §29 closed it at the recipe-line level. A recipe's output already reaches a product the same way a box or a label does — as a material, via a build line — so there was never a second path that needed keeping; `recipe_id` narrows to the one job unaffected by cost, the allergen rollup in `routes/products.js`. **SECOND: MATERIALIZATION STOPS BEING OPT-IN.** Live at 28 of 137 active recipes today, reached only through the human-triggered `POST .../materialize` — a hard dependency the design doc surfaced, not a nice-to-have, because a build line cannot point at a made thing's cost until that thing has a materials row. Saving a recipe now creates or updates its row every time, whether or not anything uses it yet, closing the gap for the other 109. **THE NAME-COLLISION QUESTION THIS REOPENS IS NAMED AND EXPLICITLY NOT ANSWERED HERE** — the first §29 addendum already found none of the platform's three signals for telling a legacy made row from a legacy bought one trustworthy alone or in combination, and settled that a human resolved all 40 of Roots' real collisions; automatic materialization creates a new instance of the identical question, on every future save rather than as a one-time migration, and it is deferred to the PR that builds it on the same terms the first addendum already set — surfaced for a human, never resolved by guessing. **Two other points from the same review are recorded as CONFIRMED rather than reopened**: the 171-row cost-population pass stays out of scope for the four remaining build steps, a separate operational pass after the screen ships; and the `product_build_lines` table, the cost roll-up split (`lib/ingredient-cost.js` unchanged, `lib/recipe-cost.js`'s `buildLines()` exported rather than duplicated), and folding the recompute into the existing `fireRecompute`/`applyRollup` network are all approved as designed. Neither addendum reverses a rule; both narrow an open question to a decision. Evidence: `docs/tacet-product-build-lines-design.md`, all seven sections. Docs only; no code changed.
 
@@ -4198,6 +4200,54 @@ this, informed by, and not permitted to relitigate, the first addendum's finding
 
 Evidence: `docs/tacet-product-build-lines-design.md` §6, and the first §29
 addendum above.
+
+### §29 addendum — a materialized recipe's cost yields to its material's own purchase price (decided 2026-08-27)
+
+**WHEN A RECIPE IS LINKED TO AN EXISTING MATERIAL, THE MATERIAL'S PURCHASE
+PRICE WINS. THE RECIPE'S OWN COST DOES NOT OVERWRITE IT.** §29's core text
+says a linked material's *"cost is derived from its recipe rather than from a
+purchase price."* That is still true of a recipe materialized as a BRAND NEW
+material — `materializeNew()`, no purchase history, nothing to defer to — and
+**it stops being true the moment that recipe is instead linked to a material
+that already had one** — `materializeLink()`, an existing `ingredients` row
+with its own `buy_price`. This addendum narrows the original sentence rather
+than reversing it: read it as true only where the material has no purchase
+price of its own.
+
+**Rationale.** The material was bought, and that is what it cost. Where a
+recipe and a bought material are the same physical thing, the recipe
+describes what was done to it — repacked, portioned, relabelled — not where
+it came from. Costing that event from the recipe instead of the purchase
+would price a bag of bought powder by what the kitchen scale says it weighs
+rather than by what the supplier invoiced, and the two have no reason to
+agree.
+
+**The live example is not hypothetical — it is the 12-of-16 pattern a
+same-day audit surfaced.** Running the exact `ensureMaterialized()` check
+read-only across all 137 recipes found 16 that would collide with an
+existing, unlinked `ingredients` row — 11 of them one shape repeated: a
+recipe named identically to a bought raw material (Organic Kale Powder,
+Organic Matcha Powder, Organic Moringa Powder, Organic Chlorella Powder,
+Organic Turmeric Powder, Organic Spirulina Powder, Organic Garlic Powder,
+Organic Onion Powder, Sumac, Extra Virgin Coconut Oil, Coconut Flakes), plus
+BioCurcumin+ (Organic) colliding on SKU rather than name. A bulk powder
+bought from a supplier, repacked into a jar via a recipe, is exactly this
+addendum's case: once a human links one of those 12 recipes to its bought
+material via `materializeLink()`, the rollup must not then quietly replace
+the supplier's price with the recipe's.
+
+**Not decided here: the detection mechanism.** Whether this is read from
+`buy_price > 0` at write time, from whether the link was made via
+`materializeLink` versus `materializeNew`, or some other signal, is left to
+whichever PR touches `lib/recipe-rollup.js`'s write path — deferred
+deliberately, the same way §29's first addendum deferred its own mechanism,
+because naming one here would bind an implementation this document doesn't
+own. **The 16 collisions themselves are not resolved by this addendum and
+are not being resolved in code** — Ash clears them by hand; this only
+settles what must happen to cost once one of them IS linked.
+
+Evidence: the 16-collision audit run against `/root/roots-v2/data/roots.db`
+on 2026-08-27, read-only, no rows written.
 
 ## 30. Channel sync — what must stay true
 

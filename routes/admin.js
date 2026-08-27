@@ -219,7 +219,10 @@ router.post('/api/admin/factory-reset', requireAuth, requireAdmin, (req, res) =>
 
   // Tables wiped, ordered child→parent so FK refs don't trip:
   const TABLES_WIPE = [
-    // Recipe graph
+    // Recipe graph — recipe_materialize_collisions references BOTH recipes
+    // and ingredients (§29's third addendum, 2026-08-27) so it must clear
+    // before either.
+    'recipe_materialize_collisions',
     'recipe_ingredients', 'recipe_steps', 'recipe_cost_data', 'recipes',
     // Items + history
     'ingredient_price_history', 'price_alerts', 'ingredients',
