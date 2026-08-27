@@ -1026,10 +1026,7 @@
         </table>
       </div>
 
-      ${canReceive ? `<div class="pu2-autonote">
-        <span class="dot"></span>
-        <span><b>${esc(T('Confirmed counts go into', '确认的数量会自动计入'))} ${storeLabel(p)} ${esc(T('stock by themselves', '门店库存'))}</b> ${esc(T('and sync out to every sales channel. Damaged units are kept out of stock.', ',并同步到各销售渠道。破损数量不计入库存。'))}</span>
-      </div>` : ''}
+      ${canReceive ? receiveNote(p) : ''}
 
       <div class="pu2-actions">
         ${canReceive ? `<button class="pu2-btn primary" data-cap="purchasing:receive" onclick="puReceiveSave()">${esc(T('Confirm delivery', '确认收货'))}</button>` : ''}
@@ -1072,6 +1069,43 @@
         ${opt('no_invoice', 'None', '无发票')}
       </select>`;
   }
+  // The note above the Confirm buttons. It used to be one fixed sentence that
+  // promised, of every PO alike, that confirmed counts go into stock AND sync to
+  // every sales channel. Neither half is reliably true: a PO can be all material
+  // lines, which move no stock at all, and a product can be listed on no channel
+  // — in which case the sync it promises has nothing to push.
+  //
+  // So it now reads back what this PO actually says. Each clause is rendered only
+  // when the lines earn it, and the destination is the PO's own Deliver-to, which
+  // storeLabel() has always read from the record rather than any fixed name.
+  //
+  // Material lines are simply not spoken for: no stock claim, no channel claim,
+  // no sentence of their own. Their badge in the name column already says what
+  // they are, and the honest thing to say about them here is nothing.
+  //
+  // Every string is an existing pair from this file, reused verbatim; the
+  // channel clause is the second half of the old sentence, split at its own
+  // punctuation. Nothing here was composed. (`every sales channel` still
+  // over-claims once it renders — tightening it to "the channels these products
+  // are listed on" needs a new locked CN pair, so it is left as it stands.)
+  function receiveNote(p) {
+    const items = p.items || [];
+    const movesStock = items.some(i => !i.ingredient_id && i.store_product_id);
+    const onChannel  = items.some(i => i.channel_listed);
+    // Nothing to promise — an all-material PO, or one whose lines carry no
+    // product at all. Say nothing rather than something untrue.
+    if (!movesStock) return '';
+    const stockClause = `<b>${esc(T('Confirmed counts go into', '确认的数量会自动计入'))} ${storeLabel(p)} ${esc(T('stock by themselves', '门店库存'))}</b>`;
+    const channelClause = onChannel
+      ? ' ' + esc(T('and sync out to every sales channel.', ',并同步到各销售渠道。'))
+      : '';
+    const damagedClause = ' ' + esc(T('Damaged units are kept out of stock.', '破损数量不计入库存。'));
+    return `<div class="pu2-autonote">
+        <span class="dot"></span>
+        <span>${stockClause}${channelClause}${damagedClause}</span>
+      </div>`;
+  }
+
   function receiveRow(it, canReceive, poNoInvoice) {
     const applied = (it.stock_applied_qty || 0) > 0 ? `✓ ${it.stock_applied_qty}` : '—';
     const dis = canReceive ? '' : 'disabled';
@@ -1081,10 +1115,19 @@
     // worth repeating here since the header supplier is blank on exactly
     // those orders and this is where the receiving decision actually happens.
     const lineSupplier = (it.supplier_name || '').trim();
+    // A MATERIAL LINE GETS NO ARRIVED INPUT. Nothing in the receiving path moves
+    // stock for it — applyReceivedToStock() skips any line carrying an
+    // ingredient_id before it reaches a stock call — so an Arrived box on that
+    // row invites a count into a screen whose headline promise does not hold for
+    // it. The Damaged box stays: damage is recorded against the line whatever
+    // the line is. Retail product rows are untouched.
+    const arrivedCell = it.ingredient_id
+      ? '<td class="right pu2-num">—</td>'
+      : `<td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>`;
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
-      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
+      ${arrivedCell}
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
@@ -1149,9 +1192,14 @@
     const receipts = [];
     document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
       const ri = tr.querySelector('.pu2-ri');
+      // A material row has no Arrived box (see receiveRow). Omit the field
+      // entirely rather than sending null — the route only writes a column the
+      // payload actually names, so leaving it off keeps whatever qty_received
+      // that line already carries instead of blanking it on the next save.
+      const rq = tr.querySelector('.pu2-rq');
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
-        qty_received: tr.querySelector('.pu2-rq').value === '' ? null : tr.querySelector('.pu2-rq').value,
+        ...(rq ? { qty_received: rq.value === '' ? null : rq.value } : {}),
         damaged_qty: tr.querySelector('.pu2-rd').value || 0,
         tracking_number: tr.querySelector('.pu2-rt').value,
         // Absent on a PO-level no-invoice line — leave the field off entirely

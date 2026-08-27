@@ -545,6 +545,29 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
       `).all(po.store_id, ...ids);
       const byId = new Map(rows.map(r => [r.product_id, r.physical_qty]));
       for (const i of items) i.current_stock = i.store_product_id ? (byId.get(i.store_product_id) ?? 0) : null;
+      // Is this line's product actually LISTED on a sales channel at this store?
+      // The receive screen promises a channel sync, and until now it promised it
+      // for every PO regardless — including one whose products no channel
+      // carries. "Listed" here means exactly what the sync means by it: a
+      // sync_enabled row in that channel's product map for this store and
+      // product (lib/meituan-bundles.js, lib/guanyi-sync.js, lib/eleme-sync.js
+      // each open with that same lookup before they enqueue anything).
+      //
+      // Per table, in its own try: a tenant database that has never carried a
+      // channel has no such table, and a missing table must read as "not
+      // listed", never as an error that costs the operator the whole screen.
+      const listed = new Set();
+      for (const tbl of ['meituan_product_map', 'guanyi_product_map', 'eleme_product_map']) {
+        try {
+          const hits = tdb().prepare(`
+            SELECT product_id FROM ${tbl}
+             WHERE retail_store_id = ? AND sync_enabled = 1
+               AND product_id IN (${ids.map(() => '?').join(',')})
+          `).all(po.store_id, ...ids);
+          for (const h of hits) listed.add(h.product_id);
+        } catch { /* no such table on this tenant — nothing is listed there */ }
+      }
+      for (const i of items) i.channel_listed = i.store_product_id ? listed.has(i.store_product_id) : false;
     }
   }
   const expenses = db.prepare('SELECT id, date, amount, category, description FROM expense_entries WHERE po_id = ? ORDER BY id').all(po.id);
