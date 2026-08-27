@@ -27,7 +27,7 @@
 // SEEING `-unstamped` ON THE SERVER MEANS THE STAMP DID NOT RUN, and every
 // cached asset on that box is one load behind. Check it with:
 //   ssh root@47.239.89.63 "grep -n 'const CACHE' /root/roots-v2/public/sw.js"
-const CACHE = 'roots-v2-shell-v899-step4-strip-recipe-packaging';
+const CACHE = 'roots-v2-shell-unstamped';
 // '/m' is Tacet Mobile — the phone companion, and the one shell here that is
 // meant to be INSTALLED rather than visited. An installed app that opens to a
 // browser error the first time the signal drops is not an app, so its shell is
