@@ -9,6 +9,10 @@ const { storeCategory } = require('../lib/category-text');
 // non-linked ingredient, since that can move a linked material's
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute } = require('../lib/recipe-rollup');
+// The one derivation of ¥/recipe-unit from a buy price (see the file header).
+// bulk-update reuses this rather than re-deriving cost itself, same as the
+// single-edit door at routes/retail-materials.js does.
+const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
@@ -270,7 +274,14 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
   // supplier_platform, allergens, is_active. All are nullable strings
   // except is_active (0/1). Whitelist ensures the endpoint can't be coaxed
   // into updating columns it shouldn't (price, image, name, etc.).
+  //
+  // unit / buy_unit are the two fields that feed deriveCostPerUnit() — a
+  // change to either can move ¥/recipe-unit even though nobody typed a price,
+  // so the recompute below reacts to the SAME two fields, not to every field
+  // in this list.
   const STR_FIELDS = ['supplier', 'accounting_category', 'unit', 'buy_unit', 'supplier_platform', 'allergens'];
+  const unitFieldsChanged = Object.prototype.hasOwnProperty.call(updates, 'unit')
+    || Object.prototype.hasOwnProperty.call(updates, 'buy_unit');
   for (const f of STR_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(updates, f)) continue;
     const v = updates[f];
@@ -292,11 +303,37 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
   const placeholders = cleanIds.map(() => '?').join(',');
   const sql = `UPDATE ingredients SET ${sets.join(', ')} WHERE id IN (${placeholders})`;
   try {
-    const tx = db.transaction(() => db.prepare(sql).run(...args, ...cleanIds));
-    const r = tx();
+    const tx = db.transaction(() => {
+      const result = db.prepare(sql).run(...args, ...cleanIds);
+      // Bulk unit edits used to leave cost_per_unit exactly where it was —
+      // right for kg → g, silently wrong for anything divisible. Recompute
+      // with the same derivation and the same rollup trigger the single-edit
+      // door (routes/retail-materials.js) fires on a moved cost, so a linked
+      // material's recipe-derived cost still rolls up. A row a recipe
+      // supplies its own cost for is left alone, and a cost that can't be
+      // derived is left alone too — never zeroed, per deriveCostPerUnit's
+      // own rule.
+      const recomputedIds = [];
+      if (unitFieldsChanged) {
+        const rows = db.prepare(`SELECT * FROM ingredients WHERE id IN (${placeholders})`).all(...cleanIds);
+        for (const row of rows) {
+          if (row.source_recipe_id) continue;
+          const { cpu } = deriveCostPerUnit(row, row.buy_price);
+          if (cpu === null) continue;
+          if (Number(cpu) === Number(row.cost_per_unit || 0)) continue;
+          db.prepare('UPDATE ingredients SET cost_per_unit = ? WHERE id = ?').run(cpu, row.id);
+          recomputedIds.push(row.id);
+        }
+      }
+      return { changes: result.changes, recomputedIds };
+    });
+    const { changes, recomputedIds } = tx();
+    for (const id of recomputedIds) {
+      fireRecompute(db, { source: 'ingredients.bulk_update', ingredient_id: id });
+    }
     logActivity(req.user.id, req.user.username, 'bulk_update', 'ingredient', null,
-      { count: r.changes, ids: cleanIds, updates }, req.ip);
-    res.json({ success: true, updated: r.changes });
+      { count: changes, ids: cleanIds, updates, cost_recomputed: recomputedIds }, req.ip);
+    res.json({ success: true, updated: changes });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
