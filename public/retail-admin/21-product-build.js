@@ -758,14 +758,20 @@
     // thing from a guess — it is a figure the operator already entered on
     // this product, carried across rather than retyped, and the row says so
     // until it is edited.
+    //
+    // Packaging is the one exception: a box, a label, a bag is bought and
+    // used one at a time, so "how many" is never actually unmeasured the
+    // way a pinch of a food ingredient is. Defaulting it to 1 removes a
+    // click that was never doing any work.
     const sug = blSuggestQty(m);
+    const isPackaging = (m.item_kind || 'food') === 'packaging';
     _blLines.push({
       id: null,
       ingredient_id: m.id,
       name_en: m.name_en,
       name_cn: m.name_cn,
       sku: m.sku,
-      qty: sug ? sug.qty : 0,
+      qty: sug ? sug.qty : (isPackaging ? 1 : 0),
       qty_from_weight: sug ? sug.raw : null,
       unit: m.unit || 'g',
       notes: null,
