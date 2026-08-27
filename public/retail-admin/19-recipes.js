@@ -696,8 +696,6 @@
         <h3 class="rcp-blk-h">${esc(T('Inputs', '成本输入'))}</h3>
         <div class="rcp-fgrid">
           ${field(T('Labour', '人工'), input('labour', cd.labour, 'type="number" min="0" step="any"', 'rcpRecompute()'))}
-          ${field(T('Packaging (per serving)', '包装(每份)'), input('packaging', cd.packaging, 'type="number" min="0" step="any"', 'rcpRecompute()'),
-                   T('A per-serving packaging figure — set up under Packaging types in the kitchen app.', '每份包装成本 —— 在后厨应用的“包装类型”中设置。'))}
           ${field(T('Overhead %', '管理费用 %'), input('overhead_pct', cd.overhead_pct, 'type="number" min="0" step="any"', 'rcpRecompute()'))}
           ${field(T('Sell price', '售价'), input('sell_price', cd.sell_price, 'type="number" min="0" step="any"', 'rcpRecompute()'))}
           ${field(T('Target food cost %', '目标食品成本 %'), input('target_food_cost', cd.target_food_cost == null ? 30 : cd.target_food_cost, 'type="number" min="0" step="any"', 'rcpRecompute()'))}
@@ -720,7 +718,12 @@
     const v = k => { const el = document.getElementById('rcp-f-' + k); return el ? el.value : null; };
     return {
       labour: parseFloat(v('labour')) || 0,
-      packaging: parseFloat(v('packaging')) || 0,
+      // packaging is NOT sent. The input is gone (Step 4), so v('packaging')
+      // would read undefined and write 0 — silently erasing the recorded
+      // figure on the first save of any recipe. lib/recipe-cost-data-write.js
+      // preserves a stored value when the key is ABSENT, which is exactly the
+      // behaviour wanted here, and is why the key is removed rather than
+      // passed as null.
       overhead_pct: parseFloat(v('overhead_pct')) || 0,
       sell_price: parseFloat(v('sell_price')) || 0,
       target_food_cost: parseFloat(v('target_food_cost')) || 30,
@@ -752,7 +755,17 @@
     return [
       row(T('Ingredient cost', '原料成本'), money(c.ingredientCost)),
       row(T('Labour', '人工'), money(c.labour)),
-      row(T('Packaging (batch)', '包装(整批)'), money(c.packagingTotal)),
+      // Shown ONLY while a stale figure is still recorded, and struck through,
+      // because it no longer counts toward anything. 93 of 105 cost rows had
+      // one when packaging moved to the product's build list (§31, Step 4);
+      // hiding them outright would make the migration unverifiable from the
+      // screen and leave an operator wondering where their number went.
+      // Disappears by itself as each recipe is cleared. CN PENDING on the
+      // note — it names the build list, which has no sourced Chinese.
+      (Number(c.packagingTotal) > 0
+        ? row(T('Packaging (batch) — no longer counted', 'Packaging (batch) — no longer counted'),
+              '<s>' + money(c.packagingTotal) + '</s>')
+        : ''),
       row(T('Overhead', '管理费用'), money(c.overheadAmount)),
       row(T('Batch cost', '整批成本'), money(c.batchCost), 'total'),
       row(T('Cost per serving', '每份成本'), c.costPerServing != null ? money(c.costPerServing) : '— ' + T('(no servings)', '(未记录份数)')),

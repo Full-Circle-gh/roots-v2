@@ -17,10 +17,18 @@
  * this file is worth having: case 1 passing on its own would also be true of the
  * broken repair.
  *
- * SCOPE IS ONE COLUMN. Cases 8 and 9 assert the opposite property for the other
- * five — an absent `labour` still writes 0, an absent `target_food_cost` still
- * writes 30 — because this change must not quietly turn the route into a
- * partial-update endpoint.
+ * SCOPE IS TWO COLUMNS AS OF 2026-08-27. It was one. Cases 8 and 9 still assert
+ * the opposite property for the remaining four — an absent `labour` still
+ * writes 0, an absent `target_food_cost` still writes 30 — because this must
+ * not quietly become a partial-update endpoint.
+ *
+ * `packaging` JOINED `packaging_type_id` when §31's Step 4 removed the
+ * packaging input from Tacet's Cost & Pricing tab: that screen's payload now
+ * legitimately says nothing about the field, and `b.packaging || 0` would have
+ * read undefined and written ZERO — erasing the recorded figure on the first
+ * save of any of the 93 recipes still carrying one. Finding 11's exact
+ * failure, on the neighbouring column, caused by the change that made the key
+ * absent. Case 12 covers it.
  *
  * In-memory fixture only. No real database, no HTTP, no app modules — the write
  * is called directly, which is why it was moved out of the routes.
@@ -175,6 +183,32 @@ console.log('\n8. An absent numeric field still writes its default, NOT the stor
   check('absent sell_price -> 0 (not 40)', r.sell_price, 0);
   check('absent target_food_cost -> 30', r.target_food_cost, 30);
   check('packaging_type_id still preserved', r.packaging_type_id, 2);
+}
+
+// ── 12 · packaging is preserved on absent, and still clearable when sent ──
+// Step 4's own failure mode, and the one that would have destroyed data on 93
+// recipes the first time anybody saved one from Tacet.
+console.log('\n12. An absent packaging FIGURE keeps the stored one (Step 4)');
+{
+  const db = makeDb();
+  seedLinked(db);                                     // packaging 1.12 stored
+  saveRecipeCostData(db, 80, { labour: 3 });          // says nothing about packaging
+  const r = row(db, 80);
+  check('absent packaging -> stored 1.12 kept, NOT zeroed', r.packaging, 1.12);
+  check('and the type link survives alongside it', r.packaging_type_id, 2);
+}
+{
+  // The kitchen app still owns clearing it, and must keep working.
+  const db = makeDb();
+  seedLinked(db);
+  saveRecipeCostData(db, 80, { packaging: 0 });
+  check('present-and-zero still CLEARS to 0', row(db, 80).packaging, 0);
+}
+{
+  const db = makeDb();
+  seedLinked(db);
+  saveRecipeCostData(db, 80, { packaging: 2.5 });
+  check('present with a value still writes it', row(db, 80).packaging, 2.5);
 }
 
 console.log('\n9. The target_food_cost 0 -> 30 quirk is preserved (recipe-cost.js:248)');
