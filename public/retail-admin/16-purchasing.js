@@ -1163,7 +1163,7 @@
         .r{text-align:right}.sku{color:#9AA3B2;font-size:11px}
         tfoot td{font-weight:600;border-top:2px solid #111A2B;border-bottom:none}
         .note{margin-top:22px;color:#58606E;font-size:12px}
-        @media print{body{margin:0}}
+        @page{margin:12mm}
       </style></head><body>
       <div class="top">
         <div><div class="wm">tacet</div><div class="meta">${e2(T('Purchase order', '采购单'))}</div></div>
