@@ -255,7 +255,7 @@ per account). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 
 - **retail-admin** = 10–14 numbered files in **one global scope, load-order-critical** (hence
   `/* eslint-disable no-undef */`). `01-core.js` bootstraps `$`, `api()`, `toast`, `ICONS`, RBAC
-  `can()`/`setCaps()`/`applyCapGates()`. **Bump `public/sw.js` cache version when admin JS changes.**
+  `can()`/`setCaps()`/`applyCapGates()`. **No `sw.js` bump is needed when admin JS changes** — the deploy ships and stamps it every time.
 - **Role-shaped dashboard** (`03-dashboard.js`): owner sees a 4-card morning glance (Recap · Needs-you ·
   Today · Customers; Today dropped its intraday chart — that's a Reports job); warehouse / dispatch-CS /
   `/dashboard/ops` get role-filtered Recap + Unhandled views. Money-card *presence* gates on the
