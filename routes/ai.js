@@ -5,6 +5,9 @@ const { requireAuth, requireAdmin, requirePermission, logActivity } = require('.
 // tool_use input or a nested field). This module is the canonical home; ai.js
 // uses its own provider abstraction below but reuses these pure helpers.
 const { parseToolInput, escapeStrayJsonQuotes } = require('../lib/model-gateway');
+// The one recipe-cost derivation (labour, packaging, overhead, unit
+// reconciliation, all of it) — see compute_margin below.
+const { computeRecipeCost } = require('../lib/recipe-cost');
 const router = express.Router();
 
 // ─────────────────────────────────────────────────────────────────────
@@ -2286,9 +2289,18 @@ const TOOL_HANDLERS = {
   },
 
   // ── compute_margin ──
-  // Sell price comes from products. Cost comes from the linked recipe's
-  // ingredients × current buy prices. Returns the breakdown so the agent
-  // can explain margin moves with specific drivers.
+  // Sell price comes from products. Cost comes from lib/recipe-cost.js's
+  // computeRecipeCost() — the ONE recipe-cost derivation the Cost Sheet, the
+  // recipe detail card, the export and the product editor's recipe-health
+  // check all already go through. This tool used to run its own ingredient
+  // query and its own arithmetic: it skipped labour, packaging and overhead,
+  // INNER JOINed away a line whose ingredient had been deleted (silently
+  // dropping cost instead of counting it missing), treated an unpriced line
+  // as a genuine zero, never checked whether a line's unit and its
+  // material's stocking unit even measured the same thing, and fell back to
+  // `servings || 1` instead of refusing a recipe with no servings recorded.
+  // Delegating to computeRecipeCost fixes all of that in one move instead of
+  // porting each fix here separately.
   compute_margin: ({ product_id, product_name }) => {
     let p = null;
     if (product_id)        p = db.prepare('SELECT * FROM products WHERE id = ? AND COALESCE(is_active,1)=1').get(product_id);
@@ -2301,38 +2313,40 @@ const TOOL_HANDLERS = {
       product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, sell_price: sell },
       note: 'No linked recipe — cost cannot be derived. Margin computed only when a recipe is linked.',
     };
-    const recipe = db.prepare('SELECT id, name_en, servings, batch_size FROM recipes WHERE id = ?').get(p.recipe_id);
-    const lines = db.prepare(`SELECT ri.qty, ri.unit, ri.ingredient_id, ing.name_en, ing.name_cn,
-                                       ing.cost_per_unit, ing.buy_unit
-                                FROM recipe_ingredients ri
-                                JOIN ingredients ing ON ing.id = ri.ingredient_id
-                               WHERE ri.recipe_id = ?`).all(recipe.id);
-    const breakdown = lines.map(l => {
-      const cost = (parseFloat(l.qty) || 0) * (parseFloat(l.cost_per_unit) || 0);
-      return { ingredient_id: l.ingredient_id, name: l.name_en || l.name_cn, qty: l.qty, unit: l.unit,
-               cost_per_unit: l.cost_per_unit, line_cost: +cost.toFixed(4) };
-    });
-    const totalRecipeCost = breakdown.reduce((s, b) => s + (b.line_cost || 0), 0);
-    const servings = recipe.servings || 1;
-    const cost_per_serving = totalRecipeCost / servings;
-    const grossMarginPct = sell > 0 ? ((sell - cost_per_serving) / sell) * 100 : 0;
-    const foodCostPct = sell > 0 ? (cost_per_serving / sell) * 100 : 0;
+    const c = computeRecipeCost(p.recipe_id, db);
+    if (!c) return {
+      product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, sell_price: sell },
+      note: 'Linked recipe no longer exists — cost cannot be derived.',
+    };
+    if (c.costPerServing == null || !(c.costPerServing > 0)) return {
+      product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, sell_price: sell },
+      recipe: { id: c.recipe_id, name_en: c.name_en },
+      note: 'This recipe has no cost yet — it needs servings, a batch size, and a price on every ingredient.',
+    };
+    const breakdown = c.lines.map(l => ({
+      ingredient_id: l.ingredient_id, name: l.name, qty: l.qty, unit: l.unit,
+      cost_per_unit: l.costPerUnit, line_cost: l.lineCost == null ? null : +l.lineCost.toFixed(4),
+      free_by_design: l.freeByDesign, unreconciled_unit: l.unreconciledUnit,
+    }));
+    const grossMarginPct = ((sell - c.costPerServing) / sell) * 100;
+    const foodCostPct = (c.costPerServing / sell) * 100;
     // Find the recently-moved ingredient(s) — useful for "why did margin
     // drop?" reasoning. Look back 90d in price history.
+    const ingredientIds = c.lines.map(l => l.ingredient_id).filter(id => id != null);
     const since = new Date(Date.now() - 90*86400000).toISOString();
-    const movers = db.prepare(`SELECT iph.ingredient_id, ing.name_en, ing.name_cn,
+    const movers = ingredientIds.length ? db.prepare(`SELECT iph.ingredient_id, ing.name_en, ing.name_cn,
         MIN(iph.price) AS min_price, MAX(iph.price) AS max_price,
         (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY recorded_at ASC LIMIT 1) AS earliest_price,
         (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY recorded_at DESC LIMIT 1) AS latest_price,
         COUNT(*) AS price_points
       FROM ingredient_price_history iph
       JOIN ingredients ing ON ing.id = iph.ingredient_id
-      WHERE iph.ingredient_id IN (${lines.map(() => '?').join(',') || '0'})
+      WHERE iph.ingredient_id IN (${ingredientIds.map(() => '?').join(',')})
         AND iph.recorded_at >= ?
       GROUP BY iph.ingredient_id
       HAVING earliest_price > 0 AND ABS((latest_price - earliest_price) / earliest_price) >= 0.05
       ORDER BY ABS((latest_price - earliest_price) / earliest_price) DESC`)
-      .all(...lines.map(l => l.ingredient_id), since);
+      .all(...ingredientIds, since) : [];
     const recent_movers = movers.map(m => ({
       ingredient_id: m.ingredient_id, name: m.name_en || m.name_cn,
       from: +m.earliest_price.toFixed(4), to: +m.latest_price.toFixed(4),
@@ -2341,10 +2355,10 @@ const TOOL_HANDLERS = {
     }));
     return {
       product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku },
-      recipe: { id: recipe.id, name_en: recipe.name_en, servings },
+      recipe: { id: c.recipe_id, name_en: c.name_en, servings: c.servings },
       sell_price: sell,
-      total_recipe_cost: +totalRecipeCost.toFixed(2),
-      cost_per_serving: +cost_per_serving.toFixed(4),
+      total_recipe_cost: +c.batchCost.toFixed(2),
+      cost_per_serving: +c.costPerServing.toFixed(4),
       gross_margin_pct: +grossMarginPct.toFixed(1),
       food_cost_pct: +foodCostPct.toFixed(1),
       ingredient_breakdown: breakdown,
