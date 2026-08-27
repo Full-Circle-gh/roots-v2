@@ -7202,7 +7202,7 @@ function renderIngRowsUI() {
         <input placeholder="Name EN · 英文名 / 中文" value="${esc(row.name_en+(row.name_cn?' / '+row.name_cn:''))}" oninput="onRFNameInput(this,${row._rowId})" onfocus="onRFNameFocus(this,${row._rowId})" onblur="setTimeout(closeAC,180)">
         <input type="number" placeholder="Qty" value="${row.qty||''}" oninput="updateIngRow(${row._rowId},'qty',this.value);rfAutoCalcBatch()">
         <select onchange="updateIngRow(${row._rowId},'unit',this.value);rfAutoCalcBatch()">
-          ${['g','kg','ml','L','pcs','bag','box','bottle','tbsp','tsp'].map(u=>`<option value="${u}" ${(row.unit||'g')===u?'selected':''}>${u}</option>`).join('')}
+          ${['g','ml','pcs','bag','box','bottle','tbsp','tsp'].map(u=>`<option value="${u}" ${(row.unit||'g')===u?'selected':''}>${u}</option>`).join('')}
         </select>
         <input placeholder="Notes 备注" value="${esc(row.notes||'')}" oninput="updateIngRow(${row._rowId},'notes',this.value)">
         <button class="btn-icon" onclick="removeIngRow(${row._rowId})" style="color:#dc2626">×</button>
