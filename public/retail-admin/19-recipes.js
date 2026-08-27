@@ -807,15 +807,16 @@
     // this line's quantity cannot be multiplied by. Same amber pill — the
     // figure is not wrong to exist, it is wrong to trust — and never Brick,
     // because nothing is broken; a number is unknown.
-    // HELD — needs a sourced CN pair before it can ship. The concept has no
-    // entry in docs/tacet-delivery-vocabulary.md (that document is delivery
-    // vocabulary only) and no shipped pair covers it: the nearest two,
-    // '采购单位与物料单位不一致' and '配方单位不是 克/毫升/件', describe different
-    // facts and would be untrue here. Rule 4 forbids composing one.
-    // if (c.unreconciledUnitLines > 0) {
-    //   warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
-    //     `${n} line...`, `<CN PAIR NEEDED>`))}</span></div>`);
-    // }
+    // The pair is LOCKED in docs/tacet-delivery-vocabulary.md, minted by Ash
+    // 2026-08-27 — copied from that table, not retyped. It names the CAUSE and
+    // carries no count: the locked string has no slot for one, and widening it
+    // here would be composing a variant of a locked pair. It reads on all three
+    // classes the counter flags — volume↔mass, mass↔count, and any dimension
+    // pair a later table entry adds.
+    if (c.unreconciledUnitLines > 0) {
+      warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
+        'UNIT MISMATCH', '单位不符'))}</span></div>`);
+    }
     // Selling below cost is an error, not a warning, and it is worth saying in
     // words as well as in Brick — a minus sign on a figure is easy to skim past.
     if (soloM && soloM.money < 0) {
