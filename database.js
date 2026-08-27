@@ -306,6 +306,13 @@ addColumn('purchase_orders', 'no_invoice_expected', 'INTEGER DEFAULT 0');
 // Per-line "no invoice expected" flag — the supplier for THIS line doesn't
 // issue invoices (cash, market, …). Used by the line-level invoice report.
 addColumn('po_line_items', 'no_invoice_expected', 'INTEGER DEFAULT 0');
+// One-off reconciliation: the receive row's invoice picker used to write only
+// po_line_items.invoice_status, which the invoice report never reads — so a
+// line marked "None" there went on being chased as "awaiting". The picker now
+// writes both (routes/retail-purchasing.js receive route); this carries the
+// lines marked before that over. Idempotent, and it never clears a mark.
+db.exec(`UPDATE po_line_items SET no_invoice_expected = 1
+          WHERE invoice_status = 'no_invoice' AND COALESCE(no_invoice_expected, 0) = 0`);
 
 // Retail Bills reuse the same invoices + invoice_lines tables as the kitchen,
 // separated by scope (mirrors purchase_orders.scope). store_id pins the bill
