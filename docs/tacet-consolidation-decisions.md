@@ -497,6 +497,8 @@ enters recipe lines in pounds or ounces and receives identical behaviour; only t
 differ. The rule is one stocking unit per material and no conversion without a stated
 factor — never a mandated metric system.
 
+A unit the dimension table does not recognise is treated as reconcilable and costs as if the dimensions matched. This is deliberate and it is silent — an unrecognised unit produces a wrong cost with no marker. The table's coverage is therefore load-bearing: a missing unit is a costing defect, not a display gap. Recorded 2026-08-27, after 'tsp' was found costing volume as mass on four lines.
+
 ## 8. Packaging
 
 - Jars, lids, labels and bags are ITEMS. Bought, stocked, costed and TRACKED by quantity.
