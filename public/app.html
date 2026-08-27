@@ -23046,7 +23046,7 @@ let _wasteSummary = null;
 let _wasteEntries = [];
 let _wasteProducts = [];
 let _wasteSelected = null;        // selected product object
-let _wastePreviewCost = null;     // {cost_per_unit, sell_price, source}
+let _wastePreviewCost = null;     // {cost_per_unit, source}
 
 async function renderWaste() {
   if (!_wasteProducts.length) {
@@ -23393,24 +23393,17 @@ function wasteUpdateCostPreview() {
   if (!costEl || !bdEl) return;
   if (!_wasteSelected) { costEl.value = ''; bdEl.textContent = ''; return; }
   const c = _wastePreviewCost;
-  if (!c || (!c.cost_per_unit && !c.sell_price)) {
+  // No sell-price fallback: a loss the cost sheet can't price shows BLANK,
+  // never priced at what it would have sold for.
+  if (!c || !c.cost_per_unit || qty <= 0) {
     costEl.value = '';
     bdEl.innerHTML = qty > 0 ? '⚠️ 无成本数据 No cost data — add ingredient prices to the cost sheet' : '';
     return;
   }
-  if (c.cost_per_unit && qty > 0) {
-    const total = c.cost_per_unit * qty;
-    costEl.value = '¥' + total.toFixed(2);
-    bdEl.innerHTML = `<span style="color:var(--muted)">¥${c.cost_per_unit.toFixed(2)} 产品成本 prod cost × ${qty} = </span><strong style="color:#e05252">¥${total.toFixed(2)}</strong>` +
-      ` <span title="Packaging is recycled — not counted in waste cost · 包装可回收,不计入损耗成本" style="margin-left:6px;color:var(--muted);font-size:11px;cursor:help">♻ excl. packaging · 不含包装</span>`;
-  } else if (c.sell_price && qty > 0) {
-    const total = c.sell_price * qty;
-    costEl.value = '¥' + total.toFixed(2);
-    bdEl.innerHTML = `<span style="color:#b85c00">⚠️ 后备 fallback: 售价 sell price ¥${c.sell_price.toFixed(2)} × ${qty} = </span><strong style="color:#e05252">¥${total.toFixed(2)}</strong>`;
-  } else {
-    costEl.value = '';
-    bdEl.textContent = '';
-  }
+  const total = c.cost_per_unit * qty;
+  costEl.value = '¥' + total.toFixed(2);
+  bdEl.innerHTML = `<span style="color:var(--muted)">¥${c.cost_per_unit.toFixed(2)} 产品成本 prod cost × ${qty} = </span><strong style="color:#e05252">¥${total.toFixed(2)}</strong>` +
+    ` <span title="Packaging is recycled — not counted in waste cost · 包装可回收,不计入损耗成本" style="margin-left:6px;color:var(--muted);font-size:11px;cursor:help">♻ excl. packaging · 不含包装</span>`;
 }
 
 async function wasteSubmitEntry() {

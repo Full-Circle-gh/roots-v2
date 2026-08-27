@@ -10,8 +10,6 @@ const router = express.Router();
 
 // Resolve a product's "production cost per unit" by walking
 // product → recipe → recipe_ingredients × ingredient.cost_per_unit + cost-sheet.
-// Returns sell_price separately so the caller can fall back when the cost
-// sheet is incomplete.
 //
 // The recipe half is lib/recipe-cost.js — the one derivation the recipe card,
 // the Cost Sheet and the Excel export all read. This function used to run its
@@ -25,41 +23,40 @@ const router = express.Router();
 //
 // WHAT IS DELIBERATELY DIFFERENT HERE, AND MUST STAY THAT WAY
 // -----------------------------------------------------------
-// 1. PACKAGING IS EXCLUDED. Packaging is recycled when a finished product is
-//    wasted (the box / container is reused on the replacement unit), so
-//    counting it would double-count. This is why the batch total is assembled
-//    from the breakdown's granular fields — ingredientCost + labour +
-//    overheadAmount — instead of taking `batchCost`, which includes packaging.
-//    No flag was added to the shared module for this: the policy belongs to
-//    waste, not to the derivation. If the policy ever changes, add
-//    `+ c.packagingTotal` here.
-// 2. THE SELL-PRICE FALLBACK stays here too. A recipe that cannot produce a
-//    cost falls back to the product's sell price, and `source` records which
-//    path answered so COGS reconciliation can tell them apart. That is a waste
-//    policy, not a costing rule, and the shared module knows nothing about it.
+// PACKAGING IS EXCLUDED. Packaging is recycled when a finished product is
+// wasted (the box / container is reused on the replacement unit), so
+// counting it would double-count. This is why the batch total is assembled
+// from the breakdown's granular fields — ingredientCost + labour +
+// overheadAmount — instead of taking `batchCost`, which includes packaging.
+// No flag was added to the shared module for this: the policy belongs to
+// waste, not to the derivation. If the policy ever changes, add
+// `+ c.packagingTotal` here.
+//
+// THE SELL-PRICE FALLBACK IS GONE. It used to price an uncosted loss at what
+// the product would have SOLD for — backwards for a line meant to report
+// what was spent, and it silently outran a real cost figure the moment a
+// recipe went incomplete. A product with no recipe-derived cost now returns
+// cost_per_unit: null and the caller (routes/waste.js's own POST handler)
+// shows that blank, the same "null means write nothing, never zero, never
+// someone else's number" rule lib/ingredient-cost.js already enforces for
+// material cost.
 function computeProductCost(productId) {
-  if (!productId) return { cost_per_unit: null, sell_price: 0, source: null };
-  const p = db.prepare('SELECT sell_price, recipe_id, name_en FROM products WHERE id = ?').get(productId);
-  if (!p) return { cost_per_unit: null, sell_price: 0, source: null };
-  const sellPrice = p.sell_price || 0;
-  if (!p.recipe_id) {
-    return { cost_per_unit: null, sell_price: sellPrice, source: sellPrice > 0 ? 'sell_price' : null };
-  }
+  if (!productId) return { cost_per_unit: null, source: null };
+  const p = db.prepare('SELECT recipe_id, name_en FROM products WHERE id = ?').get(productId);
+  if (!p || !p.recipe_id) return { cost_per_unit: null, source: null };
   // id-form: the module loads the recipe, its lines (selecting free_by_design)
   // and its cost row through the seamed handle. Returns null if the recipe id
   // points at nothing — a product whose recipe was hard-deleted.
   const c = computeRecipeCost(p.recipe_id, db);
-  if (!c) {
-    return { cost_per_unit: null, sell_price: sellPrice, source: sellPrice > 0 ? 'sell_price' : null };
-  }
-  // Packaging-free batch total — see note 1 above.
+  if (!c) return { cost_per_unit: null, source: null };
+  // Packaging-free batch total — see note above.
   const batchCost = c.ingredientCost + c.labour + c.overheadAmount;
   const costPerServ = c.servings > 0 ? batchCost / c.servings : null;
 
   if (costPerServ !== null && costPerServ > 0) {
-    return { cost_per_unit: costPerServ, sell_price: sellPrice, source: 'recipe' };
+    return { cost_per_unit: costPerServ, source: 'recipe' };
   }
-  return { cost_per_unit: null, sell_price: sellPrice, source: sellPrice > 0 ? 'sell_price' : null };
+  return { cost_per_unit: null, source: null };
 }
 
 function periodCutoff(period) {
@@ -161,14 +158,17 @@ router.post('/api/waste', requireAuth, requirePermission('waste'), (req, res) =>
 
   const cc = computeProductCost(product_id);
   const cost_per_unit = cc.cost_per_unit;
-  const sell_price    = cc.sell_price;
-  // Track WHICH path produced the cost so future COGS reconciliation can tell
-  // recipe-computed costs apart from the sell-price fallback. The cost_source
+  const sell_price    = prod.sell_price || 0;
+  // Track WHICH path produced the cost so COGS reconciliation can tell a
+  // recipe-computed loss apart from one nothing could price. The cost_source
   // column is added by an idempotent migration.
-  const cost_source = cost_per_unit != null
-    ? 'recipe'                     // ingredients × cost_per_unit + labour + overhead
-    : (sell_price > 0 ? 'sell_price_fallback' : 'none');
-  const cost_lost    = (cost_per_unit != null ? cost_per_unit : sell_price) * q;
+  const cost_source = cost_per_unit != null ? 'recipe' : 'none';
+  // No sell-price fallback: a loss the cost sheet can't price is BLANK, not
+  // priced at what it would have sold for — same policy as ingredients.js's
+  // cost_per_unit (see lib/ingredient-cost.js). retail_value below is a
+  // separate figure (what the loss would have sold for) and keeps using
+  // sell_price; it is not the cost.
+  const cost_lost    = cost_per_unit != null ? cost_per_unit * q : null;
   const retail_value = sell_price * q;
 
   try {
