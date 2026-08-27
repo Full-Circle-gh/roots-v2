@@ -1692,3 +1692,299 @@ be corrected from a measurement.
 
 Source: read-only queries of `roots.db` on 2026-08-26 over SSH, and the code
 cited above at `488dddf1`.
+
+---
+
+# Appendix A — the packaging schema, established against the live database (2026-08-27)
+
+This appendix exists because the schema was being reconstructed over SSH from
+the wrong table and the reconstruction kept coming out wrong. Everything below
+is a live read of `/root/roots-v2/data/roots.db` (721 MB) on 2026-08-27, run as
+`sqlite3 'file:…?mode=ro'`. No application module was loaded against production,
+for the reason recorded in this document's method note.
+
+**The 721 MB file is the live one.** `/root/roots-v2/roots.db` is a 0-byte
+placeholder from 2026-06-04 and answers "no such table" to every query. So does
+`/root/roots-v2/data/tenants/roots.db`, a second 0-byte file from 2026-07-05.
+A query aimed at either reads as "the column does not exist", which is the
+single easiest way to conclude a column was dropped when it never moved.
+
+## A.1 `recipes` has never held packaging. `recipe_cost_data` does.
+
+`PRAGMA table_info(recipes)` is correct as quoted — sixteen columns, no
+`packaging`, no `packaging_type_id`. That is not a loss and not a migration.
+**Packaging has always lived one table over.** `recipes` holds what a recipe
+IS; `recipe_cost_data` holds what someone TYPED about its cost, one row per
+recipe, `recipe_id` UNIQUE with `ON DELETE CASCADE`.
+
+```sql
+CREATE TABLE recipe_cost_data (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id     INTEGER NOT NULL UNIQUE,
+  labour        REAL DEFAULT 0,
+  packaging     REAL DEFAULT 0,        -- per serving
+  packaging_type_id INTEGER,
+  overhead_pct  REAL DEFAULT 0,
+  sell_price    REAL DEFAULT 0,
+  target_food_cost REAL DEFAULT 30,
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+)
+```
+
+`sqlite_master` reports **no indexes** on this table beyond the implicit unique
+index behind `recipe_id`.
+
+**The cost column is named `packaging`, not `packaging_cost`.** A query written
+against `packaging_cost` fails with `no such column`, which reads identically to
+querying the 0-byte decoy. Two different mistakes, one indistinguishable
+symptom — worth naming because both were in play.
+
+The lookup table it points at:
+
+```sql
+CREATE TABLE packaging_types (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  name_cn       TEXT,
+  cost          REAL DEFAULT 0,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+, image_data TEXT)
+```
+
+No `updated_at` — which is finding 4's problem restated: an edit to a type's
+cost leaves no timestamp and no log, so today's `cost` is not necessarily the
+cost that was copied into any recipe.
+
+## A.2 Only one screen can set the type pointer, and it is not Tacet's
+
+**Tacet's Cost & Pricing tab writes `recipe_cost_data.packaging` and nothing
+else about packaging.** `costTab()` in
+`public/retail-admin/19-recipes.js:686-702` renders five plain number inputs;
+the packaging one is at `:694-695`, with the helper text pointing at the kitchen
+app. `draftCostData()` at `:715-722` builds the save payload and carries exactly
+five keys — `labour`, `packaging`, `overhead_pct`, `sell_price`,
+`target_food_cost`. **`packaging_type_id` is not among them.** The payload goes
+to `PUT /api/retail-admin/recipes/:id/cost` from `rcpSave` at `:1019`.
+
+So the answer to "does anything on that screen write the type pointer" is **no,
+and there is no control on that screen that could.** The helper text is the only
+thing on it that knows the pointer exists.
+
+**The picker lives in the kitchen app.** `public/app.html`:
+
+| what | where |
+|---|---|
+| type `<select>` | `#cs_pack_type`, `app.html:7750-7754` |
+| its change handler | `onCsPackTypeChange()`, `app.html:7843` |
+| the number box it mirrors | `#cs_packaging`, `app.html:7757` |
+| the save that sends the pointer | `saveCostSheet(recipeId)`, `app.html:8057-8062` |
+| type CRUD modal | `showPackTypeManager()` / `savePackTypesFromDOM()`, `app.html:7864-8008` |
+
+`saveCostSheet` at `:8062` sends
+`packaging_type_id: (packSel && packSel.value && packSel.value !== '__manage__') ? packSel.value : null`
+— a real id when one is selected, a literal `null` when the operator picks
+"Custom / None". That literal null is the deliberate unlink the fix at
+`lib/recipe-cost-data-write.js` had to keep working, and is why COALESCE was the
+wrong repair.
+
+Note the shape: **the number box mirrors the selected type's cost** (`:7757`
+reads `pt.cost` when a type is linked, and greys the field). So on the kitchen
+app the number is a *copy of* the type's cost. On Tacet the same number is a
+free-typed figure with nothing behind it. Same column, two different meanings
+depending on which screen last wrote it — finding 4's copy-not-reference,
+observed from the UI side.
+
+## A.3 Ninety-one rows carry a pointer; ninety of them resolve
+
+Live counts, 2026-08-27:
+
+| | |
+|---|---|
+| `packaging_types` rows | 44 |
+| `recipes` rows | 137 |
+| `recipe_cost_data` rows | 104 |
+| rows with `packaging_type_id IS NOT NULL` | **91** |
+| of those, resolving to a real `packaging_types.id` | **90** |
+| of those, dangling | **1** |
+| rows with `packaging <> 0` | 93 |
+| distinct types actually pointed at | 24 (23 real + 1 bogus) |
+| types nothing points at | 21 of 44 |
+
+All 91 pointer rows belong to real, `is_active = 1` recipes. **The recipe ids
+holding a pointer** (91):
+
+```
+7   8   9   10  11  12  13  14  15  16  17  18  20  21  22  23  25  26  27  28
+34  35  40  42  43  47  48  49  52  54  55  56  62  63  64  65  67  68  69  70
+71  72  73  74  75  77  78  79  81  82  83  85  86  87  88  90  92  96  98  102
+111 112 113 114 115 116 117 118 119 120 121 122 124 125 126 127 128 129 130 131
+132 133 134 135 136 137 138 139 140 141 142
+```
+
+### The dangling one is a client-generated id that was never a row
+
+**Recipe 7 (`Hummus Asli`) holds `packaging_type_id = 'pt1778315688913'`, and
+`typeof()` says `text`.** `packaging_types.id` is `INTEGER PRIMARY KEY
+AUTOINCREMENT`; nothing in that table has ever had that id. SQLite's loose
+typing accepted the string into an INTEGER column without complaint.
+
+The origin is `readPackTypeRowsFromDOM()` at `app.html:7973-7976`:
+
+```js
+id: _packagingTypes[i]?.id || 'pt' + Date.now() + i,
+```
+
+A newly added type gets a **client-side placeholder id** before the server has
+given it a real one. If the operator selects that fresh type in the dropdown and
+saves the cost sheet before the type list round-trips, the placeholder is what
+lands in `recipe_cost_data`. It resolved to nothing then and it resolves to
+nothing now.
+
+**This is a second way to lose the link, and the de29c633 fix does not touch
+it.** That fix stops an absent key from erasing a good pointer. This one writes
+a bad pointer through the front door — the key is present and non-empty, so
+every rule in `lib/recipe-cost-data-write.js` passes it straight through. Not
+fixed here; recorded so the packaging migration (§31) knows one of its 91 inputs
+is unresolvable for a different reason than the two NULLs are.
+
+## A.4 Recipes 36 and 80, restated against the real schema
+
+Both earlier statements were about the right rows and the wrong table name.
+What actually happened, and where:
+
+| | recipe 36 | recipe 80 |
+|---|---|---|
+| name | Beet salad dressing / 甜菜根沙拉酱 | Zhoug — Green Chill Dip / 青辣椒酱 |
+| table | `recipe_cost_data` | `recipe_cost_data` |
+| `packaging` | **0.1** | **1.12** |
+| `packaging_type_id` | NULL | NULL |
+| `updated_at` | 2026-08-11 07:14:04 | 2026-08-26 07:28:46 |
+
+**"Recipe 36 lost its `packaging_type_id` on 2026-08-11"** — the row is on
+`recipe_cost_data`, not `recipes`, and 2026-08-11 07:14:04 is that row's
+`updated_at`, which is the last write of ANY of its six cost columns. It is not
+a timestamp of the pointer specifically, because no such timestamp exists.
+**Whether 36 ever had a pointer is not established.** Its save falls inside the
+window the 44 types were being created (05:44–07:27 that morning), so "never
+set" and "set then erased" are both consistent with the evidence. Its 0.1
+matches exactly one type today — id 57, a pressure-sensitive gasket for powder
+bottles — which is a poor semantic match for a salad dressing and is weak
+evidence either way.
+
+**And yes — recipe 36's pointer is still absent today.** `packaging` is still
+`0.1`, `packaging_type_id` is still NULL, and `updated_at` has not moved off
+2026-08-11 07:14:04 in the sixteen days since. Nothing has written that row,
+including the fix.
+
+**"Recipe 80 shows packaging 1.12 with a NULL pointer"** — correct as stated,
+and it is the stronger of the two. `activity_log` has recipe 80 created
+2026-08-14 08:00:55 and renamed 2026-08-14 08:01:33; its cost row was last
+written 2026-08-26 07:28:46. Its 1.12 is exactly `packaging_types` id 2
+(`300ml Plastic Box`, 1.12) and no other type carries that figure. So a type was
+picked, the number was copied from it, and a later save dropped the link — the
+finding-11 mechanism, on the row that shows it most clearly. **Also still
+absent today**, unchanged since 2026-08-26 07:28:46.
+
+**Neither loss appears in `activity_log`.** The log holds `create`/`update`/
+`delete` on `recipe` only — 269 updates, 136 creates, 2 deletes — and **zero**
+entries of any action from either cost route. Confirmed live, as finding 11
+predicted from the code.
+
+### Nothing new has been lost since the fix
+
+The fix is deployed: `/root/roots-v2/lib/recipe-cost-data-write.js` is on the
+box. The set of rows with a packaging number and no pointer is **still exactly
+{36, 80}** — no third row has joined them. Eleven further rows have a NULL
+pointer, but all eleven carry `packaging = 0`, so there is no number to have
+been orphaned:
+
+| recipe | packaging | updated_at |
+|---|---|---|
+| 19 | 0.0 | 2026-08-27 01:22:47 |
+| 30 | 0.0 | 2026-08-11 11:51:00 |
+| 31 | 0.0 | 2026-08-11 09:46:01 |
+| 32 | 0.0 | 2026-08-11 09:36:35 |
+| 33 | 0.0 | 2026-08-11 09:36:11 |
+| 39 | 0.0 | 2026-08-11 09:37:18 |
+| 51 | 0.0 | 2026-08-11 09:37:37 |
+| 59 | 0.0 | 2026-08-11 10:56:39 |
+| 60 | 0.0 | 2026-08-11 09:36:55 |
+| 66 | 0.0 | 2026-08-11 10:54:00 |
+| 143 | 0.0 | 2026-08-25 07:25:30 |
+
+Recipe 19 was written on 2026-08-27, after the fix landed, and still has a NULL
+pointer — which is the correct outcome for a row that never had one, not a
+regression. **This is evidence the loss stopped, not proof.** A save on a row
+that never had a pointer is indistinguishable from a save that preserved a null,
+and the absent audit trail means that will remain true.
+
+## A.5 The de29c633 fix was never testable from Cost & Pricing
+
+**The test plan assumed a control that does not exist.** Cost & Pricing has no
+packaging picker, no type name, no type thumbnail — it shows one number and one
+line of helper text. There is nothing on that screen that displays
+`packaging_type_id`, so nothing on it can show whether the pointer survived a
+save. Opening the tab, editing a field, saving, and looking at the screen would
+have shown an unchanged number both before and after the fix. **That test passes
+against the bug.**
+
+That is not a gap in the fix; it is the fix's own premise. The commit message
+says the client repair "fixes one caller of one route" and that the fault was a
+route deleting a field it was handed nothing about. The screen was never the
+subject.
+
+**The real test is a two-surface test, and neither surface is Cost & Pricing:**
+
+1. **Set the pointer in the kitchen app** — `app.html`, cost sheet,
+   `#cs_pack_type` (`:7750`), save via `saveCostSheet` (`:8057`).
+2. **Save from Tacet's Cost & Pricing tab** — change any input, save.
+3. **Read the pointer back out of the database**, because no screen will tell
+   you:
+
+```sql
+SELECT recipe_id, packaging, packaging_type_id, updated_at
+  FROM recipe_cost_data WHERE recipe_id = ?;
+```
+
+   Pre-fix the pointer is NULL and `updated_at` has moved. Post-fix the pointer
+   is unchanged and `updated_at` has moved.
+4. **Confirm the clear still works** — back in the kitchen app, select
+   "Custom / None" and save. The pointer must go to NULL. This is the half the
+   COALESCE repair would have broken, and skipping it tests only the easy
+   direction.
+
+**The headless version already exists and is the better test:**
+`scripts/test_recipe_cost_data_write.js` drives `saveRecipeCostData()` against
+an in-memory fixture and asserts all three cases — absent key preserves, present
+and empty clears, present with a value writes — plus that no other column gained
+preserve-on-absent semantics. It needs no browser, no login, and no production
+database. Run that; use the four UI steps above only to confirm the two real
+callers send what the unit test assumes.
+
+## A.6 Working note — `data/tenants/*.db` are provisioning orphans
+
+`/root/roots-v2/data/tenants/` holds `2.db`, `4.db`, `5.db`, `6.db`, `7.db`
+(~1.6 MB each) and a 0-byte `roots.db`. They are written by
+`lib/tenant-db.js` — `getTenantDb(id)` opens `data/tenants/<id>.db` and runs
+`initTenantSchema()` into it on **every** open, cloning the main DB's
+data-plane structure (148 tables, no rows, control-plane tables skipped);
+`lib/provision-tenant.js` then seeds a `storefront_config` baseline. Tenant #1
+(Roots) deliberately does not get a file — `getTenantDb(1) === mainDb` — which
+is why there is no `1.db`. **All five are abandoned.** Every one is
+schema-only apart from its storefront baseline (0 orders, 0 products, 0
+customers; `storefront_config` 5/32/33/32/33 rows), the newest was last touched
+2026-08-05, and — decisively — the `tenants` control-plane table in the live
+`roots.db` holds **one row, id 1 (Roots, active)**, and `tenant_users` holds 7
+rows all on tenant 1. There are no control-plane rows for 2, 4, 5, 6 or 7, so
+nothing can route a request to any of those files; they are residue of
+provisioning runs whose `tenants` rows were removed, plus whatever the
+`scripts/diagnose_tenant_step_*.js` helpers created as a side effect of
+requiring `tenant-db.js`. `TENANT_DATA_ISOLATION=1` **is** set in the box's
+`.env`, so the machinery is armed and functioning — it simply has no non-Roots
+tenant to serve. The 0-byte `data/tenants/roots.db` is a third decoy, created
+2026-07-05, distinct from the 0-byte one at the repo root.
+
+Source: read-only queries of `/root/roots-v2/data/roots.db` and
+`data/tenants/*.db` on 2026-08-27 over SSH, and the code cited above at
+`0f82a1f2`.
