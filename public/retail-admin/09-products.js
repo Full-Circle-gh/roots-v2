@@ -3225,6 +3225,13 @@ let VA_STORE_TOTALS = {};
 // re-open. Cleared when the editor opens a new product.
 let PD_STOCK_DATA = null;
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
+// Both halves of the row's own name, kept RAW and separate, because the Name
+// column stacks EN over CN the way the Label inputs do. `name` above stays the
+// glued one-line form and is used only where one line IS the shape: a title=
+// tooltip, and the SKU-clash message. A column cell is not one line, and the job
+// of this one — comparing a sibling's name against the rest of its family —
+// happens one language at a time.
+function _vaNameParts(p) { return { name_en: (p.name_en || '').trim(), name_cn: (p.name_cn || '').trim() }; }
 // Picker row label (escaped HTML): the name plus a quiet disambiguator so two
 // products that share a name — e.g. the same butter in two sizes — can be told
 // apart. Prefer the variant/size, fall back to SKU.
@@ -3251,12 +3258,12 @@ async function vaLoad(id) {
     // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
     // not the legacy flat stock_qty (which per-store edits never touch). Falls
     // back to stock_qty only if no per-store sum is known yet.
-    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, compare: (p.compare_at_price != null ? p.compare_at_price : ''), stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true };
+    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), ..._vaNameParts(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, compare: (p.compare_at_price != null ? p.compare_at_price : ''), stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true };
     VA_MEMBERS = members.length
-      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, compare: (m.compare != null ? m.compare : ''), stock: m.stock, published: m.is_published, img: (m.image_data || ''), ownImg: !!m.own_image, self: m.id === id }))
+      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), ..._vaNameParts(m), sku: m.sku || '', size: m.size || '', price: m.price, compare: (m.compare != null ? m.compare : ''), stock: m.stock, published: m.is_published, img: (m.image_data || ''), ownImg: !!m.own_image, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
-  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true }]; }
+  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), ..._vaNameParts(p), img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true }]; }
   // Open by default only when there's something to show (real sibling variants);
   // a single-option product starts collapsed so the editor isn't cluttered.
   VA_OPEN = VA_MEMBERS.length > 1;
@@ -3313,6 +3320,16 @@ function vaRender() {
     // and the way into that row's own editor — one click, the same paOpenEdit()
     // a standalone card uses.
     //
+    // STACKED EN OVER CN, one line each, the same shape as the Label inputs
+    // beside it — never glued into "EN · CN". A tooltip may glue, because a
+    // tooltip is one line by nature; a column cell is not, and the job of this
+    // one is COMPARING a sibling's name against the rest of its family, which is
+    // read in one language at a time. Two lines scan; a middle dot has to be
+    // parsed. The order is fixed and does not follow the language toggle,
+    // because both halves are the point.
+    const nameLines =
+      `<span>${escapeHtml(v.name_en || '—')}</span>` +
+      `<span class="va-rowname-cn">${escapeHtml(v.name_cn || '—')}</span>`;
     // NOT EDITABLE HERE, ON PURPOSE. The sibling's own editor is the single
     // writer for a name (paOpenEdit → pdOpen → PATCH), so there is one field per
     // fact rather than two that can disagree, and vaPersistSiblings still
@@ -3320,8 +3337,8 @@ function vaRender() {
     // above — it gets the text without the click-through, because that click
     // would re-open the editor the operator is already standing in.
     const rowName = v.self
-      ? `<span class="va-rowname va-rowname-self" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}</span>`
-      : `<button type="button" class="va-rowname" title="${escapeAttr(v.name + '\n' + cuT('Edit this variant', '编辑此规格'))}" onclick="paOpenEdit(${v.id})">${escapeHtml(v.name)}</button>`;
+      ? `<span class="va-rowname va-rowname-self" title="${escapeAttr(v.name)}">${nameLines}</span>`
+      : `<button type="button" class="va-rowname" title="${escapeAttr(v.name + '\n' + cuT('Edit this variant', '编辑此规格'))}" onclick="paOpenEdit(${v.id})">${nameLines}</button>`;
     // Variant option LABEL is split EN/CN (never glued) — one input per language,
     // stacked, so "Big 200g" and "大" are stored & shown separately.
     const label = `<div class="va-name">` +
@@ -3519,7 +3536,7 @@ async function vaAddSize() {
     const j = await api('/api/retail-admin/products/' + VA_ID + '/duplicate', { method: 'POST', body: { as_variant: true, label: '' } });
     const d = j.data; if (!d) throw new Error('add_failed');
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
-    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, compare: (d.compare_at_price != null ? d.compare_at_price : ''), stock: d.stock_qty, published: d.is_published, img: (d.image_data || d.image_url || ''), ownImg: !!(d.image_data || d.image_url), self: false });
+    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), ..._vaNameParts(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, compare: (d.compare_at_price != null ? d.compare_at_price : ''), stock: d.stock_qty, published: d.is_published, img: (d.image_data || d.image_url || ''), ownImg: !!(d.image_data || d.image_url), self: false });
     VA_OPEN = true;
     vaRender();
     pdLoadStoreStocks(VA_ID);   // pull the new variant's row into the stock grid

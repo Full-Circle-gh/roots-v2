@@ -3657,17 +3657,25 @@
   .va-row.va-drop-before { box-shadow: inset 0 2px 0 var(--brass); }
   .va-row.va-drop-after  { box-shadow: inset 0 -2px 0 var(--brass); }
   .va-label { width: 100%; box-sizing: border-box; }
-  /* The row's own product name. Read-only here — a sibling's name is written in
-     that sibling's own editor, which this cell is the door to. One line, clipped
-     with an ellipsis; the whole name (and what the click does) is in the title.
-     A button, not a link: it stays inside the app and takes no href. */
-  .va-rowname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-                font-size: 12px; line-height: 1.35; text-align: left; }
+  /* The row's own product name: two stacked lines, English over 中文, mirroring
+     the Label inputs beside it — never glued into "EN · CN". The cell is read
+     for COMPARISON against the rest of the family, which happens in one language
+     at a time. Each line clips to an ellipsis on its own; the whole name, and
+     what the click does, is in the title.
+     Read-only here — a sibling's name is written in that sibling's own editor,
+     which this cell is the door to. A button, not a link: it stays inside the
+     app and takes no href. */
+  .va-rowname { display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: left; }
+  .va-rowname > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                       font-size: 12px; line-height: 1.35; }
+  .va-rowname > .va-rowname-cn { font-size: 13px; }
   button.va-rowname { border: none; background: none; padding: 0; font-family: inherit;
-                      color: var(--text-2); cursor: pointer;
-                      text-decoration: underline; text-decoration-color: transparent;
-                      text-underline-offset: 2px; transition: color .12s ease, text-decoration-color .12s ease; }
-  button.va-rowname:hover, button.va-rowname:focus-visible { color: var(--brass); text-decoration-color: currentColor; }
+                      color: var(--text-2); cursor: pointer; transition: color .12s ease; }
+  button.va-rowname:hover, button.va-rowname:focus-visible { color: var(--brass); }
+  /* Underline the LINES, not the flex box — a text-decoration on a flex
+     container does not reliably paint on its children. */
+  button.va-rowname:hover > span,
+  button.va-rowname:focus-visible > span { text-decoration: underline; text-underline-offset: 2px; }
   /* The opened product's own row — same name, no door, because the door leads
      back to where the operator already is. */
   span.va-rowname-self { color: var(--text-3); }
