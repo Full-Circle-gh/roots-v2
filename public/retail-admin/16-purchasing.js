@@ -945,15 +945,21 @@
     }).join('')}</div>`;
   }
 
-  // Landed cost — freight/tax/handling on top of goods, giving a true per-unit
-  // cost. Saving posts the extras to Finance as one "Freight & fees" line.
+  // Landed cost — freight/tax/handling on top of goods. Saving posts the extras
+  // to Finance as one "Freight & fees" line; it does NOT reach any unit cost.
+  //
+  // There was a "≈ X per unit across N units" line under the total. It is gone,
+  // and nothing replaces it here. It summed the raw `qty` column across every
+  // line, so a PO of 5 kg + 3 pcs + 2 L reported 10 units, and it divided by
+  // ORDERED quantity — never qty_received, never less damaged — so a short
+  // delivery spread the whole freight bill over units that never arrived.
+  // Whether freight should reach unit cost at all is an open design question
+  // and is not answered by putting an unsound number back.
   function landedPanel(p) {
     const items = p.items || [];
     const goods = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
-    const units = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
     const f = Number(p.extra_freight) || 0, t = Number(p.extra_tax) || 0, h = Number(p.extra_handling) || 0;
     const landed = goods + f + t + h;
-    const perUnit = units > 0 ? landed / units : 0;
     const inp = (id, val) => `<span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" id="${id}" value="${val || ''}" placeholder="0" oninput="puLandedRecalc()"></span>`;
     return `<div class="pu2-card pu2-block pu2-landed">
       <b>${esc(T('True landed cost', '到手成本'))}</b>
@@ -964,7 +970,6 @@
         <div class="lc-row"><span class="g">${esc(T('Handling', '杂费'))}</span>${inp('pu2-lc-handling', h)}</div>
         <div class="lc-row tot"><span>${esc(T('Landed total', '到手合计'))}</span><span class="pu2-num" id="pu2-lc-total">${money(landed)}</span></div>
       </div>
-      <div class="sub" id="pu2-lc-per">${esc(T('≈', '约'))} ${money(perUnit)} ${esc(T('per unit across', '均摊到'))} ${units} ${esc(T('units', '件'))}</div>
       <div style="margin-top:12px"><button class="pu2-btn sm" data-cap="purchasing:edit" onclick="puSaveLanded()">${esc(T('Save — posts freight & fees to Finance', '保存 —— 运杂费记入财务'))}</button></div>
     </div>`;
   }
@@ -972,12 +977,9 @@
     if (!_po) return;
     const items = _po.items || [];
     const goods = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
-    const units = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
     const g = id => parseFloat(document.getElementById(id)?.value) || 0;
     const landed = goods + g('pu2-lc-freight') + g('pu2-lc-tax') + g('pu2-lc-handling');
     const tot = document.getElementById('pu2-lc-total'); if (tot) tot.textContent = money(landed);
-    const per = document.getElementById('pu2-lc-per');
-    if (per) per.textContent = `${T('≈', '约')} ${money(units > 0 ? landed / units : 0)} ${T('per unit across', '均摊到')} ${units} ${T('units', '件')}`;
   };
   window.puSaveLanded = async function () {
     if (!_po) return;
@@ -1164,6 +1166,11 @@
       if (r.missing_lines) bits.push(T(`${r.missing_lines} short`, `${r.missing_lines} 短缺`));
       if (r.damaged_lines) bits.push(T(`${r.damaged_lines} damaged`, `${r.damaged_lines} 破损`));
       toast(T('Received ✓', '已收货 ✓') + (bits.length ? ' — ' + bits.join(' · ') : ''), 'ok', 4000);
+      // A receipt that carried arrived counts now moves the order to Delivered
+      // server-side, so the LIST behind this screen is stale too — its segment
+      // counts and status pills read the old status until reloaded. Reload it
+      // the same way puSetStatus does, for the same reason.
+      if (r.status && r.status !== _po.status) await loadPOs();
       puOpenPO(_po.id);
     } catch (e) { toast(e.message, 'err'); }
   };
