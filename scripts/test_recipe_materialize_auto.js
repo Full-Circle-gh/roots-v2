@@ -60,6 +60,9 @@ function makeDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, name_en TEXT, name_cn TEXT, sku TEXT UNIQUE,
       unit TEXT DEFAULT 'g', cost_per_unit REAL DEFAULT 0, buy_price REAL DEFAULT 0,
       free_by_design INTEGER DEFAULT 0, item_kind TEXT DEFAULT 'food',
+      -- materializeNew files a made material under a category (2026-08-27);
+      -- the real table has always had this column, the fixture had not.
+      category TEXT,
       source_recipe_id INTEGER, is_active INTEGER DEFAULT 1, updated_at TEXT);
     CREATE TABLE recipe_ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT, recipe_id INTEGER, ingredient_id INTEGER,
