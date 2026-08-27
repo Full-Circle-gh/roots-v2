@@ -42,6 +42,10 @@ const { requireRetailAdmin } = require('./retail');
 // attached to it. One alert path, not two.
 const { firePriceAlertsForPO } = require('./purchases');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
+// The one unit-spelling normaliser (see applyReceivedToStock's unit-mismatch
+// guard below) — shared with firePriceAlertsForPO's own guard so 'pc' vs
+// 'pcs' cannot pass on one path and fail on the other.
+const { normaliseUnit } = require('../lib/ingredient-cost');
 
 const router = express.Router();
 
@@ -121,16 +125,28 @@ function postRetailPOExpenses(poId) {
 // MATERIAL LINES ARE UNTOUCHED BY THIS — they still `continue` on the very next
 // line and their pricing stays entirely with firePriceAlertsForPO /
 // ingredient_price_history / the ±5% alert, which this change does not go near.
+//
+// SAME UNIT-MISMATCH GUARD AS THE MATERIAL PATH. A material line only prices
+// back when its unit matches ingredients.buy_unit, because buy_price is a
+// per-package price that cannot be compared to, or divided by, some other
+// unit. A store_product has no buy_unit column because it needs none — every
+// product is bought and sold in whole pieces, so 'pcs' IS its stocking unit,
+// the same way a material with a per-piece buy_unit needs no division. A line
+// is normally 'pcs' by construction (the wizard hard-codes it), but the field
+// is client-supplied, so a bad import or a future caller could still hand
+// this a case/kg/box price and have it land on unit_cost as if it were a
+// per-piece figure. normaliseUnit() is the same primitive firePriceAlertsForPO
+// uses, so 'pc' vs 'pcs' cannot pass on one path and fail on the other.
 function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
-  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0 };
+  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0, costSkippedUnitMismatch: 0 };
   const lines = db.prepare(`
-    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
+    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, unit, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
   const readCost   = db.prepare('SELECT unit_cost FROM store_products WHERE id = ?');
   const writeCost  = db.prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-  let applied = 0, costed = 0, costSkippedRecipe = 0;
+  let applied = 0, costed = 0, costSkippedRecipe = 0, costSkippedUnitMismatch = 0;
   for (const l of lines) {
     // Materials have no stock table (§28) — a material line's "receiving" is
     // the price write-back firePriceAlertsForPO does on the Ordered/Delivered
@@ -170,6 +186,7 @@ function applyReceivedToStock(poId, req) {
     // is false and the purchase-order fill below resumes exactly as before.
     const cost = parseFloat(l.cost_per_unit);
     if (recipeOwnsProductCost(db, l.store_product_id)) { costSkippedRecipe++; }
+    else if (normaliseUnit(l.unit) !== 'pcs') { costSkippedUnitMismatch++; }
     else if (Number.isFinite(cost) && cost > 0) {
       const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
       // Only write on an actual change, so re-saving a received PO does not
@@ -187,7 +204,7 @@ function applyReceivedToStock(poId, req) {
       }
     }
   }
-  return { applied, costed, costSkippedRecipe };
+  return { applied, costed, costSkippedRecipe, costSkippedUnitMismatch };
 }
 
 // ── Receipt reversal — all of it, or none of it ────────────────────────────
@@ -1631,6 +1648,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
              cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
+             cost_lines_unit_mismatch: stock.costSkippedUnitMismatch,
              status: delivered ? 'Delivered' : po.status });
 });
 
