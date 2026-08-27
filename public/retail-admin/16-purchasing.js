@@ -1026,10 +1026,7 @@
         </table>
       </div>
 
-      ${canReceive ? `<div class="pu2-autonote">
-        <span class="dot"></span>
-        <span><b>${esc(T('Confirmed counts go into', '确认的数量会自动计入'))} ${storeLabel(p)} ${esc(T('stock by themselves', '门店库存'))}</b> ${esc(T('and sync out to every sales channel. Damaged units are kept out of stock.', ',并同步到各销售渠道。破损数量不计入库存。'))}</span>
-      </div>` : ''}
+      ${canReceive ? receiveNote(p) : ''}
 
       <div class="pu2-actions">
         ${canReceive ? `<button class="pu2-btn primary" data-cap="purchasing:receive" onclick="puReceiveSave()">${esc(T('Confirm delivery', '确认收货'))}</button>` : ''}
@@ -1072,6 +1069,43 @@
         ${opt('no_invoice', 'None', '无发票')}
       </select>`;
   }
+  // The note above the Confirm buttons. It used to be one fixed sentence that
+  // promised, of every PO alike, that confirmed counts go into stock AND sync to
+  // every sales channel. Neither half is reliably true: a PO can be all material
+  // lines, which move no stock at all, and a product can be listed on no channel
+  // — in which case the sync it promises has nothing to push.
+  //
+  // So it now reads back what this PO actually says. Each clause is rendered only
+  // when the lines earn it, and the destination is the PO's own Deliver-to, which
+  // storeLabel() has always read from the record rather than any fixed name.
+  //
+  // Material lines are simply not spoken for: no stock claim, no channel claim,
+  // no sentence of their own. Their badge in the name column already says what
+  // they are, and the honest thing to say about them here is nothing.
+  //
+  // Every string is an existing pair from this file, reused verbatim; the
+  // channel clause is the second half of the old sentence, split at its own
+  // punctuation. Nothing here was composed. (`every sales channel` still
+  // over-claims once it renders — tightening it to "the channels these products
+  // are listed on" needs a new locked CN pair, so it is left as it stands.)
+  function receiveNote(p) {
+    const items = p.items || [];
+    const movesStock = items.some(i => !i.ingredient_id && i.store_product_id);
+    const onChannel  = items.some(i => i.channel_listed);
+    // Nothing to promise — an all-material PO, or one whose lines carry no
+    // product at all. Say nothing rather than something untrue.
+    if (!movesStock) return '';
+    const stockClause = `<b>${esc(T('Confirmed counts go into', '确认的数量会自动计入'))} ${storeLabel(p)} ${esc(T('stock by themselves', '门店库存'))}</b>`;
+    const channelClause = onChannel
+      ? ' ' + esc(T('and sync out to every sales channel.', ',并同步到各销售渠道。'))
+      : '';
+    const damagedClause = ' ' + esc(T('Damaged units are kept out of stock.', '破损数量不计入库存。'));
+    return `<div class="pu2-autonote">
+        <span class="dot"></span>
+        <span>${stockClause}${channelClause}${damagedClause}</span>
+      </div>`;
+  }
+
   function receiveRow(it, canReceive, poNoInvoice) {
     const applied = (it.stock_applied_qty || 0) > 0 ? `✓ ${it.stock_applied_qty}` : '—';
     const dis = canReceive ? '' : 'disabled';
@@ -1081,6 +1115,14 @@
     // worth repeating here since the header supplier is blank on exactly
     // those orders and this is where the receiving decision actually happens.
     const lineSupplier = (it.supplier_name || '').trim();
+    // THE ARRIVED BOX IS ON EVERY LINE, MATERIAL INCLUDED, AND MUST STAY THERE.
+    // It looks like dead input on a material row, because applyReceivedToStock()
+    // skips any line carrying an ingredient_id before it reaches a stock call.
+    // It is not: postRetailPOExpenses() sums COALESCE(qty_received, qty) across
+    // every line with no kind branch, so this box is the ONLY way to record a
+    // short material delivery. Remove it and a 15-of-20 delivery posts to
+    // Expenses at 20. Tried and reverted 2026-08-27 — the banner above it was
+    // the defect, not the input.
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
@@ -1149,9 +1191,17 @@
     const receipts = [];
     document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
       const ri = tr.querySelector('.pu2-ri');
+      // Every row renders an Arrived box today, so this guard never fires. It
+      // is here because if one ever doesn't, the field must be OMITTED rather
+      // than sent as null: the route writes only the columns the payload names,
+      // so an absent field preserves the stored qty_received while a null
+      // blanks it — and a blanked qty_received re-posts that line to Expenses
+      // at the full ordered quantity (postRetailPOExpenses coalesces to qty).
+      // Same shape as the `ri` guard above, which does fire.
+      const rq = tr.querySelector('.pu2-rq');
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
-        qty_received: tr.querySelector('.pu2-rq').value === '' ? null : tr.querySelector('.pu2-rq').value,
+        ...(rq ? { qty_received: rq.value === '' ? null : rq.value } : {}),
         damaged_qty: tr.querySelector('.pu2-rd').value || 0,
         tracking_number: tr.querySelector('.pu2-rt').value,
         // Absent on a PO-level no-invoice line — leave the field off entirely
