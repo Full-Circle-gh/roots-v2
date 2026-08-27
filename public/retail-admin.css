@@ -12461,7 +12461,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   #tab-recipes .rcp-card, #tab-recipes-record .rcp-card {
     background: var(--td-surface, #fff); border: 1px solid var(--td-border);
-    border-radius: 14px; clip-path: inset(0 round 14px); }
+    border-radius: 14px; }
+  /* Only the LIST card clips its corners: its table rows run full-bleed to the
+     card edge and would square them off. The RECORD cards must NOT clip — they
+     are padded blocks with nothing touching the edge, and clip-path clips the
+     whole subtree, absolutely-positioned descendants included. Clipping there
+     cut the ingredient picker's result list off at the card's bottom edge
+     (only the first suggestion's top half survived). */
+  #tab-recipes .rcp-card { clip-path: inset(0 round 14px); }
   #tab-recipes .rcp-num, #tab-recipes-record .rcp-num {
     font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   #tab-recipes .rcp-sub2, #tab-recipes-record .rcp-sub2 {
