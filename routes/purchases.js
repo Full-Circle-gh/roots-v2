@@ -112,7 +112,15 @@ function _firePOPush(poId, kind) {
 // buy_unit is NOT written any more. It is a property of the item as the
 // supplier sells it, and overwriting it from a PO line silently re-based every
 // future division.
-function firePriceAlertsForPO(poId, source) {
+//
+// `actor` (optional {userId, username, ip}) is who to credit the cost_update
+// activity_log rows below to. Every caller in this file omits it (kitchen
+// writes are attributed to 'system'); routes/retail-purchasing.js passes the
+// requesting operator so a cancellation can find, and roll back, exactly what
+// this PO changed — see rollbackMaterialCost() there. Nothing here reads the
+// log back; it exists purely so a later reversal has something to read.
+function firePriceAlertsForPO(poId, source, actor) {
+  const a = actor || {};
   const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
   const skips = [];
   // Prepared behind a guard: a database restored from before this table
@@ -168,7 +176,10 @@ function firePriceAlertsForPO(poId, source) {
     if (cpu === null) { skip(ing, item, reason); continue; }
 
     if (Number(cpu) !== Number(ing.cost_per_unit || 0)) cpuMoved = true;
+    const costBefore = { buy_price: ing.buy_price ?? null, cost_per_unit: ing.cost_per_unit ?? null };
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
+    logActivity(a.userId ?? null, a.username || 'system', 'cost_update', 'ingredient', item.ingredient_id,
+      { from: costBefore, to: { buy_price: item.cost_per_unit, cost_per_unit: cpu }, po_id: poId, source }, a.ip ?? null);
     // The item just priced cleanly, so whatever blocked it before is no longer
     // true — close its open skips. They stay in the table with resolved_at set,
     // because the history of what went unpriced is worth keeping. Without this
