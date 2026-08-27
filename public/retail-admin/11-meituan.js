@@ -652,7 +652,15 @@
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
     const body = document.getElementById('mt-products-body');
-    body.innerHTML = '<div class="mt-empty">' + cuT('Loading…', '加载中…') + '</div>';
+    // The 'Loading…' line is for the FIRST load only. Every later call is a
+    // refetch behind a save, and blanking 248 rows to one line collapses the
+    // page height — .mt-list has no scroller of its own, the page does — so the
+    // browser clamps the scroll to the top and the operator loses their place
+    // on every save. With rows already on screen the list simply stays put
+    // until the new one replaces it.
+    if (!_products.length) {
+      body.innerHTML = '<div class="mt-empty">' + cuT('Loading…', '加载中…') + '</div>';
+    }
     try {
       // includeInactive so the bundle-component picker can attach paused
       // variants; the mapping list filters back to active in mtRenderProducts.
@@ -1362,7 +1370,7 @@
 
     _match.applied = done; _match.failed = failed;
     _match.running = false; _match.stage = 'done';
-    mtFilterProducts();
+    await mtLoadProducts();
     mtLoadStatus();
     mtMatchRender();
   }
@@ -1374,7 +1382,6 @@
 
   async function mtApplyReviewName(pid, storeId, storeCode, name) {
     const keep = mtKeepSync(pid, storeCode);
-    const product = _products.find(p => p.id == pid);
     try {
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
@@ -1382,10 +1389,11 @@
         body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: keep,
                                source: 'match_names' }),
       });
-      if (product) {
-        if (!product.stores) product.stores = {};
-        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: keep };
-      }
+      // No cache patch here either, and this one was the worse of the pair:
+      // it spread the old entry and overwrote only the name and the switch, so
+      // the PREVIOUS listing's `specs` and `claims` stayed on a mapping that no
+      // longer points at that listing — a picker offering options this product
+      // can never have. The callers below refetch instead.
       return true;
     } catch (e) {
       toast(e && (e.code === 'name_not_in_catalogue' || e.code === 'catalogue_not_read')
@@ -1400,7 +1408,7 @@
     if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.candidates[j])) {
       _review.ambiguous.splice(i, 1);
       _match.applied++;
-      mtFilterProducts();
+      await mtLoadProducts();
       mtMatchRender();
     }
   };
@@ -1411,7 +1419,7 @@
     if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.suggestion)) {
       _review.unmatched.splice(i, 1);
       _match.applied++;
-      mtFilterProducts();
+      await mtLoadProducts();
       mtMatchRender();
     }
   };
@@ -1425,7 +1433,7 @@
         _match.applied++;
       }
     }
-    mtFilterProducts();
+    await mtLoadProducts();
     mtMatchRender();
   };
 
@@ -1664,20 +1672,17 @@
         body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled,
                                source: name ? 'manual' : 'remove' }),
       });
-      // Update local cache, then repaint so the Tianhe status pill and the sync
-      // toggle reflect the new mapping. A chosen 规格 belonged to the old
-      // listing - the route drops it, so drop it here too rather than show a
-      // picker holding an option this listing never had.
-      if (product) {
-        if (!product.stores) product.stores = {};
-        if (name) {
-          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name,
-                                        sync_enabled: syncEnabled, claims: [], specSkuId: null, specLabel: null };
-        } else {
-          delete product.stores[storeCode];
-        }
-      }
-      mtFilterProducts();
+      // Refetch rather than patch the cache, for the reason mtSaveClaim already
+      // reloads: the consequences of this write reach past the row in front of
+      // you. A listing's 规格 live on the map entry as `specs`, and ONLY the
+      // products payload carries them (routes/meituan-admin.js attaches them
+      // there, and /listings sends names without them) — so a hand-built entry
+      // could never have any. That is what left the option picker unpainted
+      // until a page reload, and worse, left the state word reading 'Synced'
+      // for a shared listing with nothing claimed: with `specs` absent
+      // mtIsShared is false, so mtNeedsSpec never fires. It also drops
+      // _optionOwners, which mtOptionList reads to say who holds an option.
+      await mtLoadProducts();
     } catch (e) {
       // The route refuses a name the catalogue does not carry. Say what to do
       // about it rather than reporting a bare failure — the message the server
