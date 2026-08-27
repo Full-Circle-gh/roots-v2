@@ -428,6 +428,10 @@ renamed, is safe on exactly that basis: ids 269 and 270 now share a name AND bot
 For any row you are about to give a name another active row already has: confirm it has a live map
 row in every channel it sells on. The query is in §D.4.
 
+**The resolver itself is surveyed separately** in `docs/tacet-channel-line-resolution-findings.md`
+(2026-08-27): all four resolution steps, per-step counts, each of the 13 ambiguous events traced to
+its cause, and what happens to a line that resolves to nothing.
+
 ## D · Reproducing this
 
 The database is on the box, not on the PC, so these run over SSH rather than from PowerShell
