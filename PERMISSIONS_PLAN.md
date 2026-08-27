@@ -248,8 +248,8 @@ team — this slots straight into the platform‑readiness roadmap for onboardin
 
 > Reminder: **commit to `main` = live deploy.** Do permission work on a branch, or land it dark
 > (enforcement flag default OFF) so nothing changes for live operators until we flip it per tenant.
-> retail‑admin JS parts each need the `/* eslint-disable */` header; bump `sw.js` in the same commit when
-> admin JS changes; EN/CN labels + `data-no-i18n` on the matrix.
+> retail‑admin JS parts each need the `/* eslint-disable */` header; `sw.js` needs no bump — the deploy
+> ships and stamps it; EN/CN labels + `data-no-i18n` on the matrix.
 
 - **Phase 0 — Foundation (dark).** `lib/capabilities.js` registry + resolver attaching `req.caps`.
   **Shadow mode**: compute but don't block; log what *would* be denied. Verify no current operator is hit.

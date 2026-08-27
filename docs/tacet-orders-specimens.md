@@ -111,7 +111,7 @@ That is a real lock, deliberately written. **The FE doesn't model the state beca
 3. **`renderRefundPanel`** (`04:5654`) — give `paying` its own branch: badge + a non-actionable "in progress" note, and **crucially no action buttons.** It must not offer Approve or Payout while money is mid-flight. Today it silently falls through to no-badge/no-action — which is the bug.
 4. **Both language strings** (`Paying` / `退款中`), separate fields per §1.11 — never glued.
 
-Then bump `sw.js` in the same commit.
+No `sw.js` bump is needed — the deploy ships and stamps it on every deploy that carries anything. *(The manual rule this line used to carry was retired 2026-08-27; see `tacet-desktop-patterns.md` §7 / v4.8.)*
 
 **This is the exact §7 failure mode caught before it shipped:** invisible in prose, absent from the FE, and no mockup would ever include it.
 

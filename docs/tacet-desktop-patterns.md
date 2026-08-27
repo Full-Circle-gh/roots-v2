@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.7 · 2026-08-26
+# Tacet desktop patterns — v4.8 · 2026-08-27
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1581,9 +1581,19 @@ git log origin/main..HEAD -- docs/     # anything returned means it is not done
 
 **The full rule and its reasoning are the operational note, not this line** — this document cannot be the only home for it, because a rule living solely in `docs/` is unreachable by exactly the reader it protects: the one whose `docs/` is stale. Found 2026-07-30, when v3.3 and v3.4 sat on a branch that nothing was promoting.
 
-**A commit that changes a service-worker-cached asset bumps `sw.js` in the same commit.** *(Added 2026-08-03.)* Every non-HTML asset — `retail-admin/*.js`, `retail-admin.css`, `td-datetime.js` — is served **stale-while-revalidate**: the cached copy returns instantly and the new one is fetched behind it, so the first load after a deploy runs the *previous* build. Only a changed `CACHE` constant evicts it, and the deploy re-stamps that constant **only when `sw.js` is itself in the commit**. Never leave the bump to a later push — a stamp that lands because someone else shipped an hour after you is luck, not process, and it silently decides whether your commit was ever live.
+**A cached asset needs no bump — `sw.js` ships on every deploy, and nobody touches it.** *(Added 2026-08-03 as a manual rule; RETIRED 2026-08-27 and replaced by this.)* Every non-HTML asset — `retail-admin/*.js`, `retail-admin.css`, `td-datetime.js` — is still served **stale-while-revalidate**: the cached copy returns instantly and the new one is fetched behind it, so the first load after a deploy runs the *previous* build unless the `CACHE` constant changed. What changed is who is responsible for changing it. `.github/workflows/deploy.yml` appends `public/sw.js` to every deploy that ships anything, and `scripts/deploy-apply.sh` stamps the constant with the run timestamp on the way in. **The committed value is a fixed sentinel, `roots-v2-shell-unstamped`, and editing it is a defect, not diligence.**
 
-**Know which class the file is in before you assume.** Page shells are network-first and exempt — `app.html`, `pos.html` and the rest arrive fresh on their own, offline being the only case that reads cache. The check is `public/sw.js`'s own `fetch` handler, and it takes ten seconds:
+**Why the manual rule was retired.** It required a human to edit a number in the same commit, which is a rule that only works when it is remembered. It was forgotten — `4bb2f7b` shipped admin JS without it and needed a follow-up push — and worse, the number was contended: parallel branches each picked the next `vNNN` and collided four times in one day, once inside a PR opened to fix a collision. The number never reached a browser, because the installer overwrote it every time. It existed only to make the file appear in the diff, which is a job the pipeline can do without being asked.
+
+**What to check when a deploy looks like it did not go live.** The stamp, not the commit:
+
+```bash
+ssh root@47.239.89.63 "grep -n 'const CACHE' /root/roots-v2/public/sw.js"
+```
+
+A timestamp means the stamp ran. `roots-v2-shell-unstamped` means it did not, and every cached asset on that box is one load behind — a real deploy fault, worth chasing.
+
+**Know which class the file is in before you assume.** Page shells are network-first and exempt — `app.html`, `pos.html` and the rest arrive fresh on their own, offline being the only case that reads cache. This still matters for reading a bug report, even though nothing is now left to remember at commit time. The check is `public/sw.js`'s own `fetch` handler, and it takes ten seconds:
 
 ```bash
 grep -n 'isHTMLRequest\|stale-while-revalidate' public/sw.js   # which branch serves your file
@@ -1714,6 +1724,30 @@ Small, non-blocking. Resolve during Batch 0.
 
 ---
 
+*v4.8 · 2026-08-27.*
+
+**v4.8 changes — §7's manual cache bump is RETIRED and replaced by an automatic one. No page rule added, removed or altered; a commit-time obligation is removed from every future commit.**
+
+### §7 — the manual cache bump is retired
+
+**v4.2 asked a human to bump `sw.js` in the same commit as any cached asset. v4.8 asks nobody to do anything.** `.github/workflows/deploy.yml` appends `public/sw.js` to every deploy that ships anything, and `scripts/deploy-apply.sh` stamps its `CACHE` constant with the run timestamp on the way in — which it already did, but only for a deploy that happened to carry the file. The committed value is now a fixed sentinel, `roots-v2-shell-unstamped`, and editing it is a defect.
+
+**THE MECHANISM DID NOT CHANGE; THE TRIGGER DID.** Assets are still stale-while-revalidate, a changed `CACHE` is still the only thing that evicts them, and the installer still does the stamping. What was removed is the step where that depended on someone remembering.
+
+**Why: the rule was both forgotten and contended.** Forgotten — `4bb2f7b` shipped admin JS without a bump and needed a chasing push, recorded at the time as "the `sw.js` rule is a doc, not a check". Contended — the version was a single incrementing number edited on every branch, so parallel sessions picked the same next value and collided **six times in one day**, one of those collisions inside a pull request opened to fix a collision. Every one of those edits was thrown away by the installer moments later. The number never reached a browser; it existed only to make the file appear in the diff, which the pipeline can do without being asked.
+
+**The rider is conditional, and the condition is load-bearing.** `sw.js` is appended only when the deploy is shipping something else. `deploy-apply.sh` restarts `roots-v2` unconditionally, so shipping `sw.js` alone would bounce the live backend for a push that changes nothing the app serves — a docs-only commit, which today skips the deploy entirely. A deploy with nothing to ship has no stale asset to evict either, so nothing is lost by sitting it out.
+
+**What replaces the commit-time check is a deploy-time one.** `roots-v2-shell-unstamped` on the server means the stamp did not run and every cached asset there is one load behind. That is now the thing to look at when a deploy seems not to have gone live:
+
+```bash
+ssh root@47.239.89.63 "grep -n 'const CACHE' /root/roots-v2/public/sw.js"
+```
+
+**What did not change:** the network-first exemption for page shells, and the `grep` that tells you which class a file is in. Those still matter for reading a bug report — they just no longer decide what you must remember to commit.
+
+---
+
 *v4.7 · 2026-08-26.*
 
 **v4.7 changes — one rule added, in §7. Like v4.2's, it governs what ships with a commit, not how a page is built. No page rule added, removed or altered.**
@@ -1803,6 +1837,8 @@ A Chinese negation governs the verb after it, and a line break can fall on eithe
 **v4.2 changes — one rule added, in §7. It governs what ships with a commit, not how a page is built. No page rule added, removed or altered.**
 
 ### §7 — a cached asset ships with its cache bump
+
+> **SUPERSEDED 2026-08-27 by v4.8.** The rule below was correct when written and the mechanism it describes is unchanged, but the bump is no longer anyone’s job: the deploy appends `sw.js` to every ship and stamps it. Read this entry as the record of why the rule existed, not as an instruction.
 
 `sw.js` serves every non-HTML asset stale-while-revalidate, so the first load after a deploy runs the *previous* build unless the `CACHE` constant changed — and the deploy re-stamps that constant only when `sw.js` is in the commit itself. The rule was already lore: it lived in two operator memory notes ("admin-JS needs sw.js in the same commit", "CSS ship needs sw.js bump") and nowhere a new reader would find it. §7 is where a commit-time rule belongs.
 
