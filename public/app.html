@@ -7741,23 +7741,17 @@ async function showCostSheet(id) {
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">附加成本 Additional Costs</div>
         <div class="form-grid-3">
           <div class="form-group"><label>Labour ¥ 人工成本</label><input type="number" id="cs_labour" value="${cd.labour||''}" placeholder="0.00" step="0.01" oninput="csUpdate()"></div>
-          <div class="form-group"><label>Packaging Type 包装类型</label>
-            <div style="display:flex;gap:8px;align-items:flex-start">
-              <div id="cs_pack_thumb" onclick="onCsPackThumbClick()" title="Click to enlarge · 点击放大" style="width:48px;height:48px;flex-shrink:0;border:1px solid var(--border);border-radius:8px;background:var(--gray);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:zoom-in">
-                ${(()=>{const pt=_packagingTypes.find(p=>p.id===cd.packaging_type_id);return pt?.image_data?`<img src="${esc(pt.image_data)}" style="width:100%;height:100%;object-fit:cover">`:'📦';})()}
-              </div>
-              <select id="cs_pack_type" onchange="onCsPackTypeChange()" style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
-                <option value="">— Custom / None 自定义 / 无 —</option>
-                ${_packagingTypes.map(pt=>`<option value="${pt.id}" ${cd.packaging_type_id===pt.id?'selected':''}>${pt.name}${pt.name_cn?' · '+pt.name_cn:''} — ¥${parseFloat(pt.cost).toFixed(2)}</option>`).join('')}
-                <option value="__manage__">⚙️ Manage types...</option>
-              </select>
-            </div>
-            <div style="margin-top:6px">
-              <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Packaging Cost/Serving ¥ 包装成本/份</label>
-              <input type="number" id="cs_packaging" value="${(()=>{if(cd.packaging_type_id){const pt=_packagingTypes.find(p=>p.id===cd.packaging_type_id);return pt?pt.cost:(cd.packaging||'');}return cd.packaging||'';})()}" placeholder="0.00" step="0.01" oninput="csUpdate()" style="${cd.packaging_type_id?'background:var(--gray)':''}">
-              <div style="font-size:11px;color:var(--muted);margin-top:3px">Per serving · multiplied by servings count for batch total</div>
-            </div>
-          </div>
+          <!-- PACKAGING TYPE + PACKAGING COST/SERVING REMOVED (Step 5,
+               2026-08-27). §31: a recipe carries no packaging. Step 4 took
+               packaging out of batchCost, which left these two inputs writing
+               a figure nothing costs from — a field that looks like it moves
+               money and does not. Packaging is now a LIST of ordinary
+               materials on the product (its build list), priced per line from
+               what was actually paid, so one jar plus a label plus a sticker
+               is three lines instead of one hand-typed number.
+               This was the ONLY writer of recipe_cost_data.packaging_type_id.
+               The stored figures are NOT deleted — see saveCostSheet, which
+               now omits both keys so the write layer preserves them. -->
           <div class="form-group"><label>Overhead % 间接费用</label><input type="number" id="cs_overhead" value="${cd.overhead_pct||''}" placeholder="0" step="0.1" oninput="csUpdate()"></div>
         </div>
       </div>
@@ -8055,11 +8049,22 @@ function csUpdate() {
 }
 
 async function saveCostSheet(recipeId) {
-  const packSel = document.getElementById('cs_pack_type');
+  // NEITHER `packaging` NOR `packaging_type_id` IS SENT (Step 5, 2026-08-27),
+  // and leaving them out is the whole point rather than tidying.
+  //
+  // The inputs are gone. Had this kept sending them, `v('cs_packaging')` would
+  // read '' and write 0, and `packSel` would be null so the ternary would send
+  // a literal null — which resolvePackagingTypeId treats as PRESENT-and-empty
+  // and therefore as a deliberate CLEAR. One save of any recipe from this
+  // screen would have wiped both the figure and the type link, on all 90 rows
+  // that still resolve. That is finding 11's failure again, reached from the
+  // opposite direction: last time by a key that was never sent, this time by
+  // one sent as null after its input was deleted.
+  //
+  // Omitted, lib/recipe-cost-data-write.js preserves whatever is stored — the
+  // same preserve-on-absent both columns now have.
   const data = {
     labour: parseFloat(v('cs_labour'))||0,
-    packaging: parseFloat(v('cs_packaging'))||0,
-    packaging_type_id: (packSel&&packSel.value&&packSel.value!=='__manage__')?packSel.value:null,
     overhead_pct: parseFloat(v('cs_overhead'))||0,
     sell_price: parseFloat(v('cs_sell'))||0,
     target_food_cost: parseFloat(v('cs_target'))||30,
