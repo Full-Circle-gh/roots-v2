@@ -1309,7 +1309,9 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
 
 // Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status
 // (which also carries the line's no-invoice mark — see below).
-// Every save re-applies the stock delta and re-posts expenses.
+// Every save re-applies the stock delta, re-posts expenses, and — when it
+// carried an actual arrived count — moves an Ordered PO to Delivered, which is
+// what makes /undo-receive reachable for the stock this route books.
 router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
@@ -1352,11 +1354,34 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // Stock + finance follow the receive state (adjustStock runs outside the PO
   // transaction: it opens its own per-line transactions on the tenant handle).
   const stock = applyReceivedToStock(po.id, req);
+  // Receiving IS the delivery, so record it as one. This route used to book
+  // stock and leave the order at Ordered, which put /undo-receive out of reach
+  // for the stock it had just booked — that route 409s on anything but
+  // Delivered, and its button only renders on Delivered. The only way to an
+  // undoable state was "All arrived as ordered", which re-seeds qty_received
+  // from qty and so overwrites the counts the operator had just entered.
+  //
+  // Gated on `any_qty` for the same reason postRetailPOExpenses is: a save
+  // carrying only a tracking number or an invoice mark is not a delivery.
+  // Only Ordered advances — a draft never reaches the receive screen, and a
+  // Cancelled order must not be revived by a receipt.
+  //
+  // Deliberately does NOT fire firePriceAlertsForPO: it already ran on the way
+  // to Ordered (see the /status route's comment), and re-running it here would
+  // append a duplicate price-history row — the same reason /undo-receive gives
+  // for not re-firing it on the way back.
+  const delivered = any_qty && po.status === 'Ordered';
+  if (delivered) {
+    db.prepare("UPDATE purchase_orders SET status = 'Delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
+    logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
+                { from: po.status, to: 'Delivered', scope: 'retail', via: 'receive' }, req.ip);
+  }
   if (any_qty) postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
-             cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe });
+             cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
+             status: delivered ? 'Delivered' : po.status });
 });
 
 module.exports = router;
