@@ -181,7 +181,7 @@
   // this never writes anything, it only paints. Returns null when any line
   // is unpriced, which is the blocked state the rail must show honestly.
   function blTotals() {
-    const out = { materials: 0, packaging: 0, total: 0, blocked: false, blockedNames: [], blockedWithBuyPrice: 0 };
+    const out = { materials: 0, packaging: 0, total: 0, blocked: false, blockedNames: [], blockedWithBuyPrice: 0, packagingOnly: false };
     for (const l of (_blLines || [])) {
       const c = blLineCost(l);
       if (c === null) {
@@ -196,6 +196,16 @@
       }
       out[blGroupOf(l) === 'packaging' ? 'packaging' : 'materials'] += c;
       out.total += c;
+    }
+    // NO CONTENTS = NO COST, matching lib/product-build-cost.js exactly. The
+    // server refuses to publish a figure for a list that is all packaging, so
+    // this screen must refuse to paint one — otherwise the rail shows a margin
+    // the stored unit_cost does not have, which is the two-answers problem
+    // this whole design exists to remove, reproduced between client and
+    // server instead of between two screens.
+    if (_blLines && _blLines.length && !_blLines.some(l => blGroupOf(l) !== 'packaging')) {
+      out.blocked = true;
+      out.packagingOnly = true;
     }
     return out;
   }
@@ -414,6 +424,14 @@
     if (!_blLines || !_blLines.length) {
       note = cuT('The build list is this product’s cost. Add a line to see a margin.',
                  'The build list is this product’s cost. Add a line to see a margin.');
+    } else if (t.packagingOnly) {
+      // Its own sentence, ahead of the unpriced-line one: a list with nothing
+      // inside needs a different action from a list with an unpriced jar, and
+      // sharing wording would send the operator to fix the wrong thing.
+      // CN PENDING — names the build list; English on both halves.
+      const w = 'Every line here is packaging. Nothing is recorded as the contents, '
+        + 'so this product has no cost yet. Add what goes inside and the margin appears.';
+      note = cuT(w, w);
     } else if (t.blocked) {
       const names = t.blockedNames.filter(Boolean);
       const first = names[0] || '';
@@ -446,13 +464,11 @@
     // nobody has approved — a product genuinely made only of packaging is
     // absurd, but "absurd" is a judgement about Roots, not a fact about
     // every tenant. Whether it should harden into a block is Ash's call.
-    let warnHtml = '';
-    if (_blLines && _blLines.length && !_blLines.some(l => blGroupOf(l) !== 'packaging')) {
-      // CN PENDING — no sourced Chinese; English on both halves.
-      const w = 'Every line here is packaging. Nothing is recorded as the contents, '
-        + 'so this cost covers the container and not what goes in it.';
-      warnHtml = '<div class="bl-note is-warn">' + escapeHtml(cuT(w, w)) + '</div>';
-    }
+    // The packaging-only case used to warn HERE while the cost was still
+    // published. It now blocks the cost instead and says so in the note above,
+    // so a second banner would be the same fact stated twice — which reads as
+    // two problems.
+    const warnHtml = '';
 
     host.innerHTML = rows + noteHtml + warnHtml;
   }

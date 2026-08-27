@@ -57,6 +57,12 @@ function makeDb() {
       -- material's cost is overhead its own recipe added, so a parent can
       -- leave it out of its own overhead base.
       overhead_per_unit REAL DEFAULT 0,
+      -- product-build-cost.js reads this to tell contents from packaging (a
+      -- list that is all packaging publishes no cost). Absent, its SELECT
+      -- throws, applyProductBuildCosts()'s try/catch swallows it as "no
+      -- storefront", and every build-line case fails as merely blocked —
+      -- which is exactly how this gap was found.
+      item_kind TEXT DEFAULT 'food',
       source_recipe_id INTEGER, is_active INTEGER DEFAULT 1, updated_at TEXT);
     CREATE TABLE recipe_ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT, recipe_id INTEGER, ingredient_id INTEGER,
