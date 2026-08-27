@@ -3997,6 +3997,7 @@
   body:not(.ent-quickStock)  [data-feat="quickStock"],
   body:not(.ent-kitchenAdd)  [data-feat="kitchenAdd"],
   body:not(.ent-production)  [data-feat="production"],
+  body:not(.ent-waste)       [data-feat="waste"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
@@ -4020,6 +4021,11 @@
      Scoped to .tabs so it never reaches #mat-settings-home, which carries the
      same data-feat and must keep showing its own switch while off. */
   body.ent-production:not(.feat-production) .tabs [data-feat="production"] { display: none !important; }
+  /* Waste follows Production's hide-rather-than-dim rule, for the same reason:
+     its switch lives in Settings → Operations, not on the Waste page, so a
+     dimmed row would lead to a page that still works wearing a badge saying it
+     does not. Scoped to .tabs so it never reaches the switch's own card. */
+  body.ent-waste:not(.feat-waste) .tabs [data-feat="waste"] { display: none !important; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
@@ -12707,3 +12713,225 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   .pdrl-modal .pdrl-warn { margin-top: 8px; font-size: 12.5px; color: var(--td-amber-ink, #93601F);
     background: var(--td-amber-tint, #F6EBDA); border-radius: 8px; padding: 8px 10px; }
   .pdrl-modal .pdrl-hint { margin-top: 10px; font-size: 12px; color: var(--text-2, #58606E); min-height: 15px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WASTE (损耗) — §32. A1 Worklist with the thin-pulse render.
+   Painted by retail-admin/20-waste.js into #wst-root.
+
+   Colour comes from the live --td-* layer and nothing here hard-codes a hex
+   (§1.2). Radii are 14px card / 8px control / 999px pill (§1.4). Sentence
+   case throughout — there is no licensed uppercase in Tacet (§1.6).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── header (§1.7: title · no status line · one Dusk CTA) ─────────────────── */
+#tab-waste .wst-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 24px; margin-bottom: 32px;
+}
+#tab-waste .wst-title {
+  font: 500 24px/1.25 var(--f-sans); letter-spacing: -0.01em;
+  color: var(--td-text); margin: 0;
+}
+
+/* ── buttons ──────────────────────────────────────────────────────────────── */
+#tab-waste .wst-btn, .wst-modal .wst-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--td-border); background: var(--td-surface);
+  color: var(--td-text); font: 400 15px/1 var(--f-sans);
+  cursor: pointer; transition: background .2s var(--ease-out, ease), border-color .2s;
+}
+#tab-waste .wst-btn:hover { border-color: var(--td-text2); }
+/* The page's ONE Dusk element — §1.8 rule 1, the header CTA has first claim. */
+#tab-waste .wst-btn.primary {
+  background: var(--td-dusk); border-color: var(--td-dusk); color: var(--td-paper);
+}
+#tab-waste .wst-btn.primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+#tab-waste .wst-btn.ghost { background: transparent; border-color: transparent; color: var(--td-text2); }
+#tab-waste .wst-btn.ghost:hover { background: var(--td-raised); color: var(--td-text); }
+#tab-waste .wst-btn.sm { padding: 6px 10px; font-size: 13px; }
+#tab-waste .wst-btn[disabled] { opacity: .5; cursor: default; }
+#tab-waste .wst-ic { display: inline-flex; width: 16px; height: 16px; }
+#tab-waste .wst-ic svg { width: 100%; height: 100%; }
+
+/* ── pulse (A1 thin render — one line, the slot tiles would take) ─────────── */
+#tab-waste .wst-pulse {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px;
+  padding: 16px 24px; margin-bottom: 24px;
+  background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-waste .wst-fig { display: inline-flex; align-items: baseline; gap: 8px; }
+#tab-waste .wst-fig-l { font: 400 13px/1.4 var(--f-sans); color: var(--td-text2); }
+#tab-waste .wst-fig-v {
+  font: 500 18px/1.3 var(--f-sans); color: var(--td-text);
+  font-variant-numeric: tabular-nums;
+}
+/* Amber is "needs attention" (§1.10) — an uncosted count is exactly that, and
+   only when it is not zero. Text on a tint is always the -ink variant. */
+#tab-waste .wst-fig.warn .wst-fig-v { color: var(--td-amber-ink); }
+
+/* ── filter row (§1.1a region 5) ──────────────────────────────────────────── */
+#tab-waste .wst-filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: 24px;
+}
+#tab-waste .wst-sel, #tab-waste .wst-date,
+.wst-modal .wst-sel, .wst-modal .wst-in {
+  padding: 9px 12px; border-radius: 8px;
+  border: 1px solid var(--td-border); background-color: var(--td-surface);
+  color: var(--td-text); font: 400 15px/1.2 var(--f-sans);
+  font-variant-numeric: tabular-nums;
+}
+/* background-COLOR above, never the `background` shorthand. The shorthand
+   resets repeat and position, and the global <select> chevron (css:5209,
+   restated with a light stroke at css:139) came back with no-repeat gone — so
+   the arrow TILED the full width of the Store dropdown, a row of chevrons
+   striking through the store name. A select declares the whole arrow here,
+   gutter included, so neither rule can half-win. */
+#tab-waste select.wst-sel, .wst-modal select.wst-sel {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA3B2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center;
+  padding-right: 32px;
+}
+/* The arrow is --td-text2 in each theme, written out because a data-URI cannot
+   read a custom property. Dark above, light here. */
+:root[data-theme="light"] #tab-waste select.wst-sel,
+:root[data-theme="light"] .wst-modal select.wst-sel {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+#tab-waste .wst-range { display: inline-flex; align-items: center; gap: 8px; }
+#tab-waste .wst-range-sep { color: var(--td-text2); }
+
+/* ── table (§1.19 — fixed layout, classed cols, percentages summing to 100) ──
+   Measured at the 996px reference width (1280px window, less rail and gutters),
+   against the widest header and the widest real value in BOTH languages.
+
+     col          %     px@996   binding constraint
+     date        13     129      "Jul 29" ~50px; header Date/日期 ~40px. Slack.
+     store       13     129      store name, ellipses; header Store/门店 ~46px
+     prod        27     269      SLACK COLUMN — product name, ellipses, and the
+                                 voided/reversal pill sits inside it
+     qty          8      80      header "Qty"/数量 ~30px; values are small ints
+     reason      17     169      "Staff consumption" ~112px is the widest of the
+                                 seven seeded codes — the binding constraint
+     cost        14     139      "No cost" ~52px and "¥1,234.56" ~70px; header
+                                 ~32px. Slack.
+     act          8      80      "Void"/作废 button ~52px incl. padding
+                                 ────
+                                 100
+
+   Slack lives in `prod` alone, which ellipses by design (§1.19). Never in a
+   number, a pill or a date. No math functions on a col width — clamp(), min(),
+   max() and calc() are silently IGNORED under table-layout: fixed and the
+   column falls back to auto, which is how a ten-column table once split itself
+   into ten equal parts. Percentages only. */
+#tab-waste .wst-tablewrap { overflow-x: auto; }
+#tab-waste .wst-table {
+  width: 100%; table-layout: fixed; border-collapse: collapse;
+  background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-waste col.wst-c-date   { width: 13%; }
+#tab-waste col.wst-c-store  { width: 13%; }
+#tab-waste col.wst-c-prod   { width: 27%; }
+#tab-waste col.wst-c-qty    { width: 8%; }
+#tab-waste col.wst-c-reason { width: 17%; }
+#tab-waste col.wst-c-cost   { width: 14%; }
+#tab-waste col.wst-c-act    { width: 8%; }
+/* Cream header on white rows (§1.4). Single-line labels, no sub-labels — a
+   header that needs a sentence to explain it is the wrong header. */
+#tab-waste .wst-table thead th {
+  background: var(--td-raised); color: var(--td-text2);
+  font: 500 13px/1.4 var(--f-sans); text-align: left; white-space: nowrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--td-border);
+}
+#tab-waste .wst-table tbody td {
+  padding: 14px 16px; font: 400 15px/1.5 var(--f-sans);
+  color: var(--td-text); border-bottom: 1px solid var(--td-border);
+  vertical-align: top;
+}
+#tab-waste .wst-table tbody tr:last-child td { border-bottom: none; }
+#tab-waste .wst-table th.num, #tab-waste .wst-table td.num {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+#tab-waste .wst-table td.act { text-align: right; }
+#tab-waste .wst-ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-waste .wst-prod { margin-right: 8px; }
+/* A voided row stays fully legible — it is not struck through and not dimmed
+   into unreadability. The pill carries the meaning; the row still reads. */
+#tab-waste .wst-table tr.is-voided td,
+#tab-waste .wst-table tr.is-reversal td { color: var(--td-text2); }
+#tab-waste .wst-note-inline {
+  display: block; margin-top: 4px;
+  font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── pills (§1.10 — colour is semantics, text on a tint is the -ink) ───────── */
+#tab-waste .wst-pill {
+  display: inline-flex; align-items: center; padding: 2px 10px;
+  border-radius: 999px; font: 500 13px/1.5 var(--f-sans); white-space: nowrap;
+}
+/* A void is a cancellation, which is the brick bucket. */
+#tab-waste .wst-pill.voided   { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+#tab-waste .wst-pill.reversal { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+/* Zero and unknown must never look alike (§32 rule 10), so an uncosted cell
+   says so in words and wears the attention tint rather than sitting silent. */
+#tab-waste .wst-nocost { color: var(--td-amber-ink); font-size: 13px; }
+
+/* ── states (§1.12) ───────────────────────────────────────────────────────── */
+#tab-waste .wst-note, #tab-waste .wst-empty {
+  padding: 48px 24px; text-align: center;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+#tab-waste .wst-empty-t { margin-bottom: 16px; color: var(--td-text); }
+#tab-waste .wst-banner {
+  padding: 16px 24px; border-radius: 14px;
+  background: var(--td-brick-tint); color: var(--td-brick-ink);
+  border: 1px solid var(--td-border);
+}
+#tab-waste .wst-banner-t { font: 500 15px/1.5 var(--f-sans); }
+#tab-waste .wst-banner-b { font: 400 13px/1.6 var(--f-sans); margin: 4px 0 12px; }
+
+/* ── record modal (§1.13 — bounded, fixed height, one commit) ──────────────── */
+.wst-modal .wst-form {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+  text-align: left;
+}
+.wst-modal .wst-f { display: flex; flex-direction: column; gap: 4px; position: relative; }
+.wst-modal .wst-f-wide { grid-column: 1 / -1; }
+.wst-modal .wst-f-l { font: 500 13px/1.4 var(--f-sans); color: var(--td-text2); }
+.wst-modal .wst-in, .wst-modal .wst-sel { width: 100%; }
+.wst-modal .wst-onhand {
+  grid-column: 1 / -1; margin-top: -8px;
+  font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums;
+}
+/* The picker list overlays rather than growing the modal — a modal that
+   scrolls is a page that has not been promoted yet (§1.13), and this must
+   stay a modal. */
+.wst-modal .wst-drop {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 5;
+  max-height: 220px; overflow-y: auto; margin-top: 4px;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+}
+.wst-modal .wst-drop-i {
+  display: flex; align-items: baseline; gap: 8px; width: 100%;
+  padding: 10px 12px; background: none; border: none; cursor: pointer;
+  text-align: left; color: var(--td-text); font: 400 15px/1.4 var(--f-sans);
+}
+.wst-modal .wst-drop-i:hover { background: var(--td-raised); }
+.wst-modal .wst-drop-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wst-modal .wst-drop-m,
+.wst-modal .wst-drop-s {
+  font: 400 13px/1.4 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.wst-modal .wst-hint {
+  grid-column: 1 / -1; min-height: 20px;
+  font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
+}
+.wst-modal .wst-hint.warn { color: var(--td-amber-ink); }

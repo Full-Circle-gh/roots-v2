@@ -189,7 +189,7 @@ const TAB_CAP = {
   delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
   activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
-  recipes: 'recipes:view',
+  recipes: 'recipes:view', waste: 'waste:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
 // Rail folders, recounted after the gates (§2.5 of the drill-down amendment).

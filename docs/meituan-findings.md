@@ -1,16 +1,20 @@
 # meituan — Findings
 
-Eighteen findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing ·
+Nineteen findings, opened 2026-08-26 by a dashboard row ("Meituan not syncing ·
 4") and ending somewhere else entirely: the badge that opened it and the screen
 it sends you to count two different things, and the real exposure was in neither
 of them.
 
-**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10 to 18
-came from later passes the same day, and THREE OF THEM SHIPPED CODE** —
+**Findings 1 to 9 are a read-only survey and changed nothing. Findings 10 to 19
+came from later passes the same day, and FOUR OF THEM SHIPPED CODE** —
 `bc0c6144` (one line in the drift sweep), `d7848b62` (the mapping-name gate and
-its audit trail) and `693209e3` (the same gate on bundle titles). Read the
-Context section at the end before treating this document as the record of an
-untouched system.
+its audit trail), `693209e3` (the same gate on bundle titles) and `93aebe1a` (the
+resolver itself). Read the Context section at the end before treating this
+document as the record of an untouched system.
+
+**Finding 19 is the one finding 1 was written for**, and the only one that
+changes what the resolver does. Its live half is NOT yet observed: 天河 was shut
+when it deployed. Read its last section before quoting any of it as proven.
 
 **Findings 13 to 18 came from a second survey that started where finding 1
 stopped**, and the first thing it found is that finding 1's replay had never
@@ -52,6 +56,9 @@ stored copy of a thing rather than the thing. Finding 16 holds anywhere a
 wholesale replace is guarded only against emptiness. Finding 17 holds anywhere a
 composite's name contains its parts' names. Finding 18 holds anywhere a rule is
 tightened in the place everyone reads and left alone in the place nobody does.
+Finding 19 holds anywhere a check that COULD NOT RUN and a check that ran and
+said no are given the same verdict — they look identical from the caller, and
+only one of them is worth retrying.
 
 `docs/eleme-findings.md` is the companion document and is cross-referenced
 throughout rather than restated. The rules both documents produced are in
@@ -1894,6 +1901,250 @@ reached only from `scripts/meituan-set-stock.js` and
 
 ---
 
+## 19. The resolver takes a listing only when the name matches exactly, and the push now says where it went (built and SHIPPED 2026-08-26)
+
+Status: **shipped on `main` at `93aebe1a`**, deployed 13:35 UTC, CI green. This is
+findings 1, 9, 13, 15, 17 and 18 answered in one pass, and the last of them is
+what decided the shape.
+
+**The live half is NOT yet observed.** 天河 closed at 19:45 Shanghai and the
+deploy landed at 21:35; its queue was drained at 11:56 UTC and nothing has been
+pushed since. See "What production has and has not proved" at the end — the
+distinction is load-bearing and this finding should not be read as though the
+resolver has been exercised against the live suggest endpoint. It has not.
+
+### What was removed
+
+`_sugFromCapture` took a candidate through four arms and a tiebreak. Three arms
+and the tiebreak are gone:
+
+| removed | what it did |
+|---|---|
+| `_nameMatches` whole-CN-name containment | candidate contains our name |
+| **`_coreQuery` containment** | candidate contains our name's LEADING SAME-SCRIPT RUN |
+| `name_en` containment | candidate contains the Roots product's English name |
+| `requireToken` containment | candidate contains the FRAGMENT we searched |
+| shortest-name tiebreak (`:1159-1161`) | of the survivors, take the shortest |
+
+The middle one is where the damage was. `椰子酸奶 250g Coconut Yogurt` reduces to
+`椰子酸奶`, which every size of that product contains by construction, so the rule
+that read as *"a candidate must contain our whole name"* was in practice *"a
+candidate must contain our name's first few characters"*. The tiebreak then made
+the wrong choice deterministic without making it right — among size variants the
+shortest name is whichever the merchant happened to type most tersely.
+
+What remains is one line: a candidate is ours when `String(x.name).trim()` equals
+the mapped name. `en` is consulted only when there is no mapped name at all,
+which is the test scripts calling `updateStock` with one argument; a Roots
+product name equalling a listing title would be a coincidence, not a match.
+
+### The exact test runs on every term, and that is what keeps three mappings alive
+
+This is the part that would have been easy to get wrong, and finding 15 is why.
+
+`_searchTerms` builds up to three queries from the mapped name. The old code
+applied the exact test only to the first and a looser rule to the rest, on the
+reasoning that a fragment search cannot be trusted. Under exact-only that
+reasoning inverts: the term decides WHAT WE TYPE and has never had any business
+deciding what counts as a match. **The exact test now applies to every term.**
+
+Three live mappings depend on it and would have stopped pushing otherwise:
+
+| map | product | stored name | `_coreQuery` | term that answers |
+|---|---|---|---|---|
+| 819 | 10 Olive N' Cream | `OliveN‘Cream 地中海橄榄酱` | `OliveN` | `地中海橄榄酱` |
+| 817 | 139 Cacao Nibs | `Caca0 Nibs 可可粒` | `Caca` | `可可粒` |
+| 873 | 79 Za'atar | `Za‘atar绿百里香粉` | `Za` | `绿百里香粉` |
+
+Each resolves to a candidate carrying its own name byte for byte. What fails for
+them is that suggest returns nothing for a query truncated at a curly apostrophe
+(`U+2018`) or a digit inside the leading Latin run. **What needed loosening was
+the query, never the comparison.**
+
+### The loop that advanced only on a miss is now moot, not fixed
+
+`_resolveProductIds` moves to the next term only when the current one yields no
+match at all. That used to be a real defect — a term could return a WRONG match,
+the loop would stop on it, and the later term that would have found the right
+listing was never typed. Under the exact rule a wrong match cannot happen:
+`_sugFromCapture` returns the right listing or null. The condition is now exactly
+correct as it stands, and it was left unchanged on purpose rather than edited to
+look like it had been considered.
+
+### `_skusFromSpuList`: the fallback was removed, not tightened
+
+Finding 18 named `lib/meituan-browser.js:1252` as a second loose match in the
+push path — the same truncated-core rule, over a whole category's payload, with
+no exact-first preference and no tiebreak, taking the first match in payload
+order. Tightening it to an exact name comparison was the obvious repair and it
+would have been wrong.
+
+**The reason is WHEN that arm runs: only when the spuId already resolved is
+absent from the capture.** spu ids are stable and unique, so a candidate whose
+NAME matches exactly while its ID does not is, by construction, a DIFFERENT
+listing that happens to share a title. An exact name rule there cannot pick the
+right spu — it can only pick a wrong one more carefully.
+
+And every condition that reaches that arm is transient: the category click timed
+out, the list had not finished loading, the listing moved category between the
+two calls. So the arm is gone and the function returns null, which produces
+`could not resolve skuId`, no write, and a retry — the fail-closed direction.
+
+`_nameMatches` itself survives, reached only by `_extractSku`, which nothing but
+`scripts/meituan-set-stock.js` and `scripts/meituan-test-libstock.js` calls. It
+now carries a warning saying so, kept next to the function rather than copied
+into the scripts.
+
+### The empty-reply distinction, and that it is narrower than the brief allowed
+
+The brief commissioning this pass said: *"Suggest failing or returning empty
+still fails closed as a transient, since that is a check that could not run."*
+**What shipped is narrower than that, deliberately, and the disagreement is
+recorded rather than resolved quietly.**
+
+The first implementation followed the brief literally: any empty candidate list
+was a transient. Its own verification caught the problem. That rule conflates two
+different facts — *suggest answered and nothing it named is ours*, and *suggest
+did not answer* — and treating both as retryable leaves a name that matches
+nothing retrying every thirty minutes for ever. **That is precisely the shape
+finding 10 measured on product 254: 1551 hours of a self-firing loop chasing a
+target that could never resolve.** Building the rule that way would have removed
+one instance of the fault and installed another.
+
+**The signal that shipped is the reply's SHAPE, not its length**
+(`_sugAnswered`):
+
+- a well-formed `searchSugByName` reply — `data.data.searchSugVos` present and an
+  array — **is an answer**, whether it names one listing, a hundred, or none. A
+  merchant search that finds nothing is a true answer and a stable one.
+- no reply at all, or a garbled one, is **a check that could not run**, and
+  retries.
+
+The residual risk runs the other way and is stated rather than hidden: a
+200 carrying an empty list during a soft failure — rate-limited, session
+half-expired — would be read as an answer and bury a healthy row terminally on
+its first attempt.
+
+**The asymmetry is the whole argument.** The cost of that mistake is one Activity
+line and a thirty-minute wait for the drift sweep to re-queue the row. The cost
+of the opposite mistake is 1551 hours. That is why the rule sits where it does,
+and it is the sort of trade that should be written down at the time rather than
+reconstructed later from the code.
+
+### The failure is terminal on the first attempt, and says why
+
+A name no listing carries returns `{ ok: false, transient: false, reason }`. The
+daemon writes that sentence into `meituan_sync_queue.last_error` and into the
+sync log's `error_msg`, marks the row `error`, and stops. **One attempt, not
+three.** The "picked 规格 has gone" refusal — already terminal — gets a sentence
+too, instead of the generic `browser update failed`.
+
+Genuine transients are untouched: still `pending`, attempt kept not refunded, no
+sync-log row, still terminal at three with the existing sourced bilingual pair
+`update failed after retries · 多次重试仍失败`.
+
+Two small changes on the screen, not a rebuild. The Activity row now appends
+`error_msg` on an error row — the daemon has written a sentence there for years
+and the row never showed it, so a failing push read as a red line with a number
+and nothing else. And it falls back to `mapped_name` when there is no
+`product_id` or SKU, which is why a failing bundle used to render as the bare
+word "bundle" with no way to tell which one.
+
+New sentences are English on both sides. §30 rule 3 forbids composing Chinese and
+no sourced pair exists for either of them; same convention as
+`lib/meituan-map-write.js` `REFUSAL_PENDING_CN`.
+
+### §30 rule 7 is now met on Meituan
+
+Finding 9 said the resolver had the answer and discarded it three calls before
+the daemon could see it. It travels now:
+
+- `_resolveProductIds` returns `targetName` alongside `{ spuId, skus }`.
+- `_applyStockRule` spreads a `tgt` object into all six of its returns, and
+  `_toTransient` takes a second argument and passes it through.
+- `batchUpdateStock` carries `spuId`, `targetName`, `skuIds` and `reason`.
+- The daemon writes `meituan_spu_id = COALESCE(?, meituan_spu_id)` on the
+  existing `UPDATE meituan_product_map`, **on success only** — a failed push has
+  no target to record — and via COALESCE so a driver that somehow returns no spu
+  leaves the stored value standing rather than blanking it. All 32 rows the
+  one-off scripts populated were checked against the 2026-08-26 scrape first: 32
+  of 32 agree, so the column is an accurate fossil and safe to write over.
+- The `stock_push` log line carries `target_spu_id`, `target_name`, `sku_id`,
+  `mapped_name`, `product_id` or `bundle_id`, and `target_mismatch`.
+
+`mapped_name` sits beside `target_name` because **the fact worth catching is that
+they disagree**, and neither alone can say it. A mismatch also gets its own
+`TARGET MISMATCH` line in the process log. Under the exact rule a mismatch is not
+reachable, so one appearing means a bug rather than a mis-mapping.
+
+`product_id` is there for a smaller reason that had been costing every reader:
+`logSync` never carried it, so `mtRenderLog` could not name the product and fell
+back to a bare SKU on every row.
+
+**Bundles get the log line only.** `meituan_bundles` has no spu column, and
+adding one is a schema change that did not belong in this pass. Their log line
+carries `bundle_id` and the full target.
+
+### What `mtRenderLog` still does not show
+
+The new keys are stored and invisible. The screen renders a fixed set, and this
+pass deliberately did not rebuild it. What a useful row would do is show the
+target beside the mapped name **only when they differ** — under this rule they
+always agree, so showing both always is noise that trains an operator to ignore
+the one case that matters.
+
+### The drift sweep still re-queues a terminal row every 30 minutes
+
+Not changed, and the omission is deliberate. A row that goes terminal on a name
+that cannot resolve still presents drift (`last_pushed_qty <> shelf`), so
+`lib/meituan-drift-sweep.js` writes it a fresh `pending` row on its next pass and
+the cycle repeats — now at one attempt per half hour instead of three.
+
+**A guard there is a separate pass.** The sweep is the channel's only self-firing
+recovery path and finding 10 is what happens when its selection is wrong in the
+other direction: it chased an archived product for 1551 hours and held a store's
+alarm latch shut for 28 days. It reads `last_error` today only to phrase an
+alert, so a skip on that column would be a new behaviour rather than an extended
+one, and folding an unmeasured change to the recovery loop into the same deploy
+as a change to the resolver would leave neither verifiable if the day went wrong.
+
+### What production has and has not proved
+
+**Verified before the deploy**, against a detached snapshot with the real driver
+prototype and the daemon's verdict block lifted verbatim by line range (the
+daemon calls `main()` at require time and cannot be required against a fixture):
+all 398 named mappings resolve with one exception — map 957, the wine, which
+resolved to nothing before this change too; every resolved target name equals its
+mapped name; the three fallback mappings resolve with `terms[0]` forced silent;
+bundles 2 and 16 refuse instead of writing to products 9 and 196; a name absent
+from suggest is terminal with a reason and no write; suggest never replying is a
+transient; a well-formed reply naming nothing is terminal; suggest returning
+siblings but not the exact listing refuses rather than taking one — that last is
+the write the old rule made; the target fields travel and `meituan_spu_id` fills
+in; a stated refusal consumes one attempt.
+
+**Not proved, because the store was shut.** 天河 trades 10:00–19:45 and the
+deploy landed at 21:35 Shanghai, with its queue drained since 11:56 UTC. **No
+push has run under this code.** Everything above about resolution rests on the
+stored catalogue standing in for `searchSugByName`, and findings 4 and 15 are the
+record of those two disagreeing. The first real cycle is what proves it.
+
+**Never testable offline, and only production can answer:**
+
+- **Whether a well-formed empty reply ever arrives during a healthy session.**
+  That is the residual risk in the empty-reply rule above, and no fixture can
+  produce it.
+- **The duplicate-title blind spot.** An exact match names exactly one spu only
+  if no two listings share a title. The stored catalogue says none do — but
+  `meituan_listings` carries `UNIQUE(store_code, listing_name)` and the scrape
+  inserts with `INSERT OR IGNORE`, so **two spus sharing a title would collapse
+  into one row and be invisible to any count taken from that table**.
+  `meituan_listing_specs` has no such constraint and also reports zero, which is
+  the stronger reading and still not proof. If a duplicate exists, the exact
+  branch takes whichever the suggest response lists first.
+
+---
+
 ## Context — what was and was not done on 2026-08-26
 
 > **Amended after findings 10 and 11.** The bullet below was written when this
@@ -1986,6 +2237,30 @@ reached only from `scripts/meituan-set-stock.js` and
   bundle 2 needs its title re-picked from the list, and bundle 16 has no title to
   pick until its listing comes back.
 
+- **Finding 19 then shipped a fourth code change**, `93aebe1a`, at 13:35 UTC —
+  the exact-match resolver, `_skusFromSpuList` losing its name fallback, the
+  target recording and the terminal verdict. CI green. It was pushed only after
+  the in-flight deploy of PR #112 had finished, because concurrent runs share one
+  staging directory. Every process came back `online`: `roots-v2` 1614 → 1615,
+  `meituan-sync` 161 → 162, `guanyi-sync` 145 → 146, `eleme-sync` 69 → 70,
+  `gzgrocery-orders` 143 → 144, `qingyun-sync` and `qingyun-sync-yuexiu` 220 →
+  221, `proxy-watchdog` 62 → 63. `meituan-sync` restored its session, confirmed
+  login and read an order under the new code, with no startup error of its own —
+  the only stderr lines are the standing ALIPAY / pack-claims / price write-back
+  ones. `shangou-sync` has been `stopped` all day and still is.
+
+- **NO PUSH HAS RUN UNDER THE NEW RESOLVER, and that is the whole caveat on
+  finding 19.** 天河 trades 10:00–19:45 Shanghai; the deploy landed at 21:35, and
+  the store's queue had been drained since 11:56 UTC. `isStoreOpen` gates the
+  drain, so the first cycle cannot happen until the store reopens. The offline
+  verification is thorough and it is not the same thing as the endpoint answering.
+
+- **The 1,683 pending queue rows are 越秀's and predate all of this.** They are
+  dated 2026-08-24 and 2026-08-25, carry 0 attempts, and cover 187 products —
+  越秀's whole mapping set. `shangou-sync` is stopped, so nothing drains them, and
+  越秀 is 停业中 on Meituan besides. Recorded because a four-figure pending count
+  read next to a resolver deploy invites exactly the wrong conclusion.
+
 ### Working note — requiring the app’s modules on production is not read-only
 
 Not a finding; a method note, recorded because it is an easy mistake to repeat
@@ -2022,7 +2297,12 @@ against the running system between 07:26 and 07:28 UTC, and its before/after
 selection counts against detached fixtures cut at 07:00 and 07:27 UTC.
 
 Findings 13 to 18 were read at `832308a4` against fixtures cut at 17:32, 17:59
-and 19:47 UTC and, after the deploy, at 20:20 UTC. The live/offline split in
+and 19:47 UTC and, after the deploy, at 20:20 UTC. Finding 19 was built at
+`bb4b70e3` and verified against a fixture cut at 21:20 UTC, with the driver
+driven through `Object.create(prototype)` and the daemon's verdict block lifted
+verbatim by line range; its fix landed at `93aebe1a` and its post-deploy
+observations were taken between 21:35 and 22:05 Shanghai, during which the store
+was shut and no push ran. The live/offline split in
 finding 15 comes from `~/.pm2/logs/meituan-sync-out.log`, 21,860 lines spanning
 2026-07-29 to 2026-08-26 — the only record anywhere of what the resolver actually
 matched, and the reason finding 4's caveat could be tested at all rather than

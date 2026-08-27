@@ -1,6 +1,6 @@
 # packaging — Findings
 
-Sixteen findings, opened 2026-08-26 by a simple question — *what does packaging
+Nineteen findings, opened 2026-08-26 by a simple question — *what does packaging
 cost us* — and ending in a number that was counted twice on eleven materials and
 sixteen recipe lines.
 
@@ -12,6 +12,23 @@ in this document is structure, and the structure is mostly defensible.
 fix that followed and it changed code. Finding 16 records what the fix does NOT
 reach, so the gap is not mistaken for closed. Every number below is a read-only
 query against `roots.db`, and the queries are given so they can be re-run.
+
+**Findings 17, 18 and 19 shipped nothing and wrote nothing either, and none of
+the three opened a database** — each is read from the code, and each carries the
+read-only SQL that would verify it rather than the answer. **Findings 18 and 19
+are the outliers of this document in subject**: 18 is a recipe-IDENTITY defect
+and 19 is an unsourced figure in a decision record, and both are filed here only
+because checking §31's worked example and its cost estimate surfaced them. Read
+their opening paragraphs before citing either as a packaging finding.
+
+> **Amended 2026-08-26 — FINDING 11 IS NOW ALSO FIXED.** The sentence above is
+> true of the survey that produced findings 1 to 14 and is no longer true of
+> finding 11's entry, which has since gained a fix of its own (`routes/` and a
+> new `lib/`, no data written). It was fixed ahead of the other thirteen because
+> it was the only one still actively DESTROYING data: every save on Tacet's Cost
+> & Pricing tab discarded a packaging link, and those links are the packaging
+> migration's machine-resolvable input. **The migration's input stopped
+> degrading as of that change.** Amended in place rather than rewritten.
 
 Most of these are not packaging-specific. Finding 1 holds anywhere a derived cost
 is folded into a unit price that is then consumed as an input; finding 4 holds
@@ -26,6 +43,16 @@ The rules both documents answer to are in `docs/tacet-consolidation-decisions.md
 §29 (nested recipes) and §30 (channel sync). **No rule is proposed here.** Where
 this document and the code disagree, this document is stale and should be
 re-checked against the code.
+
+> **Added 2026-08-26, after §31 was written.** This document is now also the
+> evidence behind **§31 (product unit cost — contents plus packaging)**, which
+> settles that a product's cost is its contents plus its packaging, that
+> packaging attaches to the PRODUCT as a LIST of ordinary materials, and that an
+> empty list means unknown rather than zero. It draws on findings 2, 3, 4, 6, 9
+> and 12. **The sentence above still holds — no rule is proposed here** — and the
+> closing note at the foot of this document, that whether §29 or §30 should gain
+> a line is a decision rather than a finding, is left standing as written: §31 is
+> the answer that was given to it, recorded in the document that owns decisions.
 
 Two of the claims that opened this survey did not survive it, and both are
 corrected in place — see findings 4 and 5.
@@ -630,7 +657,10 @@ has since moved by two to four times, and nothing tells anyone.
 
 ## 11. Every Tacet cost save nulls `packaging_type_id`, and leaves no trace (found 2026-08-26)
 
-Status: **open, and happening now.**
+Status: **FIXED 2026-08-26 — see "The fix" at the end of this finding.** The
+description below is of the fault as it stood. **THE MIGRATION'S INPUT STOPPED
+DEGRADING AS OF THIS CHANGE**; what was already lost before it is a separate
+question, answered under "What was lost, and whether it comes back".
 
 The Tacet recipe editor builds its save payload at
 `public/retail-admin/19-recipes.js:713-722`:
@@ -689,6 +719,122 @@ activity-log entry — confirmed by
 returning **0**. The only evidence a save happened is `updated_at` moving. There
 is no before, no after, and no actor — the same absence §30 rule 7 names on the
 channel side.
+
+### The fix — an absent field is not a cleared field (built 2026-08-26)
+
+**Fixed on the SERVER, not on the screen**, and the choice is the point. The
+client repair — have Tacet send the stored id back untouched — fixes one caller
+of one route. The fault is that a route DELETED A FIELD ON BEING HANDED NOTHING
+ABOUT IT, and that is wrong for every caller, including ones not yet written.
+This is §30 rule 3's worked example applied to a second surface: **a rule
+enforced by the callers of a write is a convention, and a convention is declined
+by whichever caller nobody checked.**
+
+The UPSERT moved out of both cost routes into `lib/recipe-cost-data-write.js`,
+which now owns the one rule:
+
+| what the caller sends | what happens |
+|---|---|
+| **no `packaging_type_id` key** | the stored value is **kept** |
+| the key, empty (`null` / `''` / `0`) | **cleared** — a deliberate unlink |
+| the key with a value | that value is written |
+
+**CLEARING HAD TO KEEP WORKING, AND THE OBVIOUS REPAIR WOULD HAVE BROKEN IT.**
+`COALESCE(incoming, stored)` — one word, passes the regression test — makes an
+explicit NULL indistinguishable from an absent key, so **a packaging link could
+never be removed once set.** That is the trap `lib/meituan-map-write.js:148-162`
+already documents on the mapping side, where the clear is checked FIRST, before
+the gate, so a product with an unverifiable stored name stays removable rather
+than frozen. Same distinction, same reason: a rule meant to protect a value must
+not trap it.
+
+**NOTHING ELSE GAINED PRESERVE-ON-ABSENT SEMANTICS.** An absent `labour` still
+writes 0; an absent `target_food_cost` still writes 30, including the stored-0-
+becomes-30 quirk `lib/recipe-cost.js:248` reads back. Deliberate, and asserted:
+the other five are numbers a form always sends, and making them sticky would mean
+a field cleared to blank could never return to zero.
+
+**The kitchen route was changed too, though it was not the one losing links.**
+The Cost Sheet does send `packaging_type_id` (`public/app.html:8062`), so its
+behaviour is unchanged — but it carried a byte-identical copy of the same
+coalesce, and leaving one route repaired and one not would be two answers to one
+question, waiting to drift.
+
+**Verified against an in-memory fixture, not production**
+(`scripts/test_recipe_cost_data_write.js`, 32 assertions, the write called
+directly rather than through HTTP). The two failure modes were confirmed
+*catchable* by mutating the rule back and re-running: reverting to the original
+coalesce fails 5 assertions, and the COALESCE trap fails 4 — including both
+deliberate-clear cases. A test that passes against the broken code proves
+nothing, which is why both mutants were run.
+
+**One case is there because the repair introduced a new way to fail.** Preserving
+means READING the stored row first, and both routes key that read on
+`req.params.id` — a string, against an `INTEGER` column. Had a string id failed
+to match, the lookup would return nothing, the stored value would read as null,
+and the preserve would quietly become "write null": the original bug through a
+new door, passing every other case in the file. SQLite applies numeric affinity
+to the comparison so it matches, and that is asserted rather than reasoned about.
+
+### What was lost, and whether it comes back
+
+**Not recovered here — nothing was written.** What follows is what the evidence
+can and cannot support.
+
+**There is no audit trail of the destruction itself.** Neither cost route logs
+activity (confirmed above), `recipe_cost_data` is last-write-wins with no history
+table, and `updated_at` is overwritten by the save that did the damage. So
+recovery cannot come from the record of the loss. It has to come from somewhere
+else, and there are three somewheres:
+
+1. **A backup.** The strongest, because it is exact rather than inferred. The box
+   takes an **hourly** local SQLite snapshot (`/root/scripts/roots-backup.sh`)
+   and a nightly off-site copy to OSS with **`RETAIN_DAYS=14`**
+   (`scripts/db-backup.sh:70`). **Recipe 80 lost its link at 07:28:46 on
+   2026-08-26** — the 07:00 snapshot of that same morning holds the answer
+   outright. **Recipe 36 lost its at 07:14:04 on 2026-08-11, which is 15 days
+   back and therefore just OUTSIDE the off-site window**; whether the local
+   hourly tier still reaches it cannot be established from this repository,
+   because `roots-backup.sh` is one of the three untracked scripts that exist
+   only on the box (`docs/tacet-operating-findings.md` §3.4) and its retention
+   is not readable here.
+2. **The number matching exactly one type's cost.** Recipe 80's 1.12 equals
+   `packaging_types` id 2 (`300ml Plastic Box`). This is evidence, not proof, and
+   its weakness is finding 4's: a type's cost can be edited with no timestamp and
+   no log, so today's cost is not necessarily the cost that was copied. It is
+   only conclusive if exactly one of the 44 carries that figure.
+3. **`activity_log`, which is better than finding 4 implies.** The packaging-type
+   CREATE handler records `{ name, cost }` (`routes/lookups.js:87`) — so **the
+   cost each type was born with survives even if the type has since been
+   edited**, for all 56 creates including the 12 later deleted. The UPDATE
+   handler still logs nothing (`:91-99`), so this recovers the original figure,
+   never an intermediate one. **This evidence expires**: `activity_log` is purged
+   on every startup at `ACTIVITY_LOG_RETENTION_DAYS`, default **90**
+   (`database.js:4033-4039`), so the 2026-08-11 creation entries are readable
+   until roughly **2026-11-09** and then are not.
+
+**The rate of loss, and the current count, are not established here.** Two rows
+were recorded on 2026-08-26; whether more were lost between then and this fix
+needs a live query, which this pass did not run:
+
+```sql
+-- Every packaging number with no link, newest loss first.
+SELECT recipe_id, packaging, updated_at
+  FROM recipe_cost_data
+ WHERE COALESCE(packaging,0) > 0 AND packaging_type_id IS NULL
+ ORDER BY updated_at DESC;
+
+-- Is recipe 80's 1.12 unique among the types? (>1 row = not recoverable this way)
+SELECT id, name, cost FROM packaging_types WHERE ABS(cost - 1.12) < 0.0005;
+SELECT id, name, cost FROM packaging_types WHERE ABS(cost - 0.10) < 0.0005;
+
+-- The same question against the cost each type was CREATED with.
+SELECT entity_id, json_extract(details,'$.name') AS name,
+       json_extract(details,'$.cost') AS cost_at_create, created_at
+  FROM activity_log
+ WHERE entity_type = 'packaging_type' AND action = 'create'
+   AND ABS(CAST(json_extract(details,'$.cost') AS REAL) - 1.12) < 0.0005;
+```
 
 ---
 
@@ -1078,7 +1224,425 @@ deplete anything (finding 9), add per-store costs (finding 10), stop the Tacet
 save nulling `packaging_type_id` (finding 11), resolve the naming collision
 (finding 13) or remove `packaging_types` from the wipe list (finding 14).
 
+> **Amended 2026-08-26 — finding 11 is no longer on that list.** It was fixed by
+> a separate, later change (see finding 11's own "The fix"), not by finding 15's.
+> The rest of the sentence stands.
+
 ---
+
+## 17. A BLOCKED material never catches up, so finding 15's fix does not reach it (found 2026-08-26)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.**
+
+**THIS IS A STALE-INPUT CONSEQUENCE OF BLOCKING, NOT AN INCOMPLETE EXCLUSION.**
+Stated first because the symptom is identical to the one finding 15 closed, and a
+reader meeting it will reasonably conclude the fix did not work. It did.
+Packaging is removed where a made material's unit cost is DERIVED
+(`lib/recipe-cost.js:184` → `lib/recipe-rollup.js:174`), so every consumer
+inherits the correction and `routes/waste.js:56`'s exclusion is complete. What
+follows is about a material the corrected derivation **never runs for**.
+
+`lib/recipe-rollup.js:205-216` — when `costOneRecipe` refuses, `planRollup`
+records the material in `blocked[]`, sets its override to `null`, and `continue`s:
+
+```js
+    if (!result.ok) {
+      overrides.set(mat.ingredient_id, { cpu: null });
+      …
+      blocked.push({ … oldCpu: mat.cost_per_unit });
+      continue;
+    }
+```
+
+**No write happens on that branch, and that is correct** — it is the rule
+`lib/recipe-rollup.js:20-28` states as *"BLOCKED NODES STOP THE CASCADE, THEY DO
+NOT ZERO IT"*, which is what stops a blocked material reading as free. The
+consequence is the part worth recording: **the row keeps whatever
+`cost_per_unit` it already had, indefinitely, and nothing marks it as stale.**
+
+**So a material blocked since before `c86ef74e` still holds a
+packaging-inclusive figure**, and a wasted product whose recipe consumes it is
+costed with that packaging included. Not because the exclusion is incomplete, but
+because the corrected derivation has never been allowed to run for that material.
+The block is the cause; the stale number is the symptom.
+
+**Seven conditions block, not the four most often named:**
+
+| reason | line |
+|---|---|
+| `recipe_missing` | `:132` |
+| `recipe_archived` | `:133` |
+| `no_ingredient_lines` | `:145` |
+| `unpriced_lines` | `:147` |
+| `unreconciled_units` | `:162` |
+| `no_batch_size` | `:164` |
+| `no_cost_per_unit` | `:173` |
+
+**The count is UNKNOWN and UNMEASURED.** No database was opened for this finding —
+the container it was written in holds no copy of `roots.db` and no route to the
+box. How many linked materials are blocked, how many of those were last written
+before `c86ef74e`, and whether any is consumed by a recipe backing a product that
+is actually wasted, are all open. **The clearing case is open too**: a block that
+lifts causes the next trigger to write the corrected figure, so this self-heals
+per material at an unknown rate.
+
+### How to measure it — and how NOT to
+
+> ⚠️ **DO NOT REQUIRE THE APPLICATION'S MODULES AGAINST PRODUCTION TO ANSWER
+> THIS.** `require('./database')` is not a read: `database.js:4033-4039` runs
+> **`DELETE FROM activity_log WHERE created_at < …`** at module load, on every
+> load, gated only by `ACTIVITY_LOG_RETENTION_DAYS` (default 90). **A "read-only"
+> diagnostic that pulls in the app has already purged the activity log once.**
+> That log is currently the only surviving record of what each packaging type
+> cost when it was created (`routes/lookups.js:87`), which finding 11 depends on
+> for recovery — so the tool used to measure this finding can destroy the
+> evidence another one needs. The same hazard is recorded in
+> `docs/meituan-findings.md`'s working note.
+
+Two safe routes, both of which avoid loading any application module:
+
+1. **`sqlite3 -readonly` against production**, or equivalently
+   `sqlite3 'file:…?mode=ro'`. Read the candidates directly; derive nothing:
+
+```sql
+-- Linked materials, with when each was last written. Any row whose
+-- updated_at predates c86ef74e (2026-08-26 17:30:56 +0800) is a candidate.
+SELECT id, name_en, sku, cost_per_unit, source_recipe_id, updated_at
+  FROM ingredients
+ WHERE source_recipe_id IS NOT NULL
+ ORDER BY updated_at;
+
+-- Which of those a wasted product could actually reach.
+SELECT DISTINCT p.id, p.name_en
+  FROM products p
+  JOIN recipe_ingredients ri ON ri.recipe_id = p.recipe_id
+  JOIN ingredients i         ON i.id = ri.ingredient_id
+ WHERE i.source_recipe_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM waste_entries w WHERE w.product_id = p.id);
+```
+
+2. **A detached fixture against a restored backup** — restore a snapshot into a
+   throwaway file and run `planRollup` there, where requiring the app is
+   harmless because the activity log being purged is a copy. `blocked[]` is the
+   answer directly, with each material's `reason` and `oldCpu` already on it, and
+   `scripts/rollup_made_material_costs.js` already drives exactly this in
+   dry-run.
+
+**Neither route writes to production, and route 2 is the only one that can name
+the reason per material** — the SQL in route 1 finds candidates by date, not by
+block state, so it over-reports.
+
+---
+
+## 18. Two recipes are named Hummus Asli, so its products link to neither — and nothing says so (found 2026-08-27)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.**
+
+**THIS IS A RECIPE-IDENTITY DEFECT, NOT A PACKAGING ONE.** Stated first so it is
+not read as belonging to this document's subject: nothing about packaging causes
+it, nothing about packaging is needed to fix it, and it would be exactly as true
+in a system with no packaging model at all. **It is filed here only because
+§31's rule 2 offered Hummus Asli as a worked example, and checking the example
+surfaced it.** Whoever owns recipe identity owns this; this entry is the record,
+not the claim on it.
+
+### Two recipes, one name, differing only by SKU
+
+`database.js:4267-4268`, in the comment above the one-off product→recipe link:
+
+```js
+//     knows which is current — that is what excludes both Hummus Asli recipes
+//     (7 / 1-12 and 92 / 1-10), without needing to name them.
+```
+
+Recipe **7** (SKU `1-12`) and recipe **92** (SKU `1-10`) share **both**
+`name_en` and `name_cn`. The only field that separates them is the SKU.
+
+### Why sharing both names is exactly the case the matcher cannot resolve
+
+`database.js:4263` states the rule the linker enforces:
+
+```js
+//   * two or more of {exact SKU, exact name_en, exact name_cn} agree — survey
+//     group A. One signal alone (group B, 36 pairs, all SKU-only) is NOT enough
+```
+
+and `:4311` enforces it — `if (sigs.size < 2) continue;`.
+
+**Two of three must agree, and the SKUs differ, so SKU can serve for neither
+recipe.** That leaves `name_en` and `name_cn` as the only signals available, and
+both are required. But both are what the two recipes SHARE — so any product
+matching one recipe on both names matches the other on both names too, and
+**both qualify**. The rule that was written to demand more evidence produces, on
+this family, two equally-evidenced answers. Nothing in the data prefers either.
+
+### The product is then dropped silently
+
+`database.js:4332`:
+
+```js
+        if (rids.size > 1) { ambiguous++; continue; }
+```
+
+`continue` — no write, no log line, no row marked. The product keeps
+`recipe_id IS NULL` and `unit_cost` untouched. The only trace is a counter, in
+the migration's own console line, `database.js:4345-4346`:
+
+```js
+    console.log(`[store_products] recipe link: ${linked} product(s) linked + costed from a recipe `
+      + `(skipped ${ambiguous} ambiguous, ${noCost} no usable recipe cost, ${scaled} sample/multipack); `
+```
+
+**That is server stdout at migration time, seen once by whoever was watching the
+boot.** No warning reaches any user, no screen names the products, and the
+counter does not say WHICH products or WHICH recipes collided. A reader of the
+catalogue afterwards sees products with no recipe and no reason given.
+
+### What this means for §31
+
+**The affected products therefore hold NO recipe link at all** — not a link to
+the wrong recipe, not a shared link, none. So Hummus Asli is not §31 rule 2's
+shape (one recipe, several products packed differently); **it is the case rules
+7 and 8 exist for** — a product that must be able to carry packaging with no
+recipe anywhere in the picture. Rule 2 has been corrected accordingly
+(`docs/tacet-consolidation-decisions.md` §31, v4.93); Crunchy Granola remains
+that rule's only worked example.
+
+### The 300ml box attributed to it was recipe 9's
+
+§31 rule 2 said Hummus Asli sat "on one recipe carrying a single 300ml box".
+Recipe 7's packaging link is not a 300ml box and is not a link:
+
+```sql
+SELECT recipe_id, packaging, packaging_type_id, typeof(packaging_type_id)
+  FROM recipe_cost_data WHERE recipe_id = 7;
+-- 7 | 1.0 | pt1778315688913 | text
+```
+
+**`'pt1778315688913'` is a client-generated string id sitting in an `INTEGER`
+column, and it matches no `packaging_types` row** — finding 7 records it as an
+orphan. The `300ml Plastic Box` / `300毫升塑料瓶` is `packaging_types` id 2 and
+belongs to **recipe 9**, per `packaging-findings.md:314-315`. The box was
+attributed to the wrong recipe.
+
+### UNVERIFIED — no database was opened for this finding
+
+**That recipes 7 and 92 both still exist, and still share both `name_en` and
+`name_cn`, is NOT a live read.** `database.js:4267` is a claim made by whoever
+wrote that migration, at the time they wrote it. Either recipe may since have
+been renamed, re-SKU'd, archived or deleted, in which case the family is no
+longer ambiguous and the products may have linked on a later run — though the
+migration is `_migrations`-guarded and does not re-run, so a link would have to
+come from somewhere else. **Everything above about the MATCHING RULE is read
+from the code and is verified; everything about the two rows is not.**
+
+### How to verify it — read-only
+
+The finding 17 constraint applies unchanged and is not optional here:
+**`sqlite3 -readonly` only, no application modules, and never
+`require('./database')`** — `database.js:4033-4039` runs
+`DELETE FROM activity_log WHERE created_at < …` at module load, so requiring the
+app to "read" the database purges the activity log that finding 11's recovery
+depends on. Loading `database.js` would additionally attempt this very
+migration.
+
+```sh
+sqlite3 -readonly roots.db        # or: sqlite3 'file:roots.db?mode=ro'
+```
+
+```sql
+-- 1. Do both rows still exist, and do they still collide on both names?
+SELECT id, sku, name_en, name_cn
+  FROM recipes
+ WHERE id IN (7, 92)
+ ORDER BY id;
+
+-- 2. The collision without naming ids — every name pair carried by more than
+--    one recipe. Hummus Asli should appear; anything else here is the same
+--    defect on another family.
+SELECT name_en, name_cn, COUNT(*) AS n, GROUP_CONCAT(id) AS recipe_ids,
+       GROUP_CONCAT(sku) AS skus
+  FROM recipes
+ GROUP BY name_en, name_cn
+HAVING COUNT(*) > 1
+ ORDER BY n DESC, name_en;
+
+-- 3. The products that lost their link to it. Unlinked actives whose own
+--    name matches a recipe name — the population the ambiguous counter hid.
+SELECT sp.id, sp.sku, sp.name_en, sp.name_cn, sp.recipe_id, sp.unit_cost
+  FROM store_products sp
+ WHERE COALESCE(sp.is_active,1) = 1
+   AND sp.recipe_id IS NULL
+   AND EXISTS (SELECT 1 FROM recipes r
+                WHERE r.name_en = sp.name_en OR r.name_cn = sp.name_cn)
+ ORDER BY sp.name_en, sp.sku;
+
+-- 4. Recipe 7's orphan type id, and whether it resolves. Expect no row from
+--    the join half.
+SELECT c.recipe_id, c.packaging, c.packaging_type_id,
+       typeof(c.packaging_type_id) AS ty,
+       (SELECT COUNT(*) FROM packaging_types t
+         WHERE CAST(t.id AS TEXT) = CAST(c.packaging_type_id AS TEXT)) AS resolves
+  FROM recipe_cost_data c
+ WHERE c.recipe_id IN (7, 9, 92);
+```
+
+Query 3 over-reports by design: it finds unlinked products whose name matches
+*any* recipe, which includes products skipped for the other three reasons in the
+counter (`noCost`, `scaled`) as well as the ambiguous ones. **Narrowing it to the
+ambiguous set alone requires re-running the matcher's own logic, and that must
+not be done by importing the app** — read the four fields and apply the
+two-of-three rule by hand, or use finding 17's route 2, a detached fixture
+against a restored backup.
+
+---
+
+## 19. The "65 margins" figure has no measured source, and the operative number is smaller (found 2026-08-27)
+
+Status: **open. Read-only — nothing was shipped for this and no data was written.
+No number is corrected here, because no number was measured here.**
+
+§31's consequences state:
+
+> **65 products carry a packaging figure through their recipe today, and each one
+> needs its packaging picked once.** That one-time pass is **the real cost of this
+> change** — not the code.
+
+**Sixty-five is the budget for the pass §31 calls the real cost of the change,
+and it appears in exactly two places, both of which are §31 itself:**
+
+| where | what it is |
+|---|---|
+| `docs/tacet-consolidation-decisions.md:4244` | §31's consequences — the claim |
+| `docs/tacet-consolidation-decisions.md:19` | v4.88's changelog entry — the same claim, restating the section |
+
+*(Both were `:4240` and `:17` until v4.93's own entry and rule-2 correction shifted
+them by four and two lines respectively. The line numbers move; the count of two
+does not — grep `65 products` if they have drifted again.)*
+
+No query, no survey line, and no finding in this document produces it. The
+counted figures this survey *did* produce are finding 6's — 93 cost rows with
+`packaging > 0`, 10 explicitly zero, 34 recipes with no cost row — and those are
+counts of RECIPES, not of products. **65 is not derivable from them**, because
+the recipe→product fan-out is exactly what nobody has counted: one recipe backs
+several products (that is rule 2's whole subject), and some products link to no
+recipe at all (finding 18). **It is recorded here as unsourced, not as wrong.**
+
+### The operative number is NOT 65
+
+Even taken at face value, 65 is the wrong number for the decision it is being
+spent on. **A product that already shows an em dash in its margin column for want
+of a sell price has no margin to move**, whatever packaging is picked for it.
+`public/retail-admin/09-products.js:786`:
+
+```js
+  if (!Number.isFinite(p) || p <= 0) return null;   // no price → no margin to state
+```
+
+and `:1165` renders that null:
+
+```js
+  if (!ms.length) return '<span class="pa-col-margin pa-col-muted">—</span>';
+```
+
+So the number that matters is **65 minus the products already rendering an em
+dash** — and it is that smaller number, not 65, that §31 rule 9's third-state
+rendering decision turns on. Rule 9 requires unknown, explicit-no-packaging and a
+figure to be three distinguishable states; the cost of showing the unknown state
+is paid per product whose margin cell would visibly change. **A product with no
+sell price shows an em dash before the change and an em dash after it.** Sizing
+the rendering decision against 65 sizes it against a population that includes
+rows the decision cannot reach.
+
+### Pin the population BEFORE running either query
+
+Both queries below are unrunnable as *definitions* until three things are
+settled, and the two figures will not agree with each other or with 65 unless
+the same choices are made for both:
+
+1. **Archived in or out.** `status = 'Active'` means "not archived"
+   (`routes/retail.js:14733`), and it is independent of `is_published`. An
+   archived product is not being sold and arguably needs no pass; an unpublished
+   but active one may be published tomorrow. 65 states which of the three
+   populations it counted: it does not.
+2. **Whether `packaging = 0` counts as needing the pass.** Finding 6 counts 10
+   cost rows at an explicit zero and 34 recipes with no cost row at all, and
+   finding 6's whole point is that today those two are indistinguishable on
+   screen. Under §31 rule 9 they are different facts — one is "no packaging",
+   the other is "unknown" — so whether the zeros need an operator to confirm
+   them is a rule-9 question, not a counting question, and it must be answered
+   first.
+3. **Which product table.** `store_products` is the retail catalogue §31 is
+   about; kitchen `products` is a separate id space with its own `recipe_id`,
+   which `database.js:4276-4278` records as unreliable ("one bad row in four").
+   The queries below read `store_products` only.
+
+Answer those three, then run both. **Do not reconcile the results against 65** —
+65 has no method behind it to reconcile with.
+
+### The two queries — read-only
+
+Finding 17's constraint again, unchanged: **`sqlite3 -readonly`, no application
+modules, never `require('./database')`** (`database.js:4033-4039` purges the
+activity log at module load).
+
+```sh
+sqlite3 -readonly roots.db        # or: sqlite3 'file:roots.db?mode=ro'
+```
+
+```sql
+-- (a) THE GROSS POPULATION — products carrying a packaging figure through their
+--     recipe. This is the claim 65 makes. Adjust the two pinned choices in
+--     place: drop the status filter to include archived; change `> 0` to
+--     `>= 0` to count explicit zeros as needing the pass.
+SELECT COUNT(*) AS gross
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0;
+
+-- (b) THE OPERATIVE POPULATION — the same set, minus every product whose margin
+--     already renders as an em dash for want of a sell price. Mirrors
+--     _paMargin() at public/retail-admin/09-products.js:786: a margin exists
+--     only where sell_price is finite and > 0.
+SELECT COUNT(*) AS operative
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0
+   AND sp.sell_price IS NOT NULL
+   AND CAST(sp.sell_price AS REAL) > 0;
+
+-- (c) The difference, itemised — the products (b) drops. Worth reading rather
+--     than counting: a product with a recipe, a packaging figure and no sell
+--     price is its own question.
+SELECT sp.id, sp.sku, sp.name_en, sp.sell_price, sp.status, c.packaging
+  FROM store_products sp
+  JOIN recipe_cost_data c ON c.recipe_id = sp.recipe_id
+ WHERE sp.recipe_id IS NOT NULL
+   AND COALESCE(sp.status, 'Active') = 'Active'
+   AND COALESCE(c.packaging, 0) > 0
+   AND (sp.sell_price IS NULL OR CAST(sp.sell_price AS REAL) <= 0)
+ ORDER BY sp.name_en;
+```
+
+**Neither query is a substitute for the third pinned choice.** Query (a) with
+`> 0` silently adopts the answer "explicit zeros do not need the pass"; that is a
+decision under rule 9 and it should be made deliberately, not inherited from a
+comparison operator.
+
+### 65 is left standing in §31
+
+**Deliberately.** It has not been changed, because replacing an unsourced number
+with a second unsourced number is not an improvement, and no database was opened
+for this finding. §31's v4.93 entry records the gap and points here. When the
+queries above are run against a pinned population, §31's consequence bullet can
+be corrected from a measurement.
+
+---
+
 
 ## Context — what was and was not done on 2026-08-26
 
@@ -1095,6 +1659,17 @@ save nulling `packaging_type_id` (finding 11), resolve the naming collision
   the rule behind it. **Still nothing was written to production data by this
   session**: the verification ran against a detached fixture, and the corrected
   figures reach production only when one of the ten existing triggers next fires.
+
+- **Finding 11 then changed code too**, in a later pass the same day —
+  `routes/recipes.js`, `routes/retail-recipes.js` and a new
+  `lib/recipe-cost-data-write.js` that both now share. **Again nothing was
+  written to production data**: the write was verified against an in-memory
+  fixture (`scripts/test_recipe_cost_data_write.js`), and the two rows that had
+  already lost their link were deliberately **left alone** — whether the original
+  type is recoverable is set out under finding 11 and the decision is Ash's, not
+  this pass's. **The pass that established recoverability had no database
+  access** and did not run a live query; every count in that section is flagged
+  as needing one.
 
 - **Method.** Queries were run against `roots.db` over SSH using
   `sqlite3 'file:…?mode=ro'`. No application module was loaded against

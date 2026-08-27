@@ -173,10 +173,10 @@ Everything else on that change reuses a pair that already exists in the admin �
 Sentence case, no exclamation marks, and `notInCat` doubles as a filter-chip
 label, so it wants to stay short enough to sit in a chip beside a count.
 
-## Recipe line units — awaiting a Chinese source (REQUEST, not locked)
+## Recipe line units — 单位不符 · UNIT MISMATCH (LOCKED 2026-08-27)
 
 Rule 4 says never compose new Chinese and that additions require an amendment to
-this document. This is a second such amendment, opened rather than closed.
+this document. This is a second such amendment, opened 2026-08-26 and closed 2026-08-27.
 
 THE CONCEPT NEEDING A PAIR. A recipe line is counted in a unit that measures a
 different kind of thing than its material's stocking unit — 160 ml of an oil
@@ -212,10 +212,29 @@ rollup's own blocked-reason copy needs nothing new — both BLOCK_REASON maps fa
 an unmapped reason through to `This recipe's cost can't be worked out right
 now. · 该食谱的成本暂无法计算。`, which is true for this case.
 
-**Ash to supply the CN column.** Filling it is one edit in the product. Until it
-is filled the pill does not ship: the accounting change that drops 34 recipes'
-ingredient cost is held behind it, because dropping a cost with nothing on screen
-explaining why is worse than the wrong number it replaces.
+**THE PAIR — minted by Ash, 2026-08-27, locked.** The hold is lifted: the pill
+ships, and with it the accounting change that drops 34 recipes' ingredient cost.
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `unitMismatch` | UNIT MISMATCH | 单位不符 | The line's unit and the material's stocking unit are different kinds of quantity, so the line's cost cannot be trusted. |
+
+CHOSEN OVER TWO OTHERS, recorded so the choice is not reopened. 无法换算
+overstates — a recorded density will fix the volume↔mass cases. 待换算 implies a
+remedy that does not exist for the mass↔count case.
+
+It covers all three classes the counter flags: volume↔mass, mass↔count, and any
+future dimension pair. It names the CAUSE, not the mechanism and not the fix —
+see §29.
+
+Used on the `.rcp-warn` pill on a recipe ingredient line. Note for whoever wires
+it: `.rcp-warn` is a RECIPE-RECORD pill (`retail-admin.css` `#tab-recipes-record
+.rcp-warn`) and there is no per-line variant of it, so the string paints once per
+recipe beside the other cost warnings, not once per offending line.
+
+**DO NOT CONFUSE WITH UNCONVERTED**, which is the §6 addendum's state for a recipe
+with a blank serving size. Different state, different screen region, different
+cause.
 
 ## Deferred — recorded, not in scope of this lock
 

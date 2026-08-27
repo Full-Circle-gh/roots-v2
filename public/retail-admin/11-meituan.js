@@ -415,9 +415,20 @@
       let body;
       if (isStock) {
         const prod = _products.find(x => x.id === d.product_id);
+        // mapped_name is the fallback the bundle rows never had: a bundle carries
+        // no product_id and no SKU, so it used to render as the bare word
+        // "bundle" with no way to tell which one had failed.
         const name = prod ? (prod.name_cn || prod.name_en)
-                          : (d.sku || (d.bundle ? cuT('bundle', '套餐') : '#' + d.product_id));
+                          : (d.mapped_name || d.sku
+                             || (d.bundle ? cuT('bundle', '套餐') : '#' + d.product_id));
         body = esc(name) + (d.qty != null ? ' → ' + d.qty : '');
+        // WHY it failed, on the row itself. The daemon has written a sentence
+        // into error_msg for years and this line never showed it, so a failing
+        // push read as a red row with a number and nothing else — an operator
+        // could see that something was wrong and not what. It matters more now:
+        // a name no listing carries is terminal on the first attempt, and the
+        // sentence is the only thing that says what to do about it.
+        if (r.status === 'error' && r.error_msg) body += ' — ' + esc(r.error_msg);
       } else {
         body = esc(r.event_type) + ': ' + esc(r.error_msg || r.status || '');
       }

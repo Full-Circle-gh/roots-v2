@@ -1,3 +1,10 @@
+> **STALE — superseded 2026-08-26.** Hypothesis H2 (that the packaging double-count still reaches
+> waste through made materials) was correct when written and was closed by `c86ef74e`, committed
+> 2m43s after this document. The exclusion is complete: packaging is removed where a made material's
+> unit cost is DERIVED, so every consumer inherits the correction. See `packaging-findings.md`
+> finding 16. H2's line citations no longer resolve. The rest of this survey has not been re-verified
+> against post-fix code — treat every finding here as pre-`c86ef74e`.
+
 # Waste — read-only survey of the kitchen app's Waste section
 
 **2026-08-26 · A read-only survey of how the kitchen app's WASTE section works today, written so it
