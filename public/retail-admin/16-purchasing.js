@@ -1137,49 +1137,143 @@
   // Print / send — opens a clean, self-contained PO document in a new window
   // (its own styles; no admin tokens) and triggers the browser print dialog,
   // which doubles as "save to PDF" to email the supplier.
+  //
+  // Same sheet design as printPO() in app.html (the kitchen twin of this
+  // print): masthead + bilingual meta grid + item table + totals block +
+  // footer, Inter/Noto Sans SC, pure-black ink so labels survive a
+  // photocopy or a phone PDF viewer. Column semantics stay retail's own
+  // (Product/Cost each/Line rather than kitchen's Item & Description/Rate/
+  // Amount) since the two column sets mean different things.
   window.puPrintPO = function () {
     const p = _po;
     if (!p) return;
     const items = p.items || [];
     const total = p.total_cost || items.reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0);
     const e2 = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const rows = items.map(i => {
-      const nm = [i.name_en, i.name_cn].filter(Boolean).join(' · ');
-      const line = (i.qty || 0) * (i.cost_per_unit || 0);
-      return `<tr><td>${e2(nm)}${i.sku ? ` <span class="sku">${e2(i.sku)}</span>` : ''}</td><td class="r">${i.qty} ${e2(unitLabel(i.unit))}</td><td class="r">${money(i.cost_per_unit || 0)}</td><td class="r">${money(line)}</td></tr>`;
-    }).join('');
-    const w = window.open('', '_blank', 'width=820,height=1040');
+    const n2 = v => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Bilingual regardless of the admin's current display language — this
+    // sheet goes to suppliers, not the person printing it.
+    const STATUS_BOTH = {
+      Requested: 'Requested 已下单', Ordered: 'Ordered 已下单',
+      Delivered: 'Delivered 已收货', Cancelled: 'Cancelled 已取消',
+    };
+    const unitCN = u => (u ? (PO_UNIT_CN[u] || u) : '');
+
+    const rows = items.map((i, idx) => `
+      <tr>
+        <td class="idx num">${idx + 1}</td>
+        <td>
+          <div class="item-name">${e2(i.name_en || '')}${i.name_cn ? ` <span class="cn">${e2(i.name_cn)}</span>` : ''}</div>
+          ${i.sku ? `<div class="item-sub num">SKU ${e2(i.sku)}</div>` : ''}
+        </td>
+        <td class="qty num">${n2(i.qty)}${i.unit ? `<span class="unit">${e2(unitCN(i.unit))}</span>` : ''}</td>
+        <td class="rate num">${n2(i.cost_per_unit)}</td>
+        <td class="amt num">${n2((i.qty || 0) * (i.cost_per_unit || 0))}</td>
+      </tr>`).join('');
+
+    const metaRow = (lbl, val) => val ? `<dt>${lbl}</dt><dd class="num">${val}</dd>` : '';
+    const metaRows = [
+      metaRow('Date 日期', e2(p.date || '')),
+      metaRow('Delivery 交货', e2(p.delivery_date || '')),
+      metaRow('Supplier 供应商', supplierLabel(p)),
+      metaRow('Deliver to 收货', storeLabel(p)),
+      metaRow('Status 状态', STATUS_BOTH[p.status] || e2(p.status || '')),
+      `<dt>Items 项目</dt><dd class="num">${items.length}</dd>`,
+    ].join('');
+
+    const w = window.open('', '_blank', 'width=900,height=1100');
     if (!w) { toast(T('Allow pop-ups, then Print again', '请允许弹窗后再打印'), 'err'); return; }
-    const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${e2(p.po_number)}</title>
-      <style>
-        *{box-sizing:border-box} body{font-family:'Inter',-apple-system,Arial,sans-serif;color:#111A2B;margin:44px;font-size:13px;line-height:1.5}
-        .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111A2B;padding-bottom:14px;margin-bottom:20px}
-        .wm{font-family:Georgia,serif;font-size:22px;letter-spacing:.18em;font-weight:300}
-        h1{font-size:18px;font-weight:600;margin:0}
-        .meta{color:#58606E;font-size:12px;margin-top:4px}
-        table{width:100%;border-collapse:collapse;margin-top:8px}
-        th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#58606E;border-bottom:1px solid #E4E0D5;padding:8px 6px}
-        td{padding:9px 6px;border-bottom:1px solid #EEEDE7}
-        .r{text-align:right}.sku{color:#9AA3B2;font-size:11px}
-        tfoot td{font-weight:600;border-top:2px solid #111A2B;border-bottom:none}
-        .note{margin-top:22px;color:#58606E;font-size:12px}
-        @page{margin:12mm}
-      </style></head><body>
-      <div class="top">
-        <div><div class="wm">tacet</div><div class="meta">${e2(T('Purchase order', '采购单'))}</div></div>
-        <div style="text-align:right"><h1>${e2(p.po_number)}</h1><div class="meta">${e2(T('Date', '日期'))}: ${e2(p.date || '')}${p.delivery_date ? ` · ${e2(T('Expected', '预计'))}: ${e2(p.delivery_date)}` : ''}</div></div>
-      </div>
-      <div style="display:flex;gap:60px;margin-bottom:18px">
-        <div><div class="meta">${e2(T('Supplier', '供应商'))}</div><div>${e2(p.supplier || '—')}</div></div>
-        <div><div class="meta">${e2(T('Deliver to', '收货'))}</div><div>${storeLabel(p)}</div></div>
-      </div>
-      <table>
-        <thead><tr><th>${e2(T('Product', '商品'))}</th><th class="r">${e2(T('Qty', '数量'))}</th><th class="r">${e2(T('Cost each', '单价'))}</th><th class="r">${e2(T('Line', '小计'))}</th></tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="3" class="r">${e2(T('Total', '合计'))}</td><td class="r">${money(total)}</td></tr></tfoot>
-      </table>
-      ${p.notes ? `<div class="note">${e2(p.notes)}</div>` : ''}
-      </body></html>`;
+    const doc = `<!DOCTYPE html>
+<html lang="zh"><head><meta charset="UTF-8"><title>${e2(p.po_number)} — Roots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 12mm; }
+  :root { --ink:#000; --graphite:#000; --hair:#C9C4B6;
+          --sans:'Inter','Noto Sans SC','IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F2F1EC; font-family:var(--sans); color:var(--ink); font-weight:400; -webkit-font-smoothing:antialiased; }
+  .num { font-variant-numeric:tabular-nums; }
+  .toolbar { position:sticky; top:0; z-index:10; background:var(--ink); color:#FBF9F4; padding:10px 18px; display:flex; align-items:center; gap:10px; font-size:13px; }
+  .toolbar button { font-family:var(--sans); font-size:13px; font-weight:500; padding:6px 16px; border-radius:8px; cursor:pointer; background:#FBF9F4; color:var(--ink); border:none; }
+  .toolbar button.ghost { background:none; color:#FBF9F4; border:1px solid #58606E; }
+  .sheet { background:#fff; max-width:210mm; margin:24px auto; padding:18mm 16mm; box-shadow:0 4px 16px rgba(17,26,43,0.04); }
+  .masthead { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:18px; }
+  .doc-title h1 { margin:0; font-size:27px; font-weight:400; letter-spacing:-0.01em; line-height:1.1; }
+  .doc-title .cn { font-size:13px; color:var(--graphite); letter-spacing:.22em; margin-top:8px; }
+  .meta { font-size:12px; line-height:1.5; flex:none; }
+  .meta dl { margin:0; display:grid; grid-template-columns:auto auto; gap:6px 22px; }
+  .meta dt { color:var(--graphite); }
+  .meta dd { margin:0; text-align:right; font-weight:500; }
+  table.items { width:100%; border-collapse:collapse; margin-top:12px; }
+  table.items thead th { color:var(--ink); border-bottom:1.5px solid var(--ink); font-weight:500; font-size:11px; letter-spacing:.02em; padding:10px 12px; text-align:left; white-space:nowrap; }
+  table.items thead th.r { text-align:right; }
+  table.items thead th .cn { color:var(--ink); margin-left:5px; font-weight:400; }
+  table.items tbody td { border-bottom:1px solid var(--hair); padding:13px 12px; font-size:12.5px; vertical-align:top; }
+  table.items tbody tr:last-child td { border-bottom:none; }
+  td.idx { color:var(--graphite); font-size:11px; width:26px; }
+  td.qty, td.rate, td.amt { text-align:right; white-space:nowrap; }
+  td.rate { width:92px; }
+  td.amt { width:104px; font-weight:500; }
+  .item-name { line-height:1.45; font-weight:500; }
+  .item-name .cn { color:var(--graphite); font-weight:400; }
+  .item-sub { font-size:10.5px; color:var(--graphite); margin-top:3px; line-height:1.5; }
+  .unit { display:block; font-size:10.5px; color:var(--graphite); margin-top:3px; font-weight:400; }
+  .totals { margin-top:4px; display:flex; justify-content:flex-end; }
+  .totals table { border-collapse:collapse; min-width:300px; }
+  .totals td { padding:8px 12px; font-size:12.5px; text-align:right; }
+  .totals td.lbl { color:var(--graphite); }
+  .totals tr.grand td { border-top:1px solid var(--hair); font-weight:500; font-size:14px; padding-top:11px; }
+  .notes { margin-top:26px; padding:12px 14px; border-left:2px solid var(--hair); font-size:12px; line-height:1.6; color:var(--graphite); }
+  .notes b { color:var(--ink); font-weight:500; }
+  .foot { margin-top:40px; padding-top:10px; border-top:1px solid var(--hair); display:flex; justify-content:space-between; font-size:10px; color:var(--graphite); }
+  @media print { body { background:#fff; } .toolbar { display:none; } .sheet { box-shadow:none; margin:0; padding:10mm; max-width:none; } }
+</style></head><body>
+<div class="toolbar">
+  Purchase order
+  <span style="flex:1"></span>
+  <button onclick="window.print()">Print / Save as PDF</button>
+  <button class="ghost" onclick="window.close()">Close 关闭</button>
+</div>
+<div class="sheet">
+  <div class="masthead">
+    <div class="doc-title">
+      <h1>Purchase Order <span class="num">${e2(p.po_number)}</span></h1>
+      <div class="cn">采购单</div>
+    </div>
+    <div class="meta"><dl>${metaRows}</dl></div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:26px">#</th>
+        <th>Product <span class="cn">商品</span></th>
+        <th class="r" style="width:86px">Qty <span class="cn">数量</span></th>
+        <th class="r" style="width:92px">Cost each <span class="cn">单价</span></th>
+        <th class="r" style="width:104px">Line <span class="cn">金额</span></th>
+      </tr>
+    </thead>
+    <tbody>${rows || '<tr><td colspan="5" style="padding:24px;text-align:center;color:#000">No items · 暂无物料</td></tr>'}</tbody>
+  </table>
+
+  <div class="totals">
+    <table>
+      <tr><td class="lbl">Sub Total 小计</td><td class="num">${n2(total)}</td></tr>
+      <tr class="grand"><td class="lbl">Total 总计</td><td class="num">CNY ${n2(total)}</td></tr>
+    </table>
+  </div>
+
+  ${p.notes ? `<div class="notes"><b>Notes 备注</b> ${e2(p.notes)}</div>` : ''}
+
+  <div class="foot">
+    <span>Roots Retail · 广州</span>
+    <span class="num">${new Date().toLocaleString('zh-CN')}</span>
+  </div>
+</div>
+<script>setTimeout(()=>window.print(), 300);<\/script>
+</body></html>`;
     w.document.write(doc);
     w.document.close();
     w.focus();
