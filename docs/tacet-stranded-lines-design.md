@@ -1,6 +1,25 @@
-# Stranded lines — a screen for channel order lines that never found a product
+# Missing product — a screen for channel order lines with no product attached
 
-**2026-08-27 · DESIGN ONLY. No code was written. Nothing here is built.**
+**v1.1 · 2026-08-27 · DESIGN ONLY. No code was written. Nothing here is built.**
+
+> **v1.1 amends v1.0 in three places, on Ash's review. Everything else stands as written.**
+>
+> 1. **The screen is called Missing product, not Unmatched lines.** *Unmatched* is the resolver's
+>    word for ONE of its two failure states — the other is *ambiguous* — so the title would have
+>    excluded half the screen's contents, and it named an implementation rather than what the
+>    operator sees. **Missing product** describes the fact: a sale with no product attached,
+>    whichever way the resolver got there. §13 carries the Chinese question.
+>    **"Stranded line" stays as this document's internal noun** for the record itself — and as the
+>    filename — because it is what every citation into this design already calls it. The screen's
+>    NAME is Missing product; the record's name is unchanged. They are not the same word doing two
+>    jobs, they are a screen and the thing it lists.
+> 2. **Pack size is a stop, not a flag** (§5.3, §6). v1.0 deducted `qty × 1` and told the operator.
+>    That is a wrong deduction dressed as a disclosure — the operator cannot tell from a channel
+>    name that a line was a five-pack, so being shown "9 × 1" does not help them. Where the chosen
+>    product has pack contents, the resolve control now **requires** a pack count and defaults to
+>    **empty**. Where it has none, one unit per qty. No multiplier is ever guessed.
+> 3. **The map-creation offer is dropped from this build** (§10). Considered, deferred, with the
+>    reasoning kept.
 
 **The survey this answers:** `docs/tacet-channel-line-resolution-findings.md` (2026-08-27). Every
 number below comes from it and is not re-derived here.
@@ -133,7 +152,7 @@ buttons opening a drawer.
 | **Line** | The channel line name, verbatim | Never truncated in the middle. Full string in the row; wrap rather than ellipsis if it must. This is the operator's only handle on what was sold. |
 | **Store** | Tianhe / Yuexiu | Symmetric. Both stores are the same kind of row here. |
 | **Times** | Occurrence count in the group | Right-aligned, tabular. This is the number that makes the pita cluster visible as a cluster. |
-| **Units** | Total qty across the group's lines | Right-aligned. **What will actually be deducted**, so the operator sees "9 lines · 9 units" or "5 lines · 7 units" before committing. See §5.3 on pack size. |
+| **Qty** | Total qty across the group's lines | Right-aligned, tabular. This is **what the channel sold**, not what will be deducted — the two differ whenever the product is sold in packs, and the screen cannot know which until a product is chosen (§5.3). The number that will move appears on the confirm control, after the choice. |
 | **First / Last** | Date range of the group | `tdWhen(value, …)` per §1.18. Eight weeks between first and last is itself information. |
 | **Why** | What the resolver tried and failed on | §4.1. |
 
@@ -204,25 +223,48 @@ unmapped.
 right answer is sometimes not in the list, and the survey's guacamole case is exactly that — the
 right answer was *no product we hold*.
 
-### 5.3 · What the screen cannot know: pack size
+### 5.3 · Pack size is a stop, not a footnote
 
 `units_per_pack` lives on a **claim** — a `meituan_product_map` row with a non-empty `spec_key` — and
 a stranded line has no claim by definition. So the screen does not know whether one line took one
 unit or six.
 
-**It deducts `qty` × 1 and says so**, on the confirm control and in the drawer, showing the units it
-will move. It does not guess a pack size from the line name; the resolver's comment at
-`routes/meituan-internal.js:49-51` already refuses that guess for the same reason, and this screen
-must not be the place the guess sneaks in.
+**v1.0 got this wrong and it is corrected here.** It deducted `qty × 1` and told the operator it had
+done so. That is a wrong deduction dressed as a disclosure: an operator cannot tell from
+`（小）哈里萨辣椒酱 Harrisa（～30g）` whether the line was one jar or a tray of six, so showing them
+"5 × 1" hands them a number they have no way to check. **This screen exists because wrong deductions
+are worse than missing ones.** A number the operator cannot verify, presented as a total, is exactly
+the failure mode the never-pre-select rule (§5.1) was written against.
 
-Where a group is a multipack this is an **under-deduction**, and the operator can see the number
-before they press. Recording it here so that the later resolver work knows this screen inherited the
-gap rather than closed it.
+**The rule.**
+
+- **Where the chosen product has pack contents, the resolve control requires a pack count, and that
+  field starts EMPTY.** Not 1, not the most common value, not the last one used. Empty, with the
+  confirm control disabled until it is filled. A pre-filled default is a guess wearing a default's
+  authority.
+- **Where the chosen product has no pack contents, one unit per qty**, no field shown, nothing asked.
+  Most lines are this and they should cost one click.
+- **No multiplier is ever inferred** — not from the line name, not from a variant label, not from a
+  `X3` in a SKU. The resolver already refuses that guess for the same reason
+  (`routes/meituan-internal.js:49-51`) and this screen must not be where it sneaks back in.
+
+**"Has pack contents" needs a definition, and this is the one place the design picks a mechanism.**
+The test is: the product carries **any `meituan_product_map` row with `units_per_pack > 1`**, at
+either store, **or** it carries a non-empty `store_products.bundle_items`. Those are the two places
+the system already records "one sale of this takes more than one off the shelf". A product matching
+neither has never been sold as a pack anywhere we have recorded, which is the strongest available
+evidence that this line was not one either — and where that evidence is wrong, the field the operator
+did not see is a gap, not a wrong number, because the deduction of 1 is then also right.
+
+**The arithmetic on the confirm control** is `Σ(line qty) × pack count`, shown as its own number
+beside the line count, so the operator sees both what they are moving and how many movements it
+becomes.
 
 ## 6 · Resolve — what is written, in what order
 
 One approve action per group. The confirm control carries the counts (decision 3) — the operator sees
-they are moving nine deductions, not one.
+they are moving nine deductions, not one — and, where the product has pack contents, it is **disabled
+until the pack count is supplied** (§5.3).
 
 **Order of writes, one transaction per line, all lines in one outer transaction:**
 
@@ -231,8 +273,9 @@ For each line in the group, oldest order first:
 1. **Link the line.** `UPDATE retail_order_items SET product_id = ? WHERE id = ?`. This is what
    removes it from the queue — the pending state is derived from `product_id IS NULL`, so nothing
    else has to be written to make it disappear (§8).
-2. **Move the stock.** Through the existing adjuster (`inventory.adjustStock`), which is what also
-   fans the change out to the channels — the same reasoning the waste route records at
+2. **Move the stock**, `line qty × pack count` (§5.3), through the existing adjuster
+   (`inventory.adjustStock`), which is what also fans the change out to the channels — the same
+   reasoning the waste route records at
    `routes/retail-waste.js:380-393`. Clamped at zero, matching the channel order path
    (`routes/meituan-internal.js:486-492`): the goods left the shelf, so a shortfall is a count that
    was already wrong, not a reason to refuse. A shortfall is recorded on the result (§6.2).
@@ -365,42 +408,47 @@ suppressing them by guess would put the screen back in the business of deciding 
 - **No results** — a filter or a search matched nothing, with the filter named and an offer to clear
   it. Never a compliment.
 
-## 10 · Should resolving also offer to create the map? — a recommendation, not a decision
+## 10 · Creating the missing map — considered, and deferred out of this build
 
-**Recommendation: yes, as a separate, unticked, clearly-worded option on the resolve action — and
-only when the screen can state exactly what it would write.**
+**Decided on review: not in this build.** v1.0 recommended it as an unticked option; the cautions
+that made it only a recommendation are the argument for dropping it, and they are kept here in full
+so the question is not reopened from scratch later.
 
-The case for it is in the survey and it is strong. Both ambiguity clusters were mapping problems, not
-name problems:
+**Why it was tempting, and the case remains true.** Both ambiguity clusters were mapping problems,
+not name problems. Pita: row 351 had no map at all until 2026-08-24 09:15:11, two hours after the
+last failure — nine sales lost, the tenth saved by a mapping made by hand. Quinoa:
+`meituan_bundles` row 16 exists with the right components, registered at **tianhe**, while every
+failure is at **yuexiu**. Resolving without offering the map fixes one sale and leaves the next to
+fail identically, and the operator who has just said what the line is holds exactly the knowledge the
+map wants.
 
-- **Pita** — row 351 had no map at all until 2026-08-24 09:15:11, two hours after the last failure.
-  Nine sales were lost, and the tenth was saved by a mapping someone made by hand.
-- **Quinoa** — `meituan_bundles` row 16 exists with the right components, registered at **tianhe**,
-  while every failure is at **yuexiu**.
-
-Resolving without offering the map fixes one sale and leaves the next one to fail identically. The
-operator who has just told the screen what this line is holds exactly the knowledge the map wants.
-
-Three cautions, which are why this is a recommendation and not a decision:
+**Why it is deferred anyway.**
 
 1. **The map's key is the channel's listing name, and a stranded line is not always a listing name.**
    `Whole-Wheat Pita皮塔面包(一个)(Yes)` carries an option suffix; the map row that fixed it holds
    `Whole-Wheat Pita皮塔面包(一个)` without it. Writing the line verbatim into `meituan_name` would
-   create a map row that matches this exact option and nothing else. The screen would have to either
-   show the operator the string it is about to write and let them edit it, or write nothing.
+   create a row that matches this exact option and nothing else — a mapping that looks like a fix and
+   is not one.
 2. **A combo cannot be mapped at all.** The quinoa case wants a `meituan_bundles` row with components
-   at the right store, which is a different object with a different shape — and the components are
-   two products, not one. Offering "create the mapping" on a combo would be offering something that
-   cannot be done. The screen would need to recognise a combo, and it has no reliable way to.
-3. **`meituan_product_map` already has a hygiene problem.** `docs/channel-mapping-findings.md` (F5)
-   records 387 rows all still `sync_enabled = 1` from four bulk June runs, and (F1) three stranded
-   mapping rows on deleted products that no screen can reach. Adding a new one-click writer into that
-   table without the retirement story is how F5 gets bigger.
+   at the right store: a different object, a different shape, and two products rather than one.
+   Offering "create the mapping" there offers something that cannot be done, and the screen has no
+   reliable way to recognise a combo and hide the offer.
+3. **`meituan_product_map` already has a hygiene problem, and this screen is a cleanup screen.**
+   `docs/channel-mapping-findings.md` records 387 rows still `sync_enabled = 1` from four bulk June
+   runs (F5) and three stranded mapping rows on deleted products that no screen can reach (F1). **A
+   cleanup screen must not become a second writer into the table that needs cleaning up.** That is
+   the decisive one: the other two are solvable with care, this one is a direction-of-travel problem
+   and care does not fix it.
 
-**The shape I would recommend if it is taken:** an unticked checkbox on the resolve action, present
-**only** when the line looks like a plain listing name and no map row exists for that product at that
-store, showing the exact `meituan_name` it will write with an editable field, and absent entirely
-otherwise. Never ticked by default — the same reasoning as §5.1, and for the same reason.
+**What the screen does instead.** Nothing, and it says nothing. It resolves the line, moves the
+stock, and leaves the mapping where it already lives — the Meituan tab, which is the surface built
+for it. The screen's own job is the sale that already happened.
+
+**When to revisit.** After `meituan_product_map` has a retirement story (F5), and after there is a
+reliable combo test. Both are prerequisites, not preferences. At that point the shape v1.0 sketched
+is still the right one to start from: an unticked checkbox, present only where the line looks like a
+plain listing name and no map row exists for that product at that store, showing the exact string it
+will write in an editable field, absent entirely otherwise, never ticked by default.
 
 ## 11 · The second channel
 
@@ -417,8 +465,8 @@ Where the design extends, when a second channel does arrive:
   false, the key gains `channel` and nothing else changes.
 - **The "Why" vocabulary is shared.** The Eleme resolver has the same four steps and the same failure
   words.
-- **What is channel-specific and would need a second answer:** the ledger `reason` prefix (§6.1), and
-  the map-creation offer (§10), which writes to a channel-specific table.
+- **What is channel-specific and would need a second answer:** the ledger `reason` prefix (§6.1). The
+  map-creation offer is out of this build entirely (§10), so it needs no second answer yet.
 - **What would need designing rather than extending:** a channel filter chip on the list. Not now —
   with one channel it is an empty axis, and A1 forbids rendering an empty control to fake density.
 
@@ -432,37 +480,55 @@ Where the design extends, when a second channel does arrive:
   line is resolved by a person or dismissed by a person.
 - **Stranded lines on the mini app or web store.** Those orders are authored here; their lines cannot
   strand.
+- **Creating or repairing a channel mapping.** Considered and deferred with reasoning (§10).
 - **`docs/channel-mapping-findings.md`'s F1-F5.** Adjacent, real, and separate work.
 
-## 13 · Strings that need a Chinese half — please choose
+## 13 · Strings that need a Chinese half
 
-**No Chinese was composed for this document.** Every visible string below needs a decision before
-anything is built. Where a live precedent exists I have named it with its file and line; where none
-exists I have said so rather than reaching for one.
+**No Chinese was composed for this document.** Every visible string is listed. For each I name where
+it appears on screen, what I searched, and what I found or did not. Rule 4 of
+`docs/tacet-delivery-vocabulary.md` governs: *never compose new Chinese; copy from these tables.*
 
-| # | English | Precedent I would copy | Status |
+**The house already has a mechanism for exactly this**, and these strings should join it rather than
+live only here: that document carries a **REQUEST section** (`## Channel mapping — awaiting a Chinese
+source`) holding strings that run English-on-both-sides in the product until Ash supplies the CN,
+parked in a `*_PENDING_CN` constant per screen (`MT_PENDING_CN` in
+`public/retail-admin/11-meituan.js`, `EL_PENDING_CN` in `14-eleme.js`). When this screen is built,
+its unresolved strings belong in a request section of that document and a `PENDING_CN` constant of
+its own — not scattered in the code.
+
+### 13.1 · Ready — a verbatim live pair exists, nothing needed from you
+
+| # | English | Where it appears | The pair, and where it is live |
 |---|---|---|---|
-| 1 | **Dismiss** (the action, §7) | `Dismiss · 忽略` — a live button pair already in `public/retail-admin.html` | **Verbatim precedent. Ready.** |
-| 2 | **Dismissed** (the state / filter chip, §7) | `Ignored · Guanyi will be corrected · 已忽略` — live in the same shell | **Verbatim precedent. Ready.** |
-| 3 | **Store** column | Live pair used throughout Orders | Ready |
-| 4 | **First / Last** (§4) | `Your latest order · 最近订单`, and `首次下单` — both live | Likely ready; the exact column-header form is your call |
-| 5 | **The screen's title** | *No label pair exists.* The nearest live strings are `未匹配` (used mid-sentence in delivery-zone copy, in the same sense) and `未关联` from `Not linked · 未关联` in the Meituan tab — but that names a product↔listing map, not an order line | **ASK.** Three candidate English titles below; the Chinese half is yours to give. |
-| 6 | **Times** / **Units** columns | None found for this sense | **ASK** |
-| 7 | **Why** column, and its five values (§4.1) | None found — `no claim / no SKU / no map / matched N / matched nothing` are internal resolver words that have never been shown to anyone | **ASK.** This is the largest group and the one most worth getting right, because it is the only thing on the screen that explains the machine. |
-| 8 | The confirm control, e.g. **Deduct 9 lines** | None found for a counted confirm | **ASK** |
-| 9 | The suggestion panel's heading and its one-line disclaimer (§5.1) | None found | **ASK** |
-| 10 | Empty and no-results sentences (§9) | The house has many examples of the *form*, none of this sentence | **ASK** |
+| R1 | **Dismiss** | The per-group action, §7 | `Dismiss · 忽略` — a live button pair in `public/retail-admin.html` |
+| R2 | **Dismissed** | The state and its filter chip, §7 | `已忽略`, live in `Ignored · Guanyi will be corrected · 已忽略` in the same shell |
+| R3 | **Store** | Column header, §4 | `Store · 门店` — live, exact, used in Orders |
+| R4 | **Qty** | Column header, §4 | `Qty · 数量` — live, exact |
+| R5 | **units** | The pack-count field's unit suffix, §5.3 | `units · 份` — live in `public/retail-admin/11-meituan.js:1029`, and it labels **precisely this number**: how many of the product one sale takes |
+| R6 | **No matches** | One of the Why values (§4.1, "matched nothing") | `No matches · 无匹配` — recorded as an existing admin pair in `docs/tacet-delivery-vocabulary.md`, and live as `地图无匹配` |
 
-**On the title (#5), three candidates, English only, for you to pick before the Chinese question is
-even asked:**
+### 13.2 · Needs you — no pair exists
 
-- **Unmatched lines** — closest to what the data is. Reuses the resolver's own word.
-- **Stranded lines** — your phrase. Vivid, and it names the consequence rather than the mechanism.
-- **Lines without a product** — plainest, longest, needs no gloss.
+Eight, in the order I would take them.
 
-I would pick **Unmatched lines**: it is the shortest of the three that a person who has never read
-this document can act on, and it is the word the system already uses internally, so the screen and
-the log agree.
+| # | English | Where it appears | What I searched, and what I found |
+|---|---|---|---|
+| **A1** | **Missing product** — the screen's title | Page header (§1.7), the Orders status-line link, the Dashboard card, the palette | **Both halves are live; the combination is not.** `Missing X · 缺少X` is the established construction, used five times: `Missing required column · 缺少必需列`, `Missing session · 缺少会话`, `Missing token. · 缺少令牌。`, `No store · 缺少门店`, `KEY MISSING · 缺少密钥`. For the noun the product uses **two** live words — `产品` (the rail's own `Products · 产品`) and `商品` (throughout the Meituan screens, e.g. `已被其他商品占用`). I did **not** join them, because that is composing. Your decision is which noun; the construction is already sourced. Checked `tacet-delivery-vocabulary.md`: no entry covers this. |
+| **A2** | **Why**, the column header | Column header, §4 | Nothing found for this sense. `原因` exists nowhere as a label in the admin. |
+| **A3** | The four remaining **Why** values: **No SKU on the line** · **SKU not found** · **No mapping at this store** · **Matched N products** | The Why cell and the drawer, §4.1 | Nothing found. These are internal resolver words (`sku_unknown`, `ambiguous`) that have never been shown to anyone. Adjacent but **not** reusable: `Not linked · 未关联` names a product↔listing map, not an order line; `未匹配` appears only mid-sentence in delivery-zone copy. **The most important group on this list** — it is the only thing on the screen that explains the machine, and the largest single ask. |
+| **A4** | **Times** | Column header, §4 | Nothing found for an occurrence-count header. `次数` exists only inside sentences (`今天的提问次数已用完`), never as a label. |
+| **A5** | The **pack-count field's label**, and its one-line helper | The resolve control, §5.3 | The unit suffix is ready (R5). For the helper there is a live sentence that says exactly the right thing and is **half** of a pair: `Tick every option this product is sold as. "Units" is how many of it one sale takes — a 3-bottle option is 3.` / `勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。` (`11-meituan.js:1035-1037`). The **second clause** of the Chinese — `「份」是每卖出一份消耗的数量 — 三瓶装填 3。` — is verbatim usable and needs no composing. Reusing a clause from a live pair is a judgement call, so it is yours. The field's own label still needs a word. |
+| **A6** | The **confirm control**, carrying its counts — e.g. *Deduct 9 lines · 54 units* | The resolve action, §6 | Nothing found for a counted confirm. `扣减` is the live verb for deduct (`提货扣减`, `每次售出扣减各组成商品`), so the **verb is sourced**; the counted form is not. Note: the waste screen dropped its measure word deliberately (`79f68fc3`) — whatever shape you choose should follow that. |
+| **A7** | The **suggestion panel's heading**, and its one-line disclaimer | The drawer, §5.1 | Nothing found. The disclaimer is the load-bearing half: it is what stops the list reading as an answer. |
+| **A8** | The **empty** and **no-results** sentences | §9, §1.12 | The house has many examples of the *form* — empty is a compliment, no-results names the filter — and none of these sentences. Two strings, not one; §1.12 requires both and forbids conflating them. |
+
+### 13.3 · One inconsistency noticed while reading the vocabulary
+
+`docs/tacet-delivery-vocabulary.md`'s channel-mapping request section says *"the five strings below"*
+in its prose while its table lists **six** rows (`notInCat`, `notChecked`, `pickIt`, `reverted`,
+`cannotCheck`, `noneRead`), and the v1.3 header line says six. Recorded, not corrected — it is that
+document's to fix and it changes nothing here.
 
 ---
 
