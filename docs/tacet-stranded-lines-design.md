@@ -1,8 +1,24 @@
 # Missing product — a screen for channel order lines with no product attached
 
-**v1.1 · 2026-08-27 · DESIGN ONLY. No code was written. Nothing here is built.**
+**v1.2 · 2026-08-27 · DESIGN ONLY. No code was written. Nothing here is built.**
 
-> **v1.1 amends v1.0 in three places, on Ash's review. Everything else stands as written.**
+> ## 🔴 v1.2 — one language per view. Read this before §13.
+>
+> **Ash's rule, new and product-wide: no English may appear in the Chinese view, and no Chinese in
+> the English view. Ever.**
+>
+> **The `*_PENDING_CN` mechanism v1.1 recommended is therefore unusable, and that recommendation is
+> withdrawn.** It parks an English string in the Chinese slot by design — the exact thing the rule
+> forbids. A string without a Chinese half does not ship in English-on-both-sides; it does not ship.
+>
+> **Consequence: three strings now BLOCK the screen** — the suggestion panel's disclaimer (§13.4 B1)
+> and the empty and no-results sentences (§13.4 B2, B3). Their English is written and recorded below.
+> **They are not to be built.** Ash supplies the Chinese.
+>
+> §13 is restructured around the rule, §13.1 records what the rule exempts, and §13.5 is an audit of
+> the rest of this design against it.
+
+> **v1.1 amended v1.0 in three places, on Ash's review. Everything else stands as written.**
 >
 > 1. **The screen is called Missing product, not Unmatched lines.** *Unmatched* is the resolver's
 >    word for ONE of its two failure states — the other is *ambiguous* — so the title would have
@@ -149,8 +165,8 @@ buttons opening a drawer.
 
 | Column | Content | Notes |
 |---|---|---|
-| **Line** | The channel line name, verbatim | Never truncated in the middle. Full string in the row; wrap rather than ellipsis if it must. This is the operator's only handle on what was sold. |
-| **Store** | Tianhe / Yuexiu | Symmetric. Both stores are the same kind of row here. |
+| **Line** | The channel line name, verbatim | Never truncated in the middle. Full string in the row; wrap rather than ellipsis if it must. This is the operator's only handle on what was sold. 🔴 **The channel writes these bilingual** — see §13.5 (1): whether a quoted channel string is exempt from the one-language rule is an open question, and it is the one thing that could stop this screen being built as designed. |
+| **Store** | The store, however the shell already renders one | Symmetric — both stores are the same kind of row here. A store name is **exempt from the one-language rule** (§13.1): the ones already rendered as 天河 / 越秀 stay as they are in both views. This screen introduces no second answer. |
 | **Times** | Occurrence count in the group | Right-aligned, tabular. This is the number that makes the pita cluster visible as a cluster. |
 | **Qty** | Total qty across the group's lines | Right-aligned, tabular. This is **what the channel sold**, not what will be deducted — the two differ whenever the product is sold in packs, and the screen cannot know which until a product is chosen (§5.3). The number that will move appears on the confirm control, after the choice. |
 | **First / Last** | Date range of the group | `tdWhen(value, …)` per §1.18. Eight weeks between first and last is itself information. |
@@ -483,47 +499,156 @@ Where the design extends, when a second channel does arrive:
 - **Creating or repairing a channel mapping.** Considered and deferred with reasoning (§10).
 - **`docs/channel-mapping-findings.md`'s F1-F5.** Adjacent, real, and separate work.
 
-## 13 · Strings that need a Chinese half
+## 13 · Strings
 
-**No Chinese was composed for this document.** Every visible string is listed. For each I name where
-it appears on screen, what I searched, and what I found or did not. Rule 4 of
-`docs/tacet-delivery-vocabulary.md` governs: *never compose new Chinese; copy from these tables.*
+**The rule (v1.2, product-wide).** No English in the Chinese view, no Chinese in the English view.
+Ever. A string exists as a **pair** or it does not exist. This supersedes anything in this document
+that suggested otherwise.
 
-**The house already has a mechanism for exactly this**, and these strings should join it rather than
-live only here: that document carries a **REQUEST section** (`## Channel mapping — awaiting a Chinese
-source`) holding strings that run English-on-both-sides in the product until Ash supplies the CN,
-parked in a `*_PENDING_CN` constant per screen (`MT_PENDING_CN` in
-`public/retail-admin/11-meituan.js`, `EL_PENDING_CN` in `14-eleme.js`). When this screen is built,
-its unresolved strings belong in a request section of that document and a `PENDING_CN` constant of
-its own — not scattered in the code.
+**No Chinese was composed for this document.** Rule 4 of `docs/tacet-delivery-vocabulary.md` governs:
+*never compose new Chinese; copy from these tables.* For each string below I name where it appears on
+screen, what I searched, and what I found or did not.
 
-### 13.1 · Ready — a verbatim live pair exists, nothing needed from you
+**`*_PENDING_CN` is not available here.** That mechanism — used by `MT_PENDING_CN` in
+`public/retail-admin/11-meituan.js` and `EL_PENDING_CN` in `14-eleme.js`, and blessed by the REQUEST
+section of `tacet-delivery-vocabulary.md` — runs a string English-on-both-sides until the Chinese
+arrives. Under the rule that is a defect, not a holding pattern: it puts English into the Chinese
+view by design. v1.1 recommended it; **that recommendation is withdrawn.** The request section of the
+vocabulary document is still the right home for the *question*; it is not a licence to ship the
+English half twice.
+
+### 13.1 · What the rule does NOT cover: codes
+
+**A code is not English and is not translated.** It renders identically in both views, and a later
+reader must not try to give it a Chinese half:
+
+- **SKUs** — `3-251`, `S(3-250)`, `4-680`
+- **SKU tokens as the channel sent them** — `3-170s`, `3-250s`
+- **Product ids** — `256`, `351`
+- **Order numbers**
+- **Store names already rendered as 天河 / 越秀** — they stay as they are in both views
+
+A code is an identifier we quote. Translating one would break the thing it identifies. **Only actual
+words need a pair.**
+
+Where a label and a code appear together — `SKU not found: 3-170s` — the **label** is a pair and the
+**code** is passed through untouched. The composition is `{paired label}: {code}`, never one string.
+
+### 13.2 · Ready — a verbatim live pair exists, nothing needed
 
 | # | English | Where it appears | The pair, and where it is live |
 |---|---|---|---|
-| R1 | **Dismiss** | The per-group action, §7 | `Dismiss · 忽略` — a live button pair in `public/retail-admin.html` |
-| R2 | **Dismissed** | The state and its filter chip, §7 | `已忽略`, live in `Ignored · Guanyi will be corrected · 已忽略` in the same shell |
+| R1 | **Dismiss** | The per-group action, §7 | `Dismiss · 忽略` — live button pair in `public/retail-admin.html` |
+| R2 | **Dismissed** | The state and its filter chip, §7 | `已忽略`, live in `Ignored · Guanyi will be corrected · 已忽略` |
 | R3 | **Store** | Column header, §4 | `Store · 门店` — live, exact, used in Orders |
 | R4 | **Qty** | Column header, §4 | `Qty · 数量` — live, exact |
-| R5 | **units** | The pack-count field's unit suffix, §5.3 | `units · 份` — live in `public/retail-admin/11-meituan.js:1029`, and it labels **precisely this number**: how many of the product one sale takes |
-| R6 | **No matches** | One of the Why values (§4.1, "matched nothing") | `No matches · 无匹配` — recorded as an existing admin pair in `docs/tacet-delivery-vocabulary.md`, and live as `地图无匹配` |
+| R5 | **units** | The pack-count field's unit suffix, §5.3 | `units · 份` — `public/retail-admin/11-meituan.js:1029`. Labels **precisely this number**: how many of the product one sale takes |
+| R6 | **No matches** | A Why value (§4.1, "matched nothing") | `No matches · 无匹配` — recorded as an existing admin pair in `tacet-delivery-vocabulary.md`; live as `地图无匹配` |
+| R7 | **Clear** | The no-results control (§13.4 B3) | `Clear · 清除` — live. *(Note: `Clear · 清空` is also live. Two pairs for one word is that document's inconsistency, not this screen's; `清除` is the one used with a qualifier, as in `Clear channel filter · 清除渠道筛选`.)* |
 
-### 13.2 · Needs you — no pair exists
+### 13.3 · Needs you — no pair exists, and the element cannot ship without one
 
-Eight, in the order I would take them.
+Ten. **v1.1 listed eight and lost two column headers in its own rewrite** (`Line` and `First / Last`);
+they are restored here as N4 and N5, and the omission is recorded rather than quietly fixed.
 
 | # | English | Where it appears | What I searched, and what I found |
 |---|---|---|---|
-| **A1** | **Missing product** — the screen's title | Page header (§1.7), the Orders status-line link, the Dashboard card, the palette | **Both halves are live; the combination is not.** `Missing X · 缺少X` is the established construction, used five times: `Missing required column · 缺少必需列`, `Missing session · 缺少会话`, `Missing token. · 缺少令牌。`, `No store · 缺少门店`, `KEY MISSING · 缺少密钥`. For the noun the product uses **two** live words — `产品` (the rail's own `Products · 产品`) and `商品` (throughout the Meituan screens, e.g. `已被其他商品占用`). I did **not** join them, because that is composing. Your decision is which noun; the construction is already sourced. Checked `tacet-delivery-vocabulary.md`: no entry covers this. |
-| **A2** | **Why**, the column header | Column header, §4 | Nothing found for this sense. `原因` exists nowhere as a label in the admin. |
-| **A3** | The four remaining **Why** values: **No SKU on the line** · **SKU not found** · **No mapping at this store** · **Matched N products** | The Why cell and the drawer, §4.1 | Nothing found. These are internal resolver words (`sku_unknown`, `ambiguous`) that have never been shown to anyone. Adjacent but **not** reusable: `Not linked · 未关联` names a product↔listing map, not an order line; `未匹配` appears only mid-sentence in delivery-zone copy. **The most important group on this list** — it is the only thing on the screen that explains the machine, and the largest single ask. |
-| **A4** | **Times** | Column header, §4 | Nothing found for an occurrence-count header. `次数` exists only inside sentences (`今天的提问次数已用完`), never as a label. |
-| **A5** | The **pack-count field's label**, and its one-line helper | The resolve control, §5.3 | The unit suffix is ready (R5). For the helper there is a live sentence that says exactly the right thing and is **half** of a pair: `Tick every option this product is sold as. "Units" is how many of it one sale takes — a 3-bottle option is 3.` / `勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。` (`11-meituan.js:1035-1037`). The **second clause** of the Chinese — `「份」是每卖出一份消耗的数量 — 三瓶装填 3。` — is verbatim usable and needs no composing. Reusing a clause from a live pair is a judgement call, so it is yours. The field's own label still needs a word. |
-| **A6** | The **confirm control**, carrying its counts — e.g. *Deduct 9 lines · 54 units* | The resolve action, §6 | Nothing found for a counted confirm. `扣减` is the live verb for deduct (`提货扣减`, `每次售出扣减各组成商品`), so the **verb is sourced**; the counted form is not. Note: the waste screen dropped its measure word deliberately (`79f68fc3`) — whatever shape you choose should follow that. |
-| **A7** | The **suggestion panel's heading**, and its one-line disclaimer | The drawer, §5.1 | Nothing found. The disclaimer is the load-bearing half: it is what stops the list reading as an answer. |
-| **A8** | The **empty** and **no-results** sentences | §9, §1.12 | The house has many examples of the *form* — empty is a compliment, no-results names the filter — and none of these sentences. Two strings, not one; §1.12 requires both and forbids conflating them. |
+| **N1** | **Missing product** — the screen's title | Page header (§1.7), the Orders status-line link, the Dashboard card, the palette | **Both halves are live; the combination is not.** `Missing X · 缺少X` is the established construction, used five times: `Missing required column · 缺少必需列`, `Missing session · 缺少会话`, `Missing token. · 缺少令牌。`, `No store · 缺少门店`, `KEY MISSING · 缺少密钥`. For the noun the product uses **two** live words — `产品` (the rail's `Products · 产品`) and `商品` (throughout the Meituan screens, and as a table header in `Item · 商品`). I did **not** join them; that is composing. **Your decision is which noun.** Checked `tacet-delivery-vocabulary.md`: nothing covers this. |
+| **N2** | **Why** — column header | §4 | Nothing found for this sense. `原因` exists nowhere as a label in the admin. |
+| **N3** | The four remaining **Why** values: **No SKU on the line** · **SKU not found** · **No mapping at this store** · **Matched N products** | The Why cell and the drawer, §4.1 | Nothing found. Internal resolver words (`sku_unknown`, `ambiguous`) never shown to anyone. Adjacent but **not** reusable: `Not linked · 未关联` names a product↔listing map, not an order line; `未匹配` appears only mid-sentence in delivery-zone copy. **The most important group here** — the only thing on the screen that explains the machine. |
+| **N4** | **Line** — column header | §4 | Nothing found. `Item · 商品` is live but means the catalogue item, which is the one thing this column is not. |
+| **N5** | **First** / **Last** — column headers | §4 | **Half-found.** `Last seen · 最近活动` is a live exact pair, but it means a customer's last activity; reusing it for "the last time this line arrived" is a judgement call, so it is yours. `Last order · 最近订单` and `Last login · 最近登录` show `最近` is the live word for *last*. **Nothing at all for `First`** — `首次` appears only inside sentences. |
+| **N6** | The **pack-count field's label** | §5.3 | The unit suffix is ready (R5); the field's own label is not. |
+| **N7** | The pack-count field's **helper line** | §5.3 | A live sentence says exactly the right thing and is **half** of a pair: `Tick every option this product is sold as. "Units" is how many of it one sale takes — a 3-bottle option is 3.` / `勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。` (`11-meituan.js:1035`). Its **second Chinese clause** — `「份」是每卖出一份消耗的数量 — 三瓶装填 3。` — is verbatim usable and needs no composing. Reusing a clause out of a pair is a judgement call, so it is yours. |
+| **N8** | The **confirm control** with its counts — e.g. *Deduct 9 lines · 54 units* | §6 | `扣减` is the live verb for deduct (`提货扣减`, `每次售出扣减各组成商品`), so **the verb is sourced**; the counted form is not. The waste screen dropped its measure word deliberately (`79f68fc3`) — whatever shape you choose should follow that. |
+| **N9** | The **status line's** words — the connective text around the three facts | §9, and the Orders status-line link | Nothing found; these are sentences, not labels. **v1.1 omitted this** and it is a real ask: the numbers format themselves per language via `tdWhen` (§1.18), but *lines*, *groups*, *oldest* and *units* are words. |
+| **N10** | The **suggestion panel's heading** | §5.1 | Nothing found. Blocked with its disclaimer — see B1. |
 
-### 13.3 · One inconsistency noticed while reading the vocabulary
+### 13.4 · BLOCKING — English written, awaiting Chinese, not to be built
+
+Three strings that stop the screen rather than one element, because §1.12 requires the empty and
+no-results states of every page that filters, and §5.1's disclaimer is the thing that stops the
+suggestion list reading as an answer. **Ash supplies the Chinese. These are not built until he does.**
+
+The English is written carefully here so that the Chinese question is asked once, against a final
+sentence, rather than twice against a draft.
+
+**B1 · The suggestion panel** (§5.1). Heading and disclaimer, one line each.
+
+> **Possible matches**
+>
+> Found by searching names and codes. Nothing is selected — choose the product that was sold, or
+> search for another.
+
+*Why it is worded this way.* The first sentence says what produced the list, which is the whole of
+decision 2: a query, not a judgement. The second states plainly that no default exists and gives the
+way out. No "best", no "likely", no "recommended" — those words are the failure this screen was built
+against. Sentence case, no exclamation mark, per the brand.
+
+**B2 · Empty state** (§9, §1.12 — *a compliment, not an apology; name what will arrive*).
+
+> Every line found its product. Anything that arrives without one waits here.
+
+*Why.* Compliment first, stated as fact rather than praise; then what the screen is for, so an
+operator who has never seen it full understands what it will hold. No illustration, no "Nothing here
+yet."
+
+**B3 · No results** (§9, §1.12 — *a different state and a different sentence; name what is filtering,
+offer to clear it*).
+
+> No lines match 'pita'.
+
+with a **Clear** control beside it (R7, ready). The quoted term is the operator's own typing and is
+passed through untouched — the same class as a code (§13.1), and never translated. The sentence form
+copies the house example in §1.12 (*"No orders match 'Chen Jing'."*) exactly.
+
+### 13.5 · Audit — the rest of the design against the rule
+
+Ash asked what else in this design the rule touches. Five things, one of them load-bearing.
+
+**🔴 1 · The Line column shows a string that is bilingual by nature, and no view can be clean.**
+This is the real conflict and it needs a ruling. The channel writes lines like
+`Whole-Wheat Pita皮塔面包(一个)(Yes)` and `藜麦沙拉+南瓜汤 Quinoa Salad+Pumpkin Soup（～630g）` —
+English and Chinese welded into one string by Meituan, not by us. §3 requires it be shown
+**verbatim**, and that requirement is not negotiable: the whole screen is about what the channel
+actually sent, and normalising it would be this screen doing the fuzzy matching that caused the
+problem.
+
+So in the English view that cell contains Chinese, and in the Chinese view it contains English, and
+**nothing this design can do changes that** short of hiding the one fact the operator needs.
+
+**The case for exempting it, which is yours to accept or refuse:** it is the same class as a SKU.
+It is not our copy — it is a foreign identifier we quote so a person can recognise what was sold.
+Translating it would break the recognition, which is exactly the reasoning §13.1 already applies to
+`3-170s`. If you accept that, the exemption list gains one entry: *the channel line name, as the
+channel wrote it.* If you refuse it, this screen cannot be built as designed and the decision moves
+upstream to what a Missing product row is allowed to show.
+
+**2 · The ledger note inherits the same string** (§6.1). The note carries the channel line name
+verbatim, and that note renders on the Stock activity screen — so the conflict travels one screen
+further than this one. Whatever is decided for (1) settles this too; they must not be answered
+differently.
+
+**3 · The Store column is already exempt and the design now says so.** §4 wrote "Tianhe / Yuexiu" as
+an illustration, not a specification; it is corrected. Per the rule's own carve-out, store names
+already rendered as 天河 / 越秀 stay as they are in both views. The cell renders whatever the shell's
+existing store rendering renders; this screen does not introduce a second answer.
+
+**4 · Operator-authored text is a third class, neither paired nor exempt.** The optional dismissal
+reason (§7) is typed by a person and appears in whatever language they typed it. It is not a product
+string, has no pair, and must never be run through the language toggle. Named here so nobody later
+tries to translate it, or treats its absence of a pair as a defect.
+
+**5 · Nothing else in the design breaks the rule.** The suggestion rows already specify one language
+(§5.2, *"name (one language, §1.11)"*), dates format per language through `tdWhen` (§1.18), and every
+other visible string is enumerated in §13.2-13.4 with its status.
+
+**Out of scope, but the rule reaches further than this screen.** The push notifications in
+`public/sw.js` glue both halves into one string today — `'Notifications off · 通知已关闭'`, and a body
+carrying both languages — so both are shown to every operator regardless of view. Recorded because a
+product-wide rule wants a product-wide sweep, and that sweep is not this screen's work.
+
+### 13.6 · One inconsistency noticed while reading the vocabulary
 
 `docs/tacet-delivery-vocabulary.md`'s channel-mapping request section says *"the five strings below"*
 in its prose while its table lists **six** rows (`notInCat`, `notChecked`, `pickIt`, `reverted`,
