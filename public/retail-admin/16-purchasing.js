@@ -135,6 +135,21 @@
     return `<span class="pu2-pill grey">${esc(statusWord(p.status))}</span>`;
   }
   const storeLabel = p => esc([p.store_name_en, p.store_name_cn].filter(Boolean).join(' · ') || '—');
+  // po.supplier is one string — set when every line came from the same place,
+  // left blank for a consolidated order that mixes several. Blank used to
+  // just print "No supplier", which reads as unspecified rather than mixed.
+  // Falls back to distinct per-line supplier_name values: none of those either
+  // → genuinely unspecified; one → that's the order's supplier in practice;
+  // more than one → say so instead of hiding it, name-on-hover via title.
+  function supplierLabel(p) {
+    if (p.supplier) return esc(p.supplier);
+    const names = Array.isArray(p.items)
+      ? Array.from(new Set(p.items.map(i => (i.supplier_name || '').trim()).filter(Boolean)))
+      : (p.line_suppliers ? p.line_suppliers.split(',') : []).map(s => s.trim()).filter(Boolean);
+    if (!names.length) return esc(T('No supplier', '未指定供应商'));
+    if (names.length === 1) return esc(names[0]);
+    return `<span title="${esc(names.join(', '))}">${names.length} ${esc(T('suppliers', '家供应商'))}</span>`;
+  }
   const nameLabel = it => esc([it.name_en, it.name_cn].filter(Boolean).join(' · ') || '—');
   // A material line next to a product line on the same PO — one small grey
   // tag is the only thing that says which is which (colour stays status-only
@@ -334,7 +349,7 @@
     if (!body) return;
     const q = (document.getElementById('pu2-q')?.value || '').toLowerCase().trim();
     let rows = segRows();
-    if (q) rows = rows.filter(p => `${p.po_number} ${p.supplier || ''}`.toLowerCase().includes(q));
+    if (q) rows = rows.filter(p => `${p.po_number} ${p.supplier || ''} ${p.line_suppliers || ''}`.toLowerCase().includes(q));
 
     if (!rows.length) {
       // Empty ledger with no orders at all → the teaching empty state. A filtered
@@ -349,7 +364,7 @@
       const rcv = p.received_lines ? ` <span class="sub" style="display:inline">· ${p.received_lines} ${esc(T('in', '入库'))}</span>` : '';
       return `<tr onclick="puOpenPO(${p.id})">
         <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}</div></td>
-        <td>${esc(p.supplier || T('No supplier', '未指定供应商'))}</td>
+        <td>${supplierLabel(p)}</td>
         <td>${storeLabel(p)}</td>
         <td class="right pu2-num">${p.line_count || 0}${rcv}</td>
         <td class="right pu2-num">${money(p.total_cost)}</td>
@@ -950,7 +965,7 @@
         <span class="spacer"></span>
         <button class="pu2-btn" onclick="puPrintPO()"><span class="pu2-ic">${I.print}</span>${esc(T('Print / send', '打印 / 发送'))}</button>
       </div>
-      <div class="pu2-rcvsub pu2-num">${esc(p.supplier || T('No supplier', '未指定供应商'))} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
+      <div class="pu2-rcvsub pu2-num">${supplierLabel(p)} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
       ${lifeStepper(p)}
       ${p.notes ? `<p class="pu2-notes">${esc(p.notes)}</p>` : ''}
 
@@ -1001,8 +1016,12 @@
     const dis = canReceive ? '' : 'disabled';
     const priceNote = it.cost_per_unit != null
       ? `${money(it.cost_per_unit)} ${esc(T('each', '每件'))}` : '';
+    // A consolidated order mixes suppliers per line (§ supplierLabel above) —
+    // worth repeating here since the header supplier is blank on exactly
+    // those orders and this is where the receiving decision actually happens.
+    const lineSupplier = (it.supplier_name || '').trim();
     return `<tr data-line="${it.id}">
-      <td>${matBadge(it)}${nameLabel(it)}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
+      <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
