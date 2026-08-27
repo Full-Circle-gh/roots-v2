@@ -12990,3 +12990,198 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
 }
 .wst-modal .wst-hint.warn { color: var(--td-amber-ink); }
+
+  /* ════════════════════════════════════════════════════════════════════
+     PRODUCT BUILD LIST — the "Cost & Pricing" pane (Step 3,
+     docs/tacet-product-build-lines-design.md). Markup: retail-admin.html
+     data-pane="cost"; behaviour: retail-admin/21-product-build.js.
+
+     Tokens only, no literal colours. Sizes stay on §1.3's six-step scale
+     and radii on §1.4's two (14px card, 8px control); the half-pixel sizes
+     elsewhere in this file are drift, not a pattern to copy.
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* Two columns: list left, sticky price+margin rail right. The rail is the
+     whole point of Option 2 — the margin must survive scrolling a long list,
+     which is the requirement the inline layout could not meet. */
+  #pd-editor .pd-bl-wrap {
+    display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 24px; align-items: start;
+  }
+  #pd-editor .pd-bl-rail { position: sticky; top: 16px; display: grid; gap: 16px; }
+  /* Docked in the side panel there is no room for two columns, and the rail
+     stops being sticky because the panel scrolls, not the page. */
+  @media (max-width: 1100px) {
+    #pd-editor .pd-bl-wrap { grid-template-columns: 1fr; }
+    #pd-editor .pd-bl-rail { position: static; }
+  }
+  .pa-split-editor #pd-editor .pd-bl-wrap { grid-template-columns: 1fr; }
+  .pa-split-editor #pd-editor .pd-bl-rail { position: static; }
+
+  #pd-editor .pd-bl-sub {
+    color: var(--td-text2); font-size: 13px; margin: -8px 0 16px;
+  }
+
+  /* ── Group headings — DISPLAY ONLY ───────────────────────────────────
+     Materials and packaging read differently here and are the same row
+     underneath, grouped by the material's own item_kind. Nothing about the
+     grouping is stored on a build line (design doc §1). */
+  #pd-editor .bl-group + .bl-group { margin-top: 24px; }
+  #pd-editor .bl-group-h {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 13px; font-weight: 500; color: var(--td-text2);
+    padding-bottom: 8px; border-bottom: 1px solid var(--td-border);
+  }
+  #pd-editor .bl-group-n { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* ── A line ──────────────────────────────────────────────────────── */
+  #pd-editor .bl-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 88px 74px 84px 30px;
+    gap: 12px; align-items: center;
+    padding: 11px 0; border-bottom: 1px solid var(--td-border);
+  }
+  #pd-editor .bl-row:last-child { border-bottom: none; }
+  #pd-editor .bl-name { min-width: 0; }
+  #pd-editor .bl-name .n {
+    font-size: 15px; color: var(--td-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #pd-editor .bl-name .s {
+    font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* An unpriced line is amber, never red: it is unfinished, not broken, and
+     brick is this system's error colour (§1.10 — colour is status). */
+  #pd-editor .bl-name .s.warn { color: var(--td-amber-ink); }
+
+  #pd-editor .bl-in, #pd-editor .bl-unit {
+    width: 100%; background: var(--td-paper); border: 1px solid var(--td-border);
+    color: var(--td-text); border-radius: 8px; padding: 7px 9px;
+    font: 400 15px var(--f-sans);
+  }
+  #pd-editor .bl-in { text-align: right; font-variant-numeric: tabular-nums; }
+  #pd-editor .bl-unit { font-size: 13px; color: var(--td-text2); }
+  #pd-editor .bl-in:focus, #pd-editor .bl-unit:focus {
+    outline: none; border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint);
+  }
+  #pd-editor .bl-cost {
+    text-align: right; font-variant-numeric: tabular-nums; font-size: 15px;
+  }
+  #pd-editor .bl-row.is-nocost .bl-cost { color: var(--td-amber-ink); }
+  #pd-editor .bl-x {
+    background: none; border: none; color: var(--td-text2); cursor: pointer;
+    padding: 5px; border-radius: 8px; line-height: 0;
+  }
+  #pd-editor .bl-x svg { width: 15px; height: 15px; }
+  #pd-editor .bl-x:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  #pd-editor .bl-x:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
+
+  /* ── Loading skeleton (§1.12: no spinners) ───────────────────────── */
+  #pd-editor .bl-skel {
+    height: 44px; border-radius: 8px; background: var(--td-raised);
+    margin-bottom: 8px; opacity: .6;
+  }
+
+  /* ── Empty state ─────────────────────────────────────────────────── */
+  /* 171 of 208 products open here, so this state teaches. A compliment in
+     shape, never an apology, and never a sad illustration (§1.12). */
+  #pd-editor .bl-empty { text-align: center; padding: 32px 16px 8px; }
+  #pd-editor .bl-empty-wave { display: block; margin: 0 auto 16px; color: var(--td-text2); opacity: .45; }
+  #pd-editor .bl-empty-h { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+  #pd-editor .bl-empty-p {
+    color: var(--td-text2); margin: 0 auto; max-width: 46ch; font-size: 15px;
+  }
+
+  /* ── The picker ──────────────────────────────────────────────────── */
+  #pd-editor .pd-bl-pickwrap { position: relative; margin-top: 16px; }
+  #pd-editor .pd-bl-pick-ico {
+    position: absolute; left: 11px; top: 11px; width: 16px; height: 16px;
+    color: var(--td-text2); pointer-events: none;
+  }
+  #pd-editor .pd-bl-q {
+    width: 100%; background: var(--td-paper); border: 1px solid var(--td-border);
+    color: var(--td-text); border-radius: 8px; padding: 9px 12px 9px 35px;
+    font: 400 15px var(--f-sans);
+  }
+  #pd-editor .pd-bl-q:focus {
+    outline: none; border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint);
+  }
+  #pd-editor .bl-pick {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 12px; max-height: 300px; overflow: auto;
+    /* One soft ambient shadow, overlay only — §1.4. Never two stacked. */
+    box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .04);
+  }
+  #pd-editor .bl-pick-hint,
+  #pd-editor .bl-pick-none {
+    padding: 9px 14px; color: var(--td-text2); font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  #pd-editor .bl-pick-hint { border-bottom: 1px solid var(--td-border); }
+  #pd-editor .bl-pick-item {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 9px 14px; cursor: pointer; text-align: left;
+    background: none; border: none; color: var(--td-text);
+    font: 400 15px var(--f-sans);
+  }
+  #pd-editor .bl-pick-item:hover,
+  #pd-editor .bl-pick-item:focus-visible { background: var(--td-raised); outline: none; }
+  #pd-editor .bl-pick-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #pd-editor .bl-pick-item .s {
+    color: var(--td-text2); font-size: 13px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The kind dot. Sage = a material, amber = packaging — the same two roles
+     those colours carry everywhere else in Tacet, not decoration (§1.10). */
+  #pd-editor .bl-kind {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-right: 8px; vertical-align: middle; flex: none;
+  }
+  #pd-editor .bl-kind.k-food { background: var(--td-sage-ink); }
+  #pd-editor .bl-kind.k-pack { background: var(--td-amber-ink); }
+
+  /* ── The rail figures ────────────────────────────────────────────── */
+  #pd-editor .pd-bl-figs { background: var(--td-raised); }
+  #pd-editor .bl-rrow {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; padding: 7px 0;
+  }
+  #pd-editor .bl-rrow .k { color: var(--td-text2); font-size: 15px; }
+  #pd-editor .bl-rrow .v { font-size: 15px; font-variant-numeric: tabular-nums; }
+  #pd-editor .bl-warnv { color: var(--td-amber-ink); }
+  #pd-editor .bl-rule { height: 1px; background: var(--td-border); margin: 8px 0; }
+  #pd-editor .bl-big {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; padding-top: 4px;
+  }
+  #pd-editor .bl-big .k { font-size: 15px; color: var(--td-text2); }
+  /* 30px is §1.3's metric-number step — the one figure on this pane that
+     earns it, because moving it is why the screen exists. */
+  #pd-editor .bl-big .v {
+    font-size: 30px; font-weight: 500; letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums; color: var(--td-sage-ink);
+  }
+  #pd-editor .bl-big .v.is-neg { color: var(--td-brick-ink); }
+  #pd-editor .bl-delta {
+    text-align: right; font-size: 13px; color: var(--td-text2);
+    font-variant-numeric: tabular-nums; margin-top: 2px;
+  }
+  #pd-editor .bl-delta.down { color: var(--td-amber-ink); }
+  #pd-editor .bl-note {
+    color: var(--td-text2); font-size: 13px; line-height: 1.6;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--td-border);
+  }
+
+  /* ── Save + error ────────────────────────────────────────────────── */
+  #pd-editor .pd-bl-actions { margin-top: 16px; display: flex; gap: 8px; }
+  #pd-editor #pd-bl-save.is-dirty {
+    border-color: var(--td-dusk); color: var(--td-dusk);
+  }
+  /* A failed write renders where the operator is looking and STAYS — never a
+     toast that flies away leaving the screen looking saved (§1.12). */
+  #pd-editor .bl-err {
+    margin-top: 12px; padding: 11px 14px; border-radius: 8px;
+    background: var(--td-brick-tint); color: var(--td-brick-ink);
+    font-size: 13px; line-height: 1.6;
+  }
