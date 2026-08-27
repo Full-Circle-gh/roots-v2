@@ -1009,7 +1009,7 @@
             <th class="right">${esc(T('In stock', '已入库'))}</th>
           </tr></thead>
           <tbody>
-            ${(p.items || []).map(it => receiveRow(it, canReceive)).join('')}
+            ${(p.items || []).map(it => receiveRow(it, canReceive, !!p.no_invoice_expected)).join('')}
           </tbody>
         </table>
       </div>
@@ -1039,7 +1039,28 @@
           : `<div class="sub">${esc(T('Posts to Expenses when the order is placed.', '下单后自动记入支出。'))}</div>`}
       </div>`;
   }
-  function receiveRow(it, canReceive) {
+  // The invoice picker and the Invoices screen's no-invoice mark are ONE fact,
+  // not two. "None" here writes po_line_items.no_invoice_expected — the column
+  // lineStatus() actually reads (routes/retail-purchasing.js) — so a line the
+  // buyer marks here stops reading "Awaiting" over there. The row therefore
+  // renders from that mark first and falls back to the older stored
+  // invoice_status only for the awaiting/received distinction it still carries.
+  //
+  // When the whole PO carries the mark there is nothing per-line left to
+  // decide, so the cell is static: no select means puReceiveSave sends no
+  // invoice_status for the line, which is what keeps a later PO-level unmark
+  // from leaving every line stuck on "None".
+  function invoiceCell(it, poNoInvoice, dis) {
+    if (poNoInvoice) return `<span class="sub">${esc(T('None', '无发票'))}</span>`;
+    const sel = it.no_invoice_expected ? 'no_invoice' : (it.invoice_status || 'not_received');
+    const opt = (v, en, cn) => `<option value="${v}"${sel === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`;
+    return `<select class="pu2-input pu2-ri" ${dis}>
+        ${opt('not_received', 'Awaiting', '待收')}
+        ${opt('received', 'Received', '已收')}
+        ${opt('no_invoice', 'None', '无发票')}
+      </select>`;
+  }
+  function receiveRow(it, canReceive, poNoInvoice) {
     const applied = (it.stock_applied_qty || 0) > 0 ? `✓ ${it.stock_applied_qty}` : '—';
     const dis = canReceive ? '' : 'disabled';
     const priceNote = it.cost_per_unit != null
@@ -1054,11 +1075,7 @@
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
-      <td><select class="pu2-input pu2-ri" ${dis}>
-        <option value="not_received"${it.invoice_status === 'not_received' ? ' selected' : ''}>${esc(T('Awaiting', '待收'))}</option>
-        <option value="received"${it.invoice_status === 'received' ? ' selected' : ''}>${esc(T('Received', '已收'))}</option>
-        <option value="no_invoice"${it.invoice_status === 'no_invoice' ? ' selected' : ''}>${esc(T('None', '无发票'))}</option>
-      </select></td>
+      <td>${invoiceCell(it, poNoInvoice, dis)}</td>
       <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
     </tr>`;
   }
@@ -1119,12 +1136,15 @@
     if (!_po) return;
     const receipts = [];
     document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
+      const ri = tr.querySelector('.pu2-ri');
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
         qty_received: tr.querySelector('.pu2-rq').value === '' ? null : tr.querySelector('.pu2-rq').value,
         damaged_qty: tr.querySelector('.pu2-rd').value || 0,
         tracking_number: tr.querySelector('.pu2-rt').value,
-        invoice_status: tr.querySelector('.pu2-ri').value,
+        // Absent on a PO-level no-invoice line — leave the field off entirely
+        // there rather than sending a value the row never offered.
+        ...(ri ? { invoice_status: ri.value } : {}),
       });
     });
     try {

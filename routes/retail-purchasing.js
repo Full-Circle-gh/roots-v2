@@ -569,10 +569,12 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
 // PO-level link would attribute one supplier's invoice to another's goods.
 //
 // THE FOUR STATES ARE COMPUTED, NEVER STORED — see lineStatus() below.
-// po_line_items.invoice_status is a second, contradictory, STORED mechanism
-// that this screen has never used and must not start using: all 232 live lines
-// read 'not_received'. It is left exactly as it is. invoice_pos is dead with
-// 0 rows and is likewise left alone.
+// po_line_items.invoice_status is a second, STORED mechanism, still never read
+// here: awaiting/received is the buyer's own note on the receive row and says
+// nothing about what has actually been invoiced. Its 'no_invoice' value is the
+// one exception, and it is not read either — the receive route writes the
+// no_invoice_expected mark alongside it, so the two can no longer contradict
+// each other. invoice_pos is dead with 0 rows and is left alone.
 const INV_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
 const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
@@ -1283,7 +1285,8 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   res.json({ success: true, stock_lines_reversed: reversed });
 });
 
-// Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status.
+// Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status
+// (which also carries the line's no-invoice mark — see below).
 // Every save re-applies the stock delta and re-posts expenses.
 router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
@@ -1310,7 +1313,14 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       }
       if (r.tracking_number !== undefined) { sets.push('tracking_number = ?'); vals.push((r.tracking_number || '').toString().trim() || null); }
       if (r.tracking_carrier !== undefined) { sets.push('tracking_carrier = ?'); vals.push((r.tracking_carrier || '').toString().trim() || null); }
-      if (r.invoice_status !== undefined && VALID_INVOICE.has(r.invoice_status)) { sets.push('invoice_status = ?'); vals.push(r.invoice_status); }
+      // "None" on the receive row and the Invoices screen's no-invoice mark are
+      // the same fact stated twice, and only the mark is ever read (lineStatus
+      // above). Keep them in step: the picker writes both, so a line the buyer
+      // marks "None" here stops being chased as "awaiting" over there.
+      if (r.invoice_status !== undefined && VALID_INVOICE.has(r.invoice_status)) {
+        sets.push('invoice_status = ?'); vals.push(r.invoice_status);
+        sets.push('no_invoice_expected = ?'); vals.push(r.invoice_status === 'no_invoice' ? 1 : 0);
+      }
       if (!sets.length) continue;
       vals.push(lineId, po.id);
       db.prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
