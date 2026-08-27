@@ -384,7 +384,12 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
     SELECT po.*,
            (SELECT COUNT(*) FROM po_line_items i WHERE i.po_id = po.id)                        AS line_count,
            (SELECT SUM(COALESCE(i.total_cost,0)) FROM po_line_items i WHERE i.po_id = po.id)   AS total_cost,
-           (SELECT COUNT(*) FROM po_line_items i WHERE i.po_id = po.id AND i.qty_received IS NOT NULL) AS received_lines
+           (SELECT COUNT(*) FROM po_line_items i WHERE i.po_id = po.id AND i.qty_received IS NOT NULL) AS received_lines,
+           -- po.supplier is one string, left blank on a consolidated order that
+           -- mixes several suppliers' items into one PO/store delivery. This
+           -- gives the list something better than "No supplier" for that case
+           -- (GROUP_CONCAT(DISTINCT ...) already drops NULL/blank on its own).
+           (SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(i.supplier_name),'')) FROM po_line_items i WHERE i.po_id = po.id) AS line_suppliers
       FROM purchase_orders po
      WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ?`;
   const params = [currentTenantId()];
@@ -393,9 +398,9 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
   if (month)    { q += ' AND substr(po.date, 1, 7) = ?'; params.push(String(month).slice(0, 7)); }
   if (search) {
     q += ` AND (po.po_number LIKE ? OR po.supplier LIKE ? OR po.id IN (
-      SELECT po_id FROM po_line_items WHERE name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?))`;
+      SELECT po_id FROM po_line_items WHERE name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ? OR supplier_name LIKE ?))`;
     const s = `%${search}%`;
-    params.push(s, s, s, s, s);
+    params.push(s, s, s, s, s, s);
   }
   q += ' ORDER BY po.date DESC, po.id DESC';
   const pos = db.prepare(q).all(...params);
@@ -1196,6 +1201,20 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   res.json({ success: true });
 });
 
+// Delete — Draft (Requested) only. Every later status has already posted
+// expenses and/or written prices/stock; "Cancel order" is the reversible exit
+// for those (keeps the row, zeroes it out — see the /status route). A draft
+// never touched any ledger, so deleting it outright is safe and final.
+router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (po.status !== 'Requested') return res.status(409).json({ success: false, error: 'not_draft' });
+  db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
+  db.prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
+  logActivity(req.user.id, req.user.username, 'delete', 'purchase_order', po.id, { po_number: po.po_number, scope: 'retail' }, req.ip);
+  res.json({ success: true });
+});
+
 router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express.json(), (req, res) => {
   const { status } = req.body || {};
   if (!PO_STATUSES.has(status)) return res.status(400).json({ success: false, error: 'invalid_status' });
@@ -1221,6 +1240,40 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
               { from: po.status, to: status, scope: 'retail' }, req.ip);
   res.json({ success: true });
+});
+
+// Undo an accidental "Delivered" — pulls back whatever stock this PO's own
+// receiving pushed in (reversing exactly stock_applied_qty per line, so a
+// correction made after the fact is never double-reversed) and drops the
+// order back to Ordered/Sent. qty_received/damaged_qty are left as they were:
+// the counts stay on screen so the next confirm just re-applies the same
+// delta, it doesn't ask the operator to re-enter them. Deliberately does NOT
+// re-fire firePriceAlertsForPO (that already ran once on the way to
+// Delivered — re-running it on the way back would append a duplicate price
+// history row for no reason) or fire it again when re-confirmed later.
+router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, express.json(), (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
+  const lines = db.prepare(
+    'SELECT id, store_product_id, stock_applied_qty FROM po_line_items WHERE po_id = ? AND stock_applied_qty IS NOT NULL AND stock_applied_qty <> 0'
+  ).all(po.id);
+  let reversed = 0;
+  for (const l of lines) {
+    if (!l.store_product_id) continue;
+    inventory.adjustStock({
+      storeId: po.store_id, productId: l.store_product_id, deltaQty: -Math.round(parseFloat(l.stock_applied_qty) || 0),
+      actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
+      note: po.po_number, reason: 'restock_undo',
+    });
+    db.prepare('UPDATE po_line_items SET stock_applied_qty = 0 WHERE id = ?').run(l.id);
+    reversed++;
+  }
+  db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
+  postRetailPOExpenses(po.id);
+  logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
+              { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true, stock_lines_reversed: reversed }, req.ip);
+  res.json({ success: true, stock_lines_reversed: reversed });
 });
 
 // Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status.

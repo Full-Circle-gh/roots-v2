@@ -135,6 +135,21 @@
     return `<span class="pu2-pill grey">${esc(statusWord(p.status))}</span>`;
   }
   const storeLabel = p => esc([p.store_name_en, p.store_name_cn].filter(Boolean).join(' · ') || '—');
+  // po.supplier is one string — set when every line came from the same place,
+  // left blank for a consolidated order that mixes several. Blank used to
+  // just print "No supplier", which reads as unspecified rather than mixed.
+  // Falls back to distinct per-line supplier_name values: none of those either
+  // → genuinely unspecified; one → that's the order's supplier in practice;
+  // more than one → say so instead of hiding it, name-on-hover via title.
+  function supplierLabel(p) {
+    if (p.supplier) return esc(p.supplier);
+    const names = Array.isArray(p.items)
+      ? Array.from(new Set(p.items.map(i => (i.supplier_name || '').trim()).filter(Boolean)))
+      : (p.line_suppliers ? p.line_suppliers.split(',') : []).map(s => s.trim()).filter(Boolean);
+    if (!names.length) return esc(T('No supplier', '未指定供应商'));
+    if (names.length === 1) return esc(names[0]);
+    return `<span title="${esc(names.join(', '))}">${names.length} ${esc(T('suppliers', '家供应商'))}</span>`;
+  }
   const nameLabel = it => esc([it.name_en, it.name_cn].filter(Boolean).join(' · ') || '—');
   // A material line next to a product line on the same PO — one small grey
   // tag is the only thing that says which is which (colour stays status-only
@@ -334,7 +349,7 @@
     if (!body) return;
     const q = (document.getElementById('pu2-q')?.value || '').toLowerCase().trim();
     let rows = segRows();
-    if (q) rows = rows.filter(p => `${p.po_number} ${p.supplier || ''}`.toLowerCase().includes(q));
+    if (q) rows = rows.filter(p => `${p.po_number} ${p.supplier || ''} ${p.line_suppliers || ''}`.toLowerCase().includes(q));
 
     if (!rows.length) {
       // Empty ledger with no orders at all → the teaching empty state. A filtered
@@ -349,7 +364,7 @@
       const rcv = p.received_lines ? ` <span class="sub" style="display:inline">· ${p.received_lines} ${esc(T('in', '入库'))}</span>` : '';
       return `<tr onclick="puOpenPO(${p.id})">
         <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}</div></td>
-        <td>${esc(p.supplier || T('No supplier', '未指定供应商'))}</td>
+        <td>${supplierLabel(p)}</td>
         <td>${storeLabel(p)}</td>
         <td class="right pu2-num">${p.line_count || 0}${rcv}</td>
         <td class="right pu2-num">${money(p.total_cost)}</td>
@@ -553,6 +568,7 @@
 
         <div class="pu2-wizfoot">
           <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
+          ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
           <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
           <button class="pu2-btn primary" onclick="puWizNext(3)">${esc(T('Review order', '确认订单'))}</button>
@@ -617,7 +633,7 @@
           </span>
         </td>
         <td class="right">
-          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"></span>
+          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(it.unit || 'pcs')}</span></span>
           ${lastPaid(it)}
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
@@ -819,6 +835,7 @@
         </div>`}
         <div class="pu2-wizfoot">
           <button class="pu2-btn ghost" onclick="puWizStep(2)">${esc(T('Back', '上一步'))}</button>
+          ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
           <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
           <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puPlace()" ${empty ? 'disabled' : ''}>${esc(T('Place order', '确认下单'))}</button>
@@ -859,6 +876,20 @@
       const id = await saveWiz(false);
       if (id == null) return;
       toast(T('Saved as draft ✓', '已存为草稿 ✓'), 'ok');
+      await loadPOs(); puBackOrders();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puDeleteDraft = async function () {
+    if (!_edit.id) return;
+    if (!(await askConfirm({
+      title: T('Delete this draft order?', '删除此草稿采购单？'),
+      body: T('It was never placed, so nothing to unwind — this just removes it.', '该订单从未下单，删除不会影响任何账目。'),
+      confirmLabel: T('Delete draft', '删除草稿'),
+      danger: true,
+    }))) return;
+    try {
+      await api('/api/retail-admin/purchases/' + _edit.id, { method: 'DELETE' });
+      toast(T('Draft deleted ✓', '草稿已删除 ✓'), 'ok');
       await loadPOs(); puBackOrders();
     } catch (e) { toast(e.message, 'err'); }
   };
@@ -950,7 +981,7 @@
         <span class="spacer"></span>
         <button class="pu2-btn" onclick="puPrintPO()"><span class="pu2-ic">${I.print}</span>${esc(T('Print / send', '打印 / 发送'))}</button>
       </div>
-      <div class="pu2-rcvsub pu2-num">${esc(p.supplier || T('No supplier', '未指定供应商'))} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
+      <div class="pu2-rcvsub pu2-num">${supplierLabel(p)} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
       ${lifeStepper(p)}
       ${p.notes ? `<p class="pu2-notes">${esc(p.notes)}</p>` : ''}
 
@@ -981,6 +1012,7 @@
         ${p.status === 'Ordered' ? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived()">${esc(T('All arrived as ordered', '全部按订单到货'))}</button>` : ''}
         ${p.status === 'Ordered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puSetStatus('Requested')">${esc(T('Back to draft', '退回草稿'))}</button>` : ''}
         ${p.status === 'Delivered' ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puReorder(${p.id})">${esc(T('Order again', '再次采购'))}</button>` : ''}
+        ${p.status === 'Delivered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puUndoReceive()">${esc(T('Undo receiving', '撤销收货'))}</button>` : ''}
         ${shortN ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puBackorder()">${esc(T(`Back-order ${shortN} short`, `${shortN} 项缺货补单`))}</button>` : ''}
         <span class="spacer"></span>
         ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puSetStatus('Cancelled')">${esc(T('Cancel order', '取消采购单'))}</button>` : ''}
@@ -1000,8 +1032,12 @@
     const dis = canReceive ? '' : 'disabled';
     const priceNote = it.cost_per_unit != null
       ? `${money(it.cost_per_unit)} ${esc(T('each', '每件'))}` : '';
+    // A consolidated order mixes suppliers per line (§ supplierLabel above) —
+    // worth repeating here since the header supplier is blank on exactly
+    // those orders and this is where the receiving decision actually happens.
+    const lineSupplier = (it.supplier_name || '').trim();
     return `<tr data-line="${it.id}">
-      <td>${matBadge(it)}${nameLabel(it)}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
+      <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
@@ -1111,6 +1147,20 @@
     try {
       await api('/api/retail-admin/purchases/' + _po.id + '/status', { method: 'PUT', body: { status } });
       toast(T('Saved ✓', '已保存 ✓'), 'ok');
+      await loadPOs(); puOpenPO(_po.id);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puUndoReceive = async function () {
+    if (!_po) return;
+    if (!(await askConfirm({
+      title: T('Undo receiving?', '撤销收货？'),
+      body: T('Pulls back any stock this delivery added and returns the order to Sent.', '撤回该次收货已入库的数量，订单退回"已下单"状态。'),
+      confirmLabel: T('Undo receiving', '撤销收货'),
+      danger: true,
+    }))) return;
+    try {
+      await api('/api/retail-admin/purchases/' + _po.id + '/undo-receive', { method: 'PUT' });
+      toast(T('Undone ✓', '已撤销 ✓'), 'ok');
       await loadPOs(); puOpenPO(_po.id);
     } catch (e) { toast(e.message, 'err'); }
   };
