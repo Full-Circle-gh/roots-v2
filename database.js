@@ -5485,6 +5485,45 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_recipe_materialize_collisions_recipe ON recipe_materialize_collisions(recipe_id);
 `);
 
+// Product build lines (docs/tacet-product-build-lines-design.md, approved and
+// built as Step 2). A structural clone of recipe_ingredients with product_id
+// in place of recipe_id — same columns, same reasoning, minus `substitutes`
+// (a build list is fixed at product-creation time, per the design doc §1,
+// never read live during a production run the way a recipe line is).
+//
+// LINES POINT AT `ingredients`, NEVER `packaging_types` (§31 rule 4 / the
+// design doc's binding points) — one FK, one physical-thing table, whether
+// the line is food, packaging, or a label. There is no `line_kind` column:
+// whether a line displays as "contents" or "packaging" is read from the
+// material's own `ingredients.item_kind` on join, not duplicated here — see
+// the design doc §1 for why a second classification would drift the way
+// `packaging_types` already has from `ingredients`.
+//
+// product_id -> store_products(id), NEVER kitchen `products(id)` — B.5 /
+// §31's addendum: store_products is the id space every store-facing table
+// already agrees on, and it is the sole cost source for a product once a
+// build list exists (no coexistence with recipe_id — see §31's addendum
+// above). ON DELETE CASCADE: a build list has no meaning once its product is
+// gone, the same relationship recipe_ingredients has with recipes.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS product_build_lines (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id    INTEGER NOT NULL,
+    ingredient_id INTEGER,               -- NULL if the material is later deleted
+    name_en       TEXT NOT NULL,         -- snapshot at time of creation
+    name_cn       TEXT,
+    sku           TEXT,
+    qty           REAL NOT NULL,
+    unit          TEXT DEFAULT 'g',
+    notes         TEXT,
+    sort_order    INTEGER DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES store_products(id) ON DELETE CASCADE,
+    FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_product_build_lines_product ON product_build_lines(product_id);
+  CREATE INDEX IF NOT EXISTS idx_product_build_lines_ingredient ON product_build_lines(ingredient_id);
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
