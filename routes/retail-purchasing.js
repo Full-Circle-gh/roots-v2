@@ -188,16 +188,23 @@ function applyReceivedToStock(poId, req) {
 router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
   const includeInactive = req.query.all === '1';
   const tid = Number(currentTenantId()) || 1;
+  // A consolidated PO leaves po.supplier blank and carries the real supplier
+  // per line instead (see supplierLabel() in 16-purchasing.js). Matching only
+  // po.supplier here undercounted — the same order shows up fine on this
+  // supplier's own detail page (whose scorecard already falls back to the
+  // line-level supplier_name) but as 0 on this list. Mirror that same
+  // fallback so the two never disagree again.
+  const SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = s.name";
   const rows = db.prepare(`
     SELECT s.id, s.name, s.name_cn, s.contact_name, s.contact_phone, s.contact_wechat,
            s.payment_terms, s.payment_method, s.rating, s.notes, s.is_active,
            s.channel_type, s.channel_link, s.products_supplied, s.price_info,
            s.created_at, s.updated_at,
            (SELECT COUNT(*) FROM supplier_documents d WHERE d.supplier_id = s.id) AS doc_count,
-           (SELECT COUNT(*) FROM purchase_orders po
-             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}) AS po_count,
-           (SELECT MAX(po.date) FROM purchase_orders po
-             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}) AS last_po_date
+           (SELECT COUNT(DISTINCT po.id) FROM purchase_orders po JOIN po_line_items pli ON pli.po_id = po.id
+             WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}) AS po_count,
+           (SELECT MAX(po.date) FROM purchase_orders po JOIN po_line_items pli ON pli.po_id = po.id
+             WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}) AS last_po_date
       FROM suppliers s
      WHERE s.tenant_id = ?${includeInactive ? '' : ' AND s.is_active = 1'}
      ORDER BY s.name COLLATE NOCASE
