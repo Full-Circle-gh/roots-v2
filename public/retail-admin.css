@@ -12310,23 +12310,32 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials-record .mat-freebox { margin-top: 16px; }
 
   #tab-materials-record .mat-fincat-wrap { position: relative; }
-  /* position:fixed, not absolute — .mat-card rounds its corners with
-     clip-path (see the .mat-card rule above), and clip-path clips an
-     absolutely-positioned descendant to the card's box exactly like
-     overflow:hidden would. The list looked "stuck" at ~2 rows with no
-     way to scroll the rest into view because that rest was clipped away,
-     not merely hidden below a fold. Fixed positioning (coordinates set in
-     JS from the input's getBoundingClientRect(), in matFinCatFilter)
-     escapes the card's clip entirely. */
-  #tab-materials-record .mat-fincat-menu {
+  /* .mat-fincat-menu is NOT scoped under #tab-materials-record — matFinCatMenuEl()
+     (18-materials.js) appends it straight to <body>, so this must be a bare
+     selector or it silently matches nothing. Two separate ancestor effects
+     forced that:
+       1. .mat-card rounds its corners with clip-path, which clips an
+          absolutely-positioned descendant to the card's box exactly like
+          overflow:hidden would — position:fixed alone escapes this (the list
+          looked "stuck" at ~2 rows because the rest was clipped away, not
+          merely hidden below a fold).
+       2. clip-path also makes .mat-card a stacking-context root, and a
+          position:fixed descendant still paints as part of that context —
+          so it lost to the very next sibling card (Units & cost), a later
+          stacking context painted on top of it wherever the two overlapped.
+          Only hoisting the element out to <body>, outside any
+          stacking-context ancestor, fixes the paint order too.
+     Position (left/top/width) is set in JS from the input's
+     getBoundingClientRect() in matFinCatReposition. */
+  .mat-fincat-menu {
     position: fixed; z-index: 400;
     max-height: 220px; overflow-y: auto; background: var(--td-surface, #fff);
     border: 1px solid var(--td-border); border-radius: 8px;
     box-shadow: 0 8px 22px rgba(18,22,26,.12); padding: 4px; }
-  #tab-materials-record .mat-fincat-opt {
+  .mat-fincat-opt {
     padding: 7px 10px; border-radius: 6px; font: 400 13.5px var(--f-sans);
     color: var(--td-text); cursor: pointer; }
-  #tab-materials-record .mat-fincat-opt:hover { background: var(--td-raised); }
+  .mat-fincat-opt:hover { background: var(--td-raised); }
 
   /* The derived cost, and — when it cannot be derived — the reason why. A blank
      here would read as "zero", which is the one thing it never means. */

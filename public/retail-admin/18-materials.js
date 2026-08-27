@@ -326,6 +326,8 @@
     _recOpen = false;
     document.body.classList.remove('mat-viewing');
     window.removeEventListener('popstate', onPop);
+    const menu = document.getElementById('mat-fincat-menu');
+    if (menu) menu.hidden = true;
     if (!viaPop) history.back();
   }
 
@@ -367,26 +369,48 @@
 
   window.matDirty = function () { _dirty = true; };
 
-  // Finance-category suggestions render as our own menu, position:fixed and
-  // placed under the input by JS (not CSS-anchored via position:relative —
-  // .mat-card rounds its corners with clip-path, which clips an absolutely
-  // positioned descendant to the card same as overflow:hidden would). A
-  // native <input list>/<datalist> popup is drawn by the OS combobox widget,
-  // which some embedding webviews (e.g. chat-app browser panes) position at
-  // the wrong screen coordinates — it showed up pinned to the far edge of
-  // the window instead of under the field.
+  // Finance-category suggestions render as our own menu: position:fixed,
+  // placed under the input by JS, and — critically — a direct child of
+  // <body>, never nested inside .mat-card. Two separate ancestor effects
+  // needed escaping, not one:
+  //  1. .mat-card rounds its corners with clip-path, which clips an
+  //     absolutely-positioned descendant to the card same as overflow:hidden
+  //     would (position:fixed alone escapes this — it repositions the box
+  //     relative to the viewport instead of the card).
+  //  2. clip-path ALSO makes .mat-card a stacking-context root. A
+  //     position:fixed descendant still escapes ancestor CLIPPING, but not
+  //     ancestor PAINT ORDER — it stays painted as part of that stacking
+  //     context, so the very next sibling card (Units & cost), being a later
+  //     stacking context in DOM order, painted right on top of it, covering
+  //     the dropdown wherever the two happened to overlap on screen. Only
+  //     hoisting the element out to <body> — outside any stacking-context
+  //     ancestor — puts it back at the top of the paint order.
+  // A native <input list>/<datalist> popup is drawn by the OS combobox
+  // widget, which some embedding webviews (e.g. chat-app browser panes)
+  // position at the wrong screen coordinates in the first place — it showed
+  // up pinned to the far edge of the window instead of under the field.
+  function matFinCatMenuEl() {
+    let menu = document.getElementById('mat-fincat-menu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.className = 'mat-fincat-menu';
+      menu.id = 'mat-fincat-menu';
+      menu.hidden = true;
+      document.body.appendChild(menu);
+    }
+    return menu;
+  }
   function matFinCatReposition() {
-    const menu = document.getElementById('mat-fincat-menu');
+    const menu = matFinCatMenuEl();
     const input = document.getElementById('mat-f-accounting_category');
-    if (!menu || !input) return;
+    if (!input) return;
     const r = input.getBoundingClientRect();
     menu.style.left = r.left + 'px';
     menu.style.width = r.width + 'px';
     menu.style.top = (r.bottom + 4) + 'px';
   }
   window.matFinCatFilter = function (v) {
-    const menu = document.getElementById('mat-fincat-menu');
-    if (!menu) return;
+    const menu = matFinCatMenuEl();
     const q = String(v || '').trim().toLowerCase();
     const matches = _finCats.filter(c => !q || c.toLowerCase().includes(q)).slice(0, 30);
     if (!matches.length) { menu.hidden = true; menu.innerHTML = ''; return; }
@@ -399,13 +423,12 @@
     const el = document.getElementById('mat-f-accounting_category');
     if (el) el.value = v;
     matDirty();
-    const menu = document.getElementById('mat-fincat-menu');
-    if (menu) menu.hidden = true;
+    matFinCatMenuEl().hidden = true;
   };
   window.matFinCatBlur = function () {
     // Deferred so a menu option's mousedown (which preventDefault()s the
     // blur-causing focus loss) still has a chance to run its click first.
-    setTimeout(() => { const menu = document.getElementById('mat-fincat-menu'); if (menu) menu.hidden = true; }, 150);
+    setTimeout(() => { matFinCatMenuEl().hidden = true; }, 150);
   };
   // Fixed-position menu doesn't track the page under it on its own — close
   // it when the page underneath scrolls, so it never drifts away from the
@@ -462,7 +485,6 @@
                        + input('accounting_category', m.accounting_category,
                                'maxlength="80" autocomplete="off" onfocus="matFinCatFilter(this.value)" onblur="matFinCatBlur()"',
                                'matFinCatFilter(this.value)')
-                       + `<div class="mat-fincat-menu" id="mat-fincat-menu" hidden></div>`
                        + `</div>`)}
             </div>
           </div>
