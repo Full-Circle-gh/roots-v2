@@ -74,6 +74,19 @@ addColumn('ingredients', 'pack_contents_unit', 'TEXT');
 // forward). A deleted item never needs a unique SKU; PO lines snapshot it.
 try { db.prepare('UPDATE ingredients SET sku = NULL WHERE is_active = 0 AND sku IS NOT NULL').run(); } catch {}
 addColumn('packaging_types', 'image_data',     'TEXT');
+// How much of a MADE material's cost_per_unit is overhead its own recipe added
+// (§29's second addendum, settled 2026-08-27: OVERHEAD DOES NOT COMPOUND).
+// Overhead is a PERCENTAGE OF FOOD COST, so a parent applying its own rate to a
+// line that already carries a child's would multiply an estimate by an estimate
+// — three levels deep in real recipes, and untraceable back to anything. The
+// child's overhead still counts in the parent's total; it just stops being part
+// of the BASE the parent's percentage multiplies.
+//
+// Written only by lib/recipe-rollup.js, beside cost_per_unit, for rows with a
+// source_recipe_id. A bought material has no recipe and no overhead, so 0 is
+// its correct and permanent value — which is why the default is 0 rather than
+// NULL and no backfill is needed.
+addColumn('ingredients', 'overhead_per_unit', 'REAL DEFAULT 0');
 // Switching products from hard-delete to soft-delete (waste/restock reference
 // product_id and would orphan otherwise). New rows default to active=1.
 addColumn('products', 'is_active',  'INTEGER DEFAULT 1');

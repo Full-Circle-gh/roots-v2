@@ -53,6 +53,10 @@ function makeDb() {
     CREATE TABLE ingredients (
       id INTEGER PRIMARY KEY, name_en TEXT, name_cn TEXT, sku TEXT, unit TEXT DEFAULT 'g',
       cost_per_unit REAL DEFAULT 0, free_by_design INTEGER DEFAULT 0,
+      -- §29's second addendum, settled 2026-08-27: how much of a made
+      -- material's cost is overhead its own recipe added, so a parent can
+      -- leave it out of its own overhead base.
+      overhead_per_unit REAL DEFAULT 0,
       source_recipe_id INTEGER, is_active INTEGER DEFAULT 1, updated_at TEXT);
     CREATE TABLE recipe_ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT, recipe_id INTEGER, ingredient_id INTEGER,
@@ -511,6 +515,64 @@ function check(label, actual, expected, detail) {
   const direct = applyProductCosts(db);
   check('calling applyProductCosts() alone, after the fact, still skips it', direct.skippedHasBuildList, 1);
   check('and still leaves the build-list-derived value in place', productRow(db, 500).unit_cost, 15);
+  db.close();
+}
+
+
+// ── 17 · OVERHEAD DOES NOT COMPOUND (§29's second addendum) ───────────────
+// A parent's rate applies to the FOOD cost of its lines, not to overhead a
+// child already added. The child's overhead still counts in the parent's
+// total — it just is not multiplied a second time.
+//
+// The graph, chosen so every figure is checkable by hand:
+//   R1 makes M10 from 100g of raw M99 at 1.00/g, with overhead 50%.
+//       ingredientCost 100, overhead 50% of 100 = 50, batch 150 over 100g
+//       -> M10 costs 1.50/g, of which 0.50/g is overhead.
+//   R2 consumes 100g of M10, with its own overhead 50%.
+//       ingredientCost 150. Compounding would take 50% of 150 = 75.
+//       NOT compounding takes 50% of (150 - 50 embedded) = 50.
+//       So batch is 150 + 50 = 200, not 225.
+{
+  const db = seed(makeDb(), {
+    recipes: [[1, 100], [2, 100]],
+    materials: [[99, 1.0, null], [10, 0, 1], [20, 0, 2]],
+    lines: [[1, 99, 100]],
+  });
+  db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,qty,unit,sort_order) VALUES (2,10,?,100,?,0)').run('line', 'g');
+  db.prepare('INSERT INTO recipe_cost_data (recipe_id,overhead_pct) VALUES (1,50)').run();
+  db.prepare('INSERT INTO recipe_cost_data (recipe_id,overhead_pct) VALUES (2,50)').run();
+
+  const r = applyRollup(db, { source: 'test-overhead-no-compound' });
+  check('overhead: rollup applied', r.applied, true, JSON.stringify(r));
+
+  const m10 = ingRow(db, 10);
+  check('child material costs 1.50/g (100 food + 50 overhead over 100g)', m10.cost_per_unit, 1.5);
+  check('and records 0.50/g of that as ITS overhead', m10.overhead_per_unit, 0.5);
+
+  const m20 = ingRow(db, 20);
+  // 150 food-in (incl. the child's 50 overhead) + 50 own overhead = 200 / 100g
+  check('parent costs 2.00/g — NOT 2.25, which is what compounding gives', m20.cost_per_unit, 2);
+  // Its own overhead share is 0.50/g; the child's 0.50/g is food to it, and is
+  // NOT re-declared as overhead — otherwise a grandparent would exclude twice.
+  check('parent records only ITS OWN 0.50/g as overhead', m20.overhead_per_unit, 0.5);
+  db.close();
+}
+
+// ── 18 · the child's overhead is still IN the parent's total ─────────────
+// The rule removes it from the BASE, never from the money. Same graph with the
+// parent's rate at zero: the parent must still cost 1.50/g, carrying the
+// child's overhead through untouched.
+{
+  const db = seed(makeDb(), {
+    recipes: [[1, 100], [2, 100]],
+    materials: [[99, 1.0, null], [10, 0, 1], [20, 0, 2]],
+    lines: [[1, 99, 100]],
+  });
+  db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,qty,unit,sort_order) VALUES (2,10,?,100,?,0)').run('line', 'g');
+  db.prepare('INSERT INTO recipe_cost_data (recipe_id,overhead_pct) VALUES (1,50)').run();
+  applyRollup(db, { source: 'test-overhead-passthrough' });
+  check('parent with no rate of its own still carries the child overhead', ingRow(db, 20).cost_per_unit, 1.5);
+  check('and declares none of it as its own', ingRow(db, 20).overhead_per_unit, 0);
   db.close();
 }
 
