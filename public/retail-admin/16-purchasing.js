@@ -31,6 +31,18 @@
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
   const money = n => '¥' + fmt(Number(n) || 0);
+  // A material's buy unit is stored as an English abbreviation ('kg', 'bag',
+  // 'pcs') — fine on screen next to English labels, but on the printed PO the
+  // rest of the sheet renders in whichever language T() picks, and a raw
+  // 'kg' next to Chinese headers reads as one language leaking into another
+  // (§1.7's rule this print sheet otherwise follows). Same vocabulary as
+  // PO_UNIT_CN in app.html, the kitchen twin of this print.
+  const PO_UNIT_CN = {
+    kg: '公斤', g: '克', L: '升', ml: '毫升', lb: '磅', oz: '盎司',
+    bottle: '瓶', bag: '包', box: '盒', can: '罐', jar: '罐',
+    case: '箱', pack: '包', tub: '桶', pcs: '件',
+  };
+  const unitLabel = u => (u ? T(u, PO_UNIT_CN[u] || u) : '');
   // A supplier is stored as ONE free-text name, and most of the live ones glue
   // both languages into it — "Dry Fruit 果干". Split the stored string at its
   // language boundary (first 中文 character to last, the rest is the English
@@ -617,7 +629,7 @@
           </span>
         </td>
         <td class="right">
-          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(it.unit || 'pcs')}</span></span>
+          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span></span>
           ${lastPaid(it)}
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
@@ -1027,7 +1039,7 @@
     const rows = items.map(i => {
       const nm = [i.name_en, i.name_cn].filter(Boolean).join(' · ');
       const line = (i.qty || 0) * (i.cost_per_unit || 0);
-      return `<tr><td>${e2(nm)}${i.sku ? ` <span class="sku">${e2(i.sku)}</span>` : ''}</td><td class="r">${i.qty} ${e2(i.unit || '')}</td><td class="r">${money(i.cost_per_unit || 0)}</td><td class="r">${money(line)}</td></tr>`;
+      return `<tr><td>${e2(nm)}${i.sku ? ` <span class="sku">${e2(i.sku)}</span>` : ''}</td><td class="r">${i.qty} ${e2(unitLabel(i.unit))}</td><td class="r">${money(i.cost_per_unit || 0)}</td><td class="r">${money(line)}</td></tr>`;
     }).join('');
     const w = window.open('', '_blank', 'width=820,height=1040');
     if (!w) { toast(T('Allow pop-ups, then Print again', '请允许弹窗后再打印'), 'err'); return; }
