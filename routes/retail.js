@@ -204,9 +204,17 @@ function requireRetailAdmin(req, res, next) {
 //                (body.catalog-upstream …); this is the matching API guard so
 //                the lock can't be bypassed by calling the endpoint directly.
 //
+// WHICH MODE A TENANT IS IN IS DATA, NOT AN ASSUMPTION. It is read from
+// `tenants.product_catalog_mode` every call, and no tenant id is special-cased
+// here — a previous version of this comment asserted that Roots (#1) is
+// `upstream`, which is not what the column says: tenant 1 is `self`, so its core
+// fields (name_en included) are NOT locked and a rename from the product editor
+// saves. Flip the column, not this function, if that ever needs to change.
+//
 // req.tenant is set on the backend-operator path. The legacy kitchen path has no
-// req.tenant but always operates on Roots (#1 = upstream), so fall back to the
-// tenants row for the active tenant id; default to 'self' on any error.
+// req.tenant, so fall back to the tenants row for the active tenant id, with
+// ROOTS_TENANT_ID as the last resort. Default to 'self' on any error — a read
+// that failed must not silently lock an editor the operator is entitled to.
 function catalogMode(req) {
   try {
     if (req && req.tenant && req.tenant.product_catalog_mode) return req.tenant.product_catalog_mode;
