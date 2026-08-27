@@ -466,7 +466,28 @@
     const host = document.getElementById('pd-bl-bridge');
     if (!host) return;
     const r = _blRecipe;
-    if (!r || r.state === 'none' || r.already_in_list) { host.innerHTML = ''; return; }
+    if (!r || r.state === 'none') { host.innerHTML = ''; return; }
+
+    // WORK OUT "already added" FROM THE LINES ON SCREEN, NOT FROM THE FLAG THE
+    // SERVER SENT AT LOAD. already_in_list is a snapshot: add the recipe's
+    // material through the SEARCH PICKER rather than this bar's own button and
+    // the flag stays false, so the bar goes on offering to add something that
+    // is already on the list. Reported live — the bar was still up with the
+    // 220g Hazelnut line sitting right above it.
+    const matId = r.material && r.material.id;
+    const onList = (_blLines || []).some(l => matId != null && l.ingredient_id === matId);
+    if (onList) { host.innerHTML = ''; return; }
+
+    // AND A LIST THAT ALREADY HAS CONTENTS DOES NOT NEED THIS BAR AT ALL.
+    // The unbuilt bar says "its cost cannot be added here", which is a true
+    // statement about the RECIPE and a misleading one about a list that has
+    // contents in it by some other route — a material added by hand, a second
+    // recipe's output, a bought-in base. The bar exists to get contents in; if
+    // contents are in, it has done its job and should get out of the way.
+    // This is also the state a stale 'unbuilt' lands in when the recipe was
+    // materialised in another tab, which no amount of server flag would fix
+    // without a refetch this screen has no reason to make.
+    if ((_blLines || []).some(l => blGroupOf(l) !== 'packaging')) { host.innerHTML = ''; return; }
 
     const name = escapeHtml(cuT(r.name_en || r.name_cn || '', r.name_cn || r.name_en || '')
                             || (cuT('Recipe', '配方') + ' #' + r.recipe_id));
@@ -546,13 +567,23 @@
     if (!q) { _blPickResults = []; blRenderPick(0); return; }
     _blPickTimer = setTimeout(async () => {
       try {
-        const j = await api('/api/retail-admin/materials?search=' + encodeURIComponent(q));
+        // The build list's OWN picker endpoint, not the shared materials list.
+        // Same rows, different ORDER: ranked by how often each material is
+        // already used in a build list, so the dozen jars and labels this
+        // business actually packs with come up first out of 630. Ash asked for
+        // packaging-only or "most popular on top"; this is the second, and it
+        // avoids the first's cost — a packaging-only mode would make the
+        // operator declare what KIND they were adding before searching, and a
+        // build line has no kinds (§31, one mechanism).
+        const j = await api('/api/retail-admin/product-build/materials?search=' + encodeURIComponent(q));
         const all = (j && j.data) || [];
         // Already-added materials drop out — adding the same jar twice is
         // never what was meant, and the line would silently double its cost.
         const chosen = new Set((_blLines || []).map(l => l.ingredient_id).filter(x => x != null));
         _blPickResults = all.filter(m => !chosen.has(m.id));
-        blRenderPick(all.length);
+        // matched is the count of everything that MATCHED, not the 8 returned,
+        // so the hint can say "8 of 34" without implying 34 was the whole set.
+        blRenderPick(Number(j && j.matched) || all.length);
       } catch (e) {
         _blPickResults = [];
         blRenderPick(0);
