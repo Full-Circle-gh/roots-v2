@@ -1988,3 +1988,492 @@ tenant to serve. The 0-byte `data/tenants/roots.db` is a third decoy, created
 Source: read-only queries of `/root/roots-v2/data/roots.db` and
 `data/tenants/*.db` on 2026-08-27 over SSH, and the code cited above at
 `0f82a1f2`.
+
+---
+
+# Appendix B — the product bill of materials, what it lands on (2026-08-27)
+
+§31 settled what a product's cost is: contents plus packaging, packaging chosen
+on the product as a LIST of ordinary materials, an empty list meaning unknown.
+This appendix is the survey that has to run before any of that can be built —
+what exists TODAY that a product build list lands on: how the Margin % column
+on the live Products screen is actually computed, which of the two product
+tables it reads, how variants are represented, everywhere packaging cost is
+currently read, whether `packaging_types` and `ingredients`
+(`item_kind='packaging'`) are really two lists of the same things, and what
+existing machinery a build list could reuse rather than duplicate. Read-only
+throughout — nothing here writes code, schema, or data. **No rule is proposed
+in this appendix**, same as everywhere else in this document; where it and the
+code disagree, this appendix is stale and should be re-checked.
+
+## B.1 The Margin % column is entirely client-side arithmetic on two stored columns
+
+`GET /api/retail-admin/products` (`routes/retail.js:21640`) selects
+`sell_price, unit_cost` straight off `store_products` — no join to `recipes`
+or `recipe_cost_data`, no cost math in the route at all. The percentage itself
+is computed in the browser, `_paMargin(price, cost)`
+(`public/retail-admin/09-products.js:783-788`):
+
+```js
+function _paMargin(price, cost) {
+  if (cost == null || cost === '') return null;
+  const p = Number(price), c = Number(cost);
+  if (!Number.isFinite(p) || p <= 0) return null;
+  if (!Number.isFinite(c) || c < 0) return null;
+  return { money: p - c, pct: ((p - c) / p) * 100 };
+}
+```
+
+`(price − cost) / price`, called from `_paMarginCell()` (`:1160-1173`) for the
+list and `pdRenderMargin()` (`:1129-1137`) for the single-product editor — the
+same function on the same stored `sell_price`/`unit_cost`, so list and editor
+cannot disagree. Spot-checked live against all three figures the task named:
+Zhoug `(42.0−7.17590289364749)/42.0 = 82.9%`, BioCurcumin+
+`(164.0−31.58)/164.0 = 80.7%`, Hazelnut-Chocolate Spread
+`(89.0−46.0493141625)/89.0 = 48.3%` — all reproduce exactly.
+
+## B.2 `recipe_cost_data.packaging` does reach it — for any product whose cost is recipe-owned
+
+Yes. `store_products.unit_cost` is not hand-typed for a recipe-linked product —
+it is written by `applyProductCosts()` (`lib/recipe-rollup.js:374-397`), which
+for every active product with `recipe_id IS NOT NULL` calls
+`computeRecipeCost(p.recipe_id, db)` and takes `.costPerServing`
+(`:385-386`), then `UPDATE store_products SET unit_cost = ?` (`:380`). Inside
+`computeRecipeCost` (`lib/recipe-cost.js:259-370`), packaging is read at line
+286 (`parseFloat(cd.packaging || 0)`) and folded **unconditionally** into the
+sale-path total at line 295: `batchCost = ingredientCost + labour +
+packagingTotal + overheadAmount`. The code's own comment at line 357 calls
+this the *"SALE path... Untouched by §29's material rule."*
+
+That is the same file finding 15 fixed — but finding 15 only stopped packaging
+from also entering `materialCostPerGram` (the figure a recipe hands to a
+*parent* recipe that consumes it as a material, gated by
+`MATERIAL_COST_COMPONENTS.packaging: false`, `:252-257`). It never touched
+`costPerServing`/`batchCost`, which is what `applyProductCosts` reads. So
+packaging still fully counts toward a product's displayed cost and margin —
+which is correct per §31 rule 1 (a product's cost is contents plus packaging)
+even though it was wrong per §29's addendum when the same number travelled
+into a *parent recipe*. Two different consumers of the same `batchCost`, one
+of which was supposed to exclude packaging and now does, one of which was
+always supposed to include it and always has.
+
+Live proof, Zhoug (`store_products.id=5`, `recipe_id=80`, `servings=46`,
+`packaging=1.12`, `labour=0`, `overhead_pct=0`): stored `unit_cost =
+7.17590289364749`. `packagingTotal = 1.12 × 46 = 51.52`; solving,
+`ingredientCost/46 = 6.0559`, `+1.12 = 7.1759` — the packaging term is
+directly present in the number the operator sees. Without it, Zhoug's margin
+would read 85.6% instead of the 82.9% actually shown.
+
+**Caveat:** this only holds while a recipe is linked (`recipe_id IS NOT
+NULL`) *and* the `production` feature is on
+(`recipeOwnsProductCost()`, `lib/recipe-rollup.js:326-332`; live:
+`storefront_config.features.production = true`). For a product with no
+recipe link, `unit_cost` is a manually-typed figure with no relationship to
+`recipe_cost_data` whatsoever — see B.3.
+
+## B.3 The "—" rows: 131 of 208, and 130 of those are "no recipe, no manual cost" — not a computation failure
+
+`_paMargin` returns `null` (rendered "—") when cost is `NULL`/absent, or when
+price is missing/`≤0`. A cost of exactly `0` is treated as valid (100%
+margin) — only `NULL` reads as unknown, which is the general shape §31 rule 9
+asks for at the product level and does not yet have.
+
+The screen's 208 rows are not 208 raw `store_products` rows — the API returns
+248 active rows (`WHERE COALESCE(is_active,1)=1`), and the client collapses
+variant siblings sharing a `variant_group_id` into one card
+(`_paUnits()`, `public/retail-admin/09-products.js:1260-1292`). Verified live:
+181 standalone rows + 27 variant families = 208, exactly matching the screen.
+
+Grouping by that same `COALESCE(variant_group_id, id)` key and testing whether
+any member of each unit has both cost and price:
+
+```sql
+WITH u AS (
+  SELECT COALESCE(variant_group_id,'p'||id) unit_key, id, sell_price, unit_cost
+    FROM store_products WHERE COALESCE(is_active,1)=1),
+per_member AS (
+  SELECT unit_key,
+    (unit_cost IS NOT NULL AND CAST(unit_cost AS REAL)>=0) has_cost,
+    (sell_price IS NOT NULL AND CAST(sell_price AS REAL)>0) has_price
+  FROM u),
+per_unit AS (
+  SELECT unit_key, MAX(has_cost) any_cost, MAX(has_price) any_price,
+         MAX(has_cost AND has_price) has_margin
+  FROM per_member GROUP BY unit_key)
+SELECT COUNT(*) total, SUM(has_margin) with_margin, SUM(1-has_margin) em_dash FROM per_unit;
+-- 208 | 77 | 131
+```
+
+**77 of 208 show a number, 131 show "—".** Of the 131: **130 are missing cost
+only** (price is fine), **0** are missing price only, **1**
+(`store_products.id=288`, "Quinoa salad dressing", unpublished) is missing
+both. And of the underlying 171 raw rows with `unit_cost IS NULL`, **all 171
+have `recipe_id IS NULL`** — zero are a recipe that failed to cost. The dash is
+overwhelmingly "nobody has linked a recipe or typed a cost yet," not a broken
+calculation — which matters directly for scoping a build-list migration: there
+is no backlog of silently-failing recipe links to debug, only a backlog of
+products nobody has costed at all yet.
+
+## B.4 §4 is not stale, it is simply wrong, and should be rewritten rather than qualified
+
+§4 states: *"NO COST COLUMN EXISTS on either product table... No product has
+a cost and margin cannot be computed at all."* Both clauses are false against
+the current schema, not describing some other still-true mechanism running
+alongside the live one. `store_products.unit_cost` is a real, populated,
+directly-PATCHable column (`routes/retail.js:20539-20557`), and per B.1-B.3,
+77 of 208 products on the live screen show a computed margin right now. §4 was
+presumably accurate before `unit_cost` and the recipe-rollup cascade existed
+on `store_products`; the code has moved and the doc has not. Suggested
+replacement text, for whoever next edits that doc (not done here — this
+appendix does not edit other documents):
+
+> `store_products.unit_cost` is a real, populated column. For a product with a
+> linked recipe (and Production on), it is written by the recipe-cost rollup
+> from that recipe's `costPerServing` — which includes ingredient cost,
+> labour, overhead, and packaging. For a product with no recipe link, it is a
+> manually-entered figure with no relationship to any recipe. Margin is
+> computed client-side from `sell_price` and `unit_cost`, and is live for 77
+> of 208 products today; the other 131 show "—", 130 of them because no
+> recipe is linked and no manual cost was ever entered.
+
+## B.5 Two product tables, and the one a build list must key off
+
+`products` (kitchen, `schema.sql:149-171`, 278 live rows) and `store_products`
+(retail catalogue, created `database.js:4076`, 325 live rows) are the two
+tables, confirmed by `.schema`. `store_products` is a **fork** of `products` —
+`database.js:4351-4372` labels the block *"Forks the live catalog into
+store_products… Ids are preserved so existing retail_* rows resolve
+unchanged."* Everything the Products screen shows — the 208-row list, `GET
+/api/retail-admin/products` (`routes/retail.js:21640`), `sell_price`,
+`unit_cost`, margin — reads `store_products` exclusively; `products` is never
+touched by this path.
+
+**Which one a build list must key off is not a style choice — it is decided
+by which id space the fork actually repointed.** `database.js:4372-4389`
+repointed every store-owned table (`retail_order_items`,
+`retail_product_options`, `retail_store_stock`, `retail_stock_ledger`, and
+five more) from `products(id)` to `store_products(id)`; kitchen-owned tables
+(`market_stock`, `sales_entries`, `waste_entries`, `restock_items`, etc.) were
+deliberately left pointing at `products(id)` (`:4353-4357`). `store_products`
+carries its own independently-linked `recipe_id`, and the fork's own comment
+warns the kitchen side's version is not trustworthy:
+*"THE KITCHEN `products.recipe_id` IS NOT USED AS A SIGNAL ANYWHERE HERE...
+kitchen product 23 '81% Hazel Chocolate Spread' points at recipe 46 'Pickle
+carrot（Do chua）'"* (`database.js:4276-4278`).
+
+**The standing hazard is not theoretical — it is already live and growing.**
+`products.id` currently tops out at 305; `store_products.id` at 361. 56
+`store_products` rows (ids 306-361) have `kitchen_product_id IS NULL` — they
+were created store-side after the fork and have no kitchen counterpart. The
+two `AUTOINCREMENT` sequences are independent, so the next row inserted into
+`products` will be assigned an id that **already means a specific, unrelated
+`store_products` row today** (id 306 = "81% Hazel Chocolate Spread" on the
+store side). `docs/tacet-waste-survey.md` §H1 documents this exact class of
+failure for `waste_entries.product_id`, which still points at kitchen
+`products`: *"Every row created on either side since the fork has an id that
+means something different on the other... writing that id into
+`waste_entries.product_id` either violates the FK or — worse, when the id
+happens to exist on both sides — silently attributes the loss to a different
+product."*
+
+**Verdict: a build list must key off `store_products.id`.** It is the id
+space every store-facing table already agrees on, it carries the price and
+cost the Margin % screen reads, and `products.id` is a separate, actively
+diverging space with a documented incident class for exactly this kind of
+cross-table reuse. No `bill_of_materials`/`build_list`-named table exists in
+the live schema today (checked `.tables`) — this would be new structure
+either way, so there is no migration cost to picking the correct table now.
+
+## B.6 Variants are separate `store_products` rows sharing a `variant_group_id` — no new identity needed per variant
+
+Not a size field, not a dedicated variant table: two live siblings, two rows.
+`variant_group_id` is shared across siblings and equals the `id` of whichever
+sibling is the "group owner"; `variant_label`/`variant_sort` hold the
+operator-set label ("Small"/"Big") and display order. Live:
+
+```
+268 | Maple Cinnamon Almond Butter | 2-430 | 240g | variant_group_id=268 | Big   | 89.0
+305 | Maple Cinnamon Almond Butter | 2-420 | 150g | variant_group_id=268 | Small | 57.0
+ 64 | Whole-Wheat Wraps — XL 10" (12pc) | 3-270 | 774g | variant_group_id=NULL | — | 44.0
+```
+
+Two rows for the two-size product, one row (`variant_group_id` NULL) for the
+single-variant product — exactly as expected. `_paUnits()`
+(`public/retail-admin/09-products.js:1260-1292`) collapses siblings for
+display: *"Variant siblings … are ONE product in different sizes, not
+separate products — collapse them into a single card."*
+
+**A build list needs no new per-variant identity — it already exists.** Each
+variant is already its own permanent `store_products.id` (268 and 305 are two
+distinct, stable rows), exactly the same identity price, stock
+(`retail_store_stock.product_id`), and the stock ledger already attach to.
+What does **not** exist is any table recording what a build list for a given
+`store_products.id` actually contains — that part is new construction either
+way (see B.12). `variant_group_id` itself carries no foreign-key constraint
+anywhere in `schema.sql`/`database.js` — it is a display grouping hint, not an
+identity relationship, so nothing about it stands in the way of one build
+list per row.
+
+## B.7 Every live consumer of `recipe_cost_data.packaging` / `packaging_type_id`
+
+Sixteen consumers found, extending finding 8's twelve with four it missed —
+one correction to finding 8 is noted below, marked in place rather than
+silently changed.
+
+| # | site | becomes |
+|---|---|---|
+| 1 | `lib/recipe-rollup.js:143` → `ingredients.cost_per_unit` | **Correction to finding 8's entry #1**: as of finding 15's fix (live on `main`), this path reads `materialCostPerGram`, which `MATERIAL_COST_COMPONENTS.packaging=false` now excludes. Packaging no longer travels into a material's `cost_per_unit`. Finding 8 predates the fix and is stale on this one line only. |
+| 2 | `lib/recipe-rollup.js:384` → `store_products.unit_cost` | The Margin % figure — see B.2. |
+| 3 | `database.js:4287-4321` boot migration | One-time cost backfill, already run, inert. |
+| 4 | `routes/recipes.js:110-230`, `GET /api/recipes/export` | Excel workbook, "Packaging Total" and "Suggested Sell Price" columns. **Correction to finding 8's entry #4**: it labelled this "kitchen list" — the plain `GET /api/recipes` list never touches `recipe_cost_data`; the packaging-bearing code is entirely inside `/export`. |
+| 5 | `routes/retail-recipes.js:147-154` | Tacet recipe grid batch/serving/gram cost. |
+| 6 | `routes/retail-recipes.js:200-238` | Tacet recipe detail, returns raw `costData` verbatim. |
+| 7 | `routes/retail.js:20736-20776`, recipe-link route | Boolean gate on a link-confirmation warning only, not displayed. |
+| 8 | `routes/waste.js:51-56` | Deliberately **excludes** packaging from the waste total (reused container). |
+| 9 | `public/app.html:6480-6620`, kitchen recipe view | "Total Batch Cost" with/without-packaging toggle. |
+| 10 | `public/app.html:7672-7862`, kitchen Cost Sheet | The only screen that writes `packaging_type_id` (finding 11). |
+| 11 | `public/app.html:7970-8038`, live cost-sheet repaint | Same fields as #10, live on keystroke. |
+| 12 | `public/retail-admin/19-recipes.js:686-757`, Tacet Cost & Pricing | `Packaging (batch)`, food-cost %, suggested price — no type picker (finding 11). |
+| 13 | `routes/recipes.js:455,545-546`, recipe duplicate | Copies `packaging`/`packaging_type_id` raw into the new row. Not in finding 8 (it copies rather than derives). No Tacet-side equivalent route exists. |
+| 14 | `routes/products.js:154-212`, kitchen product detail | **New finding — dead payload.** Still selects and ships the full `costData` row (packaging included) in the JSON response, but the only client reader, `public/app.html:9718-9730`, no longer reads it — its own comment says the cost display "was deleted rather than ported." Computed and sent on every fetch, consumed by nothing. |
+| 15 | `lib/recipe-cost-data-write.js:127-131` | Reads current `packaging_type_id` to implement finding 11's absent/cleared/value write rule. Not displayed. |
+| 16 | `scripts/restore_recipe_data.js:141-146` | One-off backup-restore script, not a recurring live path. |
+
+Unchanged from finding 8/13: `routes/ai.js:2114,2292` deliberately omit
+packaging from their own hand-rolled cost math (no comment explaining why,
+unlike `waste.js`); `item_kind='packaging'` classification code
+(`scripts/categorize_items.js`, `routes/retail-materials.js:126-141`) and
+`meituan_order_fields.js`'s channel packing fee are a different "packaging"
+entirely (finding 13).
+
+## B.8 No automatic path reaches a customer price — but two screens exist for a human to transcribe one
+
+`store_products.sell_price` (what the mini-app storefront reads,
+`miniapp/pages/product/product.js:360`) is written **only** by direct human
+PATCH (`routes/retail.js:20533`) — no route auto-fills it from
+`computeRecipeCost`'s output. `unit_cost`, which does include packaging, is a
+separate internal column that feeds the margin display and nothing else
+automatically.
+
+But both cost screens exist specifically to hand a human a
+packaging-inclusive number to type into the price field: the kitchen Cost
+Sheet's readonly `Suggested Sell Price` (`public/app.html:7793-7796`,
+`= costPerServing / (targetFoodCost/100)`, and `costPerServing` includes
+packaging) sits directly beside the editable `Sell Price/Serving` input, with
+no code copying one into the other; Tacet's Cost & Pricing tab
+(`public/retail-admin/19-recipes.js:757`) has the identical relationship. No
+data trail (audit log, timestamp correlation) exists in this repo to confirm
+an operator actually transcribes the suggested figure — that workflow step is
+inferred from the screens' evident purpose, not observed.
+
+## B.9 `target_food_cost` consumes packaging already folded into cost-per-serving — it has no packaging logic of its own
+
+Branch `claude/target-food-cost-edit-c0e667` exists but is **not merged into
+main** (`git merge-base --is-ancestor` fails); its diff touches only
+`public/retail-admin/19-recipes.js` and is a render-timing fix (the Cost &
+Pricing breakdown now paints on open, not only after the first keystroke) —
+it does not touch the target-food-cost formula or packaging's place in it.
+Irrelevant to live behavior either way.
+
+The live formula, one site, `lib/recipe-cost.js:320-323`:
+
+```js
+const targetFoodCost = parseFloat(cd.target_food_cost || 30);
+const suggestedSellPrice = costPerServing !== null && targetFoodCost > 0
+  ? costPerServing / (targetFoodCost / 100) : null;
+```
+
+`costPerServing` is `batchCost / servings`, and `batchCost` is the
+packaging-inclusive sale-path total finding 15 left untouched. So packaging
+sits inside `costPerServing` **before** `target_food_cost` runs — the formula
+takes an already-packaging-inclusive number and divides it by a percentage.
+It has no separate packaging-handling branch of its own to get right or wrong.
+
+## B.10 Label/sticker cost exists as real purchasing data, and reaches zero recipes, zero products, and zero customers
+
+17 `item_kind='packaging'` `ingredients` rows match "label"/"sticker"/标签/贴纸
+by name (e.g. `ROOTS Label ROOTS`, `ROOTS Plastic Jar Stickers`, ten distinct
+`ROOTS *Stickers` SKUs), each with a real `buy_price`. `packaging_types` — the
+table `recipe_cost_data.packaging_type_id` actually points at — has **zero**
+label/sticker rows.
+
+None of the 17 have ever appeared in a `recipe_ingredients` row
+(`SELECT ... WHERE ingredient_id IN (...)` → 0 rows), and this is not
+incidental: both front ends structurally exclude `item_kind='packaging'` from
+the recipe-line picker (`routes/retail-materials.js:139-141`,
+`public/app.html:7300`), with `retail-materials.js`'s own comment explaining
+why — adding a jar through both `packaging_types` and an
+`item_kind='packaging'` line "would give a jar two uncoordinated cost paths
+into the same recipe, one of them silent." That's the right call for the jar,
+and an accidental side effect for the label: it walls the label out of
+costing entirely, with no second path standing in for it the way
+`packaging_types` stands in for the jar. All 17 rows also carry
+`cost_per_unit = 0.0` regardless — `pack_contents_qty` is blank against
+`pack_contents_unit='kg'`, which `lib/ingredient-cost.js:151` reads as
+`no_pack_contents` and refuses to derive from, the same gap finding 5
+describes for eight other rows, except these 17 aren't even logged in
+`ingredient_cost_skips`.
+
+**Verdict:** label/sticker cost is real, priced, purchased data sitting in a
+dead end. Every jar-serving recipe with a printed label on it — which, going
+by the naming, is most of the retail line — is costed for the jar and never
+for what's stuck on it. This is the inverse of finding 12's jar problem (four
+places pricing the same thing, none reconciled): here there is exactly one
+place, and it's disconnected from everything.
+
+## B.11 `packaging_types` and `ingredients` (item_kind='packaging') are two lists of the same things, kept in sync by nobody, and `ingredients` is the correct target
+
+Schema confirmed: `packaging_types` (44 live rows) has no foreign key in
+either direction — `id, name, name_cn, cost, created_at, image_data`, nothing
+referencing it, it referencing nothing. `ingredients` (146 live rows with
+`item_kind='packaging'`) has exactly one FK, `source_recipe_id → recipes(id)`
+(for made materials, §29) — unrelated to packaging_types.
+
+**Overlap, re-verified against today's live data, not just the 2026-08-26
+figures.** A strict exact-name join finds 18 pairs; a documented manual fuzzy
+pass (discounting plurals, parenthetical suffixes, one typo) extends that to
+a confident 28, generously up to 36 of the 44 `packaging_types` rows. The 8
+disagreeing pairs finding 4/12 recorded on 2026-08-26 are **unchanged to the
+fraction of a cent** a day later (−7.41% to +6.55% spread), and the wider pass
+found 2 more disagreeing pairs finding 4/12 didn't catch (+10.5%, +2.81%) —
+the drift is understated, not overstated, by the original count. (The
+original "21 matched pairs" figure could not be exactly reproduced by any
+single normalization rule tried here — recorded as an open question below,
+not as an error, since the underlying finding — that pairs disagree — holds
+either way.) On the other side, **at least 110 of the 146 `ingredients`
+packaging rows (≈75%) have no `packaging_types` counterpart at all** —
+`packaging_types` isn't merely drifting from what it overlaps, it was never a
+complete list of what it claims to cover.
+
+**No code anywhere reads both tables.** Exhaustive grep of every
+`packaging_types` reference: plain CRUD (`routes/lookups.js:77-105`), a
+one-time seed (`database.js:902-907`), the Factory Reset wipe list (finding
+14), the two exclusion comments already cited in B.10, and the kitchen app's
+picker, which copies `.cost` into a field once and never looks at the table
+again (`public/app.html:2476-2590,7745-7758,8060-8063`). None of these
+functions mention `ingredients` in the same breath. There is no reconciler,
+no scheduled job, no side-by-side UI.
+
+**`ingredients` has what `packaging_types` doesn't: live purchase-order
+write-back.** `routes/purchases.js:171` updates `buy_price`/`cost_per_unit`
+on every PO transition to Ordered/Delivered and fires a ≥5% price-change
+alert (`:177-180`). `packaging_types` has no PO integration at all — its only
+writers are manual admin CRUD and the one-time 2026-08-11 bulk seed (finding
+4). Confirms §28's claim that materials already has purchase-cost write-back.
+
+**Verdict: yes, two lists of the same physical things, and `ingredients` is
+the correct target per §31 rule 4** ("ONE RECORD PER PHYSICAL THING" — the
+table already bought from a supplier and priced on a purchase order).
+`packaging_types` is the dead-end duplicate: no FK, no PO link, hand-typed in
+a single 1h43m session, in the Factory Reset wipe list, read by exactly one
+screen that copies its number once. One real caveat before `ingredients` can
+serve as sole source of truth: 23 of its own packaging rows share a name with
+2-6 siblings and no distinguishing text (e.g. six rows all named "Vacuum
+bag," prices 0.13-0.434) — an internal ambiguity that predates and is
+independent of the packaging_types question, and would need its own cleanup
+pass.
+
+## B.12 `recipe_ingredients` is a near-exact structural template for a product build list; nothing else in the schema is
+
+`recipe_ingredients` (846 live rows / 137 recipes / 636 distinct materials):
+
+```sql
+CREATE TABLE recipe_ingredients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, recipe_id INTEGER NOT NULL,
+  ingredient_id INTEGER, name_en TEXT NOT NULL, name_cn TEXT, sku TEXT,
+  qty REAL NOT NULL, unit TEXT DEFAULT 'g', notes TEXT,
+  sort_order INTEGER DEFAULT 0, substitutes TEXT,
+  FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id));
+```
+
+Every column is exactly what "1 × box + 250g material + 1 label" needs —
+`qty`, `unit`, a material FK with a name/sku snapshot so a line survives the
+material being deleted, `sort_order`, `substitutes` — with zero
+recipe-specific columns baked in (no `servings`/`batch_size`; those live on
+the parent `recipes` row, not this table). **A `product_build_items` table
+with `product_id` in place of `recipe_id` and everything else copied is a
+structural clone, not an adaptation.** This mirrors §29's own rule that a
+recipe line points at exactly one target — a build-list line should carry the
+identical single-target constraint, for the same reason §29 gives: a
+line that could point at either a recipe or a product is the two-target
+branching pattern §29 was written to reject, and it would infect every
+reader of the table.
+
+Note in passing: `products.recipe_id` (only 4 of 278 live kitchen rows use
+it) is a *different*, pre-existing mechanism — one product, one whole recipe,
+1:1 — not a build list. A build list would sit alongside it, not replace it:
+a product could have both a linked recipe (for its cooked content) and its
+own build-list rows (for the box/label the recipe's own packaging exclusion,
+§29's second addendum, leaves for the product to carry).
+
+Two other composition-shaped tables were checked and ruled out:
+`production_batches` (7 rows) is a **run log** — one row per cooking session,
+recording multiples of a recipe made, by whom, when — with no
+composition/BOM shape at all (it references one whole recipe, not a set of
+components); explicitly out of scope per the task brief, and confirmed
+structurally unrelated. `meituan_bundle_components` (36 rows,
+`bundle_id + product_id + qty`) is the only other real parent/child table in
+the schema, but the wrong rail and the wrong granularity — whole
+`store_products` for channel stock-push math, no cost column, no unit
+conversion. No table named or containing "component," "bom," "assembly," or
+"build_item" exists beyond it.
+
+## B.13 `lib/ingredient-cost.js` needs no changes; the line-rollup layer above it does
+
+`lib/ingredient-cost.js` is explicitly documented as pure and DB-free ("NO
+WRITES, NO DB. Pure functions over one ingredient row," line 35). Its core
+export, `deriveCostPerUnit(ing, packPrice)`, takes only a material's own
+stocking-unit fields (`unit`, `buy_unit`, `buy_pack_size`,
+`pack_contents_qty`, `pack_contents_unit`) plus a price — nothing about
+`recipe_id`, `servings`, or `batch_size` appears anywhere in the file. The
+word "recipe" in its constant names (`DIVISIBLE_RECIPE_UNITS`) is legacy
+labelling for "the unit this material is measured out in," not a structural
+dependency. Real caller, `routes/purchases.js:165-171`, confirms it operates
+on a bare `ingredients` row with no recipe context at all — it's called when
+a PO price arrives, to write `ingredients.cost_per_unit`.
+
+**It can be used as-is, unmodified, by a product build list** — a build-list
+line for "1 × 300ml plastic box" or "250g of a material" would call the same
+`deriveCostPerUnit`/`gramsPerBuyUnit` functions a recipe line uses today, with
+no adaptation.
+
+**What is not reusable as-is: the qty×cost rollup one level up.**
+`buildLines()` (`lib/recipe-cost.js:131-169`) — the function that actually
+turns a line's `qty`/`unit`/`master_cost` into a cost contribution — is
+private (not in the file's exported `API` object, `:374`) but is itself
+recipe-agnostic in its actual signature (an array of
+`{ingredient_id, qty, unit, master_cost, ...}` objects, no `recipe_id`
+inside it); it would need to be exported or its ~35 lines duplicated.
+`computeRecipeCost()` itself, by contrast, is genuinely bound to the
+`recipes`/`recipe_ingredients`/`recipe_cost_data` schema (loads via
+recipe-keyed SQL) and could not serve a product build list without a new,
+parallel `computeProductBuildCost()`-style wrapper — not a shared call, a
+sibling.
+
+---
+
+**Open questions this survey could not answer:**
+
+- Whether the "group owner = row where `id == variant_group_id`" invariant
+  (B.6) holds for all 27 live variant families or only the four spot-checked
+  — could a manual DB edit already violate it?
+- Whether `products.variant_group_id` (the kitchen table's own copy of the
+  same column) is read by any kitchen-side code, or is dead weight there.
+- What fraction of a product's true packaging cost the missing label/sticker
+  (B.10) represents — blocked by the same `pack_contents_qty` gap that
+  prevents deriving those 17 rows' `cost_per_unit` at all.
+- Whether operators actually transcribe the Suggested Sell Price into
+  `sell_price` today, and how often the two are left to disagree — no audit
+  trail correlates a cost-sheet save with a later price save.
+- What exact normalization the 2026-08-26 finding used to reach "21 matched
+  pairs" between `packaging_types` and `ingredients` (B.11) — not reproduced
+  by strict equality (18) or the fuzzy pass tried here (28-36).
+- Whether the 23-row internal name collision inside `ingredients`
+  (item_kind='packaging') (B.11) needs to be cleaned up before a build list
+  can point at that table, or can be resolved as part of the same migration
+  pass.
+- Whether a product build list's cost roll-up should export and reuse
+  `buildLines()` (B.13) as-is, or duplicate its ~35 lines into a dedicated
+  product-side function — not decided here, a real implementation choice for
+  whoever builds it.
