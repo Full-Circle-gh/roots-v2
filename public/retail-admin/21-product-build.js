@@ -115,12 +115,17 @@
   // this never writes anything, it only paints. Returns null when any line
   // is unpriced, which is the blocked state the rail must show honestly.
   function blTotals() {
-    const out = { materials: 0, packaging: 0, total: 0, blocked: false, blockedNames: [] };
+    const out = { materials: 0, packaging: 0, total: 0, blocked: false, blockedNames: [], blockedWithBuyPrice: 0 };
     for (const l of (_blLines || [])) {
       const c = blLineCost(l);
       if (c === null) {
         out.blocked = true;
         out.blockedNames.push(l.name_en || l.name_cn || '');
+        // A blocked line that HAS a purchase price is a different errand from
+        // one nobody has priced at all: the first needs its unit cost derived,
+        // the second needs somebody to find out what it costs. The note says
+        // which, so the operator knows where to go.
+        if (Number(l.material_buy_price) > 0) out.blockedWithBuyPrice++;
         continue;
       }
       out[blGroupOf(l) === 'packaging' ? 'packaging' : 'materials'] += c;
@@ -221,6 +226,17 @@
     if (free) per = cuT('free', '免费');
     else if (Number(l.material_cost_per_unit) > 0)
       per = money(l.material_cost_per_unit) + '/' + escapeHtml(l.material_unit || l.unit || '');
+    else if (Number(l.material_buy_price) > 0) {
+      // A REAL PURCHASE PRICE WITH NO DERIVED UNIT COST. Costing still blocks
+      // — cost_per_unit is the only figure this list may use — but "no cost"
+      // is the wrong thing to say about a material somebody has bought and
+      // priced, and it sent Ash to the Materials screen to check whether the
+      // build list was broken. Naming the price says which of the two states
+      // this is, and where the fix is. CN PENDING: no sourced Chinese for
+      // this sentence, so English on both halves.
+      const m = 'no unit cost — ' + money(l.material_buy_price) + ' recorded on the material';
+      per = cuT(m, m);
+    }
     else per = cuT('no cost', '无成本');
 
     const sub = escapeHtml(l.name_cn || '') + (l.name_cn ? ' · ' : '') + per
@@ -321,16 +337,44 @@
     } else if (t.blocked) {
       const names = t.blockedNames.filter(Boolean);
       const first = names[0] || '';
-      const msg = names.length > 1
-        ? names.length + ' lines have no cost, starting with “' + first + '”. Set their costs and the margin appears.'
-        : '“' + first + '” has no cost. One unpriced line and the total is a guess, so it is not shown.';
+      // "no unit cost", not "no cost" — see the same correction on the line
+      // itself. Every one of these had a purchase price on the Materials
+      // screen, so calling it costless was what made the screen look broken.
+      let msg = names.length > 1
+        ? names.length + ' lines have no unit cost, starting with “' + first + '”.'
+        : '“' + first + '” has no unit cost.';
+      msg += t.blockedWithBuyPrice > 0
+        ? ' It was bought and priced, but the per-unit cost was never worked out — open the material and set it.'
+        : ' One unpriced line and the total is a guess, so it is not shown.';
       note = cuT(msg, msg);
     } else if (!(price > 0)) {
       note = cuT('Set a price to see the margin.', 'Set a price to see the margin.');
     }
     const noteHtml = note ? '<div class="bl-note">' + escapeHtml(note) + '</div>' : '';
 
-    host.innerHTML = rows + noteHtml;
+    // ── PACKAGING BUT NO CONTENTS ────────────────────────────────────────
+    // A list that prices cleanly can still be obviously unfinished, and this
+    // is the shape that hides it: box + label + sticker and nothing inside.
+    // The arithmetic is right, so nothing else on this screen objects — the
+    // cost simply comes out tiny and the margin enormous. Live example the
+    // day this shipped: Hazelnut-Chocolate Spread costed ¥1.23 against an
+    // ¥89 price and reported 98.6%, because its recipe was never
+    // materialised and so had no material to add as contents.
+    //
+    // This WARNS and does not block. The figure is honest about what has
+    // been recorded, and refusing to show it would be inventing a rule
+    // nobody has approved — a product genuinely made only of packaging is
+    // absurd, but "absurd" is a judgement about Roots, not a fact about
+    // every tenant. Whether it should harden into a block is Ash's call.
+    let warnHtml = '';
+    if (_blLines && _blLines.length && !_blLines.some(l => blGroupOf(l) !== 'packaging')) {
+      // CN PENDING — no sourced Chinese; English on both halves.
+      const w = 'Every line here is packaging. Nothing is recorded as the contents, '
+        + 'so this cost covers the container and not what goes in it.';
+      warnHtml = '<div class="bl-note is-warn">' + escapeHtml(cuT(w, w)) + '</div>';
+    }
+
+    host.innerHTML = rows + noteHtml + warnHtml;
   }
 
   function blRailRow(k, v, raw) {
@@ -391,6 +435,7 @@
     _blMarginBefore = null;
     blRender();
     blMarkDirty();
+    blRefreshCostSource();
   };
 
   // ── The picker ──────────────────────────────────────────────────────
@@ -482,6 +527,7 @@
       notes: null,
       material_item_kind: m.item_kind || 'food',
       material_cost_per_unit: m.cost_per_unit,
+      material_buy_price: m.buy_price,
       material_unit: m.unit,
       material_free_by_design: m.free_by_design,
       material_is_active: 1,
@@ -493,6 +539,7 @@
     blRenderPick(0);
     blRender();
     blMarkDirty();
+    blRefreshCostSource();
     // Put the caret in the quantity of the line just added — it is the one
     // thing still missing, and hunting for it is the whole friction.
     setTimeout(() => {
@@ -549,6 +596,7 @@
       // preview of them. They should agree; if they ever do not, the
       // operator sees the stored truth rather than a hopeful local sum.
       await blLoad(_blProductId);
+      blRefreshCostSource();
       // The product row's cost/margin moved — repaint the list behind the
       // editor so it does not show a stale figure.
       if (typeof paLoad === 'function') { try { paLoad(); } catch (e) { /* list not open */ } }
@@ -574,6 +622,35 @@
     if (b) b.classList.toggle('is-dirty', !!_blDirty);
     const err = document.getElementById('pd-bl-err');
     if (err && _blDirty) { err.style.display = 'none'; err.innerHTML = ''; }
+  }
+
+  // WHETHER A BUILD LIST EXISTS IS ITSELF A COST-SOURCE FACT, so the manual
+  // cost field has to be re-judged every time that changes — not only when a
+  // product is opened.
+  //
+  // Without this the field kept whatever it decided at open. Add the first
+  // line to a recipe-linked product and the rail said "Cost —" while the
+  // field below it still said "46.05 · From recipe", on the same screen, at
+  // the same moment — the two-surfaces-disagreeing failure this whole design
+  // exists to remove, reproduced inside the one pane meant to end it.
+  // Reported live on Hazelnut-Chocolate Spread, 2026-08-27.
+  //
+  // pdApplyCostSource() reads blHasLines() (09-products.js), so calling it is
+  // enough — it re-derives readOnly and rewrites the note itself.
+  function blRefreshCostSource() {
+    if (typeof pdApplyCostSource !== 'function') return;
+    // The row the editor is showing, resolved the way 09-products.js resolves
+    // it everywhere else (:2810, :3093, :3148) — from PA_PRODUCTS by the
+    // selected id. There is no PD_CURRENT; passing undefined instead would
+    // make the recipe half of pdApplyCostSource read a product that is not
+    // there and quietly drop the "From recipe" line for products that still
+    // need it.
+    let p = null;
+    try {
+      p = (typeof PA_PRODUCTS !== 'undefined' && PA_PRODUCTS ? PA_PRODUCTS : [])
+        .find(x => x && x.id === _blProductId) || null;
+    } catch (e) { p = null; }
+    try { pdApplyCostSource(p); } catch (e) { /* editor not open */ }
   }
 
   // The price input lives in this pane now, so its keystrokes move the

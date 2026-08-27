@@ -13185,3 +13185,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     background: var(--td-brick-tint); color: var(--td-brick-ink);
     font-size: 13px; line-height: 1.6;
   }
+  /* A build list that prices cleanly but is obviously unfinished — packaging
+     with nothing recorded as contents. Amber: unfinished, not broken. */
+  #pd-editor .bl-note.is-warn { color: var(--td-amber-ink); }

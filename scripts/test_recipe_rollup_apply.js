@@ -353,15 +353,60 @@ function check(label, actual, expected, detail) {
   db.close();
 }
 
-// ── 12 · a blocked build list leaves the stored figure untouched ──────────
+// ── 12 · a blocked build list CLEARS the stored figure ────────────────────
+// REVERSED 2026-08-27, deliberately. This case previously asserted that a
+// blocked list leaves the prior figure alone, mirroring the recipe writer's
+// "blocked writes nothing, never 0 or null". That was wrong HERE and the
+// difference is ownership, not arithmetic: applyProductCosts() now skips any
+// product with a build list, so whatever sits in unit_cost came from a source
+// that has been retired for that product. Left alone it FREEZES — the recipe
+// writer skips it, this writer refuses it, and nothing ever corrects it.
+//
+// Found live: product 23 (Hazelnut-Chocolate Spread) held ¥46.05 from recipe
+// 64 while its build list carried packaging only and one unpriced line, and
+// the Products list went on reporting a 48.3% margin off the orphaned figure.
+// §31 rule 9 — unknown is not zero, and unknown must be VISIBLE.
 {
   const db = seed(makeDb(), { recipes: [] });
-  seedProduct(db, { id: 201, unit_cost: 12.5 }); // some prior figure, from a manual entry
+  seedProduct(db, { id: 201, unit_cost: 12.5 }); // a figure from the retired source
   seedBuildLine(db, { product_id: 201, ingredient_id: 999, qty: 1, unit: 'pcs' }); // no such material
   const result = applyRollup(db, { source: 'test-build-line-blocked' });
   check('blocked build list: buildProductsBlocked counts it', result.buildProductsBlocked, 1);
   check('blocked build list: buildProductsWritten does not', result.buildProductsWritten, 0);
-  check('blocked build list: the prior figure is untouched, never zeroed or nulled', productRow(db, 201).unit_cost, 12.5);
+  check('blocked build list: the orphaned figure is CLEARED, not frozen', productRow(db, 201).unit_cost, null);
+  check('blocked build list: the clear is reported', result.buildProductsCleared, 1);
+  db.close();
+}
+
+// ── 12b · clearing is idempotent, and does not churn an already-null row ──
+// The guard matters because applyRollup fires on every material price change:
+// a blocked product must not rewrite (and re-stamp updated_at on) a row that
+// is already null, every single pass, forever.
+{
+  const db = seed(makeDb(), { recipes: [] });
+  seedProduct(db, { id: 202, unit_cost: null });
+  seedBuildLine(db, { product_id: 202, ingredient_id: 999, qty: 1, unit: 'pcs' });
+  const result = applyRollup(db, { source: 'test-build-line-blocked-already-null' });
+  check('already-null blocked product: still counted blocked', result.buildProductsBlocked, 1);
+  check('already-null blocked product: nothing cleared, no needless write', result.buildProductsCleared, 0);
+  check('already-null blocked product: stays null', productRow(db, 202).unit_cost, null);
+  db.close();
+}
+
+// ── 12c · a list that UNBLOCKS writes the real figure over the cleared one ─
+// The reason clearing is safe: the number was never data, it was derived, and
+// it comes straight back the moment the blocking line can be priced.
+{
+  const db = seed(makeDb(), { recipes: [], materials: [[50, 0.10, null]] });
+  seedProduct(db, { id: 203, unit_cost: 99.0 });
+  seedBuildLine(db, { product_id: 203, ingredient_id: 999, qty: 1, unit: 'pcs' }); // blocks
+  applyRollup(db, { source: 'test-unblock-step1' });
+  check('unblock: cleared while blocked', productRow(db, 203).unit_cost, null);
+  // Point the line at a real, priced material — the operator setting the cost.
+  db.prepare('UPDATE product_build_lines SET ingredient_id = 50, qty = 250, unit = ? WHERE product_id = 203').run('g');
+  const r2 = applyRollup(db, { source: 'test-unblock-step2' });
+  check('unblock: the real figure is written', productRow(db, 203).unit_cost, 25);
+  check('unblock: reported as written, not cleared', r2.buildProductsWritten, 1);
   db.close();
 }
 
