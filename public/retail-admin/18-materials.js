@@ -367,6 +367,35 @@
 
   window.matDirty = function () { _dirty = true; };
 
+  // Finance-category suggestions render as our own menu, anchored to the
+  // input via CSS (.mat-fincat-wrap is position:relative). A native
+  // <input list>/<datalist> popup is drawn by the OS combobox widget, which
+  // some embedding webviews (e.g. chat-app browser panes) position at the
+  // wrong screen coordinates — it showed up pinned to the far edge of the
+  // window instead of under the field.
+  window.matFinCatFilter = function (v) {
+    const menu = document.getElementById('mat-fincat-menu');
+    if (!menu) return;
+    const q = String(v || '').trim().toLowerCase();
+    const matches = _finCats.filter(c => !q || c.toLowerCase().includes(q)).slice(0, 30);
+    if (!matches.length) { menu.hidden = true; menu.innerHTML = ''; return; }
+    menu.innerHTML = matches.map(c =>
+      `<div class="mat-fincat-opt" onmousedown="event.preventDefault();matFinCatPick(${JSON.stringify(c)})">${esc(c)}</div>`).join('');
+    menu.hidden = false;
+  };
+  window.matFinCatPick = function (v) {
+    const el = document.getElementById('mat-f-accounting_category');
+    if (el) el.value = v;
+    matDirty();
+    const menu = document.getElementById('mat-fincat-menu');
+    if (menu) menu.hidden = true;
+  };
+  window.matFinCatBlur = function () {
+    // Deferred so a menu option's mousedown (which preventDefault()s the
+    // blur-causing focus loss) still has a chance to run its click first.
+    setTimeout(() => { const menu = document.getElementById('mat-fincat-menu'); if (menu) menu.hidden = true; }, 150);
+  };
+
   function paintRecord() {
     const host = recRoot();
     if (!host || !_rec) return;
@@ -402,8 +431,12 @@
               ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
                        T('Kept forever, even after archiving — so old orders keep pointing at the right thing.', '归档后仍永久保留 — 以免历史订单指向错误。'))}
               ${field(T('Finance category', '财务分类'),
-                       input('accounting_category', m.accounting_category, 'maxlength="80" list="mat-fincat-opts"')
-                       + `<datalist id="mat-fincat-opts">${_finCats.map(c => `<option value="${esc(c)}">`).join('')}</datalist>`)}
+                       `<div class="mat-fincat-wrap">`
+                       + input('accounting_category', m.accounting_category,
+                               'maxlength="80" autocomplete="off" onfocus="matFinCatFilter(this.value)" onblur="matFinCatBlur()"',
+                               'matFinCatFilter(this.value)')
+                       + `<div class="mat-fincat-menu" id="mat-fincat-menu" hidden></div>`
+                       + `</div>`)}
             </div>
           </div>
 

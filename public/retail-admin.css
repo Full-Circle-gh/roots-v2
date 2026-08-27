@@ -12309,6 +12309,17 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
   #tab-materials-record .mat-freebox { margin-top: 16px; }
 
+  #tab-materials-record .mat-fincat-wrap { position: relative; }
+  #tab-materials-record .mat-fincat-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+    max-height: 220px; overflow-y: auto; background: var(--td-surface, #fff);
+    border: 1px solid var(--td-border); border-radius: 8px;
+    box-shadow: 0 8px 22px rgba(18,22,26,.12); padding: 4px; }
+  #tab-materials-record .mat-fincat-opt {
+    padding: 7px 10px; border-radius: 6px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); cursor: pointer; }
+  #tab-materials-record .mat-fincat-opt:hover { background: var(--td-raised); }
+
   /* The derived cost, and — when it cannot be derived — the reason why. A blank
      here would read as "zero", which is the one thing it never means. */
   #tab-materials-record .mat-costline { margin-top: 16px; padding-top: 14px;
