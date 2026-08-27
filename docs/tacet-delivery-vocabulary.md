@@ -134,7 +134,7 @@ The nine `tracking_status` codes and seven `tracking_scenario` entries in `lib/t
 
 Rule 4 says never compose new Chinese and that additions require an amendment to
 this document. This section is that amendment, opened rather than closed: the
-five strings below are running English-on-both-sides in the product right now,
+six strings below are running English-on-both-sides in the product right now,
 because composing their Chinese is exactly what Rule 4 forbids and no existing
 pair covers them.
 
