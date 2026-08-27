@@ -104,6 +104,48 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
   });
 });
 
+// ── The build-list material picker ───────────────────────────────────────
+//
+// Its OWN endpoint rather than a flag on /api/retail-admin/materials, because
+// what it needs is a different ORDER, and ordering is the one thing a shared
+// list route cannot be talked into changing for one caller without changing
+// it for every caller.
+//
+// WHY NOT JUST ALPHABETICAL, WHICH IS WHAT THE SHARED ROUTE GIVES: a build
+// list is mostly packaging, the packaging is the same dozen jars and labels
+// over and over, and there are 630 materials to type past. Ash asked for
+// either a packaging-only picker or "the most popular one on top". Popularity
+// is the better of the two and it is why: a packaging-only mode needs the
+// operator to declare which kind they are adding BEFORE they search, which is
+// a mode, and modes are what §31's one-mechanism rule keeps out — a build line
+// is a build line. Ranking by what this business actually builds with gets the
+// same jars to the top without asking anybody anything, and it keeps a food
+// material one keystroke away instead of behind a toggle.
+//
+// The rank is USE COUNT ACROSS EVERY BUILD LIST — the real signal, not a
+// guess. A material nobody has built with yet sorts by name, so a first-time
+// list is exactly as usable as it is today and gets better as it is used.
+router.get('/api/retail-admin/product-build/materials', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  const q = String((req.query && req.query.search) || '').trim();
+  if (!q) return res.json({ success: true, data: [], matched: 0 });
+
+  const like = `%${q}%`;
+  const rows = db.prepare(`
+    SELECT i.id, i.name_en, i.name_cn, i.sku, i.unit, i.cost_per_unit, i.buy_price,
+           i.free_by_design, i.item_kind,
+           (SELECT COUNT(*) FROM product_build_lines pbl WHERE pbl.ingredient_id = i.id) AS use_count
+      FROM ingredients i
+     WHERE COALESCE(i.is_active, 1) = 1
+       AND (i.name_en LIKE ? OR i.name_cn LIKE ? OR i.sku LIKE ?)
+     ORDER BY use_count DESC, i.name_en COLLATE NOCASE
+  `).all(like, like, like);
+
+  // The screen shows 8. The count of what MATCHED is sent whole, so the hint
+  // line can say "8 of 34" honestly rather than implying 34 is all there is.
+  res.json({ success: true, data: rows.slice(0, 8), matched: rows.length });
+});
+
 // Save — delete-all + reinsert, mirroring recipe_ingredients' own save
 // pattern (routes/recipes.js, routes/retail-recipes.js). Simpler than
 // diffing an existing list against a submitted one, and it is the
