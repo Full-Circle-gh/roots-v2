@@ -199,6 +199,62 @@ function check(label, actual, expected, detail) {
   db.close();
 }
 
+
+// ── A LIST WITH NO CONTENTS PUBLISHES NO COST ────────────────────────────
+// Decided 2026-08-27 after warning first. The arithmetic over a jar + label
+// with nothing inside is RIGHT, which is what made it dangerous: Hazelnut
+// costed ¥1.23 against ¥89 and reported 98.6%, and nothing objected.
+{
+  const db = makeDb();
+  seedMaterial(db, { id: 1, name_en: 'Jar',   unit: 'pcs', cpu: 1.12, item_kind: 'packaging' });
+  seedMaterial(db, { id: 2, name_en: 'Label', unit: 'pcs', cpu: 0.28, item_kind: 'packaging' });
+  seedLine(db, { product_id: 90, ingredient_id: 1, qty: 1, unit: 'pcs' });
+  seedLine(db, { product_id: 90, ingredient_id: 2, qty: 1, unit: 'pcs' });
+  const r = computeProductBuildCost(90, db);
+  check('packaging-only: the list exists', r.hasBuildList, true);
+  check('packaging-only: NO cost is published', r.unitCost, null);
+  check('packaging-only: and the reason is named, not lumped in', r.packagingOnly, true);
+  check('packaging-only: no line is blamed — nothing is unpriced', r.zeroCostLines, 0);
+  db.close();
+}
+
+// One contents line is enough to unblock — the same list plus what goes in it.
+{
+  const db = makeDb();
+  seedMaterial(db, { id: 1, name_en: 'Jar',    unit: 'pcs', cpu: 1.12, item_kind: 'packaging' });
+  seedMaterial(db, { id: 3, name_en: 'Spread', unit: 'g',   cpu: 0.20, item_kind: 'food' });
+  seedLine(db, { product_id: 91, ingredient_id: 1, qty: 1,   unit: 'pcs' });
+  seedLine(db, { product_id: 91, ingredient_id: 3, qty: 100, unit: 'g' });
+  const r = computeProductBuildCost(91, db);
+  check('with contents: cost is published', r.unitCost, 21.12);
+  check('with contents: packagingOnly is false', r.packagingOnly, false);
+  db.close();
+}
+
+// A jar SOLD as merchandise is retail stock, not packaging — and must still
+// cost. This is why the test is on KIND and not on "did a food line appear":
+// the rule nudges toward correct modelling instead of making a legitimate
+// product permanently uncostable.
+{
+  const db = makeDb();
+  seedMaterial(db, { id: 4, name_en: 'Gift Jar (resold)', unit: 'pcs', cpu: 3.5, item_kind: 'retail' });
+  seedLine(db, { product_id: 92, ingredient_id: 4, qty: 1, unit: 'pcs' });
+  const r = computeProductBuildCost(92, db);
+  check('a retail-kind line counts as contents', r.packagingOnly, false);
+  check('and the product costs normally', r.unitCost, 3.5);
+  db.close();
+}
+
+// An empty list is still "never built", NOT "packaging-only" — the two are
+// different facts and the screen says different things about them.
+{
+  const db = makeDb();
+  const r = computeProductBuildCost(93, db);
+  check('empty list: hasBuildList false', r.hasBuildList, false);
+  check('empty list: not reported as packaging-only', !!r.packagingOnly, false);
+  db.close();
+}
+
 console.log();
 if (failures) { console.log(`${failures} case(s) behaved wrongly.`); process.exit(1); }
 console.log('All product build cost cases behaved as specified.');
