@@ -568,6 +568,7 @@
 
         <div class="pu2-wizfoot">
           <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
+          ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
           <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
           <button class="pu2-btn primary" onclick="puWizNext(3)">${esc(T('Review order', '确认订单'))}</button>
@@ -834,6 +835,7 @@
         </div>`}
         <div class="pu2-wizfoot">
           <button class="pu2-btn ghost" onclick="puWizStep(2)">${esc(T('Back', '上一步'))}</button>
+          ${_edit.id ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puDeleteDraft()">${esc(T('Delete draft', '删除草稿'))}</button>` : ''}
           <span class="spacer"></span>
           <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
           <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puPlace()" ${empty ? 'disabled' : ''}>${esc(T('Place order', '确认下单'))}</button>
@@ -874,6 +876,20 @@
       const id = await saveWiz(false);
       if (id == null) return;
       toast(T('Saved as draft ✓', '已存为草稿 ✓'), 'ok');
+      await loadPOs(); puBackOrders();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puDeleteDraft = async function () {
+    if (!_edit.id) return;
+    if (!(await askConfirm({
+      title: T('Delete this draft order?', '删除此草稿采购单？'),
+      body: T('It was never placed, so nothing to unwind — this just removes it.', '该订单从未下单，删除不会影响任何账目。'),
+      confirmLabel: T('Delete draft', '删除草稿'),
+      danger: true,
+    }))) return;
+    try {
+      await api('/api/retail-admin/purchases/' + _edit.id, { method: 'DELETE' });
+      toast(T('Draft deleted ✓', '草稿已删除 ✓'), 'ok');
       await loadPOs(); puBackOrders();
     } catch (e) { toast(e.message, 'err'); }
   };

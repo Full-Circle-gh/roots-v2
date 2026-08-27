@@ -1201,6 +1201,20 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   res.json({ success: true });
 });
 
+// Delete — Draft (Requested) only. Every later status has already posted
+// expenses and/or written prices/stock; "Cancel order" is the reversible exit
+// for those (keeps the row, zeroes it out — see the /status route). A draft
+// never touched any ledger, so deleting it outright is safe and final.
+router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (po.status !== 'Requested') return res.status(409).json({ success: false, error: 'not_draft' });
+  db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
+  db.prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
+  logActivity(req.user.id, req.user.username, 'delete', 'purchase_order', po.id, { po_number: po.po_number, scope: 'retail' }, req.ip);
+  res.json({ success: true });
+});
+
 router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express.json(), (req, res) => {
   const { status } = req.body || {};
   if (!PO_STATUSES.has(status)) return res.status(400).json({ success: false, error: 'invalid_status' });
