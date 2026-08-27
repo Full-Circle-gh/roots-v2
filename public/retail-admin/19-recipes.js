@@ -782,7 +782,28 @@
     // so does the card.
     const prods = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
     const solo = prods.length === 1 ? prods[0] : null;
-    const soloM = solo ? margeOf(solo) : null;
+    // THE PREMISE THIS STRIP WAS BUILT ON CAN NOW BE FALSE. The comment above
+    // says one product means its price and margin are facts about the recipe.
+    // That held while the recipe wrote store_products.unit_cost. A product
+    // with a build list takes its cost from the list instead, so its margin is
+    // a fact about the LIST — and printing it beside this recipe's own
+    // cost-per-serving made the two read as one arc when they disagreed 37x
+    // (Hazelnut-Chocolate Spread: ¥46.05 a serving, margin shown 98.6% off a
+    // ¥1.23 build list). Where the product no longer answers to this recipe,
+    // the strip shows the RECIPE's own margin — its recipe_cost_data sell
+    // price against its own cost per serving, both already computed — and
+    // labels it, so nothing on the row is a fact about something else.
+    const soloOwned = solo ? costStillFromRecipe(solo) : false;
+    const soloM = (solo && soloOwned) ? margeOf(solo) : null;
+    // The recipe's own margin, used when the product's is not this recipe's to
+    // report. computeRecipeCost already derives both halves.
+    const recM = (!soloOwned && c.marginPerServing != null && c.sellPrice > 0 && c.costPerServing != null)
+      ? { money: c.marginPerServing, pct: ((c.sellPrice - c.costPerServing) / c.sellPrice) * 100 }
+      : null;
+    const showM = soloM || recM;
+    // CN PENDING — names the build list, which has no sourced Chinese.
+    const mLbl = soloM ? T('Margin', '毛利')
+      : (recM ? T('Margin (recipe)', 'Margin (recipe)') : T('Margin', '毛利'));
 
     let html = `<div class="rcp-sumrow">
       <div class="rcp-sumfig"><span class="lbl">${esc(T('Batch cost', '整批成本'))}</span><span class="v">${money(c.batchCost)}</span></div>
@@ -790,10 +811,10 @@
                 : `<div class="rcp-sumfig"><span class="lbl">${esc(T('Per-unit cost', '单位成本'))}</span><span class="v dim">${esc(T('No batch size or servings recorded', '未记录批量大小或份数'))}</span></div>`}
       ${solo ? `<i class="rcp-sumdiv"></i>
       <div class="rcp-sumfig"><span class="lbl">${esc(T('Sells for', '售价'))}</span><span class="v">${esc(Number(solo.sell_price) > 0 ? money(solo.sell_price) : '—')}</span></div>
-      <div class="rcp-sumfig"><span class="lbl">${esc(T('Margin', '毛利'))}</span>
-        <span class="rcp-summarg${soloM && soloM.money < 0 ? ' neg' : ''}">
-          <span class="v">${esc(soloM ? (soloM.money < 0 ? '−' : '') + money(Math.abs(soloM.money)) : '—')}</span>
-          ${soloM ? `<span class="pct">${esc(pctTxt(soloM))}</span>` : ''}
+      <div class="rcp-sumfig"><span class="lbl">${esc(mLbl)}</span>
+        <span class="rcp-summarg${showM && showM.money < 0 ? ' neg' : ''}">
+          <span class="v">${esc(showM ? (showM.money < 0 ? '−' : '') + money(Math.abs(showM.money)) : '—')}</span>
+          ${showM ? `<span class="pct">${esc(pctTxt(showM))}</span>` : ''}
         </span></div>` : ''}
     </div>`;
 
@@ -848,6 +869,14 @@
   // an em dash, never as 0%.
   function margeOf(p) {
     return (typeof _paMargin === 'function') ? _paMargin(p.sell_price, p.unit_cost) : null;
+  }
+  // Does the product beside this recipe still take its cost FROM this recipe?
+  // Since §31's addendum a build list owns a product's cost outright and
+  // applyProductCosts() skips such a product, so its unit_cost can be a figure
+  // this recipe had no part in. Anything that prints the product's margin as a
+  // fact about the recipe has to ask this first.
+  function costStillFromRecipe(p) {
+    return !(Number(p && p.build_line_count) > 0);
   }
   // One minus sign, the typographic one, on BOTH halves of a negative margin.
   // toFixed() emits an ASCII hyphen, so a below-cost row otherwise reads
