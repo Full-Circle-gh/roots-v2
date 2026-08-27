@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.6 · 2026-08-27 · adds a FOURTH amendment section, Purchase receiving — awaiting a Chinese source, holding ONE English string that is running English-on-both-sides in the product until Ash supplies its Chinese — bringing the pending total to seven across two request sections. The concept is a material line's Arrived box on the receiving screen: the count never reaches stock, but it is the only thing that records a short material delivery, and the row said neither. Two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. v1.5 (2026-08-27) adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -292,6 +292,55 @@ of both strings and is not a substitute for a full stop.
 
 **APPROVED BY ASH, 2026-08-27.** Both halves of the pair are his; nothing in this
 section was composed.
+
+## Purchase receiving — awaiting a Chinese source (REQUEST, not locked)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is that amendment, opened rather than closed: the one string
+below is running English-on-both-sides in the product right now, because
+composing its Chinese is exactly what Rule 4 forbids and no existing pair covers
+it.
+
+THE CONCEPT NEEDING A PAIR. On the purchase receiving screen, a MATERIAL line's
+Arrived box behaves differently from a product line's, and nothing said so. The
+count typed there never reaches stock — `applyReceivedToStock()` skips any line
+carrying an `ingredient_id` before it reaches a stock call — but it is not
+ignored either: `postRetailPOExpenses()` sums `COALESCE(qty_received, qty)` with
+no kind branch, so that box is the ONLY way to record a short material delivery.
+A 20-unit line with 15 delivered posts 160.00 if the box is left blank and
+120.00 if 15 is entered. Meanwhile the row's In-stock cell shows a dash for
+ever. The two together read as "the number you typed did nothing", which is
+wrong in the direction that costs money.
+
+TWO EXISTING PAIRS WERE CONSIDERED AND REJECTED, recorded so the search is not
+repeated. `posts to Finance → Expenses by itself. · 会自动记入财务 → 支出。`
+is about the ORDER TOTAL at placing time — it says nothing about stock and
+nothing about one line, and on a per-row tooltip it would read as a claim about
+the whole order. `Nothing touches stock until the goods arrive and you tick them
+in. · 在到货并勾选收货之前,库存不会有任何变动。` is the opposite case: it
+promises stock movement later, which for a material line never comes.
+
+TWO DISTINCTIONS THE CHINESE MUST PRESERVE, because losing either turns the
+tooltip back into the confusion it exists to remove:
+
+1. THE NUMBER COUNTS, it is not ignored. Copy that reads "materials don't use
+   this" would tell an operator to leave a short delivery unrecorded, which
+   posts the full ordered quantity to Expenses.
+2. IT COUNTS FOR MONEY, NOT STOCK. The distinction is the whole point; a word
+   meaning "recorded" or "saved" without naming where would leave the operator
+   still looking for the number in the stock column.
+
+**Ash to supply the CN column.** Filling it is ONE edit in the product, inside
+`PU_PENDING_CN` in `public/retail-admin/16-purchasing.js`.
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `materialArrived` | This count goes to Finance → Expenses. Materials are not stocked here, so it never changes stock. |  | Tooltip on a material line's Arrived input and on its In-stock cell, on the purchase receiving screen. Both carry the same string because they are two halves of one wrong impression. |
+
+Sentence case, no exclamation marks. **The string must not contain ` · `** — it
+is authored into `data-tt` as `EN · CN` and the walker in
+`public/retail-admin/10-extras.js` splits on that separator, so a middle dot
+inside either half cuts the sentence in two.
 
 ## Deferred — recorded, not in scope of this lock
 

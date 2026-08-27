@@ -179,6 +179,25 @@
   // a new colour).
   const matBadge = it => it.ingredient_id ? `<span class="pu2-pill grey pu2-mattag">${esc(T('Material', '物料'))}</span>` : '';
 
+  // ── Awaiting a Chinese source ─────────────────────────────────────────────
+  // Rule 4 of docs/tacet-delivery-vocabulary.md says never compose new Chinese.
+  // This string has no existing pair: the closest, 'posts to Finance → Expenses
+  // by itself.' / '会自动记入财务 → 支出。', is about the ORDER TOTAL at
+  // placing time and says nothing about stock, and gluing it to '物料' would be
+  // composing a sentence, which is the thing the rule forbids.
+  //
+  // So it runs English-on-both-sides until Ash supplies the CN, exactly as
+  // EL_PENDING_CN in 14-eleme.js and MT_PENDING_CN in 11-meituan.js do. The
+  // request is open in that document under "Purchase receiving — awaiting a
+  // Chinese source". Filling it is ONE edit here.
+  //
+  // No " · " anywhere in the text: data-tt is authored "EN · CN" and the
+  // walker in 10-extras.js splits on that separator, so a stray one would cut
+  // the sentence in half.
+  const PU_PENDING_CN = {
+    materialArrived: 'This count goes to Finance → Expenses. Materials are not stocked here, so it never changes stock.',
+  };
+
   // ── entry (idempotent — prodShowView calls this every time the tab opens) ──
   window.puInit = async function () {
     if (!root()) return;
@@ -1123,14 +1142,27 @@
     // short material delivery. Remove it and a 15-of-20 delivery posts to
     // Expenses at 20. Tried and reverted 2026-08-27 — the banner above it was
     // the defect, not the input.
+    // WHAT THE MATERIAL ROW WAS NOT SAYING. Its Arrived box drives the expense
+    // and nothing else, and its In-stock cell shows a dash for ever — which
+    // together read as "the number you typed did nothing". It did: it decided
+    // what posts to Expenses. One tooltip, on both halves of that impression,
+    // says so on demand rather than as another line of copy in a dense table
+    // (teaching copy belongs behind an affordance, not stacked on the screen).
+    //
+    // data-tt is the shared bubble from 01-core.js: delegated, so a row painted
+    // later works the same, and authored "EN · CN" for the toggle in
+    // 10-extras.js. English on both sides until Ash mints the pair.
+    const matTip = it.ingredient_id
+      ? ` data-tt="${esc(PU_PENDING_CN.materialArrived + ' · ' + PU_PENDING_CN.materialArrived)}"`
+      : '';
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
-      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}${matTip}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
-      <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
+      <td class="right pu2-num"><span${matTip}>${applied}</span>${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
     </tr>`;
   }
 
