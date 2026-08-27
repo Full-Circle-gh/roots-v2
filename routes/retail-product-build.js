@@ -58,9 +58,49 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
   `).all(id);
 
   const cost = computeProductBuildCost(id, db);
+
+  // ── THE RECIPE BRIDGE ────────────────────────────────────────────────
+  // A product whose contents are cooked reaches its cost through a build
+  // line pointing at the MATERIAL its recipe makes (§29 + §31's addendum) —
+  // never through recipe_id, which now only carries the allergen rollup.
+  // But that material only exists once the recipe has been materialised,
+  // and materialisation is opt-in-on-save: 9 of 76 recipe-linked products
+  // had one the day this shipped, leaving 67 with no material to pick and
+  // nothing on screen explaining why.
+  //
+  // So the route answers the screen's real question — "is this product's
+  // recipe available as something I can add?" — in the three states the
+  // screen has to tell apart:
+  //   none        no recipe linked at all
+  //   ready       linked, materialised, here is the material to add
+  //   unbuilt     linked, NOT materialised — the recipe must be saved once
+  //               before its output can be picked
+  // This is read-only. It never materialises anything on a GET, because a
+  // screen opening must not write, and because §29's first addendum says a
+  // name collision is a human's to resolve, never a side effect.
+  let recipe = { state: 'none' };
+  const prow = db.prepare('SELECT recipe_id FROM store_products WHERE id = ?').get(id);
+  if (prow && prow.recipe_id != null) {
+    const r = db.prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE id = ?').get(prow.recipe_id);
+    const mat = db.prepare(
+      'SELECT id, name_en, name_cn, sku, unit, cost_per_unit, free_by_design, item_kind FROM ingredients WHERE source_recipe_id = ?'
+    ).get(prow.recipe_id);
+    const already = mat ? lines.some(l => l.ingredient_id === mat.id) : false;
+    recipe = {
+      state: mat ? 'ready' : 'unbuilt',
+      recipe_id: prow.recipe_id,
+      name_en: r ? r.name_en : null,
+      name_cn: r ? r.name_cn : null,
+      recipe_active: r ? !!r.is_active : false,
+      material: mat || null,
+      // Already on the list — the screen must not offer to add it twice.
+      already_in_list: already,
+    };
+  }
+
   res.json({
     success: true,
-    data: { product_id: id, name_en: product.name_en, unit_cost: product.unit_cost, lines, cost },
+    data: { product_id: id, name_en: product.name_en, unit_cost: product.unit_cost, lines, cost, recipe },
   });
 });
 

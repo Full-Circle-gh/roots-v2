@@ -843,7 +843,35 @@ function pdApplyCostSource(p) {
     // deliberately. Gluing sourced 来自 to sourced 物料 would invent a phrase
     // no Chinese reader has approved, and 物料 alone means MATERIALS — the
     // masterlist, not this product's list of them.
-    note.innerHTML = escapeHtml(cuT('From the build list', 'From the build list'));
+    let h = escapeHtml(cuT('From the build list', 'From the build list'));
+    // THE RECIPE LINK SURVIVES A BUILD LIST AND MUST STAY REACHABLE.
+    //
+    // An earlier pass returned here, which hid the recipe's name, Change and
+    // Unlink the moment a product got its first build line. That was wrong on
+    // its own terms: §31's addendum retires recipe_id as a COST source and
+    // keeps it for the allergen rollup, so the link is still live, still
+    // meaningful, and still the operator's to change — and there is no other
+    // screen that offers it. Reported by Ash within the hour: "i cant connect
+    // it to a recipe?".
+    //
+    // What changed is only which of the two owns the money. So the line says
+    // the build list owns the cost, and then names the recipe as the separate
+    // fact it now is.
+    if (recipeOwned && p && p.recipe_id != null) {
+      const rn = cuT(p.recipe_name_en || p.recipe_name_cn || '', p.recipe_name_cn || p.recipe_name_en || '')
+                 || (cuT('Recipe', '配方') + ' #' + p.recipe_id);
+      h += ' · ' + escapeHtml(cuT('Recipe', '配方')) + ' '
+        + '<a href="#" onclick="event.preventDefault();event.stopPropagation();paOpenRecipe(' + Number(p.recipe_id) + ')">'
+        + escapeHtml(rn) + '</a>'
+        + ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+        + escapeHtml(cuT('Change', '更换')) + '</button>'
+        + ' <button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
+        + escapeHtml(cuT('Unlink', '取消关联')) + '</button>';
+    } else if (_pdCanLinkRecipe() && p && p.id) {
+      h += ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+        + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button>';
+    }
+    note.innerHTML = h;
     return;
   }
   // A product that has never been saved has no row to link a recipe to, so the

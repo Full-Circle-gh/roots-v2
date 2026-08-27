@@ -13195,3 +13195,15 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   /* A build list that prices cleanly but is obviously unfinished — packaging
      with nothing recorded as contents. Amber: unfinished, not broken. */
   #pd-editor .bl-note.is-warn { color: var(--td-amber-ink); }
+
+  /* The recipe bridge — how a cooked product's contents get into the list.
+     Sage when there is a one-click answer, amber when the recipe has to be
+     made available as a material first (unfinished, not broken — §1.10). */
+  #pd-editor .bl-bridge {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+    background: var(--td-sage-tint); border: 1px solid var(--td-border);
+  }
+  #pd-editor .bl-bridge.is-unbuilt { background: var(--td-amber-tint); }
+  #pd-editor .bl-bridge-t { flex: 1 1 260px; font-size: 13px; line-height: 1.6; }
+  #pd-editor .bl-bridge.is-unbuilt .bl-bridge-t { color: var(--td-amber-ink); }

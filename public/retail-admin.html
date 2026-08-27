@@ -4570,6 +4570,14 @@
 
                   <div id="pd-bl-list"></div>
 
+                  <!-- The recipe bridge. A cooked product's contents reach
+                       this list as the MATERIAL its recipe makes; nothing on
+                       screen said so, and 67 of 76 recipe-linked products had
+                       no such material to find. Rendered by blRenderBridge().
+                       Empty for a bought-in product, which is not missing
+                       anything. -->
+                  <div id="pd-bl-bridge"></div>
+
                   <!-- The picker. A combobox, not a modal: adding a line is a
                        small, frequent action and it should not leave the page —
                        the same call 19-recipes.js made for recipe lines. -->

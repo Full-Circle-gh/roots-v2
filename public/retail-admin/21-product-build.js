@@ -54,6 +54,9 @@
   let _blLines = null;
   let _blProductId = null;
   let _blCost = null;         // last server-computed cost block
+  // The product's recipe, and whether its output can be added yet. See the
+  // route's own comment — three states: none / ready / unbuilt.
+  let _blRecipe = null;
   let _blDirty = false;
   let _blPickTimer = null;
   let _blPickResults = [];
@@ -139,6 +142,7 @@
     _blProductId = productId;
     _blLines = null;
     _blCost = null;
+    _blRecipe = null;
     _blDirty = false;
     _blMarginBefore = null;
     _blPickResults = [];
@@ -149,9 +153,11 @@
       const d = (j && j.data) || {};
       _blLines = Array.isArray(d.lines) ? d.lines : [];
       _blCost = d.cost || null;
+      _blRecipe = d.recipe || null;
     } catch (e) {
       _blLines = [];
       _blCost = null;
+      _blRecipe = null;
     }
     blRender();
   };
@@ -181,6 +187,7 @@
         + '<div class="bl-empty-h">' + escapeHtml(T_EMPTY_LINE1()) + '</div>'
         + '<p class="bl-empty-p">' + escapeHtml(T_EMPTY_LINE2()) + '</p>'
         + '</div>';
+      blRenderBridge();
       blRenderRail();
       return;
     }
@@ -213,6 +220,7 @@
         + '</div>';
     }
     host.innerHTML = html;
+    blRenderBridge();
     blRenderRail();
   }
 
@@ -436,6 +444,93 @@
     blRender();
     blMarkDirty();
     blRefreshCostSource();
+  };
+
+
+  // ── The recipe bridge ───────────────────────────────────────────────
+  // A cooked product's contents reach the list as a MATERIAL — the one the
+  // recipe makes. Nothing on this screen used to say that, so a product with
+  // a linked recipe and an empty list looked like the screen had simply lost
+  // the recipe's cost, which is exactly how it was reported.
+  //
+  // Three states, three different sentences, because they need three
+  // different actions — and telling them apart is the whole point:
+  //   ready    the material exists: offer to add it, one click.
+  //   unbuilt  the recipe has never been made available as a material. Say
+  //            so plainly and send them to the recipe, because THAT is where
+  //            the fix is and no amount of searching this picker will find
+  //            it. 67 of 76 recipe-linked products were in this state.
+  //   none     no recipe. Say nothing — a bought-in product is not missing
+  //            anything, and a nag here would be wrong on half the catalogue.
+  function blRenderBridge() {
+    const host = document.getElementById('pd-bl-bridge');
+    if (!host) return;
+    const r = _blRecipe;
+    if (!r || r.state === 'none' || r.already_in_list) { host.innerHTML = ''; return; }
+
+    const name = escapeHtml(cuT(r.name_en || r.name_cn || '', r.name_cn || r.name_en || '')
+                            || (cuT('Recipe', '配方') + ' #' + r.recipe_id));
+
+    if (r.state === 'ready') {
+      // CN PENDING — names the build list; English both halves.
+      const m = 'This product is made from a recipe. Add what it makes as the contents:';
+      host.innerHTML = '<div class="bl-bridge">'
+        + '<span class="bl-bridge-t">' + escapeHtml(cuT(m, m)) + '</span>'
+        + '<button type="button" class="btn btn-sm" onclick="blAddRecipeMaterial()">'
+        + escapeHtml(cuT('Add', '添加')) + ' ' + name + '</button>'
+        + '</div>';
+      return;
+    }
+
+    // unbuilt — the honest dead end, with the way out named.
+    const m2 = '“' + (r.name_en || r.name_cn || '') + '” is not available as a material yet, '
+      + 'so its cost cannot be added here. Open the recipe and save it once — that makes it '
+      + 'pickable, and it then behaves like any other material.';
+    host.innerHTML = '<div class="bl-bridge is-unbuilt">'
+      + '<span class="bl-bridge-t">' + escapeHtml(cuT(m2, m2)) + '</span>'
+      + '<button type="button" class="btn btn-sm" onclick="paOpenRecipe(' + Number(r.recipe_id) + ')">'
+      + escapeHtml(cuT('Open recipe', '打开配方')) + '</button>'
+      + '</div>';
+  }
+
+  // Add the recipe's own material as a line. Same shape blPickAdd builds, so
+  // there is ONE kind of build line and this is not a second mechanism —
+  // it is the ordinary add, with the picking already done.
+  window.blAddRecipeMaterial = function () {
+    const r = _blRecipe;
+    if (!r || r.state !== 'ready' || !r.material || !_blLines) return;
+    const m = r.material;
+    if (_blLines.some(l => l.ingredient_id === m.id)) return;
+    const t = blTotals();
+    const priceEl = document.getElementById('pd-price');
+    const price = priceEl ? parseFloat(priceEl.value) : NaN;
+    _blMarginBefore = (!t.blocked && price > 0 && _blLines.length)
+      ? ((price - t.total) / price) * 100 : null;
+    _blLines.push({
+      id: null, ingredient_id: m.id,
+      name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
+      qty: 0, unit: m.unit || 'g', notes: null,
+      material_item_kind: m.item_kind || 'food',
+      material_cost_per_unit: m.cost_per_unit,
+      material_buy_price: null,
+      material_unit: m.unit,
+      material_free_by_design: m.free_by_design,
+      material_is_active: 1,
+    });
+    _blDirty = true;
+    if (_blRecipe) _blRecipe.already_in_list = true;
+    blRender();
+    blMarkDirty();
+    blRefreshCostSource();
+    // Straight to the quantity — the fill weight is the one thing only the
+    // operator knows, and it is why qty defaults to 0 rather than 1.
+    setTimeout(function () {
+      const h = document.getElementById('pd-bl-list');
+      if (!h) return;
+      const rows = h.querySelectorAll('.bl-row .bl-in');
+      const last = rows[rows.length - 1];
+      if (last) { last.focus(); last.select(); }
+    }, 0);
   };
 
   // ── The picker ──────────────────────────────────────────────────────
