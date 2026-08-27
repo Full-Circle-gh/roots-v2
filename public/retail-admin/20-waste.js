@@ -40,11 +40,23 @@
    the walker would tear in half. Baking + repainting means the walker never
    sees it.
 
-   CHINESE IS SOURCED, NEVER COMPOSED. Every 中文 string below is copied from a
-   pair that already ships in this repo. Where no source exists the label stays
-   English in both languages and is listed in the PR for Ash — it is a missing
-   translation, which is visible and fixable, rather than an invented one, which
-   is neither. */
+   CHINESE IS COPIED WHERE A PRECEDENT EXISTS. Every 中文 string below was
+   checked against the rest of the repo first, and most are verbatim reuses of a
+   pair that already ships — the range endpoints, the no-results line, the
+   pick-a-thing prompt, the in-flight and voided labels. Where no precedent
+   existed the string was composed against the surrounding admin's register
+   (Ash approved this on 2026-08-27, having first required the search); those
+   are assembled from copied fragments — 损耗记录, 作废这条, 无法加载, 还没有登记 —
+   rather than translated fresh. 冲销, on the reversal pill, is the one string
+   with no fragment precedent at all.
+
+   THE INTERPOLATION ORDER DIFFERS BY LANGUAGE and that is deliberate: the void
+   dialog's body leads with the count in English and names the product first in
+   Chinese, because forcing one order on both is how a translated string reads
+   like a translation.
+
+   The T(en, '') marker described below now has no live users. It stays
+   documented because the NEXT string added here will need it. */
 
 (function () {
   'use strict';
@@ -227,9 +239,9 @@
           <option value="">${esc(T('All', '全部'))}</option>${reasons}
         </select>
         <div class="wst-range">
-          <input type="date" class="wst-date" id="wst-f-from" value="${esc(_from)}" aria-label="${esc(T('From', ''))}">
+          <input type="date" class="wst-date" id="wst-f-from" value="${esc(_from)}" aria-label="${esc(T('From', '从'))}">
           <span class="wst-range-sep">–</span>
-          <input type="date" class="wst-date" id="wst-f-to" value="${esc(_to)}" aria-label="${esc(T('To', ''))}">
+          <input type="date" class="wst-date" id="wst-f-to" value="${esc(_to)}" aria-label="${esc(T('To', '至'))}">
           ${(_from || _to || _loc || _reason) ? `<button type="button" class="wst-btn ghost sm" id="wst-f-clear">${esc(T('Clear filters', '清除筛选'))}</button>` : ''}
         </div>
       </div>`;
@@ -241,7 +253,7 @@
     // into the empty state, which would read as "nothing was wasted".
     if (_err) {
       return `<div class="wst-banner err">
-        <div class="wst-banner-t">${esc(T('This list could not be loaded.', ''))}</div>
+        <div class="wst-banner-t">${esc(T('Could not load waste records', '无法加载损耗记录'))}</div>
         <div class="wst-banner-b" data-no-i18n>${esc(_err)}</div>
         <button type="button" class="wst-btn sm" id="wst-retry">${esc(T('Try again', '重试'))}</button>
       </div>`;
@@ -253,11 +265,11 @@
       // it. Conflating them is the most common failure in this product.
       return filtering
         ? `<div class="wst-empty">
-             <div class="wst-empty-t">${esc(T('No waste matches these filters.', ''))}</div>
+             <div class="wst-empty-t">${esc(T('Nothing matches those filters.', '没有匹配的内容。'))}</div>
              <button type="button" class="wst-btn sm" id="wst-e-clear">${esc(T('Clear filters', '清除筛选'))}</button>
            </div>`
         : `<div class="wst-empty">
-             <div class="wst-empty-t">${esc(T('Nothing wasted yet. Long may it last.', ''))}</div>
+             <div class="wst-empty-t">${esc(T('Nothing wasted yet. Long may it last.', '还没有登记损耗。'))}</div>
            </div>`;
     }
     return table();
@@ -297,7 +309,7 @@
     const mark = voided
       ? `<span class="wst-pill voided">${esc(T('Voided', '已作废'))}</span>`
       : reversal
-        ? `<span class="wst-pill reversal">${esc(T('Reversal', ''))}</span>`
+        ? `<span class="wst-pill reversal">${esc(T('Reversal', '冲销'))}</span>`
         : '';
     // §32 rule 10 — zero and unknown must never look alike, so an uncosted row
     // says so in words. Not a dash (which reads as "not applicable") and not
@@ -492,21 +504,21 @@
     function refresh() {
       const qty = Number(qtyIn.value);
       let reason = null;
-      if (!picked) reason = T('Pick a product.', '');
-      else if (!Number.isInteger(qty) || qty <= 0) reason = T('Quantity must be a whole number above zero.', '');
+      if (!picked) reason = T('Pick a product.', '请选择产品。');
+      else if (!Number.isInteger(qty) || qty <= 0) reason = T('Quantity must be a whole number above zero.', '数量必须是大于零的整数。');
       else if (qty > Number(picked.on_hand)) {
         // The UI says it first; the API refusal stays the backstop.
         reason = T('Only ' + picked.on_hand + ' in stock.', T('In stock', '库存') + ' ' + picked.on_hand);
       } else if (reasonSel.value === 'other' && !noteIn.value.trim()) {
         // 'Other' requires a note — enforced here so the operator is told
         // before they press, and again by the API so it cannot be bypassed.
-        reason = T('Tell us what happened when the reason is Other.', '');
+        reason = T('Tell us what happened when the reason is Other.', '原因选择“其他”时请填写备注。');
       }
       submit.disabled = !!reason;
       let text = reason || '';
       if (!reason && preview) {
         text = preview.is_uncosted
-          ? T('No cost on file for this product — it will be recorded without one.', '')
+          ? T('No cost on file for this product — it will be recorded without one.', '该产品暂无成本,此条将不计成本。')
           : T('Cost', '成本') + ' ' + money(preview.cost_total_cents);
       }
       hint.textContent = text;
@@ -525,7 +537,7 @@
       const btn = submit;
       btn.disabled = true;
       const prev = btn.textContent;
-      btn.textContent = T('Recording…', '');
+      btn.textContent = T('Recording…', '登记中…');
       try {
         const j = await api('/api/retail-admin/waste', {
           method: 'POST',
@@ -576,8 +588,9 @@
     // This moves live stock, so it gets a confirm step, and the confirm says
     // what will move rather than asking "are you sure".
     const ok = await askConfirm({
-      title: T('Void this waste entry?', ''),
-      body: T(qty + ' × ' + what + ' goes back into stock. The entry stays in the list, marked voided.', ''),
+      title: T('Void this waste entry?', '作废这条损耗记录?'),
+      body: T(qty + ' × ' + what + ' goes back into stock. The entry stays in the list, marked voided.',
+               what + ' ' + qty + ' 件将退回库存。该记录仍保留在列表中,标记为已作废。'),
       confirmLabel: T('Void', '作废'),
       cancelLabel: T('Cancel', '取消'),
       danger: true,

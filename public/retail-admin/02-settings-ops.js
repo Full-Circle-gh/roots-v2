@@ -1616,16 +1616,10 @@ const FEATURE_CATALOG = [
   // need it and own no recipes. ON by default, matching the server-side reader
   // in routes/retail-waste.js (an absent config row means never-touched, which
   // is on).
-  //
-  // The description is ENGLISH ONLY and that is not an oversight: no Chinese
-  // source for it exists in this repo and §32's brief forbids composing one.
-  // It carries no " · " separator, so the i18n walker leaves it alone and it
-  // renders in English in both languages until Ash supplies the pair. Listed
-  // in the PR.
   { key: 'waste',       en: 'Waste',                cn: '损耗',       def: true,
-    desc: 'Recording waste moves stock: the on-hand count goes down and the sales channels are told. Voiding an entry puts the stock back. When off, the Waste tab is hidden and nothing can be recorded.',
-    descOn:  'On. Staff can record what was lost and why, and every entry moves the shelf count.',
-    descOff: 'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved.' },
+    desc: 'Recording waste moves stock: the on-hand count goes down and the sales channels are told. Voiding an entry puts the stock back. When off, the Waste tab is hidden and nothing can be recorded. · 登记损耗会变动库存:库存数量相应减少,并同步至各销售渠道。作废一条记录会把库存退回。关闭后“损耗”标签隐藏,也无法登记。',
+    descOn:  'On. Staff can record what was lost and why, and every entry moves the shelf count. · 已开启:员工可登记损耗及其原因,每条记录都会变动库存。',
+    descOff: 'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved. · 已关闭:“损耗”标签已隐藏。已登记的记录不会删除,已变动的库存也不会回滚。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {
