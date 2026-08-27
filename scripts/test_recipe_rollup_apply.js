@@ -38,7 +38,7 @@ function loadSqlite() {
   process.exit(2);
 }
 const Database = loadSqlite();
-const { applyRollup, backsLinkedMaterial } =
+const { applyRollup, backsLinkedMaterial, applyProductBuildCosts } =
   require(path.join(__dirname, '..', 'lib', 'recipe-rollup'));
 
 // Same shape as scripts/test_recipe_rollup.js's fixture, plus `updated_at` so
@@ -60,9 +60,36 @@ function makeDb() {
       recipe_id INTEGER PRIMARY KEY, labour REAL DEFAULT 0, packaging REAL DEFAULT 0,
       overhead_pct REAL DEFAULT 0, sell_price REAL DEFAULT 0, target_food_cost REAL DEFAULT 30,
       updated_at DATETIME);
+    -- Step 2, docs/tacet-product-build-lines-design.md. store_products kept
+    -- minimal but must match every column loadLinkedProducts() SELECTs
+    -- (including sku) — omitting one doesn't fail loudly, it makes that
+    -- query throw, which loadLinkedProducts()'s own try/catch reads as "no
+    -- storefront" and silently returns [], masking whatever this fixture
+    -- meant to test. Found exactly this way while writing case 14 below.
+    CREATE TABLE store_products (
+      id INTEGER PRIMARY KEY, name_en TEXT, sku TEXT, recipe_id INTEGER, unit_cost REAL,
+      is_active INTEGER DEFAULT 1, updated_at TEXT);
+    CREATE TABLE product_build_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, ingredient_id INTEGER,
+      name_en TEXT, name_cn TEXT, sku TEXT, qty REAL, unit TEXT DEFAULT 'g',
+      notes TEXT, sort_order INTEGER DEFAULT 0);
+    -- lib/features.js's productionEnabled() reads this; absent = defaults to
+    -- ON, so most cases below need no row here at all — only the
+    -- "not gated" case sets one explicitly.
+    CREATE TABLE storefront_config (key TEXT PRIMARY KEY, value_json TEXT);
   `);
   return db;
 }
+function seedProduct(db, { id, recipe_id, unit_cost, active }) {
+  db.prepare('INSERT INTO store_products (id,name_en,recipe_id,unit_cost,is_active) VALUES (?,?,?,?,?)')
+    .run(id, 'Product ' + id, recipe_id == null ? null : recipe_id, unit_cost == null ? null : unit_cost,
+         active === undefined ? 1 : active);
+}
+function seedBuildLine(db, { product_id, ingredient_id, qty, unit, sort_order }) {
+  db.prepare('INSERT INTO product_build_lines (product_id,ingredient_id,name_en,qty,unit,sort_order) VALUES (?,?,?,?,?,?)')
+    .run(product_id, ingredient_id == null ? null : ingredient_id, 'line', qty, unit || 'g', sort_order || 0);
+}
+const productRow = (db, id) => db.prepare('SELECT * FROM store_products WHERE id = ?').get(id);
 function seed(db, { recipes = [], materials = [], lines = [] }) {
   const r = db.prepare('INSERT INTO recipes (id,name_en,batch_size,is_active) VALUES (?,?,?,?)');
   const m = db.prepare("INSERT INTO ingredients (id,name_en,unit,cost_per_unit,source_recipe_id,updated_at) VALUES (?,?,?,?,?,'seed')");
@@ -296,6 +323,102 @@ function check(label, actual, expected, detail) {
   check('ordinary recipe nothing points at: false', backsLinkedMaterial(db, 2), false);
   check('recipe id with no rows at all: false', backsLinkedMaterial(db, 999), false);
   db.close();
+}
+
+// ── 11 · a build-line product recomputes through the SAME trigger network ──
+// docs/tacet-product-build-lines-design.md §3's central claim: no new call
+// site needed anywhere, because applyProductBuildCosts() runs inside
+// applyRollup() exactly the way applyProductCosts() already does. Prove it
+// by bumping a raw material's price the same way any of the eight live
+// trigger points do (routes/ingredients.js, routes/purchases.js, etc. — a
+// direct UPDATE before calling fireRecompute) and confirming a product whose
+// build list contains that material picks up the new figure from a single
+// applyRollup() call, with no build-list-specific trigger call anywhere in
+// this test.
+{
+  const db = seed(makeDb(), { recipes: [[1, 100]], materials: [[50, 0.10, null]] });
+  seedProduct(db, { id: 200, unit_cost: null });
+  seedBuildLine(db, { product_id: 200, ingredient_id: 50, qty: 250 }); // 250g @ 0.10/g = 25.0
+  const result = applyRollup(db, { source: 'test-build-line-recompute' });
+  check('build-line product: applyRollup reports it applied', result.applied, true);
+  check('build-line product: buildProductsWritten counts it', result.buildProductsWritten, 1);
+  check('build-line product: unit_cost written from the build list', productRow(db, 200).unit_cost, 25);
+
+  db.prepare("UPDATE ingredients SET cost_per_unit = 0.20, updated_at = 'raw-bump' WHERE id = 50").run();
+  const second = applyRollup(db, { source: 'test-build-line-recompute-2' });
+  check('build-line product: a raw material price bump recomputes it', productRow(db, 200).unit_cost, 50,
+        'same trigger a live cpuMoved guard would fire, no new call site');
+  check('build-line product: second pass still reports written', second.buildProductsWritten, 1);
+  db.close();
+}
+
+// ── 12 · a blocked build list leaves the stored figure untouched ──────────
+{
+  const db = seed(makeDb(), { recipes: [] });
+  seedProduct(db, { id: 201, unit_cost: 12.5 }); // some prior figure, from a manual entry
+  seedBuildLine(db, { product_id: 201, ingredient_id: 999, qty: 1, unit: 'pcs' }); // no such material
+  const result = applyRollup(db, { source: 'test-build-line-blocked' });
+  check('blocked build list: buildProductsBlocked counts it', result.buildProductsBlocked, 1);
+  check('blocked build list: buildProductsWritten does not', result.buildProductsWritten, 0);
+  check('blocked build list: the prior figure is untouched, never zeroed or nulled', productRow(db, 201).unit_cost, 12.5);
+  db.close();
+}
+
+// ── 13 · material-linked AND build-line products both update in ONE pass ──
+// The design doc's "same transaction" claim, proven directly: a single
+// applyRollup() call moves a recipe-linked material's cost, a product that
+// takes its cost from that recipe, AND an unrelated build-line product, all
+// from one raw material price change.
+{
+  const db = seed(makeDb(), {
+    recipes: [[1, 100]],                        // batch_size 100 — same shape as case 8
+    materials: [[99, 0.5, null], [10, 1.0, 1]],  // recipe 1 makes material 10
+    lines: [[1, 99, 200]],                       // recipe 1 consumes 200g of raw material 99
+  });
+  seedProduct(db, { id: 300, recipe_id: 1, unit_cost: null }); // recipe-linked product — untouched by this PR
+  seedProduct(db, { id: 301, unit_cost: null }); // build-line product
+  seedBuildLine(db, { product_id: 301, ingredient_id: 99, qty: 100 }); // 100g @ raw material 99's price
+  db.prepare("UPDATE ingredients SET cost_per_unit = 1.0, updated_at = 'raw-bump' WHERE id = 99").run();
+  const result = applyRollup(db, { source: 'test-both-writers-one-pass' });
+  // Same arithmetic as case 8: 200g @ 1.0/g = 200 ingredientCost, /100 batch_size = 2.0/g.
+  check('one pass: linked material recomputed', ingRow(db, 10).cost_per_unit, 2.0);
+  check('one pass: build-line product written', productRow(db, 301).unit_cost, 100, '100g @ 1.0/g raw material = 100');
+  check('one pass: both counted in the SAME result object', result.buildProductsWritten >= 1 && result.written >= 1, true, JSON.stringify(result));
+  db.close();
+}
+
+// ── 14 · applyProductBuildCosts is NOT gated by productionEnabled — §31 rule 7 ──
+// Unlike applyProductCosts() (recipe-based), a build list must keep working
+// with Production switched OFF, because §31 rule 7 requires it to reach a
+// tenant with no kitchen at all. Prove the two writers actually diverge on
+// the identical database, not just that neither happens to be exercised.
+{
+  const db = seed(makeDb(), { recipes: [[1, 100]], materials: [[99, 0.5, null], [10, 1.0, 1]] });
+  db.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('features.production', 'false')").run();
+  seedProduct(db, { id: 400, recipe_id: 1, unit_cost: null });   // recipe-based — should be SKIPPED
+  seedProduct(db, { id: 401, unit_cost: null });                  // build-line — should NOT be skipped
+  seedBuildLine(db, { product_id: 401, ingredient_id: 99, qty: 100 }); // 100g @ 0.5/g = 50
+  const result = applyRollup(db, { source: 'test-production-off' });
+  check('production off: recipe-based product is skipped, not written', productRow(db, 400).unit_cost, null);
+  check('production off: recipe-based skip is reported', result.productsSkippedProductionOff > 0, true);
+  check('production off: build-line product IS written anyway (§31 rule 7)', productRow(db, 401).unit_cost, 50);
+  db.close();
+}
+
+// ── 15 · loadBuildListProducts / applyProductBuildCosts alone, no table ────
+// A handle predating this migration (every fixture above the fold in this
+// file, and every existing test in this repo) must not crash a caller that
+// invokes applyProductBuildCosts() directly, mirroring loadLinkedProducts()'s
+// own established defence.
+{
+  const bareDb = new Database(':memory:');
+  bareDb.exec('CREATE TABLE ingredients (id INTEGER PRIMARY KEY)'); // deliberately no store_products, no product_build_lines
+  let threw = false;
+  let result = null;
+  try { result = applyProductBuildCosts(bareDb); } catch (e) { threw = true; }
+  check('no product_build_lines table: does not throw', threw, false);
+  check('no product_build_lines table: reads as nothing to cost', result && result.written === 0 && result.blocked === 0, true, JSON.stringify(result));
+  bareDb.close();
 }
 
 console.log();

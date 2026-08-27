@@ -224,7 +224,11 @@ router.post('/api/admin/factory-reset', requireAuth, requireAdmin, (req, res) =>
     // before either.
     'recipe_materialize_collisions',
     'recipe_ingredients', 'recipe_steps', 'recipe_cost_data', 'recipes',
-    // Items + history
+    // Items + history — product_build_lines also references ingredients
+    // (Step 2, docs/tacet-product-build-lines-design.md), so it clears here
+    // too, before every ingredients row is deleted below. Its other FK,
+    // store_products, is not touched by this kitchen-only reset at all.
+    'product_build_lines',
     'ingredient_price_history', 'price_alerts', 'ingredients',
     // Products
     'products',
