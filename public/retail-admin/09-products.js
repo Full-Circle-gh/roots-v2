@@ -808,21 +808,50 @@ function pdApplyCostSource(p) {
   const inp = document.getElementById('pd-cost');
   const note = document.getElementById('pd-cost-source');
   if (!inp) return;
-  const owned = _pdRecipeOwnsCost(p);
+  // §31's addendum (docs/tacet-consolidation-decisions.md): once a product has
+  // a BUILD LIST, that list is its only cost source — so the manual field goes
+  // read-only and the save skips unit_cost (see the readOnly check in the save
+  // payload below), leaving the figure to the server's own recompute. This is
+  // checked FIRST and independently of the recipe: a build list outranks a
+  // recipe link, exactly as applyProductCosts() now skips a product that has
+  // one (lib/recipe-rollup.js). Two writers on one column is what this
+  // prevents, on the screen as well as in the cascade.
+  const hasBuild = (typeof blHasLines === 'function') && blHasLines();
+  // recipeOwned stays the RECIPE question and nothing else — every line below
+  // that names a recipe reads this, not `owned`. Conflating the two would show
+  // "Link a recipe" copy, and fetch recipe health, for a product whose cost
+  // comes from a build list and may have no recipe at all.
+  const recipeOwned = _pdRecipeOwnsCost(p);
+  const owned = hasBuild || recipeOwned;
   inp.readOnly = owned;
   inp.classList.toggle('is-derived', owned);
   // Whatever Recipes would be warning about this recipe, said here too. Hung
   // off this function rather than pdOpen because EVERY repaint of the cost
   // source is also a moment the warning can have changed — opening a product,
   // linking, changing the link, unlinking — and one call site cannot go stale.
-  pdRecipeHealthPaint(owned ? (p && p.id) : null);
+  pdRecipeHealthPaint(recipeOwned ? (p && p.id) : null);
   if (!note) return;
+  // A BUILD LIST OUTRANKS THE RECIPE LINE, and says so plainly. A product can
+  // carry both (recipe_id survives for the allergen rollup, §31's addendum),
+  // and if this branch were missing, such a product would read "From recipe"
+  // beside a figure the recipe did not produce — the screen lying about where
+  // its own number came from.
+  if (hasBuild) {
+    note.style.display = '';
+    // CN PENDING — this names the build list, and "Build list" has no sourced
+    // Chinese (Ash, 2026-08-27), so neither does this. English on both halves
+    // deliberately. Gluing sourced 来自 to sourced 物料 would invent a phrase
+    // no Chinese reader has approved, and 物料 alone means MATERIALS — the
+    // masterlist, not this product's list of them.
+    note.innerHTML = escapeHtml(cuT('From the build list', 'From the build list'));
+    return;
+  }
   // A product that has never been saved has no row to link a recipe to, so the
   // line stays empty until it does. Everything below needs an id.
   const linkable = _pdCanLinkRecipe() && !!(p && p.id);
-  if (!owned && !linkable) { note.innerHTML = ''; note.style.display = 'none'; return; }
+  if (!recipeOwned && !linkable) { note.innerHTML = ''; note.style.display = 'none'; return; }
   note.style.display = '';
-  if (!owned) {
+  if (!recipeOwned) {
     // UNLINKED, AND SAYING SO IS THE POINT. Cost sat blank on 45 products whose
     // recipe was fully priced, with nothing on screen to suggest the two could
     // be connected — the one-time backfill (database.js) links only where two
@@ -2425,6 +2454,16 @@ async function pdOpen(id) {
   set('pd-cost', p && p.unit_cost != null ? p.unit_cost : '');
   pdApplyCostSource(p);
   pdRenderMargin();
+  // The build list (Step 3). Loads for every product, including a brand-new
+  // one (id null → the empty state), because the pane must never paint a
+  // previous product's lines while this one's are in flight. Re-applies the
+  // cost source once the lines land, since HAVING a build list is itself what
+  // makes the manual cost field read-only — a fact only known after the fetch.
+  if (typeof blLoad === 'function') {
+    Promise.resolve(blLoad(p && p.id)).then(function () {
+      pdApplyCostSource(p);
+    });
+  }
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
   set('pd-low-stock', p && p.low_stock_threshold != null ? p.low_stock_threshold : '');

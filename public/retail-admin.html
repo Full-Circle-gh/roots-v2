@@ -4430,6 +4430,18 @@
                grouping changed. pdTab() in 09-products.js swaps the active pane. ═══ -->
           <div class="pd-tabs" id="pd-tabs" role="tablist" aria-label="Product sections · 产品分区">
             <button type="button" class="pd-tab is-active" data-pane="basics"  role="tab" aria-selected="true"  onclick="pdTab('basics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-4.5-4-8.5 8"/></svg><span class="pd-tab-txt">Basics · 基础</span></button>
+            <!-- The build list, the price and the margin, on ONE pane. Sits
+                 second because it is the visit's other half: you name the
+                 product, then you decide what it costs and what it sells for.
+                 Named for the errand, not the mechanism — the list is HOW the
+                 question is answered, not the question.
+                 LABEL COPIED VERBATIM from 19-recipes.js:412, which already
+                 ships this exact bilingual pair for the recipe screen's own
+                 cost tab. Not composed here: 成本与定价 is live text for this
+                 concept, and gluing sourced 成本 to sourced 价格 with a
+                 connector would have invented a third phrase that no Chinese
+                 reader has ever approved. -->
+            <button type="button" class="pd-tab"           data-pane="cost"    role="tab" aria-selected="false" onclick="pdTab('cost')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M16.5 7H9.75a2.75 2.75 0 000 5.5h4.5a2.75 2.75 0 010 5.5H7"/></svg><span class="pd-tab-txt">Cost &amp; Pricing · 成本与定价</span></button>
             <button type="button" class="pd-tab"           data-pane="stock"   role="tab" aria-selected="false" onclick="pdTab('stock')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l9-4.5 9 4.5-9 4.5-9-4.5z"/><path d="M3 7.5V17l9 4.5 9-4.5V7.5"/><path d="M12 12v9.5"/></svg><span class="pd-tab-txt">Stock · 库存</span><span class="pd-tab-cnt" id="pd-tab-cnt-stock" style="display:none;"></span></button>
             <button type="button" class="pd-tab"           data-pane="page"    role="tab" aria-selected="false" onclick="pdTab('page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="pd-tab-txt">Page · 页面</span><span class="pd-tab-chip" id="pd-tab-chip-page" style="display:none;"></span></button>
             <button type="button" class="pd-tab"           data-pane="details" role="tab" aria-selected="false" onclick="pdTab('details')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg><span class="pd-tab-txt">Details · 详情</span></button>
@@ -4455,15 +4467,18 @@
                 <div class="pdb-fields">
                   <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
                   <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
-                  <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-                  <!-- Cost sits directly under Price because the pair is what
-                       margin is read from, and the margin line below restates
-                       both halves so nobody has to do the sum. Blank = we have
-                       never bought this; that is NOT the same as a cost of 0,
-                       so the field stays empty rather than showing 0. Receiving
-                       a purchase order overwrites whatever is typed here. -->
-                  <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-cost-source" style="margin-top:4px;display:none;"></div><div id="pd-cost-alert" style="margin-top:6px;display:none;"></div><div class="muted" id="pd-margin" style="margin-top:4px;"></div></div>
-                  <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+                  <!-- PRICE, COST AND WAS-PRICE MOVED TO THE "Cost & price"
+                       PANE (Step 3, docs/tacet-product-build-lines-design.md).
+                       They are the SAME nodes with the SAME ids, relocated —
+                       every reader in 09-products.js (pdRenderMargin, the save
+                       payload, the draft restore) keeps working untouched,
+                       which is the same discipline the bento regrouping above
+                       followed. Price sits beside the build list because the
+                       list IS the cost: setting a price and seeing what it
+                       leaves you is ONE decision, and splitting it across two
+                       panes is what let a cost figure and the screen showing
+                       it drift apart. Do not move them back without moving
+                       the build list too. -->
                   <!-- SKU lives here, not on Stock. It is how you identify the
                        product, not a fact about how many you have — and on the
                        Stock tab it sat directly above the counts, pushing the
@@ -4525,6 +4540,85 @@
                   <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
                 </div>
               </section>
+
+            </div>
+          </div>
+
+          <!-- ══════════ COST & PRICING ══════════ -->
+          <!-- Step 3 of docs/tacet-product-build-lines-design.md, Option 2 of
+               the three Claude Design put up, chosen by Ash 2026-08-27.
+               ONE pane: the build list, the price, the margin. §31's addendum
+               makes a build line the product's ONLY cost source, so a separate
+               cost screen showing a figure this list produced would be a second
+               surface that can disagree with it — the exact failure
+               docs/packaging-findings.md found four times over in the recipe
+               cost formula.
+               LANGUAGE: four strings on this pane have NO sourced Chinese and
+               ship English-only, marked CN PENDING at each site. Everything
+               else is copied from live markup. See 21-product-build.js's header
+               for the sources. Do not "finish" the English-only ones. -->
+          <div class="pd-pane" data-pane="cost" role="tabpanel">
+            <div class="pd-pp-sech" data-pp-only="1">Cost &amp; Pricing · 成本与定价</div>
+            <div class="pd-bl-wrap">
+
+              <div class="pd-bl-main">
+                <section class="pdb-card">
+                  <!-- CN PENDING — no sourced Chinese for this title. English
+                       only until a Chinese-reading Roots user confirms one. -->
+                  <div class="pd-sec-h">What one unit is made of</div>
+                  <div class="pd-bl-sub">This list is the product&rsquo;s cost. There is no other cost field.</div>
+
+                  <div id="pd-bl-list"></div>
+
+                  <!-- The picker. A combobox, not a modal: adding a line is a
+                       small, frequent action and it should not leave the page —
+                       the same call 19-recipes.js made for recipe lines. -->
+                  <div class="pd-bl-pickwrap">
+                    <svg class="pd-bl-pick-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                    <input class="pd-bl-q" id="pd-bl-q" type="text" autocomplete="off"
+                           placeholder="Search materials to add… · 搜索要添加的物料…"
+                           oninput="blPickSearch(this.value)">
+                    <div id="pd-bl-pick"></div>
+                  </div>
+
+                  <div id="pd-bl-err" style="display:none;"></div>
+
+                  <div class="pd-bl-actions">
+                    <button type="button" class="btn" id="pd-bl-save" onclick="blSave()">Save build list · 保存</button>
+                  </div>
+                </section>
+              </div>
+
+              <!-- The rail. Sticky, because the margin is the number this pane
+                   exists to move and it must survive scrolling a long list. -->
+              <aside class="pd-bl-rail">
+                <section class="pdb-card">
+                  <div class="pdb-fields">
+                    <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                    <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+                  </div>
+                </section>
+
+                <section class="pdb-card pd-bl-figs">
+                  <div id="pd-bl-nums"></div>
+                </section>
+
+                <!-- The manual cost field, kept and made honest rather than
+                     deleted. It is the same node and id 09-products.js has
+                     always saved, so the wiring is untouched; what changed is
+                     that a product WITH a build list gets it read-only, and the
+                     save already skips unit_cost on a read-only field
+                     (09-products.js:5053) — so the list owns the figure and
+                     nothing else can overwrite it. A product with NO build list
+                     keeps a typed cost working exactly as before, which is what
+                     stops this change stranding the 171 uncosted products
+                     before their build lists exist. Step 4 revisits it. -->
+                <section class="pdb-card">
+                  <div class="pdb-fields">
+                    <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-cost-source" style="margin-top:4px;display:none;"></div><div id="pd-cost-alert" style="margin-top:6px;display:none;"></div><div class="muted" id="pd-margin" style="margin-top:4px;"></div></div>
+                  </div>
+                </section>
+              </aside>
 
             </div>
           </div>
@@ -12313,6 +12407,7 @@
 <script src="/lib/recipe-cost.js"></script>
 <script src="/assets/retail-admin/19-recipes.js"></script>
 <script src="/assets/retail-admin/20-waste.js"></script>
+<script src="/assets/retail-admin/21-product-build.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
