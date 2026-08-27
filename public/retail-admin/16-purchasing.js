@@ -1209,6 +1209,46 @@
       toast(e.code === 'nothing_outstanding' ? T('No short items to back-order', '没有缺货项目') : e.message, 'err');
     }
   };
+  // A reversal the server refused because the goods are no longer on the shelf.
+  // The headline is `undoBlocked`, the locked pair in
+  // docs/tacet-delivery-vocabulary.md ("Receipt reversal refused — purchasing",
+  // LOCKED 2026-08-27). Both of its halves are load-bearing — refused, AND
+  // nothing was written — and neither may be trimmed here for space.
+  //
+  // ONE renderer for all three entry points (Undo receiving, Back to draft,
+  // Cancel order). They report the same fact and the document says they must
+  // not diverge, so they share this function rather than each writing their own.
+  //
+  // Per-product lines reuse the `${n} short · ${n} 短缺` pair already live in
+  // this file's receive toast; it is deliberately not re-minted.
+  // askCustom is the blessed path for a body that is more than one message —
+  // building .tdlg-scrim markup by hand skips injectStyle() and paints
+  // unstyled divs (see public/tacet-dialogs.js).
+  function puShowUndoBlocked(blocking) {
+    const rows = (blocking || []).map(b => {
+      // nameLabel already escapes, and returns '—' when a line carries no name
+      // at all — show the product id in that case rather than a bare dash.
+      const nm = (b.name_en || b.name_cn)
+        ? nameLabel({ name_en: b.name_en, name_cn: b.name_cn })
+        : esc('#' + b.product_id);
+      return `<div class="lc-row"><span class="g">${nm}</span><span class="pu2-num">${esc(T(`${b.short} short`, `${b.short} 短缺`))}</span></div>`;
+    }).join('');
+    const body = `
+      <h3 class="tdlg-title">${esc(T('Cannot undo this delivery', '无法撤销此次收货'))}</h3>
+      <p class="tdlg-msg">${esc(T('Some of these goods have already left stock, so this delivery cannot be undone — nothing was changed.',
+                                  '部分货品已出库，此次收货无法撤销 — 未作任何更改。'))}</p>
+      ${rows ? `<div class="pu2-lc-grid" style="margin-top:12px">${rows}</div>` : ''}`;
+    const foot = `<button class="tdlg-btn tdlg-btn--primary" data-close>${esc(T('Close', '关闭'))}</button>`;
+    const { scrim, closer, ready } = askCustom('tdlg-danger', body, foot, '[data-close]');
+    scrim.querySelector('[data-close]').addEventListener('click', () => closer(null));
+    return ready;
+  }
+  // Every reversal entry point funnels its failure through here so the refusal
+  // is never reduced to a toast on one screen and a modal on another.
+  async function puReversalError(e) {
+    if (e && e.code === 'undo_blocked') { await puShowUndoBlocked(e.data && e.data.blocking); return; }
+    toast(e.message, 'err');
+  }
   window.puSetStatus = async function (status) {
     if (!_po) return;
     if (status === 'Cancelled' && !(await askConfirm({
@@ -1220,7 +1260,7 @@
       await api('/api/retail-admin/purchases/' + _po.id + '/status', { method: 'PUT', body: { status } });
       toast(T('Saved ✓', '已保存 ✓'), 'ok');
       await loadPOs(); puOpenPO(_po.id);
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { await puReversalError(e); }
   };
   window.puUndoReceive = async function () {
     if (!_po) return;
@@ -1234,7 +1274,7 @@
       await api('/api/retail-admin/purchases/' + _po.id + '/undo-receive', { method: 'PUT' });
       toast(T('Undone ✓', '已撤销 ✓'), 'ok');
       await loadPOs(); puOpenPO(_po.id);
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { await puReversalError(e); }
   };
   window.puReorder = async function (id) {
     try {

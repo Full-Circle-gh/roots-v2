@@ -183,6 +183,116 @@ function applyReceivedToStock(poId, req) {
   return { applied, costed, costSkippedRecipe };
 }
 
+// ── Receipt reversal — all of it, or none of it ────────────────────────────
+// Reversing a receipt asserts the goods never arrived. That is only true while
+// they are still on the shelf. Where some have already been sold or consumed
+// the assertion is false, so the reversal is REFUSED OUTRIGHT — no clamping to
+// zero, no partial return, nothing written, not even the lines that would have
+// succeeded. A partial reversal leaves stock and the order records disagreeing
+// with no sign on any screen that they do, which is worse than a refusal the
+// operator can read and act on.
+//
+// inventory.adjustStock's `Math.max(0, …)` clamp is deliberately NOT changed —
+// other callers depend on it. This pre-check is what stops this path from ever
+// reaching it, and the assertion below is what proves it never did.
+//
+// EVERYTHING RUNS ON tdb(). Three reasons, all load-bearing:
+//   1. It is the handle adjustStock writes through, so the outer transaction
+//      opened here CONTAINS its per-line transactions as savepoints. Without
+//      that the check and the writes are separated by a window in which a sale
+//      can land, and the clamp bites after all.
+//   2. seam() caches one wrapper per handle and passes `transaction` straight
+//      through to better-sqlite3, so the nesting above actually happens.
+//   3. purchase_orders / po_line_items are tenant data, not control-plane
+//      (lib/tenant-db.js CONTROL_PLANE_TABLES), so tdb() is the correct handle
+//      for those writes too — `db` would be the main database for a tenant
+//      running isolated.
+function planPOReversal(po) {
+  const lines = tdb().prepare(`
+    SELECT id, store_product_id, name_en, name_cn, stock_applied_qty
+      FROM po_line_items
+     WHERE po_id = ? AND store_product_id IS NOT NULL
+       AND COALESCE(stock_applied_qty, 0) <> 0
+  `).all(po.id);
+  // AGGREGATED BY PRODUCT, NOT BY LINE. Nothing on the server stops two lines
+  // of one PO carrying the same store_product_id — lineConflict() only rejects
+  // product AND material on a single line, and the wizard's de-dupe is
+  // client-side only. Checked per line, two 5-unit lines against 6 units on the
+  // shelf would both pass their own test and the second would clamp.
+  const byProduct = new Map();
+  for (const l of lines) {
+    const qty = Math.round(parseFloat(l.stock_applied_qty) || 0);
+    if (!qty) continue;
+    const seen = byProduct.get(l.store_product_id);
+    if (seen) seen.qty += qty;
+    else byProduct.set(l.store_product_id, {
+      product_id: l.store_product_id, qty,
+      name_en: l.name_en || null, name_cn: l.name_cn || null,
+    });
+  }
+  // A product with no stock row reads 0, so any reversal against it blocks —
+  // which is right: there is nothing there to give back.
+  const readQty = tdb().prepare(
+    'SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+  );
+  const blocking = [];
+  for (const p of byProduct.values()) {
+    const have = Math.round(parseFloat(readQty.get(po.store_id, p.product_id)?.physical_qty) || 0);
+    if (p.qty > have) blocking.push({ ...p, on_shelf: have, short: p.qty - have });
+  }
+  return { lines, products: [...byProduct.values()], blocking };
+}
+
+// Returns { blocked: [...] } and writes nothing, or { blocked: null,
+// reversed_units, reversed_lines } having reversed every line in full.
+// reversed_units counts UNITS ACTUALLY RETURNED TO THE SHELF, not lines
+// attempted — the old count reported the latter and called it success.
+function reversePOStock(po, req) {
+  let outcome = { blocked: null, reversed_units: 0, reversed_lines: 0 };
+  const tx = tdb().transaction(() => {
+    // Planned INSIDE the transaction: the reads and the writes must not be
+    // separable by a concurrent sale.
+    const plan = planPOReversal(po);
+    if (plan.blocking.length) { outcome = { blocked: plan.blocking, reversed_units: 0, reversed_lines: 0 }; return; }
+    if (!plan.products.length) return;
+    let units = 0;
+    for (const p of plan.products) {
+      const r = inventory.adjustStock({
+        storeId: po.store_id, productId: p.product_id, deltaQty: -p.qty,
+        actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
+        note: po.po_number, reason: 'restock_undo',
+      });
+      // The pre-check ran in this same transaction, so the clamp cannot have
+      // bitten. Assert it rather than trust it — if this ever fires, the throw
+      // rolls the whole transaction back and nothing is written, which is the
+      // same promise the refusal makes.
+      if (r.delta !== -p.qty) {
+        const e = new Error('reversal_clamped');
+        e.code = 'reversal_clamped';
+        throw e;
+      }
+      units += p.qty;
+    }
+    // Only now, with every product proven fully returned, is the line
+    // bookkeeping cleared. stock_applied_qty therefore records what actually
+    // reversed: all of it, or — on the refusal path above — none of it.
+    const clear = tdb().prepare('UPDATE po_line_items SET stock_applied_qty = 0 WHERE id = ?');
+    for (const l of plan.lines) clear.run(l.id);
+    outcome = { blocked: null, reversed_units: units, reversed_lines: plan.lines.length };
+  });
+  tx();
+  return outcome;
+}
+
+// The refusal body. `undoBlocked` is the locked pair in
+// docs/tacet-delivery-vocabulary.md ("Receipt reversal refused — purchasing",
+// LOCKED 2026-08-27); the screen renders it. The server sends the FACTS only —
+// which products, how short — because the language belongs to the viewer, not
+// to the route. One shape for all three entry points, so they cannot diverge.
+function blockedResponse(res, blocking) {
+  return res.status(409).json({ success: false, error: 'undo_blocked', blocking });
+}
+
 // ═══ Suppliers (shared master — same table the kitchen uses) ═══════════════
 
 router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
@@ -1251,6 +1361,28 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   if (!PO_STATUSES.has(status)) return res.status(400).json({ success: false, error: 'invalid_status' });
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  // LEAVING A POSTABLE STATE GIVES THE GOODS BACK, OR IT DOES NOT HAPPEN.
+  // Back to draft (Requested) and Cancel used to fall through to the expense
+  // DELETE below and leave the stock booked — stock saying the goods arrived,
+  // Finance saying they were never bought. Both now run the same reversal
+  // /undo-receive runs, under the same refusal, and expenses and stock move
+  // together or neither moves.
+  //
+  // THE GUARD IS HERE, ON THE ROUTE, NOT ON THE BUTTONS. The buttons already
+  // stop rendering once a PO is Delivered, but a status PUT does not come from
+  // a button — a defect that is only hard to reach is still reachable. This
+  // runs BEFORE the status is written, so a refusal leaves the order exactly
+  // as it was found.
+  const leavingPostable = status !== 'Ordered' && status !== 'Delivered';
+  if (leavingPostable) {
+    const rev = reversePOStock(po, req);
+    if (rev.blocked) return blockedResponse(res, rev.blocked);
+    if (rev.reversed_units) {
+      logActivity(req.user.id, req.user.username, 'stock_reversed', 'purchase_order', po.id,
+                  { scope: 'retail', to: status, reversed_units: rev.reversed_units,
+                    reversed_lines: rev.reversed_lines }, req.ip);
+    }
+  }
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, po.id);
   // First-time delivery seeds qty_received = qty (the common "everything
   // arrived" case); receive-route edits refine it afterwards.
@@ -1282,29 +1414,26 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
 // re-fire firePriceAlertsForPO (that already ran once on the way to
 // Delivered — re-running it on the way back would append a duplicate price
 // history row for no reason) or fire it again when re-confirmed later.
+//
+// REFUSES RATHER THAN CLAMPS. It used to loop the lines, hand each one to
+// adjustStock, and take the result on trust — which meant a reversal into
+// stock that had since been sold silently returned less than it claimed,
+// zeroed stock_applied_qty anyway, and reported success with a count of lines
+// ATTEMPTED. reversePOStock() now checks every product before it writes
+// anything and refuses the whole operation if any of them is short; the count
+// below is units actually returned to the shelf.
 router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, express.json(), (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
-  const lines = db.prepare(
-    'SELECT id, store_product_id, stock_applied_qty FROM po_line_items WHERE po_id = ? AND stock_applied_qty IS NOT NULL AND stock_applied_qty <> 0'
-  ).all(po.id);
-  let reversed = 0;
-  for (const l of lines) {
-    if (!l.store_product_id) continue;
-    inventory.adjustStock({
-      storeId: po.store_id, productId: l.store_product_id, deltaQty: -Math.round(parseFloat(l.stock_applied_qty) || 0),
-      actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
-      note: po.po_number, reason: 'restock_undo',
-    });
-    db.prepare('UPDATE po_line_items SET stock_applied_qty = 0 WHERE id = ?').run(l.id);
-    reversed++;
-  }
+  const rev = reversePOStock(po, req);
+  if (rev.blocked) return blockedResponse(res, rev.blocked);
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
-              { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true, stock_lines_reversed: reversed }, req.ip);
-  res.json({ success: true, stock_lines_reversed: reversed });
+              { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true,
+                reversed_units: rev.reversed_units, reversed_lines: rev.reversed_lines }, req.ip);
+  res.json({ success: true, reversed_units: rev.reversed_units, reversed_lines: rev.reversed_lines });
 });
 
 // Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status
