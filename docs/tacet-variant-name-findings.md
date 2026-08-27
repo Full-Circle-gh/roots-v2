@@ -209,3 +209,277 @@ Two directions, not exclusive, both out of scope here:
    operator can't tell them apart"* (`09-products.js:4028-4032`). Live check: 19 `name_en` values
    are shared by two or more of the 248 active rows, covering 48 rows, worst case seven identical
    "Essential Natural Lipstick" rows; and 11 variant groups have members whose `name_en` disagree.
+
+---
+
+# Appendix · Every divergent variant group, and what a rename would touch
+
+**2026-08-27, later the same day. Read-only. No file was changed except this one.**
+
+**Sources.** Repository at `origin/main` `8891397b`. Live rows read from the production database at
+`/root/roots-v2/data/roots.db` with `sqlite3 -readonly`, over SSH, on 2026-08-27. Every number below
+is a live count, not a fixture.
+
+**A correction to the brief.** The brief said *"You cannot query the live database — you have no
+SSH."* That is not the case: SSH to `root@47.239.89.63` works from this session and was used for the
+survey above on the same day. The queries are given verbatim in §D.4 so the results can be re-run and
+checked rather than taken on trust.
+
+**Peanut butter is fixed and no longer appears.** Ids 269 and 270 now both read
+`Peanut Butter (100% Peanuts)` / `花生酱`. One side effect worth knowing: the group is now owned by
+**270**, not 269 — `PUT /api/retail-admin/products/:id/variants` sets `groupId = id` of whichever
+product is open (`routes/retail.js:21866`), so editing the group from the sibling moved ownership to
+it. Nothing depends on which member owns the group, but the shop's collapsed card follows the owner
+(`miniapp/pages/shop/shop.js:621`), so the card is now titled from 270's row.
+
+That leaves **10 groups**, 24 rows. **Every one of those 24 rows is `is_active = 1` and
+`is_published = 1`** — there is no dead row to discount anywhere in the set.
+
+## A · The groups
+
+Owner first in each block, then siblings in `variant_sort` order. `act` / `pub` are `is_active` /
+`is_published`.
+
+### Group 228 · Rye & wheat bread
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 228 | 3-250 | Whole Loaf | Hearty Rye & Whole Wheat Bread (Sliced & Frozen) | 黑麦全麦面包 (切片冷冻) | 1 | 1 |
+| sibling | 352 | S(3-250) | 3 Slices | Hearty Rye & Whole Wheat Bread | 全麦黑麦面包 | 1 | 1 |
+
+### Group 260 · Coconut yogurt, plain
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 260 | 1-130 | Small | Probiotic Coconut Yogurt - Plain Flavor | 大椰益生菌230g（中）（冷藏） | 1 | 1 |
+| sibling | 261 | 1-140 | Big | Big Size Probiotic Coconut Yogurt - Plain Flavor | 纯素椰子酸奶（大）500g （冷藏） | 1 | 1 |
+
+### Group 262 · Coconut yogurt, vanilla
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 262 | 1-150 | Small | Probiotic Coconut Yogurt - Vanilla Flavor | 纯素椰子酸奶-香草味 (冷藏) | 1 | 1 |
+| sibling | 263 | 1-160 | Big | Medium Size Probiotic Coconut Yogurt - Vanilla Flavor | 纯素椰子酸奶-香草味200g （冷藏） | 1 | 1 |
+
+### Group 265 · Coconut yogurt, peach
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 265 | 1-190 | Big | Probiotic Coconut Yogurt - Peach Flavor | 纯素椰子酸奶-桃子味(冷藏） | 1 | 1 |
+| sibling | 264 | 1-180 | Small | Probiotic Coconut Yogurt -Peach Flavor | 纯素椰子酸奶-桃子味（小）130g (冷藏） | 1 | 1 |
+
+### Group 272 · Walnuts
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 272 | 2-330 | Big | Walnuts ( unsalted, raw ) | 核桃（无盐，生） | 1 | 1 |
+| sibling | 273 | 2-320 | Small | Walnuts | 核桃 | 1 | 1 |
+
+### Group 278 · Chia seeds
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 278 | 4-160 | Small | Organic Chia Seeds | 奇亚籽 | 1 | 1 |
+| sibling | 279 | 4-170 | Big | Chia Seeds | 奇亚籽 | 1 | 1 |
+
+### Group 280 · Energy cubes
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 280 | 1-260 | Small (60g) | Energy Cubes | 能量棒（小）60g （冷藏） | 1 | 1 |
+| sibling | 317 | (1-260) X3 | 2 small packs + 1 for free | Energy Cubes | 花生奇亚能量块 | 1 | 1 |
+| sibling | 281 | 1-270 | Big (200g) | Energy Cubes | 花生奇亚能量块 | 1 | 1 |
+| sibling | 318 | (1-270) X3 | 2 big packs + 1 for free | Energy Cubes Big Size | 花生奇亚能量块（大）200g (冷藏） | 1 | 1 |
+
+### Group 283 · Passion fruit kombucha
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 283 | 2-80 | Small | Passion Fruit Kombucha | 百香果康普茶 | 1 | 1 |
+| sibling | 324 | 2-90 | Big | Kombucha (AKA Booch) - Passion Fruit | 百香果康普茶（大）1000ml （冷藏）（有另搭瓶塞） | 1 | 1 |
+
+### Group 316 · Raspberry mango sorbet
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 316 | (3-210) X5 | 4 Cups +1 for free | Raspberry Mango Sorbet | 树莓芒果冰淇淋 | 1 | 1 |
+| sibling | 198 | 3-210 | 1 Cup | Raspberry-Mango Sorbet | 树莓芒果雪葩 | 1 | 1 |
+| sibling | 315 | (3-210) X 3 | 3 Cups | Raspberry Mango Sorbet | 树莓芒果冰淇淋 | 1 | 1 |
+
+### Group 326 · Natural foundation
+
+| role | id | sku | label | name_en | name_cn | act | pub |
+|---|---|---|---|---|---|---|---|
+| **OWNER** | 326 | 12-23 | 02 Shell | The Standard Natural Foudation | 光感植物粉底液 | 1 | 1 |
+| sibling | 33 | 12-22 | 01 Snow | The Standard Natural Foundation | 光感植物粉底液 | 1 | 1 |
+| sibling | 327 | 12-24 | Sand | The Standard Natural Foudation | 光感植物粉底液 | 1 | 1 |
+
+## B · Where a sibling's name reads better than the owner's
+
+A read, flagged, not acted on.
+
+**326 — the sibling is simply correct and the owner is not.** The owner says
+*"Foudation"*. Id 33 says *"Foundation"*. Two of the three rows carry the typo and the OWNER is one
+of them, so the misspelling is what the shop's collapsed card shows today. This is the one group
+where the answer is not a preference.
+
+**228 — the sibling is the better base name.** *"(Sliced & Frozen)"* is true of both sizes, so it
+describes the product, not the loaf. The sibling's *"Hearty Rye & Whole Wheat Bread"* is the name;
+the parenthetical belongs in the product's own description or in both labels, not in one member's
+name. Note the two Chinese names also reverse the word order (黑麦全麦 vs 全麦黑麦).
+
+**316 — the wrong row owns the group.** The owner is the FIVE-cup multipack; id 198 is the single
+cup, the base product, and the only one with a plain SKU. The English names differ by one hyphen,
+but the Chinese differ in substance — 冰淇淋 (ice cream) on two rows, 雪葩 (sorbet) on the single
+cup — and only one of those can be right. Worth deciding what the product is before deciding what
+it is called.
+
+**Everywhere else the owner's name is the better one**, and the sibling is what needs changing:
+
+- **260 / 262 / 318** put the SIZE in the name — *"Big Size…"*, *"Medium Size…"*, *"…Big Size"* —
+  which is what `variant_label` already says, twice over on the card. **262 contradicts itself**: the
+  label says Big and the name says Medium. **260's Chinese is the odd one out in its own family** —
+  大椰益生菌230g（中） where every sibling uses 纯素椰子酸奶, and it says 中 while the label says Small.
+- **265** differs from its owner by one missing space (`Yogurt -Peach`).
+- **272** — the owner is more informative but spaced oddly: `Walnuts ( unsalted, raw )`. Both rows
+  want `Walnuts (unsalted, raw)`.
+- **283** — the sibling carries *"(AKA Booch)"*, which appears on no other product.
+- **280** — only 318 diverges in English, and it diverges by repeating its label. The Chinese in
+  this group is in worse shape than the English: four members, three different Chinese names.
+
+**278 is not a naming question and should not be renamed on this pass.** One row claims *Organic*
+and the other does not, on the same product in two sizes. Either both are organic, in which case the
+sibling's name understates a real claim, or they are different goods that should not share a variant
+group. That is a product decision, and getting it wrong in the direction of "organic" is a labelling
+claim, not a typo.
+
+## C · What a rename would break
+
+**Nothing that stores a name. Every product reference in every channel is by `store_products.id`.**
+
+| Surface | How it references a product | Rename-safe? |
+|---|---|---|
+| `meituan_product_map` | `product_id` FK → `store_products(id)`. `meituan_name` holds the **Meituan-side** listing title, for display/audit. | Yes |
+| `eleme_product_map` | `product_id` FK. `eleme_name` is the cached **Eleme** item title, commented *"display only"*. | Yes |
+| `guanyi_product_map` (this is gzgrocery) | `product_id` FK + `guanyi_code`. `guanyi_name` is the matched **Guanyi** itemName, *"display/audit"*. | Yes |
+| `meituan_bundle_components` | `product_id` FK. | Yes |
+| `store_products.bundle_items` / `bundle` | JSON of `{"id":270,"qty":1}` — ids, never names. | Yes |
+| `retail_vouchers` / `retail_customer_vouchers` | No product scoping at all — no `product_id`, no name column. Coupons are order-level. | Yes |
+| `meituan_listings.listing_name` | The **Meituan** catalogue name the map-name gate validates against. Never `store_products.name_en`. | Yes |
+
+Coverage for the 24 rows: **21 of 24 are mapped in Meituan, 21 in Eleme, 19 in Guanyi.** The three
+unmapped are the whole of group 326 (the foundations, ids 326 / 33 / 327) plus the two Energy Cubes
+multipacks (317, 318) — cosmetics and multipacks that were never listed on the delivery channels. So
+the group whose rename is most obviously right is also the one with nothing downstream to disturb.
+
+### C.1 · The one place a name is load-bearing, and why it cuts both ways
+
+`resolveProduct()` in `routes/meituan-internal.js:118-190` — and its twin in
+`routes/eleme-internal.js:160-220` — resolves an incoming order line to a product through a ladder:
+
+0. the option claimed by exactly one product,
+1. an inline SKU token,
+2. `meituan_product_map` matched on the **Meituan** name,
+3. **a unique active `store_products` name match** — and only if steps 0-2 all missed.
+
+Step 3 is the exposure (`routes/meituan-internal.js:186-187`):
+
+```js
+if (cjk) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_cn LIKE ?').all(`%${cjk}%`);
+if (matches.length !== 1 && en) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_en LIKE ?').all(`%${en.trim()}%`);
+if (matches.length === 1) { apply(matches[0], 'name'); }
+```
+
+`matches.length === 1`. **A rename that makes two rows share a name turns a working match into an
+ambiguous one, and the line stops deducting stock.** That is the direction this whole rename plan
+points in — making siblings agree is making names collide.
+
+**This is not hypothetical; it is already happening.** `meituan_sync_log` holds 41 `order_unsynced`
+events between 2026-06-29 and 2026-08-24. Three carry a successful `"by":"name"` match on some other
+line, so the fallback is live and load-bearing. **Thirteen are `[ambiguous]`**, and eight of those are
+one product:
+
+```
+2026-08-24  1 item(s) not synced: Whole-Wheat Pita皮塔面包(一个)(Yes) x1 [ambiguous]
+2026-08-12  1 item(s) not synced: Whole-Wheat Pita皮塔面包(一个)(Yes) x1 [ambiguous]
+…  (2026-08-11, 08-08, 08-07 ×2, 08-05, 08-02, 07-15)
+```
+
+Whole-Wheat Pita is a variant group whose two members **already share a name** — ids 256 and 351,
+both `Whole-Wheat Pita (Frozen)` / `全麦皮塔饼（冷冻）`. Every one of those lines is a sale that did
+not come off the shelf.
+
+The mechanism is coarser than "two rows share a name", and worth understanding before renaming
+anything. Step 3 strips half-width parentheses only, so `全麦皮塔饼（冷冻）` keeps its full-width ones
+and the CJK probe misses; the English probe then extracts `Whole` — `[A-Za-z][A-Za-z ]+` stops at the
+hyphen — and `name_en LIKE '%Whole%'` returns **twelve** active rows today, including both bread rows
+from group 228. So this matcher is already far too blunt to be rescued by tidier names, and equally it
+cannot be made much worse by them.
+
+**The honest read, then:** a rename cannot desync any stored mapping, because nothing stores a name.
+It perturbs one last-resort matcher that is already failing on its own. The mitigation is not to
+avoid renaming — it is to make sure any row whose name is about to collide with a sibling's is
+**mapped**, so the line resolves at step 0-2 and never reaches step 3. Peanut butter, already
+renamed, is safe on exactly that basis: ids 269 and 270 now share a name AND both carry 2 Meituan,
+1 Eleme and 1 Guanyi mapping.
+
+### C.2 · What to check before each rename
+
+For any row you are about to give a name another active row already has: confirm it has a live map
+row in every channel it sells on. The query is in §D.4.
+
+## D · Reproducing this
+
+The database is on the box, not on the PC, so these run over SSH rather than from PowerShell
+directly. Each is read-only (`-readonly` opens the file with no write handle; see
+`reference_readonly_require_still_writes` for why the app's own libraries must not be used for this).
+
+**D.1 — the divergent groups**
+
+```sql
+WITH grp AS (
+  SELECT variant_group_id AS gid FROM store_products
+   WHERE variant_group_id IS NOT NULL AND COALESCE(is_active,1)=1
+   GROUP BY variant_group_id HAVING COUNT(DISTINCT name_en) > 1)
+SELECT sp.variant_group_id AS gid,
+       CASE WHEN sp.id = sp.variant_group_id THEN 'OWNER' ELSE 'sibling' END AS role,
+       sp.id, COALESCE(sp.sku,'') AS sku, COALESCE(sp.variant_label,'') AS label,
+       sp.name_en, sp.name_cn,
+       COALESCE(sp.is_active,1) AS act, COALESCE(sp.is_published,0) AS pub
+  FROM store_products sp JOIN grp ON grp.gid = sp.variant_group_id
+ ORDER BY sp.variant_group_id, (sp.id = sp.variant_group_id) DESC, COALESCE(sp.variant_sort,0), sp.id;
+```
+
+**D.2 — names already shared by two or more active rows** (the collision surface step 3 sees)
+
+```sql
+SELECT name_en, COUNT(*) n,
+       GROUP_CONCAT(COALESCE(sku,'(no sku)') || '/' || COALESCE(variant_label,'-'), ' | ')
+  FROM store_products WHERE COALESCE(is_active,1)=1
+ GROUP BY name_en HAVING n > 1 ORDER BY n DESC;
+```
+
+**D.3 — the unsynced-order evidence**
+
+```sql
+SELECT date(created_at), substr(error_msg,1,150)
+  FROM meituan_sync_log
+ WHERE event_type='order_unsynced' AND error_msg LIKE '%[ambiguous]%'
+ ORDER BY created_at DESC;
+```
+
+**D.4 — channel mapping coverage for a set of product ids** (run before renaming into a collision)
+
+```sql
+SELECT sp.id, sp.sku, sp.name_en,
+       (SELECT COUNT(*) FROM meituan_product_map m WHERE m.product_id = sp.id) AS mt_map,
+       (SELECT COUNT(*) FROM eleme_product_map   e WHERE e.product_id = sp.id) AS el_map,
+       (SELECT COUNT(*) FROM guanyi_product_map  g WHERE g.product_id = sp.id) AS gy_map
+  FROM store_products sp WHERE sp.id IN (/* ids */);
+```
+
+Wrapped for the shell, each is:
+
+```bash
+ssh root@47.239.89.63 "sqlite3 -readonly -header -column /root/roots-v2/data/roots.db '<SQL on one line>'"
+```
