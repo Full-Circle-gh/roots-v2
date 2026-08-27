@@ -174,6 +174,17 @@ router.get('/api/retail-admin/materials/meta/categories', requireRetailAdmin, (r
   res.json({ success: true, data: rows.map(r => r.category) });
 });
 
+// The finance-category master list — same `categories` rows the kitchen app's
+// Finance page maintains (kind='accounting'). storeCategory() already snaps a
+// typed value onto one of these; this just lets the field offer them instead
+// of asking the operator to retype one from memory.
+router.get('/api/retail-admin/materials/meta/accounting-categories', requireRetailAdmin, (req, res) => {
+  const rows = db.prepare(
+    "SELECT name FROM categories WHERE kind = 'accounting' ORDER BY sort_order, name"
+  ).all();
+  res.json({ success: true, data: rows.map(r => r.name) });
+});
+
 // ═══ One material ══════════════════════════════════════════════════════════
 router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => {
   const row = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);

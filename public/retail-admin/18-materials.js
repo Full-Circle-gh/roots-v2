@@ -80,6 +80,7 @@
   let _counts = {};
   let _kinds = [];        // categories WHERE kind='item_kind'
   let _cats = [];         // distinct ingredients.category
+  let _finCats = [];      // categories WHERE kind='accounting' — the finance-category master list
   let _suppliers = [];
   let _kind = '';         // '' = all
   let _cat = '';
@@ -112,13 +113,15 @@
     // The three pickers are read once — they change on a scale of months, and a
     // failed picker fetch must not stop the list from painting.
     try {
-      const [k, c, s] = await Promise.all([
+      const [k, c, f, s] = await Promise.all([
         api('/api/retail-admin/materials/meta/kinds').catch(() => ({ data: [] })),
         api('/api/retail-admin/materials/meta/categories').catch(() => ({ data: [] })),
+        api('/api/retail-admin/materials/meta/accounting-categories').catch(() => ({ data: [] })),
         api('/api/retail-admin/suppliers').catch(() => ({ data: [] })),
       ]);
       _kinds = k.data || [];
       _cats = c.data || [];
+      _finCats = f.data || [];
       _suppliers = s.data || [];
     } catch (e) { /* pickers are optional; the list is not */ }
     load();
@@ -398,7 +401,9 @@
               ${field(T('Name (中文)', '名称(中文)'), input('name_cn', m.name_cn, 'maxlength="120"'))}
               ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
                        T('Kept forever, even after archiving — so old orders keep pointing at the right thing.', '归档后仍永久保留 — 以免历史订单指向错误。'))}
-              ${field(T('Finance category', '财务分类'), input('accounting_category', m.accounting_category, 'maxlength="80"'))}
+              ${field(T('Finance category', '财务分类'),
+                       input('accounting_category', m.accounting_category, 'maxlength="80" list="mat-fincat-opts"')
+                       + `<datalist id="mat-fincat-opts">${_finCats.map(c => `<option value="${esc(c)}">`).join('')}</datalist>`)}
             </div>
           </div>
 
