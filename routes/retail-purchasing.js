@@ -1223,6 +1223,40 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   res.json({ success: true });
 });
 
+// Undo an accidental "Delivered" — pulls back whatever stock this PO's own
+// receiving pushed in (reversing exactly stock_applied_qty per line, so a
+// correction made after the fact is never double-reversed) and drops the
+// order back to Ordered/Sent. qty_received/damaged_qty are left as they were:
+// the counts stay on screen so the next confirm just re-applies the same
+// delta, it doesn't ask the operator to re-enter them. Deliberately does NOT
+// re-fire firePriceAlertsForPO (that already ran once on the way to
+// Delivered — re-running it on the way back would append a duplicate price
+// history row for no reason) or fire it again when re-confirmed later.
+router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, express.json(), (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
+  const lines = db.prepare(
+    'SELECT id, store_product_id, stock_applied_qty FROM po_line_items WHERE po_id = ? AND stock_applied_qty IS NOT NULL AND stock_applied_qty <> 0'
+  ).all(po.id);
+  let reversed = 0;
+  for (const l of lines) {
+    if (!l.store_product_id) continue;
+    inventory.adjustStock({
+      storeId: po.store_id, productId: l.store_product_id, deltaQty: -Math.round(parseFloat(l.stock_applied_qty) || 0),
+      actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
+      note: po.po_number, reason: 'restock_undo',
+    });
+    db.prepare('UPDATE po_line_items SET stock_applied_qty = 0 WHERE id = ?').run(l.id);
+    reversed++;
+  }
+  db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
+  postRetailPOExpenses(po.id);
+  logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
+              { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true, stock_lines_reversed: reversed }, req.ip);
+  res.json({ success: true, stock_lines_reversed: reversed });
+});
+
 // Bulk per-line receive: qty_received / damaged_qty / tracking / invoice_status.
 // Every save re-applies the stock delta and re-posts expenses.
 router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, express.json(), (req, res) => {

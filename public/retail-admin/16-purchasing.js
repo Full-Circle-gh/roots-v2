@@ -981,6 +981,7 @@
         ${p.status === 'Ordered' ? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived()">${esc(T('All arrived as ordered', '全部按订单到货'))}</button>` : ''}
         ${p.status === 'Ordered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puSetStatus('Requested')">${esc(T('Back to draft', '退回草稿'))}</button>` : ''}
         ${p.status === 'Delivered' ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puReorder(${p.id})">${esc(T('Order again', '再次采购'))}</button>` : ''}
+        ${p.status === 'Delivered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puUndoReceive()">${esc(T('Undo receiving', '撤销收货'))}</button>` : ''}
         ${shortN ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puBackorder()">${esc(T(`Back-order ${shortN} short`, `${shortN} 项缺货补单`))}</button>` : ''}
         <span class="spacer"></span>
         ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puSetStatus('Cancelled')">${esc(T('Cancel order', '取消采购单'))}</button>` : ''}
@@ -1111,6 +1112,20 @@
     try {
       await api('/api/retail-admin/purchases/' + _po.id + '/status', { method: 'PUT', body: { status } });
       toast(T('Saved ✓', '已保存 ✓'), 'ok');
+      await loadPOs(); puOpenPO(_po.id);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puUndoReceive = async function () {
+    if (!_po) return;
+    if (!(await askConfirm({
+      title: T('Undo receiving?', '撤销收货？'),
+      body: T('Pulls back any stock this delivery added and returns the order to Sent.', '撤回该次收货已入库的数量，订单退回"已下单"状态。'),
+      confirmLabel: T('Undo receiving', '撤销收货'),
+      danger: true,
+    }))) return;
+    try {
+      await api('/api/retail-admin/purchases/' + _po.id + '/undo-receive', { method: 'PUT' });
+      toast(T('Undone ✓', '已撤销 ✓'), 'ok');
       await loadPOs(); puOpenPO(_po.id);
     } catch (e) { toast(e.message, 'err'); }
   };
