@@ -21665,6 +21665,29 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                       stock_qty
                     ) AS effective_stock,
                     is_published, sort_order, updated_at,
+                    -- recipe_id AND its name. The list is deliberately slim, but
+                    -- this is one integer and one string the EDITOR cannot work
+                    -- without: PA_PRODUCTS is the only object pdOpen ever sees,
+                    -- there is no hydrate-on-open fetch, and pdApplyCostSource
+                    -- reads p.recipe_id to decide between "From recipe" and
+                    -- "Link a recipe". Omitted, it only ever arrived by the
+                    -- recipe-link flow MERGING a response into PA_PRODUCTS
+                    -- (09-products.js:1138) — so it survived exactly until the
+                    -- next paLoad() and every reload showed a linked product as
+                    -- unlinked. Reported as "i link a recipe and it doesnt save
+                    -- it": the link was in the database the whole time, the list
+                    -- simply never carried it back.
+                    --
+                    -- SUBQUERIES, NOT A JOIN, AND THAT IS THE WHOLE POINT.
+                    -- The recipes table carries id / name_en / name_cn / sku / category
+                    -- too, so LEFT JOINing it makes every unqualified column in
+                    -- this SELECT ambiguous and SQLite refuses the statement
+                    -- outright — which takes the entire Products list down, not
+                    -- just the recipe name. Two scalar subqueries touch nothing
+                    -- else in the query and cannot collide with anything.
+                    (SELECT rr.name_en FROM recipes rr WHERE rr.id = p.recipe_id) AS recipe_name_en,
+                    (SELECT rr.name_cn FROM recipes rr WHERE rr.id = p.recipe_id) AS recipe_name_cn,
+                    p.recipe_id,
                     status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
