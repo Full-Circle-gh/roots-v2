@@ -85,6 +85,11 @@ const ROW_COLS = `
 // it is voided, and the reversal is a row in its own right. Summing without
 // this predicate counts a voided loss twice and then adds its own reversal.
 const LIVE_ONLY = 'reverses_waste_id IS NULL AND voided_by_waste_id IS NULL';
+// The same columns qualified for the list's join. Derived from ROW_COLS rather
+// than typed twice, so a column added above cannot be forgotten here — the two
+// lists drifting apart is exactly how a screen ends up silently missing a field.
+const W_COLS = ROW_COLS.split(',').map(c => c.trim()).filter(Boolean).map(c => 'w.' + c).join(', ');
+
 
 // ── Account-level switch (§32 rule 4) ────────────────────────────────────────
 //
@@ -212,38 +217,67 @@ function resolveCostCents(unitYuan, qty) {
   return { cents: Math.max(1, cents), uncosted: false };
 }
 
-// ── GET / — the list ─────────────────────────────────────────────────────────
+// ── GET / — the list ───────────────────────────────────────────────
 //
-// Defaults to live rows only. `include_voided=1` returns the reversals and the
-// rows they cancelled as well, for an audit view; it is opt-in because the
-// obvious question ("what did we lose") has the obvious wrong answer if voided
-// rows are in the set.
+// `include_voided=1` returns the reversals and the rows they cancelled as well.
+// The screen asks for it, because a voided entry must stay VISIBLE — a ledger
+// that quietly drops its own corrections is how nobody notices one.
+//
+// THE TOTALS DO NOT FOLLOW THE LIST, AND THAT IS THE POINT. They are always
+// computed over the LIVE subset of the same filter, whether or not voided rows
+// are being listed. A void returns the stock and cancels the loss (§32 rule 11),
+// so counting a voided entry as a loss reports money that was never lost; and
+// because a reversal is itself a positive row, summing the listed set with
+// voided rows in it counts the same loss twice and then adds its own undo.
+// `voided_entries` is returned beside the total so the exclusion is STATED
+// rather than silent — a reader can see that corrections exist and that they
+// are not in the number.
+//
+// The names are JOINED, not stored. Unlike the kitchen table this row does not
+// snapshot a product name, so a rename rewrites what history reads — recorded
+// here because it is a real trade and not an oversight: the id is the record and
+// the name is a lookup. A product deleted outright leaves a null name, which the
+// screen renders as an unknown rather than as a blank.
 router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (req, res) => {
   const db = tdb();
   const { from, to, location_id, reason, include_voided } = req.query;
   const parts = [];
   const params = [];
-  if (!(include_voided === '1' || include_voided === 'true')) parts.push(LIVE_ONLY);
-  if (from)        { parts.push('business_date >= ?'); params.push(from); }
-  if (to)          { parts.push('business_date <= ?'); params.push(to); }
-  if (location_id) { parts.push('location_id = ?');    params.push(Number(location_id)); }
-  if (reason)      { parts.push('reason_code = ?');    params.push(reason); }
-  const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
+  if (from)        { parts.push('w.business_date >= ?'); params.push(from); }
+  if (to)          { parts.push('w.business_date <= ?'); params.push(to); }
+  if (location_id) { parts.push('w.location_id = ?');    params.push(Number(location_id)); }
+  if (reason)      { parts.push('w.reason_code = ?');    params.push(reason); }
+  const filter = parts.length ? parts.join(' AND ') : '1=1';
+  const live = LIVE_ONLY.replace(/(reverses_waste_id|voided_by_waste_id)/g, 'w.$1');
+  const listWhere = (include_voided === '1' || include_voided === 'true') ? filter : `${filter} AND ${live}`;
 
-  const rows = db.prepare(
-    `SELECT ${ROW_COLS} FROM waste_records ${where} ORDER BY business_date DESC, id DESC LIMIT 500`
-  ).all(...params);
+  const rows = db.prepare(`
+    SELECT ${W_COLS},
+           p.name_en AS product_name_en, p.name_cn AS product_name_cn, p.sku AS product_sku,
+           s.code    AS location_code,   s.name_en AS location_name_en, s.name_cn AS location_name_cn
+      FROM waste_records w
+      LEFT JOIN store_products p ON p.id = w.store_product_id
+      LEFT JOIN retail_stores  s ON s.id = w.location_id
+     WHERE ${listWhere}
+     ORDER BY w.business_date DESC, w.id DESC
+     LIMIT 500
+  `).all(...params);
 
   // The uncosted COUNT travels with the total, always (§32 rule 10) — a total
   // presented alone reads as complete, and the whole point of the flag is that
   // sometimes it is not.
-  const totals = db.prepare(
-    `SELECT COALESCE(SUM(cost_total_cents), 0) AS cost_total_cents,
-            COALESCE(SUM(qty), 0)              AS qty_total,
-            COUNT(*)                           AS entries,
-            SUM(is_uncosted)                   AS uncosted_entries
-       FROM waste_records ${where}`
+  const totals = db.prepare(`
+    SELECT COALESCE(SUM(w.cost_total_cents), 0) AS cost_total_cents,
+           COALESCE(SUM(w.qty), 0)              AS qty_total,
+           COUNT(*)                             AS entries,
+           COALESCE(SUM(w.is_uncosted), 0)      AS uncosted_entries
+      FROM waste_records w
+     WHERE ${filter} AND ${live}
+  `).get(...params);
+  const voided = db.prepare(
+    `SELECT COUNT(*) AS n FROM waste_records w WHERE ${filter} AND w.voided_by_waste_id IS NOT NULL`
   ).get(...params);
+  totals.voided_entries = voided.n;
 
   res.json({ success: true, data: rows, totals });
 });

@@ -1312,6 +1312,18 @@
     Recipes · 食谱
   </button>
 
+  <!-- Waste (损耗) — §32: a stock movement with a reason. Its OWN switch, not
+       Production's: a pure retail account that makes nothing still wastes
+       finished stock, so this must not be gated behind a module about making
+       things. Hidden when off rather than dimmed, for the same reason
+       Production is — the switch lives in Settings → Operations, not on this
+       page, so a dimmed row would lead somewhere that still works wearing a
+       badge saying it doesn't. -->
+  <button data-tab="waste" data-feat="waste" onclick="wasteInit()" style="order:9">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    Waste · 损耗
+  </button>
+
   <!-- Content — a FOLDER, not a destination (rail drill-down amendment §2.2,
        2026-07-29). It was "Editor": a group that was also a live tab, the only
        one of the three with a page of its own. The group row is now labelled
@@ -11147,6 +11159,18 @@
     <div id="rcp-root" data-no-i18n></div>
   </section>
 
+  <!-- ── Waste (损耗) ────────────────────────────────────────────
+       ONE section, not two: the record is a MODAL (§1.13 — every field visible
+       on open, a fixed height, one commit), where Materials' record is a full
+       page. That is not an inconsistency to correct — §1.13's three questions
+       give different answers for the two, because a material record is authored
+       and a waste entry is not.
+       data-no-i18n because every string inside is baked by cuT() at paint time
+       and repainted on language change (retail-admin/20-waste.js). -->
+  <section id="tab-waste">
+    <div id="wst-root" data-no-i18n></div>
+  </section>
+
   <section id="tab-recipes-record">
     <div class="rcp-scroll" id="rcp-rec-scroll">
       <div class="rcp-page" data-no-i18n>
@@ -12288,6 +12312,7 @@
      19-recipes.js, which uses it for the live Cost & Pricing preview. -->
 <script src="/lib/recipe-cost.js"></script>
 <script src="/assets/retail-admin/19-recipes.js"></script>
+<script src="/assets/retail-admin/20-waste.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
