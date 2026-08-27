@@ -15,6 +15,7 @@ const { nextKitchenPONumber } = require('../lib/po-number');
 // write-back moves a non-linked ingredient's cost, since that can move a
 // linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute } = require('../lib/recipe-rollup');
+const { blockCostWrite, blockCostWriteIf } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
 // Web Push helpers — fan-out to subscribed devices when a PO event
@@ -112,7 +113,15 @@ function _firePOPush(poId, kind) {
 // buy_unit is NOT written any more. It is a property of the item as the
 // supplier sells it, and overwriting it from a PO line silently re-based every
 // future division.
-function firePriceAlertsForPO(poId, source) {
+//
+// `actor` (optional {userId, username, ip}) is who to credit the cost_update
+// activity_log rows below to. Every caller in this file omits it (kitchen
+// writes are attributed to 'system'); routes/retail-purchasing.js passes the
+// requesting operator so a cancellation can find, and roll back, exactly what
+// this PO changed — see rollbackMaterialCost() there. Nothing here reads the
+// log back; it exists purely so a later reversal has something to read.
+function firePriceAlertsForPO(poId, source, actor) {
+  const a = actor || {};
   const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
   const skips = [];
   // Prepared behind a guard: a database restored from before this table
@@ -168,7 +177,10 @@ function firePriceAlertsForPO(poId, source) {
     if (cpu === null) { skip(ing, item, reason); continue; }
 
     if (Number(cpu) !== Number(ing.cost_per_unit || 0)) cpuMoved = true;
+    const costBefore = { buy_price: ing.buy_price ?? null, cost_per_unit: ing.cost_per_unit ?? null };
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
+    logActivity(a.userId ?? null, a.username || 'system', 'cost_update', 'ingredient', item.ingredient_id,
+      { from: costBefore, to: { buy_price: item.cost_per_unit, cost_per_unit: cpu }, po_id: poId, source }, a.ip ?? null);
     // The item just priced cleanly, so whatever blocked it before is no longer
     // true — close its open skips. They stay in the table with resolved_at set,
     // because the history of what went unpriced is worth keeping. Without this
@@ -360,7 +372,16 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
 });
 
 // PUT update PO status + items
-router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (req, res) => {
+// Only writes ingredients.cost_per_unit/buy_price (via firePriceAlertsForPO)
+// when `items` is present AND the status is one that fires the price
+// write-back (mirrors the route's own guard at the firePriceAlertsForPO call
+// below) — blocked conditionally on exactly that (material cost columns). A
+// plain date/notes/warehouse edit, or an items edit that leaves status at
+// Requested, still goes through.
+router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), blockCostWriteIf(
+  (req) => !!(req.body && req.body.items) && ['Ordered', 'Delivered', 'Confirmed'].includes(req.body.status),
+  'material cost'
+), (req, res) => {
   const { date, delivery_date, status, supplier, warehouse, notes, items } = req.body;
   db.prepare('UPDATE purchase_orders SET date=?,delivery_date=?,status=?,supplier=?,warehouse=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(date, delivery_date||null, status||'Requested', supplier||null, warehouse||null, notes||null, req.params.id);
@@ -448,7 +469,13 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
 // PUT /api/purchases/:id/status — status-only update. Avoids the items
 // round-trip used by the previous PUT path which would wipe per-line state
 // (qty_received, tracking, damaged_qty) every time the user clicked a status.
-router.put('/api/purchases/:id/status', requireAuth, requirePermission('purchases'), (req, res) => {
+// Fires firePriceAlertsForPO (mirrors the guard at that call below) whenever
+// status moves to Ordered or Delivered — blocked conditionally on exactly
+// that (material cost columns). Moving back to Requested is left open.
+router.put('/api/purchases/:id/status', requireAuth, requirePermission('purchases'), blockCostWriteIf(
+  (req) => ['Ordered', 'Delivered'].includes(req.body && req.body.status),
+  'material cost'
+), (req, res) => {
   const { status } = req.body || {};
   if (!['Requested','Ordered','Delivered'].includes(status)) return res.status(400).json({ error: 'Invalid status · 状态无效' });
   const po = getKitchenPO(req.params.id);
@@ -599,7 +626,9 @@ router.post('/api/purchases/:id/repost-expense', requireAuth, requirePermission(
 // and placed into a fresh Requested PO (linked via backorder_of) so the user
 // can keep tracking what's still owed by the supplier. Empty/missing array =
 // order everything.
-router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchases'), (req, res) => {
+// Unconditionally calls firePriceAlertsForPO on every successful order —
+// blocked outright (material cost columns).
+router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchases'), blockCostWrite('material cost'), (req, res) => {
   try {
     const poId = parseInt(req.params.id, 10);
     if (!poId) return res.status(400).json({ error: 'invalid PO id · 采购单 ID 无效' });

@@ -67,6 +67,13 @@ function actorLabel(req) {
   return req.user?.display_name || req.user?.username || null;
 }
 
+// Shape firePriceAlertsForPO's optional `actor` param wants, so a cost_update
+// activity_log row it writes carries who made this PO's material price
+// write-back — the record rollbackMaterialCost() below reads back.
+function actorFor(req) {
+  return { userId: req.user?.id || null, username: actorLabel(req), ip: req.ip };
+}
+
 // ── Expense auto-posting — mirror of routes/purchases.js postPOExpenses ────
 // Idempotent DELETE-then-INSERT keyed on po_id; posts on Ordered/Delivered,
 // wiped when the PO drops back to Requested (or is Cancelled). Amount uses
@@ -291,6 +298,78 @@ function reversePOStock(po, req) {
 // to the route. One shape for all three entry points, so they cannot diverge.
 function blockedResponse(res, blocking) {
   return res.status(409).json({ success: false, error: 'undo_blocked', blocking });
+}
+
+// ── Material cost rollback — undo the ingredients.cost_per_unit / buy_price
+// write firePriceAlertsForPO made for this PO's material lines, when leaving
+// Ordered/Delivered (see the /status route below). Stock and expenses already
+// reverse on that transition; the material price write-back did not, and a
+// cancelled PO left its price standing — the bug this exists to close.
+//
+// firePriceAlertsForPO now logs a 'cost_update' activity_log row (entity_type
+// 'ingredient') every time it writes, carrying the value it overwrote. That
+// row is the ONLY source of truth for what the ingredient's cost was before
+// this PO touched it — recomputing it from ingredient_price_history would mean
+// re-running the pack-size/unit division against whatever the ingredient's
+// fields hold *today*, which can have changed since, and that is a guess, not
+// a fact. A material line on this PO with no such row (written before this
+// logging existed, or the ingredient/PO predates it) has no recoverable prior
+// value — reported back, never defaulted to 0 or left silently wrong.
+function planMaterialCostRollback(po) {
+  const materialIds = [...new Set(
+    db.prepare(`
+      SELECT ingredient_id FROM po_line_items
+       WHERE po_id = ? AND ingredient_id IS NOT NULL AND cost_per_unit IS NOT NULL AND cost_per_unit > 0
+    `).all(po.id).map(r => r.ingredient_id)
+  )];
+  if (!materialIds.length) return { restorable: [], unrecoverable: [] };
+  const placeholders = materialIds.map(() => '?').join(',');
+  const logs = db.prepare(`
+    SELECT entity_id, details FROM activity_log
+     WHERE action = 'cost_update' AND entity_type = 'ingredient' AND entity_id IN (${placeholders})
+     ORDER BY id ASC
+  `).all(...materialIds);
+  const byIngredient = new Map();
+  for (const row of logs) {
+    let d; try { d = JSON.parse(row.details); } catch (e) { continue; }
+    if (!d || Number(d.po_id) !== Number(po.id)) continue;
+    if (!byIngredient.has(row.entity_id)) byIngredient.set(row.entity_id, []);
+    byIngredient.get(row.entity_id).push(d);
+  }
+  const restorable = [], unrecoverable = [];
+  for (const id of materialIds) {
+    const entries = byIngredient.get(id) || [];
+    if (!entries.length) {
+      const ing = db.prepare('SELECT name_en, name_cn FROM ingredients WHERE id = ?').get(id);
+      unrecoverable.push({ ingredient_id: id, name_en: ing?.name_en || null, name_cn: ing?.name_cn || null });
+      continue;
+    }
+    restorable.push({ ingredient_id: id, from: entries[0].from, to: entries[entries.length - 1].to });
+  }
+  return { restorable, unrecoverable };
+}
+
+// Returns { blocked: [...] } and writes nothing, or { blocked: null, restored }.
+// A material whose current cost no longer matches what this PO last wrote has
+// already been re-priced by something newer (another PO, a manual edit) — that
+// write is left alone rather than clobbered, same as it would be if two POs
+// raced each other going forward.
+function rollbackMaterialCost(po) {
+  const plan = planMaterialCostRollback(po);
+  if (plan.unrecoverable.length) return { blocked: plan.unrecoverable, restored: 0 };
+  const readIng = db.prepare('SELECT buy_price, cost_per_unit FROM ingredients WHERE id = ?');
+  const write = db.prepare('UPDATE ingredients SET buy_price = ?, cost_per_unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  let restored = 0;
+  for (const r of plan.restorable) {
+    const cur = readIng.get(r.ingredient_id);
+    if (!cur) continue;
+    const stillCurrent = Math.abs((cur.buy_price ?? 0) - (r.to?.buy_price ?? 0)) < 1e-9
+                       && Math.abs((cur.cost_per_unit ?? 0) - (r.to?.cost_per_unit ?? 0)) < 1e-9;
+    if (!stillCurrent) continue;
+    write.run(r.from?.buy_price ?? null, r.from?.cost_per_unit ?? 0, r.ingredient_id);
+    restored++;
+  }
+  return { blocked: null, restored };
 }
 
 // ═══ Suppliers (shared master — same table the kitchen uses) ═══════════════
@@ -1355,7 +1434,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   // items-PUT path (routes/purchases.js), which fires the same way on an
   // items edit against an already-placed PO, not only on the status flip.
   if (Array.isArray(items) && (po.status === 'Ordered' || po.status === 'Delivered')) {
-    firePriceAlertsForPO(po.id, po.status === 'Ordered' ? 'po_ordered' : 'po_delivery');
+    firePriceAlertsForPO(po.id, po.status === 'Ordered' ? 'po_ordered' : 'po_delivery', actorFor(req));
   }
   postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'update', 'purchase_order', po.id, { scope: 'retail' }, req.ip);
@@ -1398,12 +1477,31 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   // as it was found.
   const leavingPostable = status !== 'Ordered' && status !== 'Delivered';
   if (leavingPostable) {
+    // Checked BEFORE anything is written: a cancel that cannot fully reverse
+    // — stock short on the shelf, or a material cost with no recoverable
+    // prior value — writes nothing at all, the same "all of it or none of
+    // it" promise reversePOStock already makes for stock alone.
+    const costPlan = planMaterialCostRollback(po);
+    if (costPlan.unrecoverable.length) {
+      return res.status(409).json({ success: false, error: 'cost_not_recoverable', ingredients: costPlan.unrecoverable });
+    }
     const rev = reversePOStock(po, req);
     if (rev.blocked) return blockedResponse(res, rev.blocked);
     if (rev.reversed_units) {
       logActivity(req.user.id, req.user.username, 'stock_reversed', 'purchase_order', po.id,
                   { scope: 'retail', to: status, reversed_units: rev.reversed_units,
                     reversed_lines: rev.reversed_lines }, req.ip);
+    }
+    const costRollback = rollbackMaterialCost(po);
+    if (costRollback.blocked) {
+      // Re-planned inside rollbackMaterialCost() to stay race-safe against the
+      // check above; a fresh unrecoverable line here means one appeared in the
+      // window between the two, not that the check above was wrong.
+      return res.status(409).json({ success: false, error: 'cost_not_recoverable', ingredients: costRollback.blocked });
+    }
+    if (costRollback.restored) {
+      logActivity(req.user.id, req.user.username, 'cost_reverted', 'purchase_order', po.id,
+                  { scope: 'retail', to: status, materials_restored: costRollback.restored }, req.ip);
     }
   }
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, po.id);
@@ -1419,7 +1517,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   // gating only on Delivered would mean a material's price alert never fires
   // in practice.
   if (status === 'Ordered' || status === 'Delivered') {
-    firePriceAlertsForPO(po.id, status === 'Ordered' ? 'po_ordered' : 'po_delivery');
+    firePriceAlertsForPO(po.id, status === 'Ordered' ? 'po_ordered' : 'po_delivery', actorFor(req));
   }
   if (status === 'Ordered' || status === 'Delivered') postRetailPOExpenses(po.id);
   else db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(po.id);

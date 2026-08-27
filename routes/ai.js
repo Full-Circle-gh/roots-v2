@@ -2185,10 +2185,10 @@ const TOOL_HANDLERS = {
     }
     if (!id || !ing) return { not_found: true };
     const since = new Date(Date.now()-days*86400000).toISOString().slice(0,10);
-    const history = db.prepare(`SELECT created_at, price, buy_unit, source
+    const history = db.prepare(`SELECT recorded_at, price, buy_unit, source
                                   FROM ingredient_price_history
-                                 WHERE ingredient_id = ? AND created_at >= ?
-                                 ORDER BY created_at`).all(id, since);
+                                 WHERE ingredient_id = ? AND recorded_at >= ?
+                                 ORDER BY recorded_at`).all(id, since);
     return { ingredient: ing, history };
   },
 
@@ -2322,13 +2322,13 @@ const TOOL_HANDLERS = {
     const since = new Date(Date.now() - 90*86400000).toISOString();
     const movers = db.prepare(`SELECT iph.ingredient_id, ing.name_en, ing.name_cn,
         MIN(iph.price) AS min_price, MAX(iph.price) AS max_price,
-        (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY created_at ASC LIMIT 1) AS earliest_price,
-        (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY created_at DESC LIMIT 1) AS latest_price,
+        (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY recorded_at ASC LIMIT 1) AS earliest_price,
+        (SELECT price FROM ingredient_price_history WHERE ingredient_id = iph.ingredient_id ORDER BY recorded_at DESC LIMIT 1) AS latest_price,
         COUNT(*) AS price_points
       FROM ingredient_price_history iph
       JOIN ingredients ing ON ing.id = iph.ingredient_id
       WHERE iph.ingredient_id IN (${lines.map(() => '?').join(',') || '0'})
-        AND iph.created_at >= ?
+        AND iph.recorded_at >= ?
       GROUP BY iph.ingredient_id
       HAVING earliest_price > 0 AND ABS((latest_price - earliest_price) / earliest_price) >= 0.05
       ORDER BY ABS((latest_price - earliest_price) / earliest_price) DESC`)

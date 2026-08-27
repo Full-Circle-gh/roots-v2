@@ -20552,9 +20552,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     // A hand-edit stands until the next receive writes over it: nothing in this
     // handler is aware of receiving, and applyReceivedToStock writes on its own
     // schedule (last price wins).
+    // 0 is refused outright, same as negative or invalid — store_products has
+    // no free-item flag to tell a deliberate ¥0 apart from the 100%-margin bug
+    // this guard exists to stop, so nothing short of a real positive cost is
+    // accepted. Reintroduce this branch's `>= 0` only alongside such a flag.
     const raw = body.unit_cost;
     const v = (raw === '' || raw == null) ? NaN : parseFloat(raw);
-    sets.push('unit_cost = ?'); params.push(Number.isFinite(v) && v >= 0 ? v : null);
+    sets.push('unit_cost = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
   }
   if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
   if ('low_stock_threshold' in body) {

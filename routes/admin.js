@@ -14,6 +14,7 @@ const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 // material's recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute } = require('../lib/recipe-rollup');
 const { requireAuth, requireAdmin, logActivity } = require('../middleware/auth');
+const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
 // POST create user
@@ -203,7 +204,10 @@ router.get('/api/admin/backup', requireAuth, requireAdmin, (req, res) => {
 // the live db to data/roots-pre-wipe-<ts>.db before doing anything, so a
 // rollback is one file copy away. Re-seeds item_kind defaults so the
 // Items page tabs work post-wipe.
-router.post('/api/admin/factory-reset', requireAuth, requireAdmin, (req, res) => {
+// Wipes ingredients (cost columns included), recipes, recipe_ingredients and
+// recipe_cost_data outright — blocked (material cost columns + recipe lines +
+// recipe cost data), on top of everything else it destroys.
+router.post('/api/admin/factory-reset', requireAuth, requireAdmin, blockCostWrite('material cost / recipe data'), (req, res) => {
   const fs = require('fs');
   const { confirm } = req.body || {};
   if (confirm !== 'RESET') return res.status(400).json({ error: 'confirm:"RESET" required · 需输入 RESET 确认' });
@@ -278,7 +282,9 @@ router.post('/api/admin/factory-reset', requireAuth, requireAdmin, (req, res) =>
 //      the PO price write-back use — and a row the helper cannot price keeps
 //      the cost it already has.
 // Returns counts so the user can see what changed.
-router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => {
+// Rewrites ingredients.cost_per_unit across the whole catalogue — blocked
+// outright (material cost columns).
+router.post('/api/admin/repair-items', requireAuth, requireAdmin, blockCostWrite('material cost'), (req, res) => {
   // Mirrors the client splitCN — keep this in sync with public/app.html.
   function splitName(s) {
     if (!s) return { en: '', cn: '' };
@@ -422,7 +428,12 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
 // renamed to roots-pre-restore-<timestamp>.db as a safety net before the
 // new file replaces it. The process must be restarted by pm2 afterwards
 // (the route returns success with a `restart_required: true` flag).
-router.post('/api/admin/restore', requireAuth, requireAdmin, (req, res) => {
+// Overwrites the entire database file wholesale, roots.db and everything in
+// it — a strict superset of material cost columns, recipe lines and recipe
+// cost data (and of every Tacet table besides), so it is blocked outright
+// rather than counted "ambiguous": there is no reading of this route under
+// which it doesn't touch those three.
+router.post('/api/admin/restore', requireAuth, requireAdmin, blockCostWrite('the entire database'), (req, res) => {
   const fs = require('fs');
   const { db_base64 } = req.body;
   if (!db_base64 || typeof db_base64 !== 'string') return res.status(400).json({ error: 'db_base64 (data URI or raw base64) required · 缺少 base64 数据' });

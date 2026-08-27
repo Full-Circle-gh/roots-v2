@@ -18,6 +18,7 @@ const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
 // materials row. See lib/recipe-materialize.js's own comment for the three
 // outcomes and why a name collision writes nothing.
 const { ensureMaterialized } = require('../lib/recipe-materialize');
+const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
 // Nested recipes (§29): a line may reference a material that is itself made by
@@ -318,7 +319,9 @@ router.get('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
 });
 
 // POST create recipe
-router.post('/api/recipes', requireAuth, requirePermission('recipes'), (req, res) => {
+// Writes recipe_ingredients on every create with lines — blocked outright
+// (recipe lines).
+router.post('/api/recipes', requireAuth, requirePermission('recipes'), blockCostWrite('recipe lines'), (req, res) => {
   const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
   if (!name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
   try {
@@ -355,7 +358,11 @@ router.post('/api/recipes', requireAuth, requirePermission('recipes'), (req, res
 });
 
 // PUT update recipe
-router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, res) => {
+// Always writes the recipe header (batch_size/servings, which the cost
+// cascade reads directly) and, when `ingredients` is sent, replaces
+// recipe_ingredients wholesale — blocked outright (recipe lines + recipe
+// cost data).
+router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), blockCostWrite('recipe lines / recipe cost data'), (req, res) => {
   const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
   if (ingredients) {
     const refusal = cycleRefusal(req.params.id, ingredients);
@@ -401,7 +408,8 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, 
 });
 
 // PUT update cost data
-router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), (req, res) => {
+// The dedicated recipe_cost_data writer — blocked outright (recipe cost data).
+router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), blockCostWrite('recipe cost data'), (req, res) => {
   // The Cost Sheet DOES send `packaging_type_id` (public/app.html:8062 — the
   // picked type, or a literal null when nothing is selected), so this route's
   // behaviour is unchanged: a picked type is written, a cleared picker still
@@ -439,7 +447,9 @@ router.put('/api/recipes/:id/restore', requireAuth, requirePermission('recipes')
 // children (ingredients, steps, cost data). Admin only because once it's
 // gone, it's gone. Refuses to hard-delete an active recipe (use the
 // soft-delete endpoint first).
-router.delete('/api/recipes/:id/permanent', requireAuth, requireDelete, requirePermission('recipes'), (req, res) => {
+// Hard-deletes recipe_ingredients and recipe_cost_data along with the
+// recipe — blocked outright (recipe lines + recipe cost data).
+router.delete('/api/recipes/:id/permanent', requireAuth, requireDelete, requirePermission('recipes'), blockCostWrite('recipe lines / recipe cost data'), (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only · 仅管理员可永久删除' });
   const r = db.prepare('SELECT id, name_en, is_active FROM recipes WHERE id = ?').get(req.params.id);
   if (!r) return res.status(404).json({ error: 'Recipe not found · 食谱未找到' });
@@ -460,7 +470,9 @@ router.delete('/api/recipes/:id/permanent', requireAuth, requireDelete, requireP
 // a multiplier to batch_size, servings, serving_size, and every ingredient
 // qty — used by the "Save as New Recipe" button on the Batch Scaler bar.
 // Returns the new recipe id so the UI can jump straight into the copy.
-router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipes'), (req, res) => {
+// Clones recipe_ingredients + recipe_cost_data into the new recipe —
+// blocked outright (recipe lines + recipe cost data).
+router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipes'), blockCostWrite('recipe lines / recipe cost data'), (req, res) => {
   const src = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
   if (!src) return res.status(404).json({ error: 'Recipe not found' });
   const ings  = db.prepare('SELECT * FROM recipe_ingredients WHERE recipe_id = ? ORDER BY sort_order').all(src.id);
@@ -569,7 +581,9 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
 // POST bulk import — accepts an array of recipe objects, each with nested
 // ingredients[] and steps[]. Wrapped in a transaction so a partial import
 // never lands. Skips recipes whose SKU already exists.
-router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), (req, res) => {
+// Writes recipe_ingredients for every imported row with lines — blocked
+// outright (recipe lines).
+router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), blockCostWrite('recipe lines'), (req, res) => {
   const { recipes } = req.body;
   if (!Array.isArray(recipes) || !recipes.length) return res.status(400).json({ error: 'recipes array required' });
 

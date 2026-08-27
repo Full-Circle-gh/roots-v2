@@ -9,6 +9,7 @@ const { storeCategory } = require('../lib/category-text');
 // non-linked ingredient, since that can move a linked material's
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute } = require('../lib/recipe-rollup');
+const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
 // A UNIQUE violation on `sku` is now reachable in a way it was not before:
@@ -94,7 +95,9 @@ router.get('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
 });
 
 // POST create ingredient
-router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (req, res) => {
+// Writes ingredients.cost_per_unit / buy_price on every create — blocked
+// outright (material cost columns).
+router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), blockCostWrite('material cost'), (req, res) => {
   const { name_en, name_cn, sku, category, unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit, cost_per_unit, buy_price,
           supplier, supplier_platform, supplier_link, supplier_qr_data, image_data, allergens, notes,
           accounting_category, item_kind, free_by_design } = req.body;
@@ -121,7 +124,11 @@ router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (
 });
 
 // PUT update ingredient
-router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients'), (req, res) => {
+// Writes ingredients.cost_per_unit / buy_price on every update (fix 4 above
+// stopped it defaulting a missing cost to 0, but a client that DOES send a
+// cost still overwrites the master figure) — blocked outright (material cost
+// columns).
+router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients'), blockCostWrite('material cost'), (req, res) => {
   const { name_en, name_cn, sku, category, unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit, cost_per_unit, buy_price,
           supplier, supplier_platform, supplier_link, supplier_qr_data, image_data, allergens, notes,
           accounting_category, item_kind, free_by_design } = req.body;
@@ -133,8 +140,16 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
   // right here or the ordinary edit form silently overwrites it. Keep the
   // stored numbers whatever the body says; every other field still saves.
   const linked   = !!existing.source_recipe_id;
-  const nextCpu  = linked ? existing.cost_per_unit : (cost_per_unit || 0);
-  const nextBuy  = linked ? existing.buy_price     : (buy_price || 0);
+  // A cost field the request never sent (undefined/null/blank/non-numeric)
+  // must leave the stored value alone — defaulting it to 0 here erased a real
+  // cost on every save that merely forgot to include it (the kitchen app's
+  // own cost field is display-only for a linked row, and a PUT missing the
+  // key entirely reaches this route from more than that one form). An
+  // explicit 0 in the request is still a real client-supplied value and
+  // saves verbatim, same as any other number.
+  const hasCost  = (v) => v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v));
+  const nextCpu  = linked ? existing.cost_per_unit : (hasCost(cost_per_unit) ? cost_per_unit : existing.cost_per_unit);
+  const nextBuy  = linked ? existing.buy_price     : (hasCost(buy_price)     ? buy_price     : existing.buy_price);
   // A linked row's cost is pinned to its existing value above, so this can
   // only be true for the kind of write that actually feeds the rollup graph.
   const cpuMoved = !linked && Number(nextCpu) !== Number(existing.cost_per_unit || 0);
@@ -320,7 +335,10 @@ router.delete('/api/ingredients/:id', requireAuth, requireDelete, requirePermiss
 // (and recipes + recipe_ingredients + ingredient_price_history) inside the
 // same transaction so re-imports don't accumulate stale rows. Admin only
 // when wipe=true; regular users can still do additive imports.
-router.post('/api/ingredients/bulk', requireAuth, requirePermission('ingredients'), (req, res) => {
+// Writes ingredients.cost_per_unit / buy_price for every imported row, and
+// wipe=true also deletes recipe_ingredients / recipe_cost_data outright —
+// blocked outright (material cost columns + recipe lines + recipe cost data).
+router.post('/api/ingredients/bulk', requireAuth, requirePermission('ingredients'), blockCostWrite('material cost / recipe data'), (req, res) => {
   const { ingredients, wipe } = req.body;
   if (!Array.isArray(ingredients)) return res.status(400).json({ error: 'ingredients array required · 食材数组必填' });
   if (wipe && req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only for wipe · 仅管理员可清空' });
