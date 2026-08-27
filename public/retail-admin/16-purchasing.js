@@ -1064,7 +1064,7 @@
     if (poNoInvoice) return `<span class="sub">${esc(T('None', '无发票'))}</span>`;
     const sel = it.no_invoice_expected ? 'no_invoice' : (it.invoice_status || 'not_received');
     const opt = (v, en, cn) => `<option value="${v}"${sel === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`;
-    return `<select class="pu2-input pu2-ri" ${dis}>
+    return `<select class="pu2-input pu2-ri" data-saved="${sel}" onchange="puSaveLineInvoice(this, ${it.id})" ${dis}>
         ${opt('not_received', 'Awaiting', '待收')}
         ${opt('received', 'Received', '已收')}
         ${opt('no_invoice', 'None', '无发票')}
@@ -1166,6 +1166,29 @@
       toast(T('Received ✓', '已收货 ✓') + (bits.length ? ' — ' + bits.join(' · ') : ''), 'ok', 4000);
       puOpenPO(_po.id);
     } catch (e) { toast(e.message, 'err'); }
+  };
+  // The invoice picker saves the moment it changes. It used to ride along on
+  // Confirm delivery, so recording "this supplier issues no 发票" meant booking
+  // stock and flipping the order to received — for goods still in transit. The
+  // two facts are unrelated, so this one stands on its own route.
+  window.puSaveLineInvoice = async function (sel, lineId) {
+    if (!_po) return;
+    const v = sel.value;
+    const was = sel.dataset.saved || '';
+    sel.disabled = true;
+    try {
+      await api(`/api/retail-admin/purchasing/po/${_po.id}/line/${lineId}/invoice-status`,
+                { method: 'PUT', body: { invoice_status: v } });
+      // Keep the in-memory PO in step so a re-render (or Confirm delivery) does
+      // not paint the old value back over what was just saved.
+      const it = (_po.items || []).find(i => Number(i.id) === Number(lineId));
+      if (it) { it.invoice_status = v; it.no_invoice_expected = v === 'no_invoice' ? 1 : 0; }
+      sel.dataset.saved = v;
+      toast(T('Invoice status saved ✓', '发票状态已保存 ✓'), 'ok');
+    } catch (e) {
+      if (was) sel.value = was;
+      toast(e.message, 'err');
+    } finally { sel.disabled = false; }
   };
   window.puAllArrived = function () { puSetStatus('Delivered'); };
   window.puBackorder = async function () {

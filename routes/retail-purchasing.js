@@ -952,6 +952,28 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requir
   res.json({ success: true, no_invoice_expected: flag });
 });
 
+// The receive row's invoice picker, saved on its own. It used to ride along on
+// the bulk receive route, which meant the only way to record "no 发票 for this
+// line" was to press Confirm delivery — booking stock and flipping the order
+// to received for goods that may not have arrived. Whether a supplier will
+// issue paperwork is not a fact about delivery, so it saves by itself, with no
+// stock or expense side effects. Writes the no_invoice_expected mark too, for
+// the same reason the bulk route does: only the mark is ever read.
+router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/invoice-status', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const line = db.prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+                            WHERE pli.id = ? AND pli.po_id = ? AND COALESCE(po.tenant_id,1) = ?`)
+    .get(req.params.lineId, req.params.id, tid);
+  if (!line) return res.status(404).json({ success: false, error: 'not_found' });
+  const status = req.body && req.body.invoice_status;
+  if (!VALID_INVOICE.has(status)) return res.status(400).json({ success: false, error: 'invalid_invoice_status' });
+  const mark = status === 'no_invoice' ? 1 : 0;
+  db.prepare('UPDATE po_line_items SET invoice_status = ?, no_invoice_expected = ? WHERE id = ?').run(status, mark, line.id);
+  logActivity(req.user.id, req.user.username, 'line_invoice_status', 'po_line_item', line.id,
+              { invoice_status: status, no_invoice_expected: !!mark }, req.ip);
+  res.json({ success: true, invoice_status: status, no_invoice_expected: !!mark });
+});
+
 // The Reach chip's QR, fetched only when someone clicks it — it is a base64
 // blob and has no business riding along in every supplier list read.
 router.get('/api/retail-admin/suppliers/:id/channel-qr', requireRetailAdmin, (req, res) => {
