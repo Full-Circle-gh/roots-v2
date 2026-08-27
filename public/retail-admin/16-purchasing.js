@@ -1115,19 +1115,18 @@
     // worth repeating here since the header supplier is blank on exactly
     // those orders and this is where the receiving decision actually happens.
     const lineSupplier = (it.supplier_name || '').trim();
-    // A MATERIAL LINE GETS NO ARRIVED INPUT. Nothing in the receiving path moves
-    // stock for it — applyReceivedToStock() skips any line carrying an
-    // ingredient_id before it reaches a stock call — so an Arrived box on that
-    // row invites a count into a screen whose headline promise does not hold for
-    // it. The Damaged box stays: damage is recorded against the line whatever
-    // the line is. Retail product rows are untouched.
-    const arrivedCell = it.ingredient_id
-      ? '<td class="right pu2-num">—</td>'
-      : `<td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>`;
+    // THE ARRIVED BOX IS ON EVERY LINE, MATERIAL INCLUDED, AND MUST STAY THERE.
+    // It looks like dead input on a material row, because applyReceivedToStock()
+    // skips any line carrying an ingredient_id before it reaches a stock call.
+    // It is not: postRetailPOExpenses() sums COALESCE(qty_received, qty) across
+    // every line with no kind branch, so this box is the ONLY way to record a
+    // short material delivery. Remove it and a 15-of-20 delivery posts to
+    // Expenses at 20. Tried and reverted 2026-08-27 — the banner above it was
+    // the defect, not the input.
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
-      ${arrivedCell}
+      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
@@ -1192,10 +1191,13 @@
     const receipts = [];
     document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
       const ri = tr.querySelector('.pu2-ri');
-      // A material row has no Arrived box (see receiveRow). Omit the field
-      // entirely rather than sending null — the route only writes a column the
-      // payload actually names, so leaving it off keeps whatever qty_received
-      // that line already carries instead of blanking it on the next save.
+      // Every row renders an Arrived box today, so this guard never fires. It
+      // is here because if one ever doesn't, the field must be OMITTED rather
+      // than sent as null: the route writes only the columns the payload names,
+      // so an absent field preserves the stored qty_received while a null
+      // blanks it — and a blanked qty_received re-posts that line to Expenses
+      // at the full ordered quantity (postRetailPOExpenses coalesces to qty).
+      // Same shape as the `ri` guard above, which does fire.
       const rq = tr.querySelector('.pu2-rq');
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
