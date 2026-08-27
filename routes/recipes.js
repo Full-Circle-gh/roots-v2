@@ -482,6 +482,17 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
   const scale = parseFloat(req.body?.scale);
   const isScaled = scale && scale > 0 && Math.abs(scale - 1) > 0.001;
   const round1 = v => v == null ? v : Math.round(v * 10) / 10;
+  // Ingredient qty is a batch requirement, not currency: rounding a scaled
+  // line to one decimal place zeroes out a real amount (a pinch, a few
+  // drops) the moment scale takes it under 0.05 — Math.round(0.3*0.1*10)/10
+  // is 0. Two decimals covers the common case; on the rare scale that would
+  // STILL round a genuinely positive qty to 0, keep the unrounded value
+  // rather than lose it — never zero what scaling down made small, not gone.
+  const round2Qty = v => {
+    if (v == null) return v;
+    const r = Math.round(v * 100) / 100;
+    return (r === 0 && v > 0) ? v : r;
+  };
 
   // Servings is a COUNT OF SELLABLE PORTIONS, so it rounds DOWN, never to
   // nearest. Rounding up invents a portion that cannot be sold, and since cost
@@ -553,7 +564,7 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
       VALUES (?,?,?,?,?,?,?,?,?,?)`);
     ings.forEach(i => insIng.run(
       newId, i.ingredient_id, i.name_en, i.name_cn, i.sku,
-      isScaled ? round1((parseFloat(i.qty) || 0) * scale) : i.qty,
+      isScaled ? round2Qty((parseFloat(i.qty) || 0) * scale) : i.qty,
       i.unit, i.notes, i.substitutes, i.sort_order
     ));
     const insStep = db.prepare(`INSERT INTO recipe_steps (recipe_id, step_number, name, instructions) VALUES (?,?,?,?)`);
