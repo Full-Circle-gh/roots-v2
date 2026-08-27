@@ -38,8 +38,9 @@ function loadSqlite() {
   process.exit(2);
 }
 const Database = loadSqlite();
-const { applyRollup, backsLinkedMaterial, applyProductBuildCosts } =
+const { applyRollup, backsLinkedMaterial, applyProductBuildCosts, applyProductCosts } =
   require(path.join(__dirname, '..', 'lib', 'recipe-rollup'));
+const { computeRecipeCost } = require(path.join(__dirname, '..', 'lib', 'recipe-cost'));
 
 // Same shape as scripts/test_recipe_rollup.js's fixture, plus `updated_at` so
 // "was this row touched" is checkable without relying on the value alone.
@@ -419,6 +420,53 @@ function check(label, actual, expected, detail) {
   check('no product_build_lines table: does not throw', threw, false);
   check('no product_build_lines table: reads as nothing to cost', result && result.written === 0 && result.blocked === 0, true, JSON.stringify(result));
   bareDb.close();
+}
+
+// ── 16 · §31's addendum ENFORCED — a product with BOTH a recipe_id and a
+// build list takes its cost from the build list, and applyProductCosts()
+// leaves it alone ENTIRELY. This is the fix requested after PR #122's
+// review: the skip must be a condition stated inside applyProductCosts()
+// (productIdsWithBuildLines()), not an accident of which of the two writers
+// applyRollup() happens to call second — a reader who reorders those two
+// calls must get the identical answer.
+//
+// Proven by giving the recipe a REAL, positive, correctly-derivable cost —
+// batch_size, servings, a priced ingredient line, no recipe_cost_data
+// oddities — that WOULD have been written if the skip weren't real. A test
+// that only checked "no error was thrown" could pass even if the skip did
+// nothing at all; asserting the stored value equals the build list's figure
+// (15) and NOT the recipe's (10) is what actually proves precedence.
+{
+  const db = seed(makeDb(), { materials: [[99, 1.0, null], [88, 0.30, null]] });
+  // Not using seed()'s recipes tuple — it has no servings slot, and a null
+  // servings recipe always yields costPerServing: null (blocked) regardless
+  // of this fix, which would prove nothing. Direct INSERT for full control.
+  db.prepare('INSERT INTO recipes (id,name_en,batch_size,servings,is_active) VALUES (1,?,100,10,1)').run('Recipe 1');
+  db.prepare("INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,qty,unit,sort_order) VALUES (1,99,'line',100,'g',0)").run();
+  seedProduct(db, { id: 500, recipe_id: 1, unit_cost: null });
+  seedBuildLine(db, { product_id: 500, ingredient_id: 88, qty: 50, unit: 'g' }); // 50g @ 0.30/g = 15.0
+
+  // Setup sanity — confirm the recipe ALONE really would produce a real,
+  // different, positive cost. If this assertion fails, the test below would
+  // pass for the wrong reason (both sources agreeing, or the recipe being
+  // blocked anyway) rather than proving the skip.
+  const wouldHaveBeen = computeRecipeCost(1, db);
+  check('setup sanity: the recipe alone yields a real cost the skip must override', wouldHaveBeen.costPerServing, 10);
+
+  const result = applyRollup(db, { source: 'test-build-list-wins-over-recipe' });
+  check('both sources on one product: unit_cost is the BUILD LIST figure (15), not the recipe (10)', productRow(db, 500).unit_cost, 15);
+  check('both sources: applyProductCosts reports the skip explicitly', result.productsSkippedHasBuildList, 1);
+  check('both sources: applyProductCosts wrote nothing for this product', result.productsWritten, 0);
+  check('both sources: applyProductBuildCosts is the one that actually wrote it', result.buildProductsWritten, 1);
+
+  // Reordering the two calls must not change the answer — the guarantee
+  // lives inside applyProductCosts() itself, not in applyRollup()'s call
+  // order. Prove it by calling applyProductCosts() a second time, alone,
+  // directly, after applyProductBuildCosts() already ran.
+  const direct = applyProductCosts(db);
+  check('calling applyProductCosts() alone, after the fact, still skips it', direct.skippedHasBuildList, 1);
+  check('and still leaves the build-list-derived value in place', productRow(db, 500).unit_cost, 15);
+  db.close();
 }
 
 console.log();
