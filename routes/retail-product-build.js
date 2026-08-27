@@ -41,6 +41,14 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
     SELECT pbl.id, pbl.ingredient_id, pbl.name_en, pbl.name_cn, pbl.sku, pbl.qty, pbl.unit,
            pbl.notes, pbl.sort_order,
            i.item_kind AS material_item_kind, i.cost_per_unit AS material_cost_per_unit,
+           -- buy_price is carried so the SCREEN can tell two very different
+           -- states apart: a material nobody has ever priced, and one with a
+           -- real purchase price whose per-unit cost was never derived.
+           -- Costing reads cost_per_unit and only that (this is not a second
+           -- cost path); buy_price is here to make the second case say so
+           -- instead of a bare "no cost". Found live on ROOTS Plastic Jar
+           -- Stickers — buy_price ¥0.0975, cost_per_unit 0.
+           i.buy_price AS material_buy_price,
            i.unit AS material_unit, i.free_by_design AS material_free_by_design,
            COALESCE(i.is_active, 1) AS material_is_active
       FROM product_build_lines pbl
