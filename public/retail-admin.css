@@ -12778,9 +12778,27 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-waste .wst-sel, #tab-waste .wst-date,
 .wst-modal .wst-sel, .wst-modal .wst-in {
   padding: 9px 12px; border-radius: 8px;
-  border: 1px solid var(--td-border); background: var(--td-surface);
+  border: 1px solid var(--td-border); background-color: var(--td-surface);
   color: var(--td-text); font: 400 15px/1.2 var(--f-sans);
   font-variant-numeric: tabular-nums;
+}
+/* background-COLOR above, never the `background` shorthand. The shorthand
+   resets repeat and position, and the global <select> chevron (css:5209,
+   restated with a light stroke at css:139) came back with no-repeat gone — so
+   the arrow TILED the full width of the Store dropdown, a row of chevrons
+   striking through the store name. A select declares the whole arrow here,
+   gutter included, so neither rule can half-win. */
+#tab-waste select.wst-sel, .wst-modal select.wst-sel {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA3B2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 12px center;
+  padding-right: 32px;
+}
+/* The arrow is --td-text2 in each theme, written out because a data-URI cannot
+   read a custom property. Dark above, light here. */
+:root[data-theme="light"] #tab-waste select.wst-sel,
+:root[data-theme="light"] .wst-modal select.wst-sel {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
 }
 #tab-waste .wst-range { display: inline-flex; align-items: center; gap: 8px; }
 #tab-waste .wst-range-sep { color: var(--td-text2); }
