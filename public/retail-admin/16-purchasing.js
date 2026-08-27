@@ -66,6 +66,16 @@
     const half = supSplit(name);
     return T(half.en, (nameCn && String(nameCn).trim()) || half.cn);
   }
+  // Finance-category text (expense_entries.category, same vocabulary as
+  // ingredients.accounting_category / po_line_items.expense_category — see
+  // lib/category-text.js) is stored as ONE combined bilingual string with no
+  // separate EN/CN column. Split it the same way a supplier name splits, so
+  // the receiving screen's Finance panel never shows both languages at once.
+  function catLabel(cat) {
+    if (!cat) return '';
+    const half = supSplit(cat);
+    return T(half.en, half.cn);
+  }
   // "Today" in the store's clock (GZ = UTC+8) so a delivery due today never
   // reads as late just because the browser is on UTC.
   const todayGz = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -1035,7 +1045,7 @@
       <div class="pu2-fin">
         <b>${esc(T('Finance', '财务'))}</b>
         ${(p.expenses || []).length
-          ? `<div class="pu2-num">${p.expenses.map(x => `${esc(x.category || '')} — ${money(x.amount)}`).join('<br>')}<div class="sub">${esc(T('Posted to Expenses', '已记入支出'))} · ${money(expTotal)}</div></div>`
+          ? `<div class="pu2-num">${p.expenses.map(x => `${esc(catLabel(x.category))} — ${money(x.amount)}`).join('<br>')}<div class="sub">${esc(T('Posted to Expenses', '已记入支出'))} · ${money(expTotal)}</div></div>`
           : `<div class="sub">${esc(T('Posts to Expenses when the order is placed.', '下单后自动记入支出。'))}</div>`}
       </div>`;
   }
