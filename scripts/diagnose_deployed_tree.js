@@ -296,6 +296,14 @@ function main() {
 //
 // MANIFEST_SW_NORMALIZED is public/sw.js hashed with its CACHE stamp replaced by
 // the literal <STAMP>, matching what SW_STAMP_RE does to the deployed copy.
+//
+// Since 2026-08-27 the committed CACHE value is a fixed sentinel
+// (`roots-v2-shell-unstamped`) rather than a hand-edited version, and the deploy
+// appends sw.js to every ship so the installer always stamps it. Two
+// consequences for this manifest: the RAW entry for public/sw.js below now moves
+// only when sw.js's actual code changes — it no longer churns once per UI
+// commit — and a box reading `roots-v2-shell-unstamped` has not been stamped at
+// all, which is a deploy fault rather than a normalisation problem.
 // ════════════════════════════════════════════════════════════════════════════
 // Generated 2026-08-27 from origin/main = 8891397b. main carries 614 deployable
 // files and 613 are below — SELF is the one deliberately left out.
@@ -327,7 +335,7 @@ function main() {
 // wrong. Regenerate whenever that handful starts costing more attention than it
 // saves — and treat a DIFFERS the last push did NOT touch as the real thing.
 const MANIFEST_COMMIT = '8891397bdb8749e04feee1ccffeb9c0dc8048b38';
-const MANIFEST_SW_NORMALIZED = '375eeb28db06c11b5fb4818dc2a988a3498c3df4';
+const MANIFEST_SW_NORMALIZED = 'e4e504e52d97c742de592e125099c5825224e820';
 const MANIFEST = {
   "database.js": 'e4e457f235b44d86541f985224f41e64b05e9c56',
   "lib/address-cn.js": '12d738c662f7583d63ceaa8b00380c7cfab99696',
@@ -518,7 +526,7 @@ const MANIFEST = {
   "public/stock.html": 'b859cb359cc5c0e442d63c4f34e4d33fcf9def18',
   "public/store-admin.html": '521282047ed7e906dffdfc815ae9b87741b832f1',
   "public/storefront.html": '06096448a17ee5e9b652283863e2ee8df54cd13c',
-  "public/sw.js": 'fdf09eb6120725bb948543afb08ffe1c7ee795ad',
+  "public/sw.js": 'b6fb434c4ee5ef888f54cc5fbea0fa68332a4a85',
   "public/tacet-apple-touch-icon.png": '1fff42cfdc247739a7baf3f4f57502df6b25ee40',
   "public/tacet-dialogs.js": 'a289b6e7186ffbe30fc4caedc68dd0045fbfab73',
   "public/tacet-favicon.svg": '960020f8858f89edb0505b00e4e020445c960718',

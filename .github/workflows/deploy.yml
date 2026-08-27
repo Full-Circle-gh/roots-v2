@@ -98,6 +98,36 @@ jobs:
             done < "$1"
           }
 
+          # public/sw.js RIDES ALONG ON EVERY DEPLOY THAT SHIPS ANYTHING.
+          #
+          # deploy-apply.sh stamps sw.js's CACHE constant with the run timestamp,
+          # and that stamp is the only thing that evicts a cached asset — every
+          # non-HTML file the service worker serves is stale-while-revalidate, so
+          # the first load after a deploy runs the PREVIOUS build until the
+          # constant moves. But the installer only stamps a file it was given,
+          # and the file it is given is this list. So the stamp used to depend on
+          # a human editing a version number in the same commit: remembered, it
+          # worked; forgotten, the deploy reported success and shipped code
+          # nobody would run until their second visit. It was forgotten (see
+          # docs/tacet-session-addendum.md), and the numbering itself caused
+          # collisions between parallel branches that each picked the next vNNN.
+          #
+          # Appending it here makes the stamp unconditional. Nobody edits
+          # anything, and the constant in the repo is a fixed sentinel.
+          #
+          # ONLY WHEN THE LIST IS OTHERWISE NON-EMPTY, and this is load-bearing:
+          # deploy-apply.sh restarts roots-v2 unconditionally, so shipping sw.js
+          # on its own would bounce the live backend for a push that changes
+          # nothing the app serves — a docs-only commit, say, which today skips
+          # the deploy entirely on `count=0`. A deploy with nothing to ship also
+          # has no stale asset to evict, so there is nothing to gain by it.
+          add_sw() {   # $1 = list to append public/sw.js to, if it is non-empty
+            [ -s "$1" ] || return 0
+            [ -f public/sw.js ] || return 0
+            grep -qx 'public/sw.js' "$1" && return 0
+            echo 'public/sw.js' >> "$1"
+          }
+
           : > /tmp/changed.txt
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.full_sync }}" = "true" ]; then
             MODE=full
@@ -168,6 +198,12 @@ jobs:
           fi
 
           filter /tmp/changed.txt /tmp/files.txt
+          SW_RIDER=0
+          if ! grep -qx 'public/sw.js' /tmp/files.txt 2>/dev/null; then SW_RIDER=1; fi
+          add_sw /tmp/files.txt
+          if [ "$SW_RIDER" = "1" ] && grep -qx 'public/sw.js' /tmp/files.txt; then
+            echo "public/sw.js appended — its CACHE stamp is what evicts cached assets."
+          fi
           COUNT=$(wc -l < /tmp/files.txt | tr -d ' ')
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "Mode: $MODE — base: $BASE_SRC"
@@ -183,6 +219,9 @@ jobs:
           if [ "$MODE" = "changed" ] && [ -n "$OLD" ] && git cat-file -e "${OLD}^{commit}" 2>/dev/null; then
             git diff --name-only "$OLD" "${{ github.sha }}" > /tmp/old-changed.txt
             filter /tmp/old-changed.txt /tmp/old-files.txt
+            # Same rider on both sides, or sw.js would show up as "rescued" on
+            # every deploy and drown the one thing this block exists to show.
+            add_sw /tmp/old-files.txt
             RESCUED="$(comm -23 <(sort -u /tmp/files.txt) <(sort -u /tmp/old-files.txt) || true)"
             if [ -n "$RESCUED" ]; then
               echo "Files the previous-push base would have SKIPPED, and this base ships:"

@@ -8,9 +8,26 @@
 //     (instant from cache, refresh in background).
 //   • API requests: network-only, never cached.
 //
-// Bump CACHE on every UI shape change to force every client to evict
-// its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v898-list-carries-recipe-id';
+// DO NOT EDIT THE LINE BELOW. It is a sentinel, not a version.
+//
+// deploy-apply.sh rewrites it to `roots-v2-shell-<deploy timestamp>` on the way
+// in, and .github/workflows/deploy.yml appends this file to every deploy that
+// ships anything — so the rewrite happens on every deploy without anyone doing
+// a thing. A changed CACHE is what makes the activate handler below drop every
+// old cache, which is what stops a stale-while-revalidate asset serving the
+// previous build on the first load after a deploy.
+//
+// It used to be a hand-incremented `vNNN-what-changed`, and the number had to be
+// edited in the same commit or the stamp never fired. It was forgotten (see
+// docs/tacet-session-addendum.md), and parallel branches kept picking the same
+// next number — six collisions in one day, one of them inside a PR whose
+// purpose was fixing a collision. The number never reached a browser: the
+// installer overwrote it every time.
+//
+// SEEING `-unstamped` ON THE SERVER MEANS THE STAMP DID NOT RUN, and every
+// cached asset on that box is one load behind. Check it with:
+//   ssh root@47.239.89.63 "grep -n 'const CACHE' /root/roots-v2/public/sw.js"
+const CACHE = 'roots-v2-shell-unstamped';
 // '/m' is Tacet Mobile — the phone companion, and the one shell here that is
 // meant to be INSTALLED rather than visited. An installed app that opens to a
 // browser error the first time the signal drops is not an app, so its shell is
