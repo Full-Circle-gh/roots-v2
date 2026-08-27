@@ -587,10 +587,16 @@
     const what = productLabel(r);
     // This moves live stock, so it gets a confirm step, and the confirm says
     // what will move rather than asking "are you sure".
+    // NO MEASURE WORD, in either language. A row carries its own `unit` and a
+    // waste entry is not always pieces — 3 kg of something rendered as “3 件”
+    // reads as three pieces, which is a different fact. The English stays
+    // unit-agnostic through “qty × product” and the Chinese uses the same ×
+    // rather than reaching for a classifier. Chinese names the product first
+    // because that is its natural order, not English's.
     const ok = await askConfirm({
       title: T('Void this waste entry?', '作废这条损耗记录?'),
       body: T(qty + ' × ' + what + ' goes back into stock. The entry stays in the list, marked voided.',
-               what + ' ' + qty + ' 件将退回库存。该记录仍保留在列表中,标记为已作废。'),
+               what + ' × ' + qty + ' 将退回库存。该记录仍保留在列表中,标记为已作废。'),
       confirmLabel: T('Void', '作废'),
       cancelLabel: T('Cancel', '取消'),
       danger: true,
