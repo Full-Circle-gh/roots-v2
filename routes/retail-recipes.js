@@ -256,10 +256,20 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   let products = [];
   try {
     products = db.prepare(`
-      SELECT id, name_en, name_cn, weight AS size, sell_price, unit_cost
-        FROM store_products
-       WHERE recipe_id = ? AND COALESCE(is_active,1) = 1
-       ORDER BY name_en COLLATE NOCASE, id
+      SELECT sp.id, sp.name_en, sp.name_cn, sp.weight AS size, sp.sell_price, sp.unit_cost,
+             -- DOES THIS RECIPE STILL OWN THAT unit_cost? Since §31's addendum
+             -- a product with a build list takes its cost from the list and
+             -- applyProductCosts() skips it, so the figure beside this recipe
+             -- may have nothing to do with this recipe. The screen has to know,
+             -- because it prints the product's margin in the same strip as the
+             -- recipe's own batch cost and cost-per-serving: Hazelnut-Chocolate
+             -- Spread showed "Cost per serving ¥46.05" beside "Margin 98.6%",
+             -- the second computed from a ¥1.23 build list, and the two read as
+             -- one arc. 0 rows here means the recipe still owns it.
+             (SELECT COUNT(*) FROM product_build_lines pbl WHERE pbl.product_id = sp.id) AS build_line_count
+        FROM store_products sp
+       WHERE sp.recipe_id = ? AND COALESCE(sp.is_active,1) = 1
+       ORDER BY sp.name_en COLLATE NOCASE, sp.id
     `).all(recipe.id);
   } catch (e) { products = []; }
   // consumers (§29 step 6) — which OTHER active recipes currently use this
