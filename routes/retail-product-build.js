@@ -73,11 +73,43 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
   // screen has to tell apart:
   //   none        no recipe linked at all
   //   ready       linked, materialised, here is the material to add
+  //   repack      linked, NOT materialised, and the recipe is a single line —
+  //               "one unit is N of that material". Here is that material,
+  //               with the recipe's own quantity. See below.
   //   unbuilt     linked, NOT materialised — the recipe must be saved once
   //               before its output can be picked
   // This is read-only. It never materialises anything on a GET, because a
   // screen opening must not write, and because §29's first addendum says a
   // name collision is a human's to resolve, never a side effect.
+  //
+  // WHY 'repack' EXISTS. 'unbuilt' tells the operator to open the recipe and
+  // save it once. After the 2026-08-27 backfill
+  // (scripts/backfill_materialize_recipes.js) that instruction is FALSE for
+  // every product that still lands here, and reported as such: 122 of 138
+  // active recipes now have a material, and all 12 products still without one
+  // are a one-line recipe named after the very material it consumes — a
+  // REPACK ("one 120g jar is 120g of the bulk turmeric we already buy").
+  // ensureMaterialized() refuses those by design and always will: the name is
+  // already taken by that same bulk material, and linking the two would make
+  // the recipe need its own output (lib/recipe-graph.js's cycle guard). So
+  // saving the recipe a hundred times changes nothing, and the bar was
+  // sending people to do exactly that.
+  //
+  // A repack has no made thing to add because there is no made thing — the
+  // contents are the bulk material, at the quantity the recipe already
+  // states. That quantity is the better number than the product's net-weight
+  // text: it is structured, and it is what the kitchen actually costed. So
+  // this branch hands the screen the same {material} shape 'ready' does, plus
+  // the qty, and the screen's add button does not have to know the difference.
+  //
+  // ONE LINE IS THE WHOLE TEST — not a name match. Two of the twelve (Coconut
+  // Flakes ← "Coconut Flake", BioCurcumin+ (Organic) ← "BioCurcumin+") differ
+  // by a plural or a suffix, and a name test would leave exactly those two
+  // still reading the false instruction. A one-line recipe means "one unit is
+  // N of that thing" whether or not the two share a name, and if the line is
+  // a transformation with a yield loss, the recipe's own qty is STILL the
+  // right cost — it is what goes in. A one-line recipe that DID materialise
+  // never reaches here; it is 'ready' above.
   let recipe = { state: 'none' };
   const prow = db.prepare('SELECT recipe_id FROM store_products WHERE id = ?').get(id);
   if (prow && prow.recipe_id != null) {
@@ -85,14 +117,38 @@ router.get('/api/retail-admin/products/:id/build-lines', requireRetailAdmin, (re
     const mat = db.prepare(
       'SELECT id, name_en, name_cn, sku, unit, cost_per_unit, free_by_design, item_kind FROM ingredients WHERE source_recipe_id = ?'
     ).get(prow.recipe_id);
-    const already = mat ? lines.some(l => l.ingredient_id === mat.id) : false;
+
+    // The repack read, only when there is no material to offer already.
+    let sole = null;
+    if (!mat) {
+      const n = db.prepare('SELECT COUNT(*) AS n FROM recipe_ingredients WHERE recipe_id = ?').get(prow.recipe_id);
+      if (n && n.n === 1) {
+        // COALESCE(is_active,1) = 1 — a line pointing at an archived or
+        // deleted material is not something to offer as this product's
+        // contents; it falls through to 'unbuilt' and says so honestly.
+        sole = db.prepare(`
+          SELECT i.id, i.name_en, i.name_cn, i.sku, i.unit, i.cost_per_unit,
+                 i.free_by_design, i.item_kind, ri.qty AS recipe_qty, ri.unit AS recipe_unit
+            FROM recipe_ingredients ri
+            JOIN ingredients i ON i.id = ri.ingredient_id
+           WHERE ri.recipe_id = ? AND COALESCE(i.is_active, 1) = 1`).get(prow.recipe_id) || null;
+      }
+    }
+
+    const offered = mat || sole;
+    const already = offered ? lines.some(l => l.ingredient_id === offered.id) : false;
     recipe = {
-      state: mat ? 'ready' : 'unbuilt',
+      state: mat ? 'ready' : (sole ? 'repack' : 'unbuilt'),
       recipe_id: prow.recipe_id,
       name_en: r ? r.name_en : null,
       name_cn: r ? r.name_cn : null,
       recipe_active: r ? !!r.is_active : false,
-      material: mat || null,
+      material: offered || null,
+      // Only a repack carries one: it is the recipe's own line quantity, and
+      // 'ready' has no equivalent fact to offer (a made material's fill
+      // weight is the product's, not the recipe's).
+      qty: sole ? sole.recipe_qty : null,
+      qty_unit: sole ? (sole.recipe_unit || sole.unit || 'g') : null,
       // Already on the list — the screen must not offer to add it twice.
       already_in_list: already,
     };

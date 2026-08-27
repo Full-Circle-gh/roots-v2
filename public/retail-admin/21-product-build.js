@@ -90,6 +90,13 @@
   const T_QTY       = () => cuT('qty', '数量');
   const T_UNIT      = () => cuT('Unit', '单位');
 
+  // CN PENDING — no sourced Chinese for this sentence; English both halves,
+  // the same call T_EMPTY_LINE1/2 above make and for the same reason.
+  const T_FROM_WEIGHT = raw => {
+    const m = 'from the product’s net weight (' + raw + ')';
+    return cuT(m, m);
+  };
+
   // ── Grouping ────────────────────────────────────────────────────────
   // DISPLAY ONLY. Every line is the same line; the group it paints under is
   // read from the MATERIAL's own item_kind, never stored on the build line.
@@ -99,6 +106,62 @@
   // and falls to Materials, where its "material deleted" flag is legible.
   function blGroupOf(line) {
     return (line.material_item_kind === 'packaging') ? 'packaging' : 'materials';
+  }
+
+  // ── The product's own net weight, as a quantity a build line can use ──
+  // Asked for directly: "once added as a material, if there are no variety,
+  // is it possible the system will fill up automatically the weight of the
+  // product? it's already known in product page." It is —
+  // store_products.weight, the Size/weight field this editor already shows
+  // in #pd-weight, holds it for 203 of 248 active products ("120g", "500ml",
+  // "1L"). Typing it a second time into the first build line was the whole
+  // of that question.
+  //
+  // READ FROM THE FIELD, NOT THE LOADED ROW, for two reasons: a weight the
+  // operator has just typed but not yet saved is the one that should land,
+  // and #pd-weight always holds the OPEN row's own size — a variant member
+  // writes its own value into it (09-products.js:3492) — so this is correct
+  // for a variant group too, not only for the single product asked about.
+  //
+  // DELIBERATELY NARROW, AND null RATHER THAN A GUESS. A wrong fill weight
+  // is worse than an empty one: it is a confident wrong cost, and every
+  // margin downstream of it reads as measured. So it refuses exactly what
+  // scripts/backfill_weight_from_spec_strip.js's cleanWeight() refuses — a
+  // dual "230g / 500g" umbrella value, a placeholder, anything without a
+  // number — plus anything that is not one number and one unit it can name.
+  function blNetWeight() {
+    const el = document.getElementById('pd-weight');
+    const raw = el ? String(el.value || '').trim() : '';
+    if (!raw || raw.indexOf('/') >= 0 || /[[\]]|填写/.test(raw)) return null;
+    const m = /^([0-9]+(?:\.[0-9]+)?)\s*(kg|g|克|公斤|ml|毫升|l|升)$/i.exec(raw);
+    if (!m) return null;
+    const n = parseFloat(m[1]);
+    if (!(n > 0)) return null;
+    const u = m[2].toLowerCase();
+    if (u === 'kg' || u === '公斤') return { qty: n * 1000, unit: 'g', raw: raw };
+    if (u === 'l' || u === '升') return { qty: n * 1000, unit: 'ml', raw: raw };
+    if (u === 'ml' || u === '毫升') return { qty: n, unit: 'ml', raw: raw };
+    return { qty: n, unit: 'g', raw: raw };
+  }
+
+  // What quantity a newly added line should open with. Zero for everything
+  // except the ONE line the net weight actually describes: the FIRST
+  // contents line, when the material is costed in the unit the weight is
+  // stated in.
+  //
+  // Packaging is never it — a 120g bag does not hold 120 boxes. A SECOND
+  // contents line is never it either: once a list has contents, the net
+  // weight is split between them in proportions only the operator knows,
+  // and filling the whole weight onto each would double the cost silently.
+  // A unit mismatch is never it: 120 of a material priced per piece is not
+  // 120 g of anything.
+  function blSuggestQty(mat) {
+    if ((mat.item_kind || 'food') === 'packaging') return null;
+    if ((_blLines || []).some(l => blGroupOf(l) !== 'packaging')) return null;
+    const w = blNetWeight();
+    if (!w) return null;
+    if ((mat.unit || 'g') !== w.unit) return null;
+    return w;
   }
 
   // What one line costs, or null when it cannot be known. Mirrors
@@ -248,7 +311,16 @@
     else per = cuT('no cost', '无成本');
 
     const sub = escapeHtml(l.name_cn || '') + (l.name_cn ? ' · ' : '') + per
-      + (deleted ? ' · ' + escapeHtml(cuT('material deleted', '物料已删除')) : '');
+      + (deleted ? ' · ' + escapeHtml(cuT('material deleted', '物料已删除')) : '')
+      // A prefilled quantity must never pass for a measured one. The note
+      // names its source and disappears the moment the field is edited, so
+      // it is provenance rather than persistent clutter.
+      // Its OWN node, and the separator lives inside it, so blRepaintCosts
+      // can drop the whole thing on the keystroke that makes it untrue —
+      // that function repaints money only and never rewrites this subline.
+      + (l.qty_from_weight
+        ? '<span class="bl-fromw"> · ' + escapeHtml(T_FROM_WEIGHT(l.qty_from_weight)) + '</span>'
+        : '');
 
     return '<div class="bl-row' + (cost === null ? ' is-nocost' : '') + '">'
       + '<div class="bl-name">'
@@ -394,6 +466,10 @@
   window.blField = function (idx, key, val) {
     if (!_blLines || !_blLines[idx]) return;
     _blLines[idx][key] = key === 'qty' ? (val === '' ? 0 : Number(val)) : val;
+    // The "came from the net weight" note is only true until it is typed
+    // over. Cleared here rather than compared on render, because the
+    // operator retyping the SAME number is still their number now.
+    if (key === 'qty') _blLines[idx].qty_from_weight = null;
     _blDirty = true;
     // Only the money moves. Repainting the whole list on every keystroke
     // would destroy the caret in the input being typed into — the same
@@ -419,6 +495,13 @@
         const out = cell.querySelector('.bl-cost');
         if (out) out.textContent = c === null ? '—' : money(c);
         cell.classList.toggle('is-nocost', c === null);
+        // The net-weight provenance note, once the quantity has been typed
+        // over. Removed here because this is the only repaint a keystroke
+        // triggers — a full blRender() would take the caret with it.
+        if (!x.l.qty_from_weight) {
+          const w = cell.querySelector('.bl-fromw');
+          if (w) w.remove();
+        }
       }
     }
     // Group subtotals.
@@ -489,16 +572,34 @@
     // without a refetch this screen has no reason to make.
     if ((_blLines || []).some(l => blGroupOf(l) !== 'packaging')) { host.innerHTML = ''; return; }
 
-    const name = escapeHtml(cuT(r.name_en || r.name_cn || '', r.name_cn || r.name_en || '')
-                            || (cuT('Recipe', '配方') + ' #' + r.recipe_id));
+    // THE BUTTON NAMES THE MATERIAL, NOT THE RECIPE. For 'ready' they are the
+    // same words; for a repack they are not — the recipe is "Organic Turmeric
+    // Powder (the jar we pack)" and the thing being added is the bulk
+    // material it is portioned from. Same fallback shape the recipe name used
+    // before, so a nameless row still gets a label rather than a bare "Add".
+    const mn = r.material
+      ? cuT(r.material.name_en || r.material.name_cn || '', r.material.name_cn || r.material.name_en || '')
+      : '';
+    const matName = escapeHtml(mn || (cuT('Recipe', '配方') + ' #' + r.recipe_id));
 
-    if (r.state === 'ready') {
+    if (r.state === 'ready' || r.state === 'repack') {
       // CN PENDING — names the build list; English both halves.
-      const m = 'This product is made from a recipe. Add what it makes as the contents:';
+      //
+      // Two sentences because they are two different facts, and saying the
+      // 'ready' one about a repack would be wrong: a repack does not MAKE
+      // anything, it portions something already bought. Naming the quantity
+      // in the sentence is the point of the repack line — the operator can
+      // see the number the button is about to put in before pressing it.
+      const m = r.state === 'repack'
+        ? 'This product is one recipe line: '
+          + (r.qty != null ? r.qty + ' ' + (r.qty_unit || 'g') + ' of ' : '')
+          + (r.material ? (r.material.name_en || r.material.name_cn || '') : '')
+          + '. Add it as the contents:'
+        : 'This product is made from a recipe. Add what it makes as the contents:';
       host.innerHTML = '<div class="bl-bridge">'
         + '<span class="bl-bridge-t">' + escapeHtml(cuT(m, m)) + '</span>'
         + '<button type="button" class="btn btn-sm" onclick="blAddRecipeMaterial()">'
-        + escapeHtml(cuT('Add', '添加')) + ' ' + name + '</button>'
+        + escapeHtml(cuT('Add', '添加')) + ' ' + matName + '</button>'
         + '</div>';
       return;
     }
@@ -519,7 +620,7 @@
   // it is the ordinary add, with the picking already done.
   window.blAddRecipeMaterial = function () {
     const r = _blRecipe;
-    if (!r || r.state !== 'ready' || !r.material || !_blLines) return;
+    if (!r || (r.state !== 'ready' && r.state !== 'repack') || !r.material || !_blLines) return;
     const m = r.material;
     if (_blLines.some(l => l.ingredient_id === m.id)) return;
     const t = blTotals();
@@ -527,10 +628,21 @@
     const price = priceEl ? parseFloat(priceEl.value) : NaN;
     _blMarginBefore = (!t.blocked && price > 0 && _blLines.length)
       ? ((price - t.total) / price) * 100 : null;
+    // A REPACK'S QUANTITY COMES FROM THE RECIPE, NOT THE NET-WEIGHT TEXT.
+    // Both usually say the same thing (120g of turmeric, a 120g jar), but the
+    // recipe's is structured, carries its own unit, and is the figure the
+    // kitchen actually costed — so it wins where it exists, and the row
+    // carries no "from net weight" note because that is not where it came
+    // from. Only a materialised recipe ('ready') has no quantity of its own
+    // and falls back to the product's weight.
+    const sug = r.state === 'repack' && Number(r.qty) > 0 ? null : blSuggestQty(m);
+    const repackQty = r.state === 'repack' && Number(r.qty) > 0 ? Number(r.qty) : null;
     _blLines.push({
       id: null, ingredient_id: m.id,
       name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
-      qty: 0, unit: m.unit || 'g', notes: null,
+      qty: repackQty != null ? repackQty : (sug ? sug.qty : 0),
+      qty_from_weight: sug ? sug.raw : null,
+      unit: repackQty != null ? (r.qty_unit || m.unit || 'g') : (m.unit || 'g'), notes: null,
       material_item_kind: m.item_kind || 'food',
       material_cost_per_unit: m.cost_per_unit,
       material_buy_price: null,
@@ -637,18 +749,24 @@
     _blMarginBefore = (!t.blocked && price > 0 && _blLines.length)
       ? ((price - t.total) / price) * 100 : null;
 
+    // Zero, unless the product's OWN net weight already says what this line
+    // holds — see blSuggestQty(). Never one: a quantity is a fact about THIS
+    // product, and defaulting to 1 would put a confident number on a line
+    // nobody has measured. The save refuses qty <= 0 anyway
+    // (routes/retail-product-build.js), so a zero left standing is refused
+    // here rather than at save time. A suggested weight is a different
+    // thing from a guess — it is a figure the operator already entered on
+    // this product, carried across rather than retyped, and the row says so
+    // until it is edited.
+    const sug = blSuggestQty(m);
     _blLines.push({
       id: null,
       ingredient_id: m.id,
       name_en: m.name_en,
       name_cn: m.name_cn,
       sku: m.sku,
-      // Zero, not one. A quantity is a fact about THIS product that only the
-      // operator knows; defaulting to 1 would put a confident number on a
-      // line nobody has measured, and the save refuses qty <= 0 anyway
-      // (routes/retail-product-build.js), so the refusal is visible here
-      // rather than at save time.
-      qty: 0,
+      qty: sug ? sug.qty : 0,
+      qty_from_weight: sug ? sug.raw : null,
       unit: m.unit || 'g',
       notes: null,
       material_item_kind: m.item_kind || 'food',
