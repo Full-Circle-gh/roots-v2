@@ -34,8 +34,8 @@ Three pairs collide today — same listing, no spec on either row, both enabled,
 | listing | regular | small |
 |---|---|---|
 | 格兰诺拉脆麦片 Crunchy Granola | map 839, product 226, SKU 4-240, qty 18 | map 1004, product 358, SKU S(4-240), qty 93 |
-| 无糖荷麦片Anti Inflammatory Granola | map 833, product 174, SKU 4-360, qty 6 | map 995, product 357, SKU S(4-360), qty 97 |
-| 荷麦面包Gulten Free Buckwheat Brea | map 888, product 255, SKU 3-252, qty 15 | map 996, product 353, SKU S(3-252), qty 25 |
+| 无糖荞麦片Anti Inflammatory Granola | map 833, product 174, SKU 4-360, qty 6 | map 995, product 357, SKU S(4-360), qty 97 |
+| 荞麦面包Gulten Free Buckwheat Brea | map 888, product 255, SKU 3-252, qty 15 | map 996, product 353, SKU S(3-252), qty 25 |
 
 `S(...)` in a SKU denotes the small serving of that SKU — confirmed by Ash. These are real distinct products, not duplicates.
 
