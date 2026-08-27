@@ -12310,8 +12310,16 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials-record .mat-freebox { margin-top: 16px; }
 
   #tab-materials-record .mat-fincat-wrap { position: relative; }
+  /* position:fixed, not absolute — .mat-card rounds its corners with
+     clip-path (see the .mat-card rule above), and clip-path clips an
+     absolutely-positioned descendant to the card's box exactly like
+     overflow:hidden would. The list looked "stuck" at ~2 rows with no
+     way to scroll the rest into view because that rest was clipped away,
+     not merely hidden below a fold. Fixed positioning (coordinates set in
+     JS from the input's getBoundingClientRect(), in matFinCatFilter)
+     escapes the card's clip entirely. */
   #tab-materials-record .mat-fincat-menu {
-    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+    position: fixed; z-index: 400;
     max-height: 220px; overflow-y: auto; background: var(--td-surface, #fff);
     border: 1px solid var(--td-border); border-radius: 8px;
     box-shadow: 0 8px 22px rgba(18,22,26,.12); padding: 4px; }

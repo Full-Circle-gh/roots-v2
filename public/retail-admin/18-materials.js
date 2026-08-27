@@ -367,12 +367,23 @@
 
   window.matDirty = function () { _dirty = true; };
 
-  // Finance-category suggestions render as our own menu, anchored to the
-  // input via CSS (.mat-fincat-wrap is position:relative). A native
-  // <input list>/<datalist> popup is drawn by the OS combobox widget, which
-  // some embedding webviews (e.g. chat-app browser panes) position at the
-  // wrong screen coordinates — it showed up pinned to the far edge of the
-  // window instead of under the field.
+  // Finance-category suggestions render as our own menu, position:fixed and
+  // placed under the input by JS (not CSS-anchored via position:relative —
+  // .mat-card rounds its corners with clip-path, which clips an absolutely
+  // positioned descendant to the card same as overflow:hidden would). A
+  // native <input list>/<datalist> popup is drawn by the OS combobox widget,
+  // which some embedding webviews (e.g. chat-app browser panes) position at
+  // the wrong screen coordinates — it showed up pinned to the far edge of
+  // the window instead of under the field.
+  function matFinCatReposition() {
+    const menu = document.getElementById('mat-fincat-menu');
+    const input = document.getElementById('mat-f-accounting_category');
+    if (!menu || !input) return;
+    const r = input.getBoundingClientRect();
+    menu.style.left = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    menu.style.top = (r.bottom + 4) + 'px';
+  }
   window.matFinCatFilter = function (v) {
     const menu = document.getElementById('mat-fincat-menu');
     if (!menu) return;
@@ -381,6 +392,7 @@
     if (!matches.length) { menu.hidden = true; menu.innerHTML = ''; return; }
     menu.innerHTML = matches.map(c =>
       `<div class="mat-fincat-opt" onmousedown="event.preventDefault();matFinCatPick(${JSON.stringify(c)})">${esc(c)}</div>`).join('');
+    matFinCatReposition();
     menu.hidden = false;
   };
   window.matFinCatPick = function (v) {
@@ -395,6 +407,21 @@
     // blur-causing focus loss) still has a chance to run its click first.
     setTimeout(() => { const menu = document.getElementById('mat-fincat-menu'); if (menu) menu.hidden = true; }, 150);
   };
+  // Fixed-position menu doesn't track the page under it on its own — close
+  // it when the page underneath scrolls, so it never drifts away from the
+  // field it was anchored to. Scroll events don't bubble, so a capturing
+  // document listener is the only way to catch the record page's own
+  // scroller — but that also fires while scrolling *inside* the menu's own
+  // option list (its target is a descendant, seen during capture), which
+  // must not close it.
+  document.addEventListener('scroll', (e) => {
+    const menu = document.getElementById('mat-fincat-menu');
+    if (menu && !menu.hidden && !menu.contains(e.target)) menu.hidden = true;
+  }, true);
+  window.addEventListener('resize', () => {
+    const menu = document.getElementById('mat-fincat-menu');
+    if (menu && !menu.hidden) menu.hidden = true;
+  });
 
   function paintRecord() {
     const host = recRoot();
