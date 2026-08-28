@@ -7991,6 +7991,18 @@ function ordNewRender() {
     // never refilled from the zone quote again — see ordNewFeeTyped.
     feeTouched: { ship: false, pack: false },
   };
+  // The busy latch and the two action buttons only ever get set BUSY/disabled
+  // (ordNewSetBusy) — a successful create leaves them that way on purpose
+  // (§1.12's in-flight rule: "Created"/"Saved" stays put while the page is
+  // mid-redirect). Nothing ever put them back for the NEXT order, so opening
+  // this form a second time in the same session found Create order still
+  // disabled and _ORD_NEW_BUSY still true — clicking it, or Save draft, was a
+  // silent no-op forever after the first order this page created.
+  _ORD_NEW_BUSY = false;
+  const createBtn = document.getElementById('onw-create');
+  if (createBtn) { createBtn.disabled = false; createBtn.textContent = cuT('Create order', '创建订单'); }
+  const draftBtn = document.getElementById('onw-draft');
+  if (draftBtn) { draftBtn.disabled = false; draftBtn.textContent = cuT('Save draft', '存为草稿'); }
   ['onw-cust-q', 'onw-guest-name', 'onw-guest-phone', 'onw-prod-q',
    'onw-addr-name', 'onw-addr-phone',
    'onw-addr-street', 'onw-addr-postal', 'onw-note-cust', 'onw-note-staff']
