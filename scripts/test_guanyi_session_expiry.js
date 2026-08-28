@@ -28,6 +28,28 @@
  *
  * So the two things pinned here are: a rolling WAF cookie is not a login
  * expiry, and the window survives a restart.
+ *
+ * FOLLOW-UP — 2026-08-28, the alert that cried wolf every twelve hours instead.
+ * The 08-25 fix (a NON_LOGIN_COOKIE denylist of known WAF/CDN/analytics names)
+ * stopped the ~0h pages, but the daemon kept paging "~45h" on a loop. A live
+ * dump of tianhe's session cookies showed why: device_id and cid, a device
+ * fingerprint reissued roughly daily, dated ~42h out — on nobody's denylist,
+ * and past the 6h rolling-cookie window, so they became the new minimum. The
+ * jar also carries several Alibaba tracking cookies dated ~360-400 days out
+ * (loginAppkey, _ati, tfstk, two 3AB9D23F… hex cookies) that a denylist would
+ * equally have missed had they ever been the minimum. And the cookie that
+ * actually IS the login, shiroCookie, turned out to carry no expires date at
+ * all — a pure session cookie, so its true lifetime was never observable from
+ * the jar to begin with.
+ *
+ * Fix: LOGIN_COOKIE is now an ALLOWLIST of the one cookie known to gate the
+ * login, not a denylist of cookies known not to. A denylist only ever knows
+ * the junk it has already met; an allowlist can't be fooled by the next
+ * rolling cookie that shows up dated a day or two out. Given shiroCookie has
+ * no date, sessionExpiry() now returns null in normal operation — there is no
+ * reliable forward-looking signal in this cookie jar, and no warning beats a
+ * fabricated one. The reactive "🔴 登录已失效" alert (fired when a live API
+ * call actually fails) is untouched and remains the trustworthy signal.
  */
 'use strict';
 
@@ -70,23 +92,36 @@ console.log('sessionExpiry — what counts as the login');
 it('the WAF\'s rolling cookie is not the login expiry (the 2026-08-25 page)', () => {
   const b = snapshot([
     cookie('acw_tc', 30 * 60_000),        // Aliyun WAF, ~30 min, reissued for ever
-    cookie('SESSION', 40 * HOUR),         // the actual login
+    cookie('shiroCookie', 40 * HOUR),     // the actual login, IF it ever carries a date
   ]);
   const exp = b.sessionExpiry();
   assert.ok(exp, 'expected an expiry from the login cookie');
-  assert.strictEqual(exp.name, 'SESSION', `read ${exp.name} as the login`);
+  assert.strictEqual(exp.name, 'shiroCookie', `read ${exp.name} as the login`);
   const hrs = Math.round((exp.atMs - Date.now()) / HOUR);
   assert.ok(hrs >= 39 && hrs <= 41, `expected ~40h, got ${hrs}h`);
 });
 
-it('an unknown short-lived cookie is caught too, by its own reissue', () => {
-  // Not on any name list — the general net is that the snapshot is rewritten
-  // every 30 minutes and this cookie is STILL only dated 2h past it.
+it('a non-allowlisted cookie is never the login, however it\'s dated (the 2026-08-28 page)', () => {
+  // device_id/cid: a device fingerprint, reissued roughly daily and dated
+  // ~42h out on a live tianhe dump — well past the 6h rolling window, so the
+  // 2026-08-25 denylist fix let it through and it paged "~45h" on a loop.
+  // Not on LOGIN_COOKIE, so the allowlist must ignore it regardless of dating.
   const b = snapshot([
-    cookie('gy_lb_node', 2 * HOUR),
-    cookie('JSESSIONID_GY', 5 * 24 * HOUR),
+    cookie('device_id', 42 * HOUR),
+    cookie('cid', 42 * HOUR),
   ]);
-  assert.strictEqual(b.sessionExpiry().name, 'JSESSIONID_GY');
+  assert.strictEqual(b.sessionExpiry(), null, 'a non-login cookie must never be read as the login');
+});
+
+it('shiroCookie itself carries no expiry, so a real session still reports null', () => {
+  // The 2026-08-28 finding: the actual login cookie is a pure session cookie
+  // on this tenant (expires -1). No warning is the honest answer here, not a
+  // guess borrowed from whichever unrelated cookie happens to be dated soonest.
+  const b = snapshot([
+    { name: 'shiroCookie', domain: '.guanyierp.com', path: '/', expires: -1 },
+    cookie('secToken', 400 * 24 * HOUR),   // ~400d Alibaba-tracking-style dating; not the login
+  ]);
+  assert.strictEqual(b.sessionExpiry(), null);
 });
 
 it('nothing but rolling cookies means NO warning, not a fake one', () => {
@@ -96,12 +131,12 @@ it('nothing but rolling cookies means NO warning, not a fake one', () => {
 
 it('other domains and undated session cookies are still ignored', () => {
   const b = snapshot([
-    cookie('SESSION', 10 * HOUR, '.aliyun.com'),
+    cookie('shiroCookie', 10 * HOUR, '.aliyun.com'),
     { name: 'tmp', domain: '.guanyierp.com', path: '/', expires: -1 },
-    cookie('SESSION', 60 * HOUR),
+    cookie('shiroCookie', 60 * HOUR),
   ]);
   const exp = b.sessionExpiry();
-  assert.strictEqual(exp.name, 'SESSION');
+  assert.strictEqual(exp.name, 'shiroCookie');
   assert.ok(Math.round((exp.atMs - Date.now()) / HOUR) >= 59);
 });
 
@@ -109,9 +144,9 @@ it('a login genuinely near its end is still reported, on a stale snapshot', () =
   // persistSession has not written for two days (it only writes while logged
   // in), so the rolling filter measures from then — a real 3h-away expiry on a
   // 2-day-old file is news, and must not be filtered away as "reissued".
-  const b = snapshot([cookie('SESSION', 3 * HOUR)], 2 * 24 * HOUR);
+  const b = snapshot([cookie('shiroCookie', 3 * HOUR)], 2 * 24 * HOUR);
   const exp = b.sessionExpiry();
-  assert.ok(exp && exp.name === 'SESSION', 'expected the near expiry to survive');
+  assert.ok(exp && exp.name === 'shiroCookie', 'expected the near expiry to survive');
 });
 
 it('no session file at all is null, not a throw', () => {
