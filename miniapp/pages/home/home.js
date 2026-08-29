@@ -708,7 +708,9 @@ Page({
   onShareAppMessage() {
     const af = this.data.affiliate;
     if (af?.enabled && af.code) {
-      const reward = Number(af.reward_per_order) || 30;
+      // The friend's discount, not the referrer's own reward — this text is
+      // addressed to whoever opens the shared card ("your first order").
+      const reward = Number(af.reward_referee) || 20;
       const en = this.data.lang === 'en';
       // Office-set custom invite title (admin → Share cards), else the built-in
       // reward-aware default. The code always rides in the path, never the
@@ -742,7 +744,9 @@ Page({
   onShareTimeline() {
     const af = this.data.affiliate;
     if (af?.enabled && af.code) {
-      const reward = Number(af.reward_per_order) || 30;
+      // The friend's discount, not the referrer's own reward — same as
+      // onShareAppMessage above.
+      const reward = Number(af.reward_referee) || 20;
       const en = this.data.lang === 'en';
       const custom = af.share_title && af.share_title[this.data.lang];
       return {
