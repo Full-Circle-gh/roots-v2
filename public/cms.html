@@ -5607,6 +5607,36 @@
         </div>
       </div>
 
+      <!-- Loading screen — full-screen splash shown while the mini app launches,
+           a live map initialises, or a full-page fetch is in flight. Stored
+           under brand.loading_splash. -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Loading screen · 加载页</h3>
+          <div class="muted">Shown to customers on app launch, on the map screen and on other full-page loading states, in place of a blank screen. Changes save automatically. · 顾客打开小程序、加载地图或其它整页加载时展示,取代空白页面。更改自动保存。</div>
+        </div>
+
+        <div class="field">
+          <label class="stacked">Logo · 徽标</label>
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+            <div id="cfg-splash-logo-preview"
+                 style="width:96px; height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-elev-1); border:1px dashed var(--line); border-radius:6px;">
+              <span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <input type="file" id="cfg-splash-logo-file" accept="image/*">
+              <button type="button" class="btn" id="cfg-splash-logo-clear" style="align-self:flex-start;">Clear · 清除</button>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:6px;">Square PNG recommended, at least 200×200. Without a logo, customers see a plain loading dot instead. · 推荐正方形 PNG,至少 200×200。未上传时顾客将看到普通的加载动画。</div>
+        </div>
+
+        <div class="pd-row2">
+          <div class="field"><label class="stacked">Loading text EN · 加载文案(英文)</label><input type="text" id="cfg-splash-label-en" placeholder="Loading…"></div>
+          <div class="field"><label class="stacked">Loading text CN · 加载文案(中文)</label><input type="text" id="cfg-splash-label-cn" placeholder="加载中…"></div>
+        </div>
+      </div>
+
       <!-- Me page menu — reorder + show/hide the customer's Me-page rows.
            Stored under me_page.rows; saves automatically on each change. -->
       <div class="group-card">
@@ -6386,6 +6416,7 @@ function initThemeBrand() {
   if (!modal || !trigger) return;
 
   let footerData = null;   // base64 wordmark data URL, held between pick + save
+  let splashData = null;   // base64 loading-screen logo, held between pick + save
   let meRows = [];         // [{ id, enabled }] working copy, in display order
   let meSaveT = null;
 
@@ -6485,6 +6516,37 @@ function initThemeBrand() {
     saveFooter(T('Footer saved', '页脚已保存'));
   });
 
+  // Loading screen — base64 logo buffer + auto-save on any field change.
+  function setSplashPreview(dataUrl) {
+    const el = $('#cfg-splash-logo-preview');
+    if (!el) return;
+    el.innerHTML = dataUrl
+      ? '<img src="' + dataUrl + '" style="max-width:100%; max-height:100%; object-fit:contain;">'
+      : '<span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>';
+  }
+  function saveSplash(okMsg) {
+    return putKey('brand.loading_splash', {
+      logo_image: splashData || null,
+      label_en:   ($('#cfg-splash-label-en').value || '').trim() || null,
+      label_cn:   ($('#cfg-splash-label-cn').value || '').trim() || null,
+    }, okMsg);
+  }
+  ['cfg-splash-label-en', 'cfg-splash-label-cn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => saveSplash(T('Loading screen saved', '加载页已保存'))); });
+  $('#cfg-splash-logo-file').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type || !f.type.startsWith('image/')) { toast(T('Image only', '仅支持图片'), 'err'); e.target.value = ''; return; }
+    const r = new FileReader();
+    r.onload = ev => { splashData = ev.target.result; setSplashPreview(splashData); saveSplash(T('Loading screen saved', '加载页已保存')); };
+    r.readAsDataURL(f);
+  });
+  $('#cfg-splash-logo-clear').addEventListener('click', () => {
+    splashData = null; setSplashPreview(null);
+    const fi = $('#cfg-splash-logo-file'); if (fi) fi.value = '';
+    saveSplash(T('Loading screen saved', '加载页已保存'));
+  });
+
   // Me-page menu — hydrate / render / reorder; debounced auto-save.
   function hydrateMeRows(savedRows) {
     const saved = Array.isArray(savedRows) ? savedRows : [];
@@ -6550,6 +6612,11 @@ function initThemeBrand() {
       $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
       $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
       $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
+      const spl = (c.brand && c.brand.loading_splash) || {};
+      splashData = spl.logo_image || null;
+      setSplashPreview(splashData);
+      $('#cfg-splash-label-en').value = spl.label_en || '';
+      $('#cfg-splash-label-cn').value = spl.label_cn || '';
       hydrateMeRows(c.me_page && c.me_page.rows);
       renderMeRows();
       syncOpts();

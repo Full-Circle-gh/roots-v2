@@ -368,7 +368,7 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
     <div class="menu more-menu" id="menu-more">
       <button onclick="closeMenus();openTheme()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a10 10 0 1 1 0-20 8 8 0 0 1 0 16h-1.5a1.5 1.5 0 0 0-1 2.6A2 2 0 0 1 12 22Z"/><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor"/><circle cx="16.5" cy="10.5" r="1.2" fill="currentColor"/></svg>
-        <span class="mi-tx"><span class="t"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></span><span class="s"><span class="i18n-en">Accent, mascots, footer, Me menu</span><span class="i18n-cn">主色、吉祥物、页脚、我的菜单</span></span></span></button>
+        <span class="mi-tx"><span class="t"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></span><span class="s"><span class="i18n-en">Accent, mascots, footer, loading screen, Me menu</span><span class="i18n-cn">主色、吉祥物、页脚、加载页、我的菜单</span></span></span></button>
       <div class="sep"></div>
       <button onclick="closeMenus();doRevert()" class="danger">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -487,6 +487,23 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
           <div class="fld"><label><span class="i18n-en">Tagline CN</span><span class="i18n-cn">宣传语(中文)</span></label><input type="text" id="tb-footer-tag-cn" placeholder="用代码,带来清晰"></div>
           <div class="fld"><label><span class="i18n-en">Credit line EN</span><span class="i18n-cn">落款(英文)</span></label><input type="text" id="tb-footer-cred-en" placeholder="Powered by tacet"></div>
           <div class="fld" style="margin-bottom:0;"><label><span class="i18n-en">Credit line CN</span><span class="i18n-cn">落款(中文)</span></label><input type="text" id="tb-footer-cred-cn" placeholder="由 tacet 提供技术支持"></div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Loading screen</span><span class="i18n-cn">加载页</span></div>
+          <div class="fld">
+            <label><span class="i18n-en">Logo</span><span class="i18n-cn">徽标</span></label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div id="tb-splash-prev" style="width:72px;height:72px;display:flex;align-items:center;justify-content:center;background:var(--bg-elev-1);border:1px dashed var(--line);border-radius:8px;">
+                <span style="color:var(--text-3);font-size:11px;"><span class="i18n-en">No image</span><span class="i18n-cn">无图片</span></span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <input type="file" id="tb-splash-file" accept="image/*">
+                <button type="button" id="tb-splash-clear" style="align-self:flex-start;padding:7px 12px;border:1px solid var(--line);background:var(--bg-elev-2);color:var(--text-2);border-radius:8px;font:600 12px var(--f-sans);"><span class="i18n-en">Clear</span><span class="i18n-cn">清除</span></button>
+              </div>
+            </div>
+          </div>
+          <div class="fld"><label><span class="i18n-en">Loading text EN</span><span class="i18n-cn">加载文案(英文)</span></label><input type="text" id="tb-splash-label-en" placeholder="Loading…"></div>
+          <div class="fld" style="margin-bottom:0;"><label><span class="i18n-en">Loading text CN</span><span class="i18n-cn">加载文案(中文)</span></label><input type="text" id="tb-splash-label-cn" placeholder="加载中…"></div>
         </div>
         <div class="dgroup">
           <div class="t"><span class="i18n-en">Me page menu</span><span class="i18n-cn">「我的」页菜单</span></div>
@@ -1046,7 +1063,7 @@ const TB_ME_DEFS = [
   { id: 'bug',        label: 'Found a bug? · 报告问题' },
   { id: 'tour',       label: 'Take the tour · 查看教程' },
 ];
-const TB = { accent: 'lime-leaf', footerImg: null, meRows: [] };
+const TB = { accent: 'lime-leaf', footerImg: null, splashImg: null, meRows: [] };
 let tbMeSaveT = null;
 
 async function tbPut(key, value, okMsg) {
@@ -1083,6 +1100,19 @@ function tbSaveFooter(okMsg) {
     tagline_cn:    (($('#tb-footer-tag-cn').value) || '').trim() || null,
     credit_en:     (($('#tb-footer-cred-en').value) || '').trim() || null,
     credit_cn:     (($('#tb-footer-cred-cn').value) || '').trim() || null,
+  }, okMsg);
+}
+function tbSetSplashPreview(url) {
+  const el = $('#tb-splash-prev'); if (!el) return;
+  el.innerHTML = url
+    ? '<img src="' + url + '" style="max-width:100%;max-height:100%;object-fit:contain;">'
+    : '<span style="color:var(--text-3);font-size:11px;">' + cuT('No image', '无图片') + '</span>';
+}
+function tbSaveSplash(okMsg) {
+  return tbPut('brand.loading_splash', {
+    logo_image: TB.splashImg || null,
+    label_en:   (($('#tb-splash-label-en').value) || '').trim() || null,
+    label_cn:   (($('#tb-splash-label-cn').value) || '').trim() || null,
   }, okMsg);
 }
 
@@ -1159,6 +1189,24 @@ function tbInit() {
     if (file) file.value = '';
     tbSaveFooter(cuT('Footer saved', '页脚已保存'));
   });
+  // Loading screen — auto-save on any field change / image pick / clear.
+  ['tb-splash-label-en', 'tb-splash-label-cn']
+    .forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', () => tbSaveSplash(cuT('Loading screen saved', '加载页已保存'))); });
+  const splashFile = $('#tb-splash-file');
+  if (splashFile) splashFile.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type || !f.type.startsWith('image/')) { toast(cuT('Image only', '仅支持图片'), true); e.target.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = ev => { TB.splashImg = ev.target.result; tbSetSplashPreview(TB.splashImg); tbSaveSplash(cuT('Loading screen saved', '加载页已保存')); };
+    rd.readAsDataURL(f);
+  });
+  const splashClr = $('#tb-splash-clear');
+  if (splashClr) splashClr.addEventListener('click', () => {
+    TB.splashImg = null; tbSetSplashPreview(null);
+    if (splashFile) splashFile.value = '';
+    tbSaveSplash(cuT('Loading screen saved', '加载页已保存'));
+  });
 }
 
 // Hydrate every TB control from the live config blob (called by openDesign).
@@ -1176,6 +1224,11 @@ function tbHydrate(data) {
   if ($('#tb-footer-tag-cn'))  $('#tb-footer-tag-cn').value  = mef.tagline_cn || '';
   if ($('#tb-footer-cred-en')) $('#tb-footer-cred-en').value = mef.credit_en || '';
   if ($('#tb-footer-cred-cn')) $('#tb-footer-cred-cn').value = mef.credit_cn || '';
+  const spl = (c.brand && c.brand.loading_splash) || {};
+  TB.splashImg = spl.logo_image || null;
+  tbSetSplashPreview(TB.splashImg);
+  if ($('#tb-splash-label-en')) $('#tb-splash-label-en').value = spl.label_en || '';
+  if ($('#tb-splash-label-cn')) $('#tb-splash-label-cn').value = spl.label_cn || '';
   tbHydrateMe(c.me_page && c.me_page.rows);
   tbRenderMe();
 }

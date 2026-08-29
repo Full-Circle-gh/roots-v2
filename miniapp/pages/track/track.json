@@ -1,5 +1,7 @@
 {
-  "usingComponents": {},
+  "usingComponents": {
+    "loading-splash": "/components/loading-splash/loading-splash"
+  },
   "navigationBarTitleText": "Tracking",
   "navigationBarBackgroundColor": "#FAF7F1",
   "navigationBarTextStyle": "black",
