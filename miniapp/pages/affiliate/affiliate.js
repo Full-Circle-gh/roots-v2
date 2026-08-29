@@ -63,6 +63,8 @@ const COPY = {
     referredByLabel: 'INVITED BY',
     disabledTitle: 'Refer-a-friend is paused.',
     disabledBody:  'Our affiliate program is taking a short break. Check back soon — we will let you know when it returns.',
+    blockedTitle:  "You can't refer friends right now.",
+    blockedBody:   "Your invite code has been turned off. You can still shop and use any codes friends share with you — just get in touch if you think this is a mistake.",
     shareTitle:    'INVITE FRIENDS',
     shareBody:     'Share this code with a friend. They get ¥{them}, you get ¥{you} on their first order.',
     shareBodySolo: 'Share this code with a friend. You get ¥{you} on their first order.',
@@ -114,6 +116,8 @@ const COPY = {
     referredByLabel: '邀请人',
     disabledTitle: '推广计划暂停中。',
     disabledBody:  '我们的推广计划暂时关闭,稍后会重新开放。',
+    blockedTitle:  '暂时无法邀请好友。',
+    blockedBody:   '您的邀请码已被停用。您仍可正常购物,也可使用朋友分享给您的邀请码 — 如认为这是误操作,请联系我们。',
     shareTitle:    '邀请好友',
     shareBody:     '把邀请码发给朋友,TA 得 ¥{them},TA 完成首单后你得 ¥{you}。',
     shareBodySolo: '把邀请码发给朋友,TA 完成首单后你得 ¥{you}。',
@@ -142,6 +146,10 @@ Page({
     copy: COPY.en,
     loading: true,
     enabled: true,
+    // THIS customer's own standing — distinct from `enabled` (the shop-wide
+    // program toggle). An admin can disable one person's referring without
+    // pausing the program for anyone else; see the wxml's blocked-state card.
+    blocked: false,
     code: '',
     rewardPerOrder: 30,   // referrer reward ("for you")
     rewardReferee: 0,      // friend reward ("for them"); 0 = friend gets nothing
@@ -206,10 +214,14 @@ Page({
       this.setData({ loading: false });
       return;
     }
-    this.loadQr();
     this.setData({ loading: true });
     try {
       const data = await api.get('/api/retail/affiliate');
+      const blocked = !!data.affiliate_blocked;
+      // A blocked customer's own share affordances (QR, card) would just draw
+      // a code that /affiliate/qr and /affiliate/apply both now refuse —
+      // don't spend the WeChat QR quota on an image nothing can use.
+      if (data.enabled !== false && !blocked) this.loadQr();
       const reward = Number(data.reward_per_order) || 0;
       const refereeReward = Number(data.reward_referee) || 0;
       const invites = (data.invites || []).map(it => ({
@@ -224,6 +236,7 @@ Page({
       this.setData({
         loading: false,
         enabled: data.enabled !== false,
+        blocked,
         code: data.code || '',
         rewardPerOrder: reward,
         rewardReferee: refereeReward,

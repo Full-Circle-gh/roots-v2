@@ -3755,6 +3755,17 @@ addColumn('retail_customers', 'referral_applied_at',      'DATETIME');
 // bounty never consults them in either mode.
 addColumn('retail_customers', 'lifetime_eligible',        'INTEGER DEFAULT 0');
 addColumn('retail_customers', 'lifetime_eligible_since',  'DATETIME');
+// Per-customer affiliate opt-out. Stops ONE customer acting as a REFERRER —
+// their code is refused when a new friend tries to apply it, and any future
+// payout to THEM (the one-time bounty and the ongoing revenue share alike)
+// stops — without touching their account (retail_customers.is_blocked, which
+// blocks login/checkout entirely) or the shop-wide program toggle
+// (features.affiliate, which is everyone). Forwards-only, same contract as
+// lifetime_eligible above: nothing already paid is clawed back, and a friend
+// who already joined under their code before this was set still gets the
+// welcome reward promised to THEM — this flag only ever revokes the blocked
+// customer's own upside.
+addColumn('retail_customers', 'affiliate_blocked', 'INTEGER DEFAULT 0');
 // Provenance — how this customer record was born. NULL/'app' = self-service
 // signup (WeChat / web OAuth / phone-OTP); 'manual' = keyed in by staff via
 // the Mini App Backend (walk-ins, phone orders). created_by is the staff

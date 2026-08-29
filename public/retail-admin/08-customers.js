@@ -1614,7 +1614,7 @@ function renderAffiliateBlock(aff) {
     <div class="row" style="gap: 24px; flex-wrap: wrap; margin-bottom: 12px;">
       <div class="field" style="margin: 0;">
         <label class="stacked">Their code · 本人邀请码</label>
-        <div style="font-size: 16px;">${codeHtml}
+        <div style="font-size: 16px;">${codeHtml}${aff.affiliate_blocked ? ` <span class="cu-pill blocked" data-no-i18n>${escapeHtml(cuT('Disabled', '已停用'))}</span>` : ''}
           <button class="btn btn-sm" style="margin-left: 8px;" onclick="afReissueCode(${CU_CURRENT.customer.id}, event)">Reissue · 重发</button>
         </div>
       </div>
@@ -1626,6 +1626,7 @@ function renderAffiliateBlock(aff) {
         <label class="stacked">Conversions · 转化数</label>
         <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned · 已赚</span></div>
       </div>
+      ${renderAffiliateBlockToggle(aff)}
       ${renderLifetimeEligibility(aff)}
     </div>
     <div class="table-wrap">
@@ -1635,6 +1636,50 @@ function renderAffiliateBlock(aff) {
       </table>
     </div>
   `;
+}
+
+// Per-customer affiliate opt-out — stop THIS customer acting as a referrer
+// without touching their account (that's the header's Block/Unblock, above)
+// or the shop-wide program toggle (Affiliate tab → Settings). Always shown,
+// unlike renderLifetimeEligibility below: it applies in every lifetimeMode,
+// and it's the one-time bounty too, not just the ongoing share.
+function renderAffiliateBlockToggle(aff) {
+  const on = !!aff.affiliate_blocked;   // "on" = referring is disabled
+  return `
+      <div class="field" style="margin: 0;">
+        <label class="stacked">${cuT('Referring', '推荐资格')}</label>
+        <div style="font-size: 13px; padding: 6px 0;">
+          <button class="btn btn-sm" onclick="cuSetAffiliateBlocked(${CU_CURRENT.customer.id}, ${on ? 'false' : 'true'}, event)">${
+            on ? cuT('Let them refer again', '恢复推荐资格')
+               : cuT('Stop them referring', '停止推荐资格')}</button>
+          <div class="muted" style="font-size: 11px; margin-top: 4px; max-width: 44ch;">${
+            on ? cuT('Their code is disabled — new friends cannot apply it, and no further referral or share reward reaches them.',
+                     '其邀请码已停用 — 好友无法使用，本人也不再获得新的推荐奖励或复购分成。')
+               : cuT('Their code works normally.', '其邀请码正常可用。')}</div>
+        </div>
+      </div>`;
+}
+
+// Mirrors cuSetLifetimeEligible below: same endpoint pair shape as the
+// header's Block/Unblock (POST .../affiliate-block, .../affiliate-unblock),
+// same confirm-only-when-disabling posture as the ongoing-share toggle.
+async function cuSetAffiliateBlocked(customerId, blocked, ev) {
+  const btn = ev && ev.currentTarget;
+  if (blocked && !(await askConfirm({
+    title: cuT('Stop this customer referring friends?', '停止该客户的推荐资格？'),
+    body: cuT('Their referral code stops working for new friends, and they stop earning new referral or share rewards. Anything already paid into their wallet stays; the account itself is untouched.',
+              '其邀请码将无法被新好友使用，本人也不再获得新的推荐奖励或复购分成。已发放至钱包的奖励不受影响，账号本身不受影响。'),
+    confirmLabel: cuT('Stop them referring', '停止推荐资格'),
+  }))) return;
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/retail-admin/customers/${customerId}/affiliate-${blocked ? 'block' : 'unblock'}`, { method: 'POST' });
+    toast(blocked ? cuT('Referring disabled', '已停止推荐资格') : cuT('Referring re-enabled', '已恢复推荐资格'));
+    if (CU_CURRENT?.customer?.id === customerId) cuOpenDetail(customerId);
+  } catch (e) {
+    toast(cuT('Could not change this: ' + e.message, '修改失败：' + e.message), 'err');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Ongoing repeat-order share — is this customer one of the chosen few?

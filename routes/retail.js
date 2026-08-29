@@ -16446,6 +16446,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
       recent_topups: recentTopups,
       affiliate: {
         referral_code: customer.referral_code,
+        affiliate_blocked: customer.affiliate_blocked ? 1 : 0,
         referred_by:   referrer,
         invites:       referralsByMe,
         summary:       referralsAgg,
@@ -16605,6 +16606,29 @@ router.post('/api/retail-admin/customers/:id/unblock', requireRetailAdmin, (req,
   const r = tdb().prepare('UPDATE retail_customers SET is_blocked = 0 WHERE id = ?').run(id);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'unblock', 'retail_customer', id, {}, req.ip);
+  res.json({ success: true });
+});
+
+// Affiliate-only opt-out — toggles `affiliate_blocked`. Unlike block/unblock
+// above, the customer's account is untouched: they can still log in, order,
+// and (if referred by someone else) redeem a friend's code. This only stops
+// THEM acting as a referrer — see addColumn('retail_customers',
+// 'affiliate_blocked') in database.js for the full contract (their code is
+// refused on new applies, and no further referral or lifetime-share payout
+// reaches them; nothing already paid is clawed back).
+router.post('/api/retail-admin/customers/:id/affiliate-block', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const reason = req.body?.reason ? String(req.body.reason).slice(0, 200) : null;
+  const r = tdb().prepare('UPDATE retail_customers SET affiliate_blocked = 1 WHERE id = ?').run(id);
+  if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
+  logActivity(req.user.id, req.user.username, 'affiliate_block', 'retail_customer', id, { reason }, req.ip);
+  res.json({ success: true });
+});
+router.post('/api/retail-admin/customers/:id/affiliate-unblock', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = tdb().prepare('UPDATE retail_customers SET affiliate_blocked = 0 WHERE id = ?').run(id);
+  if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
+  logActivity(req.user.id, req.user.username, 'affiliate_unblock', 'retail_customer', id, {}, req.ip);
   res.json({ success: true });
 });
 
@@ -17057,6 +17081,11 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
     success: true,
     data: {
       enabled:              s.enabled,
+      // THIS customer's own standing, distinct from the shop-wide `enabled`
+      // above — an admin can turn off referring for one person without
+      // pausing the program for anyone else. See addColumn('retail_customers',
+      // 'affiliate_blocked') in database.js.
+      affiliate_blocked:    req.customer.affiliate_blocked ? 1 : 0,
       reward_per_order:     s.rewardPerOrder,
       reward_referee:       s.rewardReferee,
       // Repeat-order revenue share, so the banner can advertise the ongoing
@@ -17131,6 +17160,7 @@ router.get('/api/retail/affiliate/qr', requireRetailAuth, async (req, res) => {
   try {
     const s = affiliateSettings();
     if (!s.enabled) return res.status(409).json({ success: false, error: 'program_disabled' });
+    if (req.customer.affiliate_blocked) return res.status(409).json({ success: false, error: 'affiliate_blocked' });
     // No WeChat credentials (dev / a tenant that hasn't connected yet) — the
     // client hides the QR affordance rather than showing a broken one.
     if (getTenantCreds(currentTenantId()).wechat.devMode) {
@@ -17209,7 +17239,10 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
   if (me.referred_by_customer_id) {
     return res.status(409).json({ success: false, error: 'already_referred' });
   }
-  const inviter = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE referral_code = ?').get(raw);
+  // affiliate_blocked = 0: an admin-disabled affiliate's code is refused the
+  // same as one that never existed, so a friend applying it learns nothing
+  // about why (see addColumn('retail_customers', 'affiliate_blocked')).
+  const inviter = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE referral_code = ? AND affiliate_blocked = 0').get(raw);
   if (!inviter)         return res.status(404).json({ success: false, error: 'code_not_found' });
   if (inviter.id === me.id) return res.status(409).json({ success: false, error: 'cannot_refer_self' });
   if (inviter.referred_by_customer_id === me.id) {
@@ -17267,7 +17300,13 @@ function creditReferralReward(orderId) {
     tdb().prepare("UPDATE retail_referrals SET status = 'void', voided_at = CURRENT_TIMESTAMP, voided_reason = 'not_first_order' WHERE id = ?").run(ref.id);
     return;
   }
-  const reward = Number(ref.reward_amount) || 0;
+  // Admin opt-out — see addColumn('retail_customers', 'affiliate_blocked') in
+  // database.js. Only cancels the REFERRER's own bounty: the friend applied
+  // this code back when it still worked, so the welcome reward promised to
+  // THEM still pays — this flag only ever revokes the blocked customer's own
+  // upside, never the invitee's.
+  const referrerBlocked = !!tdb().prepare('SELECT affiliate_blocked FROM retail_customers WHERE id = ?').get(ref.referrer_id)?.affiliate_blocked;
+  const reward = referrerBlocked ? 0 : (Number(ref.reward_amount) || 0);
   const refereeReward = Number(ref.referee_reward_amount) || 0;
   // Shared helper: credit a wallet + log a ledger row. NOTE: double-pay is
   // prevented by the status='joined' guard above + the WHERE status='joined'
@@ -17335,6 +17374,10 @@ function creditLifetimeCommission(orderId) {
   const referrerId = cust && cust.referred_by_customer_id;
   if (!referrerId) return;                          // not an invited customer
   if (referrerId === o.customer_id) return;         // defensive: never self-pay
+  // Admin opt-out — see addColumn('retail_customers', 'affiliate_blocked') in
+  // database.js. Checked regardless of lifetimeMode: a blocked referrer earns
+  // nothing further, whether or not they were ever hand-picked for the share.
+  if (tdb().prepare('SELECT affiliate_blocked FROM retail_customers WHERE id = ?').get(referrerId)?.affiliate_blocked) return;
   // Time-limited share: the referrer only earns on this friend's orders for
   // `lifetimeMonths` after they joined (12 = one year; 0 = forever). Past the
   // window we just stop earning — no clawback. Anchored on the order's paid_at

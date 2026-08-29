@@ -1,10 +1,20 @@
 <view class="page">
 
-  <!-- Disabled-state notice — admin turned the program off. -->
+  <!-- Disabled-state notice — admin turned the whole program off. -->
   <view wx:if="{{!loading && enabled === false}}" class="disabled-card">
     <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title f-bear">{{copy.disabledTitle}}</view>
     <view class="disabled-body f-aleo">{{copy.disabledBody}}</view>
+  </view>
+
+  <!-- Blocked-state notice — admin disabled referring for THIS customer only;
+       the program is still running for everyone else. Checked after the
+       program-wide toggle above so a fully-paused program still shows the
+       generic message rather than this personal one. -->
+  <view wx:elif="{{!loading && blocked}}" class="disabled-card">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title f-bear">{{copy.blockedTitle}}</view>
+    <view class="disabled-body f-aleo">{{copy.blockedBody}}</view>
   </view>
 
   <block wx:else>
