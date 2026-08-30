@@ -13,6 +13,7 @@ const { seam } = require('../lib/db-seam');
 const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
+const { productUnitCostYuan } = require('../lib/product-cost');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -115,7 +116,12 @@ function fallbackUnits(storeId, productId) {
 //      them. Without this, such lines silently failed to deduct stock.
 //   3. UNIQUE active name match (CJK core, then English) as a last resort.
 // Ambiguous/no match → productId null (not deducted, surfaced as unresolved).
-function resolveProduct(item, storeId, storeCode) {
+//
+// MATCHING ONLY — the cost snapshot is stamped by resolveProduct() below, which
+// wraps this. Split that way so the four match branches here stay purely about
+// identifying the product, and the cost is read ONCE off whichever id they
+// settle on rather than four times in four places that would drift apart.
+function matchProductForLine(item, storeId, storeCode) {
   const qty = parseInt(item.qty, 10) || 0;
   const out = { name: item.name, sku: item.sku || null, qty, productId: null, nameCn: item.name, nameEn: item.name, matchBy: null,
                 // How many units of the product this line took, per unit sold.
@@ -188,6 +194,39 @@ function resolveProduct(item, storeId, storeCode) {
   if (matches.length === 1) { apply(matches[0], 'name'); }
   else if (!out.matchBy || out.matchBy === 'sku_unknown') out.matchBy = matches.length > 1 ? 'ambiguous' : 'unmatched';
   return withUnits();
+}
+
+// Match the line, then stamp what one unit of it cost us — the figure the order
+// INSERT writes into retail_order_items.unit_cost_at_sale.
+//
+// ONE LOOKUP, AT THE END, on whatever id the four branches settled on. Reading
+// it inside each branch would mean four copies of the same call, on four
+// different row shapes, and the next branch added would be the one that forgot.
+//
+// AN UNMATCHED LINE COSTS NULL, NOT ZERO. Meituan lines legitimately fail to
+// resolve (ambiguous name, unmapped listing) and are surfaced as `unresolved`
+// rather than dropped — they still become order rows. There is no product to
+// price, so the honest snapshot is "unknown", and productUnitCostYuan is never
+// called with a null id.
+//
+// PER UNIT, NOT PER PACK. `units` beside it says how many units one sold item
+// took off the shelf, and it is written to the row's own pack_units column — so
+// the cost stays per-unit here and the two multiply at read time. Folding the
+// pack size in here would double-count against that column.
+//
+// NEVER THROWS: this runs inside the ingest that records a real order, and a
+// cost nothing reads yet must not be able to cost us the order itself.
+function resolveProduct(item, storeId, storeCode) {
+  const out = matchProductForLine(item, storeId, storeCode);
+  out.unitCostAtSale = null;
+  if (out.productId) {
+    try {
+      out.unitCostAtSale = productUnitCostYuan(db, out.productId);
+    } catch (e) {
+      console.error('[meituan-internal] cost snapshot failed for product', out.productId, e && e.message);
+    }
+  }
+  return out;
 }
 
 // ── The extras the order payload already carried ─────────────────────────────
@@ -464,12 +503,17 @@ router.post('/ingest-order', (req, res) => {
         db.prepare(`
           INSERT INTO retail_order_items
             (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total,
-             channel_food_id, options_json, pack_units)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             channel_food_id, options_json, pack_units, unit_cost_at_sale)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty,
                fnum(it.unitPrice) || 0, fnum(it.lineTotal) || 0,
                it.foodId || null, it.options ? JSON.stringify(it.options) : null,
-               packUnits(it.units));
+               packUnits(it.units),
+               // Stamped by resolveProduct(). NOT given the `|| 0` treatment the
+               // two money columns above get: a zero price on an unmatched line
+               // is a known-empty figure the reports SUM, while a zero COST would
+               // claim the goods were free. Unknown stays NULL.
+               it.unitCostAtSale ?? null);
       }
       return oid;
     })();

@@ -44,6 +44,7 @@ const db = require('../database');
 const { adjustStock } = require('../lib/inventory');
 const { GzGroceryAdmin, extractSku } = require('../lib/gzgrocery-admin');
 const { notifyOrder } = require('../lib/gzgrocery-order-notify');
+const { productUnitCostYuan } = require('../lib/product-cost');
 
 let MODE = (process.env.GZGROCERY_ORDER_MODE || 'off').toLowerCase();
 if (!['off', 'shadow', 'live'].includes(MODE)) MODE = 'off';
@@ -184,6 +185,30 @@ function gzUnitPrice(productId) {
   return r ? Number(r.owed) || 0 : 0;
 }
 
+// Per-unit COST for the mirrored line, the cost sibling of gzUnitPrice above and
+// what lands in retail_order_items.unit_cost_at_sale.
+//
+// A SIBLING RATHER THAN ANOTHER COLUMN ON gzUnitPrice'S SELECT, on purpose. That
+// statement reads a PRICE, which on this channel is a GZ-specific figure
+// (excel_gz_price → excel_retail → sell_price) that genuinely lives in those two
+// tables. Cost is not like that: lib/product-cost.js is the one place that
+// decides what a product costs, and a BUNDLE's cost is derived from its
+// components rather than stored — so `sp.unit_cost` bolted onto that join would
+// snapshot blank for every bundle GZ sells, which is the exact hole that module
+// exists to close. The price basis differs per channel; the cost basis does not.
+//
+// Null (never 0) whenever the figure can't be established, and never throws: the
+// mirror records a real order and must not fail over a column nothing reads yet.
+function gzUnitCost(productId) {
+  if (!productId) return null;
+  try {
+    return productUnitCostYuan(db, productId);
+  } catch (e) {
+    log(`cost snapshot failed for product ${productId}: ${e.message}`);
+    return null;
+  }
+}
+
 function parseGzDateMs(s) {
   if (!s) return null;
   let m = /(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
@@ -270,7 +295,10 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
     // join returns nothing once a product is deleted or re-SKU'd — so a mirror
     // that only stored product_id shows "no SKU". oi.sku is the SKU that was
     // actually ordered and survives catalogue churn.
-    return { product_id: it.product_id, sku: it.sku || null, name_cn: it.name_cn || null, name_en: it.name_en || null, qty: it.qty, unit_price: owed, line_total: line };
+    return { product_id: it.product_id, sku: it.sku || null, name_cn: it.name_cn || null, name_en: it.name_en || null, qty: it.qty, unit_price: owed, line_total: line,
+      // Cost read here, beside the price, off the same product_id — one lookup
+      // per line, on the live catalogue, at the moment the mirror is written.
+      unit_cost_at_sale: gzUnitCost(it.product_id) };
   });
   subtotal = +subtotal.toFixed(2);
   const placedAt = gzPlacedAt(dateAdded);
@@ -287,8 +315,10 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
         shipAddr, shipJson, storeId, placedAt, placedAt);
     const oid = r.lastInsertRowid;
     const ins = db.prepare(`INSERT INTO retail_order_items
-      (order_id, product_id, sku, name_cn, name_en, qty, unit_price, line_total) VALUES (?,?,?,?,?,?,?,?)`);
-    for (const l of lines) ins.run(oid, l.product_id, l.sku, l.name_cn, l.name_en, l.qty, l.unit_price, l.line_total);
+      (order_id, product_id, sku, name_cn, name_en, qty, unit_price, line_total, unit_cost_at_sale)
+      VALUES (?,?,?,?,?,?,?,?,?)`);
+    for (const l of lines) ins.run(oid, l.product_id, l.sku, l.name_cn, l.name_en, l.qty, l.unit_price, l.line_total,
+      l.unit_cost_at_sale ?? null);
   })();
   log(`mirrored ${roNo} → retail_orders (channel=gzgrocery, ¥${subtotal}, ${lines.length} line(s))`);
 }

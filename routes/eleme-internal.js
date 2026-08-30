@@ -25,6 +25,7 @@ const { seam } = require('../lib/db-seam');
 const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
+const { productUnitCostYuan } = require('../lib/product-cost');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -168,7 +169,11 @@ function fallbackUnits(storeId, productId) {
 //   1. 货号 / extendCode → store_products.sku
 //   2. eleme_product_map by Eleme listing name (per store)
 //   3. unique active name match (CJK then English)
-function resolveProduct(item, storeId) {
+//
+// MATCHING ONLY — the cost snapshot is stamped by resolveProduct() below, which
+// wraps this, so the four branches here stay purely about identifying the
+// product and the cost is read once off whichever id they settle on.
+function matchProductForLine(item, storeId) {
   const qty = parseInt(item.qty, 10) || 0;
   // Line money now arrives from the channel (Tier 0/1) — carry it through the
   // resolver so a matched AND an unmatched line both keep their real price.
@@ -239,6 +244,32 @@ function withFallbackUnits(out, storeId) {
   const { units, sure } = fallbackUnits(storeId, out.productId);
   out.units = units;
   if (!sure) out.matchBy = (out.matchBy || 'matched') + '+pack_unknown';
+  return out;
+}
+
+// Match the line, then stamp what one unit of it cost us — the figure the order
+// INSERT writes into retail_order_items.unit_cost_at_sale. The Eleme twin of
+// meituan-internal's wrapper, and deliberately a separate copy: these two
+// resolvers have always been parallel implementations rather than one shared
+// one, and merging them is a bigger change than this.
+//
+// ONE LOOKUP, AT THE END, on whatever id the branches settled on — never one
+// per branch. An UNMATCHED line (ambiguous or unmapped, kept as an order row and
+// surfaced as `unresolved`) has no product to price, so it lands NULL rather
+// than a guess or a zero. PER UNIT: `units` carries the pack size into the row's
+// own pack_units column, so the two multiply at read time instead of here.
+//
+// NEVER THROWS — this runs inside the ingest that records a real order.
+function resolveProduct(item, storeId) {
+  const out = matchProductForLine(item, storeId);
+  out.unitCostAtSale = null;
+  if (out.productId) {
+    try {
+      out.unitCostAtSale = productUnitCostYuan(db, out.productId);
+    } catch (e) {
+      console.error('[eleme-internal] cost snapshot failed for product', out.productId, e && e.message);
+    }
+  }
   return out;
 }
 
@@ -317,12 +348,17 @@ router.post('/ingest-order', (req, res) => {
         // from later.
         db.prepare(`
           INSERT INTO retail_order_items
-            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total, pack_units)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total, pack_units,
+             unit_cost_at_sale)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty,
                it.unitPrice != null ? it.unitPrice : 0,
                it.lineTotal != null ? it.lineTotal : 0,
-               packUnits(it.units));
+               packUnits(it.units),
+               // Stamped by resolveProduct(). No `: 0` fallback like the two
+               // money columns above — an unknown cost is NULL, because a zero
+               // there would claim the goods were free.
+               it.unitCostAtSale ?? null);
       }
       return oid;
     })();

@@ -3445,6 +3445,39 @@ addColumn('retail_order_items', 'addon_id', 'INTEGER');
 // settlement paths (direct + approve) from refund_lines_json; mirrors the
 // order-level ledger so prints/drawer read one field instead of parsing JSON.
 addColumn('retail_order_items', 'refunded_qty', 'INTEGER DEFAULT 0');
+// What ONE UNIT of this line cost us, ¥, as at the moment of sale. The cost
+// counterpart to `unit_price` beside it, and a snapshot for the same reason
+// every other snapshot column on this table exists: a later edit to the
+// product — a PO receive, a hand edit, a recipe recompute — must not rewrite
+// what a past order earned. Nothing reads it yet; capture starts now so the
+// history exists when a margin report is built on it.
+//
+// PER UNIT, NOT PER LINE AND NOT PER PACK, so the column means one thing on
+// all six write paths. `pack_units` on this same row already carries the
+// packs→units factor the channel paths need (a Meituan `qty` is packs, a
+// checkout `qty` is units), so the line's cost is
+//   unit_cost_at_sale × qty × COALESCE(pack_units, 1)
+// and a six-pack does not silently record six times its cost per unit.
+//
+// NULL = COST UNKNOWN, and 0 is never written. Same convention as the column
+// it is sourced from: lib/product-cost.js returns null for a figure that is
+// absent or not > 0, and the product editor refuses to store 0 outright
+// (routes/retail.js, the `unit_cost` branch) because 0 reports a 100% margin.
+// An unmatched channel line (no product_id) and a never-costed product both
+// land NULL, which is the honest answer for each.
+//
+// ALWAYS WRITTEN THROUGH productUnitCostYuan(db, product_id), never a raw
+// SELECT unit_cost: a BUNDLE's cost is derived from its components and its own
+// unit_cost column is blank on every bundle in the catalogue, so the raw column
+// would snapshot "free" for every bundle ever sold.
+//
+// Rows predating this column stay NULL permanently — deliberately not
+// backfilled. The sources that could reconstruct a historic cost are partial
+// (retail_product_versions keeps 25 versions per product; activity_log
+// 'cost_update' rows are written only by PO receiving; the recipe rollup
+// records nothing at all), and a backfill falling back to TODAY's cost would
+// produce a column that looks like a snapshot without being one.
+addColumn('retail_order_items', 'unit_cost_at_sale', 'REAL');
 // Wallet balance (prepaid store credit) spent on this order, ¥. Mirrors
 // points_amount: deducted from retail_customers.balance inside the order-create
 // tx and reversed to the wallet on cancel/refund. Store credit (balance OR

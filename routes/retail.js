@@ -18,6 +18,7 @@ const multer = require('multer');
 const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
 const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
+const { productUnitCostYuan } = require('../lib/product-cost');
 // Read-only cost maths, used by the recipe-link endpoint to say whether the
 // recipe an operator just picked can actually yield a figure — the same
 // function applyProductCosts() decides that with, so the answer the modal
@@ -1626,6 +1627,37 @@ function applyBundleCost(row) {
     console.error('[bundle-cost] could not derive cost for product', row && row.id, e && e.message);
   }
   return row;
+}
+
+// ── The cost snapshot written onto every order line ────────────────────────
+// What one unit of `productId` costs us right now, in ¥, for stamping into
+// retail_order_items.unit_cost_at_sale at the moment a sale is written. See the
+// column's own comment in database.js for what it means and why it is per-unit.
+//
+// THE ONE READER, THROUGH THE ONE READER. productUnitCostYuan() is what decides
+// what a product costs — bundles derived from their components, a figure not
+// > 0 read as unknown — so this adds no arithmetic of its own. A raw
+// `SELECT unit_cost` here would snapshot blank for every bundle sold, which is
+// exactly the hole lib/product-cost.js exists to close.
+//
+// NEVER THROWS, and that is the whole reason this wrapper exists rather than a
+// bare call at each of the four write sites. Three of those sites sit INSIDE the
+// transaction that writes the order itself — a checkout, a Meituan ingest — and
+// a cost lookup that raised there would roll back a real order over a column
+// nothing reads yet. Same judgement applyBundleCost() makes right above, for the
+// same reason: null is the value the column already means "unknown" by, so a
+// failure degrades to the honest answer instead of losing the sale.
+//
+// A null/absent productId (an unmatched channel line) short-circuits to null
+// without a query — there is nothing to look up and nothing to guess.
+function costAtSale(handle, productId) {
+  if (!productId) return null;
+  try {
+    return productUnitCostYuan(handle, productId);
+  } catch (e) {
+    console.error('[cost-at-sale] could not resolve cost for product', productId, e && e.message);
+    return null;
+  }
 }
 
 // ── Variant photo inheritance ("fallback when empty") ──────────────────────
@@ -9763,6 +9795,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       product: p,
       qty,
       unitPrice,
+      // The cost counterpart of unitPrice, resolved HERE — beside the price, off
+      // the same product row, at the same moment — so the pair that lands on the
+      // order line was read from one state of the catalogue rather than two.
+      // Carried on the item (not re-read at the INSERT) because the substitution
+      // path below rebuilds `resolved` from its own rows, and a lookup at the
+      // INSERT would silently cost the ORIGINAL product for a swapped-in line.
+      unitCostAtSale: costAtSale(tdb(), p.id),
       lineTotal: unitPrice * qty,
       options: chosenLabels,
       isFlash: eff.is_flash,
@@ -9928,6 +9967,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
           product: sub,
           qty: subQty,
           unitPrice: Number(sub.price),
+          // The SUBSTITUTE's cost, not the product it replaces. This line is a
+          // sale of `sub` — the customer is charged sub.price and sub leaves the
+          // shelf — so the cost beside that price has to be sub's too. The
+          // second of the two places this route resolves a product, and the one
+          // a fix applied only to the main loop above would leave blank.
+          unitCostAtSale: costAtSale(tdb(), sub.id),
           lineTotal: Number(sub.price) * subQty,
           options: [],
           replacedForProductId: r.product.id,
@@ -10607,8 +10652,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       `INSERT INTO retail_order_items
          (order_id, product_id, name_en, name_cn, sku, size, image_url,
           qty, unit_price, line_total, options_json,
-          ship_modes, needs_ice_pack, ship_from_supplier, replaced_for_product_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          ship_modes, needs_ice_pack, ship_from_supplier, replaced_for_product_id,
+          unit_cost_at_sale)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     for (const r of resolved) {
       insertItem.run(
@@ -10619,7 +10665,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         r.product.ship_modes || 'air,land',
         r.product.needs_ice_pack ? 1 : 0,
         r.product.ship_from_supplier ? 1 : 0,
-        r.replacedForProductId || null
+        r.replacedForProductId || null,
+        // Resolved when the line was priced, not here: `resolved` may have been
+        // rebuilt by the substitution path, whose items carry their OWN
+        // product's cost. `?? null` keeps undefined out of better-sqlite3, which
+        // refuses it — a line from a path that somehow set no cost lands NULL
+        // (unknown), never 0.
+        r.unitCostAtSale ?? null
       );
     }
     // Auto-plan shipments based on dest city + per-item ship_modes. For
@@ -22267,7 +22319,20 @@ function resolveManualOrderLines(items) {
       unitPrice = up;
     }
     unitPrice = Math.round(unitPrice * 100) / 100;
-    resolved.push({ p, qty, unitPrice, lineTotal: Math.round(unitPrice * qty * 100) / 100 });
+    // The cost snapshot for the order INSERT, resolved beside the price for the
+    // same reason the checkout does it here rather than at the INSERT.
+    //
+    // Note the operator can OVERRIDE unitPrice above (a hand-keyed discount, a
+    // staff price) and cannot override this: what we paid for the goods does not
+    // change because of what we chose to charge for them. A counter sale rung up
+    // at ¥0 still records what it cost, which is the case the snapshot is most
+    // worth having for.
+    //
+    // Harmless on the fee-preview endpoint that shares this helper: it reads
+    // only shippingFee/packingFee off the result and inserts nothing, so it
+    // simply carries one more unread field per line.
+    resolved.push({ p, qty, unitPrice, lineTotal: Math.round(unitPrice * qty * 100) / 100,
+                    unitCostAtSale: costAtSale(tdb(), p.id) });
   }
   return { resolved };
 }
@@ -22655,15 +22720,17 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       const insItem = tx.prepare(
         `INSERT INTO retail_order_items
            (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
-            ship_modes, needs_ice_pack, ship_from_supplier)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+            ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
       );
       for (const r of resolved) {
         insItem.run(
           orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal,
           r.p.ship_modes || 'air,land',
           r.p.needs_ice_pack ? 1 : 0,
-          r.p.ship_from_supplier ? 1 : 0
+          r.p.ship_from_supplier ? 1 : 0,
+          // Snapshotted by resolveManualOrderLines() alongside the price.
+          r.unitCostAtSale ?? null
         );
       }
       tx.prepare(
@@ -31535,7 +31602,12 @@ function deriveAddonLineMoney(items, nowMs) {
     const unit = eff.price + optionDelta;
     const line = unit * (Number(it.qty) || 0);
     if (!(unit >= 0)) return null;
-    out.push({ unit_price: unit, line_total: line });
+    // The cost snapshot rides along with the money this function already
+    // re-derives from columns. Settlement IS the moment of sale for an add-on —
+    // the line does not exist on the order until the payment lands — so a cost
+    // read here is a cost read at the right time, and this is already the one
+    // place that re-reads store_products for these lines.
+    out.push({ unit_price: unit, line_total: line, unit_cost_at_sale: costAtSale(tdb(), p.id) });
     subtotal += line;
   }
   return { lines: out, subtotal: Math.round(subtotal * 100) / 100 };
@@ -31664,12 +31736,26 @@ function finalizeOrderAddon(addonId) {
       reason: derived ? 'price moved between staging and settlement' : 'a product or option choice is no longer resolvable',
     }));
   }
+  // The COST snapshot is taken from the derivation regardless of whether the
+  // PRICE agreed, and deliberately so: `agrees` guards one specific hazard —
+  // JSON money reaching a money column — and there is no staged cost for it to
+  // guard. Nothing was ever staged to compare against, so the freshly-read
+  // figure is the only candidate there is, and a line whose price drifted is
+  // exactly a line whose cost is worth having recorded. When the derivation
+  // failed outright (`derived` null — a product or choice has gone) every line
+  // stays undefined and lands NULL at the INSERT: unknown, never guessed.
+  if (derived) {
+    items = items.map((it, i) => Object.assign({}, it, {
+      unit_cost_at_sale: derived.lines[i].unit_cost_at_sale,
+    }));
+  }
 
   const insItem = tdb().prepare(
     `INSERT INTO retail_order_items
        (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price,
-        line_total, options_json, ship_modes, needs_ice_pack, ship_from_supplier, addon_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        line_total, options_json, ship_modes, needs_ice_pack, ship_from_supplier, addon_id,
+        unit_cost_at_sale)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const newItemIds = [];
 
@@ -31686,7 +31772,11 @@ function finalizeOrderAddon(addonId) {
         order.id, it.product_id || null, it.name_en || null, it.name_cn || null,
         it.sku || null, it.size || null, it.qty, it.unit_price, it.line_total,
         it.options && it.options.length ? JSON.stringify(it.options) : null,
-        it.ship_modes || null, it.needs_ice_pack ? 1 : 0, it.ship_from_supplier ? 1 : 0, addonId
+        it.ship_modes || null, it.needs_ice_pack ? 1 : 0, it.ship_from_supplier ? 1 : 0, addonId,
+        // Set above from the settlement-time derivation; undefined whenever that
+        // derivation could not run, which better-sqlite3 will not accept — so
+        // it becomes an explicit NULL.
+        it.unit_cost_at_sale ?? null
       );
       newItemIds.push(info.lastInsertRowid);
     }
