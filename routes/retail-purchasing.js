@@ -40,7 +40,7 @@ const { requireRetailAdmin } = require('./retail');
 // loads that module first (line ~344, before this one at ~370), so this
 // require resolves the already-cached router with firePriceAlertsForPO
 // attached to it. One alert path, not two.
-const { firePriceAlertsForPO } = require('./purchases');
+const { firePriceAlertsForPO, allocateLandedExtras } = require('./purchases');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
@@ -123,7 +123,13 @@ function postRetailPOExpenses(poId) {
 // ingredient_price_history / the ±5% alert, which this change does not go near.
 function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
-  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0 };
+  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0, landedSkipped: [] };
+  // The PO's freight/tax/handling, split over its lines by goods value — the
+  // SAME allocation firePriceAlertsForPO uses for materials (routes/purchases.js
+  // allocateLandedExtras). A product's stored cost is what it cost to get onto
+  // the shelf, not what the supplier's line said, and the two cost paths must
+  // not disagree about how the extras were split.
+  const landed = allocateLandedExtras(poId, db);
   const lines = db.prepare(`
     SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
       FROM po_line_items WHERE po_id = ?
@@ -168,7 +174,14 @@ function applyReceivedToStock(poId, req) {
     // cascade owns that figure — receiving must not overwrite it with what a
     // delivery of the ingredients happened to charge. With Production off this
     // is false and the purchase-order fill below resumes exactly as before.
-    const cost = parseFloat(l.cost_per_unit);
+    //
+    // LANDED, not invoiced: the line's share of the PO's extras is added on top
+    // of the supplier's unit price. Zero when the PO carries no extras, so every
+    // PO written before this behaves exactly as it did.
+    const invoiced = parseFloat(l.cost_per_unit);
+    const cost = Number.isFinite(invoiced) && invoiced > 0
+      ? invoiced + (landed.perUnit.get(l.id) || 0)
+      : invoiced;
     if (recipeOwnsProductCost(db, l.store_product_id)) { costSkippedRecipe++; }
     else if (Number.isFinite(cost) && cost > 0) {
       const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
@@ -183,11 +196,16 @@ function applyReceivedToStock(poId, req) {
         // (it stores a NULL id and keeps the name). No new mechanism invented.
         logActivity(req.user?.id || null, actorLabel(req), 'cost_update', 'product', l.store_product_id,
           { from: before, to: cost, po_id: poId, po_number: po.po_number,
-            line_id: l.id, name: l.name_en, source: 'po_receive' }, req.ip);
+            line_id: l.id, name: l.name_en, source: 'po_receive',
+            invoiced_unit_cost: invoiced, landed_share_per_unit: landed.perUnit.get(l.id) || 0 }, req.ip);
       }
     }
   }
-  return { applied, costed, costSkippedRecipe };
+  // Lines that took no share because they had no goods value — surfaced to the
+  // receive response rather than swallowed, so the operator can see which line
+  // is not carrying its part of the freight.
+  return { applied, costed, costSkippedRecipe,
+           landedSkipped: landed.extras > 0 ? landed.skipped : [] };
 }
 
 // ── Receipt reversal — all of it, or none of it ────────────────────────────
@@ -1296,8 +1314,26 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   db.prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(num(freight), num(tax), num(handling), po.id);
   const posted = postRetailPOExpenses(po.id);
+  // The extras now feed per-unit cost (allocateLandedExtras), and on this screen
+  // they are typed AFTER the goods arrive — so a save has to re-run the cost
+  // write-back or the new figure would sit on the header and never reach a
+  // product. Only on a Delivered PO: before that there is no received quantity
+  // to allocate against, and the write-back runs on the way to Ordered anyway.
+  // applyReceivedToStock is idempotent (stock moves on the delta, cost writes
+  // only on a change), so this re-run books no stock and no duplicate history.
+  //
+  // MATERIAL lines are deliberately NOT re-costed here. Their write-back is
+  // firePriceAlertsForPO, which appends an ingredient_price_history row on every
+  // call — the documented reason /undo-receive and the receive route both refuse
+  // to re-fire it. So extras typed after a material PO is Delivered reach that
+  // PO's ingredients only on the next PO that prices them. Flagged, not papered
+  // over: closing it means deciding whether a landed-cost edit deserves its own
+  // history row, which is a pricing decision, not a code one.
+  const recosted = po.status === 'Delivered' ? applyReceivedToStock(po.id, req) : null;
   logActivity(req.user.id, req.user.username, 'landed_cost', 'purchase_order', po.id, { freight: num(freight), tax: num(tax), handling: num(handling) }, req.ip);
-  res.json({ success: true, posted });
+  res.json({ success: true, posted,
+             cost_lines_updated: recosted ? recosted.costed : 0,
+             landed_lines_skipped: recosted ? recosted.landedSkipped : [] });
 });
 
 // A line is a PRODUCT or a MATERIAL, never both — one PO can freely mix lines
@@ -1631,6 +1667,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
              cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
+             landed_lines_skipped: stock.landedSkipped,
              status: delivered ? 'Delivered' : po.status });
 });
 
