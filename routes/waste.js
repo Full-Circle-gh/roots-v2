@@ -21,21 +21,30 @@ const router = express.Router();
 // affected), and would have become a real divergence the first time someone
 // priced one. Consolidating fixes it as a side effect rather than as a patch.
 //
-// WHAT IS DELIBERATELY DIFFERENT HERE, AND MUST STAY THAT WAY
-// -----------------------------------------------------------
-// PACKAGING IS EXCLUDED. Packaging is recycled when a finished product is
-// wasted (the box / container is reused on the replacement unit), so
-// counting it would double-count. This is why the batch total is assembled
-// from the breakdown's granular fields — ingredientCost + labour +
-// overheadAmount — instead of taking `batchCost`, which includes packaging.
-// No flag was added to the shared module for this: the policy belongs to
-// waste, not to the derivation. If the policy ever changes, add
-// `+ c.packagingTotal` here.
+// ONE COST SOURCE, NOT A SECOND COPY OF THE ARITHMETIC
+// ----------------------------------------------------
+// This used to assemble its own batch total — ingredientCost + labour +
+// overheadAmount — rather than reading `batchCost`, because `batchCost` then
+// INCLUDED packaging and packaging is recycled when a finished unit is wasted
+// (the box goes on the replacement unit), so counting it would double-count.
+// lib/recipe-cost.js's Step 4 has since taken packaging out of `batchCost`
+// entirely (§31: "THE RECIPE CARRIES NO PACKAGING" — the container is a cost
+// of the sellable unit and is recorded on the product's build list). The two
+// expressions therefore compute the same number today, and the hand-assembled
+// one is now just a second copy of the formula waiting to disagree with the
+// first the next time a component moves.
 //
-// THE SELL-PRICE FALLBACK IS GONE. It used to price an uncosted loss at what
+// So this reads `costPerServing` off the breakdown — the SAME field the recipe
+// card, the Cost Sheet, the Excel export and lib/recipe-rollup.js's product
+// cost all read. Waste's packaging policy is unchanged; it is simply no longer
+// enforced by re-deriving the total here. If a recipe cost ever carries
+// packaging again, that is a change to the shared module and to what every one
+// of those readers shows, not a subtraction this file makes privately.
+//
+// THERE IS NO SELL-PRICE FALLBACK. It used to price an uncosted loss at what
 // the product would have SOLD for — backwards for a line meant to report
 // what was spent, and it silently outran a real cost figure the moment a
-// recipe went incomplete. A product with no recipe-derived cost now returns
+// recipe went incomplete. A product with no recipe-derived cost returns
 // cost_per_unit: null and the caller (routes/waste.js's own POST handler)
 // shows that blank, the same "null means write nothing, never zero, never
 // someone else's number" rule lib/ingredient-cost.js already enforces for
@@ -49,9 +58,10 @@ function computeProductCost(productId) {
   // points at nothing — a product whose recipe was hard-deleted.
   const c = computeRecipeCost(p.recipe_id, db);
   if (!c) return { cost_per_unit: null, source: null };
-  // Packaging-free batch total — see note above.
-  const batchCost = c.ingredientCost + c.labour + c.overheadAmount;
-  const costPerServ = c.servings > 0 ? batchCost / c.servings : null;
+  // The shared derivation's own per-serving figure — see note above. Null when
+  // the recipe records no servings, which is one of the ways a product ends up
+  // with nothing to price it by.
+  const costPerServ = c.costPerServing;
 
   if (costPerServ !== null && costPerServ > 0) {
     return { cost_per_unit: costPerServ, source: 'recipe' };
