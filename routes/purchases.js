@@ -120,9 +120,70 @@ function _firePOPush(poId, kind) {
 // requesting operator so a cancellation can find, and roll back, exactly what
 // this PO changed — see rollbackMaterialCost() there. Nothing here reads the
 // log back; it exists purely so a later reversal has something to read.
+
+// ── Landed-cost allocation — the PO's freight / tax / handling onto its lines ─
+// purchase_orders.extra_freight / extra_tax / extra_handling are what the
+// delivery cost ON TOP of the goods. They already post to Finance as one
+// "Freight & fees" expense line (postPOExpenses / postRetailPOExpenses); until
+// now they stopped there and never reached a per-unit cost, so every cost this
+// module derives understated what the goods actually cost to get here.
+//
+// Split in proportion to each line's GOODS VALUE — received qty × unit price,
+// the same COALESCE(qty_received, qty) basis the expense posting groups on, so
+// a shortage moves the allocation with it. Returned per BUY UNIT (share ÷ qty)
+// because that is the shape deriveCostPerUnit() and the store_products
+// write-back both consume: caller adds it to the line's cost_per_unit and feeds
+// the sum to the SAME derivation as before. No second cost formula exists.
+//
+// A line with ZERO goods value (no price, or nothing received) takes no share
+// and is reported in `skipped` — dividing its zero qty into a share is the
+// division this function exists to not do. If EVERY line is zero the total is
+// zero, nothing is allocated at all, and the caller writes exactly what it
+// wrote before.
+//
+// Pure read. Nothing here writes, so it is safe to call on any PO in any state.
+function allocateLandedExtras(poId, dbh) {
+  const h = dbh || db;
+  const num = v => Math.max(0, parseFloat(v) || 0);
+  // Behind a guard for the same reason ingredient_cost_skips is below: the three
+  // columns arrive by migration (database.js), and a database restored from
+  // before them must not take a whole PO status flip down with it. No columns →
+  // no extras → every caller writes exactly what it wrote before this existed.
+  const none = { extras: 0, totalGoods: 0, perUnit: new Map(), skipped: [] };
+  let po = null;
+  try {
+    po = h.prepare('SELECT extra_freight, extra_tax, extra_handling FROM purchase_orders WHERE id = ?').get(poId);
+  } catch (e) { console.warn('[landed cost] extras unavailable:', e.message); return none; }
+  const extras = po ? num(po.extra_freight) + num(po.extra_tax) + num(po.extra_handling) : 0;
+  // No extras — the overwhelmingly common case, and every PO written before this
+  // existed. Return before reading a single line: nothing to split, nothing to
+  // report, and the caller's arithmetic is untouched.
+  if (!(extras > 0)) return none;
+  const lines = h.prepare('SELECT id, name_en, qty, qty_received, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
+  const perUnit = new Map();
+  const skipped = [];
+  const priced = [];
+  let totalGoods = 0;
+  for (const l of lines) {
+    const qty = parseFloat(l.qty_received == null ? l.qty : l.qty_received) || 0;
+    const cpu = parseFloat(l.cost_per_unit) || 0;
+    const value = qty * cpu;
+    if (!(value > 0)) { skipped.push({ line_id: l.id, name_en: l.name_en || '', qty, cost_per_unit: cpu }); continue; }
+    priced.push({ id: l.id, qty, value });
+    totalGoods += value;
+  }
+  // totalGoods === 0 means every line was skipped. Nothing is allocated — the
+  // guard that keeps the division below off a zero denominator.
+  if (totalGoods > 0) {
+    for (const p of priced) perUnit.set(p.id, (extras * (p.value / totalGoods)) / p.qty);
+  }
+  return { extras, totalGoods, perUnit, skipped };
+}
+
 function firePriceAlertsForPO(poId, source, actor) {
   const a = actor || {};
-  const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
+  const items = db.prepare('SELECT id, ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
+  const landed = allocateLandedExtras(poId, db);
   const skips = [];
   // Prepared behind a guard: a database restored from before this table
   // existed must not take the whole PO status flip down with it. Prices still
@@ -173,14 +234,26 @@ function firePriceAlertsForPO(poId, source, actor) {
 
     if (normaliseUnit(item.unit) !== normaliseUnit(ing.buy_unit)) { skip(ing, item, 'unit_mismatch'); continue; }
 
-    const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
+    // LANDED, not invoiced. The line's share of the PO's freight/tax/handling
+    // is added to the pack price BEFORE the one derivation divides it down, so
+    // cost_per_unit is what the goods cost to get here rather than what the
+    // supplier's line said. Zero when the PO carries no extras, which is every
+    // PO written before this existed — their costs do not move.
+    //
+    // buy_price still stores the INVOICE pack price, unchanged: it is what the
+    // supplier charges for one package, it is what the ±5% alert below compares
+    // against, and folding delivery into it would re-base that comparison on
+    // something the next invoice cannot be checked against.
+    const landedPackPrice = (parseFloat(item.cost_per_unit) || 0) + (landed.perUnit.get(item.id) || 0);
+    const { cpu, reason } = deriveCostPerUnit(ing, landedPackPrice);
     if (cpu === null) { skip(ing, item, reason); continue; }
 
     if (Number(cpu) !== Number(ing.cost_per_unit || 0)) cpuMoved = true;
     const costBefore = { buy_price: ing.buy_price ?? null, cost_per_unit: ing.cost_per_unit ?? null };
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
     logActivity(a.userId ?? null, a.username || 'system', 'cost_update', 'ingredient', item.ingredient_id,
-      { from: costBefore, to: { buy_price: item.cost_per_unit, cost_per_unit: cpu }, po_id: poId, source }, a.ip ?? null);
+      { from: costBefore, to: { buy_price: item.cost_per_unit, cost_per_unit: cpu }, po_id: poId, source,
+        landed_pack_price: landedPackPrice, landed_share_per_unit: landed.perUnit.get(item.id) || 0 }, a.ip ?? null);
     // The item just priced cleanly, so whatever blocked it before is no longer
     // true — close its open skips. They stay in the table with resolved_at set,
     // because the history of what went unpriced is worth keeping. Without this
@@ -197,7 +270,16 @@ function firePriceAlertsForPO(poId, source, actor) {
   // skip), so every line that reached the UPDATE loop was on a non-linked
   // ingredient — exactly the trigger condition.
   if (cpuMoved) fireRecompute(db, { source: 'purchases.po_price_writeback', po_id: poId });
-  return { skips };
+  // landedSkips = lines that took no share of the extras because they had no
+  // goods value. Reported, not silent: a line the operator priced at 0 quietly
+  // pushing its freight onto its neighbours is the same class of invisible
+  // money movement the skips above exist to surface.
+  if (landed.skipped.length && landed.extras > 0) {
+    console.warn(`[landed cost] PO ${poId}: ¥${landed.extras.toFixed(2)} extras allocated over `
+      + `¥${landed.totalGoods.toFixed(2)} of goods; ${landed.skipped.length} line(s) took no share `
+      + `(zero goods value): ${landed.skipped.map(s => s.name_en || 'line ' + s.line_id).join(', ')}`);
+  }
+  return { skips, landedSkips: landed.skipped, landedExtras: landed.extras };
 }
 
 // ── Auto-post PO line items into expense_entries by category ────────────────
@@ -944,4 +1026,8 @@ module.exports.postPOExpenses = postPOExpenses;
 // maths and needs to be exercisable against a fixture DB, not only through a
 // live PO status flip.
 module.exports.firePriceAlertsForPO = firePriceAlertsForPO;
+// The ONE landed-cost allocation. routes/retail-purchasing.js consumes it for
+// the store_products.unit_cost write-back so both cost paths split the same
+// extras the same way — a second copy is what let the pack-price bug happen.
+module.exports.allocateLandedExtras = allocateLandedExtras;
 module.exports.backfillOrderedExpenses = backfillOrderedExpenses;

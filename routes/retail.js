@@ -21883,6 +21883,63 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     const bySales = new Map(salesRows.map(r => [r.product_id, r.units]));
     rows.forEach(r => { r.units_30d = bySales.get(r.id) || 0; });
   }
+  // ── What Meituan actually settled, per product ────────────────────────────
+  // The Margin column has always been list price vs cost. On a Meituan sale the
+  // customer's price is not what we receive — the platform takes its cut before
+  // the money lands — so that figure reads a channel order as more profitable
+  // than it was. channel_settle_amount is Meituan's own 预计收入 for the order
+  // (database.js:2974), scraped per order by the daemon.
+  //
+  // ALLOCATED, because settle is an ORDER fact and this column is a PRODUCT one.
+  // A two-line order settles once; the share carried by each line is its share
+  // of the order's goods value (line_total ÷ the order's line total) — the same
+  // proportional split routes/purchases.js allocateLandedExtras() uses for a
+  // PO's freight, and for the same reason: it is the only split that reproduces
+  // the order total when you add the lines back up.
+  //
+  // Orders with no settle figure are absent, not zero (§1.17 rule 2 — an
+  // unmatched value renders as unknown, never a plausible default): a product
+  // that has never sold on Meituan, and one whose orders the daemon has not
+  // priced, both arrive with mt_revenue null and the column shows one figure,
+  // exactly as it does today.
+  //
+  // Same status set as the 30-day units above — money that was cancelled or
+  // refunded is not money we received. lines_total > 0 keeps the division off a
+  // zero denominator (a fully-discounted order).
+  if (rows.length) {
+    const ids = rows.map(r => r.id);
+    const ph = ids.map(() => '?').join(',');
+    let mtRows = [];
+    try {
+      mtRows = tdb().prepare(`
+        SELECT i.product_id,
+               SUM(o.channel_settle_amount * (i.line_total / t.lines_total)) AS revenue,
+               SUM(i.qty)                                                    AS units
+          FROM retail_order_items i
+          JOIN retail_orders      o ON o.id = i.order_id
+          JOIN (SELECT order_id, SUM(line_total) AS lines_total
+                  FROM retail_order_items GROUP BY order_id) t ON t.order_id = i.order_id
+         WHERE i.product_id IN (${ph})
+           AND o.channel = 'meituan'
+           AND o.channel_settle_amount IS NOT NULL
+           AND t.lines_total > 0
+           AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+         GROUP BY i.product_id
+      `).all(...ids);
+    } catch (e) {
+      // A database predating the channel_settle_amount migration must not take
+      // the whole catalogue down. No rows → no second figure, list unchanged.
+      console.warn('[products] Meituan settle unavailable:', e.message);
+    }
+    const byMt = new Map(mtRows.map(r => [r.product_id, r]));
+    rows.forEach(r => {
+      const m = byMt.get(r.id);
+      // Null, not 0, when there is nothing to say. The client renders the
+      // second figure only where both of these are real numbers.
+      r.mt_revenue = m && Number.isFinite(m.revenue) ? m.revenue : null;
+      r.mt_units   = m && Number.isFinite(m.units)   ? m.units   : null;
+    });
+  }
   res.json({ success: true, data: rows });
 });
 
