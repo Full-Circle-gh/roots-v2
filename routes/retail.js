@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
+const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
 // Read-only cost maths, used by the recipe-link endpoint to say whether the
 // recipe an operator just picked can actually yield a figure — the same
 // function applyProductCosts() decides that with, so the answer the modal
@@ -1592,6 +1593,39 @@ function decorateBundleRow(r, { withComponents = false } = {}) {
   if (withComponents) r.bundle_components = comps;
   delete r.bundle_items;                  // never ship the raw recipe
   return r;
+}
+
+// Overwrite an ADMIN product row's `unit_cost` with the figure derived from its
+// components, for a row that is a bundle. Cheap no-op for everything else.
+//
+// WHY THIS IS A DECORATION AND NOT A STORED COLUMN. Every other derived cost in
+// the system is CASCADED into store_products.unit_cost (lib/recipe-rollup.js),
+// because its inputs — an ingredient price, a recipe line — move behind trigger
+// points that call fireRecompute(). A bundle's inputs are OTHER PRODUCTS' unit
+// costs, and those move from two writers that have no such trigger: purchase-
+// order receiving (routes/retail-purchasing.js) and the hand-edit in this
+// file's own PATCH. A stored bundle figure would therefore be stale from the
+// next delivery until something unrelated happened to fire a recompute, and
+// stale is the one failure mode a cost column must not have. Derived on read,
+// it is right on every read, and it also cannot fight the cascade for ownership
+// of a column two other writers already share.
+//
+// Applied to the three ADMIN reads (list, single, PATCH response) — the whole
+// of what the operator's Products screen ever sees, so both the Margin column
+// and the editor's Cost field get the same figure from the same place. NOT
+// applied to the storefront rows decorateBundleRow() handles: a customer is
+// never shown a cost.
+function applyBundleCost(row) {
+  if (!row) return row;
+  try {
+    if (bundleOwnsProductCost(tdb(), row.id)) row.unit_cost = bundleUnitCostYuan(tdb(), row.id);
+  } catch (e) {
+    // A cost is not worth a 500 on the catalogue. Leaving the stored column
+    // (blank, on every bundle today) is the same em dash a blocked derivation
+    // would have produced anyway.
+    console.error('[bundle-cost] could not derive cost for product', row && row.id, e && e.message);
+  }
+  return row;
 }
 
 // ── Variant photo inheritance ("fallback when empty") ──────────────────────
@@ -20579,7 +20613,29 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const v = parseFloat(body.compare_at_price);
     sets.push('compare_at_price = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
   }
-  if ('unit_cost' in body && recipeOwnsProductCost(tdb(), id)) {
+  // Is this row a bundle AS OF THIS SAVE? The editor sends `bundle_items` on
+  // every save of a product it has the bundle section loaded for (bpBody(),
+  // public/retail-admin/09-products.js), so the request itself can be the thing
+  // that makes a product a bundle or stops it being one — and the reads below
+  // will honour the NEW state. Reading only the stored row would get both
+  // transitions backwards for exactly one save: a product becoming a bundle
+  // would store a hand-typed cost the reads then hide, and one ceasing to be a
+  // bundle would have the operator's first real cost dropped on the floor.
+  const willBeBundle = ('bundle_items' in body)
+    ? sanitizeBundleItems(body.bundle_items, id) != null
+    : bundleOwnsProductCost(tdb(), id);
+  if ('unit_cost' in body && willBeBundle) {
+    // Derived from the components, exactly as a recipe-owned figure is derived
+    // from the recipe — so a hand-typed value is dropped rather than stored
+    // under a figure the reads then overwrite on the way out, which is the
+    // worst of both: the operator's number is in the database, invisible, and
+    // the screen shows something else. Nothing is nulled; the stored column is
+    // simply left where receiving or an earlier edit put it, unread.
+    //
+    // CHECKED BEFORE THE RECIPE, because a bundle's components ARE its cost
+    // source and a bundle carrying a recipe_id (nothing stops one) must not
+    // fall through to a branch whose figure the reads do not use.
+  } else if ('unit_cost' in body && recipeOwnsProductCost(tdb(), id)) {
     // Recipe-derived: the cascade owns this figure, so a hand-typed value is
     // dropped rather than saved-then-overwritten on the next recompute (which
     // would look like the editor silently losing the operator's edit). The
@@ -20748,6 +20804,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // editor can render chips. Empty array = not a bundle. Round-trips on save
   // (sanitizeBundleItems reads each card's id+qty).
   if (row) { row.bundle_items = resolveBundleComponents(row.bundle_items); row.is_bundle = row.bundle_items.length > 0; }
+  applyBundleCost(row);      // a bundle's cost is its components' — see the helper
   if (row) row.product_facts = parseFactsCol(row.product_facts);
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
@@ -20932,6 +20989,14 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
         WHERE COALESCE(is_active, 1) = 1
         ORDER BY is_published DESC, sort_order ASC, name_en ASC`
     ).all();
+    // The Cost column is the same derived figure the grid and the editor show,
+    // for the same rows. An export that disagreed with the screen it was taken
+    // from is worse than one with no cost at all: the spreadsheet is what gets
+    // mailed around and priced off, long after anyone can check it against the
+    // catalogue. A non-bundle row costs one primary-key lookup and is then left
+    // exactly as it was — the only path here that pays it per row rather than
+    // per bundle, which an uncapped once-a-day export can afford.
+    rows.forEach(applyBundleCost);
     // Per-store stock gets one column per open store (Tianhe, Yuexiu, …), which
     // is what the grid shows. Pulled in ONE query keyed by store, not a
     // correlated subquery per product per store.
@@ -21047,6 +21112,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   } else { row.bundle = null; }
   row.bundle_items = resolveBundleComponents(row.bundle_items);   // hydrate recipe → component cards
   row.is_bundle = row.bundle_items.length > 0;
+  applyBundleCost(row);      // a bundle's cost is its components' — see the helper
   if (typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
       const n = JSON.parse(row.nutrition);
@@ -21786,6 +21852,12 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     // Bundle PRODUCT flag for the list card (cheap parse, no component lookup).
     r.bundle_items = parseBundleItems(r.bundle_items);
     r.is_bundle = r.bundle_items.length > 0;
+    // …and its cost, which DOES need one. Only bundle rows pay for it (10 of
+    // them on the live catalogue against a 500-row grid), and the list is the
+    // only source PA_PRODUCTS — and therefore the editor's Cost field and the
+    // Margin column — ever reads, so leaving it out would show the derived
+    // figure on the product page and a blank on the grid beside it.
+    if (r.is_bundle) applyBundleCost(r);
     return r;
   });
   // Trailing-30-day units, batched in one extra query keyed off the rows just
