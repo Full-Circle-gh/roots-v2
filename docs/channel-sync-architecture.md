@@ -1062,7 +1062,7 @@ engine's log gets a retention period, a scheduled prune, and a stated default.
 | `GUANYI_STORE_CODE` default `'tianhe'` | `routes/guanyi-admin.js:18`, `scripts/guanyi-daemon.js:73` | The connection's location |
 | `GZGROCERY_STORE_CODE` default `'tianhe'` | `scripts/gzgrocery-order-daemon.js:52` | The connection's location |
 | `WHERE channel='gzgrocery' AND store_code='tianhe'` — literal, no override | `scripts/gzgrocery-order-daemon.js:552` | Connection-scoped query |
-| **`tianhe_qty` as a column name** | `guanyi_pickup_log` schema (`scripts/guanyi-daemon.js:55`) and every query and log line that reads it | Renamed to a neutral name (`tacet_qty`). A column named after one shop of one tenant cannot survive a second tenant |
+| **`tianhe_qty` as a column name** | `guanyi_pickup_log` schema (`scripts/guanyi-daemon.js:55`) and every query and log line that reads it | **Resolved by deletion, not rename.** A column named after one shop of one tenant cannot survive a second tenant — but this table goes with the pickup inference (§6b), so it never reaches one. No rename; see §18 |
 | **`GV`/`GVF` brand prefix compiled into the SKU matcher** — `/\bGVF?\s*[·\- ]?\s*(\d+-\d+[A-Za-z]?)\b/i` | `lib/gzgrocery-admin.js:331` | A per-connection **SKU pattern** setting: the tenant states how their SKU appears in that channel's data. Ships pre-filled with Roots' current value |
 | `'no Roots products'` note text | `scripts/gzgrocery-order-daemon.js:483` | Neutral wording |
 | `non-Roots` in the cycle log | `scripts/gzgrocery-order-daemon.js:605` | Neutral wording |
@@ -1153,7 +1153,7 @@ Tables and columns with intent. Not migration SQL.
 |---|---|---|
 | `retail_orders` | Add a reference to `channel_connection` | Today `channel` is a text field (`'meituan'`, `'eleme'`, `'gzgrocery'`) that cannot distinguish 外卖 from 闪购 or one location from another. Existing `channel` stays for compatibility |
 | `retail_order_items` | Add an "unmatched" marker | So an unresolved line is a fact on the order, not only a log string |
-| `guanyi_pickup_log` | Rename `tianhe_qty` → `tacet_qty` | §16b. **Only if the table outlives the pickup inference's retirement (§6b)** — if retirement lands first, the table goes read-only and the rename is wasted work. Sequence the two before doing either |
+| `guanyi_pickup_log` | **No rename. Resolved 2026-08-30: do not rename `tianhe_qty` → `tacet_qty`.** | The table is being deleted with the pickup inference (§6b), so the rename is work on something scheduled for removal. The multi-tenancy objection to the column name (§16b) is answered by the deletion. Until then the table keeps the name it has; the `guanyi_pickup_log` history is retained read-only after retirement, column name and all, because it is a historical record and not a live schema |
 | `retail_stock_ledger` | Ensure the movement reason vocabulary covers sweep corrections, zeroing, and cancellation write-offs | So every automatic stock movement is attributable |
 
 ### Tables retired
