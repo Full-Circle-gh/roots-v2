@@ -52,6 +52,18 @@ production server, then restarts the app.** A `git commit` here is effectively a
 deploy. Non-deployable files (`.md`, `.csv`) are skipped. Be deliberate about what you
 commit, and never bypass the hook (`--no-verify`) to dodge a failing check.
 
+**The same deploy also runs from GitHub Actions** (`.github/workflows/deploy.yml`) on
+every push to `main` — this is what actually ships a push made without the local
+post-commit hook (e.g. from a Claude Code session with no repo-local git hooks, a PR
+merge, or a push from a machine that never ran `npm install`'s hook setup). It's the
+identical syntax-gate → backup → install → pm2-restart → health-check pipeline, run on
+a GitHub-hosted runner that has real network access to the production server. **A
+session without direct network access to the server should never fall back to
+telling the user to run `scripts/deploy-changed.sh` / manual `ssh`+`scp` by hand** —
+just push to `main` and confirm the deploy via `list_workflow_runs` for `deploy.yml`
+(or ask the user to check the repo's Actions tab). A `[skip deploy]` / `[no deploy]`
+token in the commit subject bypasses both paths.
+
 ## Conventions
 
 - **Bilingual UI:** English and 中文 are **two separate versions** of every operator
