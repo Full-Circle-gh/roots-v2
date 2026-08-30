@@ -824,20 +824,51 @@ function pdApplyCostSource(p) {
   // one (lib/recipe-rollup.js). Two writers on one column is what this
   // prevents, on the screen as well as in the cascade.
   const hasBuild = (typeof blHasLines === 'function') && blHasLines();
+  // A BUNDLE OUTRANKS BOTH, because its components ARE the product. The server
+  // says the same thing in two places — applyBundleCost() overwrites unit_cost
+  // on every admin read of a row carrying components, and the PATCH drops a
+  // hand-typed figure for one (routes/retail.js) — so a screen that let the
+  // field be typed into would be offering an edit the server has already
+  // decided to ignore.
+  const hasBundle = (typeof bpHasComponents === 'function') && bpHasComponents(p);
   // recipeOwned stays the RECIPE question and nothing else — every line below
   // that names a recipe reads this, not `owned`. Conflating the two would show
   // "Link a recipe" copy, and fetch recipe health, for a product whose cost
   // comes from a build list and may have no recipe at all.
   const recipeOwned = _pdRecipeOwnsCost(p);
-  const owned = hasBuild || recipeOwned;
+  const owned = hasBundle || hasBuild || recipeOwned;
   inp.readOnly = owned;
   inp.classList.toggle('is-derived', owned);
   // Whatever Recipes would be warning about this recipe, said here too. Hung
   // off this function rather than pdOpen because EVERY repaint of the cost
   // source is also a moment the warning can have changed — opening a product,
   // linking, changing the link, unlinking — and one call site cannot go stale.
-  pdRecipeHealthPaint(recipeOwned ? (p && p.id) : null);
+  // …but NOT for a bundle. The warning is about a recipe's figure being too
+  // low, and a bundle does not use that figure — it uses its components' — so
+  // the pill would be an alarm about a number nothing on this screen shows.
+  // It also keeps bpRender()'s repaint free: that runs on every component
+  // keystroke, and this call is a fetch.
+  pdRecipeHealthPaint((recipeOwned && !hasBundle) ? (p && p.id) : null);
   if (!note) return;
+  // The bundle line, and it stops here. Unlike the build-list branch below
+  // there is no second half naming a recipe: a bundle's cost does not come
+  // from one and offering "Link a recipe" beside a figure the components
+  // produced would name a source that is not the source.
+  //
+  // BLANK IS A STATE THIS LINE HAS TO EXPLAIN, not one it can leave to an em
+  // dash. A bundle whose components are all priced shows a number; one with a
+  // single unpriced component shows nothing at all (lib/bundle-cost.js — a
+  // partial sum is never published), and without this sentence the operator
+  // reads that blank as "bundles just don't have costs" rather than as one
+  // component they can go and fix.
+  if (hasBundle) {
+    note.style.display = '';
+    note.innerHTML = escapeHtml(inp.value.trim()
+      ? cuT('Added up from what’s inside', '由套装内商品成本合计得出')
+      : cuT('Added up from what’s inside — blank until every product inside has a cost',
+            '由套装内商品成本合计得出 — 内含商品成本齐全后显示'));
+    return;
+  }
   // A BUILD LIST OUTRANKS THE RECIPE LINE, and says so plainly. A product can
   // carry both (recipe_id survives for the allergen rollup, §31's addendum),
   // and if this branch were missing, such a product would read "From recipe"
@@ -3869,6 +3900,16 @@ function bpRender() {
     modes + modeBody;
   if (BP_PICKING) { const s = document.getElementById('bp-search'); if (s) s.focus(); bpPickerList(); }
   pdRenderSummaries();
+  // Every repaint of this section is a moment the product's COST SOURCE can
+  // have changed — the first component added, the last one removed, a switch to
+  // pre-packed — and the Cost field above has to lock or release with it rather
+  // than waiting for the next time the editor is opened. Same reasoning
+  // pdApplyCostSource's own comment gives for hanging the recipe-health paint
+  // off itself instead of off pdOpen.
+  try {
+    const p = (PA_PRODUCTS || []).find(x => x.id === BP_ID);
+    if (p) pdApplyCostSource(p);
+  } catch (e) {}
 }
 function bpQty(id, val) {
   const c = BP.find(x => x.id === id); if (!c) return;
@@ -3900,6 +3941,22 @@ function bpPick(id) {
 function bpBody() {
   if (BP_MODE !== 'assembled' || !BP.length) return null;
   return BP.map(c => ({ id: c.id, qty: Math.max(1, parseInt(c.qty, 10) || 1) }));
+}
+// Does this product carry a component list — i.e. is its cost derived?
+//
+// READS THE LIVE EDITOR STATE FIRST, not the saved row, so the Cost field locks
+// the moment the first component chip is added and releases the moment the last
+// one is removed — before the autosave lands, matching what the server will do
+// with that save (routes/retail.js decides on the INCOMING bundle_items for
+// exactly this reason). Falls back to the row for a product whose bundle
+// section is not the loaded one, which is the case pdApplyCostSource hits when
+// it repaints from a list row.
+//
+// bpBody()'s own test, deliberately: prepacked never saves components, so it is
+// not a derived cost and must not lock the field.
+function bpHasComponents(p) {
+  if (p && p.id != null && BP_ID === Number(p.id)) return BP_MODE === 'assembled' && BP.length > 0;
+  return !!(p && Array.isArray(p.bundle_items) && p.bundle_items.length > 0);
 }
 // The bundle mode to save ('assembled' | 'prepacked' | null = not a bundle).
 function bpModeBody() {
@@ -5185,6 +5242,19 @@ async function pdSaveCore() {
     if (id) {
       const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+      // A DERIVED cost is the server's answer, not the operator's, so it is the
+      // one field a no-reload save must still write back into the form — the
+      // caret is never in it (it is read-only) and leaving it stale would show
+      // yesterday's total beside today's components. Same merge-then-repaint
+      // convention pdRecipeLinkApplied uses. Hand-typed costs are untouched:
+      // this only fires while the field is read-only.
+      const cin = document.getElementById('pd-cost');
+      if (cin && cin.readOnly && j.data && 'unit_cost' in j.data
+          && Number(document.getElementById('pd-id').value || 0) === Number(id)) {
+        cin.value = j.data.unit_cost != null ? j.data.unit_cost : '';
+        pdApplyCostSource(i >= 0 ? PA_PRODUCTS[i] : j.data);
+        pdRenderMargin();
+      }
     } else if (j.data) {
       // Brand-new product just got its id — promote the editor to edit-mode so the
       // next autosave PATCHes instead of creating a second product.
