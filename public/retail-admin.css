@@ -12652,6 +12652,11 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
+  #tab-recipes-record .rcp-line.rcp-drop-before { box-shadow: inset 0 2px 0 var(--td-brass, #b08d57); }
+  #tab-recipes-record .rcp-line.rcp-drop-after  { box-shadow: inset 0 -2px 0 var(--td-brass, #b08d57); }
+  #tab-recipes-record .rcp-line-drag { flex: none; cursor: grab; color: var(--td-text2);
+    text-align: center; user-select: none; font-size: 13px; line-height: 1; padding: 4px 2px; }
+  #tab-recipes-record .rcp-line-drag:active { cursor: grabbing; }
   #tab-recipes-record .rcp-line-name { flex: 1 1 auto; min-width: 0; }
   #tab-recipes-record .rcp-line-name .n { font-weight: 500; color: var(--td-text); font-size: 13.5px; }
   #tab-recipes-record .rcp-line-name .s { font-size: 12px; color: var(--td-text2); }
@@ -12659,6 +12664,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
   #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }
   #tab-recipes-record .rcp-line-unit { width: 70px; flex: none; }
+  #tab-recipes-record .rcp-line-note { width: 140px; flex: none; }
   #tab-recipes-record .rcp-line-cost { width: 90px; flex: none; text-align: right; font-size: 13px;
     color: var(--td-text2); font-variant-numeric: tabular-nums; }
   #tab-recipes-record .rcp-line-rm { flex: none; cursor: pointer; color: var(--td-text2);
@@ -12706,6 +12712,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   @media (max-width: 760px) {
     #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
     #tab-recipes-record .rcp-line { flex-wrap: wrap; }
+    #tab-recipes-record .rcp-line-note { width: 100%; order: 10; }
   }
 
 /* ══════════════════════════════════════════════════════════════════════════

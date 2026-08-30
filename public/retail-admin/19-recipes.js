@@ -541,12 +541,19 @@
   }
 
   // ── Ingredients ──────────────────────────────────────────────────────────
+  // Drag-to-reorder mirrors the variant table's own pattern (09-products.js
+  // vaDragStart/vaDragOver/vaDrop/vaDragEnd) — same grip gesture, same
+  // before/after drop indicator, just scoped to _lines instead of VA_MEMBERS.
+  // sort_order is derived from array position at save time (retail-recipes.js
+  // already writes it that way), so reordering the array is the whole fix.
+  let _lineDrag = null;
   function lineRow(l, idx) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
     const per = isFree ? T('free', '免费') : (hasCost ? `${moneyU(l.master_cost)}/${esc(l.master_unit || l.unit || '')}` : T('no cost', '无成本'));
     return `
-      <div class="rcp-line">
+      <div class="rcp-line" draggable="false" ondragover="rcpLineDragOver(event,${idx})" ondragleave="rcpLineDragLeave(event)" ondrop="rcpLineDrop(event,${idx})" ondragend="rcpLineDragEnd()">
+        <span class="rcp-line-drag" draggable="true" ondragstart="rcpLineDragStart(event,${idx})" title="${esc(T('Drag to reorder', '拖动排序'))}">⠿</span>
         <div class="rcp-line-name">
           <div class="n">${esc(l.name_en || l.master_name_en || '')}</div>
           <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn ? ' · ' : ''}${esc(per)}${l.ingredient_id == null ? ' · ' + esc(T('material deleted', '物料已删除')) : ''}</div>
@@ -556,6 +563,8 @@
         <select class="rcp-input rcp-line-unit" onchange="rcpLineField(${idx},'unit',this.value)">
           ${RECIPE_UNITS().map(u => `<option value="${esc(u)}"${l.unit === u ? ' selected' : ''}>${esc(u)}</option>`).join('')}
         </select>
+        <input class="rcp-input rcp-line-note" type="text" value="${esc(l.notes || '')}"
+               placeholder="${esc(T('Note', '备注'))}" oninput="rcpLineField(${idx},'notes',this.value)">
         <span class="rcp-line-cost">${hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—')}</span>
         <button type="button" class="rcp-line-rm" title="${esc(T('Remove', '移除'))}" onclick="rcpLineRemove(${idx})">${I.x}</button>
       </div>`;
@@ -591,6 +600,33 @@
     renderSubbody('ingredients');
     rcpRecompute();
     updateIngredientsBadge();
+  };
+  window.rcpLineDragStart = function (e, idx) {
+    _lineDrag = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+  };
+  window.rcpLineDragOver = function (e, idx) {
+    if (_lineDrag == null || _lineDrag === idx) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const row = e.currentTarget;
+    row.classList.toggle('rcp-drop-before', idx < _lineDrag);
+    row.classList.toggle('rcp-drop-after', idx > _lineDrag);
+  };
+  window.rcpLineDragLeave = function (e) { e.currentTarget.classList.remove('rcp-drop-before', 'rcp-drop-after'); };
+  window.rcpLineDrop = function (e, idx) {
+    e.preventDefault();
+    const from = _lineDrag; _lineDrag = null;
+    if (from == null || from === idx) { window.rcpLineDragEnd(); return; }
+    const [moved] = _lines.splice(from, 1);
+    _lines.splice(idx, 0, moved);
+    _dirty = true;
+    renderSubbody('ingredients');
+    rcpRecompute();
+  };
+  window.rcpLineDragEnd = function () {
+    _lineDrag = null;
+    document.querySelectorAll('#rcp-lines .rcp-line').forEach(r => r.classList.remove('rcp-drop-before', 'rcp-drop-after'));
   };
 
   // The picker — GET /api/retail-admin/materials?for_recipe=1, the filter
