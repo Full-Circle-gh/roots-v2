@@ -260,6 +260,39 @@ await itAsync('candidates are capped at three, and keep the provider ranking', a
     });
 });
 
+await itAsync('SAME-CITY WRONG-DISTRICT: a strong name match in a different district is not taken silently', async () => {
+  // The real-world failure this guards: a generic/branded name ("XX新天地")
+  // out-scores the actual estate while sitting in a different district of
+  // the same city — a perfectly ordinary same-city distance, so MAX_DROP_KM
+  // never sees it. Only one candidate is offered, so without the district
+  // gate this would clear POI_AUTO_SCORE/MARGIN/MIN_SHARED outright.
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),
+      SHOP,
+      poiList([{ ...FAR, name: '富力新天地', address: '广东省广州市天河区元岗街富力新天地', provider: 'qingyun' }]),
+      { geocode: blindGeo }),
+    (e) => { assert.strictEqual(e.pickPlace, true, 'must park for a person, not auto-ship the wrong district'); return true; });
+});
+
+await itAsync('same district name in the address text still auto-takes', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '越秀区', address: '富力新天地' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '富力新天地', address: '广东省广州市越秀区广州大道富力新天地', provider: 'qingyun' }]),
+    { geocode: blindGeo });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
+
+await itAsync('no district on file, or none readable from the hit — undecidable, still auto-takes', async () => {
+  const p = await buildCreatePayload(
+    ORDER({ province: '广东省', city: '广州市', district: '', address: '祈福新村倚湖湾' }),
+    SHOP,
+    poiList([{ ...NEAR, name: '祈福新村倚湖湾', address: '', provider: 'qingyun' }]),
+    { geocode: blindGeo });
+  assert.strictEqual(p._geo.source, 'poi_auto');
+});
+
 await itAsync('a ROAD skips the name search and goes to the geocoder', async () => {
   // The name search would answer — with the road centroid or a shop on it —
   // and it must not be consulted, because geocoding indexes exactly this.

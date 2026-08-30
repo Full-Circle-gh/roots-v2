@@ -109,6 +109,17 @@ it('refuses a precise match in the WRONG city', () => {
   assert.strictEqual(v.ok, false);
   assert.strictEqual(v.reason, 'city_mismatch');
 });
+it('refuses a precise match in the WRONG district of the RIGHT city', () => {
+  // Same city, so cityMatch is true — this is exactly the failure MAX_DROP_KM
+  // cannot catch, because a wrong district is a normal same-city distance.
+  const v = geocode.isDeliverablePin({ lat: 23.1, lng: 113.3, precision: 'rooftop', cityMatch: true, districtMatch: false });
+  assert.strictEqual(v.ok, false);
+  assert.strictEqual(v.reason, 'district_mismatch');
+});
+it('an unknown district is undecidable, not a mismatch', () => {
+  const v = geocode.isDeliverablePin({ lat: 23.1, lng: 113.3, precision: 'rooftop', cityMatch: true, districtMatch: null });
+  assert.strictEqual(v.ok, true);
+});
 it('refuses nothing at all', () => {
   assert.strictEqual(geocode.isDeliverablePin(null).ok, false);
 });
@@ -118,6 +129,13 @@ it('广州 == 广州市', () => assert.strictEqual(geocode.cityMatches('广州',
 it('广州市 != 佛山市', () => assert.strictEqual(geocode.cityMatches('广州市', '佛山市'), false));
 it('unknown side is undecidable, not a mismatch', () => {
   assert.strictEqual(geocode.cityMatches('广州市', ''), null);
+});
+
+console.log('\ndistrictMatches — same idea one level down');
+it('天河区 == 天河', () => assert.strictEqual(geocode.districtMatches('天河区', '天河'), true));
+it('天河区 != 越秀区', () => assert.strictEqual(geocode.districtMatches('天河区', '越秀区'), false));
+it('unknown side is undecidable, not a mismatch', () => {
+  assert.strictEqual(geocode.districtMatches('天河区', ''), null);
 });
 
 // ── buildCreatePayload ────────────────────────────────────────────────────
