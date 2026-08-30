@@ -2970,8 +2970,12 @@ addColumn('retail_orders', 'channel_preorder_at', 'DATETIME');
 // was nowhere: Meituan takes a commission and the fees split three ways, so a
 // ¥65 order settles at ¥61.75. subtotal / shipping_fee / packing_fee (existing
 // columns) now carry the 商品金额 / 配送费 / 打包袋 split instead of a lump sum.
-addColumn('retail_orders', 'channel_commission',   'REAL');  // 平台服务费 taken by Meituan
-addColumn('retail_orders', 'channel_settle_amount','REAL');  // 预计收入 — what lands with us
+// Both are channel-neutral, not Meituan-only: routes/eleme-internal.js fills the
+// same pair from Eleme's 服务费 / 商家实收, so one query answers "what did this
+// order actually earn" across both platforms. NULL means the platform never told
+// us — never read it as zero commission.
+addColumn('retail_orders', 'channel_commission',   'REAL');  // 平台服务费 / 服务费 taken by the platform
+addColumn('retail_orders', 'channel_settle_amount','REAL');  // 预计收入 / 商家实收 — what lands with us
 addColumn('retail_orders', 'channel_discount',     'REAL');  // merchant-funded activity spend
 // Rider. Meituan's own fleet carries these orders, so this is the only delivery
 // record that exists for them — our own dispatch columns were always empty.
@@ -5193,11 +5197,15 @@ addColumn('eleme_catalogue_cache', 'specs', 'TEXT');
 addColumn('eleme_product_map', 'spec_name', 'TEXT');
 // Tier 1 order collection: the per-order economics Eleme only exposes on the
 // order-detail read (merchant income after commission, the platform-vs-merchant
-// discount split, packaging/delivery fees), plus the raw list row. Kept here
-// rather than as new retail_orders columns because only this channel populates
-// them and nothing in the UI reads them yet — and because a raw copy is what
-// makes a wrong money-unit guess (ELEME_MONEY_SCALE) recoverable from stored
-// data instead of needing the order re-read from Eleme.
+// discount split, packaging/delivery fees), plus the raw list row. The two that
+// every channel shares — 商家实收 and 服务费 — have since moved OUT of here into
+// retail_orders.channel_settle_amount / channel_commission, the columns Meituan
+// already fills; this JSON keeps the copy anyway, because it is what makes a
+// wrong money-unit guess (ELEME_MONEY_SCALE) recoverable from stored data instead
+// of needing the order re-read from Eleme. The rest (subsidy/discount split,
+// packaging and delivery fees) still live only here — they have no column of
+// their own, and inventing one per fee before anything reads them would be
+// guessing at a shape.
 addColumn('eleme_order_import', 'detail_json', 'TEXT');
 
 // ── One claim per option, and how many units that option sells ──────────────

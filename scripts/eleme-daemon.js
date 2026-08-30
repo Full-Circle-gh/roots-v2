@@ -421,6 +421,10 @@ async function refreshOrderStatus(storeCode, order) {
         elemeOrderId: order.elemeOrderId, statusDesc: order.statusDesc, eta: order.eta,
         preOrderAt: order.preOrderAt, note: order.note,
         needsCutlery: order.needsCutlery, placedAt: order.placedAt,
+        // The economics, when the LIST row carries them (no Tier 1 read happens
+        // on a refresh). Fills a blank only, so this heals an order imported
+        // before those columns were written and never touches one that has them.
+        merchantIncome: order.merchantIncome, commission: order.commission,
       }),
     });
     if (res.ok) {
