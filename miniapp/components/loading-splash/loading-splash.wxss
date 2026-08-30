@@ -75,11 +75,15 @@
 .ls-dot--3 { animation-delay: .3s; }
 
 .ls-label {
-  /* Explicit UI sans stack — this overlay can mount before app.wxss's own
-     font vars are guaranteed loaded (it's meant to cover exactly that gap),
-     so it doesn't lean on inheriting --f-toni from an ancestor page and risk
-     falling back to the browser/OS default serif instead. */
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', -apple-system, sans-serif;
+  /* Tenant's own BODY brand font (--f-aleo) — set globally on `page` in
+     app.wxss (base value, or a tenant's own upload via theme.buildThemeVars
+     overriding it inline on the page root). Custom-property inheritance
+     crosses this component's style isolation boundary same as it does for
+     every other themed block in the app, so this always matches whatever
+     font the tenant's brand uses for regular text elsewhere — never a font
+     hardcoded here. The literal fallback only covers the page root somehow
+     not carrying the var at all. */
+  font-family: var(--f-aleo, 'Aleo', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif);
   font-size: 22rpx;
   font-weight: 500;
   color: #6A6E2D;

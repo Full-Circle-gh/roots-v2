@@ -3,6 +3,7 @@
 // 业务域名 / ICP. Data comes from GET /api/retail/orders/:orderNo/tracking/:number
 // over the plain request domain (already whitelisted, no ICP required).
 const api = require('../../utils/api');
+const theme = require('../../utils/theme');
 
 // Scenario banner tints, mirrored from the old server-rendered page.
 const URG_BG = { urgent: '#FCE3E5', action_needed: '#FBEFC9', info: '#E3EFD3', transit: '#E5EEF8' };
@@ -15,6 +16,10 @@ Page({
     error: false,
     t: null,            // tracking view from the API
     bannerStyle: '',    // computed urgency-tinted banner style
+    // Tenant brand-font/colour CSS vars, so the loading-splash's label (and
+    // anything else themed here) matches the tenant's brand identity same
+    // as Home does — un-themed tenants render unaffected ('').
+    themeVars: '',
   },
 
   onLoad(q) {
@@ -23,6 +28,7 @@ Page({
     const orderNo = String(q.order_no || '').replace(/[^A-Za-z0-9_-]/g, '');
     const number  = String(q.number   || '').replace(/[^A-Za-z0-9_-]/g, '');
     wx.setNavigationBarTitle({ title: lang === 'cn' ? '物流跟踪' : 'Tracking' });
+    this.setData({ themeVars: theme.buildThemeVars(app?.globalData?.config) });
     if (!orderNo || !number) { this.setData({ lang, loading: false, error: true }); return; }
     this.setData({ lang });
     this.load(orderNo, number, lang);

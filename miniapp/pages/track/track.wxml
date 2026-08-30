@@ -1,5 +1,5 @@
 <!-- Native shipment tracking. Same look as the old web-view page, no ICP. -->
-<view class="wrap">
+<view class="wrap" style="{{themeVars}}">
   <loading-splash wx:if="{{loading}}" visible="{{true}}" />
 
   <view wx:elif="{{error || !t}}" class="state err">
