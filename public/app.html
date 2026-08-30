@@ -14873,9 +14873,26 @@ async function showPOForm(id) {
   renderPORows();
 }
 
+// Shared suggestion list for the per-line supplier field (one <datalist>,
+// referenced by every row's list= attribute) — rebuilt from _suppliersCache
+// each time rows are painted so a supplier added mid-session shows up
+// without a full page reload.
+function syncPOSupplierDatalist() {
+  let dl = document.getElementById('poSupplierDatalist');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'poSupplierDatalist';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = (_suppliersCache || [])
+    .map(s => `<option value="${esc(s.name)}">${s.name_cn ? esc(s.name) + ' · ' + esc(s.name_cn) : ''}</option>`)
+    .join('');
+}
+
 function renderPORows() {
   const container = document.getElementById('poItemRows');
   if (!container) return;
+  syncPOSupplierDatalist();
   // Each line is a 2-row card: the main inputs (qty / unit / price /
   // category) on top, then a thin secondary row for invoice tracking
   // (supplier · channel · invoice checkbox). Keeps the busy table
@@ -14948,17 +14965,28 @@ function renderPORows() {
            list (admin → 🚚 Suppliers). -->
       <div style="display:grid;grid-template-columns:24px minmax(200px,1fr) minmax(200px,1fr) 32px;gap:8px;align-items:center;margin-top:6px">
         <span style="color:var(--muted);text-align:center;line-height:0" title="Per-line supplier · 此行供应商"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span>
-        <select data-po-row-supplier="${row._rowId}" onchange="updatePORow(${row._rowId},'supplier_name',this.value)" style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7">
-          <option value="">— inherit from PO header · 继承订单头 —</option>
-          ${(_suppliersCache || []).map(s => `<option value="${esc(s.name)}" ${(row.supplier_name||'')===s.name?'selected':''}>${esc(s.name)}${s.name_cn?' · '+esc(s.name_cn):''}</option>`).join('')}
-          ${row.supplier_name && !(_suppliersCache || []).some(s => s.name === row.supplier_name) ? `<option value="${esc(row.supplier_name)}" selected>${esc(row.supplier_name)} <em>(legacy 旧)</em></option>` : ''}
-        </select>
+        <!-- A plain <select> here used to render 100+ suppliers with no way
+             to filter, and — with color-scheme:dark set at :root but this
+             control's background hardcoded light — its OWN options rendered
+             with the dark theme's light option text over that light
+             background: unreadable except the hover row, which gets a
+             browser-drawn highlight with its own contrasting text. A search
+             box for 100+ entries is worth more than a picklist anyway, so
+             this is now a freeform text field with a searchable suggestion
+             list (list=) — typing filters live, and typing a name that isn't
+             in the list simply adds it, which is what "+ New supplier" was a
+             workaround for. color-scheme:light plus an explicit text color
+             keep it legible regardless of the app's theme. -->
+        <input data-po-row-supplier="${row._rowId}" list="poSupplierDatalist" autocomplete="off"
+          placeholder="— inherit from PO header · 继承订单头 —" value="${esc(row.supplier_name || '')}"
+          oninput="updatePORow(${row._rowId},'supplier_name',this.value)"
+          style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7;color:#1a1a17;color-scheme:light">
         <!-- Per-line note — the buyer's remark about THIS item (substitute
              brand, delivery instruction, why the price moved). The PO header
              already has a Notes box, but on a mixed shopping list a remark
              only makes sense next to the line it belongs to. -->
         <input data-po-row-note="${row._rowId}" placeholder="Note · 备注" value="${esc(row.note||'')}" title="Note for this line · 此行备注"
-          style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7"
+          style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7;color:#1a1a17"
           oninput="updatePORow(${row._rowId},'note',this.value)">
         <span></span>
       </div>
