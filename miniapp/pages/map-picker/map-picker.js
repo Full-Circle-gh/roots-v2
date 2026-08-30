@@ -12,6 +12,7 @@
 // flow works even though wx.getLocation is rejected for this AppID. POI search +
 // reverse-geocode go through our server (/api/retail/*), which holds the Amap key.
 const api = require('../../utils/api');
+const theme = require('../../utils/theme');
 
 Page({
   data: {
@@ -31,12 +32,20 @@ Page({
     // resolvePin's hideMapSplash calls) — a live map with no context reads
     // as broken for the first second or so otherwise.
     mapLoading: true,
+    // Tenant brand-font/colour CSS vars, so the loading-splash's label
+    // matches the tenant's brand identity same as Home does.
+    themeVars: '',
   },
 
   onLoad(query) {
     let lang = 'en';
-    try { lang = getApp().globalData.lang || 'en'; } catch (e) {}
-    const patch = { lang };
+    let themeVars = '';
+    try {
+      const app = getApp();
+      lang = app.globalData.lang || 'en';
+      themeVars = theme.buildThemeVars(app.globalData.config);
+    } catch (e) {}
+    const patch = { lang, themeVars };
     const qLat = query && Number(query.lat);
     const qLng = query && Number(query.lng);
     if (qLat && qLng && isFinite(qLat) && isFinite(qLng)) { patch.lat = qLat; patch.lng = qLng; }

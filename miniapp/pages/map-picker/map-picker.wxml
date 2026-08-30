@@ -1,4 +1,4 @@
-<view class="picker">
+<view class="picker" style="{{themeVars}}">
   <!-- Branded loading state — shown until the first centre fix resolves,
        matching the app-launch splash instead of a blank map. -->
   <loading-splash visible="{{mapLoading}}" text="{{ lang === 'cn' ? '地图加载中…' : 'Loading map…' }}" />
