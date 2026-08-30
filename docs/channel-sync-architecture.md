@@ -12,9 +12,10 @@ file and table names only where precision matters.
 
 **What this is not.** It is not a migration script, not a UI design, and not an
 implementation. No code is proposed line by line. Where a decision was locked in
-the brief, it is treated as settled and specified, not re-argued. Two places
-where I think a locked decision has a real problem are in **OBJECTIONS** at the
-end; nothing has been quietly changed.
+the brief, it is treated as settled and specified, not re-argued. One place where
+I think a locked decision has a real problem is in **OBJECTIONS** at the end,
+along with a second objection that was raised, checked against the code, and
+withdrawn. Nothing has been quietly changed.
 
 **Scope of Phase 1: stock and orders only.** Price sync is explicitly out. So is
 listing creation. So is the tenant-installed agent.
@@ -583,15 +584,28 @@ different directories or different store codes. Under the engine:
 - a connection's session is loaded only into a browser context created for that
   connection, and never written back to any other connection's record.
 
-**3. The OpenCart password is the exception, and it must be named as one.**
-gzgrocery's OpenCart admin is the only integration that genuinely re-authenticates
-by itself, automatically, with no human — which is a real operational advantage
-and the reason it never had the month-long silent outage its sibling had. That
-capability requires holding a password.
+**3. The OpenCart password goes too — no exception.** gzgrocery's OpenCart admin
+is the only path in the system that holds a reusable password, and its client
+does attempt an unattended re-login. An earlier draft of this document argued for
+a carve-out on the grounds that this was a working, proven capability worth
+keeping. **That argument was checked and withdrawn** — see OBJECTIONS for the
+facts. In short: nothing establishes that this re-login has ever succeeded, or
+ever run, and the two gzgrocery logins had been conflated.
 
-The decision says no stored platform passwords. Applied literally, gzgrocery's
-order reader loses automatic re-login and gains a human step it does not have
-today. **See OBJECTIONS.**
+So gzgrocery's order reader is treated identically to every other connection.
+This is straightforward for it, because OpenCart's authenticated state is an
+ordinary session — an `OCSESSID` cookie plus a per-session `user_token`
+(`lib/gzgrocery-admin.js:89-110`). Under the engine:
+
+- the tenant enters the OpenCart password once, in the reconnect flow (§8);
+- the engine performs the login, captures the resulting cookie jar and
+  `user_token` as that connection's **session**, encrypts it, stores it, and
+  **discards the password**;
+- when the session expires, the connection enters "needs re-login" like any
+  other and the tenant re-enters the password through the same phone flow.
+
+No browser is involved, so the reconnect screen for this connection is a single
+password field — the simplest of the five.
 
 **4. What is deleted.** The two dead Meituan credential paths (the unused
 environment variables and the unused `tenant-creds` keys) are removed, so that
@@ -1177,6 +1191,10 @@ Roots/GO VEGAN! is the only live tenant. Five connections. One at a time.
    deducted twice. Read the live `.env` and record both values. **If both are
    `live`, that is a live data-correctness bug that must be fixed before any
    cutover work starts**, because cutover will otherwise inherit and obscure it.
+   The same reading answers a second question: if `GZGROCERY_ORDER_MODE` is `off`,
+   the OpenCart order reader has never run in production, and connection 5's dry
+   run is its first real exercise rather than a comparison against known-good
+   behaviour. Record which it is — it changes how much weight the dry run carries.
 2. **`MEITUAN_SKIP_STORES` and `SHANGOU_STORES` are confirmed consistent** on the
    live box — `MEITUAN_SKIP_STORES` must contain `yuexiu` and `SHANGOU_STORES`
    must be `yuexiu`. If they disagree, two daemons are racing the same queue rows
@@ -1266,15 +1284,22 @@ must take ownership of the holder Chrome or launch its own — decide which befo
 this connection, not during it.
 
 **5. Gzgrocery — OpenCart orders (connection 5).**
-*Why last:* it is the one whose cutover is genuinely entangled with another
-connection's behaviour. It shares the double-count guard with connection 4
-(§20 precondition 1), it holds the only stored password (§9 / OBJECTIONS), it has
-zero alerting and zero admin surface today so there is no baseline to compare
-against, and its cold-start baseline (`gzgrocery_meta.baseline_order_id`) must be
-carried across exactly or it will either re-import history or skip a day.
+*Why last:* it is the connection with the least operational evidence behind it
+and the most entanglement. It shares the double-count guard with connection 4
+(§20 precondition 1); it has zero alerting and zero admin surface today, so there
+is no baseline to compare a dry run against; its cold-start baseline
+(`gzgrocery_meta.baseline_order_id`) must be carried across exactly or it will
+either re-import history or skip a day; and — established while checking the
+withdrawn objection — **it may never have run in production at all.** Its mode
+defaults to `off`, at which the cycle returns before a client is even
+constructed, so unless the live box overrides it, nothing here has been exercised
+against the real gzgrocery admin. Going last means the engine is proven four
+times over before it meets the least-known path.
 *Watch for:* carry `baseline_order_id`, `decremented` and `reversed` for every
 existing order into `channel_order_ledger` before enabling. A miss here
-double-decrements real stock.
+double-decrements real stock. Also expect the dry run to be the **first**
+real exercise of the OpenCart login and parser for this connection — treat a
+clean dry run as new information, not as confirmation of existing behaviour.
 
 ### Rollback, per connection
 
@@ -1328,7 +1353,7 @@ Every finding in `docs/channel-sync-audit.md`. Nothing dropped silently.
 | 15 | No log retention anywhere | §16a, §18 | Retention setting and scheduled prune |
 | 16 | No `busy_timeout` pragma anywhere | §5 | Required on every engine connection |
 | 17 | Sessions plaintext on disk (3 channels) | §9 | Encrypted at rest via `lib/secret-box.js`, keyed per connection |
-| 18 | OpenCart username/password in plaintext env | §9 | Moves out of env; **see OBJECTIONS** |
+| 18 | OpenCart username/password in plaintext env | §9 | Password is not stored at all. The tenant enters it at reconnect; the engine keeps only the resulting `OCSESSID` + `user_token` session, encrypted |
 | 19 | `eleme_tokens` plaintext columns, written by a live route, read by nothing | §17 | Dropped with the dead client |
 | 20 | Dead `MEITUAN_<CODE>_USER/PASS` read | §9, §17 | Deleted |
 | 21 | Unused encrypted `meituan.<code>.*` keys in `tenant-creds` | §9, §17 | Deleted |
@@ -1426,43 +1451,76 @@ Short list. Each is a plain question with a concrete example.
 
 ## OBJECTIONS
 
-Two locked decisions have problems I believe are real. Nothing has been changed;
-both are specified as written above.
+One objection stands. A second was raised in an earlier draft, checked against
+the code, and withdrawn — it is kept below rather than deleted, because the
+finding that killed it is worth having on the record. Nothing in the spec above
+departs from a locked decision.
 
-### Objection 1 — "no stored platform passwords" costs gzgrocery its automatic recovery
+### Objection 1 — WITHDRAWN. No stored passwords, no exceptions.
 
-**The decision (§9, brief item 7):** the engine stores sessions, not passwords.
+An earlier draft of this document objected that the no-stored-passwords rule
+would cost gzgrocery an automatic unattended recovery it relies on today. **That
+objection rested on an assumption I never verified, and on a conflation of two
+different logins. It is withdrawn.** The facts, established by reading the code:
 
-**The problem.** Four of the five connections hold browser sessions and need a
-human to re-login when those expire — so for them, the decision costs nothing.
-The fifth, gzgrocery's OpenCart order reader, is different: it holds a username
-and password and **re-authenticates completely automatically**. Its client
-detects a logged-out response and transparently logs back in and retries
-(`lib/gzgrocery-admin.js:114-126`). It has never needed a human.
+**There are two gzgrocery logins, and the password belongs to only one of them.**
 
-That capability is not incidental. Its sibling connection — Guanyi, session-based
-— is the one that failed silently for a month because "no session self-heal" and
-"no alerting" combined. The order reader cannot have that failure, because it
-heals itself.
+| | **(a) Guanyi ERP** — outbound stock | **(b) OpenCart admin** — inbound orders |
+|---|---|---|
+| Credential held | **None.** Session only, plaintext at `data/guanyi-sessions/<store>-session.json`. There is no `GUANYI_USER`/`GUANYI_PASS` anywhere in the tree | **Username + password**, `GZGROCERY_ADMIN_USER` / `GZGROCERY_ADMIN_PASS`, plaintext environment variables, read at `lib/gzgrocery-admin.js:33-35` |
+| Login sequence | Entirely human. `scripts/guanyi-login.js` opens a headed browser; `interactiveLogin()` (`lib/guanyi-browser.js:234-262`) types nothing and simply polls for up to six minutes until the dashboard appears | Two HTTP requests, `lib/gzgrocery-admin.js:89-110`: GET `common/login`, scrape `name="csrfToken" value="…"`, POST `{username, password, csrfToken}`, succeed if `user_token=` appears in the redirect `Location` |
+| Steps the code cannot complete alone | **All of them.** `lib/guanyi-browser.js:8-10`: *"Login is username+password (no QR). The session is created once by the standalone `scripts/guanyi-login.js` (a human types the password — **we never automate credential entry**)"*. `scripts/guanyi-login.js:25` prompts the operator for *"the Guanyi account + password **(and SMS code if asked)**"* — so SMS is anticipated, though the code cannot confirm it because a human handles every step | **None in the code.** Grepping `lib/gzgrocery-admin.js` and `scripts/gzgrocery-order-daemon.js` for SMS / 短信 / 验证码 / captcha / 2FA / OTP returns **nothing**. The code's model of this login is password-only |
+| On failure or expiry | `ensureLoggedIn()` (`lib/guanyi-browser.js:196-229`) **never attempts a credential re-login**. It re-reads a newer session file if one appeared on disk, otherwise logs *"session expired or missing — run `scripts/guanyi-login.js` to create one"* and returns false. The daemon then alerts | `_get()` (`lib/gzgrocery-admin.js:114-121`) detects a logged-out reply and calls `login()` once, then retries the request. A thrown login error reaches the daemon's catch at `scripts/gzgrocery-order-daemon.js:599-603` (a log line and a `gzgrocery_order_log` row) or `:628`. **No alert** |
+| Evidence it has ever expired and been recovered | **Yes, documented.** `docs/gzgrocery-findings.md`: the ERP session died and stock pushes failed ~78% (9,405 errors) from 2026-06-24 to 2026-07-26, 8,902 of them the single message "not logged in". Recovery was a **manual** re-login at 2026-07-27 04:55. The same document names the root defect: *"No session self-heal: `fetchListings` has no auto-reauth path when the ERP session expires"* | **UNKNOWN — not determinable from code, requires observation** (below) |
 
-Applied literally, this decision **removes the only self-healing authentication
-in the system** and replaces it with a human step that connection does not
-currently need. It makes that connection strictly less reliable.
+**Why the objection collapses.**
 
-**What I would put to you.** The decision's intent — we should not be a
-repository of merchants' platform passwords — is right, and for the four
-browser-session connections it costs nothing. But gzgrocery's OpenCart admin is
-not a merchant platform login in the same sense: it is a **third party's
-back-office account issued to Roots**, held by Roots, for a system that has no
-API and no session-token flow. A carve-out for "connections whose adapter
-declares it can re-authenticate unattended, where the credential is stored
-encrypted via `lib/secret-box.js` and never leaves the server" would keep the
-principle and keep the reliability.
+1. **The password belongs to (b), not (a).** The login the product owner believes
+   requires an SMS code is (a) Guanyi — and (a) holds **no password at all**. A
+   stored password buys (a) nothing, because there is nothing in (a) that would
+   use one. A human is needed for (a) either way, today and under the engine.
+2. **My original argument credited (b) with surviving (a)'s outage.** It does not
+   follow. They are separate systems with separate credentials and separate
+   transports. (a) failed for a month because it has no self-heal *by design*;
+   (b) played no part in that, and its existence prevented nothing.
+3. **Nothing establishes that (b)'s unattended re-login works.** Storing a
+   password is not evidence, and attempting a re-login is not evidence of one
+   succeeding. Specifically:
+   - No dated incident note, findings entry or known-issue records an OpenCart
+     session expiry. The only date in `lib/gzgrocery-admin.js` (`:199`,
+     `2026-06-27`) is a date-format example inside a parser comment.
+   - **The code could not produce such evidence even if it worked.** `login()` is
+     called silently from inside `_get()`. No console line, no
+     `gzgrocery_order_log` action, no counter and no sync-log row records a
+     re-login. A successful unattended re-authentication would leave no trace
+     anywhere.
+   - `GZGROCERY_ORDER_MODE` **defaults to `off`**, and at `off` the cycle returns
+     before the client is ever constructed (`scripts/gzgrocery-order-daemon.js:548`).
+     If the live box is on the default, **this login has never run in production
+     even once.** The audit already lists the live value of that variable as
+     unknown from the repository.
+   - The re-login is attempted **once** per request. If the second attempt also
+     comes back logged out, the parser receives a login page and returns zero
+     rows — which is indistinguishable from a quiet day with no orders, and is
+     not alerted on.
 
-If the answer is still no, the spec above stands and the consequence should be
-accepted knowingly: connection 5 gains a "needs re-login" state it does not have
-today, and its grace window (§7b) should be set generously, because a
-30-second session blip that used to self-heal will now page somebody.
+**What would need to be observed to settle it** (none of it available from the
+code): the live `GZGROCERY_ORDER_MODE` value on the box; whether the daemon's
+stdout or `gzgrocery_order_log` show any completed cycles at all; and a
+deliberate session invalidation — clear the cookie jar, or let `OCSESSID` age out
+— with the following cycle watched to see whether it recovers unaided.
+
+**The decision, recorded:** **no stored passwords, no exceptions. Gzgrocery is
+treated identically to every other connection.** The carve-out is removed from
+§9. The consequences noted in the withdrawn objection — a generous grace window
+because a self-healing blip would now page somebody — are also withdrawn, because
+the self-healing was never demonstrated.
+
+**One thing this does cost, stated honestly:** if (b)'s unattended re-login *does*
+work in production, we are giving up a capability we never measured. That is an
+acceptable trade — an unproven capability is not grounds for an exception to a
+rule about credential storage — but if the observation above is ever run and
+shows it working, it is worth revisiting on evidence rather than on intent.
 
 ### Objection 2 — phone re-login cannot cover an image or slider challenge
 
