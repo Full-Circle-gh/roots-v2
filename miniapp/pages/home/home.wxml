@@ -2,7 +2,7 @@
   <!-- Cold-start boot splash — the tenant's logo, shown once per launch
        while the very first config/layout fetch is in flight. Fades out
        once refresh() lands (see onLoad/hideBootSplash in home.js). -->
-  <loading-splash visible="{{bootSplash}}" />
+  <loading-splash visible="{{bootSplash}}" tabbar="{{true}}" />
 
   <!-- Floating language toggle — top-right, always visible. Customer-facing
        quick swap; the bigger picker on Me tab is the "settings" home. -->
