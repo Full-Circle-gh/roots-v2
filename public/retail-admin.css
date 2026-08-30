@@ -2617,35 +2617,67 @@
      block. Measured, not assumed. paRender emits the grip col, th and td only
      while reordering is armed, and the rule below sizes it when they exist. */
   #pa-table col.pa-c-sel    { width:  4%; }
-  #pa-table col.pa-c-name   { width: 29%; }
+  #pa-table col.pa-c-name   { width: 24%; }
   #pa-table col.pa-c-cat    { width: 12%; }
   #pa-table col.pa-c-sku    { width: 10%; }
   #pa-table col.pa-c-price  { width:  8%; }
-  #pa-table col.pa-c-margin { width:  8%; }
+  /* Margin: 8% → 13%, the width this column's second figure needed. A cell that
+     carries a Meituan line is `Meituan  49–50%` — label ragged left, figure hard
+     right, one pair per line.
+
+     MEASURED IN CHROMIUM at the §1.19 reference width of 996px, both languages,
+     against the widest real cell (a variant family, whose margin renders as a
+     RANGE on both lines — the binding case, and 19px wider than the single
+     figure that was measured first):
+
+       width   worst cell                          EN        CN
+       8%      `Meituan 49–50%`                   −49px     −29px   spills
+       11%     `Meituan 49–50%`                   −19px      ok     spills (EN)
+       13%     `Meituan 49–50%`                    ok        ok
+
+     English sets the floor, as §1.19 says it usually does: `Meituan` measures
+     52px against 美团's 28px. Verified by the harness in the PR description —
+     no cell scrollWidth exceeds its clientWidth in either language.
+
+     WHERE THE 5% COMES FROM. All of it from Product — the column that ellipses
+     by design, which is where §1.19 says slack lives. Every data-stores variant
+     below moves with it, so the set still sums to exactly 100 in all five
+     arrangements and the per-store stock columns keep the width they had.
+
+     🔴 STATUS WAS TRIED AS THE SOURCE AND MEASURED WRONG. It looked like the
+     column with the most slack — `Active` / `在售` needs ~74px against 109px —
+     so 2% was taken from it. At 9% (89px) the badge SPILLS 9px in English,
+     because the widest status is not `Active`, it is `Disabled` (§1.19 trap 2:
+     size against the widest REAL value, not a typical one). Status is back at
+     11% and is not a source of slack on this table.
+
+     ⚠ At the untested extreme — five stores AND reorder mode — Product lands at
+     11%. Roots runs three. Re-measure before a five-store tenant ships. */
+  #pa-table col.pa-c-margin { width: 13%; }
   #pa-table col.pa-c-status { width: 11%; }
   /* One combined Stock column (a single-store tenant): the whole 18% remainder
      would go to a count, so Product takes it back and Stock lands on 9% — the
      same width a store column gets, so the two shapes read alike. */
-  #pa-table[data-stores="1"] col.pa-c-name { width: 38%; }
+  #pa-table[data-stores="1"] col.pa-c-name { width: 33%; }
   /* 3 stores → 7% a column (70px), 4 → 6.5% (65px), 5 → 6.4% (64px), all clear
      of the 62px floor. Product funds the most because it is the one that
      ellipses; Category and SKU give up their own slack after it, and past three
      stores they start ellipsing their widest values too. */
-  #pa-table[data-stores="3"] col.pa-c-name { width: 26%; }
-  #pa-table[data-stores="4"] col.pa-c-name { width: 23%; }
+  #pa-table[data-stores="3"] col.pa-c-name { width: 21%; }
+  #pa-table[data-stores="4"] col.pa-c-name { width: 18%; }
   #pa-table[data-stores="4"] col.pa-c-cat  { width: 11%; }
   #pa-table[data-stores="4"] col.pa-c-sku  { width:  9%; }
-  #pa-table[data-stores="5"] col.pa-c-name { width: 19%; }
+  #pa-table[data-stores="5"] col.pa-c-name { width: 14%; }
   #pa-table[data-stores="5"] col.pa-c-cat  { width: 10%; }
   #pa-table[data-stores="5"] col.pa-c-sku  { width:  8%; }
   /* Reordering slides a grip column in at the front. Product funds it, so the
      stock block does not move as the mode is flipped on and off. */
   #pa-table.pa-reorder col.pa-c-grip { width: 3%; }
-  #pa-table.pa-reorder col.pa-c-name { width: 26%; }
-  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 35%; }
-  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 23%; }
-  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 20%; }
-  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 16%; }
+  #pa-table.pa-reorder col.pa-c-name { width: 21%; }
+  #pa-table.pa-reorder[data-stores="1"] col.pa-c-name { width: 30%; }
+  #pa-table.pa-reorder[data-stores="3"] col.pa-c-name { width: 18%; }
+  #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 15%; }
+  #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 11%; }
 
   /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component and Orders is its
      anchor (§1.13a rule 3). Every value here is the spec's, not a per-page
@@ -2728,7 +2760,30 @@
   #pa-table td.pa-c-margin {
     color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap;
   }
+  /* Two margins in one cell — list price vs what Meituan settled. Only the rows
+     that HAVE a channel figure carry this; every other row keeps the single
+     unlabelled figure and its one-line height, so the ragged-row-height cost is
+     paid only where there is a second number worth reading.
+
+     A label + figure pair per line, the label ragged left and the figure hard
+     right on the column's own edge, so the two percentages sit directly above
+     one another and the comparison is vertical — which is the whole point of
+     the cell. `justify-content: space-between` rather than a gap, so the
+     figures stay aligned however wide the label's language makes it. */
+  #pa-table td.pa-c-margin .pa-mgn2 { display: inline-flex; flex-direction: column; gap: 2px; }
+  .pa-mgn-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  /* The label is the quiet half: it names the measure, the figure is the
+     measure. 13px is the caption step (§1.3) and 400 against the figure's 500 —
+     no third size, no uppercase, no new colour. */
+  .pa-mgn-row > i { font-style: normal; font-weight: 400; color: var(--td-text2); }
+  .pa-mgn-row > b { font-weight: 500; color: var(--td-text); }
+  /* The channel line reads one step back from the list line — it is a fact
+     about one sales channel, not the product's headline number. */
+  .pa-mgn-ch > b { color: var(--td-text2); }
   .pa-col-muted { color: var(--td-text2); }
+  /* The Meituan line under the editor's Cost field, matching the list cell:
+     same measure, one step quieter than the list margin above it. */
+  #pd-margin .pd-margin-ch { color: var(--td-text2); margin-top: 2px; }
   /* A cost the recipe owns. Reads as a stated figure rather than an empty box
      waiting for input — same type and size, just not on a typing surface. The
      source line beneath it names the recipe, so this only has to say "not

@@ -794,6 +794,47 @@ function _paMargin(price, cost) {
   if (!Number.isFinite(c) || c < 0) return null;
   return { money: p - c, pct: ((p - c) / p) * 100 };
 }
+// ── Meituan actual margin ────────────────────────────────────────────────────
+// The SAME expression as _paMargin above, on a different revenue: what Meituan
+// settled with us for this product instead of what it is listed at. §1.17 rule
+// 1 ("one word, one measure") is why the two never share a label on screen —
+// they are two measures, so they get two words: "List" and "Meituan".
+//
+//   revenue — the product's allocated share of channel_settle_amount, summed
+//             over its Meituan orders (server-side; see the products list
+//             endpoint in routes/retail.js).
+//   units   — how many of it those orders sold, so the cost side is
+//             units × current unit_cost. CURRENT cost, deliberately: it is the
+//             same cost the List figure beside it uses, and a figure that mixed
+//             historic cost with current cost would not be comparable to it.
+//
+// Null whenever the answer is unknown — no Meituan orders, no settle figure
+// from the daemon, or no cost — exactly as _paMargin does, and every caller
+// renders null by showing the single List figure alone.
+function _paChannelMargin(revenue, units, cost) {
+  if (revenue == null || units == null) return null;
+  if (cost == null || cost === '') return null;
+  const r = Number(revenue), u = Number(units), c = Number(cost);
+  if (!Number.isFinite(r) || r <= 0) return null;   // nothing received → nothing to state
+  if (!Number.isFinite(u) || u <= 0) return null;
+  if (!Number.isFinite(c) || c < 0) return null;
+  // PER UNIT, so `money` is the same kind of number as _paMargin's and the two
+  // can be read against each other. The total settled over the total sold is
+  // what one unit actually earned on the channel; the percentage is identical
+  // either way, but a total sitting beside a per-unit figure under two labels
+  // that both say "margin" is exactly the §1.17 rule 1 failure this avoids.
+  const unitRevenue = r / u;
+  return { money: unitRevenue - c, pct: ((unitRevenue - c) / unitRevenue) * 100,
+           unitRevenue, units: u, revenue: r };
+}
+// Collapses a variant family the way _paMargin's callers do — the members are
+// sizes of one product, and a family that showed only its first size's channel
+// margin would be the same lie the price and margin cells refuse to tell.
+function _paChannelMarginOf(u) {
+  return (u.group ? u.members : [u.p])
+    .map(m => _paChannelMargin(m.mt_revenue, m.mt_units, m.unit_cost))
+    .filter(Boolean);
+}
 // Is this product's cost owned by a recipe right now? Mirrors the server's
 // recipeOwnsProductCost() exactly: a recipe is named AND Production is on. The
 // feature state is already on the body as `feat-production`, the same signal
@@ -1190,16 +1231,44 @@ function paOpenRecipe(recipeId) {
 }
 // The margin line under the editor's Cost field: money difference AND percentage,
 // so neither has to be worked out from the other.
+//
+// A SECOND line joins it for a product Meituan has settled money on — the same
+// two numbers computed on what that channel actually paid us per unit instead of
+// on the list price. It appears only when there is a figure to show, so the
+// field keeps its one-line height for every product with no channel history.
+// The line reads live off the Cost field, like the first one, so typing a cost
+// moves both figures together.
 function pdRenderMargin() {
   const el = document.getElementById('pd-margin');
   if (!el) return;
   const g = id => { const n = document.getElementById(id); return n ? n.value : ''; };
-  const m = _paMargin(g('pd-price'), g('pd-cost').trim());
+  const cost = g('pd-cost').trim();
+  const m = _paMargin(g('pd-price'), cost);
+  // The row the list already holds — mt_revenue / mt_units come down with it.
+  const p = (PA_PRODUCTS || []).find(x => x.id === Number(g('pd-id'))) || null;
+  const ch = p ? _paChannelMargin(p.mt_revenue, p.mt_units, cost) : null;
+  const line = (label, v) => {
+    const sign = v.money < 0 ? '−' : '';
+    return label + ' ' + sign + paMoney(Math.abs(v.money)) + ' · ' + v.pct.toFixed(1) + '%'
+         + (v.money < 0 ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
+  };
+  el.textContent = '';
   if (!m) { el.textContent = cuT('Margin — add a cost to see it', '毛利 — 填写成本后显示'); return; }
-  const sign = m.money < 0 ? '−' : '';
-  el.textContent = cuT('Margin', '毛利') + ' ' + sign + paMoney(Math.abs(m.money))
-                 + ' · ' + m.pct.toFixed(1) + '%'
-                 + (m.money < 0 ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
+  // One figure keeps the word it has always had. Two figures need two words
+  // (§1.17 rule 1) — they are the same expression on different revenue.
+  if (!ch) { el.textContent = line(cuT('Margin', '毛利'), m); return; }
+  const add = (text, cls) => {
+    const d = document.createElement('div');
+    d.textContent = text;
+    if (cls) d.className = cls;
+    el.appendChild(d);
+  };
+  add(line(cuT('List margin', '标价毛利'), m));
+  // qty is REAL on the line item, so a count is rounded for display rather than
+  // shown as "12.0 sold". It is context for the figure above it, not a stock number.
+  const sold = Math.round(ch.units).toLocaleString();
+  add(line(cuT('Meituan actual', '美团实收'), ch) + ' · '
+      + cuT(`over ${sold} sold`, `已售 ${sold} 件`), 'pd-margin-ch');
 }
 function _paPriceCell(u) {
   const pr = _paUnitPrices(u);
@@ -1221,19 +1290,41 @@ function _paPriceCell(u) {
 //
 // An unknown cost is an em dash, never 0%. Members with no cost are left out of
 // the range rather than dragged to 100%.
+//
+// A SECOND figure appears under the first, and only for a product Meituan has
+// actually settled money on — what that channel really paid us against the same
+// cost. Two figures need two words (§1.17 rule 1), so each line is labelled the
+// moment there are two; a product with no Meituan sales renders exactly the one
+// unlabelled figure it always did, and the row keeps its single-line height.
 function _paMarginCell(u) {
   const ms = (u.group ? u.members : [u.p])
     .map(m => _paMargin(m.sell_price, m.unit_cost))
     .filter(Boolean)
     .map(m => m.pct);
+  const mt = _paChannelMarginOf(u).map(m => m.pct);
+  if (ms.length && mt.length) {
+    return '<span class="pa-col-margin pa-mgn2">'
+      + `<span class="pa-mgn-row"><i>${escapeHtml(cuT('List', '标价'))}</i>${_paMarginSpan(ms)}</span>`
+      + `<span class="pa-mgn-row pa-mgn-ch"><i>${escapeHtml(cuT('Meituan', '美团'))}</i>${_paMarginSpan(mt)}</span>`
+      + '</span>';
+  }
   if (!ms.length) return '<span class="pa-col-margin pa-col-muted">—</span>';
-  const lo = Math.min(...ms), hi = Math.max(...ms);
-  // One decimal for a single figure; whole numbers across a range, so the cell
-  // stays narrow — the same "drop the noise on a range" rule the price cell uses.
-  const body = Math.abs(hi - lo) < 0.05
+  return `<span class="pa-col-margin${Math.max(...ms) < 0 ? ' pa-col-muted' : ''}">${_paMarginFigure(ms)}</span>`;
+}
+// One decimal for a single figure; whole numbers across a range, so the cell
+// stays narrow — the same "drop the noise on a range" rule the price cell uses.
+// ONE formatter, used by both lines of the cell above: the List and the Meituan
+// figures are read against each other, and two renderings of the same measure
+// would make a real difference between them indistinguishable from a rounding
+// difference.
+function _paMarginFigure(pcts) {
+  const lo = Math.min(...pcts), hi = Math.max(...pcts);
+  return Math.abs(hi - lo) < 0.05
     ? lo.toFixed(1) + '%'
     : Math.round(lo) + '–' + Math.round(hi) + '%';
-  return `<span class="pa-col-margin${hi < 0 ? ' pa-col-muted' : ''}">${body}</span>`;
+}
+function _paMarginSpan(pcts) {
+  return `<b${Math.max(...pcts) < 0 ? ' class="pa-col-muted"' : ''}>${_paMarginFigure(pcts)}</b>`;
 }
 // Stock badge: green = healthy, brass = low (≤5), red = out (0). The number is
 // the family's effective stock; an unpublished product still shows its count.
