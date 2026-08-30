@@ -480,8 +480,13 @@ retired, and not reachable by any supported operation."
 
 - `lib/meituan-drift-sweep.js` — every 30 min, re-reads actual stock against
   what Meituan last accepted and **re-enqueues the gap regardless of why the
-  earlier push failed** (`scripts/meituan-daemon.js:70-78`). This is the only
-  thing in any of the three channels that recovers a terminally-failed row.
+  earlier push failed** (`scripts/meituan-daemon.js:70-78`; wired in at `:1501`
+  and `scripts/shangou-daemon.js:932`). This is the only thing in any of the
+  three channels *designed* to recover a terminally-failed row. Unlike the
+  OpenCart re-login above, it is **observable**: a run writes a `drift_sweep` row
+  to `meituan_sync_log` (`lib/meituan-drift-sweep.js:256-257`). This audit read
+  code, not live log tables, so how often it has actually fired is not
+  established here — but the evidence to settle it exists and can be queried.
 - `scripts/meituan-daemon.js:1093-1102` recovers rows stranded in `'processing'`
   by a crash, since the retry query would never see them again.
 - `lib/meituan-queue-stall.js` — a 120-minute canary on the queue.
@@ -1190,11 +1195,37 @@ from the redirect `Location`. Failure is classified by regexing the page body fo
 `/Warning|No match|incorrect|error/i` → "bad credentials", else "unexpected
 response".
 
-**Expiry detection and re-auth are fully automatic** —
-`_looksLoggedOut(r)` (`:123-126`) checks for a 302 to `route=common/login` or a
-login form in the body, and `_get` transparently re-logs in and retries once
-(`:114-120`). **This is the only one of the three channels that re-authenticates
-without a human.**
+**Unattended re-login is ATTEMPTED here. Whether it WORKS is UNKNOWN — not
+determinable from code.** `_looksLoggedOut(r)` (`:123-126`) checks for a 302 to
+`route=common/login` or a login form in the body, and `_get` calls `login()` and
+retries the request once (`:114-120`). This is the only one of the three channels
+whose code attempts to re-authenticate without a human — but attempting is not
+succeeding, and nothing in the tree establishes that it ever has:
+
+- **No expiry has ever been recorded for this path.** No dated incident note, no
+  findings entry, no known-issue. The only date in `lib/gzgrocery-admin.js`
+  (`:199`, `2026-06-27`) is a date-format example inside a parser comment. The
+  month-long session death in `docs/gzgrocery-findings.md` was the **Guanyi ERP**
+  session (3A), recovered manually — a different system with different
+  credentials.
+- **A success would leave no trace.** `login()` is called silently from inside
+  `_get()`. No console line, no `gzgrocery_order_log` action, no counter and no
+  sync-log row records a re-login. Unlike the drift sweep and auto-heal (which
+  write `drift_sweep` and `autoheal` rows), this path is unobservable either way.
+- **On the default configuration it has never run at all.**
+  `GZGROCERY_ORDER_MODE` defaults to `off`, at which `runCycle()` returns before
+  the client is ever constructed (`scripts/gzgrocery-order-daemon.js:548`). The
+  live value is not in the repository — see the open questions.
+- **The retry is single-shot.** If the second attempt also comes back logged out,
+  the parser receives a login page, returns zero rows, and the cycle reports
+  "fetched 0 recent order(s)" — indistinguishable from a quiet day, and
+  unalerted.
+
+**What would need to be observed to settle it:** the live `GZGROCERY_ORDER_MODE`
+value; whether the daemon's stdout or `gzgrocery_order_log` show any completed
+cycles at all; and a deliberate session invalidation — clearing the cookie jar or
+letting `OCSESSID` age out — with the following cycle watched to see whether it
+recovers unaided.
 
 ## 3.3 Trigger + cadence
 
@@ -1414,7 +1445,9 @@ Notable branches: `no guanyi mapping` → **immediate terminal `'error'`**
 still-processing rows on a batch throw → kept retryable if `attempts < 3`
 (`:335-340`). No backoff, no dead-letter. The auto-heal (§3.2) is the closest
 thing to Meituan's drift sweep — but it only runs after a *recovery*, not on a
-timer.
+timer. Like the drift sweep and unlike the OpenCart re-login, it is observable
+(`autoheal` rows in `guanyi_sync_log`, `scripts/guanyi-daemon.js:664-668`;
+invoked at `:799`); whether it has fired is a log query this audit did not run.
 
 **3B — OpenCart.** This is the outlier. `scripts/gzgrocery-order-daemon.js`:
 
@@ -1588,11 +1621,11 @@ Meituan's two halves differ.
 | **Auth credential** | Human login → `storageState` JSON | Human login → `storageState` JSON | **3A** human login → `storageState` JSON. **3B** username + password |
 | **Credential storage** | `data/meituan-sessions/*.json`, **plaintext**. Env user/pass read but **never used**. `tenant-creds` AES keys exist, **unused**. | `data/eleme-sessions/*.json`, **plaintext**. `eleme_tokens` table (**plaintext columns**) written by OAuth, **unused**. | **3A** `data/guanyi-sessions/*.json`, plaintext. **3B** `GZGROCERY_ADMIN_USER`/`PASS`, **plaintext env** |
 | **Expiry detection** | Dashboard-iframe probe + a separate "store binding lost" state | `ensureLoggedIn` + `ksid` wait | **3A** 60 s health probe + 72 h advance expiry warning. **3B** `_looksLoggedOut()` on every request |
-| **Re-auth** | **Human**, from the ops screen (phone) | **Human**, laptop with a display + `scp`. **No ops-screen entry.** | **3A** human, ops screen. **3B** **fully automatic** |
+| **Re-auth** | **Human**, from the ops screen (phone) | **Human**, laptop with a display + `scp`. **No ops-screen entry.** | **3A** human, ops screen. **3B** unattended re-login **attempted**; never observed to succeed, and unobservable by design (§3.2) |
 | **Trigger** | Poll + edge-triggered queue + admin buttons + job tables | Poll + edge-triggered queue + admin buttons | **3A** edge-triggered queue + admin buttons. **3B** poll only. **3C** poll only |
 | **Order poll interval** | 300 s ±40% (外卖) / 120 s (闪购); +30 min trailing sweep over 3 days | ~5 min; page-observe with a 10 min re-nav and a 120 s freshness ceiling | **3B** 60 s over 3 days × 5 pages |
 | **Stock queue drain** | 10 s | 10 s | 10 s |
-| **Backstop sweep** | **Yes** — 30 min drift sweep + 120 min stall canary + stranded-`processing` recovery | **None** | **3A** auto-heal, but only after a recovery, not on a timer. **3B** n/a (reconciler is inherently self-healing) |
+| **Backstop sweep** | **Yes** — 30 min drift sweep + 120 min stall canary + stranded-`processing` recovery | **None** | **3A** auto-heal, but only after a recovery, not on a timer. **3B** n/a — the reconciler re-derives state each cycle, so it needs no backstop *provided the read succeeds*; a read that silently returns a login page instead looks like a quiet day |
 | **Open-hours gating** | Yes (+15 min grace) | Yes (+30 min grace) | **No — neither daemon reads store hours** |
 | **Self-overlap** | Sequential loop; safe in-process | Sequential loop; safe in-process | Sequential loops; safe in-process |
 | **Cross-process lock** | **None.** Two daemons share the tables; separated only by `MEITUAN_SKIP_STORES` / `SHANGOU_STORES` env | **None.** `ELEME_SKIP_STORES` convention | **None.** 3B and 3C double-count guard is **two env vars and a comment** |
@@ -1609,7 +1642,7 @@ Meituan's two halves differ.
 | **Void restock guard** | `channel_stock_restored`, once-only, with re-deduct on revive; `bornVoid` skip | same | `reversed` flag, once-only |
 | **Retry policy** | 3 attempts, no backoff, terminal thereafter; attempts *refunded* for binding-loss and verification cool-down | 3 attempts, no backoff, terminal thereafter; attempts refunded for transient | **3A** 3 attempts, no backoff. **3B** no attempts concept at all |
 | **Dead-letter** | None | None | None |
-| **Terminal rows recoverable?** | **Yes**, by the drift sweep | **No** | **3A** only via auto-heal after a recovery. **3B** n/a |
+| **Terminal rows recoverable?** | **By design yes**, via the drift sweep (observable as `drift_sweep` log rows; frequency not checked here) | **No** | **3A** only via auto-heal after a recovery. **3B** n/a |
 | **Ops alerts (`sendOpsAlert` count)** | **17** (外卖) + **8** (闪购) | **7** | **3A: 7. 3B: 0** |
 | **Sync log table** | `meituan_sync_log` | `eleme_sync_log` | `guanyi_sync_log`, `guanyi_pickup_log`, `gzgrocery_order_log` |
 | **Log retention** | None | None | None |
@@ -1917,7 +1950,9 @@ of alerting or admin UI, is the least-matured code of the three.
    `GZGROCERY_ORDER_MODE` defaults to `off` and `GUANYI_PICKUP_MODE` to `off`;
    the live values are in a `.env` on the box, which is not in the repo. Whether
    the double-count guard (3B `live` ⇒ 3C `shadow`) currently holds cannot be
-   determined here.
+   determined here. The same reading also settles a second question: at `off`,
+   3B's OpenCart login has never run in production at all, so its unattended
+   re-login (§3.2) is untested as well as unobserved.
 
 2. **Whether `MEITUAN_SKIP_STORES` and `SHANGOU_STORES` are set consistently in
    production.** The correctness of the 外卖/闪购 split depends on it entirely.

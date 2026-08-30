@@ -397,6 +397,86 @@ source of truth" means — but it is surprising the first time it happens, so:
 - The connection's health screen should say, in words, that the channel's stock
   is managed by Tacet and manual edits there will be reverted.
 
+### 6b. The Guanyi pickup inference does not come across — decision
+
+**What it is.** A legacy mechanism inside the Guanyi daemon that **guesses a
+customer collected an order** when a stock number drops between two reads
+(`scripts/guanyi-daemon.js:400-610`). It exists because we could not read
+gzgrocery's orders at all when it was written — the audit calls it "3C". It
+samples Guanyi's on-hand every 60 seconds, diffs against a stored baseline in
+`guanyi_pickup_baseline`, and treats a drop as a sale.
+
+**It is still firing in production.** Confirmed by operator screenshots dated
+2026-08-29 at 10:55 and 18:07, both Guanyi tianhe, 184 products, following a
+session expiry and a manual re-login. The message they show is the bad-read
+guard's re-baseline notice — *"pickup baselines re-synced to live stock — N
+product(s) after 5 identical reads"* — emitted when the guard has seen an
+identical reading for `GUARD_RESYNC_AFTER` cycles and accepts it as the new
+truth (`scripts/guanyi-daemon.js:465-505`).
+
+**Note what those two screenshots actually show:** a session gap, then the
+inference throwing its own baseline away and starting again from whatever number
+Guanyi happened to be showing. Any units that moved during the gap are
+unaccounted for — the code says so itself and deliberately infers no pickup from
+the jump, because inventing a decrement from a number it has just admitted it
+does not trust is how an earlier −1,863 unit incident happened.
+
+**The decision: it must NOT be carried into the new engine.** It is a workaround
+for not having real pickup data. It infers sales from a number that also moves
+for reasons that are not sales — our own pushes settling, partial listing reads,
+proxy blips, the ERP's own adjustments — and every one of those is a source of
+drift, not a defence against it. The engine's recovery sweep (§6) does the
+opposite job: it treats Tacet as the truth and corrects the channel. Running an
+inference that treats the *channel's* number as evidence about our stock,
+alongside a sweep that overwrites the channel's number, would have the two
+fighting each other.
+
+**One thing that is not a retirement:** on 2026-08-30 the re-baseline notice
+stopped being pushed to the ops WeCom group (commit `b83fd15`), on the grounds
+that nothing is lost and nobody needs to act. That is defensible as alerting
+hygiene, but it changes nothing about the mechanism — it only removes the signal
+the operator was using to notice it running. The inference is as active today as
+it was in the screenshots.
+
+**What "trusted" has to mean before it is deleted.** The order reader replaces it
+only if the order reader is actually seeing the sales. Concretely, all four:
+
+1. **The order reader is live**, not `off` and not `shadow` — connection 5 has
+   completed cutover and is writing stock through the engine.
+2. **Coverage is demonstrated, not assumed.** For an agreed observation period
+   (a month is the natural unit, since gzgrocery's ordering is weekly-ish), every
+   stock movement the inference *would* have made is compared against what the
+   order reader *did* make. The inference is left running in shadow for exactly
+   this purpose — it becomes the control, not the mechanism.
+3. **The gap is explained, not just small.** Where the two disagree, each
+   disagreement has a known cause — a cancelled order, an ERP adjustment, a
+   partial read — rather than being written off as noise. A residual the engine
+   cannot account for means the order reader is missing a class of sale, and that
+   is exactly the thing the inference was covering for.
+4. **No unresolved "Needs you" items on connection 5** attributable to unmatched
+   lines, because an unmatched line is a sale the order reader saw and did not
+   deduct — which the inference *would* have caught, and which would therefore be
+   a real regression on deletion.
+
+Until all four hold, the inference stays in shadow mode: logging what it would do
+and changing nothing. `GUANYI_PICKUP_MODE` already has exactly this setting.
+
+**Where in the cutover sequence.** Connection 5 (gzgrocery — OpenCart orders) is
+last in the order in §20. Retirement is **after** it, not part of it:
+
+| Point | State of the inference |
+|---|---|
+| Before connection 4 (Guanyi stock) cuts over | Unchanged — whatever mode the box is in today (§20 precondition 1 establishes which) |
+| Connection 4 cutover | Unchanged. The engine takes over the stock push; the inference is left alone so only one thing changes at a time |
+| Connection 5 cutover | Forced to `shadow` as part of the go-live step, if it is not already. This is the existing double-count guard, now enforced rather than conventional |
+| Observation period after connection 5 is live | Runs in shadow as the control for criteria 2–4 above |
+| Retirement | The daemon code, `guanyi_pickup_baseline`, `guanyi_pickup_log`, the `/guanyi/pickups` admin routes and the pickups panel are removed together. The `guanyi_pickup_log` history is retained read-only until the next schema migration, because it is the record of what the channel did before the order reader existed |
+
+**The one thing that must not happen:** deleting the inference at the same moment
+connection 5 goes live. That would remove the control and the mechanism in one
+step, and if the order reader turns out to under-count, nothing would be left to
+show it.
+
 ---
 
 ## 7. Poll rate
@@ -1073,7 +1153,7 @@ Tables and columns with intent. Not migration SQL.
 |---|---|---|
 | `retail_orders` | Add a reference to `channel_connection` | Today `channel` is a text field (`'meituan'`, `'eleme'`, `'gzgrocery'`) that cannot distinguish 外卖 from 闪购 or one location from another. Existing `channel` stays for compatibility |
 | `retail_order_items` | Add an "unmatched" marker | So an unresolved line is a fact on the order, not only a log string |
-| `guanyi_pickup_log` | Rename `tianhe_qty` → `tacet_qty` | §16b |
+| `guanyi_pickup_log` | Rename `tianhe_qty` → `tacet_qty` | §16b. **Only if the table outlives the pickup inference's retirement (§6b)** — if retirement lands first, the table goes read-only and the rename is wasted work. Sequence the two before doing either |
 | `retail_stock_ledger` | Ensure the movement reason vocabulary covers sweep corrections, zeroing, and cancellation write-offs | So every automatic stock movement is attributable |
 
 ### Tables retired
@@ -1247,7 +1327,8 @@ it is the connection whose existing code is closest to what the engine wants: it
 already reconciles against the channel's live number rather than blind-writing.
 *Watch for:* the missing enqueue-time collapse means its queue may hold many
 stale rows at freeze time; drain or discard them deliberately rather than letting
-the new engine inherit them.
+the new engine inherit them. Leave the pickup inference exactly as it is through
+this cutover (§6b) — only one thing changes at a time.
 
 **2. Eleme (connection 3).**
 *Why second:* lowest order volume of the three order-bearing connections, so a
@@ -1300,6 +1381,9 @@ existing order into `channel_order_ledger` before enabling. A miss here
 double-decrements real stock. Also expect the dry run to be the **first**
 real exercise of the OpenCart login and parser for this connection — treat a
 clean dry run as new information, not as confirmation of existing behaviour.
+Force the pickup inference to `shadow` as part of go-live and **leave it
+running** — it is the control against which the order reader's coverage is
+measured, and it is retired only after that measurement passes (§6b).
 
 ### Rollback, per connection
 
@@ -1338,7 +1422,8 @@ Every finding in `docs/channel-sync-audit.md`. Nothing dropped silently.
 |---|---|---|---|
 | 1 | No locks anywhere; non-atomic select-then-claim in all three drains | §5 | Single-statement atomic claim; per-product lease |
 | 2 | 外卖/闪购 separated only by env-var convention | §3, §5 | Two connections; the product lease makes collision structurally impossible |
-| 3 | gzgrocery double-count guard is two env vars and a comment | §5, §20 | One engine owns both halves; precondition 1 verifies the current state before cutover |
+| 3 | gzgrocery double-count guard is two env vars and a comment | §5, §6b, §20 | One engine owns both halves; precondition 1 verifies the current state before cutover; the guard becomes enforced at connection 5's go-live and disappears entirely when the pickup inference is retired (§6b) |
+| 3b | The Guanyi pickup inference infers sales from stock drift and re-baselines after a session gap — still firing in production | §6b | Not carried into the engine. Held in shadow as the control, then retired after connection 5 on four stated criteria |
 | 4 | Recovery sweep on Meituan only; terminal rows unreachable elsewhere | §6 | Every connection gets the generalised sweep |
 | 5 | Alerting 17 → 0 across channels | §15 | Alerting is engine-level; identical coverage per connection |
 | 6 | gzgrocery order reader: no route, no UI, no alert | §15, §16a, §19 | It becomes a connection like any other |
