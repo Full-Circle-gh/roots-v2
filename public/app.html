@@ -1061,6 +1061,8 @@ canvas.fin-canvas { width:100%!important; height:220px!important; display:block;
 }
 .po-status-btn:focus-visible { box-shadow: 0 0 0 3px rgba(204,217,0,.45); }
 :root[data-theme="dark"] .po-status-btn.is-active { box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+.po-status-btn.is-locked { cursor: not-allowed; opacity: .5; }
+.po-status-btn.is-locked:hover { border-color: var(--border); color: var(--muted); background: transparent; }
 /* Inline help tooltips. Replaces long bilingual instruction blocks that
    used to clutter every section. Usage:
        <span class="help-tip" data-help="long explanation"></span>
@@ -14140,10 +14142,21 @@ async function viewPO(id) {
             const isActive = po.status === s;
             const icon = s === 'Requested' ? '📝' : s === 'Ordered' ? '🛒' : s === 'Delivered' ? '📦' : '•';
             const arrow = idx < PO_STATUSES.length - 1 ? `<span class="po-status-arrow" aria-hidden="true">→</span>` : '';
-            return `<button class="po-status-btn ${isActive?'is-active':''}" onclick="updatePOStatus(${po.id},'${s}')" ${isActive?'aria-current="step"':''}
+            // Ordered/Delivered now write material cost (price write-back +
+            // Finance expense post), which is Tacet-owned — see
+            // middleware/block-kitchen-cost-writes.js. Any PUT that names
+            // one of those as the target status is refused, so a click here
+            // used to walk the buyer through the whole split-order modal
+            // only to fail on submit. Grey the step out up front instead
+            // (past a step the PO already reached stays clickable, since
+            // that's a step backward, not into the blocked write).
+            const locked = !isActive && (s === 'Ordered' || s === 'Delivered');
+            const lockedTitle = 'Now done in Tacet Purchases — this kitchen app can no longer place or advance orders. Open this PO in Tacet (/retail-admin) instead. '
+              + '· 请在 Tacet 采购中完成下单/推进状态,本厨房端已停用该操作。';
+            return `<button class="po-status-btn ${isActive?'is-active':''}${locked?' is-locked':''}" ${locked ? 'disabled' : `onclick="updatePOStatus(${po.id},'${s}')"`} ${isActive?'aria-current="step"':''}
               style="--bg:${c[0]};--fg:${c[1]}"
-              title="Mark as ${s} · 标记为${PO_STATUS_CN[s]||s}">
-              <span class="po-status-icon">${icon}</span>
+              title="${locked ? lockedTitle : `Mark as ${s} · 标记为${PO_STATUS_CN[s]||s}`}">
+              <span class="po-status-icon">${locked ? '🔒' : icon}</span>
               <span class="po-status-label">${statusLabel(s, PO_STATUS_CN)}</span>
             </button>${arrow}`;
           }).join('')}
@@ -14414,17 +14427,13 @@ async function viewPO(id) {
 }
 
 async function updatePOStatus(id, status) {
-  // Special case: Requested → Ordered may need to split the PO (only some
-  // items can be ordered now). Show a per-line picker; deferred lines move
-  // to a new Requested PO automatically.
-  if (status === 'Ordered') {
-    try {
-      const dr = await fetch('/api/purchases/'+id);
-      const dd = await dr.json();
-      if (dd?.success && dd.data?.status === 'Requested' && (dd.data.items||[]).length > 1) {
-        return showPOOrderSplit(id, dd.data);
-      }
-    } catch {}
+  // Ordered/Delivered are Tacet-owned writes now (see the stepper's `locked`
+  // buttons above) — this only fires if something reaches updatePOStatus by
+  // another path (e.g. a stale button), so it stays a plain toast rather
+  // than repeating the stepper's fuller explanation.
+  if (status === 'Ordered' || status === 'Delivered') {
+    toast('🔒 Placing/advancing orders now happens in Tacet Purchases (/retail-admin) · 请在 Tacet 采购中完成此操作', 'error');
+    return;
   }
   // Status-only PUT — does NOT round-trip the items array, so per-line state
   // (qty_received, damaged_qty, tracking_number) is preserved when the user
