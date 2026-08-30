@@ -3,5 +3,7 @@
   "navigationBarBackgroundColor": "#F2E7DF",
   "navigationBarTextStyle": "black",
   "backgroundColor": "#F2E7DF",
-  "usingComponents": {}
+  "usingComponents": {
+    "loading-splash": "/components/loading-splash/loading-splash"
+  }
 }

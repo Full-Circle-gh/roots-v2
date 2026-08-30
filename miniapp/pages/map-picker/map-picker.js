@@ -27,6 +27,10 @@ Page({
     listLoading: false,
     listEmpty: false,
     canConfirm: false,
+    // Branded splash shown until the first centre-pin address resolves (see
+    // resolvePin's hideMapSplash calls) — a live map with no context reads
+    // as broken for the first second or so otherwise.
+    mapLoading: true,
   },
 
   onLoad(query) {
@@ -43,6 +47,14 @@ Page({
     this._suppress = false;                       // skip the next regionchange
     this._t = null;
     this._st = null;
+    // Safety net — if the first fix never comes back (permission denial with
+    // no fallback, dead network), don't leave the customer behind the splash.
+    this._splashTimer = setTimeout(() => this.hideMapSplash(), 5000);
+  },
+
+  hideMapSplash() {
+    if (this._splashTimer) { clearTimeout(this._splashTimer); this._splashTimer = null; }
+    if (this.data.mapLoading) this.setData({ mapLoading: false });
   },
 
   onReady() {
@@ -106,6 +118,7 @@ Page({
   onUnload() {
     if (this._t) clearTimeout(this._t);
     if (this._st) clearTimeout(this._st);
+    if (this._splashTimer) clearTimeout(this._splashTimer);
   },
 
   // A user-driven pan/zoom selects the pin again and refreshes; a programmatic
@@ -145,10 +158,12 @@ Page({
           if (onPin) { this._result = null; this.setData({ canConfirm: false }); }
           this.setData({ resolving: false, pinAddress: '' });
         }
+        this.hideMapSplash();
       })
       .catch(() => {
         if (this.data.selectedId === 'pin') { this._result = null; this.setData({ canConfirm: false }); }
         this.setData({ resolving: false, pinAddress: '' });
+        this.hideMapSplash();
       });
   },
 

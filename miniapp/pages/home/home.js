@@ -78,6 +78,9 @@ Page({
     // hero/content fade-in (utils/fontgate.js) so the wordmark doesn't flash a
     // system font then snap to Bear Serif. True (instant) on cached launches.
     fontsReady: true,
+    // Cold-start boot splash (tenant logo). Set true in onLoad only on the
+    // very first Home mount of this app session — see hideBootSplash().
+    bootSplash: false,
   },
 
   switchLang(e) {
@@ -99,15 +102,30 @@ Page({
     // finished; mismatch = re-show, missing = brand-new user.
     // Fade brand text in once the brand fonts are ready (first launch only).
     fontgate.gate(this);
+    // Boot splash — once per cold start, not on every return to Home.
+    // globalData lives until WeChat evicts the mini app, so this flag (like
+    // _onboardingChecked below) naturally resets on the next cold launch.
+    const app = getApp();
+    if (!app.globalData._bootSplashShown) {
+      app.globalData._bootSplashShown = true;
+      this.setData({ bootSplash: true });
+      // Safety net — if refresh() somehow never resolves, don't strand the
+      // customer behind the splash forever.
+      this._bootSplashTimer = setTimeout(() => this.hideBootSplash(), 6000);
+    }
     this._gateOnboarding().then(redirected => {
-      if (redirected) return;
-      const app = getApp();
+      if (redirected) { this.hideBootSplash(); return; }
       this.setData({
         lang: app.globalData.lang || 'en',
         customer: app.globalData.customer || null,
       });
-      this.refresh();
+      this.refresh().then(() => this.hideBootSplash());
     });
+  },
+
+  hideBootSplash() {
+    if (this._bootSplashTimer) { clearTimeout(this._bootSplashTimer); this._bootSplashTimer = null; }
+    if (this.data.bootSplash) this.setData({ bootSplash: false });
   },
 
   async _gateOnboarding() {
