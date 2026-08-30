@@ -502,10 +502,11 @@ async function processPickupReconcile() {
         guardSig[storeCode] = null;
         log(storeCode, `⚠ BAD-READ GUARD: same ${sig} for ${trips} cycles — accepted as truth, re-baselined ${rebased} product(s), NO pickup inferred.`);
         logSync(storeCode, 'pickup_guard', 'resync', { drops, zeros, listed, trips, rebased });
-        sendOpsAlert(
-          `🟠 管易 ${storeCode} 取货推断基准已重置：${rebased} 个商品（连续 ${trips} 次读数一致，未推断任何取货）\n` +
-          `Guanyi ${storeCode} pickup baselines re-synced to live stock — ${rebased} product(s) after ${trips} identical reads; no pickup was inferred from the gap.`
-        );
+        // Not paged to WeCom: by construction nothing was lost and no action is
+        // needed here (see the comment above this branch) — unlike a channel
+        // disconnect or a proxy outage, this is the guard working as intended,
+        // not a problem for a person to look at. Server log + logSync above are
+        // enough to trace it after the fact if it ever needs investigating.
         continue;
       }
       guardTripStreak[storeCode] = 0;
