@@ -1,6 +1,6 @@
-<view wx:if="{{mounted}}" class="ls-overlay {{visible ? '' : 'ls-hide'}}">
+<view wx:if="{{mounted}}" class="ls-overlay {{visible ? '' : 'ls-hide'}} {{tabbar ? 'ls-has-tabbar' : ''}}">
   <view class="ls-mark">
-    <image wx:if="{{logoUrl}}" class="ls-logo" src="{{logoUrl}}" mode="aspectFit"></image>
+    <image wx:if="{{logoUrl}}" class="ls-logo {{isGif ? '' : 'ls-logo-breathe'}}" src="{{logoUrl}}" mode="aspectFit"></image>
     <view wx:else class="ls-dots">
       <view class="ls-dot ls-dot--1"></view>
       <view class="ls-dot ls-dot--2"></view>

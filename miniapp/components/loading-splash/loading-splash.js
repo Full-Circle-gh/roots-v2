@@ -9,6 +9,9 @@
 // Optional `text` property overrides the label for a specific screen
 // (e.g. "Loading map…"); otherwise it reads brand.loading_splash's own
 // label, then falls back to a generic bilingual "Loading…".
+// Optional `tabbar` property (Boolean) — set true on a page that sits under
+// the custom tab bar (currently just Home) so the mark centres in the space
+// actually free of chrome instead of the full raw screen height.
 
 const config = require('../../utils/config');
 
@@ -20,10 +23,12 @@ Component({
   properties: {
     visible: { type: Boolean, value: false },
     text: { type: String, value: '' },
+    tabbar: { type: Boolean, value: false },
   },
   data: {
     mounted: false,
     logoUrl: '',
+    isGif: false,
     displayLabel: '',
   },
   lifetimes: {
@@ -59,7 +64,12 @@ Component({
     },
     applyConfig() {
       const splash = config.get('brand.loading_splash', {}) || {};
-      this.setData({ logoUrl: splash.logo_image || '' });
+      const logoUrl = splash.logo_image || '';
+      // An animated GIF supplies its own motion — that's the "let it move"
+      // option — so the CSS breathing pulse (meant to keep a STATIC logo
+      // from looking dead) is skipped for it; see .ls-logo-breathe in the wxss.
+      const isGif = /^data:image\/gif/i.test(logoUrl) || /\.gif($|\?)/i.test(logoUrl);
+      this.setData({ logoUrl, isGif });
       this.applyLabel(splash);
     },
     applyLabel(splash) {
