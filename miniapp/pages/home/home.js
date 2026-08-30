@@ -725,7 +725,11 @@ Page({
   // affiliate page with the code pre-filled. Otherwise, generic store share.
   onShareAppMessage() {
     const af = this.data.affiliate;
-    if (af?.enabled && af.code) {
+    // affiliate_blocked: an admin disabled THIS customer's referring (see
+    // routes/retail.js's /affiliate-block) — their code no longer works when
+    // a friend applies it, so stop handing it out with a reward promise
+    // attached. Falls through to the generic store share below.
+    if (af?.enabled && af.code && !af.affiliate_blocked) {
       // The friend's discount, not the referrer's own reward — this text is
       // addressed to whoever opens the shared card ("your first order").
       const reward = Number(af.reward_referee) || 20;
@@ -761,7 +765,8 @@ Page({
 
   onShareTimeline() {
     const af = this.data.affiliate;
-    if (af?.enabled && af.code) {
+    // See onShareAppMessage above — same affiliate_blocked gate.
+    if (af?.enabled && af.code && !af.affiliate_blocked) {
       // The friend's discount, not the referrer's own reward — same as
       // onShareAppMessage above.
       const reward = Number(af.reward_referee) || 20;
