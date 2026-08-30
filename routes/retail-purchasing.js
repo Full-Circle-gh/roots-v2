@@ -124,12 +124,18 @@ function postRetailPOExpenses(poId) {
 function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
   if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0 };
-  const lines = db.prepare(`
+  // tdb(), not the global handle — for the reason planPOReversal states below
+  // ("EVERYTHING RUNS ON tdb()"): po_line_items and store_products are tenant
+  // data, so `db` is the MAIN database for any tenant running isolated. The
+  // cost write-back here was the one statement in this file's cost path still
+  // on the global handle, which meant a non-Roots receipt read its own PO lines
+  // through one connection and stamped Roots' unit_cost through another.
+  const lines = tdb().prepare(`
     SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
-  const readCost   = db.prepare('SELECT unit_cost FROM store_products WHERE id = ?');
-  const writeCost  = db.prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  const readCost   = tdb().prepare('SELECT unit_cost FROM store_products WHERE id = ?');
+  const writeCost  = tdb().prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
   let applied = 0, costed = 0, costSkippedRecipe = 0;
   for (const l of lines) {
     // Materials have no stock table (§28) — a material line's "receiving" is
@@ -154,7 +160,7 @@ function applyReceivedToStock(poId, req) {
       });
       applied++;
     }
-    db.prepare('UPDATE po_line_items SET stock_applied_qty = ? WHERE id = ?').run(good, l.id);
+    tdb().prepare('UPDATE po_line_items SET stock_applied_qty = ? WHERE id = ?').run(good, l.id);
 
     // Cost write-back. Deliberately NOT inside the `delta !== 0` branch above: a
     // correction that re-saves the same quantity at a different price is exactly
@@ -169,7 +175,7 @@ function applyReceivedToStock(poId, req) {
     // delivery of the ingredients happened to charge. With Production off this
     // is false and the purchase-order fill below resumes exactly as before.
     const cost = parseFloat(l.cost_per_unit);
-    if (recipeOwnsProductCost(db, l.store_product_id)) { costSkippedRecipe++; }
+    if (recipeOwnsProductCost(tdb(), l.store_product_id)) { costSkippedRecipe++; }
     else if (Number.isFinite(cost) && cost > 0) {
       const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
       // Only write on an actual change, so re-saving a received PO does not
@@ -317,13 +323,17 @@ function blockedResponse(res, blocking) {
 // value — reported back, never defaulted to 0 or left silently wrong.
 function planMaterialCostRollback(po) {
   const materialIds = [...new Set(
-    db.prepare(`
+    tdb().prepare(`
       SELECT ingredient_id FROM po_line_items
        WHERE po_id = ? AND ingredient_id IS NOT NULL AND cost_per_unit IS NOT NULL AND cost_per_unit > 0
     `).all(po.id).map(r => r.ingredient_id)
   )];
   if (!materialIds.length) return { restorable: [], unrecoverable: [] };
   const placeholders = materialIds.map(() => '?').join(',');
+  // activity_log stays on the GLOBAL handle deliberately — it is a control-plane
+  // table (lib/tenant-db.js CONTROL_PLANE_TABLES) and is never cloned into a
+  // tenant DB, so tdb() would look for it where it does not exist. Everything
+  // around it here is tenant data and moves to tdb().
   const logs = db.prepare(`
     SELECT entity_id, details FROM activity_log
      WHERE action = 'cost_update' AND entity_type = 'ingredient' AND entity_id IN (${placeholders})
@@ -340,7 +350,7 @@ function planMaterialCostRollback(po) {
   for (const id of materialIds) {
     const entries = byIngredient.get(id) || [];
     if (!entries.length) {
-      const ing = db.prepare('SELECT name_en, name_cn FROM ingredients WHERE id = ?').get(id);
+      const ing = tdb().prepare('SELECT name_en, name_cn FROM ingredients WHERE id = ?').get(id);
       unrecoverable.push({ ingredient_id: id, name_en: ing?.name_en || null, name_cn: ing?.name_cn || null });
       continue;
     }
@@ -357,8 +367,8 @@ function planMaterialCostRollback(po) {
 function rollbackMaterialCost(po) {
   const plan = planMaterialCostRollback(po);
   if (plan.unrecoverable.length) return { blocked: plan.unrecoverable, restored: 0 };
-  const readIng = db.prepare('SELECT buy_price, cost_per_unit FROM ingredients WHERE id = ?');
-  const write = db.prepare('UPDATE ingredients SET buy_price = ?, cost_per_unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  const readIng = tdb().prepare('SELECT buy_price, cost_per_unit FROM ingredients WHERE id = ?');
+  const write = tdb().prepare('UPDATE ingredients SET buy_price = ?, cost_per_unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
   let restored = 0;
   for (const r of plan.restorable) {
     const cur = readIng.get(r.ingredient_id);

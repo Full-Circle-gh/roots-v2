@@ -23,6 +23,16 @@
 
 const express = require('express');
 const db = require('../database');
+// Per-tenant connection. `ingredients`, `ingredient_price_history` and
+// `price_alerts` are data-plane tables with no tenant_id column
+// (lib/tenant-db.js CONTROL_PLANE_TABLES lists what is shared, and none of
+// these are on it), so under data isolation they live in the tenant's own DB
+// and the global handle is Roots' masterlist. Every write on the COST path
+// below therefore goes through tdb() — the same handle lib/product-cost.js's
+// header names as the only correct one ("never the global handle, or a
+// non-Roots tenant reads Roots' catalogue"). For Roots, tdb() IS the global
+// handle, so nothing about the live install changes.
+const { tdb } = require('../lib/tenant-db');
 // The one cost derivation, shared with the kitchen form and the PO write-back.
 // Never re-implement this maths — a second copy is what stored a pack price as
 // a per-gram cost.
@@ -247,7 +257,7 @@ router.post('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   const b = readBody(req.body || {});
   if (!b.name_en) return res.status(400).json({ success: false, error: 'name_required' });
   try {
-    const r = db.prepare(`INSERT INTO ingredients
+    const r = tdb().prepare(`INSERT INTO ingredients
       (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,
        cost_per_unit,buy_price,supplier,allergens,notes,accounting_category,item_kind,free_by_design)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -258,7 +268,7 @@ router.post('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
     // A starting price is a price. The kitchen create logs one the same way, so
     // a material added from either door has the same first history row.
     if (b.buy_price > 0) {
-      db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
+      tdb().prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
         .run(r.lastInsertRowid, b.buy_price, b.buy_unit, 'manual', (req.user && req.user.username) || 'backend');
     }
     res.json({ success: true, id: r.lastInsertRowid });
@@ -270,7 +280,11 @@ router.post('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
 
 // ═══ Update ════════════════════════════════════════════════════════════════
 router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => {
-  const existing = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);
+  // Read through tdb() too: this row's stored cost_per_unit is what costFor()
+  // preserves for a made material and what the recompute check below compares
+  // against, so reading it from a different database than the one written to
+  // would decide both from another tenant's figure.
+  const existing = tdb().prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const b = readBody(req.body || {});
   if (!b.name_en) b.name_en = existing.name_en;
@@ -281,7 +295,7 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
     // value is carried in here for costFor()'s guard to see. Captured once so
     // the same number both gets written and drives the recompute check below.
     const writtenCpu = costFor({ ...b, source_recipe_id: existing.source_recipe_id }, existing.cost_per_unit);
-    db.prepare(`UPDATE ingredients SET
+    tdb().prepare(`UPDATE ingredients SET
       name_en=?,name_cn=?,sku=?,category=?,unit=?,buy_unit=?,buy_pack_size=?,
       pack_contents_qty=?,pack_contents_unit=?,cost_per_unit=?,buy_price=?,supplier=?,
       allergens=?,notes=?,accounting_category=?,item_kind=?,free_by_design=?,
@@ -297,12 +311,12 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
     // Two edit doors onto one table must not disagree about whether a price
     // change is worth recording.
     if (b.buy_price && b.buy_price !== existing.buy_price) {
-      db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
+      tdb().prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
         .run(req.params.id, b.buy_price, b.buy_unit, 'manual', (req.user && req.user.username) || 'backend');
       if (existing.buy_price > 0) {
         const pct = ((b.buy_price - existing.buy_price) / existing.buy_price) * 100;
         if (Math.abs(pct) >= 5) {
-          db.prepare('INSERT INTO price_alerts (ingredient_id,old_price,new_price,change_pct) VALUES (?,?,?,?)')
+          tdb().prepare('INSERT INTO price_alerts (ingredient_id,old_price,new_price,change_pct) VALUES (?,?,?,?)')
             .run(req.params.id, existing.buy_price, b.buy_price, pct);
         }
       }
@@ -311,7 +325,12 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
     // cost to its existing value, so this can only be true for the kind of
     // write that actually feeds the rollup graph.
     const cpuMoved = !existing.source_recipe_id && Number(writtenCpu) !== Number(existing.cost_per_unit || 0);
-    if (cpuMoved) fireRecompute(db, { source: 'retail-materials.update', ingredient_id: Number(req.params.id) });
+    // tdb(), because fireRecompute WRITES through the handle it is given —
+    // lib/recipe-rollup.js's applyRollup / applyProductCosts stamp
+    // ingredients.cost_per_unit and store_products.unit_cost. Handing it the
+    // global handle made the cascade rewrite Roots' costs from another
+    // tenant's material edit, which is the widest of these writes.
+    if (cpuMoved) fireRecompute(tdb(), { source: 'retail-materials.update', ingredient_id: Number(req.params.id) });
     res.json({ success: true });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, req.params.id) });

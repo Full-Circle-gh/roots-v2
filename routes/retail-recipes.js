@@ -29,6 +29,12 @@
 
 const express = require('express');
 const db = require('../database');
+// Per-tenant connection, for the COST writes below. `recipe_cost_data`,
+// `recipes` and `ingredients` are data-plane tables with no tenant_id column,
+// so under data isolation they live in the tenant's own DB and the global
+// handle is Roots'. Roots itself resolves tdb() to that same global handle, so
+// the live install is unchanged.
+const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const { computeRecipeCost } = require('../lib/recipe-cost');
 const { checkCycle } = require('../lib/recipe-graph');
@@ -347,8 +353,12 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     // Recompute trigger (§29 step 3) — same condition the kitchen door checks
     // (routes/recipes.js PUT /:id): batch_size and the ingredient lines just
     // written both feed a linked material's recipe cost.
-    if (backsAnyCostedRow(db, req.params.id)) {
-      fireRecompute(db, { source: 'retail-recipes.update', recipe_id: Number(req.params.id) });
+    // tdb(): fireRecompute WRITES through the handle it is given
+    // (lib/recipe-rollup.js stamps ingredients.cost_per_unit and
+    // store_products.unit_cost), and backsAnyCostedRow decides whether it runs
+    // — both must look at the same database the save above wrote to.
+    if (backsAnyCostedRow(tdb(), req.params.id)) {
+      fireRecompute(tdb(), { source: 'retail-recipes.update', recipe_id: Number(req.params.id) });
     }
     // §29's third addendum — after the name/SKU write and the recompute, so
     // a rename that clears a collision is picked up this same request.
@@ -362,7 +372,9 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
 
 // ═══ Cost data ═════════════════════════════════════════════════════════════
 router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) => {
-  const existing = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  // The existence guard reads the same database the cost row is written to —
+  // otherwise a tenant's save is admitted or refused on Roots' recipe list.
+  const existing = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   // THIS SCREEN HAS NO PACKAGING-TYPE PICKER, so its payload never carries
   // `packaging_type_id` — and the write underneath keeps the stored one rather
@@ -371,9 +383,9 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
   // packaging it was, quietly deleting the packaging migration's input one
   // recipe at a time. The absent/cleared distinction lives in the lib so it
   // holds for the kitchen route and for any caller not yet written.
-  saveRecipeCostData(db, req.params.id, req.body);
-  if (backsAnyCostedRow(db, req.params.id)) {
-    fireRecompute(db, { source: 'retail-recipes.cost_update', recipe_id: Number(req.params.id) });
+  saveRecipeCostData(tdb(), req.params.id, req.body);
+  if (backsAnyCostedRow(tdb(), req.params.id)) {
+    fireRecompute(tdb(), { source: 'retail-recipes.cost_update', recipe_id: Number(req.params.id) });
   }
   res.json({ success: true });
 });
