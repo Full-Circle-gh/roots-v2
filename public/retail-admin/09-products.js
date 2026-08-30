@@ -11,6 +11,13 @@
 // magazine-spread experience; kitchen master data (price, stock) stays
 // in /products. Lazy-loaded on first tab open.
 // ════════════════════════════════════════════════════════════════
+// COST and MARGIN figures print in the tenant's display currency (01-core.js
+// acMoney), not a hardcoded ¥. Deliberately scoped to those two: the catalogue's
+// PRICE column and the price/compare-at INPUTS on this screen still carry a
+// literal ¥, and moving them is a change to what the operator TYPES rather than
+// to what a cost derivation REPORTS.
+const paMoney = n => (typeof acMoney === 'function' ? acMoney(Number(n) || 0) : '¥' + fmt(Number(n) || 0));
+
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
 let PA_CURRENT = null;  // currently open product (when modal is showing)
@@ -1040,7 +1047,7 @@ async function pdRecipeLinkOpen() {
   // have to divide. A recipe that can't produce one is labelled rather than
   // hidden: it is still the right recipe, it just needs finishing first.
   const costLabel = r => (r.costPerServing != null && Number.isFinite(r.costPerServing) && r.costPerServing > 0)
-    ? '¥' + fmt(r.costPerServing)
+    ? paMoney(r.costPerServing)
     : cuT('no cost yet', '暂无成本');
   function renderResults() {
     const host = scrim.querySelector('#pdrl-results');
@@ -1076,7 +1083,7 @@ async function pdRecipeLinkOpen() {
           '该配方暂无成本 —— 需要填写份数、批量大小，并为每项原料填写价格。关联仍会保存，配方可计算成本后即会显示。')) + '</div>';
     host.innerHTML = '<div class="pdrl-selline">' + escapeHtml(cuT('Selected: ', '已选择：'))
       + '<b>' + escapeHtml(r.name_en || r.name_cn || '') + '</b>'
-      + (usable ? ' — ' + escapeHtml(cuT('cost', '成本') + ' ¥' + fmt(r.costPerServing)) : '')
+      + (usable ? ' — ' + escapeHtml(cuT('cost', '成本') + ' ' + paMoney(r.costPerServing)) : '')
       + '</div>' + warn;
   }
   function updateSubmitState() {
@@ -1190,7 +1197,7 @@ function pdRenderMargin() {
   const m = _paMargin(g('pd-price'), g('pd-cost').trim());
   if (!m) { el.textContent = cuT('Margin — add a cost to see it', '毛利 — 填写成本后显示'); return; }
   const sign = m.money < 0 ? '−' : '';
-  el.textContent = cuT('Margin', '毛利') + ' ' + sign + '¥' + fmt(Math.abs(m.money))
+  el.textContent = cuT('Margin', '毛利') + ' ' + sign + paMoney(Math.abs(m.money))
                  + ' · ' + m.pct.toFixed(1) + '%'
                  + (m.money < 0 ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
 }

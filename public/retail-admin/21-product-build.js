@@ -42,11 +42,14 @@
 (function () {
   'use strict';
 
-  // Currency, defined here the same way 18-materials.js:27 and
-  // 19-recipes.js:59 each define it — a file-local const over the shared
-  // fmt(), not a global. Kept identical so a figure cannot read differently
-  // depending on which screen printed it.
-  const money = n => '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2));
+  // Currency, defined here the same way 18-materials.js and 19-recipes.js each
+  // define it — a file-local const over the shared formatter, kept identical so
+  // a figure cannot read differently depending on which screen printed it. That
+  // shared formatter is now 01-core.js's acMoney(), which reads the TENANT's
+  // display currency instead of assuming ¥ and 2dp.
+  const money = n => (typeof acMoney === 'function'
+    ? acMoney(Number(n) || 0)
+    : '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2)));
 
   // The build list as the operator is editing it. Null until a product is
   // opened — NOT [], which would read as "opened, and genuinely empty" and

@@ -140,6 +140,46 @@ function escapeAttr(s) { return escapeHtml(s); }
 function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
 function fmt(n) { return Number(n || 0).toFixed(2); }
 
+// ── Tenant display currency ────────────────────────────────────────────────
+// The tenant's currency is a stored setting, not a constant: storefront_config
+// key `currency`, normalised server-side by routes/retail.js normalizeCurrency()
+// to { code, symbol, decimals, position } and edited under Settings by
+// renderCurrencyControl() (05-marketing.js). It already reached the mini app and
+// the storefront; the cost and margin screens did not read it and printed a
+// hardcoded '¥' with a hardcoded 2dp, so a tenant who selected $ or ฿ was told
+// their costs and margins in yuan.
+//
+// DEFAULTS ARE THE SERVER'S, FIELD FOR FIELD. A tenant that never touched the
+// setting formats exactly as before — ¥, 2dp, symbol first.
+const CURRENCY_FALLBACK = Object.freeze({ code: 'CNY', symbol: '¥', decimals: 2, position: 'before' });
+function acCurrency() {
+  let raw = null;
+  // _cfgCache is declared with `let` in a LATER part file, so a call made
+  // before that file has run would hit the temporal dead zone — `typeof` does
+  // not save you from a TDZ ReferenceError. Guarded rather than assumed, so a
+  // screen that paints early falls back to the default instead of throwing.
+  try { raw = (_cfgCache && typeof _cfgCache === 'object') ? _cfgCache.currency : null; } catch (e) { raw = null; }
+  const c = (raw && typeof raw === 'object') ? raw : {};
+  return {
+    code:     typeof c.code === 'string' && c.code.trim() ? c.code.trim().toUpperCase().slice(0, 3) : CURRENCY_FALLBACK.code,
+    symbol:   typeof c.symbol === 'string' && c.symbol.trim() ? c.symbol.trim().slice(0, 4) : CURRENCY_FALLBACK.symbol,
+    decimals: Number.isInteger(c.decimals) && c.decimals >= 0 && c.decimals <= 3 ? c.decimals : CURRENCY_FALLBACK.decimals,
+    position: c.position === 'after' ? 'after' : 'before',
+  };
+}
+// Just the symbol — for the input adornments that sit beside a number field
+// rather than formatting one.
+function acCurrencySymbol() { return acCurrency().symbol; }
+// Format an amount in the tenant's display currency. `dp` overrides the
+// currency's own decimal places, for the sub-cent per-unit figures on the
+// Recipes screen; everything else takes the tenant's setting.
+function acMoney(n, dp) {
+  const c = acCurrency();
+  const places = Number.isInteger(dp) ? dp : c.decimals;
+  const s = Number(n || 0).toFixed(places);
+  return c.position === 'after' ? s + c.symbol : c.symbol + s;
+}
+
 // ── Per-user capabilities (RBAC) — client mirror of the server's req.caps ──
 // One operator's effective capability set decides what this app draws: hide the
 // nav sections and action buttons they can't use. This is the "same app,

@@ -56,12 +56,19 @@
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
 
-  const money = n => '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2));
-  // Cost PER GRAM is often sub-cent (¥0.0114) — the plain 2dp money() would
-  // round it to ¥0.01 and lose the figure entirely on a screen whose whole
-  // point is not looking free. Same reasoning as the recipe Excel export's
-  // UNIT_MONEY format (lib/recipe-cost.js / routes/recipes.js export route).
-  const moneyU = n => '¥' + (Number(n) || 0).toFixed(4);
+  // The tenant's display currency (01-core.js acMoney), not a hardcoded ¥.
+  const money = n => (typeof acMoney === 'function'
+    ? acMoney(Number(n) || 0)
+    : '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2)));
+  // Cost PER GRAM is often sub-cent (¥0.0114) — the plain money() would round
+  // it to ¥0.01 and lose the figure entirely on a screen whose whole point is
+  // not looking free. Same reasoning as the recipe Excel export's UNIT_MONEY
+  // format (lib/recipe-cost.js / routes/recipes.js export route). TWO PLACES
+  // BEYOND the currency's own, so this keeps its 4dp for a 2dp currency and
+  // still shows sub-unit detail for a 0dp one (JPY) rather than a bare integer.
+  const moneyU = n => (typeof acMoney === 'function'
+    ? acMoney(Number(n) || 0, (typeof acCurrency === 'function' ? acCurrency().decimals : 2) + 2)
+    : '¥' + (Number(n) || 0).toFixed(4));
   const dash = v => (v === null || v === undefined || v === '' ? '—' : v);
 
   const COST = () => (typeof window !== 'undefined' && window.RootsRecipeCost) || null;
