@@ -24,7 +24,11 @@
     ? escapeHtml
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
-  const money = n => '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2));
+  // The tenant's display currency (01-core.js acMoney), not a hardcoded ¥ —
+  // material costs are money and read in whatever currency the tenant set.
+  const money = n => (typeof acMoney === 'function'
+    ? acMoney(Number(n) || 0)
+    : '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2)));
   // A missing value reads as a dash, never as zero or an empty cell — the
   // catalogue has real gaps (blank finance category, unrecorded pack contents)
   // and hiding them is how they stay unfixed.

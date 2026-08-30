@@ -80,7 +80,13 @@
   // addendum point 3) and this is the only place that divides — a second
   // /100 somewhere else is how a figure ends up a hundred times wrong on one
   // screen and right on another.
-  const money = cents => '¥' + (Number(cents || 0) / 100).toFixed(2);
+  // …and the tenant's display currency prints it (01-core.js acMoney), not a
+  // hardcoded ¥. The DIVISION stays here and stays /100 — the stored figure is
+  // whole cents of the tenant's currency, which is a storage decision, not a
+  // display one.
+  const money = cents => (typeof acMoney === 'function'
+    ? acMoney(Number(cents || 0) / 100)
+    : '¥' + (Number(cents || 0) / 100).toFixed(2));
 
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
