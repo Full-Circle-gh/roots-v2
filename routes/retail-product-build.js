@@ -187,14 +187,25 @@ router.get('/api/retail-admin/product-build/materials', requireRetailAdmin, (req
   if (!q) return res.json({ success: true, data: [], matched: 0 });
 
   const like = `%${q}%`;
+  // source_recipe_id marks a material that only exists as a recipe's own
+  // materialised stand-in (§29) — never something staff bought or would buy.
+  // A search for a real ingredient's name easily collides with one of these
+  // (a recipe and the material it's built from are often named alike, e.g.
+  // "Dates (Nour)" the recipe stand-in vs "Nour Dates (retail)" the actual
+  // purchasable item), and with no visual difference in the list the two read
+  // as interchangeable when they are not — one has a supplier and a buy
+  // price, the other cannot. Ranked after everything else (rather than
+  // filtered out entirely: a stand-in IS occasionally the right pick, via
+  // this same picker, for a product whose own recipe makes it) and flagged
+  // so the front end can label it.
   const rows = db.prepare(`
     SELECT i.id, i.name_en, i.name_cn, i.sku, i.unit, i.cost_per_unit, i.buy_price,
-           i.free_by_design, i.item_kind,
+           i.free_by_design, i.item_kind, i.source_recipe_id,
            (SELECT COUNT(*) FROM product_build_lines pbl WHERE pbl.ingredient_id = i.id) AS use_count
       FROM ingredients i
      WHERE COALESCE(i.is_active, 1) = 1
        AND (i.name_en LIKE ? OR i.name_cn LIKE ? OR i.sku LIKE ?)
-     ORDER BY use_count DESC, i.name_en COLLATE NOCASE
+     ORDER BY (i.source_recipe_id IS NOT NULL) ASC, use_count DESC, i.name_en COLLATE NOCASE
   `).all(like, like, like);
 
   // The screen shows 8. The count of what MATCHED is sent whole, so the hint

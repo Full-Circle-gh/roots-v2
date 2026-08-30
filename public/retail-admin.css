@@ -13158,6 +13158,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   }
   #pd-editor .bl-kind.k-food { background: var(--td-sage-ink); }
   #pd-editor .bl-kind.k-pack { background: var(--td-amber-ink); }
+  /* Recipe-materialised stand-in flag in the build-list picker — a material
+     nobody buys, easily confused with a same-ish-named real one. */
+  #pd-editor .bl-pick-standin {
+    display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+    background: var(--td-amber-bg, rgba(157,124,63,.14)); color: var(--td-amber-ink);
+    white-space: nowrap; vertical-align: middle;
+  }
 
   /* ── The rail figures ────────────────────────────────────────────── */
   #pd-editor .pd-bl-figs { background: var(--td-raised); }

@@ -745,10 +745,22 @@
         const cost = m.free_by_design ? cuT('free', '免费')
           : (m.cost_per_unit > 0 ? money(m.cost_per_unit) + '/' + escapeHtml(m.unit || '')
             : cuT('no cost', '无成本'));
+        // A recipe's own materialised stand-in (§29) — not something anyone
+        // buys, and easily confused with a same-ish-named real material
+        // (the "Dates (Nour)" recipe stand-in vs "Nour Dates (retail)" the
+        // actual purchasable item). Labelled rather than hidden: it's the
+        // right pick for a product built from its own recipe, wrong for
+        // everything else, and the operator is the one who knows which.
+        const standIn = m.source_recipe_id != null
+          ? '<span class="bl-pick-standin" title="' + escapeHtml(cuT(
+              'Made by a recipe, not bought — check this is the one you mean.',
+              '由配方自制,并非采购所得——请确认这就是您要选的那一项。')) + '">'
+            + escapeHtml(cuT('from recipe', '配方自制')) + '</span>'
+          : '';
         return '<button type="button" class="bl-pick-item" onclick="blPickAdd(' + m.id + ')">'
           + '<span class="bl-pick-n"><span class="bl-kind ' + kind + '" aria-hidden="true"></span>'
           + escapeHtml(m.name_en || '')
-          + (m.name_cn ? ' · ' + escapeHtml(m.name_cn) : '') + '</span>'
+          + (m.name_cn ? ' · ' + escapeHtml(m.name_cn) : '') + standIn + '</span>'
           + '<span class="s">' + cost + '</span></button>';
       }).join('')
       + '</div>';
