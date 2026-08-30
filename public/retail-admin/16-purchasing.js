@@ -455,7 +455,7 @@
             name_en: i.name_en, name_cn: i.name_cn,
             sku: i.sku, qty: i.qty, unit: i.unit, cost_per_unit: i.cost_per_unit,
             expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
-            supplier_name: i.supplier_name || '', current_stock: i.current_stock,
+            supplier_name: i.supplier_name || '', current_stock: i.current_stock, note: i.note || '',
           })),
         };
         _wstep = 2; _screen = 'wizard'; paint();
@@ -643,9 +643,11 @@
       const supBlock = it.ingredient_id
         ? `<div class="pu2-supline"><span class="sub">${supLabel}</span></div>`
         : `<div class="pu2-supline"><span class="pu2-supchip" onclick="puPick(${it.store_product_id})">${supLabel} <span class="swap">▾</span></span></div>`;
+      const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
+        placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
       return `<tr>
         <td>${matBadge(it)}${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
-          ${supBlock}</td>
+          ${supBlock}${noteBlock}</td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
         <td>
           <span class="pu2-qty">
@@ -762,7 +764,7 @@
       it = {
         store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
         qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
-        purchase_channel: '', current_stock: p.physical_qty, supplier_name: '',
+        purchase_channel: '', current_stock: p.physical_qty, supplier_name: '', note: '',
       };
       _edit.items.push(it);
     }
@@ -779,7 +781,7 @@
         ingredient_id: m.id, name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
         qty: 1, unit: m.buy_unit || 'pcs', cost_per_unit: m.buy_price || 0,
         expense_category: m.accounting_category || '', purchase_channel: '',
-        current_stock: null, supplier_name: m.supplier || '',
+        current_stock: null, supplier_name: m.supplier || '', note: '',
       };
       _edit.items.push(it);
     }
@@ -879,7 +881,7 @@
         qty: parseFloat(it.qty) || 0, unit: it.unit || 'pcs',
         cost_per_unit: parseFloat(it.cost_per_unit) || 0,
         expense_category: it.expense_category || null, purchase_channel: it.purchase_channel || null,
-        supplier_name: it.supplier_name || null,
+        supplier_name: it.supplier_name || null, note: it.note || null,
       })),
     };
   }
@@ -1123,8 +1125,9 @@
     // short material delivery. Remove it and a 15-of-20 delivery posts to
     // Expenses at 20. Tried and reverted 2026-08-27 — the banner above it was
     // the defect, not the input.
+    const itemNote = (it.note || '').trim();
     return `<tr data-line="${it.id}">
-      <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
+      <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}${itemNote ? `<div class="sub pu2-linenoteview">${esc(T('Note', '备注'))}: ${esc(itemNote)}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>

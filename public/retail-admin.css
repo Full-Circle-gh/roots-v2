@@ -10374,6 +10374,10 @@
   #prod-view-purchasing .pu2-supchip:hover { border-color: var(--td-text2); }
   #prod-view-purchasing .pu2-supchip .swap { color: var(--td-text2); }
   #prod-view-purchasing .pu2-lasthint.pricewarn { color: var(--td-amber-ink); }
+  /* per-line note — sits under the supplier chip, one small text input */
+  #prod-view-purchasing .pu2-linenote { display: block; margin-top: 6px; width: 100%; max-width: 220px;
+    font-size: 12.5px; padding: 4px 8px; }
+  #prod-view-purchasing .pu2-linenoteview { font-style: italic; }
 
   /* Bills — KPI tiles + outstanding-by-supplier + recorded ledger */
   #prod-view-purchasing .pu2-metricrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 20px 0 8px; }
