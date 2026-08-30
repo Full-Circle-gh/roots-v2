@@ -36,6 +36,17 @@ router.use((req, res, next) => {
   next();
 });
 
+// A money field from the daemon, or null. The browser already divided by the
+// money scale, so this only has to reject what isn't a usable number — an absent
+// field, a string Eleme sent instead of a figure, a NaN out of a bad parse. Null
+// rather than 0 on purpose: "Eleme didn't tell us" and "Eleme took nothing" are
+// different facts, and only one of them is true.
+function fmoney(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Collapse a name for fuzzy comparison (drop spec parens, spaces, punctuation).
 function normName(s) {
   return String(s || '')
@@ -268,6 +279,15 @@ router.post('/ingest-order', (req, res) => {
     // our own orders those are ADDENDS to subtotal, so writing them beside a
     // subtotal that already equals the total would double-count in every place
     // that re-adds them. They are kept intact in eleme_order_import.detail_json.
+    //
+    // The two that DO get columns: what Eleme keeps (服务费) and what actually
+    // lands with us (商家实收). Same pair, same meaning, same columns Meituan
+    // already fills — a reader asking "what did this channel cost us" now gets
+    // one answer for both channels instead of having to parse Eleme's JSON.
+    // Both stay NULL when the platform didn't give us a number: 0 would read as
+    // "commission-free", which is a claim we can't make.
+    const commission   = fmoney(order.commission);
+    const settleAmount = fmoney(order.merchantIncome);
 
     const orderId = db.transaction(() => {
       const r = db.prepare(`
@@ -275,13 +295,16 @@ router.post('/ingest-order', (req, res) => {
           order_no, status, payment_method, subtotal, total,
           store_id, channel, fulfillment_type, placed_at, paid_at,
           channel_status, channel_status_at, channel_eta, channel_preorder_at,
-          customer_note, needs_cutlery
+          customer_note, needs_cutlery,
+          channel_commission, channel_settle_amount
         ) VALUES (?, ?, 'eleme', ?, ?, ?, 'eleme', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
+                  ?, ?,
                   ?, ?)
       `).run(orderNo, internalStatus, total, total, storeId, placedAt, placedAt,
-             channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery);
+             channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
+             commission, settleAmount);
       const oid = r.lastInsertRowid;
       // channel_stock_restored means exactly "this order's stock is NOT currently
       // deducted from our count". A born-void order never had its stock taken, so
@@ -374,7 +397,8 @@ router.post('/ingest-order', (req, res) => {
 // time, so an earlier platform time is always the truer one and a correct row can
 // never be dragged forward.
 router.post('/update-order-status', (req, res) => {
-  const { elemeOrderId, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt } = req.body || {};
+  const { elemeOrderId, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt,
+          merchantIncome, commission } = req.body || {};
   const desc   = (statusDesc && String(statusDesc).trim()) || null;
   const etaVal = (eta && String(eta).trim()) || null;
   if (!elemeOrderId || !desc) return res.status(400).json({ error: 'elemeOrderId and statusDesc required' });
@@ -410,15 +434,25 @@ router.post('/update-order-status', (req, res) => {
     const preVal     = (preOrderAt && String(preOrderAt).trim()) || null;
     const placedVal  = (placedAt && String(placedAt).trim()) || null;
     const cutleryVal = needsCutlery == null ? null : (needsCutlery ? 1 : 0);
+    // The economics fill blanks only. An order mirrored before this build parsed
+    // them heals on the next poll that sees the figures; one that already has a
+    // number keeps it, because the import-time read is the one taken beside the
+    // money scale we recorded — a later poll must not overwrite it with a
+    // differently-scaled figure.
+    const commissionVal = fmoney(commission);
+    const settleVal     = fmoney(merchantIncome);
     db.prepare(`
       UPDATE retail_orders
          SET channel_preorder_at = COALESCE(?, channel_preorder_at),
              customer_note = CASE WHEN COALESCE(customer_note,'') = '' THEN COALESCE(?, customer_note) ELSE customer_note END,
              needs_cutlery = COALESCE(?, needs_cutlery),
+             channel_commission    = COALESCE(channel_commission, ?),
+             channel_settle_amount = COALESCE(channel_settle_amount, ?),
              placed_at = CASE WHEN ? IS NOT NULL AND ? < placed_at THEN ? ELSE placed_at END,
              paid_at   = CASE WHEN ? IS NOT NULL AND ? < paid_at   THEN ? ELSE paid_at   END
        WHERE id = ?
     `).run(preVal, noteVal, cutleryVal,
+           commissionVal, settleVal,
            placedVal, placedVal, placedVal,
            placedVal, placedVal, placedVal,
            imp.retail_order_id);
