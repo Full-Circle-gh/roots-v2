@@ -30,7 +30,12 @@
     ? escapeHtml
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
   const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
-  const money = n => '¥' + fmt(Number(n) || 0);
+  // The tenant's display currency (01-core.js acMoney), not a hardcoded ¥ —
+  // purchase prices are what a cost figure is derived from, so they must read
+  // in the same currency the cost screens print.
+  const money = n => (typeof acMoney === 'function' ? acMoney(Number(n) || 0) : '¥' + fmt(Number(n) || 0));
+  // Just the symbol, for the adornment beside a bare number input.
+  const cur = () => (typeof acCurrencySymbol === 'function' ? acCurrencySymbol() : '¥');
   // A material's buy unit is stored as an English abbreviation ('kg', 'bag',
   // 'pcs') — fine on screen next to English labels, but on the printed PO the
   // rest of the sheet renders in whichever language T() picks, and a raw
@@ -657,7 +662,7 @@
           </span>
         </td>
         <td class="right">
-          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span></span>
+          <span class="pu2-costwrap">${esc(cur())}<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span></span>
           ${lastPaid(it)}
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
@@ -962,7 +967,7 @@
     const goods = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
     const f = Number(p.extra_freight) || 0, t = Number(p.extra_tax) || 0, h = Number(p.extra_handling) || 0;
     const landed = goods + f + t + h;
-    const inp = (id, val) => `<span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" id="${id}" value="${val || ''}" placeholder="0" oninput="puLandedRecalc()"></span>`;
+    const inp = (id, val) => `<span class="pu2-costwrap">${esc(cur())}<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" id="${id}" value="${val || ''}" placeholder="0" oninput="puLandedRecalc()"></span>`;
     return `<div class="pu2-card pu2-block pu2-landed">
       <b>${esc(T('True landed cost', '到手成本'))}</b>
       <div class="pu2-lc-grid">
@@ -1874,7 +1879,7 @@
           <div class="pu2-fgrid three">
             <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puInvField('supplier', this.value)">${supOpts}</select></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('invoice_number', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Amount ¥', '金额 ¥'))}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Amount', '金额') + ' ' + cur())}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puInvField('date', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Due date', '到期日'))}</span><input class="pu2-input" type="date" value="${esc(d.due_date)}" onchange="puInvField('due_date', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Note', '备注'))}</span><input class="pu2-input" value="${esc(d.notes)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('notes', this.value)"></label>
