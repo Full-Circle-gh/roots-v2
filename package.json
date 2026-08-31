@@ -28,6 +28,7 @@
     "test:point-search": "node scripts/test_point_search.js",
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:preorder": "node scripts/test_preorder_local.js",
+    "test:kitchen-po-copy": "node scripts/test_kitchen_po_copy.js && node scripts/test_kitchen_po_picker.js",
     "test:proxy": "node scripts/test_proxy_failover.js",
     "test:queue-window": "node scripts/test_meituan_queue_window.js",
     "test:queue-stall": "node scripts/test_meituan_queue_stall.js",

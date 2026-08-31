@@ -10570,6 +10570,19 @@
     display: inline-flex; align-items: center; justify-content: center; color: var(--td-paper); cursor: pointer; }
   #prod-view-purchasing .pu2-chk svg { width: 11px; height: 11px; }
   #prod-view-purchasing .pu2-chk.on { background: var(--td-text); border-color: var(--td-text); }
+
+  /* Copy-from-kitchen picker — the same modal shell, but it holds a LIST that
+     can run to dozens of orders. So the shell stops scrolling as one block and
+     the body scrolls inside it: the store picker, the double-row warning and
+     the Copy button stay on screen however far down the list the buyer is. */
+  #prod-view-purchasing .pu2-modal#pu2-kmodal { width: min(880px, calc(100vw - 32px));
+    display: flex; flex-direction: column; overflow: hidden; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-body { overflow: auto; flex: 1 1 auto; }
+  #prod-view-purchasing #pu2-kmodal .pu2-toolbar { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot .pu2-f { min-width: 200px; }
+  /* The tick column is a cell, not a grid child like the allocation rows. */
+  #prod-view-purchasing #pu2-kmodal .pu2-tbl td .pu2-chk { vertical-align: middle; }
   @media (max-width: 820px) {
     #prod-view-purchasing .pu2-metricrow { grid-template-columns: 1fr 1fr; }
     #prod-view-purchasing .pu2-billcols { grid-template-columns: 1fr; }
