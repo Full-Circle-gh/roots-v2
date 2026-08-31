@@ -258,6 +258,9 @@
   // ── paint dispatch ────────────────────────────────────────────────────────
   function paint() {
     if (!root()) return;
+    // The suggestion menu lives on <body>, so a repaint would otherwise leave
+    // it floating beside a field that no longer exists.
+    if (typeof puSuggestClose === 'function') puSuggestClose();
     if (_screen === 'orders')     paintOrders();
     else if (_screen === 'wizard')    paintWizard();
     else if (_screen === 'receive')   paintReceive();
@@ -2211,6 +2214,174 @@
   };
   window.puBackSuppliers = async function () { _sup = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
 
+  // ── Payment-field suggestions (our own menu, not a native <datalist>) ──────
+  // "When" and "How" used to be <input list=…> + <datalist>. The popup a
+  // datalist produces is drawn by the OS combobox widget, not by us: it takes
+  // no styling at all (it landed as a black OS list against these light cards)
+  // and some embedding webviews — the chat-app browser pane among them —
+  // position it at the wrong screen coordinates entirely, so it appeared
+  // pinned to the far edge of the window instead of under the field it
+  // belongs to. Same fix, same reasons, as the Finance-category menu in
+  // 18-materials.js: draw the list ourselves, position:fixed under the input
+  // from its getBoundingClientRect(), and hang it off <body> so no ancestor
+  // card can clip it or paint over it.
+  //
+  // `v` is what gets STORED, unchanged from the old <option value>s — the
+  // fields are still free text and the menu only saves typing. en/cn are the
+  // display halves, so one language leads and the other trails in muted type.
+  const PU_SUGGEST = {
+    terms: [
+      { v: 'Prepay 预付',   en: 'Prepay', cn: '预付' },
+      { v: 'COD 货到付款',  en: 'COD',    cn: '货到付款' },
+      { v: 'Net 15',        en: 'Net 15', cn: '月结15' },
+      { v: 'Net 30',        en: 'Net 30', cn: '月结30' },
+    ],
+    methods: [
+      { v: 'WeChat 微信',   en: 'WeChat',        cn: '微信' },
+      { v: 'Alipay 支付宝', en: 'Alipay',        cn: '支付宝' },
+      { v: 'Bank 银行转账', en: 'Bank transfer', cn: '银行转账' },
+      { v: 'Cash 现金',     en: 'Cash',          cn: '现金' },
+    ],
+  };
+  // The hint under the field is that same list read out loud — derived from it
+  // so the two can't drift (the hand-written hint said "On delivery" where the
+  // list offered "COD").
+  const puSuggestHint = key => PU_SUGGEST[key].map(o => T(o.en, o.cn)).join(' · ');
+
+  let _sugFor = null;   // id of the input the open menu belongs to
+  let _sugIdx = -1;     // keyboard-highlighted row, -1 = none
+
+  function puSuggestMenuEl() {
+    let menu = document.getElementById('pu2-suggest-menu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'pu2-suggest-menu';
+      menu.className = 'pu2-suggest-menu';
+      menu.setAttribute('role', 'listbox');
+      menu.hidden = true;
+      // mousedown, not click: it fires before the input's blur, and
+      // preventDefault() stops the field losing focus at all.
+      menu.addEventListener('mousedown', (e) => {
+        const opt = e.target.closest('.pu2-suggest-opt');
+        if (!opt) return;
+        e.preventDefault();
+        puSuggestPick(opt.dataset.v);
+      });
+      document.body.appendChild(menu);
+    }
+    return menu;
+  }
+  function puSuggestPlace(input) {
+    const menu = puSuggestMenuEl();
+    const r = input.getBoundingClientRect();
+    menu.style.left = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    // Under the field by default; over it when the field sits low enough that
+    // the list would run off the bottom of the window.
+    const below = window.innerHeight - r.bottom;
+    if (below < menu.offsetHeight + 12 && r.top > below) menu.style.top = Math.max(8, r.top - menu.offsetHeight - 4) + 'px';
+    else menu.style.top = (r.bottom + 4) + 'px';
+  }
+  function puSuggestRows(inputId, key) {
+    const input = document.getElementById(inputId);
+    if (!input) return [];
+    const q = String(input.value || '').trim().toLowerCase();
+    // The rule the native popup used: case-insensitive substring, matched over
+    // the stored value and both display halves, so "wechat", "微信" and
+    // "WeChat 微信" all find the same row. A value that already IS an option
+    // keeps the whole list open instead of narrowing to itself.
+    if (!q || PU_SUGGEST[key].some(o => o.v.toLowerCase() === q)) return PU_SUGGEST[key];
+    return PU_SUGGEST[key].filter(o => (o.v + ' ' + o.en + ' ' + o.cn).toLowerCase().includes(q));
+  }
+  function puSuggestPaint(rows) {
+    puSuggestMenuEl().innerHTML = rows.map((o, i) => {
+      const lead = T(o.en, o.cn), trail = T(o.cn, o.en);
+      return `<div class="pu2-suggest-opt${i === _sugIdx ? ' on' : ''}" role="option"
+          aria-selected="${i === _sugIdx}" data-v="${esc(o.v)}">
+          <span class="lead">${esc(lead)}</span>${lead === trail ? '' : `<span class="trail">${esc(trail)}</span>`}
+        </div>`;
+    }).join('');
+  }
+  window.puSuggestOpen = function (inputId, key) {
+    const input = document.getElementById(inputId);
+    if (!input || !PU_SUGGEST[key]) return;
+    if (_sugFor !== inputId) _sugIdx = -1;
+    const rows = puSuggestRows(inputId, key);
+    if (!rows.length) { puSuggestClose(); return; }
+    _sugFor = inputId;
+    if (_sugIdx >= rows.length) _sugIdx = -1;
+    puSuggestPaint(rows);
+    const menu = puSuggestMenuEl();
+    menu.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    puSuggestPlace(input);
+  };
+  window.puSuggestPick = function (v) {
+    const input = _sugFor && document.getElementById(_sugFor);
+    if (input) { input.value = v; input.focus(); }
+    puSuggestClose();
+  };
+  window.puSuggestClose = function () {
+    const menu = document.getElementById('pu2-suggest-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    const input = _sugFor && document.getElementById(_sugFor);
+    if (input) input.setAttribute('aria-expanded', 'false');
+    _sugFor = null; _sugIdx = -1;
+  };
+  window.puSuggestBlur = function (inputId) {
+    // Deferred: an option's mousedown preventDefault()s the focus loss, but a
+    // click landing anywhere else still needs its turn before we tear down.
+    // Only close if the menu is still THIS field's — tabbing from When to How
+    // fires the first field's blur after the second has already opened its
+    // own list, and closing then would shut a menu the user just asked for.
+    setTimeout(() => { if (_sugFor === inputId) puSuggestClose(); }, 150);
+  };
+  // The chevron is inside the label, so a plain click would re-focus the input
+  // and toggle nothing. Handle it on mousedown, before focus moves.
+  window.puSuggestToggle = function (e, inputId, key) {
+    e.preventDefault(); e.stopPropagation();
+    if (_sugFor === inputId) { puSuggestClose(); return; }
+    const input = document.getElementById(inputId);
+    if (input) input.focus();
+    puSuggestOpen(inputId, key);
+  };
+  // Arrow keys / Enter / Escape — the keyboard the native popup gave us free.
+  window.puSuggestKey = function (e, inputId, key) {
+    const menu = document.getElementById('pu2-suggest-menu');
+    const open = !!menu && !menu.hidden && _sugFor === inputId;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { _sugIdx = -1; puSuggestOpen(inputId, key); }
+      const el = puSuggestMenuEl(), n = el.children.length;
+      if (!n) return;
+      _sugIdx = e.key === 'ArrowDown' ? (_sugIdx + 1) % n : (_sugIdx <= 0 ? n - 1 : _sugIdx - 1);
+      puSuggestPaint(puSuggestRows(inputId, key));
+      const on = el.children[_sugIdx];
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'Enter') {
+      const on = menu.children[_sugIdx];
+      // Enter with nothing highlighted means "I typed what I meant" — leave
+      // the free text alone and just get the menu out of the way.
+      if (_sugIdx >= 0 && on) { e.preventDefault(); puSuggestPick(on.dataset.v); }
+      else puSuggestClose();
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); puSuggestClose(); }
+  };
+  // A fixed menu doesn't follow the page under it — close on anything that
+  // would leave it stranded beside a field that has moved. Scroll events don't
+  // bubble, so a capturing listener is the only way to see the form's own
+  // scroller; that also catches scrolling INSIDE the menu, which must not
+  // close it.
+  document.addEventListener('scroll', (e) => {
+    const menu = document.getElementById('pu2-suggest-menu');
+    if (menu && !menu.hidden && !menu.contains(e.target)) puSuggestClose();
+  }, true);
+  window.addEventListener('resize', () => { if (_sugFor) puSuggestClose(); });
+
   const CH_OPTS = ['', 'taobao', 'alibaba', 'wechat', 'phone', 'website', 'other'];
   function paintSupplier() {
     const s = _sup;
@@ -2240,8 +2411,26 @@
         <div class="pu2-fgroup">
           <div class="pu2-kicker">${esc(T('How you pay them', '付款方式'))}</div>
           <div class="pu2-fgrid">
-            <label class="pu2-f"><span class="lbl">${esc(T('When', '付款时点'))}</span><input class="pu2-input" id="pu2-s-terms" list="pu2-terms" value="${esc(s.payment_terms || '')}"><span class="hint">${esc(T('Prepay · On delivery · Net 15 · Net 30', '预付 · 货到付款 · 月结15 · 月结30'))}</span></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span><input class="pu2-input" id="pu2-s-method" list="pu2-methods" value="${esc(s.payment_method || '')}"><span class="hint">${esc(T('WeChat · Alipay · Bank transfer · Cash', '微信 · 支付宝 · 银行转账 · 现金'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('When', '付款时点'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-s-terms" value="${esc(s.payment_terms || '')}" autocomplete="off"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-s-terms','terms')" oninput="puSuggestOpen('pu2-s-terms','terms')"
+                  onkeydown="puSuggestKey(event,'pu2-s-terms','terms')" onblur="puSuggestBlur('pu2-s-terms')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-s-terms','terms')">${I.chevDown}</button>
+              </span>
+              <span class="hint">${esc(puSuggestHint('terms'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-s-method" value="${esc(s.payment_method || '')}" autocomplete="off"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-s-method','methods')" oninput="puSuggestOpen('pu2-s-method','methods')"
+                  onkeydown="puSuggestKey(event,'pu2-s-method','methods')" onblur="puSuggestBlur('pu2-s-method')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-s-method','methods')">${I.chevDown}</button>
+              </span>
+              <span class="hint">${esc(puSuggestHint('methods'))}</span></label>
           </div>
         </div>
 
@@ -2257,9 +2446,6 @@
             <label class="pu2-f" style="grid-column:1 / -1"><span class="lbl">${esc(T('Notes', '备注'))}</span><textarea class="pu2-input" id="pu2-s-notes" rows="2" placeholder="${esc(T('Minimum order, delivery days, price quirks…', '起订量、送货日、价格说明……'))}">${esc(s.notes || '')}</textarea></label>
           </div>
         </div>
-
-        <datalist id="pu2-terms"><option value="Prepay 预付"></option><option value="COD 货到付款"></option><option value="Net 15"></option><option value="Net 30"></option></datalist>
-        <datalist id="pu2-methods"><option value="WeChat 微信"></option><option value="Alipay 支付宝"></option><option value="Bank 银行转账"></option><option value="Cash 现金"></option></datalist>
 
         <div class="pu2-wizfoot">
           ${s.id ? `<button class="pu2-btn ${s.is_active ? 'danger' : ''}" data-cap="purchasing:edit" onclick="puSupToggle()">${s.is_active ? esc(T('Disable', '停用')) : esc(T('Enable', '启用'))}</button>` : `<button class="pu2-btn ghost" onclick="puBackSuppliers()">${esc(T('Cancel', '取消'))}</button>`}
