@@ -100,6 +100,7 @@
   let _pickInfo = null;      // its loaded price list
   let _supLine = null;       // index of the line whose supplier is being set
   let _supLineInfo = null;   // that line's price list ({suppliers:[]} for a material)
+  let _supDraft = null;      // half-typed name, kept across a repaint of the lines
   let _invOut = null;        // supplier groups + KPI totals + aging, from the server
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
@@ -491,6 +492,7 @@
         </div>
       </div>
       <div id="pu2-wizbody"></div>`;
+    _supLine = null; _supLineInfo = null; _supDraft = null;
     if (step === 1) wizStep1();
     else if (step === 2) wizStep2();
     else wizStep3();
@@ -633,6 +635,12 @@
   function renderLines() {
     const body = document.getElementById('pu2-linebody');
     if (!body) return;
+    // A qty or note edit repaints this whole tbody, and the supplier picker
+    // lives inside it — keep whatever is half-typed in its box across that.
+    if (_supLine != null) {
+      const el = document.getElementById('pu2-supname');
+      if (el) _supDraft = el.value;
+    }
     if (!_edit.items.length) {
       const emptyMsg = materialsFeatureOn()
         ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
@@ -652,7 +660,8 @@
       // before had nothing to open, and a material line — which carries no
       // retail PO history at all — rendered as dead text with no way to set
       // or change its supplier.
-      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
+      const supOpen = _supLine === i;
+      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
       return `<tr>
@@ -672,7 +681,7 @@
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
         <td class="right"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
-      </tr>`;
+      </tr>${supOpen ? `<tr class="pu2-supedit"><td colspan="6">${supPickerHtml(it)}</td></tr>` : ''}`;
     }).join('');
     const total = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
     const units = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
@@ -706,6 +715,10 @@
   window.puRemoveLine = function (i) {
     if (!_edit) return;
     _edit.items.splice(i, 1);
+    // The open picker is addressed by line index, and every index after the
+    // removed one just shifted — put it away rather than let it point at a
+    // different product than the one it was opened on.
+    _supLine = null; _supLineInfo = null; _supDraft = null;
     renderLines(); renderSuggestions();
   };
 
@@ -842,7 +855,7 @@
     addOrSetLine(_pickP, x.supplier || '', x.last_cost);
   };
   window.puCloseSupPop = function () {
-    _pickP = null; _pickInfo = null; _supLine = null; _supLineInfo = null;
+    _pickP = null; _pickInfo = null;
     const host = document.getElementById('pu2-suppop');
     if (host) { host.style.display = 'none'; host.innerHTML = ''; }
   };
@@ -872,39 +885,62 @@
     return names;
   }
 
+  // Opening it is a toggle — a second tap on the same chip puts it away.
+  // The picker is painted INTO the line's own row (renderLines), not into the
+  // popover slot at the top of the card: on a long order that slot sits a
+  // screenful above whatever you clicked, so the picker opened where you could
+  // not see it and the chip read as dead.
   window.puLineSup = async function (i) {
     if (!_edit || !_edit.items[i]) return;
+    if (_supLine === i) { puCloseLineSup(); return; }
     const it = _edit.items[i];
     _pickP = null; _pickInfo = null;
-    _supLine = i;
-    _supLineInfo = it.store_product_id ? await loadProductSuppliers(it.store_product_id) : { suppliers: [] };
+    puCloseSupPop();
+    _supLine = i; _supDraft = null; _supLineInfo = { suppliers: [] };
+    renderLines();       // paint it now — the price list, if any, follows
+    focusSupName();
+    if (!it.store_product_id) return;
+    const info = await loadProductSuppliers(it.store_product_id);
     // The line can be removed, or another chip opened, while that fetch is out.
-    if (_supLine !== i || !_edit || !_edit.items[i]) return;
-    renderLineSupPop();
+    if (_supLine !== i || !_edit || _edit.items[i] !== it) return;
+    _supLineInfo = info;
+    if (info.suppliers && info.suppliers.length) { renderLines(); focusSupName(); }
   };
 
-  function renderLineSupPop() {
-    const host = document.getElementById('pu2-suppop');
-    if (!host || _supLine == null || !_edit || !_edit.items[_supLine]) return;
-    const it = _edit.items[_supLine];
+  function focusSupName() {
+    const el = document.getElementById('pu2-supname');
+    if (!el) return;
+    if (typeof el.focus === 'function') el.focus();
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }
+
+  window.puCloseLineSup = function () {
+    if (_supLine == null) return;
+    _supLine = null; _supLineInfo = null; _supDraft = null;
+    renderLines();
+  };
+
+  // The picker's markup — history rows when the product has any, and in every
+  // case the supplier book plus a box to type into.
+  function supPickerHtml(it) {
     const s = (_supLineInfo && _supLineInfo.suppliers) || [];
     const costs = s.map(x => Number(x.last_cost)).filter(n => isFinite(n));
     const minCost = costs.length ? Math.min(...costs) : null;
     const names = supplierNameList([...s.map(x => x.supplier), it.supplier_name]);
-    host.innerHTML = `
-      <div class="pu2-pop">
+    const val = _supDraft != null ? _supDraft : (it.supplier_name || '');
+    return `<div class="pu2-pop">
         <div class="pop-head">
-          <b>${nameLabel(it)}</b>
-          <span class="sub pu2-mono">${esc(it.sku || '')}</span>
+          <b>${esc(T('Who are we buying this from?', '这一行向谁采购？'))}</b>
+          <span class="sub">${nameLabel(it)}</span>
           <span style="margin-left:auto;display:inline-flex;gap:14px">
             ${it.store_product_id ? `<button class="pu2-link" style="margin:0" onclick="puPriceHistory(${it.store_product_id})">${esc(T('Price history', '价格历史'))}</button>` : ''}
-            <button class="pu2-link" style="margin:0" onclick="puCloseSupPop()">${esc(T('Close', '关闭'))}</button>
+            <button class="pu2-link" style="margin:0" onclick="puCloseLineSup()">${esc(T('Close', '关闭'))}</button>
           </span>
         </div>
         ${s.map((x, idx) => {
           const preferred = idx === 0;
           const cheapest = minCost != null && Number(x.last_cost) === minCost && s.length > 1;
-          const chosen = it.supplier_name && x.supplier === it.supplier_name;
+          const chosen = !!it.supplier_name && x.supplier === it.supplier_name;
           return `<div class="pu2-suprow${preferred ? ' best' : ''}">
             <div class="sname">${esc(x.supplier || T('Unrecorded', '未记录'))}${preferred ? ` <span class="pu2-tagstar">${I.star}${esc(T('Preferred', '常用'))}</span>` : ''}</div>
             <div><div class="lab">${esc(T('Last paid', '上次'))}</div><div class="val pu2-num${cheapest ? ' cheap' : ''}">${money(x.last_cost)}${cheapest ? ' · ' + esc(T('cheapest', '最低')) : ''}</div></div>
@@ -917,19 +953,15 @@
           <div class="sname">${esc(s.length ? T('Someone else', '其他供应商') : T('Supplier', '供应商'))}</div>
           <div class="supfield">
             <input class="pu2-input" type="text" id="pu2-supname" list="pu2-supnames" autocomplete="off"
-              value="${esc(it.supplier_name || '')}"
+              value="${esc(val)}"
               placeholder="${esc(T('Pick one, or type a name', '选择或输入名称'))}"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();puLineSupSave();}">
+              onkeydown="if(event.key==='Enter'){event.preventDefault();puLineSupSave();}else if(event.key==='Escape'){puCloseLineSup();}">
             <datalist id="pu2-supnames">${names.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
             <span class="hint">${esc(T('Leave it empty and the line follows the order’s supplier.', '留空则该行沿用订单的供应商。'))}</span>
           </div>
           <div><button class="pu2-btn sm${s.length ? '' : ' primary'}" onclick="puLineSupSave()">${esc(T('Save', '保存'))}</button></div>
         </div>
       </div>`;
-    host.style.display = '';
-    if (typeof host.scrollIntoView === 'function') host.scrollIntoView({ block: 'nearest' });
-    const inp = document.getElementById('pu2-supname');
-    if (inp && typeof inp.focus === 'function') inp.focus();
   }
 
   // Taking a supplier off the history list takes their last price with it —
@@ -943,8 +975,7 @@
     it.supplier_name = x.supplier || '';
     if (x.last_cost != null && x.last_cost !== '') it.cost_per_unit = x.last_cost;
     if (it.store_product_id) _hist[it.store_product_id] = { previous: { cost_per_unit: x.last_cost } };
-    puCloseSupPop();
-    renderLines();
+    puCloseLineSup();
   };
 
   // A typed name only ever sets the name — never a price. We have no figure to
@@ -954,8 +985,7 @@
     if (_supLine == null || !_edit || !_edit.items[_supLine]) return;
     const el = document.getElementById('pu2-supname');
     _edit.items[_supLine].supplier_name = ((el && el.value) || '').trim();
-    puCloseSupPop();
-    renderLines();
+    puCloseLineSup();
   };
 
   function wizStep3() {
