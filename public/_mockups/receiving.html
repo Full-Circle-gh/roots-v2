@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" id="mThemeColor" content="#FBF9F4">
+<meta name="color-scheme" content="light dark">
+<meta name="format-detection" content="telephone=no">
+<title>Receiving — layout mockup</title>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     THROWAWAY MOCKUP. Not wired to anything.
+     No API calls, no imports from the app, no routes. All data below is fake.
+     Tokens and component styles are copied from public/m.html so this reads as
+     Tacet Mobile rather than a wireframe.
+
+     Two deliberate departures from m.html:
+       • Dusk (#6E67AF) is not used anywhere — it is the AI colour. --accent
+         resolves to ink, which is the same choice m.html's toggle() makes.
+       • No WaveMark / "runs on tacet" mark.
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+  --amber:#C9954A; --brick:#B4533E;
+  --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
+  --sage-ink:#5F7357; --amber-ink:#8A6425; --brick-ink:#B4533E;
+  --raised:#F6F3EC; --border:#E4E0D5; --unseen:#F4F5F0;
+
+  --bg:var(--paper); --surface-card:#FFFFFF; --surface-raised:var(--raised); --surface-dark:var(--ink);
+  --text-primary:var(--ink); --text-secondary:var(--graphite); --text-caption:var(--graphite);
+  --border-default:var(--border); --border-strong:var(--graphite);
+  /* Ink, not Dusk — see the note in the head. */
+  --border-focus:var(--ink);
+  --accent:var(--ink); --accent-hover:#1D2942; --accent-press:#0A1120;
+  --success:var(--sage); --warning:var(--amber); --danger:var(--brick);
+  --radius-card:14px;
+  --ease-settle:cubic-bezier(0.16,1,0.3,1);
+  --font-ui:'Inter','Noto Sans SC','Source Han Sans SC',-apple-system,system-ui,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40; --surface-dark:#0B121F;
+  --text-primary:var(--paper); --text-secondary:#9AA2B0; --text-caption:#9AA2B0;
+  --border-default:#263149; --border-strong:#3A455D; --border-focus:var(--paper);
+  --unseen:#182329;
+  --amber-tint:rgba(201,149,74,.16); --brick-tint:rgba(180,83,62,.20); --sage-tint:rgba(163,180,159,.16);
+  --amber-ink:#D9A55E; --brick-ink:#DE8B77; --sage-ink:#A3B49F;
+  --accent:var(--paper); --accent-hover:#EFEBE2; --accent-press:#DFDACE;
+}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:#E9E5DC;font-family:var(--font-ui);color:var(--text-primary);
+  padding-bottom:calc(env(safe-area-inset-bottom,0px) + 40px)}
+:root[data-theme="dark"] body{background:#0B121F}
+button,input,textarea{font-family:inherit}
+button,.row,.chip,.pill,.eyebrow,h1,h2{-webkit-user-select:none;user-select:none}
+button,a,.row,.chip,.stepbtn{touch-action:manipulation}
+
+/* ── m.html components, verbatim where possible ───────────────────────── */
+.card{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px}
+.list{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden}
+.sep{height:1px;background:var(--border-default)}
+.eyebrow{font-size:13px;font-weight:500;color:var(--text-secondary)}
+.row{display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:12px 16px;background:transparent;
+  border:none;cursor:pointer;text-align:left;color:var(--text-primary);font-family:inherit}
+.rowico{width:36px;height:36px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;
+  justify-content:center;color:var(--text-secondary);flex:none}
+.num{font-variant-numeric:tabular-nums}
+.btn2{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;
+  color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn2:disabled{opacity:.45;cursor:default}
+.cta{width:100%;min-height:48px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);
+  color:var(--bg);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:background .2s var(--ease-settle)}
+.cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
+.cta:disabled{opacity:.4;cursor:default}
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;
+  white-space:nowrap;flex:none}
+.stepbtn{width:52px;height:52px;border-radius:10px;background:var(--surface-raised);border:1px solid var(--border-default);
+  display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
+.stepbtn:active{background:var(--border-default)}
+.stepbtn:disabled{opacity:.35;cursor:default}
+.stepbtn.sm{width:44px;height:44px;border-radius:8px}
+.chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
+  cursor:pointer;font-family:inherit;white-space:nowrap;border:1px solid var(--border-default);
+  background:var(--surface-card);color:var(--text-secondary)}
+.chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
+.chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
+.i svg,svg.i{display:block;flex:none}
+input{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
+  color:var(--text-primary);font-size:15px;width:100%}
+input:focus{outline:none;border-color:var(--border-focus)}
+.hscroll{scrollbar-width:none;-ms-overflow-style:none;overflow-x:auto}
+.hscroll::-webkit-scrollbar{display:none}
+@keyframes tRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tFade{from{opacity:0}to{opacity:1}}
+.rise{animation:tRise .32s var(--ease-settle) both}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
+
+/* The quantity field. Tabular, large, and the same height as its steppers so
+   the three read as one control. */
+.qty{width:78px;height:52px;padding:0;text-align:center;font-size:22px;font-weight:500;
+  font-variant-numeric:tabular-nums;border-radius:10px;background:var(--surface-card);
+  border:1px solid var(--border-default);color:var(--text-primary)}
+.qty.sm{width:60px;height:44px;font-size:17px}
+.qty.edit{border-color:var(--amber);background:var(--amber-tint);color:var(--amber-ink)}
+
+/* ── Mockup chrome (NOT part of the app) ──────────────────────────────── */
+.chrome{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border-default);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px}
+.chrome-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.chrome-title{flex:1;min-width:0;font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chrome-btn{height:34px;padding:0 11px;border-radius:999px;border:1px solid var(--border-default);
+  background:var(--surface-card);color:var(--text-secondary);font-size:12px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;flex:none}
+.seg{display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px}
+.segb{flex:1;padding:7px 4px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;background:transparent;
+  color:var(--text-secondary);display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+.segb.on{background:var(--surface-card);color:var(--text-primary);box-shadow:0 1px 3px rgba(17,26,43,.08)}
+:root[data-theme="dark"] .segb.on{box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.segb b{font-size:15px;font-weight:500;line-height:1.2}
+.segb span{font-size:11px;font-weight:400;line-height:1.2;opacity:.9;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;max-width:100%}
+
+.stage{padding:16px 0 0}
+.caption{padding:0 16px 12px;max-width:520px;margin:0 auto}
+.caption h2{margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:-.01em}
+.caption p{margin:0;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+
+/* The device. Below 520px it simply fills the screen, exactly like m.html;
+   above it, the drawn handset so this can be judged on a laptop too. */
+.frame{background:var(--bg);border-top:1px solid var(--border-default);
+  border-bottom:1px solid var(--border-default);overflow:hidden}
+@media (min-width:520px){
+  .frame{width:402px;margin:0 auto;border-radius:34px;border:none;
+    box-shadow:0 24px 70px rgba(17,26,43,.28),0 0 0 11px #1c1c1e,0 0 0 12px #2c2c2e}
+  .chrome,.caption{max-width:520px;margin-left:auto;margin-right:auto}
+  .stage{padding-bottom:8px}
+}
+.divider{height:14px;background:transparent}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <div class="chrome-top">
+    <span class="chrome-title" id="chromeTitle">Receiving · layout mockup</span>
+    <button class="chrome-btn" onclick="APP.cmd('lang')" id="langBtn">EN</button>
+    <button class="chrome-btn" onclick="APP.cmd('theme')" id="themeBtn">☾</button>
+    <button class="chrome-btn" onclick="APP.cmd('reset')" id="resetBtn">Reset</button>
+  </div>
+  <div class="seg" id="segRoot"></div>
+</div>
+
+<div class="stage">
+  <div class="caption" id="caption"></div>
+  <div class="frame" id="frame"></div>
+  <div class="divider"></div>
+  <div class="caption" id="rcvCaption"></div>
+  <div class="frame" id="rcvFrame"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ══ Icons ════════════════════════════════════════════════════════════════
+   Lucide geometry, inlined rather than fetched from a CDN so the file is
+   genuinely standalone and works on a phone with no network. Same builder
+   signature as m.html's ic(). */
+const ICONS = {
+  'chevron-down':'<path d="m6 9 6 6 6-6"/>',
+  'chevron-up':'<path d="m18 15-6-6-6 6"/>',
+  'chevron-right':'<path d="m9 18 6-6-6-6"/>',
+  'chevron-left':'<path d="m15 18-6-6 6-6"/>',
+  'x':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  'check':'<path d="M20 6 9 17l-5-5"/>',
+  'minus':'<path d="M5 12h14"/>',
+  'plus':'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  'search':'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'package':'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  'triangle-alert':'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  'map-pin':'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+  'user':'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  'circle-check':'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  'circle-dashed':'<path d="M10.1 2.18a10 10 0 0 1 3.8 0"/><path d="M17.6 3.71a10 10 0 0 1 2.69 2.7"/><path d="M21.82 10.1a10 10 0 0 1 0 3.8"/><path d="M20.29 17.6a10 10 0 0 1-2.7 2.69"/><path d="M13.9 21.82a10 10 0 0 1-3.8 0"/><path d="M6.4 20.29a10 10 0 0 1-2.69-2.7"/><path d="M2.18 13.9a10 10 0 0 1 0-3.8"/><path d="M3.71 6.4a10 10 0 0 1 2.7-2.69"/>',
+  'pencil':'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  'shopping-cart':'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+  'truck':'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  'clock':'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+};
+function ic(name, size, stroke){
+  size = size || 20; stroke = stroke || 1.75;
+  return '<svg class="i" xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" '
+    + 'fill="none" stroke="currentColor" stroke-width="'+stroke+'" stroke-linecap="round" stroke-linejoin="round">'
+    + (ICONS[name]||'') + '</svg>';
+}
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ══ Language ═════════════════════════════════════════════════════════════ */
+let LANG = 'en';
+function T(en, zh){ return LANG === 'en' ? en : (zh || en); }
+
+/* ══ Pills — m.html's PILL map ════════════════════════════════════════════ */
+const PILL = {
+  clear:['rgba(88,96,110,0.10)','var(--text-secondary)'],
+  success:['var(--sage-tint)','var(--sage-ink)'],
+  warning:['var(--amber-tint)','var(--amber-ink)'],
+  danger:['var(--brick-tint)','var(--brick-ink)'],
+  muted:['rgba(88,96,110,0.06)','var(--text-secondary)'],
+};
+function pill(tone, label){
+  const p = PILL[tone] || PILL.clear;
+  return '<span class="pill" style="background:'+p[0]+';color:'+p[1]+'">'+label+'</span>';
+}
+
+/* ══ FAKE DATA ════════════════════════════════════════════════════════════
+   RPO-0003 · Tianhe · 5 lines · 3 suppliers. Nothing here is real. */
+const LOCATIONS = [
+  { id:1, en:'Tianhe',        zh:'天河'     },
+  { id:2, en:'Pearl River',   zh:'珠江新城' },
+  { id:3, en:'Central Kitchen', zh:'中央厨房' },
+];
+const SUPPLIERS = [
+  { id:'gf',  en:'Green Farm',      zh:'绿田农场' },
+  { id:'wdg', en:'Wong Dry Goods',  zh:'黄记杂货' },
+  { id:'so',  en:'Sun Oils',        zh:'阳光油品' },
+];
+const LINES = [
+  { id:'l1', sup:'gf',  en:'Mint',        zh:'薄荷',   sku:'HRB-MNT', ordered:5,  unit:'kg' },
+  { id:'l2', sup:'gf',  en:'Coriander',   zh:'香菜',   sku:'HRB-COR', ordered:3,  unit:'kg' },
+  { id:'l3', sup:'wdg', en:'Red lentils', zh:'红扁豆', sku:'DRY-RLN', ordered:25, unit:'kg' },
+  { id:'l4', sup:'wdg', en:'Chickpeas',   zh:'鹰嘴豆', sku:'DRY-CKP', ordered:20, unit:'kg' },
+  { id:'l5', sup:'so',  en:'Coconut oil', zh:'椰子油', sku:'OIL-CCO', ordered:12, unit:'L'  },
+];
+/* Fixed list. No free text — the whole point of a reason CODE. */
+const REASONS = [
+  { id:'short',    en:'Short delivery', zh:'少送'   },
+  { id:'damaged',  en:'Damaged',        zh:'破损'   },
+  { id:'wrong',    en:'Wrong item',     zh:'错货'   },
+  { id:'not_sent', en:'Not sent',       zh:'未发货' },
+];
+
+/* The state the scenario asks for: Green Farm and Wong Dry Goods arrived,
+   Sun Oils did not; Mint is 1 short; 2 Chickpeas came in damaged. */
+function seedLines(){
+  return {
+    l1:{ recv:4,  dmg:0, reason:'short'    },
+    l2:{ recv:3,  dmg:0, reason:null       },
+    l3:{ recv:25, dmg:0, reason:null       },
+    l4:{ recv:20, dmg:2, reason:null       },
+    l5:{ recv:0,  dmg:0, reason:'not_sent' },
+  };
+}
+/* Pristine — every line prefilled with the full ordered quantity, which is
+   what staff actually see before they touch anything. Reachable from Reset. */
+function pristineLines(){
+  const o = {};
+  LINES.forEach(l => { o[l.id] = { recv:l.ordered, dmg:0, reason:null }; });
+  return o;
+}
+
+/* ══ Received tab — six past sessions over a fortnight ════════════════════ */
+const SESSIONS = [
+  { id:'s1', date:'30 Aug', time:'08:40', po:'RPO-0007', sup:'Green Farm',      supZh:'绿田农场',
+    loc:'Tianhe', locZh:'天河', by:'Shun Lai', byZh:'黎顺', lines:2, flags:[] },
+  { id:'s2', date:'29 Aug', time:'09:14', po:'RPO-0002', sup:'Wong Dry Goods',  supZh:'黄记杂货',
+    loc:'Tianhe', locZh:'天河', by:'Jing Wei', byZh:'魏静', lines:3, flags:['short'] },
+  { id:'s3', date:'27 Aug', time:'14:02', po:'RPO-0006', sup:'Sun Oils',        supZh:'阳光油品',
+    loc:'Pearl River', locZh:'珠江新城', by:'Mei Chan', byZh:'陈美', lines:1, flags:['damaged'] },
+  { id:'s4', date:'25 Aug', time:'08:05', po:'RPO-0005', sup:'Green Farm',      supZh:'绿田农场',
+    loc:'Tianhe', locZh:'天河', by:'Shun Lai', byZh:'黎顺', lines:3, flags:[] },
+  { id:'s5', date:'22 Aug', time:'10:31', po:'RPO-0004', sup:'Hoi Kee Produce', supZh:'海记果蔬',
+    loc:'Central Kitchen', locZh:'中央厨房', by:'Bao Tang', byZh:'汤宝', lines:4, flags:['over'] },
+  { id:'s6', date:'19 Aug', time:'09:22', po:'RPO-0001', sup:'Wong Dry Goods',  supZh:'黄记杂货',
+    loc:'Tianhe', locZh:'天河', by:'Jing Wei', byZh:'魏静', lines:2, flags:[] },
+];
+/* The one expanded session's line detail, including a correction. */
+const S2_LINES = [
+  { en:'Red lentils', zh:'红扁豆', ordered:25, recv:25, dmg:0, unit:'kg', reason:null },
+  { en:'Chickpeas',   zh:'鹰嘴豆', ordered:20, recv:18, dmg:0, unit:'kg', reason:'short' },
+  { en:'Split peas',  zh:'豌豆瓣', ordered:10, recv:9,  dmg:0, unit:'kg', reason:'short',
+    correction:{ fromWho:'Shun', fromWhoZh:'阿顺', from:7, toWho:'Jing', toWhoZh:'阿静', to:9,
+                 at:'29 Aug 11:40',
+                 why:'Miscounted — two sacks were behind the pallet',
+                 whyZh:'点错了 — 两袋货被挡在托盘后面' } },
+];
+
+/* ══ State ════════════════════════════════════════════════════════════════ */
+const state = {
+  layout:'A',
+  loc:1, locOpen:false,
+  lines:seedLines(),
+  groups:{ gf:true, wdg:true, so:true },   // A: expanded?
+  bOpen:null,                              // B: supplier sub-screen id
+  bDone:{ gf:true },                       // B: confirmed suppliers
+  cMode:'ready',                           // C: ready | pick | fix
+  cFlagged:{},                             // C: line id -> true
+  pristine:false,                          // showing the untouched prefill?
+  done:null,                               // 'A' | 'B' | 'C' once recorded
+  rcvQuery:'', rcvFilter:'all', rcvOpen:'s2',
+};
+
+/* ══ Derived ══════════════════════════════════════════════════════════════ */
+const lineById  = id => LINES.find(l => l.id === id);
+const supById   = id => SUPPLIERS.find(s => s.id === id);
+const locById   = id => LOCATIONS.find(l => l.id === id);
+const supName   = s => T(s.en, s.zh);
+const locName   = l => T(l.en, l.zh);
+const lineName  = l => T(l.en, l.zh);
+const linesOf   = sid => LINES.filter(l => l.sup === sid);
+const st        = id => state.lines[id];
+/* Shortfall is CALCULATED. Nobody is ever asked to work it out. */
+const short     = l => Math.max(0, l.ordered - st(l.id).recv);
+const over      = l => Math.max(0, st(l.id).recv - l.ordered);
+const touched   = l => st(l.id).recv !== l.ordered || st(l.id).dmg > 0;
+const reasonOf  = id => REASONS.find(r => r.id === id);
+
+function supState(sid){
+  const ls = linesOf(sid);
+  if (ls.every(l => st(l.id).recv === 0)) return 'none';       // nothing arrived
+  if (ls.some(l => short(l) > 0 || st(l.id).dmg > 0 || over(l) > 0)) return 'issue';
+  return 'ok';
+}
+function supPill(sid){
+  const s = supState(sid);
+  if (s === 'none')  return pill('muted',   T('Not arrived','未到货'));
+  if (s === 'issue') return pill('warning', T('Has issues','有异常'));
+  return pill('success', T('All arrived','全部到货'));
+}
+/* Lines bucketed by outcome. Kept as LISTS, not counts, so the summary can
+   name what is wrong — "Mint, 1 kg short" is worth more at the door than
+   "1 short", and counting units across kg and L would be nonsense anyway. */
+function tally(){
+  const complete=[], shortL=[], dmgL=[], overL=[], notSent=[];
+  LINES.forEach(l => {
+    const s = st(l.id);
+    if (s.recv === 0)      notSent.push(l);
+    else if (short(l) > 0) shortL.push(l);
+    else if (over(l) > 0)  overL.push(l);
+    else                   complete.push(l);
+    if (s.dmg > 0) dmgL.push(l);          // damage is independent of shortfall
+  });
+  return { complete, shortL, dmgL, overL, notSent };
+}
+/* Every short line needs a reason before the delivery can be recorded. */
+function missingReasons(){
+  return LINES.filter(l => short(l) > 0 && !st(l.id).reason);
+}
+
+/* ══ Shared screen pieces ═════════════════════════════════════════════════ */
+
+/* m.html's pageHead, trimmed to what a mockup needs. */
+function pageHead(o){
+  return '<div style="border-bottom:1px solid var(--border-default);padding:16px 10px 14px 16px">'
+    + (o.back ? '<div style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:4px;'
+        + 'font-size:13px;font-weight:500;color:var(--text-secondary)">'+ic('chevron-left',16,2)+esc(o.back)+'</div>' : '')
+    + '<div style="display:flex;align-items:center;gap:12px;min-height:38px">'
+    +   '<h1 class="num" style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;'
+    +     'line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+o.title+'</h1>'
+    +   (o.right || '')
+    + '</div>'
+    + (o.status ? '<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;'
+        + 'color:var(--text-secondary);line-height:1.35">'+o.status+'</p>' : '')
+    + '</div>';
+}
+
+/* The location control. Top of every layout, defaults to Tianhe, changeable. */
+function locationControl(){
+  const cur = locById(state.loc);
+  const head = '<button class="row" onclick="APP.cmd(\'locToggle\')" style="min-height:60px">'
+    + '<span class="rowico">'+ic('map-pin',18)+'</span>'
+    + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">'
+    +   '<span style="font-size:12.5px;color:var(--text-secondary)">'+T('Receiving into','收货至')+'</span>'
+    +   '<span style="font-size:15.5px;font-weight:500">'+esc(locName(cur))+'</span></span>'
+    + '<span style="color:var(--text-secondary);display:flex">'+ic(state.locOpen?'chevron-up':'chevron-down',18)+'</span>'
+    + '</button>';
+  if (!state.locOpen) return '<div class="list">'+head+'</div>';
+  const opts = LOCATIONS.map(l => {
+    const on = l.id === state.loc;
+    return '<div class="sep"></div>'
+      + '<button class="row" onclick="APP.cmd(\'loc\','+l.id+')" style="min-height:52px;padding-left:64px">'
+      + '<span style="flex:1;font-size:15px;'+(on?'font-weight:500':'color:var(--text-secondary)')+'">'+esc(locName(l))+'</span>'
+      + (on ? '<span style="color:var(--sage-ink);display:flex">'+ic('check',18,2)+'</span>' : '')
+      + '</button>';
+  }).join('');
+  return '<div class="list rise">'+head+opts+'</div>';
+}
+
+/* ── One line editor ──────────────────────────────────────────────────────
+   Prefilled with the ordered quantity. Big steppers so it works one-handed
+   with a box in the other. Units are display-only, straight off the PO. */
+function lineEditor(l, opt){
+  opt = opt || {};
+  const s = st(l.id);
+  const sh = short(l), ov = over(l);
+  /* The received box is tinted only when the RECEIVED count differs from what
+     was ordered. Damage is a separate fact with its own field and its own
+     colour — tinting this box for it said the count had been changed when it
+     had not. */
+  const edited = s.recv !== l.ordered;
+
+  const stepper = '<div style="display:flex;align-items:center;gap:10px">'
+    + '<button class="stepbtn" onclick="APP.cmd(\'recv\',\''+l.id+'|-1\')" aria-label="minus" '
+    +   (s.recv<=0?'disabled':'')+'>'+ic('minus',22,2)+'</button>'
+    + '<input class="qty '+(edited?'edit':'')+'" inputmode="numeric" pattern="[0-9]*" value="'+s.recv+'" '
+    +   'onchange="APP.cmd(\'recvSet\',\''+l.id+'|\'+this.value)" '
+    +   'onfocus="this.select()">'
+    + '<span style="font-size:14px;color:var(--text-secondary);min-width:22px">'+esc(l.unit)+'</span>'
+    + '<button class="stepbtn" onclick="APP.cmd(\'recv\',\''+l.id+'|1\')" aria-label="plus" style="margin-left:auto">'
+    +   ic('plus',22,2)+'</button>'
+    + '</div>';
+
+  /* The shortfall is stated, never asked for. */
+  let note = '';
+  if (sh > 0) {
+    /* A line at zero is a no-show, not a shortfall — "12 L short of 12" is a
+       sum nobody needs to read back. */
+    const txt = s.recv === 0
+      ? T('Nothing arrived — what happened?','未到货 — 原因？')
+      : (LANG==='en' ? sh+' '+l.unit+' short of '+l.ordered+' — what happened?'
+                     : '短少 '+sh+' '+l.unit+'（订购 '+l.ordered+'）— 原因？');
+    note = '<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--amber-ink)">'
+      + ic('triangle-alert',16) + '<span class="num" style="font-size:13.5px">'+txt+'</span></div>';
+  } else if (ov > 0) {
+    note = '<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-secondary)">'
+      + ic('triangle-alert',16) + '<span class="num" style="font-size:13.5px">'
+      + (LANG==='en' ? ov+' '+l.unit+' over ordered' : '多收 '+ov+' '+l.unit)
+      + '</span></div>';
+  }
+
+  /* Reason codes. Fixed list, single select, 44px targets.
+     A 2×2 GRID, not a horizontal scroller: at 380px a scroller fits about two
+     and a half chips, so the fourth reason ("Not sent") was off-screen behind
+     a sideways swipe inside a vertical list. All four have to be visible. */
+  const reasons = sh > 0
+    ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
+      + REASONS.map(r => '<button class="chip '+(s.reason===r.id?'on':'')+'" style="justify-content:center;padding:0 10px" '
+          + 'onclick="APP.cmd(\'reason\',\''+l.id+'|'+r.id+'\')">'+esc(T(r.en,r.zh))+'</button>').join('')
+      + '</div>'
+    : '';
+
+  /* Damaged is its own quantity, not a reason code and not part of received. */
+  const dmg = '<div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;'
+    + 'border-top:1px solid var(--border-default)">'
+    + '<span style="flex:1;min-width:0;font-size:13.5px;'
+    +   (s.dmg>0?'color:var(--brick-ink);font-weight:500':'color:var(--text-secondary)')+'">'
+    +   T('Damaged on arrival','到货破损')+'</span>'
+    + '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|-1\')" '+(s.dmg<=0?'disabled':'')+'>'
+    +   ic('minus',18,2)+'</button>'
+    + '<input class="qty sm" inputmode="numeric" pattern="[0-9]*" value="'+s.dmg+'" '
+    +   'style="'+(s.dmg>0?'border-color:var(--brick);background:var(--brick-tint);color:var(--brick-ink)':'')+'" '
+    +   'onchange="APP.cmd(\'dmgSet\',\''+l.id+'|\'+this.value)" onfocus="this.select()">'
+    + '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|1\')">'+ic('plus',18,2)+'</button>'
+    + '</div>';
+
+  return '<div class="card" style="padding:14px">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">'
+    +   '<span style="display:flex;flex-direction:column;min-width:0">'
+    +     '<span style="font-size:15.5px;font-weight:500">'+esc(lineName(l))+'</span>'
+    +     '<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">'+esc(l.sku)+'</span>'
+    +   '</span>'
+    +   '<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">'
+    +     T('ordered','订购')+' '+l.ordered+' '+esc(l.unit)+'</span>'
+    + '</div>'
+    + stepper + note + reasons + dmg
+    + (opt.unflag ? '<button class="btn2" style="width:100%;margin-top:12px;font-size:13.5px;'
+        + 'color:var(--text-secondary)" onclick="APP.cmd(\'cUnflag\',\''+l.id+'\')">'
+        + T('This one is fine after all','这项没问题') + '</button>' : '')
+    + '</div>';
+}
+
+/* ── Supplier group action: nothing came from this supplier ─────────────── */
+function nothingArrivedBtn(sid){
+  const none = supState(sid) === 'none';
+  if (none) {
+    return '<button class="btn2" style="width:100%;font-size:13.5px;color:var(--text-secondary)" '
+      + 'onclick="APP.cmd(\'supAll\',\''+sid+'\')">'+T('Undo — it did arrive','撤销 — 其实到货了')+'</button>';
+  }
+  return '<button class="btn2" style="width:100%;font-size:13.5px;color:var(--text-secondary)" '
+    + 'onclick="APP.cmd(\'supNone\',\''+sid+'\')">'+T('Nothing arrived from this supplier','该供应商未到货')+'</button>';
+}
+
+/* ── The submit summary. No money, anywhere. ──────────────────────────── */
+function summaryCard(){
+  const t = tally();
+  const loc = locById(state.loc);
+  const row = (tone, txt) => '<div style="display:flex;align-items:center;gap:10px;padding:7px 0">'
+    + '<span style="width:6px;height:6px;border-radius:999px;flex:none;background:'+tone+'"></span>'
+    + '<span class="num" style="font-size:13.5px;color:var(--text-secondary)">'+txt+'</span></div>';
+  let rows = '';
+  if (t.complete.length) rows += row('var(--sage)', LANG==='en'
+    ? t.complete.length+' line'+(t.complete.length>1?'s':'')+' complete'
+    : t.complete.length+' 项完好');
+  t.shortL.forEach(l => rows += row('var(--amber)', LANG==='en'
+    ? esc(lineName(l))+' — '+short(l)+' '+esc(l.unit)+' short'
+    : esc(lineName(l))+' — 短少 '+short(l)+' '+esc(l.unit)));
+  t.dmgL.forEach(l => rows += row('var(--brick)', LANG==='en'
+    ? esc(lineName(l))+' — '+st(l.id).dmg+' '+esc(l.unit)+' damaged'
+    : esc(lineName(l))+' — 破损 '+st(l.id).dmg+' '+esc(l.unit)));
+  t.overL.forEach(l => rows += row('var(--graphite)', LANG==='en'
+    ? esc(lineName(l))+' — '+over(l)+' '+esc(l.unit)+' over ordered'
+    : esc(lineName(l))+' — 多收 '+over(l)+' '+esc(l.unit)));
+  t.notSent.forEach(l => rows += row('var(--graphite)', LANG==='en'
+    ? esc(lineName(l))+' — nothing arrived'
+    : esc(lineName(l))+' — 未到货'));
+
+  return '<div class="card" style="padding:14px 16px">'
+    + '<span class="eyebrow" style="display:block;margin-bottom:4px">'+T('About to record','即将登记')+'</span>'
+    + rows
+    + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;'
+    +   'border-top:1px solid var(--border-default);color:var(--text-secondary)">'
+    +   ic('map-pin',15)+'<span style="font-size:13px">'+T('Into','收货至')+' '+esc(locName(loc))+'</span></div>'
+    + '</div>';
+}
+
+function submitBlock(){
+  const missing = missingReasons();
+  const blocked = missing.length > 0;
+  const warn = blocked
+    ? '<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;'
+      + 'background:var(--amber-tint);margin-bottom:10px">'
+      + '<span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">'+ic('triangle-alert',16)+'</span>'
+      + '<span style="font-size:13.5px;color:var(--amber-ink)">'
+      + (LANG==='en'
+          ? missing.length+' short line'+(missing.length>1?'s':'')+' still need'+(missing.length>1?'':'s')+' a reason.'
+          : '还有 '+missing.length+' 项短少未选原因。')
+      + '</span></div>'
+    : '';
+  return '<div style="display:flex;flex-direction:column">'+warn
+    + '<button class="cta" '+(blocked?'disabled':'')+' onclick="APP.cmd(\'record\')">'
+    + T('Record delivery','登记收货')+'</button></div>';
+}
+
+/* ── The end state, so the flow has somewhere to land ───────────────────── */
+function recordedScreen(){
+  const t = tally();
+  const loc = locById(state.loc);
+  const bits = [];
+  if (t.complete.length) bits.push(LANG==='en' ? t.complete.length+' complete' : t.complete.length+' 项完好');
+  if (t.shortL.length)   bits.push(LANG==='en' ? t.shortL.length+' short'      : t.shortL.length+' 项短少');
+  if (t.dmgL.length)     bits.push(LANG==='en' ? t.dmgL.length+' damaged'      : t.dmgL.length+' 项破损');
+  if (t.overL.length)    bits.push(LANG==='en' ? t.overL.length+' over'        : t.overL.length+' 项多收');
+  if (t.notSent.length)  bits.push(LANG==='en' ? t.notSent.length+' not sent'  : t.notSent.length+' 项未发货');
+  return pageHead({ title:'RPO-0003', status:T('Recorded just now','刚刚登记'),
+                    right:pill('success', T('Received','已收货')) })
+    + '<div style="padding:28px 16px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center">'
+    + '<span style="color:var(--sage-ink);display:flex">'+ic('circle-check',44,1.5)+'</span>'
+    + '<span style="font-size:17px;font-weight:500">'+T('Delivery recorded','收货已登记')+'</span>'
+    + '<span class="num" style="font-size:14px;color:var(--text-secondary);line-height:1.5">'
+    +   esc(bits.join(' · '))+'<br>'+T('Into','收货至')+' '+esc(locName(loc))+'</span>'
+    + '<button class="btn2" style="margin-top:6px" onclick="APP.cmd(\'again\')">'
+    +   T('Run it again','再看一次')+'</button>'
+    + '</div>';
+}
+
+/* ══ LAYOUT A — full list ═════════════════════════════════════════════════
+   Everything expanded, one scroll, submit at the bottom. */
+function layoutA(){
+  if (state.done === 'A') return recordedScreen();
+  const groups = SUPPLIERS.map(s => {
+    const open = state.groups[s.id];
+    const ls = linesOf(s.id);
+    const head = '<button onclick="APP.cmd(\'grp\',\''+s.id+'\')" style="display:flex;align-items:center;gap:10px;'
+      + 'width:100%;padding:12px 4px 12px 2px;background:none;border:none;cursor:pointer;font-family:inherit;'
+      + 'text-align:left;color:var(--text-primary)">'
+      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">'
+      +   '<span style="font-size:15.5px;font-weight:500">'+esc(supName(s))+'</span>'
+      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary)">'
+      +     ls.length+' '+T(ls.length===1?'line':'lines','项')+'</span></span>'
+      + supPill(s.id)
+      + '<span style="color:var(--text-secondary);display:flex">'+ic(open?'chevron-up':'chevron-down',18)+'</span>'
+      + '</button>';
+    const body = open
+      ? '<div style="display:flex;flex-direction:column;gap:10px;padding-bottom:6px">'
+        + ls.map(l => lineEditor(l)).join('') + nothingArrivedBtn(s.id) + '</div>'
+      : '';
+    return '<div style="border-top:1px solid var(--border-default);padding-top:2px">'+head+body+'</div>';
+  }).join('');
+
+  return pageHead({
+      title:'RPO-0003', back:T('Purchasing','采购'),
+      right:pill('clear', T('Ordered','已下单')),
+      status:(LANG==='en' ? '3 suppliers · 5 lines · ordered 28 Aug' : '3 家供应商 · 5 项 · 8月28日下单') })
+    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
+    +   locationControl()
+    +   '<div>'+groups+'</div>'
+    +   summaryCard()
+    +   submitBlock()
+    + '</div>';
+}
+
+/* ══ LAYOUT B — one supplier at a time ════════════════════════════════════
+   Groups collapsed; tapping one opens a focused sub-screen; each supplier is
+   confirmed and closed before moving on. */
+function layoutB(){
+  if (state.done === 'B') return recordedScreen();
+  if (state.bOpen) return layoutBSupplier(state.bOpen);
+
+  const rows = SUPPLIERS.map((s, i) => {
+    const ls = linesOf(s.id);
+    const done = !!state.bDone[s.id];
+    const t = ls.reduce((a,l) => {
+      if (short(l) > 0) a.sh++; if (st(l.id).dmg > 0) a.dm++; return a;
+    }, {sh:0, dm:0});
+    const sub = done
+      ? (t.sh || t.dm
+          ? (LANG==='en'
+              ? [t.sh?t.sh+' short':'', t.dm?t.dm+' damaged':''].filter(Boolean).join(' · ')
+              : [t.sh?t.sh+' 项短少':'', t.dm?t.dm+' 项破损':''].filter(Boolean).join(' · '))
+          : T('All as ordered','全部按订单'))
+      : ls.length+' '+T(ls.length===1?'line to check':'lines to check','项待核对');
+    return (i ? '<div class="sep"></div>' : '')
+      + '<button class="row" onclick="APP.cmd(\'bOpen\',\''+s.id+'\')" style="min-height:70px">'
+      + '<span class="rowico" style="'+(done?'background:var(--sage-tint);color:var(--sage-ink)':'')+'">'
+      +   ic(done?'circle-check':'circle-dashed',18)+'</span>'
+      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">'
+      +   '<span style="font-size:15.5px;font-weight:500">'+esc(supName(s))+'</span>'
+      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
+      +     'text-overflow:ellipsis;white-space:nowrap">'+esc(sub)+'</span></span>'
+      + (done ? supPill(s.id) : '')
+      + '<span style="color:var(--text-secondary);display:flex">'+ic('chevron-right',18)+'</span>'
+      + '</button>';
+  }).join('');
+
+  const left = SUPPLIERS.filter(s => !state.bDone[s.id]).length;
+  const ready = left === 0;
+  const progress = LANG==='en'
+    ? (SUPPLIERS.length - left)+' of '+SUPPLIERS.length+' suppliers confirmed'
+    : '已确认 '+(SUPPLIERS.length - left)+'/'+SUPPLIERS.length+' 家供应商';
+
+  return pageHead({
+      title:'RPO-0003', back:T('Purchasing','采购'),
+      right:pill('clear', T('Ordered','已下单')),
+      status:progress })
+    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
+    +   locationControl()
+    +   '<div class="list">'+rows+'</div>'
+    +   (ready ? summaryCard() : '')
+    +   (ready
+          ? submitBlock()
+          /* Outline, not a filled slab. A disabled primary button at 40%
+             opacity is still the heaviest thing on the screen, which is the
+             wrong emphasis for "you are not finished yet". */
+          : '<button class="btn2" style="width:100%;color:var(--text-secondary)" disabled>'
+            + (LANG==='en' ? left+' supplier'+(left>1?'s':'')+' still to confirm' : '还有 '+left+' 家待确认')
+            + '</button>')
+    + '</div>';
+}
+
+function layoutBSupplier(sid){
+  const s = supById(sid);
+  const ls = linesOf(sid);
+  const idx = SUPPLIERS.findIndex(x => x.id === sid) + 1;
+  const missing = ls.filter(l => short(l) > 0 && !st(l.id).reason);
+  return pageHead({
+      title:esc(supName(s)),
+      back:T('All suppliers','全部供应商'),
+      right:supPill(sid),
+      status:(LANG==='en'
+        ? 'Supplier '+idx+' of '+SUPPLIERS.length+' · '+ls.length+' line'+(ls.length>1?'s':'')
+        : '第 '+idx+'/'+SUPPLIERS.length+' 家 · '+ls.length+' 项') })
+    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:12px">'
+    +   '<div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">'
+    +     ic('map-pin',15)+'<span style="font-size:13px">'+T('Into','收货至')+' '+esc(locName(locById(state.loc)))+'</span></div>'
+    +   ls.map(l => lineEditor(l)).join('')
+    +   nothingArrivedBtn(sid)
+    +   (missing.length
+          ? '<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;'
+            + 'background:var(--amber-tint)"><span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">'
+            + ic('triangle-alert',16)+'</span><span style="font-size:13.5px;color:var(--amber-ink)">'
+            + (LANG==='en' ? 'Pick a reason for the short line before confirming.' : '确认前请为短少项选择原因。')
+            + '</span></div>'
+          : '')
+    +   '<button class="cta" '+(missing.length?'disabled':'')+' onclick="APP.cmd(\'bConfirm\',\''+sid+'\')">'
+    +     T('Confirm','确认')+' '+esc(supName(s))+'</button>'
+    + '</div>';
+}
+
+/* ══ LAYOUT C — exception-first ═══════════════════════════════════════════
+   The common case is one tap. Anything wrong is flagged line by line. */
+function layoutC(){
+  if (state.done === 'C') return recordedScreen();
+  const head = pageHead({
+    title:'RPO-0003', back:T('Purchasing','采购'),
+    right:pill('clear', T('Ordered','已下单')),
+    status:(LANG==='en' ? '3 suppliers · 5 lines · ordered 28 Aug' : '3 家供应商 · 5 项 · 8月28日下单') });
+
+  /* ── ready: the fast path ── */
+  if (state.cMode === 'ready') {
+    const manifest = SUPPLIERS.map(s =>
+      '<div style="padding:12px 16px">'
+      + '<span class="eyebrow" style="display:block;margin-bottom:6px">'+esc(supName(s))+'</span>'
+      + linesOf(s.id).map(l =>
+          '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:3px 0">'
+          + '<span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          +   esc(lineName(l))+'</span>'
+          + '<span class="num" style="flex:none;font-size:14px;color:var(--text-secondary)">'
+          +   l.ordered+' '+esc(l.unit)+'</span></div>').join('')
+      + '</div>').join('<div class="sep"></div>');
+
+    return head
+      + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
+      +   locationControl()
+      +   '<button class="cta" style="min-height:60px;font-size:16px" onclick="APP.cmd(\'cAllOk\')">'
+      +     ic('check',20,2)+T('All arrived as ordered','全部按订单到货')+'</button>'
+      +   '<button class="btn2" style="width:100%" onclick="APP.cmd(\'cMode\',\'pick\')">'
+      +     T('Something is wrong','有问题')+'</button>'
+      +   '<div class="list">'
+      +     '<div style="padding:12px 16px 0"><span class="eyebrow">'
+      +       (LANG==='en' ? 'What you are confirming — 5 lines' : '你正在确认的内容 — 5 项')+'</span></div>'
+      +     manifest
+      +   '</div>'
+      + '</div>';
+  }
+
+  /* ── pick: which lines are wrong ── */
+  if (state.cMode === 'pick') {
+    const n = Object.keys(state.cFlagged).filter(k => state.cFlagged[k]).length;
+    const rows = SUPPLIERS.map(s =>
+      '<div style="padding:10px 16px 4px;background:var(--surface-raised)">'
+      + '<span class="eyebrow">'+esc(supName(s))+'</span></div>'
+      + linesOf(s.id).map(l => {
+          const on = !!state.cFlagged[l.id];
+          return '<button class="row" onclick="APP.cmd(\'cFlag\',\''+l.id+'\')" style="min-height:60px">'
+            + '<span style="width:26px;height:26px;border-radius:7px;flex:none;display:flex;align-items:center;'
+            +   'justify-content:center;border:1.5px solid '+(on?'var(--text-primary)':'var(--border-strong)')+';'
+            +   'background:'+(on?'var(--text-primary)':'transparent')+';color:var(--bg)">'
+            +   (on?ic('check',17,2.5):'')+'</span>'
+            + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">'
+            +   '<span style="font-size:15px;'+(on?'font-weight:500':'')+'">'+esc(lineName(l))+'</span>'
+            +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary)">'
+            +     T('ordered','订购')+' '+l.ordered+' '+esc(l.unit)+'</span></span>'
+            + '</button>';
+        }).join('')).join('<div class="sep"></div>');
+
+    return head
+      + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
+      +   '<div><span style="font-size:15px;font-weight:500;display:block;margin-bottom:3px">'
+      +     T('Which lines are wrong?','哪些项有问题？')+'</span>'
+      +     '<span style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">'
+      +     T('Everything you do not tick is recorded as arrived in full.','未勾选的项将按订单全数记入。')+'</span></div>'
+      +   '<div class="list">'+rows+'</div>'
+      +   '<button class="cta" '+(n?'':'disabled')+' onclick="APP.cmd(\'cMode\',\'fix\')">'
+      +     (n ? (LANG==='en' ? 'Fix '+n+' line'+(n>1?'s':'') : '处理 '+n+' 项')
+                : T('Tick the lines that are wrong','请勾选有问题的项'))+'</button>'
+      +   '<button class="btn2" style="width:100%;color:var(--text-secondary)" onclick="APP.cmd(\'cMode\',\'ready\')">'
+      +     T('Back','返回')+'</button>'
+      + '</div>';
+  }
+
+  /* ── fix: editors for the flagged lines only ── */
+  const flagged = LINES.filter(l => state.cFlagged[l.id]);
+  return head
+    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
+    +   '<div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:14px;'
+    +     'background:var(--sage-tint);color:var(--sage-ink)">'+ic('check',16,2)
+    +     '<span class="num" style="font-size:13.5px">'
+    +     (LANG==='en'
+        ? (LINES.length - flagged.length)+' lines recorded as ordered'
+        : (LINES.length - flagged.length)+' 项按订单记入')+'</span></div>'
+    +   flagged.map(l => lineEditor(l, {unflag:true})).join('')
+    +   summaryCard()
+    +   submitBlock()
+    +   '<button class="btn2" style="width:100%;color:var(--text-secondary)" onclick="APP.cmd(\'cMode\',\'pick\')">'
+    +     T('Change which lines are flagged','修改勾选的项')+'</button>'
+    + '</div>';
+}
+
+/* ══ RECEIVED TAB ═════════════════════════════════════════════════════════
+   A list of past receiving SESSIONS, not purchase orders. */
+const RCV_FILTERS = [
+  { id:'all',     en:'All',       zh:'全部' },
+  { id:'issues',  en:'Issues',    zh:'有异常' },
+  { id:'short',   en:'Short',     zh:'短少' },
+  { id:'damaged', en:'Damaged',   zh:'破损' },
+  { id:'over',    en:'Over',      zh:'多收' },
+];
+function flagPills(f){
+  if (!f.length) return pill('success', T('Clean','无异常'));
+  return f.map(k =>
+      k==='short'   ? pill('warning', T('Short','短少'))
+    : k==='damaged' ? pill('danger',  T('Damaged','破损'))
+    :                 pill('clear',   T('Over','多收'))).join('');
+}
+function sessionMatches(s){
+  const q = state.rcvQuery.trim().toLowerCase();
+  if (q) {
+    const hay = [s.sup, s.supZh, s.loc, s.locZh, s.by, s.byZh, s.po, s.date].join(' ').toLowerCase();
+    if (hay.indexOf(q) === -1) return false;
+  }
+  const f = state.rcvFilter;
+  if (f === 'all') return true;
+  if (f === 'issues') return s.flags.length > 0;
+  return s.flags.indexOf(f) !== -1;
+}
+
+/* The expanded session's body — line detail plus the correction trail. */
+function sessionDetail(s){
+  if (s.id !== 's2') {
+    return '<div style="padding:0 16px 16px"><span style="font-size:13.5px;color:var(--text-secondary)">'
+      + T('Tap the 29 Aug row to see a session with a correction on it.','点击 8月29日 那行可查看带更正记录的收货。')
+      + '</span></div>';
+  }
+  const lines = S2_LINES.map(l => {
+    const sh = Math.max(0, l.ordered - l.recv);
+    const r  = l.reason ? reasonOf(l.reason) : null;
+    const corr = l.correction
+      ? '<div style="display:flex;align-items:flex-start;gap:9px;margin-top:9px;padding:10px 12px;border-radius:10px;'
+        + 'background:var(--surface-raised)">'
+        + '<span style="flex:none;color:var(--text-secondary);display:flex;margin-top:1px">'+ic('pencil',14)+'</span>'
+        + '<span style="display:flex;flex-direction:column;gap:3px;min-width:0">'
+        +   '<span class="num" style="font-size:13px;font-weight:500">'
+        +     (LANG==='en'
+                ? esc(l.correction.fromWho)+' recorded '+l.correction.from+', '
+                  + esc(l.correction.toWho)+' changed to '+l.correction.to
+                : esc(l.correction.fromWhoZh)+'登记 '+l.correction.from+'，'
+                  + esc(l.correction.toWhoZh)+'改为 '+l.correction.to)
+        +   '</span>'
+        +   '<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">'
+        +     esc(T(l.correction.why, l.correction.whyZh))+'</span>'
+        +   '<span class="num" style="font-size:11.5px;color:var(--text-secondary);opacity:.85">'
+        +     esc(l.correction.at)+'</span>'
+        + '</span></div>'
+      : '';
+    return '<div style="padding:11px 0;border-top:1px solid var(--border-default)">'
+      + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
+      +   '<span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      +     esc(T(l.en,l.zh))+'</span>'
+      +   '<span class="num" style="flex:none;font-size:14px;'+(sh?'color:var(--amber-ink);font-weight:500':'color:var(--text-secondary)')+'">'
+      +     l.recv+' / '+l.ordered+' '+esc(l.unit)+'</span></div>'
+      + (sh ? '<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">'
+              + (LANG==='en' ? sh+' '+l.unit+' short · '+T(r.en,r.zh) : '短少 '+sh+' '+l.unit+' · '+T(r.en,r.zh))
+              + '</div>' : '')
+      + corr + '</div>';
+  }).join('');
+
+  return '<div style="padding:0 16px 16px">'
+    + '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:2px 0 10px">'
+    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
+    +     ic('shopping-cart',14)+'<span class="num">'+esc(s.po)+'</span></span>'
+    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
+    +     ic('map-pin',14)+esc(T(s.loc,s.locZh))+'</span>'
+    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
+    +     ic('user',14)+esc(T(s.by,s.byZh))+'</span>'
+    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
+    +     ic('clock',14)+'<span class="num">'+esc(s.date+' '+s.time)+'</span></span>'
+    + '</div>'
+    + lines
+    + '</div>';
+}
+
+function receivedTab(){
+  const shown = SESSIONS.filter(sessionMatches);
+  const chips = '<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">'
+    + RCV_FILTERS.map(f => {
+        const n = f.id==='all' ? SESSIONS.length
+                : f.id==='issues' ? SESSIONS.filter(s=>s.flags.length).length
+                : SESSIONS.filter(s=>s.flags.indexOf(f.id)!==-1).length;
+        return '<button class="chip '+(state.rcvFilter===f.id?'on':'')+'" '
+          + 'onclick="APP.cmd(\'rcvFilter\',\''+f.id+'\')">'+esc(T(f.en,f.zh))
+          + '<span class="c">'+n+'</span></button>';
+      }).join('')
+    + '</div>';
+
+  const rows = shown.map((s, i) => {
+    const open = state.rcvOpen === s.id;
+    const head = '<button class="row" onclick="APP.cmd(\'rcvOpen\',\''+s.id+'\')" '
+      + 'style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">'
+      + '<span class="rowico" style="'+(s.flags.length?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)')+'">'
+      +   ic(s.flags.length?'triangle-alert':'circle-check',18)+'</span>'
+      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'
+      +   '<span style="display:flex;align-items:baseline;gap:8px">'
+      +     '<span class="num" style="font-size:15px;font-weight:500;flex:none">'+esc(s.date)+'</span>'
+      +     '<span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      +       esc(T(s.sup,s.supZh))+'</span></span>'
+      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
+      +     'text-overflow:ellipsis;white-space:nowrap">'
+      +     esc(T(s.loc,s.locZh))+' · '+esc(T(s.by,s.byZh))+' · '
+      +     s.lines+' '+T(s.lines===1?'line':'lines','项')+'</span>'
+      +   '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'+flagPills(s.flags)+'</span></span>'
+      + '<span style="color:var(--text-secondary);display:flex;padding-top:4px">'
+      +   ic(open?'chevron-up':'chevron-down',18)+'</span>'
+      + '</button>';
+    return (i ? '<div class="sep"></div>' : '') + head + (open ? sessionDetail(s) : '');
+  }).join('');
+
+  const empty = '<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">'
+    + T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')+'</div>';
+
+  return pageHead({
+      title:T('Receiving','收货'),
+      status:(LANG==='en' ? '6 deliveries in the last fortnight · 3 with issues'
+                          : '近两周 6 次收货 · 3 次有异常') })
+    + '<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;margin:14px 16px 12px">'
+    +   '<button style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;'
+    +     'font-size:13.5px;font-weight:500;background:transparent;color:var(--text-secondary)">'
+    +     T('To receive','待收货')+' <span class="num" style="color:var(--text-secondary)">2</span></button>'
+    +   '<button style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;'
+    +     'font-size:13.5px;font-weight:500;background:var(--surface-card);color:var(--text-primary);'
+    +     'box-shadow:0 1px 3px rgba(17,26,43,.08)">'
+    +     T('Received','已收货')+' <span class="num" style="color:var(--text-secondary)">6</span></button>'
+    + '</div>'
+    + '<div style="padding:0 16px 12px;position:relative">'
+    +   '<span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);'
+    +     'display:flex;pointer-events:none">'+ic('search',17)+'</span>'
+    +   '<input value="'+esc(state.rcvQuery)+'" style="padding-left:42px" '
+    +     'placeholder="'+T('Supplier, location or person','供应商、门店或收货人')+'" '
+    +     'oninput="APP.cmd(\'rcvQuery\', this.value)">'
+    + '</div>'
+    + chips
+    + '<div style="padding:12px 16px 28px">'
+    +   (shown.length ? '<div class="list">'+rows+'</div>' : empty)
+    + '</div>';
+}
+
+/* ══ Captions + chrome ════════════════════════════════════════════════════ */
+const LAYOUTS = {
+  A:{ title:'A — Full list',
+      body:'All three suppliers expanded on one scrolling page. Everything is visible at once and the submit sits at the bottom. Longest page, fewest taps to reach any single line.' },
+  B:{ title:'B — One supplier at a time',
+      body:'Supplier groups start collapsed. Tapping one opens it as a focused sub-screen that must be confirmed before the next. Green Farm is already confirmed — open Wong Dry Goods, then Sun Oils.' },
+  C:{ title:'C — Exception-first',
+      body:'Assumes the delivery is correct. One tap records the whole PO. “Something is wrong” opens a line picker, and only the ticked lines get an editor. Fastest for the common case, slowest for a messy one.' },
+};
+
+function renderChrome(){
+  const seg = ['A','B','C'].map(k => {
+    const on = state.layout === k;
+    const sub = k==='A' ? T('Full list','完整列表')
+              : k==='B' ? T('One supplier','逐个供应商')
+              :           T('Exception-first','异常优先');
+    return '<button class="segb '+(on?'on':'')+'" onclick="APP.cmd(\'layout\',\''+k+'\')">'
+      + '<b>'+k+'</b><span>'+esc(sub)+'</span></button>';
+  }).join('');
+  document.getElementById('segRoot').innerHTML = seg;
+  document.getElementById('langBtn').textContent  = LANG === 'en' ? 'EN' : '中';
+  /* Labelled with what the NEXT tap gives you, not with what it is called. */
+  document.getElementById('resetBtn').textContent = state.pristine
+    ? T('Scenario','情景') : T('Untouched','未填写');
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.getElementById('themeBtn').textContent = dark ? '☀' : '☾';
+  document.getElementById('chromeTitle').textContent = T('Receiving · layout mockup','收货 · 布局样稿');
+}
+
+function render(){
+  renderChrome();
+  const L = LAYOUTS[state.layout];
+  document.getElementById('caption').innerHTML =
+    '<h2>'+esc(L.title)+'</h2><p>'+esc(L.body)+'</p>';
+  document.getElementById('frame').innerHTML =
+      state.layout === 'A' ? layoutA()
+    : state.layout === 'B' ? layoutB()
+    :                        layoutC();
+  document.getElementById('rcvCaption').innerHTML =
+    '<h2>The Received tab</h2><p>Past receiving sessions, not purchase orders — one row per delivery actually taken in. '
+    + 'The 29 Aug row is expanded to show a session detail with a correction on it.</p>';
+  document.getElementById('rcvFrame').innerHTML = receivedTab();
+}
+
+/* ══ Commands ═════════════════════════════════════════════════════════════ */
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const whole = v => { const n = parseInt(String(v).replace(/[^0-9]/g,''), 10); return Number.isFinite(n) ? n : 0; };
+
+const APP = {
+  cmd(name, arg){
+    const parts = typeof arg === 'string' ? arg.split('|') : [];
+    switch(name){
+
+      case 'layout': state.layout = arg; state.done = null; window.scrollTo({top:0, behavior:'smooth'}); break;
+      case 'lang':   LANG = LANG === 'en' ? 'zh' : 'en'; break;
+      case 'theme': {
+        const d = document.documentElement;
+        const next = d.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        d.setAttribute('data-theme', next);
+        document.getElementById('mThemeColor').setAttribute('content', next === 'light' ? '#FBF9F4' : '#111A2B');
+        break;
+      }
+      /* Flips between the scenario and the pristine prefilled state, so the
+         "before anyone has touched it" screen can be seen too. Driven by an
+         explicit flag rather than by deep-comparing state against the seed —
+         that version needed two taps to get anywhere once anything had been
+         edited, because the first tap only put the scenario back. */
+      case 'reset': {
+        state.pristine = !state.pristine;
+        state.lines = state.pristine ? pristineLines() : seedLines();
+        state.done = null; state.bOpen = null; state.bDone = state.pristine ? {} : { gf:true };
+        state.cMode = 'ready'; state.cFlagged = {}; state.locOpen = false;
+        break;
+      }
+
+      case 'locToggle': state.locOpen = !state.locOpen; break;
+      case 'loc':       state.loc = Number(arg); state.locOpen = false; break;
+
+      case 'recv': {
+        const s = st(parts[0]);
+        s.recv = clamp(s.recv + Number(parts[1]), 0, 999);
+        const l = lineById(parts[0]);
+        s.dmg = Math.min(s.dmg, s.recv);            // can't damage what did not arrive
+        if (s.recv >= l.ordered) s.reason = null;   // no shortfall, no reason needed
+        break;
+      }
+      case 'recvSet': {
+        const s = st(parts[0]), l = lineById(parts[0]);
+        s.recv = clamp(whole(parts[1]), 0, 999);
+        s.dmg = Math.min(s.dmg, s.recv);
+        if (s.recv >= l.ordered) s.reason = null;
+        break;
+      }
+      case 'dmg': {
+        const s = st(parts[0]);
+        s.dmg = clamp(s.dmg + Number(parts[1]), 0, s.recv);
+        break;
+      }
+      case 'dmgSet': {
+        const s = st(parts[0]);
+        s.dmg = clamp(whole(parts[1]), 0, s.recv);
+        break;
+      }
+      case 'reason': {
+        const s = st(parts[0]);
+        s.reason = s.reason === parts[1] ? null : parts[1];
+        break;
+      }
+
+      case 'grp': state.groups[arg] = !state.groups[arg]; break;
+      /* One tap for the supplier who simply did not turn up. */
+      case 'supNone':
+        linesOf(arg).forEach(l => { const s = st(l.id); s.recv = 0; s.dmg = 0; s.reason = 'not_sent'; });
+        break;
+      case 'supAll':
+        linesOf(arg).forEach(l => { const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null; });
+        break;
+
+      case 'bOpen':    state.bOpen = arg; window.scrollTo({top:0, behavior:'smooth'}); break;
+      case 'bConfirm': state.bDone[arg] = true; state.bOpen = null; window.scrollTo({top:0, behavior:'smooth'}); break;
+
+      /* Entering the fix step MAKES GOOD ON WHAT THE PICKER PROMISED: every
+         line the operator did not tick is recorded as arrived in full, right
+         then, so the summary can never quietly carry a problem on a line they
+         just said was fine. Flagged lines keep whatever is already on them. */
+      case 'cMode':
+        if (arg === 'fix') {
+          LINES.forEach(l => {
+            if (state.cFlagged[l.id]) return;
+            const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null;
+          });
+        }
+        state.cMode = arg;
+        break;
+      case 'cFlag':   state.cFlagged[arg] = !state.cFlagged[arg]; break;
+      case 'cUnflag': {
+        state.cFlagged[arg] = false;
+        const l = lineById(arg), s = st(arg);
+        s.recv = l.ordered; s.dmg = 0; s.reason = null;
+        if (!Object.keys(state.cFlagged).some(k => state.cFlagged[k])) state.cMode = 'ready';
+        break;
+      }
+      case 'cAllOk':
+        LINES.forEach(l => { const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null; });
+        state.done = 'C';
+        break;
+
+      case 'record': state.done = state.layout; break;
+      case 'again':
+        state.done = null; state.lines = seedLines(); state.bOpen = null; state.bDone = { gf:true };
+        state.cMode = 'ready'; state.cFlagged = {};
+        break;
+
+      case 'rcvFilter': state.rcvFilter = arg; break;
+      case 'rcvQuery':  state.rcvQuery = arg; break;
+      case 'rcvOpen':   state.rcvOpen = state.rcvOpen === arg ? null : arg; break;
+    }
+    render();
+    /* The search field is rebuilt on every render, so put the caret back. */
+    if (name === 'rcvQuery') {
+      const el = document.querySelector('#rcvFrame input');
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  }
+};
+window.APP = APP;
+
+/* Follow the phone, with a manual override in the chrome. */
+try {
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.getElementById('mThemeColor').setAttribute('content', dark ? '#111A2B' : '#FBF9F4');
+} catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+
+render();
+</script>
+</body>
+</html>
