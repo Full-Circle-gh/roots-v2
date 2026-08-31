@@ -535,6 +535,11 @@ const state = {
      clear on close" a guess. */
   rcvSeg:'toreceive', rcvDeliv:null, rcvTried:false, rcvLoading:false, rcvErr:null,
   rcvQ:'', rcvFlag:'all', rcvOpen:null, rcvDetail:null, rcvDetailErr:null,
+  /* To receive has its OWN list rather than borrowing Purchasing's poList:
+     searching it means asking the server (only the server can see inside the
+     lines), and a shared list would have made a search here silently re-filter
+     the Purchasing screen too. */
+  rcvTo:null, rcvToQ:'', rcvToTried:false, rcvToErr:null,
   recvId:null, recvPo:null, recvErr:null, recvBusy:false, recvSaveErr:null,
   recvVals:null, recvDmg:null, recvGroups:null, recvStore:null, recvStoreOpen:false,
   recvDone:null, poReceipts:null, poReceiptsFor:null,
@@ -1041,6 +1046,11 @@ reg('rcvQuery', v=>{ const el=document.getElementById('mRcvQ');
   state.rcvQ=String(v||''); state.focus={id:'mRcvQ',pos:el?el.selectionStart:null};
   state.rcvOpen=null; state.rcvDetail=null; render();
   clearTimeout(rcvQTimer); rcvQTimer=setTimeout(()=>loadDeliveries(true),320); });
+let rcvToTimer=null;
+reg('rcvToQuery', v=>{ const el=document.getElementById('mRcvToQ');
+  state.rcvToQ=String(v||''); state.focus={id:'mRcvToQ',pos:el?el.selectionStart:null}; render();
+  clearTimeout(rcvToTimer); rcvToTimer=setTimeout(()=>loadToReceive(true),320); });
+reg('rcvToRetry', ()=>{ state.rcvToErr=null; render(); loadToReceive(true); });
 reg('rcvOpen', id=>{ const n=Number(id);
   if(state.rcvOpen===n){ state.rcvOpen=null; state.rcvDetail=null; render(); return; }
   state.rcvOpen=n; state.rcvDetail=null; state.rcvDetailErr=null; render(); loadDelivery(n); });
@@ -1053,7 +1063,7 @@ reg('rcvGoTo', id=>{ state.poId=null; state.rcvSeg='received'; state.rcvOpen=Num
 
 reg('recvOpen', id=>{ push('receive'); loadReceive(id); });
 reg('recvRetryLoad', ()=>{ if(state.recvId) loadReceive(state.recvId); });
-reg('recvBackToList', ()=>{ state.rcvSeg='received'; state.rcvTried=false; APP.cmd('back'); loadDeliveries(true); });
+reg('recvBackToList', ()=>{ state.rcvSeg='received'; state.rcvTried=false; state.rcvToTried=false; APP.cmd('back'); loadDeliveries(true); });
 reg('recvStoreToggle', ()=>{ state.recvStoreOpen=!state.recvStoreOpen; render(); });
 reg('recvStore', id=>{ state.recvStore=Number(id); state.recvStoreOpen=false; render(); });
 /* Whole numbers only, and damage can never exceed what arrived — you cannot
@@ -1123,7 +1133,7 @@ reg('recvSave', ()=>{
     if(t.none.length)     bits.push(LANG==='en'?(t.none.length+' not sent'):(t.none.length+' 项未发货'));
     state.recvDone=bits.join(' · ');
     /* Both lists the save just changed are now stale. */
-    state.posTried=false; state.rcvTried=false; state.poReceiptsFor=null;
+    state.posTried=false; state.rcvTried=false; state.rcvToTried=false; state.poReceiptsFor=null;
     render(); showToast(T('Delivery recorded','收货已登记'));
   }).catch(e=>{ state.recvBusy=false;
     if(String(e.message)==='auth') return;
@@ -3435,6 +3445,20 @@ function loadDeliveries(force){
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.rcvLoading=false; state.rcvErr=E('Could not load deliveries.','无法加载收货记录。'); render(); });
 }
+/* Orders still waiting on their goods. The search goes to the server because
+   the thing worth searching — the product names on the lines — is not in the
+   list payload, and could not be: /purchases already looks inside
+   po_line_items for name_en / name_cn / sku, which is exactly the question
+   "which order is bringing the mint?" needs asked. */
+function loadToReceive(force){
+  if(state.rcvToTried&&!force) return;
+  state.rcvToTried=true;
+  const q=(state.rcvToQ||'').trim();
+  api('/purchases'+(q?'?search='+encodeURIComponent(q):'')).then(rows=>{
+    state.rcvTo=Array.isArray(rows)?rows:[]; state.rcvToErr=null; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.rcvToErr=E('Could not load orders.','无法加载采购单。'); render(); });
+}
 function loadDelivery(id){
   state.rcvDetail=null; state.rcvDetailErr=null;
   api('/receiving/deliveries/'+Number(id)).then(d=>{
@@ -3751,6 +3775,7 @@ function rcvDeliveryRow(d,i){
           <span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvSupText(d))}</span></span>
         <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
           [rcvStoreName(d),d.actor_label,(d.line_count||0)+' '+T(d.line_count===1?'line':'lines','项')].filter(Boolean).join(' · ')}</span>
+        ${rcvMatched(d)}
         <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${rcvFlagPills(d.flags)}</span></span>
       <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic(open?'chevron-up':'chevron-down',18)}</span></button>
     ${open?(state.rcvDetailErr?`<div style="padding:0 16px 16px;font-size:13.5px;color:var(--brick-ink)">${state.rcvDetailErr}</div>`
@@ -3758,8 +3783,19 @@ function rcvDeliveryRow(d,i){
       :`<div style="padding:0 16px 16px;font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`):''}`;
 }
 function rcvToReceive(){
-  const all=state.poList||[];
+  const all=state.rcvTo||[];
   return all.filter(p=>p.status==='Requested'||p.status==='Ordered');
+}
+/* The products a search matched, named on the row. Without this a hit reads as
+   "this order matched, open it to find out why", which is the one-by-one hunt
+   the search exists to replace. */
+function rcvMatched(r){
+  const m=r.matched_lines||[];
+  if(!m.length) return '';
+  const names=m.map(l=>(LANG==='en'?(l.name_en||l.name_cn):(l.name_cn||l.name_en))||l.sku).filter(Boolean);
+  if(!names.length) return '';
+  return `<span style="display:flex;align-items:center;gap:5px;margin-top:1px;font-size:12.5px;color:var(--sage-ink);min-width:0">
+    ${ic('package',13)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(names.join(' · '))}</span></span>`;
 }
 function statusReceiving(){
   const n=rcvToReceive().length, d=state.rcvDeliv;
@@ -3768,21 +3804,28 @@ function statusReceiving(){
   return bits.join(' · ');
 }
 function screenReceiving(){
-  loadPOs(); loadDeliveries();
+  loadToReceive(); loadDeliveries();
   const seg=(k,label,n)=>`<button onclick="APP.cmd('rcvSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${state.rcvSeg===k?'var(--surface-card)':'transparent'};color:${state.rcvSeg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${state.rcvSeg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}${n==null?'':` <span class="num" style="color:var(--text-secondary)">${n}</span>`}</button>`;
   const segs=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;margin:14px 16px 12px">
     ${seg('toreceive',T('To receive','待收货'),rcvToReceive().length)}${seg('received',T('Received','已收货'),state.rcvDeliv?state.rcvDeliv.length:null)}</div>`;
   if(state.rcvSeg==='toreceive'){
     const rows=rcvToReceive();
-    if(state.posErr) return segs+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    const toSearch=`<div style="padding:0 16px 12px;position:relative">
+      <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
+      <input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
+        placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)"></div>`;
+    if(state.rcvToErr) return segs+toSearch+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick-ink)">${state.posErr}</span></div></div>`;
-    if(!state.poList) return segs+`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!rows.length) return segs+nothingYet(T('Nothing on its way','没有待收货的订单'),
-      T('Orders you have placed appear here until the goods arrive. Open one at the door to tick it in.',
-        '已下单但尚未到货的采购单会显示在这里。到货时打开即可收货。'));
-    return segs+`<div style="padding:0 16px 28px"><div class="list">${rows.map((p,i)=>`${i?'<div class="sep"></div>':''}
+      <span style="font-size:14px;color:var(--brick-ink)">${state.rcvToErr}</span></div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('rcvToRetry')">${T('Try again','重试')}</button></div>`;
+    if(!state.rcvTo) return segs+toSearch+`<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+    if(!rows.length) return segs+toSearch+(state.rcvToQ.trim()
+      ?`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No order on its way has that.','没有待收货的采购单包含该商品。')}</div>`
+      :nothingYet(T('Nothing on its way','没有待收货的订单'),
+        T('Orders you have placed appear here until the goods arrive. Open one at the door to tick it in.',
+          '已下单但尚未到货的采购单会显示在这里。到货时打开即可收货。')));
+    return segs+toSearch+`<div style="padding:0 16px 28px"><div class="list">${rows.map((p,i)=>`${i?'<div class="sep"></div>':''}
       <button class="row" onclick="APP.cmd('recvOpen',${p.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
         <span class="rowico">${ic('shopping-cart',18)}</span>
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
@@ -3791,6 +3834,7 @@ function screenReceiving(){
             <span style="font-size:15px;min-width:0;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}</span></span>
           <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
             [poStore(p),(p.line_count||0)+' '+T('lines','项'),p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):''].filter(Boolean).join(' · ')}</span>
+          ${rcvMatched(p)}
           <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${poPill(p)}</span></span>
         <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic('chevron-right',18)}</span></button>`).join('')}</div></div>`;
   }
@@ -3799,7 +3843,7 @@ function screenReceiving(){
   const search=`<div style="padding:0 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
     <input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
-      placeholder="${T('Supplier, store or person','供应商、门店或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
+      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
   if(state.rcvErr) return segs+search+chips+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
     <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
     <span style="font-size:14px;color:var(--brick-ink)">${state.rcvErr}</span></div>
