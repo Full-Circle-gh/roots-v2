@@ -4694,23 +4694,34 @@ function markOrderPaid(orderId) {
       try { inventory.commitOrderReservations(orderId); }
       catch (e) { console.error('[inventory.commit]', e); }
 
-      // Scheduled-for-later GZ orders skip the reserve→commit gate at checkout
-      // (stockGate off), so commitOrderReservations above is a no-op for them and
-      // their stock would otherwise sit untouched until staff click Preparing.
-      // The office wants a Guangzhou order's stock pulled the moment it's paid —
-      // regardless of the delivery day — so decrement now. Idempotent (no-ops on
-      // GZ same-day orders that already reserved, and on any prior prepare-commit).
-      // Out-of-Guangzhou orders are deliberately NOT decremented here: their stock
-      // still commits at the first fulfilment transition, so the warehouse keeps
-      // its restock-before-ship window.
+      // Orders that skipped the reserve→commit gate at checkout (stockGate off —
+      // everything except GZ same-day and pickup) carry no reservation, so the
+      // commit above is a no-op for them. Their stock is pulled HERE instead.
+      //
+      // Until 2026-08-31 this was gated on the order carrying a Guangzhou
+      // address: an out-of-GZ order was left for its first fulfilment transition
+      // so the warehouse kept a restock-before-ship window. That window is what
+      // let a shelf sell past itself. The hard out-of-stock gate in POST /orders
+      // reads physical_qty, and physical_qty that only moves when someone clicks
+      // "Start preparing" reads "5 left" to the next shopper, and the next, for
+      // as many orders as arrive — the shop sets a count and the count never
+      // answers for anything. The same gate also went quiet whenever the saved
+      // address simply didn't parse as Guangzhou (a district with no city on it),
+      // which is not a fulfilment policy, just a miss.
+      //
+      // Selling past zero is a per-product decision that already has its own
+      // switch — oos_policy 'backorder_gz' keeps a sold-out item orderable as a
+      // pre-order for the shoppers we ship to — so it does not also need an
+      // unmoved shelf count standing in for it. Every paid order decrements now,
+      // whatever its address.
+      //
+      // Idempotent: no-ops on orders that already reserved (GZ same-day, pickup),
+      // on the counter sale committed a few lines above, and on any prior
+      // prepare-commit — so the preparing/dispatch calls that still make this
+      // call for orders paid before this change cannot double-count.
       try {
-        const ord = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
-        let addr = null;
-        try { addr = JSON.parse(ord?.address_json || 'null'); } catch { /* no address */ }
-        if (addr && inventory.isGuangzhouAddress(addr)) {
-          prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid (GZ scheduled)' });
-        }
-      } catch (e) { console.error('[inventory.prepareCommit (paid GZ)]', e); }
+        prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid' });
+      } catch (e) { console.error('[inventory.prepareCommit (paid)]', e); }
     }
     // Award earn-points on the actual transition. awardOrderPoints is
     // idempotent so calling it on already-paid orders is safe.
@@ -27623,15 +27634,21 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // admin path bypasses it.
     try { inventory.commitOrderReservations(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
     catch (e) { console.error('[inventory.commit (admin)]', e); }
-    // A counter sale marked paid HERE must move stock exactly as one settled
-    // through markOrderPaid does. This is the same feature, not a second one:
-    // the operator rings a walk-in up as pending, the customer pays at the till,
-    // and the operator clicks Mark paid — the commit above is a no-op for it
-    // (a manual order holds no reservation), so without this the walk-in
-    // decrements on one route and not the other, purely by which button settled
-    // it. Guarded on the genuine pending→paid transition, like the print and
-    // WeCom hooks below; commitUnreservedOrder is idempotent besides, so a
-    // re-save cannot double-count.
+    // An order marked paid HERE must move stock exactly as one settled through
+    // markOrderPaid does. This is the same feature, not a second one: the money
+    // arriving off-app (cash at the till, a bank transfer) and the operator
+    // clicking Mark paid is the same sale as the gateway callback, and the
+    // commit above is a no-op for any order that never reserved — a counter
+    // sale, and every order the checkout stock gate let through unreserved —
+    // so without this the shelf moves on one route and not the other, purely by
+    // which button settled it. Guarded on the genuine pending→paid transition,
+    // like the print and WeCom hooks below; commitUnreservedOrder is idempotent
+    // besides, so a re-save cannot double-count.
+    //
+    // This fired for counter sales alone until 2026-08-31 (an isTerminalOnPaid
+    // test stood here), which left a mini-app order marked paid off-app waiting
+    // on its first preparing/dispatch click for a decrement — the same wait,
+    // one route over, that markOrderPaid no longer makes an order serve.
     //
     // NOTE: this path does NOT flip the order to 'delivered' the way
     // markOrderPaid does — it never calls isTerminalOnPaid, so a counter sale
@@ -27641,14 +27658,11 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // way: it is keyed on the sale being paid, not on the status it lands in.
     if (o.status !== 'paid') {
       try {
-        const _ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(id);
-        if (isTerminalOnPaid(_ft)) {
-          prepareCommitUnreservedOrder(id, {
-            actorUserId: req.user.id,
-            actorLabel: req.user.display_name || req.user.username || null,
-          });
-        }
-      } catch (e) { console.error('[inventory.commit (admin counter)]', e); }
+        prepareCommitUnreservedOrder(id, {
+          actorUserId: req.user.id,
+          actorLabel: req.user.display_name || req.user.username || null,
+        });
+      } catch (e) { console.error('[inventory.commit (admin paid)]', e); }
     }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
     // Auto-print the bill, same as the gateway callbacks do inside

@@ -1339,6 +1339,33 @@ check('the create route refuses a counter sale with no store',
 check('the counter decrement goes through prepareCommitUnreservedOrder, not adjustStock',
   /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · counter sale \(paid\)' \}\)/.test(SERVER_SRC), true);
 
+// ── PAID IS THE MOMENT, FOR EVERY ORDER ────────────────────────────────────
+// The counter sale above fell between two rules. The larger half of the second
+// rule was still standing until 2026-08-31: the paid-order decrement was gated
+// on `isGuangzhouAddress(addr)`, so an out-of-city order — or one whose saved
+// address simply did not parse as Guangzhou, a district with no city on it —
+// kept its units on the shelf until a person clicked Start preparing.
+//
+// That is not a quiet delay. The hard out-of-stock gate in POST /orders reads
+// physical_qty, so a shelf that only moves by hand answers "5 left" to the next
+// shopper, and the next, for as many orders as arrive between the payment and
+// the click. A shop that sets a count expects the count to answer for it.
+//
+// Both settle routes are pinned, because an order settled off-app through the
+// drawer is the same sale as one settled by the gateway and must not move the
+// shelf differently. The admin route's decrement used to fire for counter sales
+// alone (an isTerminalOnPaid test stood in front of it) — hence the second half
+// of that check.
+const MARK_PAID_SRC = extractFn('markOrderPaid', SERVER_SRC) || '';
+check('markOrderPaid was found in routes/retail.js (extraction is intact)',
+  MARK_PAID_SRC !== '', true);
+check('markOrderPaid decrements every paid order, with no address test in front of it',
+  /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · paid' \}\)/.test(MARK_PAID_SRC)
+  && !/isGuangzhouAddress/.test(MARK_PAID_SRC), true);
+check('the admin Mark paid route decrements every order, not counter sales alone',
+  /\[inventory\.commit \(admin paid\)\]/.test(SERVER_SRC)
+  && (SERVER_SRC.match(/isTerminalOnPaid\(/g) || []).length === 1, true);
+
 
 // ═══ 12. The counter till's manual settle ═══════════════════════════════════
 // THE ASSERTION THIS SECTION EXISTS FOR: a walk-in settles by HAND. The cashier
