@@ -69,10 +69,29 @@ addColumn('recipes',       'image_data',      'TEXT');
 addColumn('recipe_ingredients', 'substitutes', 'TEXT');
 addColumn('ingredients', 'pack_contents_qty',  'REAL');
 addColumn('ingredients', 'pack_contents_unit', 'TEXT');
-// One-time: free SKUs still held by already soft-deleted ingredients so the
-// codes can be reused (the DELETE handler now nulls SKU on delete going
-// forward). A deleted item never needs a unique SKU; PO lines snapshot it.
-try { db.prepare('UPDATE ingredients SET sku = NULL WHERE is_active = 0 AND sku IS NOT NULL').run(); } catch {}
+// REMOVED 2026-08-31 — this ran on EVERY boot, not once, and by the end it was
+// the only thing left in the codebase nulling an ingredient's SKU. Both doors
+// that archive one now deliberately keep it, and this line quietly undid both:
+//
+//   routes/retail-materials.js's archive handler — "THE SKU IS KEPT (§18) — a
+//     reused code makes historical orders and reports point at the wrong
+//     thing. The kitchen half stopped nulling it; this door was never allowed
+//     to."
+//   routes/ingredients.js:364's soft-delete — changed to `SET is_active = 0`
+//     alone, its comment recording the 148 rows that lost their SKU before
+//     that change and are mostly unrecoverable.
+//
+// So its own comment ("the DELETE handler now nulls SKU on delete going
+// forward") had become false, and the "one-time" backfill it described had in
+// fact already run on every restart for months: nothing legacy was left for it
+// to free, and every is_active = 0 row still holding a SKU was one those two
+// handlers had deliberately preserved. Found when 46 materials archived by
+// scripts/audit_made_materials.js were due to silently lose their SKUs at the
+// next pm2 restart — a deploy included — despite archive being a reversible
+// action a human can undo from the Materials screen.
+//
+// Nothing replaces it. Freeing a code for reuse is a data decision with an
+// owner, not a side effect of booting.
 addColumn('packaging_types', 'image_data',     'TEXT');
 // How much of a MADE material's cost_per_unit is overhead its own recipe added
 // (§29's second addendum, settled 2026-08-27: OVERHEAD DOES NOT COMPOUND).
