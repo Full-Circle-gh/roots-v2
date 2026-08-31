@@ -687,11 +687,22 @@
     return esc([T('From & to', '来源与门店'), T('What to buy', '采购内容'), T('Review & place', '确认下单')][n - 1]);
   }
 
-  function supplierOptions(selected) {
-    return `<option value="">${esc(T('No supplier — mixed / one-off', '不指定 —— 混合/一次性'))}</option>` + _suppliers
-      .filter(s => s.is_active || s.name === selected)
-      .map(s => `<option value="${esc(s.name)}"${s.name === selected ? ' selected' : ''}>${esc(supName(s.name, s.name_cn))}</option>`)
-      .join('');
+  // The order's own supplier. It was a <select> carrying the whole book — 80+
+  // names on the live tenant, no way to type at it, and its popup is the OS
+  // combobox widget the Invoices fields moved away from (some embedding
+  // webviews position it against the wrong edge of the window). It is the same
+  // search box those use now; empty still means "mixed / one-off".
+  function supplierFieldHtml(selected) {
+    return `<span class="pu2-suggestwrap">
+        <input class="pu2-input" type="text" id="pu2-w-supplier" autocomplete="off"
+          role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+          value="${esc(selected || '')}"
+          placeholder="${esc(T('Type to search your suppliers', '输入以搜索供应商'))}"
+          onfocus="puSuggestOpen('pu2-w-supplier','posuppliers')" oninput="puSuggestOpen('pu2-w-supplier','posuppliers')"
+          onkeydown="puSuggestKey(event,'pu2-w-supplier','posuppliers')" onblur="puSuggestBlur('pu2-w-supplier')">
+        <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+          onmousedown="puSuggestToggle(event,'pu2-w-supplier','posuppliers')">${I.chevDown}</button>
+      </span>`;
   }
   function storeOptions(selected) {
     return _stores.map(s => `<option value="${s.id}"${s.id === selected ? ' selected' : ''}>${esc(s.name_en || s.code)}${s.name_cn ? ' · ' + esc(s.name_cn) : ''}</option>`).join('');
@@ -704,7 +715,7 @@
         <div class="pu2-fgrid">
           <label class="pu2-f">
             <span class="lbl">${esc(T('Supplier', '供应商'))}</span>
-            <select class="pu2-input" id="pu2-w-supplier">${supplierOptions(e.supplier)}</select>
+            ${supplierFieldHtml(e.supplier)}
             <span class="hint">${esc(T('Optional — leave empty for a mixed or one-off buy.', '可选 —— 混合或一次性采购可留空。'))}</span>
           </label>
           <label class="pu2-f">
@@ -729,17 +740,34 @@
       </div>`;
   }
 
-  // read step-1 fields off the DOM into state (called on every step change)
+  // read step-1 fields off the DOM into state (called on every step change).
+  // Returns false when the supplier box holds something that names nobody —
+  // the <select> it replaced could not express that, and letting it through
+  // would put an order under a supplier no screen can ever group it with.
   function grabStep1() {
     const g = id => document.getElementById(id);
-    if (g('pu2-w-supplier')) _edit.supplier = g('pu2-w-supplier').value || '';
+    const sup = g('pu2-w-supplier');
+    if (sup) {
+      const typed = String(sup.value || '').trim();
+      // A pick from the menu is already committed; a name typed out in full
+      // still counts, matched on the stored name or either language half.
+      const hit = typed && bookSuggestRows([_edit.supplier])
+        .find(o => [o.v, o.en, o.cn].some(x => x && String(x).toLowerCase() === typed.toLowerCase()));
+      if (typed && !hit) {
+        toast(T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。'), 'err');
+        if (sup.focus) sup.focus();
+        return false;
+      }
+      _edit.supplier = hit ? hit.v : '';
+    }
     if (g('pu2-w-store'))    _edit.store_id = parseInt(g('pu2-w-store').value, 10) || _edit.store_id;
     if (g('pu2-w-delivery')) _edit.delivery_date = g('pu2-w-delivery').value || '';
     if (g('pu2-w-notes'))    _edit.notes = g('pu2-w-notes').value || '';
+    return true;
   }
 
   window.puWizNext = function (n) {
-    if (_wstep === 1) grabStep1();
+    if (_wstep === 1 && !grabStep1()) return;
     _wstep = n; paintWizard();
   };
   window.puWizStep = function (n) { _wstep = n; paintWizard(); };
@@ -1070,6 +1098,13 @@
     (extra || []).forEach(push);
     return names;
   }
+  // Those "other names", for the line whose picker is OPEN: whoever this
+  // product was bought from before, and whatever the line itself carries.
+  function lineSupExtras() {
+    const s = (_supLineInfo && _supLineInfo.suppliers) || [];
+    const it = (_supLine != null && _edit && _edit.items[_supLine]) || null;
+    return s.map(x => x.supplier).concat(it ? [it.supplier_name] : []);
+  }
 
   // Opening it is a toggle — a second tap on the same chip puts it away.
   // The picker is painted INTO the line's own row (renderLines), not into the
@@ -1112,7 +1147,6 @@
     const s = (_supLineInfo && _supLineInfo.suppliers) || [];
     const costs = s.map(x => Number(x.last_cost)).filter(n => isFinite(n));
     const minCost = costs.length ? Math.min(...costs) : null;
-    const names = supplierNameList([...s.map(x => x.supplier), it.supplier_name]);
     const val = _supDraft != null ? _supDraft : (it.supplier_name || '');
     return `<div class="pu2-pop">
         <div class="pop-head">
@@ -1138,11 +1172,16 @@
         <div class="pu2-suprow manual">
           <div class="sname">${esc(s.length ? T('Someone else', '其他供应商') : T('Supplier', '供应商'))}</div>
           <div class="supfield">
-            <input class="pu2-input" type="text" id="pu2-supname" list="pu2-supnames" autocomplete="off"
-              value="${esc(val)}"
-              placeholder="${esc(T('Pick one, or type a name', '选择或输入名称'))}"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();puLineSupSave();}else if(event.key==='Escape'){puCloseLineSup();}">
-            <datalist id="pu2-supnames">${names.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+            <span class="pu2-suggestwrap">
+              <input class="pu2-input" type="text" id="pu2-supname" autocomplete="off"
+                role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                value="${esc(val)}"
+                placeholder="${esc(T('Type to search your suppliers', '输入以搜索供应商'))}"
+                onfocus="puSuggestOpen('pu2-supname','linesuppliers')" oninput="puSuggestOpen('pu2-supname','linesuppliers')"
+                onkeydown="puLineSupKey(event)" onblur="puSuggestBlur('pu2-supname')">
+              <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                onmousedown="puSuggestToggle(event,'pu2-supname','linesuppliers')">${I.chevDown}</button>
+            </span>
             <span class="hint">${esc(T('Leave it empty and the line follows the order’s supplier.', '留空则该行沿用订单的供应商。'))}</span>
           </div>
           <div><button class="pu2-btn sm${s.length ? '' : ' primary'}" onclick="puLineSupSave()">${esc(T('Save', '保存'))}</button></div>
@@ -1171,7 +1210,30 @@
     if (_supLine == null || !_edit || !_edit.items[_supLine]) return;
     const el = document.getElementById('pu2-supname');
     _edit.items[_supLine].supplier_name = ((el && el.value) || '').trim();
+    puSuggestClose();
     puCloseLineSup();
+  };
+  // Enter and Escape mean two things at this field, and the open menu gets
+  // first refusal: Enter takes the highlighted row, Escape puts the list away.
+  // Only once the menu is out of the way do they mean save and close-the-
+  // picker, which is what they meant before this field had a menu at all.
+  window.puLineSupKey = function (e) {
+    const menu = document.getElementById('pu2-suggest-menu');
+    const open = !!menu && !menu.hidden && _sugFor === 'pu2-supname';
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { puSuggestKey(e, 'pu2-supname', 'linesuppliers'); return; }
+    // First Escape shuts the list; a second one closes the picker.
+    if (e.key === 'Escape') {
+      if (open) puSuggestKey(e, 'pu2-supname', 'linesuppliers');
+      else puCloseLineSup();
+      return;
+    }
+    if (e.key === 'Enter') {
+      // A highlighted row is the pick. Enter with nothing highlighted still
+      // means what it always meant here — save the name as typed.
+      if (open && _sugIdx >= 0) { puSuggestKey(e, 'pu2-supname', 'linesuppliers'); return; }
+      e.preventDefault();
+      puLineSupSave();
+    }
   };
 
   function wizStep3() {
@@ -1223,7 +1285,9 @@
     };
   }
   async function saveWiz(markOrdered) {
-    if (_wstep === 1) grabStep1();
+    // Saving from step 1 obeys the same rule Next does: a supplier box holding
+    // a name that is nobody stops the save rather than being written as one.
+    if (_wstep === 1 && !grabStep1()) return null;
     const body = wizBody();
     if (!body.items.length) { toast(T('Add at least one product', '请先添加商品'), 'err'); return null; }
     let id = _edit.id;
@@ -2832,6 +2896,18 @@
   // there clears the allocations and repaints (puInvField's own rule, unchanged).
   const supplierSuggestRows = () =>
     invSupplierList().map(o => ({ v: o.name, en: o.en, cn: o.cn, label: o.label }));
+  // The two ORDER-side supplier fields — the order's own supplier on step 1 of
+  // the wizard, and a line's supplier in the picker — search the same book, and
+  // differ from the Invoices pair above in one way: their `label` is the WHOLE
+  // stored name, not one language half. Both write straight into the order (the
+  // step-1 field is read back off the DOM by grabStep1, the line field by
+  // puLineSupSave), and the order carries the name as one string — the recap on
+  // step 2 and the printed PO both show it whole. The menu still splits the
+  // halves for reading; only what lands in the box differs.
+  const bookSuggestRows = (extra) => supplierNameList(extra).map(n => {
+    const half = supSplit(n);
+    return { v: n, en: half.en, cn: half.cn, label: n };
+  });
   const PU_SUGGEST_DYN = {
     suppliers: {
       rows: supplierSuggestRows,
@@ -2840,6 +2916,16 @@
     invsuppliers: {
       rows: supplierSuggestRows,
       commit: (v) => { if (_invDraft) puInvField('supplier', v); },
+    },
+    // A draft placed against a supplier who has since been retired keeps
+    // offering that supplier — otherwise reopening the draft would quietly
+    // drop the name it was already carrying.
+    posuppliers: {
+      rows: () => bookSuggestRows([_edit && _edit.supplier]),
+      commit: (v) => { if (_edit) _edit.supplier = v; },
+    },
+    linesuppliers: {
+      rows: () => bookSuggestRows(lineSupExtras()),
     },
   };
   const puSuggestOpts = key => (PU_SUGGEST_DYN[key] ? PU_SUGGEST_DYN[key].rows() : (PU_SUGGEST[key] || []));

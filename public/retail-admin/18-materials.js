@@ -799,7 +799,7 @@
               <input class="mat-input" id="mat-f-supplier" value="${esc(m.supplier == null ? '' : m.supplier)}"
                 maxlength="160" autocomplete="off" role="combobox" aria-expanded="false"
                 aria-autocomplete="list" aria-controls="mat-combo-menu"
-                placeholder="${esc(T('Search suppliers…', '搜索供应商…'))}"
+                placeholder="${esc(T('Type to search your suppliers', '输入以搜索供应商'))}"
                 oninput="matDirty();matSupNote();matComboOpen('supplier')"
                 onfocus="matComboOpen('supplier')"
                 onkeydown="matComboKey(event,'supplier')"
