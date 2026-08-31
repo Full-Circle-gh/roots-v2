@@ -654,6 +654,154 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: pos });
 });
 
+// ── Deliveries — reading receipts back as a list of DELIVERIES ─────────────
+// The tables store one receipt per save. A person does not think in saves: a
+// three-supplier order arriving over three days is three deliveries, and Jing
+// fixing Shun's count an hour later is not a fourth — it is a correction to
+// the one that already happened.
+//
+// THE RULE, and it is derived at read time rather than stamped at write time:
+// a receipt is a DELIVERY when it is the first to receive at least one line.
+// A receipt that only revisits lines an earlier receipt already covered is a
+// CORRECTION, and it hangs under the line it corrects rather than earning a
+// row of its own. Nothing is flagged when it is written because the same save
+// is a delivery from one angle and a correction from another — Wednesday's
+// receipt brought Red lentils for the first time AND revised Mint — and only
+// the reader knows which question is being asked.
+//
+// THE TRANSITION GAP FALLS OUT OF THIS FOR FREE. A PO received before the
+// tables existed has no receipt for its lines, so the first correction after
+// the fact IS a first appearance, and renders as its own delivery rather than
+// as a correction dangling off nothing. What that delivery cannot say is what
+// came before it — hence untrackedLines() below, which the screen states in
+// words instead of leaving a gap.
+const DELIVERY_SQL = `
+  SELECT r.id, r.po_id, r.store_id, r.actor_label, r.actor_realm, r.note, r.received_at,
+         po.po_number, po.supplier, po.status AS po_status,
+         (SELECT COUNT(*) FROM po_receipt_lines l WHERE l.receipt_id = r.id) AS line_count,
+         (SELECT COUNT(*) FROM po_receipt_lines l
+           WHERE l.receipt_id = r.id
+             AND NOT EXISTS (
+               SELECT 1 FROM po_receipt_lines l2 JOIN po_receipts r2 ON r2.id = l2.receipt_id
+                WHERE l2.line_id = l.line_id AND r2.po_id = r.po_id AND r2.id < r.id)
+         ) AS new_lines
+    FROM po_receipts r
+    JOIN purchase_orders po ON po.id = r.po_id
+   WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ?`;
+
+// The lines of one receipt, each with what its PO line ORDERED — which is the
+// only way "4 of 5" can be said at all, and the only way short/over is known.
+function receiptLines(receiptId) {
+  return db.prepare(`
+    SELECT l.id, l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
+           pli.name_en, pli.name_cn, pli.sku, pli.unit, pli.qty AS ordered,
+           pli.supplier_name
+      FROM po_receipt_lines l
+      JOIN po_line_items pli ON pli.id = l.line_id
+     WHERE l.receipt_id = ?
+     ORDER BY pli.sort_order, pli.id`).all(receiptId);
+}
+
+// short / damaged / over, from the lines of one delivery. The same three words
+// the list marks a row with and the detail repeats per line.
+function deliveryFlags(lines) {
+  const f = [];
+  if (lines.some(l => l.qty_received != null && +l.qty_received < +l.ordered)) f.push('short');
+  if (lines.some(l => +l.damaged_qty > 0)) f.push('damaged');
+  if (lines.some(l => l.qty_received != null && +l.qty_received > +l.ordered)) f.push('over');
+  return f;
+}
+
+// Who a delivery came from. A PO is a mixed shopping list, so the answer is the
+// LINES' suppliers, not the header's — falling back to the header when a line
+// carries none, which is what every other supplier read in this file does.
+function deliverySuppliers(lines, poSupplier) {
+  const names = new Set();
+  for (const l of lines) {
+    const n = (l.supplier_name || '').trim() || (poSupplier || '').trim();
+    if (n) names.add(n);
+  }
+  return [...names];
+}
+
+// Lines already received where no receipt covers them: the deliveries that
+// happened before this history existed. Counted, never invented.
+function untrackedLines(poId) {
+  return db.prepare(`
+    SELECT COUNT(*) AS c FROM po_line_items pli
+     WHERE pli.po_id = ? AND pli.qty_received IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM po_receipt_lines l WHERE l.line_id = pli.id)`).get(poId).c;
+}
+
+function decorateDelivery(row) {
+  const lines = receiptLines(row.id);
+  const store = row.store_id ? inventory.getStore(row.store_id) : null;
+  return {
+    ...row,
+    lines,
+    flags: deliveryFlags(lines),
+    suppliers: deliverySuppliers(lines, row.supplier),
+    store_name_en: store?.name_en || null,
+    store_name_cn: store?.name_cn || null,
+  };
+}
+
+// GET /api/retail-admin/receiving/deliveries — the Received list.
+// Deliveries only; corrections stay inside the delivery they correct.
+router.get('/api/retail-admin/receiving/deliveries', requireRetailAdmin, (req, res) => {
+  const rows = db.prepare(DELIVERY_SQL + ' ORDER BY r.received_at DESC, r.id DESC LIMIT 200')
+    .all(currentTenantId())
+    .filter(r => r.new_lines > 0);
+  const out = rows.map(decorateDelivery);
+
+  // Search and filter here rather than in SQL: both read the DERIVED shape —
+  // the supplier list is assembled from lines, and the flags from a comparison
+  // against the ordered quantity. A WHERE clause could not see either without
+  // rebuilding both, and then there would be two of each.
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const flag = String(req.query.flag || 'all');
+  const match = d => {
+    if (flag === 'issues' && !d.flags.length) return false;
+    if (flag !== 'all' && flag !== 'issues' && d.flags.indexOf(flag) === -1) return false;
+    if (!q) return true;
+    const hay = [d.po_number, d.actor_label, d.store_name_en, d.store_name_cn, ...d.suppliers]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  };
+  res.json({ success: true, data: out.filter(match) });
+});
+
+// GET /api/retail-admin/receiving/deliveries/:id — one delivery, with every
+// later revision of its lines nested under the line it corrects.
+router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (req, res) => {
+  const row = db.prepare(DELIVERY_SQL + ' AND r.id = ?').all(currentTenantId(), req.params.id)[0];
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  const d = decorateDelivery(row);
+  // Every later receipt row for these lines, on this PO. Ordered, so the
+  // screen reads them as "recorded N, changed to M" straight down the list.
+  const corr = db.prepare(`
+    SELECT l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
+           r.id AS receipt_id, r.received_at, r.actor_label
+      FROM po_receipt_lines l
+      JOIN po_receipts r ON r.id = l.receipt_id
+     WHERE r.po_id = ? AND r.id > ? AND l.line_id IN (${d.lines.map(() => '?').join(',') || 'NULL'})
+     ORDER BY r.id`).all(row.po_id, row.id, ...d.lines.map(l => l.line_id));
+  for (const l of d.lines) l.corrections = corr.filter(c => c.line_id === l.line_id);
+  res.json({ success: true, data: d });
+});
+
+// GET /api/retail-admin/purchases/:id/receipts — the deliveries taken against
+// one order, for the PO detail screen.
+router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  const rows = db.prepare(DELIVERY_SQL + ' AND r.po_id = ? ORDER BY r.received_at, r.id')
+    .all(currentTenantId(), po.id)
+    .filter(r => r.new_lines > 0)
+    .map(decorateDelivery);
+  res.json({ success: true, data: { deliveries: rows, untracked_lines: untrackedLines(po.id) } });
+});
+
 router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
@@ -695,9 +843,27 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
   }
   const expenses = db.prepare('SELECT id, date, amount, category, description FROM expense_entries WHERE po_id = ? ORDER BY id').all(po.id);
   const store = po.store_id ? inventory.getStore(po.store_id) : null;
+  // ── Where this order may still be received into ──────────────────────────
+  // The receive screen must never offer a destination the receive route will
+  // then refuse with store_locked. So the answer travels WITH the order: which
+  // shelf its stock is on, whether that is now fixed, and the list to choose
+  // from while it is not. A screen that has to POST to discover it cannot
+  // change the store has already shown the operator a choice that was a lie.
+  const receivingStoreId = appliedReceiptStore(db, po);
+  const locked = !!db.prepare(
+    'SELECT 1 FROM po_line_items WHERE po_id = ? AND COALESCE(stock_applied_qty, 0) <> 0 LIMIT 1'
+  ).get(po.id);
+  const rStore = receivingStoreId ? inventory.getStore(receivingStoreId) : null;
   res.json({ success: true, data: {
     ...po, items, expenses,
     store_name_en: store?.name_en || null, store_name_cn: store?.name_cn || null,
+    receiving_store_id: receivingStoreId,
+    receiving_store_name_en: rStore?.name_en || null,
+    receiving_store_name_cn: rStore?.name_cn || null,
+    store_locked: locked,
+    // Only worth sending while a choice is still open.
+    stores: locked ? [] : inventory.listStores({ activeOnly: true })
+      .map(s => ({ id: s.id, name_en: s.name_en, name_cn: s.name_cn })),
   } });
 });
 
