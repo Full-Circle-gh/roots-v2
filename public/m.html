@@ -326,6 +326,32 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
+
+/* ── Receiving ────────────────────────────────────────────────────────────
+   The quantity control on the receive screen. 52px because it is used one-
+   handed with a box in the other, standing at a door — the 44px floor is a
+   minimum for a thumb that is paying attention, not for one that is busy. */
+.qty{width:72px;height:52px;padding:0;text-align:center;font-size:22px;font-weight:500;
+  font-variant-numeric:tabular-nums;border-radius:10px;background:var(--surface-card);
+  border:1px solid var(--border-default);color:var(--text-primary)}
+.qty.sm{width:60px;height:44px;font-size:17px}
+/* Amber only when the ARRIVED count differs from what was ordered. Damage is a
+   separate fact with its own control and its own colour; tinting this for it
+   said the count had been changed when it had not. */
+.qty.edit{border-color:var(--amber);background:var(--amber-tint);color:var(--amber-ink)}
+/* The damage mark, at the right end of the quantity row. Quiet at zero; once
+   it carries a count it fills brick AND SHOWS THE NUMBER, so damage is legible
+   while scrolling and never hides behind a tap. */
+.dmgbtn{min-width:52px;height:52px;padding:0 11px;border-radius:10px;background:transparent;
+  border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;gap:5px;
+  color:var(--text-secondary);cursor:pointer;flex:none}
+.dmgbtn.on{background:var(--brick-tint);border-color:var(--brick);color:var(--brick-ink)}
+.dmgbtn .n{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+/* The supplier header's secondary action — small, quiet, never a CTA. */
+.minibtn{height:44px;padding:0 11px;border-radius:999px;border:1px solid var(--border-default);
+  background:transparent;color:var(--text-secondary);font-size:12.5px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;white-space:nowrap;flex:none;font-family:inherit}
+.minibtn.on{border-color:var(--text-primary);color:var(--text-primary)}
 </style>
 </head>
 <body>
@@ -502,6 +528,21 @@ const state = {
   lb:null, lbErr:null, lbTried:false,
   polls:null, pollsErr:null, pollsTried:false, pollOpen:null, pollBusy:null,
   poDetail:null, poErr:null, poBusy:false,
+  /* Receiving. rcv* is the LIST of deliveries; recv* is the screen that books
+     one. Two prefixes because they are two screens with two lifetimes — the
+     list survives opening a delivery, the receive screen is thrown away the
+     moment it is left, and one prefix would have made "which of these do I
+     clear on close" a guess. */
+  rcvSeg:'toreceive', rcvDeliv:null, rcvTried:false, rcvLoading:false, rcvErr:null,
+  rcvQ:'', rcvFlag:'all', rcvOpen:null, rcvDetail:null, rcvDetailErr:null,
+  /* To receive has its OWN list rather than borrowing Purchasing's poList:
+     searching it means asking the server (only the server can see inside the
+     lines), and a shared list would have made a search here silently re-filter
+     the Purchasing screen too. */
+  rcvTo:null, rcvToQ:'', rcvToTried:false, rcvToErr:null,
+  recvId:null, recvPo:null, recvErr:null, recvBusy:false, recvSaveErr:null,
+  recvVals:null, recvDmg:null, recvGroups:null, recvStore:null, recvStoreOpen:false,
+  recvDone:null, poReceipts:null, poReceiptsFor:null,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   /* Declared here rather than sprung into existence by whichever loader gets
      there first. There is one state object and well over a hundred keys on it,
@@ -979,12 +1020,126 @@ reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; r
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
 reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false;
   state.poMounted=false; render(); state.poMounted=true;
+  // The arrivals booked against this order, so the order and its deliveries
+  // are one tap apart — the cost of putting Receiving on its own screen, paid.
+  loadPoReceipts(Number(id));
   api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
       state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
 reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; render(); });
+/* From the order straight into receiving it. The sheet closes first — leaving
+   it open behind a full screen is how a Back button ends up with two things
+   to mean. */
+reg('poReceive', ()=>{ const id=state.poId; if(!id) return;
+  state.poId=null; state.poDetail=null; APP.cmd('recvOpen',id); });
 /* Marking a delivery in writes stock and posts the cost to the books, so it
    asks first and says both of those things before it does. */
+/* ── Receiving ───────────────────────────────────────────────────────────── */
+reg('rcvSeg', k=>{ state.rcvSeg=k; state.rcvOpen=null; state.rcvDetail=null; render(); if(k==='received') loadDeliveries(); });
+reg('rcvFlag', k=>{ state.rcvFlag=k; state.rcvOpen=null; state.rcvDetail=null; render(); loadDeliveries(true); });
+reg('rcvRetry', ()=>{ state.rcvErr=null; render(); loadDeliveries(true); });
+/* Typing keeps the caret through the re-render via state.focus, the same
+   mechanism Products and Customers search use. The fetch is debounced so a
+   fast typist makes one request, not nine. */
+let rcvQTimer=null;
+reg('rcvQuery', v=>{ const el=document.getElementById('mRcvQ');
+  state.rcvQ=String(v||''); state.focus={id:'mRcvQ',pos:el?el.selectionStart:null};
+  state.rcvOpen=null; state.rcvDetail=null; render();
+  clearTimeout(rcvQTimer); rcvQTimer=setTimeout(()=>loadDeliveries(true),320); });
+let rcvToTimer=null;
+reg('rcvToQuery', v=>{ const el=document.getElementById('mRcvToQ');
+  state.rcvToQ=String(v||''); state.focus={id:'mRcvToQ',pos:el?el.selectionStart:null}; render();
+  clearTimeout(rcvToTimer); rcvToTimer=setTimeout(()=>loadToReceive(true),320); });
+reg('rcvToRetry', ()=>{ state.rcvToErr=null; render(); loadToReceive(true); });
+reg('rcvOpen', id=>{ const n=Number(id);
+  if(state.rcvOpen===n){ state.rcvOpen=null; state.rcvDetail=null; render(); return; }
+  state.rcvOpen=n; state.rcvDetail=null; state.rcvDetailErr=null; render(); loadDelivery(n); });
+/* Both halves of the link between an order and its arrivals. */
+reg('rcvOpenPO', id=>{ APP.cmd('openPO',id); });
+reg('rcvGoTo', id=>{ state.poId=null; state.rcvSeg='received'; state.rcvOpen=Number(id); state.rcvDetail=null;
+  if(!state.stack.length||state.stack[state.stack.length-1].route!=='receiving'){
+    state.stack=[{route:'receiving',title:SUBS.receiving.title}]; }
+  render(); loadDeliveries(); loadDelivery(Number(id)); });
+
+reg('recvOpen', id=>{ push('receive'); loadReceive(id); });
+reg('recvRetryLoad', ()=>{ if(state.recvId) loadReceive(state.recvId); });
+reg('recvBackToList', ()=>{ state.rcvSeg='received'; state.rcvTried=false; state.rcvToTried=false; APP.cmd('back'); loadDeliveries(true); });
+reg('recvStoreToggle', ()=>{ state.recvStoreOpen=!state.recvStoreOpen; render(); });
+reg('recvStore', id=>{ state.recvStore=Number(id); state.recvStoreOpen=false; render(); });
+/* Whole numbers only, and damage can never exceed what arrived — you cannot
+   break what did not turn up. Raising the count past the order clears the
+   reason: there is no shortfall left to explain. */
+function recvSet(id,recv,dmg,reason){
+  const v=state.recvVals[id]; if(!v) return;
+  if(recv!=null) v.recv=Math.max(0,Math.min(9999,recv));
+  if(dmg!=null)  v.dmg=Math.max(0,dmg);
+  v.dmg=Math.min(v.dmg,v.recv);
+  if(reason!==undefined) v.reason=reason;
+  const it=(state.recvPo.items||[]).find(x=>String(x.id)===String(id));
+  if(it&&v.recv>=rcvOrdered(it)) v.reason=null;
+  state.recvSaveErr=null; render();
+}
+reg('recvQty', a=>{ const [id,d]=String(a).split('|'); recvSet(id,rcvVal(id).recv+Number(d)); });
+reg('recvQtySet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),rcvInt(a.slice(i+1))); });
+reg('recvDmg', a=>{ const [id,d]=String(a).split('|'); recvSet(id,null,rcvVal(id).dmg+Number(d)); });
+reg('recvDmgSet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),null,rcvInt(a.slice(i+1))); });
+reg('recvDmgOpen', id=>{ state.recvDmg=state.recvDmg===String(id)?null:String(id); render(); });
+reg('recvReason', a=>{ const [id,r]=String(a).split('|'); const v=rcvVal(id); recvSet(id,null,null,v.reason===r?null:r); });
+/* One tap for the supplier who simply did not turn up, and one to undo it. */
+reg('recvGroupNone', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
+  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(v){ v.recv=0; v.dmg=0; v.reason='not_sent'; } });
+  state.recvDmg=null; state.recvSaveErr=null; render(); });
+reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
+  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(v){ v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
+  state.recvSaveErr=null; render(); });
+/* The server's refusals, in words. Every one of these is reachable by a client
+   that has drifted from the rule, so each says what to do rather than echoing
+   a code the operator cannot act on. */
+function recvErrText(e){
+  const c=e&&e.code;
+  if(c==='reason_required')       return T('A short line needs a reason. Pick one and try again.','短少的项需要选择原因，请选择后重试。');
+  if(c==='reason_not_applicable') return T('A reason belongs only on a line that came up short.','只有短少的项才需要填写原因。');
+  if(c==='reason_invalid')        return T('That reason is not one this app knows. Reopen the order and try again.','该原因无效，请重新打开采购单后重试。');
+  if(c==='store_locked')          return T('Stock from this order is already on another shelf, so it cannot be received here. Reopen the order to see where it is going.','本单库存已入到其他门店，无法在此收货。请重新打开采购单查看收货门店。');
+  if(c==='store_not_found')       return T('That store is not available any more. Reopen the order and pick another.','该门店已不可用，请重新打开采购单另选。');
+  if(c==='not_found')             return T('This order is no longer there. It may have been cancelled.','该采购单已不存在，可能已被取消。');
+  return T('That did not save. Nothing has changed and your counts are still here — try again.','没有保存成功。数据未变动，已填写的数量仍在 — 请重试。');
+}
+reg('recvSave', ()=>{
+  const po=state.recvPo; if(!po||state.recvBusy) return;
+  if(rcvMissingReasons().length) return;
+  state.recvBusy=true; state.recvSaveErr=null; render();
+  /* The reason key is sent on EVERY line, null where the line is not short.
+     That is what makes this a reason-aware caller: the server enforces the
+     rule in both directions for anyone who sends the key, and does nothing for
+     anyone who omits it (routes/purchases.js planReceiptReason). Sending it
+     only on short lines would leave a stale reason standing on a line that had
+     just been corrected upwards. */
+  const receipts=(po.items||[]).map(it=>{ const v=rcvVal(it.id);
+    return { line_id:it.id, qty_received:v.recv, damaged_qty:v.dmg,
+             receipt_reason: v.recv<rcvOrdered(it) ? v.reason : null }; });
+  const body={receipts};
+  /* Only when the operator actually moved it, and never when locked — the
+     screen does not offer the choice then, and sending it anyway would be
+     asking for a refusal we already know the answer to. */
+  if(!po.store_locked&&state.recvStore&&state.recvStore!==po.receiving_store_id) body.store_id=state.recvStore;
+  apiWrite('/purchases/'+po.id+'/receive',body,'PUT').then(r=>{
+    state.recvBusy=false;
+    const t=rcvTally(), bits=[];
+    if(t.complete.length) bits.push(LANG==='en'?(t.complete.length+' complete'):(t.complete.length+' 项完好'));
+    if(t.short.length)    bits.push(LANG==='en'?(t.short.length+' short'):(t.short.length+' 项短少'));
+    if(t.dmg.length)      bits.push(LANG==='en'?(t.dmg.length+' damaged'):(t.dmg.length+' 项破损'));
+    if(t.over.length)     bits.push(LANG==='en'?(t.over.length+' over'):(t.over.length+' 项多收'));
+    if(t.none.length)     bits.push(LANG==='en'?(t.none.length+' not sent'):(t.none.length+' 项未发货'));
+    state.recvDone=bits.join(' · ');
+    /* Both lists the save just changed are now stale. */
+    state.posTried=false; state.rcvTried=false; state.rcvToTried=false; state.poReceiptsFor=null;
+    render(); showToast(T('Delivery recorded','收货已登记'));
+  }).catch(e=>{ state.recvBusy=false;
+    if(String(e.message)==='auth') return;
+    state.recvSaveErr=recvErrText(e); render(); });
+});
+
 reg('poStatus', st=>{
   const d=state.poDetail; if(!d||state.poBusy) return;
   const run=()=>{
@@ -1977,7 +2132,7 @@ function screenSales(){
    Catalogue, Categories and Stock activity are gone from this list: they are
    sub-views of Products now, and a page reachable two ways drifts in one. */
 const MORE_GROUPS=[
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -3207,7 +3362,13 @@ function sheetPO(){
          <div class="list">${items.map((it,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${poLineRow(it)}`).join('')}</div></div>`:''}
        ${d.notes?`<div class="card" style="padding:14px"><div class="eyebrow">${T('Notes','备注')}</div>
          <div style="font-size:14px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(d.notes)}</div></div>`:''}
-       ${done?'':noteBar(T('Short counts and damage are per-line — record those on desktop.','缺货与破损需逐项登记，请在电脑端处理。'))}
+       ${/* This used to send short counts and damage to the desktop. It no
+             longer has to — Receive is a screen on this phone now, and a
+             footnote pointing somewhere else would be the app lying about its
+             own reach. "Everything arrived" below stays as the fast path for
+             the common case; this is the way in when something is wrong. */''}
+       ${done?'':`<button class="btn2" style="width:100%" onclick="APP.cmd('poReceive')">${ic('package',18)}${T('Receive line by line','逐项收货')}</button>`}
+       ${poDeliveries(d.id)}
      </div>
      ${cta?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('poStatus','${cta.status}')">${busy?T('Saving…','保存中…'):cta.label}</button></div>`:''}</div>`;
@@ -3239,6 +3400,487 @@ function settingsGroupCard(rows){
     ${ctl(r)}</div>`).join('')}
     ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
+/* ==========================================================================
+   Receiving — what turned up, and booking it in
+   --------------------------------------------------------------------------
+   Two screens, and they are deliberately NOT inside Purchasing. Purchasing
+   counts ORDERS; this counts DELIVERIES; and a segmented control whose
+   segments count different nouns can never make its numbers agree — Open would
+   count orders while Received counted arrivals, and a three-supplier order
+   arriving over three days would add three to one number and one to the other.
+   So Receiving is its own screen off More, and Purchasing is untouched.
+
+   A DELIVERY IS NOT A SAVE. The server writes one receipt per save; a person
+   thinks in van-loads. The list therefore shows deliveries — a receipt that
+   brought at least one line for the first time — and a later save that only
+   revises lines already received hangs UNDER the line it corrects, in the
+   detail. That derivation lives on the server (routes/retail-purchasing.js
+   DELIVERY_SQL) so the list and the PO screen cannot disagree about it.
+
+   Costs are absent on purpose. The person at the door counts boxes; what the
+   boxes cost is the buyer's screen, and putting a number here invites an
+   argument about money at the one moment nobody can check it.
+   ========================================================================== */
+const RCV_FLAGS=[{key:'all',en:'All',zh:'全部'},{key:'issues',en:'Issues',zh:'有异常'},
+  {key:'short',en:'Short',zh:'短少'},{key:'damaged',en:'Damaged',zh:'破损'},{key:'over',en:'Over',zh:'多收'}];
+/* The three shipped reason codes, verbatim. These strings go on the wire
+   (po_line_items.receipt_reason) — a prettier local set would be a second
+   vocabulary to translate at the one boundary where a typo is silent and the
+   reason simply never saves. Damage is NOT here: it is a quantity of its own,
+   and it happens on lines that are not short at all. */
+const RCV_REASONS=[{key:'short_delivery',en:'Short delivery',zh:'少送'},
+  {key:'wrong_item',en:'Wrong item',zh:'错货'},{key:'not_sent',en:'Not sent',zh:'未发货'}];
+const rcvReason=k=>{ const r=RCV_REASONS.find(x=>x.key===k); return r?T(r.en,r.zh):''; };
+const rcvInt=v=>{ const n=parseInt(String(v==null?'':v).replace(/[^0-9]/g,''),10); return Number.isFinite(n)?n:0; };
+const rcvName=o=>(LANG==='en'?(o.name_en||o.name_cn):(o.name_cn||o.name_en))||'—';
+const rcvStoreName=o=>(LANG==='en'?(o.store_name_en||o.store_name_cn):(o.store_name_cn||o.store_name_en))||'';
+
+/* ── Loaders ─────────────────────────────────────────────────────────────── */
+function loadDeliveries(force){
+  if(state.rcvTried&&!force) return;
+  state.rcvTried=true; state.rcvLoading=true;
+  const qs='?q='+encodeURIComponent(state.rcvQ||'')+'&flag='+encodeURIComponent(state.rcvFlag||'all');
+  api('/receiving/deliveries'+qs).then(rows=>{
+    state.rcvDeliv=Array.isArray(rows)?rows:[]; state.rcvErr=null; state.rcvLoading=false; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.rcvLoading=false; state.rcvErr=E('Could not load deliveries.','无法加载收货记录。'); render(); });
+}
+/* Orders still waiting on their goods. The search goes to the server because
+   the thing worth searching — the product names on the lines — is not in the
+   list payload, and could not be: /purchases already looks inside
+   po_line_items for name_en / name_cn / sku, which is exactly the question
+   "which order is bringing the mint?" needs asked. */
+function loadToReceive(force){
+  if(state.rcvToTried&&!force) return;
+  state.rcvToTried=true;
+  const q=(state.rcvToQ||'').trim();
+  api('/purchases'+(q?'?search='+encodeURIComponent(q):'')).then(rows=>{
+    state.rcvTo=Array.isArray(rows)?rows:[]; state.rcvToErr=null; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.rcvToErr=E('Could not load orders.','无法加载采购单。'); render(); });
+}
+function loadDelivery(id){
+  state.rcvDetail=null; state.rcvDetailErr=null;
+  api('/receiving/deliveries/'+Number(id)).then(d=>{
+    if(state.rcvOpen!==Number(id)) return; state.rcvDetail=d; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.rcvDetailErr=E('Could not open this delivery.','无法打开这条收货记录。'); render(); });
+}
+/* The receive screen's whole world in one call: the order, its lines, and
+   WHERE it may still be received into. The store answer travels with the
+   order rather than being discovered by trying — see the location control. */
+function loadReceive(poId){
+  state.recvId=Number(poId); state.recvPo=null; state.recvErr=null; state.recvSaveErr=null;
+  state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false; state.recvDone=null;
+  api('/purchases/'+Number(poId)).then(d=>{
+    if(state.recvId!==Number(poId)) return;
+    state.recvPo=d;
+    state.recvStore=d.receiving_store_id||d.store_id||null;
+    /* Prefilled at the FULL ORDERED QUANTITY, which is the whole ergonomic
+       argument of this screen: staff touch only what is wrong. A line already
+       received keeps what it holds, so re-opening a part-received order shows
+       the counts somebody already entered rather than resetting their work. */
+    const v={};
+    (d.items||[]).forEach(it=>{ v[it.id]={
+      recv: it.qty_received==null ? Math.round(+it.qty||0) : Math.round(+it.qty_received||0),
+      dmg: Math.round(+it.damaged_qty||0),
+      reason: it.receipt_reason||null }; });
+    state.recvVals=v; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.recvErr=E('Could not open this order.','无法打开这张采购单。'); render(); });
+}
+function loadPoReceipts(poId){
+  if(state.poReceiptsFor===Number(poId)) return;
+  state.poReceiptsFor=Number(poId); state.poReceipts=null;
+  api('/purchases/'+Number(poId)+'/receipts').then(d=>{
+    if(state.poReceiptsFor!==Number(poId)) return; state.poReceipts=d; render();
+  }).catch(e=>{ /* the PO sheet still stands without its deliveries */ });
+}
+
+/* ── Derived ─────────────────────────────────────────────────────────────── */
+const rcvOrdered=it=>Math.round(+it.qty||0);
+const rcvVal=id=>(state.recvVals&&state.recvVals[id])||{recv:0,dmg:0,reason:null};
+const rcvShort=it=>Math.max(0,rcvOrdered(it)-rcvVal(it.id).recv);
+const rcvOver=it=>Math.max(0,rcvVal(it.id).recv-rcvOrdered(it));
+function rcvSupplier(it,po){ return (it.supplier_name||'').trim()||(po.supplier||'').trim()||T('Unspecified','未指定'); }
+function rcvGroups(){
+  const po=state.recvPo; if(!po) return [];
+  const g=new Map();
+  (po.items||[]).forEach(it=>{ const k=rcvSupplier(it,po); if(!g.has(k)) g.set(k,[]); g.get(k).push(it); });
+  return [...g].map(([name,items])=>({name,items}));
+}
+function rcvGroupState(items){
+  if(items.every(it=>rcvVal(it.id).recv===0)) return 'none';
+  if(items.some(it=>rcvShort(it)>0||rcvVal(it.id).dmg>0||rcvOver(it)>0)) return 'issue';
+  return 'ok';
+}
+function rcvGroupPill(items){
+  const s=rcvGroupState(items);
+  if(s==='none')  return pill('view',T('Not arrived','未到货'));
+  if(s==='issue') return pill('restock',T('Issues','有异常'));
+  return pill('delivered',T('Complete','已齐'));
+}
+/* Every short line owes a reason — the server refuses the save without one
+   (routes/purchases.js planReceiptReason), so the button says so BEFORE the
+   tap rather than letting a 400 explain it afterwards. */
+function rcvMissingReasons(){
+  const po=state.recvPo; if(!po) return [];
+  return (po.items||[]).filter(it=>rcvShort(it)>0&&!rcvVal(it.id).reason);
+}
+function rcvTally(){
+  const po=state.recvPo, t={complete:[],short:[],dmg:[],over:[],none:[]};
+  (po.items||[]).forEach(it=>{ const v=rcvVal(it.id);
+    if(v.recv===0) t.none.push(it);
+    else if(rcvShort(it)>0) t.short.push(it);
+    else if(rcvOver(it)>0) t.over.push(it);
+    else t.complete.push(it);
+    if(v.dmg>0) t.dmg.push(it); });
+  return t;
+}
+
+/* ── The receive screen (mockup layout A) ────────────────────────────────── */
+/* The destination. Changeable only while nothing has been booked; once the
+   first receipt moves stock the server refuses a different store
+   (store_locked), because stock_applied_qty is one number per line with no
+   store in it and could not describe goods split across two shelves. So the
+   lock is SHOWN, with the reason, rather than presented as a live choice that
+   fails on save. Never offer what will be refused. */
+function rcvLocation(){
+  const po=state.recvPo;
+  const name=rcvStoreName({store_name_en:po.receiving_store_name_en||po.store_name_en,
+                           store_name_cn:po.receiving_store_name_cn||po.store_name_cn});
+  const cur=(state.recvStore&&(po.stores||[]).find(s=>s.id===state.recvStore))||null;
+  const shown=cur?(LANG==='en'?(cur.name_en||cur.name_cn):(cur.name_cn||cur.name_en)):name;
+  if(po.store_locked){
+    return `<div class="list"><div class="row" style="min-height:60px;cursor:default">
+      <span class="rowico">${ic('map-pin',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:12.5px;color:var(--text-secondary)">${T('Receiving into','收货至')}</span>
+        <span style="font-size:15.5px;font-weight:500">${escAttr(shown||T('No store','未设门店'))}</span></span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('lock',17)}</span></div>
+      <div class="sep"></div>
+      <div style="padding:10px 16px 12px;font-size:12.5px;line-height:1.5;color:var(--text-secondary)">
+        ${T('Stock from this order is already on this shelf, so it cannot be received somewhere else. Move it with a transfer instead.',
+            '本单已有库存入到该门店，因此不能改到其他门店。如需调整请使用调拨。')}</div></div>`;
+  }
+  const head=`<button class="row" onclick="APP.cmd('recvStoreToggle')" style="min-height:60px">
+    <span class="rowico">${ic('map-pin',18)}</span>
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Receiving into','收货至')}</span>
+      <span style="font-size:15.5px;font-weight:500">${escAttr(shown||T('Choose a store','选择门店'))}</span></span>
+    <span style="color:var(--text-secondary);display:flex">${ic(state.recvStoreOpen?'chevron-up':'chevron-down',18)}</span></button>`;
+  if(!state.recvStoreOpen) return `<div class="list">${head}</div>`;
+  return `<div class="list">${head}${(po.stores||[]).map(s=>{
+    const on=s.id===state.recvStore;
+    return `<div class="sep"></div><button class="row" onclick="APP.cmd('recvStore',${s.id})" style="min-height:52px;padding-left:64px">
+      <span style="flex:1;font-size:15px;${on?'font-weight:500':'color:var(--text-secondary)'}">${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span>
+      ${on?`<span style="color:var(--sage-ink);display:flex">${ic('check',18,2)}</span>`:''}</button>`;}).join('')}</div>`;
+}
+/* One line. [−][n][+] as one control, the unit beside it, and the damage mark
+   at the right end of the SAME row — one row, one hand, nothing hidden. */
+function rcvLine(it){
+  const v=rcvVal(it.id), ord=rcvOrdered(it), sh=rcvShort(it), ov=rcvOver(it);
+  /* Compared as strings: the command carries the id back through an onclick
+     attribute, so it arrives as text while it.id is a number, and === between
+     the two is quietly always false — the counter opened in state and never on
+     the glass. */
+  const open=String(state.recvDmg)===String(it.id);
+  const edited=v.recv!==ord;
+  const qty=`<div style="display:flex;align-items:center;gap:8px">
+    <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|-1')">${ic('minus',22,2)}</button>
+    <input class="qty${edited?' edit':''}" inputmode="numeric" pattern="[0-9]*" value="${v.recv}"
+      aria-label="${T('Arrived','已收')}" onfocus="this.select()" onchange="APP.cmd('recvQtySet','${it.id}|'+this.value)">
+    <button class="stepbtn" aria-label="${T('More','增加')}" onclick="APP.cmd('recvQty','${it.id}|1')">${ic('plus',22,2)}</button>
+    <span style="font-size:14px;color:var(--text-secondary)">${escAttr(it.unit||'')}</span>
+    <button class="dmgbtn${v.dmg>0?' on':''}" style="margin-left:auto${open&&!v.dmg?';border-color:var(--text-primary);color:var(--text-primary)':''}"
+      aria-label="${T('Damaged','破损')}" onclick="APP.cmd('recvDmgOpen','${it.id}')">${ic('package-x',20)}${v.dmg>0?`<span class="n">${v.dmg}</span>`:''}</button></div>`;
+  /* Damage: one tap to the counter, every press writes, nothing to confirm —
+     the count is already on the mark, so closing loses nothing. */
+  const dmg=open?`<div class="rise" style="margin-top:10px;padding:12px 14px;border-radius:12px;background:var(--surface-raised)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="color:var(--text-secondary);display:flex">${ic('package-x',16)}</span>
+      <span style="flex:1;font-size:13.5px;font-weight:500">${T('How many damaged?','破损几件？')}</span>
+      <button class="btn2" style="min-height:32px;padding:0 10px;font-size:12.5px;color:var(--text-secondary)" onclick="APP.cmd('recvDmgOpen','${it.id}')">${T('Done','完成')}</button></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="stepbtn sm" ${v.dmg<=0?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|-1')">${ic('minus',18,2)}</button>
+      <input class="qty sm" inputmode="numeric" pattern="[0-9]*" value="${v.dmg}"
+        style="${v.dmg>0?'border-color:var(--brick);background:var(--brick-tint);color:var(--brick-ink)':''}"
+        onfocus="this.select()" onchange="APP.cmd('recvDmgSet','${it.id}|'+this.value)">
+      <button class="stepbtn sm" ${v.dmg>=v.recv?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|1')">${ic('plus',18,2)}</button>
+      <span class="num" style="margin-left:auto;font-size:12.5px;color:var(--text-secondary);text-align:right">${
+        LANG==='en'?('of '+v.recv+' '+(it.unit||'')+'<br>arrived'):('共收 '+v.recv+' '+(it.unit||''))}</span></div></div>`:'';
+  /* The shortfall is STATED. Nobody is asked to work out the difference. */
+  let note='';
+  if(sh>0){ const txt=v.recv===0?T('Nothing arrived — what happened?','未到货 — 原因？')
+      :(LANG==='en'?(sh+' '+(it.unit||'')+' short of '+ord+' — what happened?'):('短少 '+sh+' '+(it.unit||'')+'（订购 '+ord+'）— 原因？'));
+    note=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--amber-ink)">${ic('triangle-alert',16)}<span class="num" style="font-size:13.5px">${txt}</span></div>`;
+  } else if(ov>0){
+    note=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-secondary)">${ic('triangle-alert',16)}<span class="num" style="font-size:13.5px">${
+      LANG==='en'?(ov+' '+(it.unit||'')+' over ordered'):('多收 '+ov+' '+(it.unit||''))}</span></div>`;
+  }
+  /* Three reasons, 2-up. A horizontal scroller fits about two and a half at
+     380px, which put the last one behind a sideways swipe nested inside a
+     vertical list — invisible unless you knew to look. */
+  const reasons=sh>0?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${
+    RCV_REASONS.map(r=>`<button class="chip${v.reason===r.key?' on':''}" style="justify-content:center;padding:0 10px"
+      onclick="APP.cmd('recvReason','${it.id}|${r.key}')">${T(r.en,r.zh)}</button>`).join('')}</div>`:'';
+  return `<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:15.5px;font-weight:500">${escAttr(rcvName(it))}</span>
+        ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}</span>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${ord} ${escAttr(it.unit||'')}</span></div>
+    ${qty}${dmg}${note}${reasons}</div>`;
+}
+/* The no-show action sits in the HEADER, beside the pill, because it is a fact
+   about this supplier. Under the group's last line it read as another line
+   item — and as belonging to whichever group came next. */
+function rcvGroupHead(g){
+  const none=rcvGroupState(g.items)==='none';
+  return `<div style="display:flex;align-items:center;gap:7px;padding:12px 2px">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(g.name)}</span>
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${g.items.length} ${T(g.items.length===1?'line':'lines','项')}</span></span>
+    <button class="minibtn${none?' on':''}" onclick="APP.cmd('${none?'recvGroupAll':'recvGroupNone'}','${escAttr(g.name)}')">${
+      none?T('Undo','撤销'):T('None arrived','未到货')}</button>
+    ${rcvGroupPill(g.items)}</div>`;
+}
+function rcvSummary(){
+  const t=rcvTally();
+  const row=(tone,txt)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+    <span style="width:6px;height:6px;border-radius:999px;flex:none;background:${tone}"></span>
+    <span class="num" style="font-size:13.5px;color:var(--text-secondary)">${txt}</span></div>`;
+  let rows='';
+  if(t.complete.length) rows+=row('var(--sage)',LANG==='en'?(t.complete.length+' line'+(t.complete.length>1?'s':'')+' complete'):(t.complete.length+' 项完好'));
+  t.short.forEach(it=>rows+=row('var(--amber)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvShort(it)+' '+(it.unit||'')+' short'):(escAttr(rcvName(it))+' — 短少 '+rcvShort(it)+' '+(it.unit||''))));
+  t.dmg.forEach(it=>rows+=row('var(--brick)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvVal(it.id).dmg+' '+(it.unit||'')+' damaged'):(escAttr(rcvName(it))+' — 破损 '+rcvVal(it.id).dmg+' '+(it.unit||''))));
+  t.over.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvOver(it)+' '+(it.unit||'')+' over ordered'):(escAttr(rcvName(it))+' — 多收 '+rcvOver(it)+' '+(it.unit||''))));
+  t.none.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — nothing arrived'):(escAttr(rcvName(it))+' — 未到货')));
+  return `<div class="card" style="padding:14px 16px">
+    <span class="eyebrow" style="display:block;margin-bottom:4px">${T('About to record','即将登记')}</span>${rows}</div>`;
+}
+function screenReceive(){
+  if(state.recvErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${state.recvErr}</span></div>
+    <button class="btn2" style="width:100%;margin-top:12px" onclick="APP.cmd('recvRetryLoad')">${T('Try again','重试')}</button></div>`;
+  const po=state.recvPo;
+  /* Reached with no order behind it — a stale link, or a Back that outlived
+     its screen. Says so and offers the way on, rather than a spinner that will
+     never resolve because nothing is loading. */
+  if(!po&&!state.recvId) return nothingYet(T('No order open','没有打开的采购单'),
+    T('Open an order from Receiving to tick its delivery in.','请从“收货”中打开一张采购单进行收货。'));
+  /* The text sits inside its wrapper rather than being the wrapper: a bare
+     padded div IS the painting box, so its top lands on the header hairline —
+     which scripts/test_mobile_geometry.js measures and rightly fails. */
+  if(!po) return `<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+  if(state.recvDone) return `<div style="padding:28px 16px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center">
+    <span style="color:var(--sage-ink);display:flex">${ic('circle-check',44,1.5)}</span>
+    <span style="font-size:17px;font-weight:500">${T('Delivery recorded','收货已登记')}</span>
+    <span class="num" style="font-size:14px;color:var(--text-secondary);line-height:1.5">${escAttr(state.recvDone)}</span>
+    <button class="btn2" style="margin-top:6px" onclick="APP.cmd('recvBackToList')">${T('Back to Receiving','返回收货')}</button></div>`;
+  const missing=rcvMissingReasons();
+  const groups=rcvGroups().map(g=>`<div style="border-top:1px solid var(--border-default)">${rcvGroupHead(g)}
+    <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:6px">${g.items.map(rcvLine).join('')}</div></div>`).join('');
+  /* A failed save NEVER clears the screen: everything typed is in state.recvVals
+     and stays exactly where it was, with the server's own words above the
+     button and the button still there to press again. */
+  const err=state.recvSaveErr?`<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--brick-tint);margin-bottom:10px">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',16)}</span>
+    <span style="font-size:13.5px;color:var(--brick-ink)">${state.recvSaveErr}</span></div>`:'';
+  const warn=missing.length?`<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);margin-bottom:10px">
+    <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',16)}</span>
+    <span style="font-size:13.5px;color:var(--amber-ink)">${LANG==='en'
+      ?(missing.length+' short line'+(missing.length>1?'s':'')+' still need'+(missing.length>1?'':'s')+' a reason.')
+      :('还有 '+missing.length+' 项短少未选原因。')}</span></div>`:'';
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${rcvLocation()}
+    <div>${groups}</div>
+    ${rcvSummary()}
+    <div style="display:flex;flex-direction:column">${err}${warn}
+      <button class="cta" ${(missing.length||state.recvBusy)?'disabled':''} onclick="APP.cmd('recvSave')">${
+        state.recvBusy?T('Recording…','登记中…'):T('Record delivery','登记收货')}</button></div></div>`;
+}
+
+/* ── The Receiving screen: To receive / Received ─────────────────────────── */
+function rcvFlagPills(flags){
+  if(!flags||!flags.length) return pill('delivered',T('Clean','无异常'));
+  return flags.map(f=>f==='short'?pill('restock',T('Short','短少'))
+    :f==='damaged'?pill('refund',T('Damaged','破损')):pill('draft',T('Over','多收'))).join('');
+}
+function rcvSupText(d){
+  const s=d.suppliers||[];
+  if(!s.length) return T('No supplier','未指定供应商');
+  return s.length===1?s[0]:(LANG==='en'?(s.length+' suppliers'):(s.length+' 家供应商'));
+}
+function rcvCorrection(c,prev){
+  return `<div style="display:flex;align-items:flex-start;gap:9px;margin-top:9px;padding:10px 12px;border-radius:10px;background:var(--surface-raised)">
+    <span style="flex:none;color:var(--text-secondary);display:flex;margin-top:1px">${ic('pencil',14)}</span>
+    <span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+      <span class="num" style="font-size:13px;font-weight:500">${
+        prev==null
+          /* The transition gap, said as a whole sentence. An order received
+             before deliveries were recorded has no earlier row to sit beside,
+             so the trail does not begin with a blank — it says what is known
+             and what is not. */
+          ? (LANG==='en'?(escAttr(c.actor_label||T('Someone','某人'))+' changed this to '+c.qty_received)
+                        :(escAttr(c.actor_label||'某人')+'改为 '+c.qty_received))
+          : (LANG==='en'?(escAttr(prev.who||T('Someone','某人'))+' recorded '+prev.qty+', '+escAttr(c.actor_label||T('someone','某人'))+' changed to '+c.qty_received)
+                        :(escAttr(prev.who||'某人')+'登记 '+prev.qty+'，'+escAttr(c.actor_label||'某人')+'改为 '+c.qty_received))}</span>
+      ${prev==null?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${T('The earlier count was recorded before deliveries were kept, so there is no record of who entered it.','此前的数量在收货记录启用之前登记，因此没有登记人记录。')}</span>`:''}
+      ${c.note?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${escAttr(c.note)}</span>`:''}
+      <span class="num" style="font-size:11.5px;color:var(--text-secondary);opacity:.85">${fmtDay(c.received_at)} ${fmtTime(c.received_at)}</span></span></div>`;
+}
+function rcvDetailBody(d){
+  const fact=(icon,txt)=>`<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">${ic(icon,14)}${txt}</span>`;
+  const lines=(d.lines||[]).map(l=>{
+    const ord=Math.round(+l.ordered||0), got=l.qty_received==null?null:Math.round(+l.qty_received);
+    const sh=got==null?0:Math.max(0,ord-got), ov=got==null?0:Math.max(0,got-ord);
+    /* Corrections hang under the line they correct, oldest first. Each reads
+       against the value before it — which is this line's own figure for the
+       first correction, and the previous correction's for the rest. */
+    /* null when this delivery recorded no count of its own — the transition
+       gap. The line was received before deliveries were kept, so the first
+       correction has nothing to sit beside and must say so rather than claim
+       somebody "recorded null". */
+    let prev=got==null?null:{who:d.actor_label,qty:got};
+    const corr=(l.corrections||[]).map(c=>{
+      const html=rcvCorrection(c,prev); prev={who:c.actor_label,qty:c.qty_received}; return html; }).join('');
+    return `<div style="padding:11px 0;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvName(l))}</span>
+        <span class="num" style="flex:none;font-size:14px;${sh?'color:var(--amber-ink);font-weight:500':(ov?'color:var(--text-secondary)':'color:var(--text-secondary)')}">${got==null?'—':got} / ${ord} ${escAttr(l.unit||'')}</span></div>
+      ${sh?`<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">${LANG==='en'?(sh+' '+(l.unit||'')+' short'):('短少 '+sh+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReason(l.receipt_reason):''}</div>`:''}
+      ${ov?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${LANG==='en'?(ov+' '+(l.unit||'')+' over'):('多收 '+ov+' '+(l.unit||''))}</div>`:''}
+      ${+l.damaged_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(Math.round(+l.damaged_qty)+' '+(l.unit||'')+' damaged'):('破损 '+Math.round(+l.damaged_qty)+' '+(l.unit||''))}</div>`:''}
+      ${corr}</div>`;}).join('');
+  return `<div style="padding:0 16px 16px">
+    <div style="display:flex;flex-wrap:wrap;gap:14px;padding:2px 0 10px">
+      ${fact('shopping-cart',`<button onclick="APP.cmd('rcvOpenPO',${d.po_id})" style="background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--text-primary);text-decoration:underline;text-underline-offset:2px"><span class="num">${escAttr(d.po_number||'')}</span></button>`)}
+      ${rcvStoreName(d)?fact('map-pin',escAttr(rcvStoreName(d))):''}
+      ${d.actor_label?fact('user',escAttr(d.actor_label)):''}
+      ${fact('clock',`<span class="num">${fmtDay(d.received_at)} ${fmtTime(d.received_at)}</span>`)}</div>
+    ${d.note?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;padding-bottom:6px">${escAttr(d.note)}</div>`:''}
+    ${lines}</div>`;
+}
+function rcvDeliveryRow(d,i){
+  const open=state.rcvOpen===d.id;
+  const issues=(d.flags||[]).length;
+  return `${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('rcvOpen',${d.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
+      <span class="rowico" style="${issues?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)'}">${ic(issues?'triangle-alert':'circle-check',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span style="display:flex;align-items:baseline;gap:8px">
+          <span class="num" style="font-size:15px;font-weight:500;flex:none">${fmtDay(d.received_at)}</span>
+          <span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvSupText(d))}</span></span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+          [rcvStoreName(d),d.actor_label,(d.line_count||0)+' '+T(d.line_count===1?'line':'lines','项')].filter(Boolean).join(' · ')}</span>
+        ${rcvMatched(d)}
+        <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${rcvFlagPills(d.flags)}</span></span>
+      <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic(open?'chevron-up':'chevron-down',18)}</span></button>
+    ${open?(state.rcvDetailErr?`<div style="padding:0 16px 16px;font-size:13.5px;color:var(--brick-ink)">${state.rcvDetailErr}</div>`
+      :state.rcvDetail&&state.rcvDetail.id===d.id?rcvDetailBody(state.rcvDetail)
+      :`<div style="padding:0 16px 16px;font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`):''}`;
+}
+function rcvToReceive(){
+  const all=state.rcvTo||[];
+  return all.filter(p=>p.status==='Requested'||p.status==='Ordered');
+}
+/* The products a search matched, named on the row. Without this a hit reads as
+   "this order matched, open it to find out why", which is the one-by-one hunt
+   the search exists to replace. */
+function rcvMatched(r){
+  const m=r.matched_lines||[];
+  if(!m.length) return '';
+  const names=m.map(l=>(LANG==='en'?(l.name_en||l.name_cn):(l.name_cn||l.name_en))||l.sku).filter(Boolean);
+  if(!names.length) return '';
+  return `<span style="display:flex;align-items:center;gap:5px;margin-top:1px;font-size:12.5px;color:var(--sage-ink);min-width:0">
+    ${ic('package',13)}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(names.join(' · '))}</span></span>`;
+}
+function statusReceiving(){
+  const n=rcvToReceive().length, d=state.rcvDeliv;
+  const bits=[LANG==='en'?(n+' waiting on a delivery'):(n+' 张待收货')];
+  if(d) bits.push(LANG==='en'?(d.length+' taken in'):(d.length+' 次收货'));
+  return bits.join(' · ');
+}
+function screenReceiving(){
+  loadToReceive(); loadDeliveries();
+  const seg=(k,label,n)=>`<button onclick="APP.cmd('rcvSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${state.rcvSeg===k?'var(--surface-card)':'transparent'};color:${state.rcvSeg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${state.rcvSeg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}${n==null?'':` <span class="num" style="color:var(--text-secondary)">${n}</span>`}</button>`;
+  const segs=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;margin:14px 16px 12px">
+    ${seg('toreceive',T('To receive','待收货'),rcvToReceive().length)}${seg('received',T('Received','已收货'),state.rcvDeliv?state.rcvDeliv.length:null)}</div>`;
+  if(state.rcvSeg==='toreceive'){
+    const rows=rcvToReceive();
+    const toSearch=`<div style="padding:0 16px 12px;position:relative">
+      <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
+      <input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
+        placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)"></div>`;
+    if(state.rcvToErr) return segs+toSearch+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.rcvToErr}</span></div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('rcvToRetry')">${T('Try again','重试')}</button></div>`;
+    if(!state.rcvTo) return segs+toSearch+`<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+    if(!rows.length) return segs+toSearch+(state.rcvToQ.trim()
+      ?`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No order on its way has that.','没有待收货的采购单包含该商品。')}</div>`
+      :nothingYet(T('Nothing on its way','没有待收货的订单'),
+        T('Orders you have placed appear here until the goods arrive. Open one at the door to tick it in.',
+          '已下单但尚未到货的采购单会显示在这里。到货时打开即可收货。')));
+    return segs+toSearch+`<div style="padding:0 16px 28px"><div class="list">${rows.map((p,i)=>`${i?'<div class="sep"></div>':''}
+      <button class="row" onclick="APP.cmd('recvOpen',${p.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
+        <span class="rowico">${ic('shopping-cart',18)}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span style="display:flex;align-items:baseline;gap:8px">
+            <span class="num" style="font-size:15px;font-weight:500;flex:none">${escAttr(p.po_number||('#'+p.id))}</span>
+            <span style="font-size:15px;min-width:0;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}</span></span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+            [poStore(p),(p.line_count||0)+' '+T('lines','项'),p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):''].filter(Boolean).join(' · ')}</span>
+          ${rcvMatched(p)}
+          <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${poPill(p)}</span></span>
+        <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic('chevron-right',18)}</span></button>`).join('')}</div></div>`;
+  }
+  const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
+    RCV_FLAGS.map(f=>`<button class="chip${state.rcvFlag===f.key?' on':''}" onclick="APP.cmd('rcvFlag','${f.key}')">${T(f.en,f.zh)}</button>`).join('')}</div>`;
+  const search=`<div style="padding:0 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
+    <input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
+      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
+  if(state.rcvErr) return segs+search+chips+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${state.rcvErr}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('rcvRetry')">${T('Try again','重试')}</button></div>`;
+  const rows=state.rcvDeliv;
+  if(!rows) return segs+search+chips+`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length){
+    const narrowed=state.rcvQ||state.rcvFlag!=='all';
+    return segs+search+chips+(narrowed
+      ?`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`
+      :nothingYet(T('No deliveries yet','还没有收货记录'),
+        T('Every delivery you tick in is kept here — what arrived, who took it in, and where it went.',
+          '每次收货都会记录在这里：到了什么、谁收的、入到哪个门店。')));
+  }
+  return segs+search+chips+`<div style="padding:12px 16px 28px"><div class="list">${rows.map(rcvDeliveryRow).join('')}</div></div>`;
+}
+/* The deliveries taken against one order — the other half of the link. Drawn
+   inside the PO sheet so the order and its arrivals are one tap apart, which
+   is the cost this navigation choice had to pay for. */
+function poDeliveries(poId){
+  const d=state.poReceipts;
+  if(!d) return '';
+  const rows=(d.deliveries||[]);
+  if(!rows.length&&!d.untracked_lines) return '';
+  return `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <span class="eyebrow">${T('Deliveries','收货记录')}</span>
+    ${rows.map(r=>`<button onclick="APP.cmd('rcvGoTo',${r.id})" style="display:flex;align-items:center;gap:10px;width:100%;padding:0;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span class="num" style="font-size:14px">${fmtDay(r.received_at)} · ${r.line_count} ${T(r.line_count===1?'line':'lines','项')}</span>
+        <span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([rcvStoreName(r),r.actor_label].filter(Boolean).join(' · '))}</span></span>
+      ${rcvFlagPills(r.flags)}
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right',16)}</span></button>`).join('')}
+    ${d.untracked_lines?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${
+      LANG==='en'?(d.untracked_lines+' line'+(d.untracked_lines>1?'s':'')+' on this order '+(d.untracked_lines>1?'were':'was')+' received before deliveries were kept, so there is no record of who or when.')
+                 :('本单有 '+d.untracked_lines+' 项在收货记录启用之前入库，因此没有收货人和时间记录。')}</span>`:''}</div>`;
+}
+
 let sheetStep={};
 const SUBS={
   setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
@@ -3521,6 +4163,17 @@ const SUBS={
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
+SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
+/* The one screen pushed from something other than More, so it names its own
+   title (the order being received) and its own way back. */
+SUBS.receive={title:['Receive','收货'],
+  titleOf:()=>escAttr((state.recvPo&&state.recvPo.po_number)||(state.recvId?'#'+state.recvId:T('Receive','收货'))),
+  backLabel:()=>T('Receiving','收货'),
+  status:()=>{ const po=state.recvPo; if(!po) return '';
+    const n=(po.items||[]).length, s=rcvGroups().length;
+    return LANG==='en' ? (s+' supplier'+(s===1?'':'s')+' · '+n+' line'+(n===1?'':'s'))
+                       : (s+' 家供应商 · '+n+' 项'); },
+  render:()=>screenReceive()};
 
 /* Pausing a coupon is the one marketing action a phone should have: it is a
    single field on a single record, and it is what an operator reaches for when
@@ -6203,7 +6856,13 @@ function bodyHtml(){
     // from content, and pushing the real content down a line. §1.7 says the
     // header is title · status, and "same for every page" is the point: the
     // number you came for should be in the same place on every screen.
-    return pageHead({title:T(...sub.title), back:T('More','更多'),
+    /* titleOf / backLabel are optional and exist for one screen: Receive, which
+       is the first page here pushed from something other than More. Its title
+       is the order it is receiving (a number, not a fixed word) and its Back
+       goes to Receiving, not More. Every other screen passes neither and reads
+       exactly as it always did. */
+    return pageHead({title:def.titleOf?def.titleOf():T(...sub.title),
+      back:def.backLabel?def.backLabel():T('More','更多'),
       cta:def.cta?def.cta():'', status:def.status?def.status():''}) + def.render();
   }
   switch(state.tab){

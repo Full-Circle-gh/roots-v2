@@ -3989,6 +3989,12 @@ Measured at this head: `routes/retail.js` holds **28 `withTransaction(` call sit
 
 **AND ONE THING THE WORD "IRREVERSIBLE" OVERSTATED, MEASURED BEFORE ANYTHING WAS TOUCHED.** The off-site daily backups hold `tacet.dump` (454 MB) and `roles.sql` for **2026-08-21, 08-22 and 08-23**, under a 30-day retention. **So the cluster is restorable from OSS until roughly 2026-09-22 and not after.** No new dumps are being taken. **Every deleted file is recoverable from git history at `e22964bb` indefinitely.**
 
+> 🔴 **THE RETENTION FIGURE IN THE TWO PARAGRAPHS ABOVE IS WRONG, AND THE CORRECTION SHORTENS THE WINDOW BY SIXTEEN DAYS — measured 2026-09-01.** They say 30-day retention and a deadline of ~2026-09-22. **`db-backup.sh` carries `RETAIN_DAYS=14`, not 30**, and its OSS prune deletes whole `daily/` prefixes older than that. The 30 was the LOCAL tier and was carried across to the off-site one without being read.
+>
+> **THE ACTUAL DEADLINE IS 2026-09-06.** Verified in the bucket on 2026-09-01, four `tacet.dump` + `roles.sql` pairs still standing — `20260820` (pruned 09-03), `20260821` (09-04), `20260822` (09-05), `20260823` (**09-06, the last one**). After that the cluster is unrecoverable, as intended.
+>
+> **THE ERROR IS THE INSTRUCTIVE PART AND IS RECORDED RATHER THAN PATCHED OUT.** The number was quoted from memory of the retention tiers instead of read out of the script that enforces them — **the same class as every scan-derived figure this record has had to correct**, and this time in the direction that makes a deadline look further away than it is. **A retention window is a property of the script, not of the tier you remember.**
+
 
 #### OPERATIONS NOTE — THE CLUSTER WAS DROPPED, IN THIS ORDER, 2026-08-23
 
@@ -4003,6 +4009,12 @@ Measured at this head: `routes/retail.js` holds **28 `withTransaction(` call sit
 **4. THE PACKAGES ARE STILL INSTALLED AND THE UNIT IS ONLY DISABLED, NOT MASKED.** `pg_dump`, `psql` and the server binaries remain, so an apt upgrade could try to start a service whose data directory no longer exists. **Disabled prevents auto-start; masking would be stronger.** Left as a decision rather than taken silently.
 
 **RECOVERABILITY, STATED PRECISELY BECAUSE "IRREVERSIBLE" WAS AN OVERSTATEMENT.** The off-site daily backups hold `tacet.dump` (454 MB) plus `roles.sql` for **2026-08-21, 08-22 and 08-23**, under 30-day retention. **The cluster is restorable until roughly 2026-09-22 and not after.** No new dumps are being taken. `roles.sql` matters more than its 795 bytes suggest: `pg_dump` is per-database and does not carry roles, and the dump names `tacet_app` in 304 GRANT statements.
+
+> 🔴 **THE RETENTION FIGURE IN THE TWO PARAGRAPHS ABOVE IS WRONG, AND THE CORRECTION SHORTENS THE WINDOW BY SIXTEEN DAYS — measured 2026-09-01.** They say 30-day retention and a deadline of ~2026-09-22. **`db-backup.sh` carries `RETAIN_DAYS=14`, not 30**, and its OSS prune deletes whole `daily/` prefixes older than that. The 30 was the LOCAL tier and was carried across to the off-site one without being read.
+>
+> **THE ACTUAL DEADLINE IS 2026-09-06.** Verified in the bucket on 2026-09-01, four `tacet.dump` + `roles.sql` pairs still standing — `20260820` (pruned 09-03), `20260821` (09-04), `20260822` (09-05), `20260823` (**09-06, the last one**). After that the cluster is unrecoverable, as intended.
+>
+> **THE ERROR IS THE INSTRUCTIVE PART AND IS RECORDED RATHER THAN PATCHED OUT.** The number was quoted from memory of the retention tiers instead of read out of the script that enforces them — **the same class as every scan-derived figure this record has had to correct**, and this time in the direction that makes a deadline look further away than it is. **A retention window is a property of the script, not of the tier you remember.**
 
 **ONE ORDERING CONSTRAINT IS STILL OPEN ON THE BOX.** `lib/db-driver.js`, `lib/pg.js` and `lib/pg-handle.js` are **deleted from the repository but deliberately still present on the box.** The box's `database.js` is the pre-cancellation file and **requires `./lib/db-driver` unconditionally at line 37** — outside the `if (IS_POSTGRES)` guard. **Deleting it before the new `database.js` deploys throws `MODULE_NOT_FOUND` in a file ~94 others require, including all six channel daemons, and the health watchdog would restart the application into the same failure every two minutes.** Remove the three only after the deploy lands. Everything else the migration left on the box is gone; a copy of all of it is at `/root/backups/pg-migration-boxcopy-20260823.tgz`.
 

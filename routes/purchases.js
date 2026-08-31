@@ -18,6 +18,170 @@ const { fireRecompute } = require('../lib/recipe-rollup');
 const { blockCostWrite, blockCostWriteIf } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
+// ── Receipt reasons ─────────────────────────────────────────────────────────
+// Why a line's received count came in BELOW what was ordered. Validated the
+// same way invoice_status is: a fixed set, checked server-side, no free text.
+//
+// DAMAGE IS NOT A REASON. It has its own quantity (po_line_items.damaged_qty)
+// and it happens on lines that are not short at all — 20 of 20 arrived, 2 of
+// them broken. A reason only ever explains the shortfall.
+const RECEIPT_REASONS = new Set(['short_delivery', 'wrong_item', 'not_sent']);
+
+// What one receipt payload should do to a line's receipt_reason.
+//   ordered  — the line's qty
+//   nextQty  — qty_received AFTER this save (null = nothing received yet)
+//   sent     — the payload's receipt_reason, or undefined if the key is absent
+//   current  — what the column holds now
+// → { write:false } leave it alone | { write:true, value } | { error:code }
+//
+// THE KEY BEING ABSENT IS ITS OWN ANSWER, and that is what keeps this additive.
+// The rule is "a short line carries a reason", but the desktop receive screen
+// (public/retail-admin/16-purchasing.js puReceiveSave) has no picker and sends
+// short quantities with no reason at all. Enforcing the rule against a payload
+// that cannot satisfy it would 400 every short receive on a screen the
+// warehouse uses daily — so the rule binds the callers that participate: send
+// the key and it is enforced in both directions, omit it and nothing is
+// written. That is the same present-vs-absent discipline qty_received already
+// uses on this endpoint, and puReceiveSave's own comment spells out why the
+// distinction matters there. Once every receive screen sends the key,
+// `sent === undefined` stops happening and the rule is live everywhere with no
+// further change here.
+//
+// A line that is no longer short is the one case a silent caller still moves:
+// the stale reason is cleared, because a row must never claim a shortfall it
+// does not have.
+function planReceiptReason({ ordered, nextQty, sent, current }) {
+  const isShort = nextQty != null && nextQty < ordered;
+  if (sent === undefined) {
+    return (!isShort && current != null) ? { write: true, value: null } : { write: false };
+  }
+  const value = (sent == null || sent === '') ? null : String(sent);
+  if (isShort) {
+    if (!RECEIPT_REASONS.has(value)) {
+      return { error: value == null ? 'reason_required' : 'reason_invalid' };
+    }
+    return { write: true, value };
+  }
+  if (value != null) return { error: 'reason_not_applicable' };
+  return { write: true, value: null };
+}
+
+// The received quantity a line will hold after this payload is applied. An
+// absent qty_received key preserves what is stored; a null blanks it.
+function nextReceivedQty(line, r) {
+  if (r.qty_received === undefined) {
+    return line.qty_received == null ? null : parseFloat(line.qty_received);
+  }
+  return (r.qty_received == null || r.qty_received === '')
+    ? null : Math.max(0, parseFloat(r.qty_received) || 0);
+}
+
+// Validate every line's reason BEFORE anything is written, so a bad code can
+// never leave half a delivery saved. Returns a Map of line_id → plan, or
+// { error, line_id } for the caller to turn into its own 400 shape.
+// ── Receipts ────────────────────────────────────────────────────────────────
+// One header + one row per line, appended every time a save actually books a
+// delivery. See the table comment in database.js for why this exists and why
+// there is no backfill.
+
+// Which lines this save is asserting a receipt for. A line qualifies when the
+// payload puts a real arrived count on it, or reports damage — not merely when
+// it appears. The desktop screen sends every row of the PO on every save,
+// including ones still blank, and a receipt that claimed those had arrived
+// would make a two-line delivery read as five.
+//
+// A caller that re-sends lines it already entered (which the desktop does) gets
+// rows for them again. That is faithful: the save did re-assert those numbers.
+// A screen wanting "what changed on Tuesday" compares consecutive receipts.
+function receiptLineIds(receipts) {
+  const ids = [];
+  for (const r of receipts) {
+    const lineId = parseInt(r.line_id, 10);
+    if (!lineId) continue;
+    const assertsQty = r.qty_received !== undefined && r.qty_received !== null && r.qty_received !== '';
+    const assertsDmg = r.damaged_qty !== undefined && (parseFloat(r.damaged_qty) || 0) > 0;
+    if (assertsQty || assertsDmg) ids.push(lineId);
+  }
+  return ids;
+}
+
+// Append one receipt. MUST be called inside the same transaction as the line
+// updates, and AFTER them — it reads the lines back, so what it records is what
+// was actually stored rather than what the payload hoped for.
+// Returns { receiptId, lines } or null when the save booked nothing.
+//
+// `receipt_note` on a line, not `note`: po_line_items already has a `note`
+// column holding the buyer's own remark about the item ("substitute brand"),
+// and the two would have quietly overwritten each other's meaning.
+function recordReceipt(h, { poId, storeId, scope, actor, receipts, note }) {
+  const ids = receiptLineIds(receipts);
+  if (!ids.length) return null;
+  const info = h.prepare(`INSERT INTO po_receipts
+      (po_id, store_id, scope, actor_user_id, actor_label, actor_realm, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(poId, storeId ?? null, scope || 'kitchen',
+         actor?.userId ?? null, actor?.label ?? null, actor?.realm ?? null, note ?? null);
+  const receiptId = info.lastInsertRowid;
+  const read = h.prepare('SELECT qty_received, damaged_qty, receipt_reason FROM po_line_items WHERE id = ? AND po_id = ?');
+  const ins  = h.prepare(`INSERT INTO po_receipt_lines
+      (receipt_id, line_id, qty_received, damaged_qty, receipt_reason, note)
+      VALUES (?, ?, ?, ?, ?, ?)`);
+  const notes = new Map();
+  for (const r of receipts) {
+    const id = parseInt(r.line_id, 10);
+    if (id && r.receipt_note !== undefined) notes.set(id, String(r.receipt_note || '').trim() || null);
+  }
+  let lines = 0;
+  for (const id of ids) {
+    const l = read.get(id, poId);
+    if (!l) continue;
+    ins.run(receiptId, id, l.qty_received, l.damaged_qty || 0, l.receipt_reason, notes.get(id) ?? null);
+    lines++;
+  }
+  return { receiptId, lines };
+}
+
+// The store a PO's already-applied stock is sitting at: the last receipt that
+// named one, else the order's own store. Historical POs have no receipts, so
+// this is po.store_id for every order that exists today — which is what makes
+// the store change below a no-op for all of them.
+function appliedReceiptStore(h, po) {
+  const last = h.prepare(
+    'SELECT store_id FROM po_receipts WHERE po_id = ? AND store_id IS NOT NULL ORDER BY id DESC LIMIT 1'
+  ).get(po.id);
+  return last ? last.store_id : (po.store_id ?? null);
+}
+
+// Kitchen-side wording for the three refusals. The retail route answers in its
+// own shape (a bare code the screen translates), matching each file's existing
+// error convention rather than inventing a third.
+const RECEIPT_REASON_ERRORS = {
+  reason_required:       'A short line needs a reason · 短缺行需要填写原因',
+  reason_invalid:        'Unknown reason code · 收货原因无效',
+  reason_not_applicable: 'A reason belongs only on a short line · 仅短缺行可填写原因',
+};
+
+function planReceiptReasons(h, poId, receipts) {
+  const plans = new Map();
+  for (const r of receipts) {
+    const lineId = parseInt(r.line_id, 10);
+    if (!lineId) continue;
+    const line = h.prepare(
+      'SELECT qty, qty_received, receipt_reason FROM po_line_items WHERE id = ? AND po_id = ?'
+    ).get(lineId, poId);
+    if (!line) continue;
+    const plan = planReceiptReason({
+      ordered: parseFloat(line.qty) || 0,
+      nextQty: nextReceivedQty(line, r),
+      sent: r.receipt_reason,
+      current: line.receipt_reason,
+    });
+    if (plan.error) return { error: plan.error, line_id: lineId };
+    plans.set(lineId, plan);
+  }
+  return { plans };
+}
+
 // Web Push helpers — fan-out to subscribed devices when a PO event
 // happens. Lazy-loaded so a missing or mis-configured push module
 // doesn't break the rest of the route.
@@ -609,6 +773,11 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
     if (!Array.isArray(receipts)) return res.status(400).json({ error: 'receipts[] required · 收货数据必填' });
     const poId = parseInt(req.params.id, 10);
     if (!poId) return res.status(400).json({ error: 'invalid PO id · 采购单 ID 无效' });
+    // Reasons are resolved and refused up front — nothing below runs on a bad
+    // code. Kitchen receiving moves no stock, but it records the same fact.
+    const planned = planReceiptReasons(db, poId, receipts);
+    if (planned.error) return res.status(400).json({ error: RECEIPT_REASON_ERRORS[planned.error], line_id: planned.line_id });
+    const reasonUpd = db.prepare('UPDATE po_line_items SET receipt_reason = ? WHERE id = ? AND po_id = ?');
     const upd = db.prepare(`UPDATE po_line_items SET
       qty_received    = ?,
       damaged_qty     = ?,
@@ -617,6 +786,7 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
       WHERE id = ? AND po_id = ?`);
     let missing_lines = 0, damaged_lines = 0, total_missing = 0, total_damaged = 0;
     let any_qty_received = false;
+    let receipt = null;
     const tx = db.transaction(() => {
       for (const r of receipts) {
         const lineId = parseInt(r.line_id, 10);
@@ -642,9 +812,28 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
         } else {
           upd.run(q, dq, tn, tc, lineId, poId);
         }
+        // Written separately rather than folded into `upd`, so a tracking-only
+        // save can still clear a reason its quantity change made stale without
+        // that statement touching the receive columns it must leave alone.
+        const plan = planned.plans.get(lineId);
+        if (plan && plan.write) reasonUpd.run(plan.value, lineId, poId);
         if (q != null) any_qty_received = true;
         if (q != null && q < orderedQty) { missing_lines++; total_missing += orderedQty - q; }
         if (dq > 0)                       { damaged_lines++; total_damaged += dq; }
+      }
+      // The delivery record, appended last so it reads the lines back as
+      // stored. Gated on any_qty_received for the same reason the expense
+      // re-post below is: a save carrying only a tracking number is not a
+      // delivery, and one that booked nothing must not leave a phantom row in
+      // the Received list. Kitchen receipts carry no store — kitchen
+      // purchasing moves no stock and has no stores to move it between — but
+      // the delivery is recorded exactly as retail's is.
+      if (any_qty_received) {
+        receipt = recordReceipt(db, {
+          poId, storeId: null, scope: 'kitchen',
+          actor: { userId: req.user.id, label: req.user.display_name || req.user.username || null, realm: 'kitchen' },
+          receipts, note: (req.body && req.body.receipt_note) || null,
+        });
       }
     });
     tx();
@@ -653,8 +842,10 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
     // metadata, not a money event.
     if (any_qty_received) postPOExpenses(poId);
     logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', poId,
-      { lines: receipts.length, missing_lines, damaged_lines, total_missing, total_damaged }, req.ip);
-    res.json({ success: true, missing_lines, damaged_lines, total_missing, total_damaged });
+      { lines: receipts.length, missing_lines, damaged_lines, total_missing, total_damaged,
+        receipt_id: receipt?.receiptId ?? null }, req.ip);
+    res.json({ success: true, missing_lines, damaged_lines, total_missing, total_damaged,
+               receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0 });
   } catch (e) {
     console.error('[receive PO error]', e);
     res.status(500).json({ error: 'Receive failed · 收货失败: ' + (e.message || 'unknown error') });
@@ -1030,4 +1221,15 @@ module.exports.firePriceAlertsForPO = firePriceAlertsForPO;
 // the store_products.unit_cost write-back so both cost paths split the same
 // extras the same way — a second copy is what let the pack-price bug happen.
 module.exports.allocateLandedExtras = allocateLandedExtras;
+// The ONE receipt-reason rule. routes/retail-purchasing.js consumes it so the
+// kitchen and retail receive endpoints cannot disagree about what a valid
+// reason is or when one is owed — a second copy is exactly how invoice_status
+// ended up with a no_invoice mark the invoice report never read.
+module.exports.RECEIPT_REASONS = RECEIPT_REASONS;
+module.exports.planReceiptReasons = planReceiptReasons;
+// The ONE receipt writer, shared for the same reason: a delivery must be
+// recorded the same shape whichever scope took it in, or the Received list
+// reads two different histories depending on who was standing at the door.
+module.exports.recordReceipt = recordReceipt;
+module.exports.appliedReceiptStore = appliedReceiptStore;
 module.exports.backfillOrderedExpenses = backfillOrderedExpenses;

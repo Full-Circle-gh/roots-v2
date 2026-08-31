@@ -93,7 +93,11 @@ const CASES = [
     ['and names the damage',         `sheetText().includes('2 damaged')`],
     ['notes are shown',              `sheetText().includes('Back door before 9am')`],
     ['the one phone action is offered', `sheetText().includes('Everything arrived')`],
-    ['and it says where partials go',   `sheetText().includes('desktop')`],
+    // Was: "and it says where partials go" — asserting the sheet pointed at the
+    // desktop for short counts and damage. It no longer does, because it no
+    // longer has to: Receive is a screen on the phone now, and the sheet offers
+    // the way into it instead of an apology.
+    ['and offers the per-line screen',  `sheetText().includes('Receive line by line')`],
   ]],
   ['a draft offers the other step', SEEDED
     + `APP.cmd('openPO',7); state.poDetail={id:7,po_number:'RPO-0007',supplier:'Bean Bros',status:'Requested',total_cost:120,items:[]}; render();`, [

@@ -1310,6 +1310,42 @@ function _paPriceCell(u) {
   const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${short(pr.min)}–${short(pr.max)}`;
   return `<span class="pa-col-price">${body}</span>`;
 }
+// ── The "cost is not complete" mark ──────────────────────────────────────────
+// The operator's own tag (store_products.cost_incomplete), painted beside the
+// figure it qualifies. §31 rule 9's unknown-is-not-zero, made visible on the one
+// screen where the too-good number is actually read: a margin computed off a
+// cost missing its packaging looks exactly like one computed off a whole cost,
+// and it looks BETTER, which is the direction that gets acted on.
+//
+// A VARIANT FAMILY IS MARKED IF ANY MEMBER IS. The cell folds its members into
+// one figure, so one member's partial cost is already inside the number shown —
+// marking only when every size is tagged would hide it behind the sizes that
+// are fine.
+//
+// ONE MARK PER CELL, AHEAD OF THE FIGURES RATHER THAN AFTER ONE OF THEM. The
+// tag is a fact about the COST, and both lines of a two-figure cell are drawn
+// from that same cost — a mark hung off the Meituan line would read as a
+// complaint about Meituan. The column is right-aligned, so the mark sits in the
+// cell's own empty space and displaces nothing.
+//
+// CN PENDING on the tooltip — no sourced Chinese for this sentence, and
+// composing one is forbidden (§30 rule 3). English on both halves.
+function _paCostIncomplete(u) {
+  return (u.group ? u.members : [u.p]).some(m => m && m.cost_incomplete === 1);
+}
+function _paMarginWarn() {
+  const t = 'Marked “cost is not complete” — this percentage is drawn from a cost '
+          + 'that is missing something, so the real margin is lower.';
+  return `<span class="pa-mgn-warn" title="${escapeHtml(cuT(t, t))}" aria-label="${escapeHtml(cuT(t, t))}">${PD_ICON_WARN}</span>`;
+}
+// Wraps a finished cell body in the flag row when the tag is set. Returns the
+// body untouched when it is not, so an unflagged row keeps the exact markup
+// (and the exact height) it has always had.
+function _paMarginFlagged(u, body) {
+  return _paCostIncomplete(u)
+    ? `<span class="pa-mgn-flag">${_paMarginWarn()}${body}</span>`
+    : body;
+}
 // Margin column: PERCENTAGE only. The money difference lives in the editor,
 // beside the two numbers it is drawn from; on a list scanned down a screen the
 // percentage is the comparable figure and a second ¥ column next to Price would
@@ -1334,13 +1370,18 @@ function _paMarginCell(u) {
     .map(m => m.pct);
   const mt = _paChannelMarginOf(u).map(m => m.pct);
   if (ms.length && mt.length) {
-    return '<span class="pa-col-margin pa-mgn2">'
+    return _paMarginFlagged(u, '<span class="pa-col-margin pa-mgn2">'
       + `<span class="pa-mgn-row"><i>${escapeHtml(cuT('List', '标价'))}</i>${_paMarginSpan(ms)}</span>`
       + `<span class="pa-mgn-row pa-mgn-ch"><i>${escapeHtml(cuT('Meituan', '美团'))}</i>${_paMarginSpan(mt)}</span>`
-      + '</span>';
+      + '</span>');
   }
+  // NOT MARKED WHEN THERE IS NO FIGURE. An em dash already says "unknown" and
+  // claims nothing, so a warning beside it would be a second answer to a
+  // question the cell has stopped asking — and it would appear on rows whose
+  // cost is simply absent, where the tag has nothing to qualify.
   if (!ms.length) return '<span class="pa-col-margin pa-col-muted">—</span>';
-  return `<span class="pa-col-margin${Math.max(...ms) < 0 ? ' pa-col-muted' : ''}">${_paMarginFigure(ms)}</span>`;
+  return _paMarginFlagged(u,
+    `<span class="pa-col-margin${Math.max(...ms) < 0 ? ' pa-col-muted' : ''}">${_paMarginFigure(ms)}</span>`);
 }
 // One decimal for a single figure; whole numbers across a range, so the cell
 // stays narrow — the same "drop the noise on a range" rule the price cell uses.
@@ -2630,6 +2671,10 @@ async function pdOpen(id) {
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   ck('pd-ship-from-supplier', p && p.ship_from_supplier === 1);
   ck('pd-supplier-paused', p && p.supplier_paused === 1);
+  // The operator's "this cost is not the whole cost" tag. Off for a product
+  // that has never been tagged AND for a brand-new one — a cost nobody has
+  // typed yet has nothing to be incomplete about.
+  ck('pd-cost-incomplete', p && p.cost_incomplete === 1);
   // Out-of-stock policy. Show the effective value: a blank policy on a legacy
   // batch meal reads as "backorder outside GZ" (and persists explicitly on save).
   { const os = document.getElementById('pd-oos-policy');
@@ -5284,6 +5329,10 @@ function pdCollectBody() {
               : (g('pd-oos-policy') === 'backorder_gz' ? 'backorder_gz' : 'strict'),
     ship_from_supplier: ckd('pd-ship-from-supplier'),
     supplier_paused: ckd('pd-supplier-paused'),
+    // Always sent, both ways: clearing the tag is as much a statement as
+    // setting it ("I have checked this one and it is complete"), so it must
+    // reach the server rather than being omitted when false.
+    cost_incomplete: ckd('pd-cost-incomplete'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
     description_cn: pdRteClean(document.getElementById('pd-rte-cn').innerHTML),
@@ -5494,6 +5543,7 @@ function pdSnapshot() {
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
     ship_supplier: ck('pd-ship-from-supplier'), supplier_paused: ck('pd-supplier-paused'),
+    cost_incomplete: ck('pd-cost-incomplete'),
     oos_policy: g('pd-oos-policy'),
     air: ck('pd-ship-air'), land: ck('pd-ship-land'), local: ck('pd-ship-local'), published: ck('pd-published'),
     desc_en: document.getElementById('pd-rte-en').innerHTML, desc_cn: document.getElementById('pd-rte-cn').innerHTML,
@@ -5515,6 +5565,7 @@ function pdApplySnapshot(s) {
   set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
   ck('pd-ship-from-supplier', s.ship_supplier); ck('pd-supplier-paused', s.supplier_paused);
+  ck('pd-cost-incomplete', s.cost_incomplete);
   set('pd-oos-policy', s.oos_policy || 'strict');
   pdSyncSupplierUi();
   ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-ship-local', s.local); ck('pd-published', s.published);

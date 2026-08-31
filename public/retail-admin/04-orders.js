@@ -7477,7 +7477,17 @@ function openDirectRefundDialog(orderId) {
         btn, url: `/api/retail-admin/orders/${orderId}/refund/direct`,
         method: 'POST', body, errLabelEn: 'Refund failed', errLabelCn: '退款失败',
       });
-      toast(cuT('Refunded', '已退款') + ` ¥${fmt(j.amount || 0)}`);
+      // A 'manual' payout means no gateway money moved — the order was paid
+      // off-app (cash, or a WeChat transfer in a chat), so the refund is
+      // recorded on the books but the operator still has to send the money.
+      // Saying only "Refunded" there reads as "done", and the customer waits.
+      if (j.method === 'manual') {
+        toast(cuT(
+          `Recorded ¥${fmt(j.amount || 0)} — pay the customer back by hand (paid off-app)`,
+          `已记录 ¥${fmt(j.amount || 0)} — 该订单为线下支付,请手动退款给顾客`), 'warn', 7000);
+      } else {
+        toast(cuT('Refunded', '已退款') + ` ¥${fmt(j.amount || 0)}`);
+      }
       bg.remove();
       openOrder(orderId, { instant: true });
       loadOrders();

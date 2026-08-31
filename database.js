@@ -212,6 +212,12 @@ addColumn('waste_entries', 'cost_source', 'TEXT');
 addColumn('po_line_items', 'qty_received', 'REAL');
 // Track which PO each backorder PO came from for traceability.
 addColumn('purchase_orders', 'backorder_of', 'INTEGER');
+// A retail PO copied out of the kitchen list remembers the kitchen PO it came
+// from. Two jobs: provenance on screen (the copy says which PO-#### it mirrors)
+// and the duplicate guard — the copy endpoint refuses a second copy of the same
+// kitchen order, because the copy is a SECOND row for the same real purchase and
+// nothing else in the schema would catch it being made twice.
+addColumn('purchase_orders', 'copied_from_po_id', 'INTEGER');
 // Per-line shipment tracking + damage report. Tracking number is what the
 // supplier (Taobao etc) gives at ship time. carrier is optional ("sf"/"yto"/…)
 // — left null we link to 17track which auto-detects. damaged_qty is part of
@@ -219,6 +225,103 @@ addColumn('purchase_orders', 'backorder_of', 'INTEGER');
 addColumn('po_line_items', 'tracking_number', 'TEXT');
 addColumn('po_line_items', 'tracking_carrier', 'TEXT');
 addColumn('po_line_items', 'damaged_qty',     'REAL DEFAULT 0');
+// WHY a line's received count came in below what was ordered. A fixed list
+// validated server-side (routes/purchases.js RECEIPT_REASONS), not free text,
+// so "why do we keep coming up short on this supplier" is a question that can
+// be counted rather than read one note at a time.
+//
+// DAMAGE IS DELIBERATELY NOT ONE OF THE REASONS. It is its own quantity
+// (damaged_qty above) and it happens on lines that are not short at all — 20
+// of 20 arrived, 2 of them broken. Carrying the word in both places made one
+// fact look like two, and the mockup that had it in both is why this note
+// exists. A reason is only ever about the shortfall.
+//
+// NULL is the normal state: a line that arrived in full has nothing to explain.
+addColumn('po_line_items', 'receipt_reason', 'TEXT');
+
+// ── Receipts — one record per delivery actually taken in ────────────────────
+// A purchase order is what was ASKED FOR. A receipt is what TURNED UP, and the
+// two are not one-to-one: a three-supplier order arrives over three days, and
+// the receive endpoint is built to be called again and again for exactly that.
+// Until now nothing recorded the difference. The traces were spread over three
+// places and none of them could answer "what arrived on Tuesday, who took it
+// in, and where did it go":
+//   • activity_log wrote one 'receive' row per save, but its `lines` is the
+//     COUNT OF LINES SENT, not the lines that moved — and the desktop screen
+//     sends every line every time, so it is always the PO's full line count.
+//     It also drops user_id for every Mini App Backend operator (no users row
+//     to satisfy the FK), leaving a bare username string.
+//   • retail_stock_ledger has the store and the actor, but skips any line whose
+//     delta was zero, skips material lines, and skips kitchen receiving
+//     entirely — and it keys on product_id, so two PO lines for one product
+//     collapse into one stream nothing can separate.
+//   • po_line_items holds only the LATEST values; a correction overwrites what
+//     it corrected.
+//
+// APPEND-ONLY, AND THAT IS THE WHOLE DESIGN. Nothing here is ever updated. A
+// correction is a NEW receipt carrying the new numbers, so the row before it is
+// the "before" value — which is why there are no qty_before / damaged_before
+// columns to drift out of step with the line they describe.
+//
+// NO BACKFILL, DELIBERATELY, AND DO NOT ADD ONE LATER. Purchase orders received
+// before this shipped have no receipt rows and must keep none. The three
+// sources above cannot reconstruct one — every attempt would have to invent the
+// per-line quantities activity_log never stored, split deliveries the ledger
+// cannot separate, and guess an actor whose id was already discarded. A history
+// that is honestly absent beats one that is quietly wrong.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS po_receipts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_id          INTEGER NOT NULL,
+    -- Where the goods ACTUALLY went, which is not necessarily the store the PO
+    -- was raised against. NULL for kitchen receipts, which move no stock.
+    store_id       INTEGER,
+    scope          TEXT NOT NULL DEFAULT 'kitchen',   -- mirrors purchase_orders.scope
+    -- WHO, in two parts, because there are two id spaces. A kitchen session is
+    -- a users(id); a Mini App Backend operator is a tenant_users(id); the two
+    -- collide. actor_realm says which one actor_user_id belongs to, so the
+    -- name is resolvable instead of merely stored. No FK for the same reason
+    -- retail_stock_ledger.actor_user_id has none — a hard FK to users(id)
+    -- rejects every operator-driven write.
+    actor_user_id  INTEGER,
+    actor_label    TEXT,
+    actor_realm    TEXT,                              -- 'kitchen' | 'backend'
+    note           TEXT,
+    received_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE
+    -- store_id carries no FK either: a receipt is history and must outlive the
+    -- store closing. retail_stock_ledger takes the other trade because it
+    -- describes live stock.
+  );
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_po    ON po_receipts(po_id);
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_at    ON po_receipts(received_at);
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_store ON po_receipts(store_id);
+
+  -- One row per line per save. The receipt's own store/actor/time live on the
+  -- header above rather than repeating down every line.
+  CREATE TABLE IF NOT EXISTS po_receipt_lines (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_id     INTEGER NOT NULL,
+    line_id        INTEGER NOT NULL,
+    qty_received   REAL,
+    damaged_qty    REAL DEFAULT 0,
+    receipt_reason TEXT,
+    -- Why this line's number changed, when it is changing one already recorded.
+    -- "Miscounted — two sacks were behind the pallet". Free text on purpose:
+    -- receipt_reason is the countable fact, this is the sentence a person needs
+    -- to read the correction.
+    note           TEXT,
+    FOREIGN KEY (receipt_id) REFERENCES po_receipts(id)    ON DELETE CASCADE,
+    FOREIGN KEY (line_id)    REFERENCES po_line_items(id)  ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_receipt ON po_receipt_lines(receipt_id);
+  CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_line    ON po_receipt_lines(line_id);
+`);
+// NOTE (multi-tenant): no tenant_id here on purpose. A receipt reaches its
+// tenant through po_id → purchase_orders.tenant_id, which is one indexed join
+// and cannot drift out of step with the order it belongs to. If purchasing is
+// ever split per-tenant database, these two tables move with purchase_orders
+// and po_line_items — they are the same body of data.
 // Per-ingredient accounting bucket. When a PO line is created from this
 // ingredient (kitchen order, autocomplete pick, bulk import), the line's
 // expense_category is auto-populated from this column so finance posts
@@ -4262,6 +4365,48 @@ try {
   // scripts/postgres-full-copy/plan.json; that migration was cancelled and the
   // census deleted, so REAL yuan alongside its neighbours is the live convention.)
   addColumn('store_products', 'unit_cost', 'REAL');
+  // ── "This cost is not the whole cost" ────────────────────────────────────
+  //
+  // The operator's own tag, set by hand in the product editor and shown as a
+  // mark beside the margin in the products list. 1 = what unit_cost holds is
+  // known to be missing something. See the three states below.
+  //
+  // WHY A STORED FLAG RATHER THAN A DERIVED ONE. §31 rule 9 (an empty packaging
+  // list means UNKNOWN, not zero) is about a fact the system usually cannot
+  // see. Most of this catalogue carries a cost somebody typed, and no query can
+  // tell a typed ¥12 that already includes the jar from a typed ¥12 that forgot
+  // it — deriving the answer would mean guessing it on every one of them. The
+  // person who typed the figure knows, so they say so, and the system stores
+  // what they said instead of inferring what they meant.
+  //
+  // (No count is stated here on purpose. §31's own "65 products" is recorded as
+  // UNSOURCED in docs/packaging-findings.md finding 19, which carries the
+  // read-only queries and the three choices that must be pinned before either
+  // is run. A second unsourced number would not be an improvement.)
+  //
+  // IT IS SEEDED ONCE AND THEN NEVER WRITTEN BY THE SYSTEM AGAIN — see the
+  // store_products_cost_incomplete_seed_v1 migration below, which ticks it for
+  // the one case that IS provable (a build list holding contents and not one
+  // packaging line). Ash's call: a tag that starts empty says "every cost is
+  // complete" on day one, which is the flattering default rule 9 exists to
+  // stop. After the seed the column belongs to the operator alone.
+  //
+  // NULLABLE, WITH THREE STATES, AND THE THIRD ONE IS LOAD-BEARING.
+  //   NULL — nobody has answered. The state every product starts in.
+  //   0    — answered: this cost holds everything it should. §31 rule 9's
+  //          "there must be an explicit way to say NO PACKAGING", so the
+  //          reseller selling loose goods is CORRECT rather than unfinished.
+  //   1    — answered: something is missing, mark the margin.
+  // A DEFAULT 0 would collapse the first two into one value, and the seed below
+  // could then never tell a product it has not reached yet from one the
+  // operator has deliberately cleared — it would re-tick the cleared one on any
+  // re-run. Unknown is not zero here for the same reason it is not zero for
+  // unit_cost three lines up.
+  //
+  // Both NULL and 0 render identically today (no mark) — the list only ever
+  // marks an explicit 1. The distinction is for the seed and for anyone later
+  // measuring how much of the catalogue has actually been through the pass.
+  addColumn('store_products', 'cost_incomplete', 'INTEGER');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
@@ -5614,6 +5759,63 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_product ON product_build_lines(product_id);
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_ingredient ON product_build_lines(ingredient_id);
 `);
+
+// ── One-off: seed cost_incomplete from the build lists we can read ───────────
+//
+// The tag is the operator's from here on, but it must not START empty: an
+// untouched flag reads as "every cost on this catalogue is complete", which is
+// the flattering default §31 rule 9 was written against. So it is ticked once,
+// for the one shape the system can PROVE is missing something.
+//
+// THE RULE, AND ONLY THIS RULE: a product whose build list holds contents and
+// NOT ONE packaging line. Its cost is real, its margin publishes, and the jar,
+// the label and the sticker are provably not in it. Everything else is left
+// UNANSWERED (NULL) rather than asserted complete — the seed declines to
+// answer, which is not the same as answering "fine":
+//
+//   * A product with NO build list is left alone. Its cost was typed, and a
+//     typed ¥12 that includes the jar and a typed ¥12 that forgot it are the
+//     same number — Ash's call, made explicitly: do not guess on those. They
+//     are tickable by hand in the editor, one at a time, by whoever knows.
+//   * A packaging-ONLY list is left alone. lib/product-build-cost.js already
+//     refuses to publish a cost for it, so it shows an em dash and claims
+//     nothing; its problem is missing contents, which this tag does not name.
+//   * A list already carrying packaging is left alone. It is complete as far
+//     as anything here can tell.
+//
+// KIND IS THE TEST AND IT MIRRORS lib/product-build-cost.js EXACTLY —
+// item_kind = 'packaging' is packaging, everything else (including a line whose
+// material was deleted, which has no kind to read) is contents. Two readings of
+// "is this line packaging" would drift, and the seed would then tick products
+// the cost module thinks are fine.
+//
+// Guarded by _migrations, and idempotent on its own terms as well: it touches
+// only rows where nobody has answered (`cost_incomplete IS NULL`), so
+// re-running it by hand after clearing the guard cannot re-tick a product the
+// operator has since cleared — a cleared tag is a stored 0, which this skips.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('store_products_cost_incomplete_seed_v1');
+  const haveCol = db.pragma('table_info(store_products)').some(c => c.name === 'cost_incomplete');
+  if (!done && haveCol) {
+    const info = db.prepare(`
+      UPDATE store_products
+         SET cost_incomplete = 1
+       WHERE cost_incomplete IS NULL
+         AND EXISTS (
+               SELECT 1 FROM product_build_lines pbl
+                 LEFT JOIN ingredients i ON i.id = pbl.ingredient_id
+                WHERE pbl.product_id = store_products.id
+                  AND COALESCE(i.item_kind, 'food') != 'packaging')
+         AND NOT EXISTS (
+               SELECT 1 FROM product_build_lines pbl
+                 JOIN ingredients i ON i.id = pbl.ingredient_id
+                WHERE pbl.product_id = store_products.id
+                  AND i.item_kind = 'packaging')
+    `).run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('store_products_cost_incomplete_seed_v1');
+    console.log(`[store_products] cost_incomplete seed: ${info.changes} product(s) tagged — a build list with contents and no packaging line`);
+  }
+} catch (e) { console.error('[store_products] cost_incomplete seed failed:', e); }
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

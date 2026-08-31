@@ -4006,9 +4006,21 @@ async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCent
   if (!j.refund_id) {
     const err = new Error('wechat_refund_failed: ' + (j.message || j.code || JSON.stringify(j)));
     err.code = 'wechat_refund_failed';
+    err.wxCode = j.code || null;
     throw err;
   }
   return j;
+}
+
+// "WeChat has no such transaction." Raised when we try to refund an out_trade_no
+// the gateway never charged — the signature of an order whose money was taken
+// off-app (see hasGatewayRef). Matched on the v3 error code, with the message
+// text as a fallback for the shapes that omit it.
+function isMissingTransactionError(e) {
+  if (!e) return false;
+  const code = String(e.wxCode || '');
+  if (code === 'ORDERNOTEXIST' || code === 'RESOURCE_NOT_EXISTS') return true;
+  return /ORDERNOTEXIST|RESOURCE_NOT_EXISTS|订单不存在/i.test(String(e.message || ''));
 }
 
 // ─── Alipay API helpers ───────────────────────────────────────────────────
@@ -4682,23 +4694,34 @@ function markOrderPaid(orderId) {
       try { inventory.commitOrderReservations(orderId); }
       catch (e) { console.error('[inventory.commit]', e); }
 
-      // Scheduled-for-later GZ orders skip the reserve→commit gate at checkout
-      // (stockGate off), so commitOrderReservations above is a no-op for them and
-      // their stock would otherwise sit untouched until staff click Preparing.
-      // The office wants a Guangzhou order's stock pulled the moment it's paid —
-      // regardless of the delivery day — so decrement now. Idempotent (no-ops on
-      // GZ same-day orders that already reserved, and on any prior prepare-commit).
-      // Out-of-Guangzhou orders are deliberately NOT decremented here: their stock
-      // still commits at the first fulfilment transition, so the warehouse keeps
-      // its restock-before-ship window.
+      // Orders that skipped the reserve→commit gate at checkout (stockGate off —
+      // everything except GZ same-day and pickup) carry no reservation, so the
+      // commit above is a no-op for them. Their stock is pulled HERE instead.
+      //
+      // Until 2026-08-31 this was gated on the order carrying a Guangzhou
+      // address: an out-of-GZ order was left for its first fulfilment transition
+      // so the warehouse kept a restock-before-ship window. That window is what
+      // let a shelf sell past itself. The hard out-of-stock gate in POST /orders
+      // reads physical_qty, and physical_qty that only moves when someone clicks
+      // "Start preparing" reads "5 left" to the next shopper, and the next, for
+      // as many orders as arrive — the shop sets a count and the count never
+      // answers for anything. The same gate also went quiet whenever the saved
+      // address simply didn't parse as Guangzhou (a district with no city on it),
+      // which is not a fulfilment policy, just a miss.
+      //
+      // Selling past zero is a per-product decision that already has its own
+      // switch — oos_policy 'backorder_gz' keeps a sold-out item orderable as a
+      // pre-order for the shoppers we ship to — so it does not also need an
+      // unmoved shelf count standing in for it. Every paid order decrements now,
+      // whatever its address.
+      //
+      // Idempotent: no-ops on orders that already reserved (GZ same-day, pickup),
+      // on the counter sale committed a few lines above, and on any prior
+      // prepare-commit — so the preparing/dispatch calls that still make this
+      // call for orders paid before this change cannot double-count.
       try {
-        const ord = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
-        let addr = null;
-        try { addr = JSON.parse(ord?.address_json || 'null'); } catch { /* no address */ }
-        if (addr && inventory.isGuangzhouAddress(addr)) {
-          prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid (GZ scheduled)' });
-        }
-      } catch (e) { console.error('[inventory.prepareCommit (paid GZ)]', e); }
+        prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid' });
+      } catch (e) { console.error('[inventory.prepareCommit (paid)]', e); }
     }
     // Award earn-points on the actual transition. awardOrderPoints is
     // idempotent so calling it on already-paid orders is safe.
@@ -20372,7 +20395,11 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
 // is also the exact column set written on restore, so capture and restore agree.
 const VERSION_COLUMNS = [
   'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
-  'sell_price', 'compare_at_price', 'unit_cost', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
+  // cost_incomplete travels WITH unit_cost, never apart from it: the tag is a
+  // statement about that exact figure, so a restore that rolled the cost back
+  // to a version recorded before the packaging was added would leave the tag
+  // cleared against a cost that is short again.
+  'sell_price', 'compare_at_price', 'unit_cost', 'cost_incomplete', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
   'is_market', 'is_restock_only', 'is_batch_made', 'oos_policy', 'status', 'is_published',
@@ -20763,6 +20790,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // ship_from_supplier, but persisted independently so toggling it back on is
   // one write.
   if ('supplier_paused' in body) { sets.push('supplier_paused = ?'); params.push(body.supplier_paused ? 1 : 0); }
+  // The operator's own "this cost is not the whole cost" tag (§31 rule 9 —
+  // unknown is not zero). Set and cleared by hand in the product editor; the
+  // system writes it exactly once, in the database.js seed, and never again.
+  // It says nothing about WHAT is missing and does not change unit_cost — the
+  // stored figure is still the stored figure, it is simply marked as partial
+  // wherever it is shown.
+  if ('cost_incomplete' in body) { sets.push('cost_incomplete = ?'); params.push(body.cost_incomplete ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
   if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
@@ -20839,6 +20873,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            cost_incomplete,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(id);
@@ -21152,6 +21187,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            cost_incomplete,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -21859,6 +21895,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     nutrition, bundle, bundle_items, bundle_mode, tags,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
                     is_batch_made, oos_policy, ship_from_supplier, supplier_paused, use_block_design,
+                    -- The operator's "this cost is not the whole cost" tag. Carried on
+                    -- every row because the Margin cell marks the figure with it, and
+                    -- a mark that arrived only when the editor had been opened would
+                    -- be absent on exactly the rows nobody has looked at.
+                    cost_incomplete,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
@@ -27278,13 +27319,40 @@ const STATUS_TRANSITIONS = {
 // of all manual payments collapsing into "unknown".
 const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other']);
 
+// Evidence that a settled payment row's money actually reached the gateway.
+// Either mark is conclusive on its own:
+//
+//   • out_trade_no carries WX_OUT_TRADE_PREFIX. The two ORDER-create paths seed
+//     the row with the bare order_no as a placeholder (customer checkout ~10730,
+//     staff-keyed order ~22739); only a PAY-create overwrites it with the
+//     prefixed ref it actually sends to the provider (/payment/create ~4827,
+//     guest pay ~5358). So the prefix is the mark of a charge having been raised
+//     — and its absence means no charge ever was.
+//   • A provider callback landed (transaction_id / raw_callback_json). Covers
+//     legacy rows minted before the prefix existed.
+//
+// Without this, a staff-keyed order (source='manual', channel e.g. 'wechat_chat')
+// where the operator picked plain 'wechat' looked like gateway money to both
+// guards below — method 'wechat' is not in OFFLINE_PAY_METHODS, and its bare
+// order_no ref does not start with 'MANUAL' — so a refund fired a real WeChat
+// refund against a transaction WeChat had never seen. That 502s the whole
+// request ('订单不存在'), leaving such an order un-refundable by ANY amount or
+// mode. The customer paid the shop by WeChat transfer in a chat; the money is
+// not at the gateway and must go back by hand.
+function hasGatewayRef(p) {
+  return String(p.out_trade_no || '').startsWith(WX_OUT_TRADE_PREFIX) ||
+    !!p.transaction_id || !!p.has_callback;
+}
+
 // A settled payment row holds real gateway money we can push back only when it
-// went through the WeChat gateway: a non-offline method AND a real provider
-// out_trade_no (the synthetic 'MANUAL…' refs are off-app bookkeeping).
+// went through the WeChat gateway: a non-offline method, a real provider
+// out_trade_no (the synthetic 'MANUAL…' refs are off-app bookkeeping), AND
+// evidence that a charge was actually raised there (hasGatewayRef).
 function isGatewayPayment(p) {
   return !!p && p.out_trade_no &&
     !OFFLINE_PAY_METHODS.has(p.method) &&
-    !String(p.out_trade_no).startsWith('MANUAL');
+    !String(p.out_trade_no).startsWith('MANUAL') &&
+    hasGatewayRef(p);
 }
 
 // Pure planner: decide how much of `amount` (¥) each settled payment row absorbs,
@@ -27323,8 +27391,13 @@ function planRefundAllocation(rows, amount) {
 // when the operator explicitly pays back off-app (cash/bank) or in dev mode.
 async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
   const payCtx = opts.payCtx || payContext();
+  // has_callback (not raw_callback_json itself — it is a whole provider payload)
+  // feeds hasGatewayRef via isGatewayPayment. Without these two columns every
+  // legacy pre-prefix row would read as off-app and stop being refunded.
   const rows = tdb().prepare(
-    `SELECT id, method, amount, out_trade_no, COALESCE(refunded_amount, 0) AS refunded_amount
+    `SELECT id, method, amount, out_trade_no, transaction_id,
+            (raw_callback_json IS NOT NULL) AS has_callback,
+            COALESCE(refunded_amount, 0) AS refunded_amount
        FROM retail_payments
       WHERE order_id = ? AND status IN ('success', 'refunded')
       ORDER BY id ASC`
@@ -27341,15 +27414,31 @@ async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
       const refundCents = Math.round(step.take * 100);
       // Unique per row even when several rows refund inside the same millisecond.
       const outRefundNo = ('RF' + p.id + 'X' + p.out_trade_no + Date.now().toString().slice(-5)).slice(0, 63);
-      const r = await wechatPayRefund({
-        outTradeNo: p.out_trade_no, outRefundNo, refundCents, totalCents,
-        reason: opts.reason || ('Refund order ' + orderId),
-      });
-      if (r.status === 'ABNORMAL') {
-        const e = new Error('wechat_refund_abnormal'); e.code = 'wechat_refund_abnormal'; e.abnormal = true; throw e;
+      let r;
+      try {
+        r = await wechatPayRefund({
+          outTradeNo: p.out_trade_no, outRefundNo, refundCents, totalCents,
+          reason: opts.reason || ('Refund order ' + orderId),
+        });
+      } catch (e) {
+        // Belt-and-braces for the same class isGatewayPayment now screens out:
+        // a row WeChat has no transaction for. hasGatewayRef catches these up
+        // front, but a row that slipped past it (an odd legacy ref, a charge
+        // raised against another merchant) must not fail the whole refund —
+        // there is no gateway money to return, so record it as an off-app
+        // payout the operator settles by hand, exactly like a cash row.
+        if (!isMissingTransactionError(e)) throw e;
+        console.warn('[refund] no gateway txn for', p.out_trade_no, '→ manual payout:', e.message);
+        manualAmount = +(manualAmount + step.take).toFixed(2);
+        r = null;
       }
-      refs.push(r.refund_id + (r.status ? ' (' + r.status + ')' : ''));
-      gatewayAmount = +(gatewayAmount + step.take).toFixed(2);
+      if (r) {
+        if (r.status === 'ABNORMAL') {
+          const e = new Error('wechat_refund_abnormal'); e.code = 'wechat_refund_abnormal'; e.abnormal = true; throw e;
+        }
+        refs.push(r.refund_id + (r.status ? ' (' + r.status + ')' : ''));
+        gatewayAmount = +(gatewayAmount + step.take).toFixed(2);
+      }
     } else {
       manualAmount = +(manualAmount + step.take).toFixed(2);
     }
@@ -27370,7 +27459,9 @@ async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
 // True when the order still holds gateway money we could refund (any settled,
 // not-fully-refunded WeChat payment row). Used to decide whether a refund/cancel
 // must claim + push money back, vs. a pure off-app order the operator settles by
-// hand. Mirrors isGatewayPayment in SQL.
+// hand. Mirrors isGatewayPayment in SQL — including the hasGatewayRef test (the
+// prefixed out_trade_no / callback evidence), so the two agree on a staff-keyed
+// order whose placeholder ref never became a real charge.
 function orderHasRefundableGatewayMoney(orderId) {
   const offline = [...OFFLINE_PAY_METHODS];
   const ph = offline.map(() => '?').join(',');
@@ -27380,8 +27471,10 @@ function orderHasRefundableGatewayMoney(orderId) {
         AND COALESCE(refunded_amount, 0) + 0.005 < amount
         AND out_trade_no IS NOT NULL AND out_trade_no NOT LIKE 'MANUAL%'
         AND method NOT IN (${ph})
+        AND (out_trade_no LIKE ? OR transaction_id IS NOT NULL
+             OR raw_callback_json IS NOT NULL)
       LIMIT 1`
-  ).get(orderId, ...offline);
+  ).get(orderId, ...offline, WX_OUT_TRADE_PREFIX + '%');
 }
 
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
@@ -27559,15 +27652,21 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // admin path bypasses it.
     try { inventory.commitOrderReservations(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
     catch (e) { console.error('[inventory.commit (admin)]', e); }
-    // A counter sale marked paid HERE must move stock exactly as one settled
-    // through markOrderPaid does. This is the same feature, not a second one:
-    // the operator rings a walk-in up as pending, the customer pays at the till,
-    // and the operator clicks Mark paid — the commit above is a no-op for it
-    // (a manual order holds no reservation), so without this the walk-in
-    // decrements on one route and not the other, purely by which button settled
-    // it. Guarded on the genuine pending→paid transition, like the print and
-    // WeCom hooks below; commitUnreservedOrder is idempotent besides, so a
-    // re-save cannot double-count.
+    // An order marked paid HERE must move stock exactly as one settled through
+    // markOrderPaid does. This is the same feature, not a second one: the money
+    // arriving off-app (cash at the till, a bank transfer) and the operator
+    // clicking Mark paid is the same sale as the gateway callback, and the
+    // commit above is a no-op for any order that never reserved — a counter
+    // sale, and every order the checkout stock gate let through unreserved —
+    // so without this the shelf moves on one route and not the other, purely by
+    // which button settled it. Guarded on the genuine pending→paid transition,
+    // like the print and WeCom hooks below; commitUnreservedOrder is idempotent
+    // besides, so a re-save cannot double-count.
+    //
+    // This fired for counter sales alone until 2026-08-31 (an isTerminalOnPaid
+    // test stood here), which left a mini-app order marked paid off-app waiting
+    // on its first preparing/dispatch click for a decrement — the same wait,
+    // one route over, that markOrderPaid no longer makes an order serve.
     //
     // NOTE: this path does NOT flip the order to 'delivered' the way
     // markOrderPaid does — it never calls isTerminalOnPaid, so a counter sale
@@ -27577,14 +27676,11 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // way: it is keyed on the sale being paid, not on the status it lands in.
     if (o.status !== 'paid') {
       try {
-        const _ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(id);
-        if (isTerminalOnPaid(_ft)) {
-          prepareCommitUnreservedOrder(id, {
-            actorUserId: req.user.id,
-            actorLabel: req.user.display_name || req.user.username || null,
-          });
-        }
-      } catch (e) { console.error('[inventory.commit (admin counter)]', e); }
+        prepareCommitUnreservedOrder(id, {
+          actorUserId: req.user.id,
+          actorLabel: req.user.display_name || req.user.username || null,
+        });
+      } catch (e) { console.error('[inventory.commit (admin paid)]', e); }
     }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
     // Auto-print the bill, same as the gateway callbacks do inside
