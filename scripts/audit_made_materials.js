@@ -56,7 +56,11 @@ const Database = require('better-sqlite3');
 
 const WRITE = process.argv.includes('--write');
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
-const db = new Database(DB_PATH);
+// READ-ONLY UNLESS --write. This is meant to be run against the live database
+// while pm2 is serving from it, so the reporting pass is opened in a mode where
+// a stray UPDATE cannot execute at all — the guarantee is enforced by SQLite,
+// not by trusting that every branch below happens to be a SELECT.
+const db = new Database(DB_PATH, WRITE ? {} : { readonly: true });
 
 // Every live material a recipe backs, with the shape of that recipe alongside:
 // how many lines it has, and (for a one-liner) the live material it repacks.
