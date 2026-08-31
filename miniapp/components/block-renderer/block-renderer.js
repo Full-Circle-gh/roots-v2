@@ -1442,8 +1442,16 @@ Component({
             // Receipt-view specific decorations
             receiptStub: en ? 'ROOTS · REFER' : 'ROOTS · 推广',
             receiptDate: '—',  // placeholder; could populate w/ today if we wanted
-            enabled:    af.enabled !== false,
-            disabledMsg: en ? 'Refer-a-friend is paused.' : '推广计划暂停中。',
+            // Two independent ways this card goes quiet: the shop-wide program
+            // is paused (`enabled`), or an admin disabled THIS customer's
+            // referring (`affiliate_blocked` — see routes/retail.js's
+            // /affiliate-block). Either way /affiliate/apply refuses the code,
+            // so hiding the code + SHARE button is the honest render; only the
+            // reason differs, and the message says which.
+            enabled:    af.enabled !== false && !af.affiliate_blocked,
+            disabledMsg: af.affiliate_blocked
+              ? (en ? 'Your invite code has been turned off.' : '您的邀请码已被停用。')
+              : (en ? 'Refer-a-friend is paused.' : '推广计划暂停中。'),
             signinHint: en ? 'Tap to open and get your code →' : '点击获取你的邀请码 →',
           };
           break;

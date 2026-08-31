@@ -1693,8 +1693,15 @@
     var accent = color(b.accent_color || 'ink');
     var copyLabel = en ? 'COPY' : '复制', shareLabel = en ? 'SHARE' : '分享';
     var codeLabel = en ? 'YOUR CODE' : '邀请码';
-    var enabled = af.enabled !== false;
-    var disabledMsg = en ? 'Refer-a-friend is paused.' : '推广计划暂停中。';
+    // Two independent ways this card goes quiet: the shop-wide program is
+    // paused (`enabled`), or an admin disabled THIS customer's referring
+    // (`affiliate_blocked` — see routes/retail.js's /affiliate-block). Either
+    // way /affiliate/apply refuses the code, so hiding COPY + the ?ref= SHARE
+    // link is the honest render; only the reason differs.
+    var enabled = af.enabled !== false && !af.affiliate_blocked;
+    var disabledMsg = af.affiliate_blocked
+      ? (en ? 'Your invite code has been turned off.' : '您的邀请码已被停用。')
+      : (en ? 'Refer-a-friend is paused.' : '推广计划暂停中。');
     var signinHint = en ? 'Tap to open and get your code →' : '点击获取你的邀请码 →';
     // On the web COPY copies the code and SHARE copies a ready ?ref= link.
     var shareLink = (typeof location !== 'undefined' ? location.origin + location.pathname : '') + '?ref=' + encodeURIComponent(code);

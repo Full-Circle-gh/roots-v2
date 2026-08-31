@@ -508,6 +508,10 @@ Page({
   // referral code to a tracked link so when the friend opens the mini app
   // we can pre-fill the apply box on the affiliate page.
   onShareAppMessage() {
+    // The wxml hides this page's share buttons behind the blocked-state card,
+    // but WeChat's own "..." menu still calls this handler — so the gate has
+    // to live here too, not just in the markup. See _storeShare below.
+    if (this.data.blocked) return this._storeShare();
     const code = this.data.code || '';
     // The share lands on the FRIEND, so it advertises THEIR reward
     // (rewardReferee). When that's 0 we use a neutral invite rather than
@@ -531,6 +535,12 @@ Page({
   },
 
   onShareTimeline() {
+    // Same gate as onShareAppMessage — Moments is reachable from the "..."
+    // menu whether or not the page draws its own MOMENTS button.
+    if (this.data.blocked) {
+      const s = this._storeShare();
+      return { title: s.title, ...(s.imageUrl ? { imageUrl: s.imageUrl } : {}) };
+    }
     const code = this.data.code || '';
     const them = Number(this.data.rewardReferee) || 0;
     const en = this.data.lang === 'en';
@@ -542,6 +552,23 @@ Page({
     return {
       title,
       query: `ref=${encodeURIComponent(code)}`,
+    };
+  },
+
+  // Plain storefront share — no code, no reward promise. Used when an admin
+  // has disabled THIS customer's referring: /affiliate/apply refuses their
+  // code, so a card carrying it would promise the friend a discount that
+  // cannot be claimed. Mirrors home.js's generic fallback (same office-set
+  // Home card from admin → Share cards) so both surfaces read alike.
+  _storeShare() {
+    const sharing = getApp().globalData.config?.sharing || {};
+    const img = sharing.home;
+    const title = (sharing.homeTitle && sharing.homeTitle[this.data.lang])
+      || (this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots · plant-forward food');
+    return {
+      title,
+      path: '/pages/home/home',
+      ...(img ? { imageUrl: img } : {}),
     };
   },
 
