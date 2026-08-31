@@ -101,6 +101,7 @@
   let _invOut = null;        // supplier groups + KPI totals + aging, from the server
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
+  let _invAssign = null;     // the "set supplier" modal's working state
   let _invMonth = '';        // 'YYYY-MM' or '' for all
   let _invSearch = '';       // supplier / item / SKU / PO number
   let _invSearchTimer = null;
@@ -1466,6 +1467,10 @@
   // paperwork lives. Invoices created here are stamped scope='retail' so the
   // kitchen screen can no longer delete them — which it did, once, to a real
   // row (see the note in routes/finance.js).
+  // The literal the server groups under when the whole supplier chain comes up
+  // empty (routes/retail-purchasing.js INV_UNSPECIFIED) — a bucket, not a
+  // vendor, so the screen treats it as one everywhere it appears.
+  const INV_UNSPECIFIED = '未指定 Unspecified';
   const INV_META = {
     fully_invoiced:      () => ({ label: T('Fully invoiced', '已开票'),  cls: 'sage'  }),
     partially_invoiced:  () => ({ label: T('Partial', '部分开票'),        cls: 'amber' }),
@@ -1658,8 +1663,8 @@
             ${cell(g.awaiting, 'awaiting')}
             ${cell(g.no_invoice_expected, 'no_invoice_expected')}
             <td class="right" onclick="event.stopPropagation()">
-              ${g.supplier === '未指定 Unspecified'
-                ? `<span class="pu2-mut sm">${esc(T('Set a supplier on these lines first', '请先为这些明细设置供应商'))}</span>`
+              ${g.supplier === INV_UNSPECIFIED
+                ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Nothing on these lines said who they came from — name the supplier and they move into that supplier’s group', '这些明细未记录来源 —— 指定供应商后即归入该供应商'))}" onclick="puInvAssign()">${esc(T('Set supplier', '设置供应商'))}</button>`
                 : (chase > 0.005
                     ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvNew(${i})">${esc(T('Add invoice', '添加发票'))}</button>`
                     : `<span class="pu2-mut sm">${esc(T('All invoiced', '已全部开票'))}</span>`)}
@@ -1674,6 +1679,10 @@
   // The lines inside one supplier, grouped by the buying order they sit on so
   // the PO-level "no invoice" mark has somewhere honest to live.
   function invLinesHtml(g) {
+    // Only the Unspecified bucket gets the "set supplier" affordances — a line
+    // already grouped under a real vendor is attributed, and re-pointing it is
+    // an order edit, not invoice chasing.
+    const unspec = g.supplier === INV_UNSPECIFIED;
     const byPo = new Map();
     for (const l of g.lines) {
       if (!byPo.has(l.po_number)) byPo.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, date: l.date, po_no_invoice: l.po_no_invoice, lines: [] });
@@ -1684,6 +1693,7 @@
         <span class="pu2-mono">${esc(po.po_number)}</span>
         <span class="pu2-mut">${esc(po.date || '')}</span>
         <span class="spacer"></span>
+        ${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${po.lines.map(l => l.line_id).join(',')}])">${esc(T('Set supplier for this order', '为整单设置供应商'))}</button>` : ''}
         ${po.po_no_invoice
           ? `<span class="pu2-pill grey">${esc(T('No invoice', '不开发票'))}</span>
              <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore', '恢复'))}</button>`
@@ -1696,7 +1706,7 @@
           <span class="pu2-num">${money(l.amount)}</span>
           <span class="pu2-num pu2-mut">${l.covered > 0.005 ? esc(T('invoiced', '已开票')) + ' ' + money(l.covered) : ''}</span>
           <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
-          <span class="act">${l.po_no_invoice ? ''
+          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice ? ''
             : l.line_no_invoice
               ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore', '恢复'))}</button>`
               : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This line will never have an invoice', '该明细不会开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},true)">${esc(T('No invoice', '不开发票'))}</button>`}</span>
@@ -1772,6 +1782,120 @@
     } catch (e) { toast(e.message, 'err'); }
   };
 
+  // ── "Set supplier" — the way out of the Unspecified bucket ────────────────
+  // A line lands there when NOTHING in the chain named a supplier: not the
+  // line, not its order's header, not the item's master record. The screen
+  // used to state that and stop — "set a supplier on these lines first" with
+  // nowhere to do it, because the order wizard only reopens drafts and most of
+  // these lines sit on placed kitchen-scope orders this admin never opens.
+  //
+  // So the fix lives here, on the row that names the problem. The modal opens
+  // on whatever was pointed at — one line, one order, or the whole bucket —
+  // every line ticked, so the common case (a whole order that came from one
+  // place) is one choice and Save. Untick anything that came from elsewhere
+  // and set it separately.
+  window.puInvAssign = function (lineIds) {
+    const g = invGroup(INV_UNSPECIFIED);
+    if (!g) return;
+    const want = Array.isArray(lineIds) && lineIds.length ? new Set(lineIds) : null;
+    const lines = g.lines.filter(l => !want || want.has(l.line_id));
+    if (!lines.length) return;
+    _invDraft = null;
+    _invAssign = { supplier: '', lines, picked: new Set(lines.map(l => l.line_id)) };
+    renderAssignModal();
+  };
+  function assignPicked() {
+    const d = _invAssign; if (!d) return [];
+    return d.lines.filter(l => d.picked.has(l.line_id));
+  }
+  function renderAssignModal() {
+    const d = _invAssign; if (!d) return;
+    const byPo = new Map();
+    d.lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
+    // The names on offer are the ones this tenant already uses — the master plus
+    // anything a placed order carries — which is exactly what the server will
+    // accept. A tenant with neither gets told where to add one rather than a
+    // second empty control to stare at.
+    const sups = invSupplierList();
+    const supOpts = ['<option value="">' + esc(T('Choose a supplier', '选择供应商')) + '</option>']
+      .concat(sups.map(o => `<option value="${esc(o.name)}"${o.name === d.supplier ? ' selected' : ''}>${esc(o.label)}</option>`)).join('');
+    const rows = [...byPo.entries()].map(([po, ls]) => `
+      <div class="pu2-pogrp">${esc(po)}</div>
+      ${ls.map(l => {
+        const on = d.picked.has(l.line_id);
+        const m = INV_META[l.status]();
+        return `<div class="pu2-allocrow">
+          <span class="pu2-chk${on ? ' on' : ''}" onclick="puInvAssignToggle(${l.line_id})">${on ? I.check : ''}</span>
+          <div>${nameLabel(l)}${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}</div>
+          <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
+          <div class="pu2-num">${money(l.amount)}</div>
+        </div>`;
+      }).join('')}`).join('');
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puInvCloseModal()"></div>
+      <div class="pu2-modal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('Set supplier', '设置供应商'))}</h2>
+               <div class="sub">${esc(T('Say who these lines came from. They move into that supplier’s group, ready to chase a 发票 for.', '指明这些明细的来源。设置后将归入该供应商,可开始跟进发票。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puInvCloseModal()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puInvAssignField(this.value)">${supOpts}</select>
+            ${sups.length ? '' : `<span class="hint">${esc(T('No suppliers on file yet — add one on the Suppliers tab, then come back.', '还没有供应商 —— 请先在“供应商”中添加,然后返回。'))}</span>`}</label>
+          <div class="pu2-alloc-head">
+            <span class="pu2-kicker" style="margin:0">${esc(T('Lines to move', '要设置的明细'))}</span>
+            <button class="pu2-btn sm" style="margin-left:auto" onclick="puInvAssignAll()">${esc(assignPicked().length === d.lines.length ? T('Untick all', '全部取消') : T('Tick all', '全选'))}</button>
+          </div>
+          <div class="pu2-alloclist">${rows}</div>
+        </div>
+        <div class="pu2-modal-foot">
+          <span id="pu2-assignbadge">${assignBadgeHtml()}</span>
+          <span class="spacer"></span>
+          <button class="pu2-btn ghost" onclick="puInvCloseModal()">${esc(T('Cancel', '取消'))}</button>
+          <button class="pu2-btn primary" onclick="puInvAssignSave()">${esc(T('Set supplier', '设置供应商'))}</button>
+        </div>
+      </div>`;
+  }
+  function assignBadgeHtml() {
+    const d = _invAssign; if (!d) return '';
+    const picked = assignPicked();
+    const total = picked.reduce((s, l) => s + (l.amount || 0), 0);
+    if (!picked.length) return `<span class="pu2-mut">${esc(T('Nothing ticked', '未勾选'))}</span>`;
+    return `<span class="pu2-pill grey">${picked.length} ${esc(T('of', '/'))} ${d.lines.length} ${esc(T('lines', '条明细'))}</span> <span class="pu2-mut pu2-num">${money(total)}</span>`;
+  }
+  window.puInvAssignField = function (v) { if (_invAssign) { _invAssign.supplier = v; } };
+  window.puInvAssignToggle = function (lineId) {
+    const d = _invAssign; if (!d) return;
+    if (d.picked.has(lineId)) d.picked.delete(lineId); else d.picked.add(lineId);
+    renderAssignModal();
+  };
+  window.puInvAssignAll = function () {
+    const d = _invAssign; if (!d) return;
+    if (assignPicked().length === d.lines.length) d.picked.clear();
+    else d.lines.forEach(l => d.picked.add(l.line_id));
+    renderAssignModal();
+  };
+  window.puInvAssignSave = async function () {
+    const d = _invAssign; if (!d) return;
+    if (!d.supplier) { toast(T('Choose a supplier', '请选择供应商'), 'err'); return; }
+    const ids = assignPicked().map(l => l.line_id);
+    if (!ids.length) { toast(T('Tick at least one line', '请至少勾选一条明细'), 'err'); return; }
+    try {
+      await api('/api/retail-admin/purchasing/lines/supplier', { method: 'PUT', body: { supplier: d.supplier, line_ids: ids } });
+      // Open the group they just moved into, so the lines are visible where
+      // they landed rather than vanishing from the screen.
+      const moved = d.supplier;
+      toast(T('Supplier set ✓', '已设置供应商 ✓'), 'ok');
+      puInvCloseModal();
+      _invExpanded.add(moved);
+      await invReload();
+    } catch (e) {
+      toast(e.code === 'unknown_supplier'
+        ? T('That supplier isn’t on file — add them on the Suppliers tab first.', '该供应商不在名录中 —— 请先在“供应商”中添加。')
+        : e.message, 'err');
+    }
+  };
+
   // ── the invoice modal — the same form for a new one and an edit ───────────
   function billHost() {
     // Mounted as a sibling of #pu2-root inside the pane; CSS is keyed on
@@ -1787,13 +1911,14 @@
   }
   window.puInvCloseModal = function () {
     _invDraft = null;
+    _invAssign = null;
     const h = document.getElementById('pu2-modal-host');
     if (h) h.innerHTML = '';
   };
   window.puInvNew = function (groupIdx) {
     const groups = (_invOut && _invOut.groups) || [];
     const sup = (typeof groupIdx === 'number' && groups[groupIdx]) ? groups[groupIdx].supplier : '';
-    _invDraft = { id: null, supplier: sup && sup !== '未指定 Unspecified' ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
+    _invDraft = { id: null, supplier: sup && sup !== INV_UNSPECIFIED ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
     renderInvModal();
   };
   // Editing loads the invoice's OWN allocations into the draft, so the lines it
@@ -1820,7 +1945,7 @@
     ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier_cn) cn.set(g.supplier, g.supplier_cn); });
     _suppliers.forEach(s => { if (s.name_cn) cn.set(s.name, s.name_cn); });
     const names = new Set();
-    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== '未指定 Unspecified') names.add(g.supplier); });
+    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== INV_UNSPECIFIED) names.add(g.supplier); });
     _suppliers.filter(s => s.is_active).forEach(s => names.add(s.name));
     if (_invDraft && _invDraft.supplier) names.add(_invDraft.supplier);
     return [...names].sort((a, b) => a.localeCompare(b)).map(n => ({ name: n, label: supName(n, cn.get(n)) }));
