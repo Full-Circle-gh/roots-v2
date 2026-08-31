@@ -34,6 +34,18 @@
  *       question with no screen to answer it. Unarchive from the Materials
  *       screen the moment the recipe is actually used.
  *
+ *       BUT ON LIVE DATA CLASS B IS MOSTLY A TO-DO LIST, NOT JUNK. The 32 rows
+ *       the first production run found are breads, kombuchas, yogurts and
+ *       parfaits — things Roots sells, whose product build lines have simply
+ *       never been set up (9 of 76 recipe-linked products had one the day that
+ *       feature shipped). Archiving one hides it from the build-list picker,
+ *       which filters COALESCE(is_active,1)=1, so it removes the exact row you
+ *       would search for when wiring that product up — and the recipe bridge
+ *       cannot help either, since a class B recipe by definition has no product
+ *       pointing at it. So class B is REPORT-ONLY under --write and needs its
+ *       own --archive-unused. Read it as "these recipes still need a build
+ *       list" before reading it as cleanup.
+ *
  * IT IS CAUTIOUS BY DESIGN. A row is only offered when NOTHING references it:
  * no build line, no other recipe's ingredient line, no purchase, no kitchen
  * order, no price history — and no product pointing at its recipe, because the
@@ -46,21 +58,28 @@
  * screen where a delete is not.
  *
  * Read-only by default. Run ON THE SERVER:
- *   node scripts/audit_made_materials.js            # report
- *   node scripts/audit_made_materials.js --write    # apply
+ *   node scripts/audit_made_materials.js                    # report
+ *   node scripts/audit_made_materials.js --write            # class A only
+ *   node scripts/audit_made_materials.js --archive-unused   # class B too (read its banner)
  */
 'use strict';
 
 const path = require('path');
 const Database = require('better-sqlite3');
 
+// --write acts on the repack twins ONLY. Class B is deliberately behind its own
+// flag: archiving one of those hides it from the build-list picker, which
+// filters COALESCE(is_active,1)=1 (routes/retail-product-build.js), so it takes
+// away the very row you would search for when wiring that product's build list
+// up. See the class B banner below.
 const WRITE = process.argv.includes('--write');
+const ARCHIVE_UNUSED = process.argv.includes('--archive-unused');
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
 // READ-ONLY UNLESS --write. This is meant to be run against the live database
 // while pm2 is serving from it, so the reporting pass is opened in a mode where
 // a stray UPDATE cannot execute at all — the guarantee is enforced by SQLite,
 // not by trusting that every branch below happens to be a SELECT.
-const db = new Database(DB_PATH, WRITE ? {} : { readonly: true });
+const db = new Database(DB_PATH, (WRITE || ARCHIVE_UNUSED) ? {} : { readonly: true });
 
 // Every live material a recipe backs, with the shape of that recipe alongside:
 // how many lines it has, and (for a one-liner) the live material it repacks.
@@ -138,7 +157,13 @@ if (repack.length) {
 }
 
 if (unused.length) {
-  console.log(`── B · ${WRITE ? 'ARCHIVED' : 'WOULD ARCHIVE'} (link kept) — never used, ${unused.length} ──`);
+  console.log(`── B · NOT WIRED UP YET — ${unused.length} ${ARCHIVE_UNUSED ? '(ARCHIVING, link kept)' : '(review only)'} ──`);
+  console.log('  These are real multi-line recipes whose material nothing points at YET. On live');
+  console.log('  data that reads as a to-do list, not junk: breads, kombuchas, yogurts — things');
+  console.log('  Roots sells, whose product build lists simply have not been set up. Archiving one');
+  console.log('  HIDES IT FROM THE BUILD-LIST PICKER, which is the row you would search for when');
+  console.log('  you go to set that build list up. Hence --archive-unused, and not --write.');
+  console.log();
   console.log(`  ${w('MADE ROW', 32)}${w('SKU', 10)}${w('FROM RECIPE', 32)}LINES`);
   for (const m of unused) console.log(`  ${w(m.name_en, 32)}${w(m.sku, 10)}${w(m.recipe_name, 32)}${m.line_count}`);
   console.log();
@@ -152,20 +177,27 @@ if (keep.length) {
 
 if (!made.length) console.log('Nothing to do.\n');
 
-if (WRITE && (repack.length || unused.length)) {
+const doRepacks = WRITE && repack.length;
+const doUnused = ARCHIVE_UNUSED && unused.length;
+
+if (doRepacks || doUnused) {
   const unlinkArchive = db.prepare(
     'UPDATE ingredients SET source_recipe_id = NULL, is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
   const archiveOnly = db.prepare(
     'UPDATE ingredients SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
   db.transaction(() => {
-    for (const m of repack) unlinkArchive.run(m.id);
-    for (const m of unused) archiveOnly.run(m.id);
+    if (doRepacks) for (const m of repack) unlinkArchive.run(m.id);
+    if (doUnused) for (const m of unused) archiveOnly.run(m.id);
   })();
-  console.log(`Done — ${repack.length} repack twin(s) unlinked and archived, ${unused.length} unused row(s) archived.`);
+  console.log('Done —'
+    + (doRepacks ? ` ${repack.length} repack twin(s) unlinked and archived.` : '')
+    + (doUnused ? ` ${unused.length} unused row(s) archived.` : ''));
   console.log('Nothing was deleted. Tick "Archived" on the Materials screen to see them,');
   console.log('and un-archive any the kitchen still wants.\n');
-} else if (repack.length || unused.length) {
-  console.log('Dry run. Re-run with --write to apply.\n');
+} else {
+  if (repack.length) console.log(`Dry run. --write archives the ${repack.length} repack twin(s) in A.`);
+  if (unused.length) console.log(`Class B is review-only; --archive-unused would archive those ${unused.length}. Read its banner first.`);
+  if (repack.length || unused.length) console.log();
 }
 
 db.close();
