@@ -49,6 +49,11 @@ fs.rmSync(SCRATCH, { recursive: true, force: true });
 fs.mkdirSync(SCRATCH, { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'database.js'), path.join(SCRATCH, 'database.js'));
 fs.copyFileSync(path.join(ROOT, 'schema.sql'),  path.join(SCRATCH, 'schema.sql'));
+// database.js's later migrations require('./lib/...'). Without these the ALTERs
+// still run but several migrations abort half-way and print SqliteErrors — a
+// fixture that quietly diverges from a real boot is worth less than the noise
+// suggests, so link the directory in rather than tolerate the warnings.
+try { fs.symlinkSync(path.join(ROOT, 'lib'), path.join(SCRATCH, 'lib'), 'dir'); } catch {}
 const cleanup = () => { try { fs.rmSync(SCRATCH, { recursive: true, force: true }); } catch {} };
 process.on('exit', cleanup);
 
