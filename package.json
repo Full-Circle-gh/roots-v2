@@ -20,6 +20,7 @@
   "test:mobile": "node scripts/test_mobile_screens.js && node scripts/test_mobile_geometry.js && node scripts/test_mobile_home.js && node scripts/test_mobile_orders.js && node scripts/test_mobile_products.js && node scripts/test_mobile_purchasing.js && node scripts/test_mobile_inbox.js && node scripts/test_mobile_activity.js && node scripts/test_mobile_categories.js && node scripts/test_mobile_club.js && node scripts/test_mobile_voting.js && node scripts/test_mobile_settings.js && node scripts/test_mobile_sales.js && node scripts/test_mobile_team.js && node scripts/test_mobile_trend.js && node scripts/test_mobile_dots.js && node scripts/test_mobile_customer_record.js && node scripts/test_mobile_pwa.js",
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
+    "test:offapp-refund": "node scripts/test_offapp_refund_guard.js",
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
     "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",

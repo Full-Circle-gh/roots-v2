@@ -4006,9 +4006,21 @@ async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCent
   if (!j.refund_id) {
     const err = new Error('wechat_refund_failed: ' + (j.message || j.code || JSON.stringify(j)));
     err.code = 'wechat_refund_failed';
+    err.wxCode = j.code || null;
     throw err;
   }
   return j;
+}
+
+// "WeChat has no such transaction." Raised when we try to refund an out_trade_no
+// the gateway never charged — the signature of an order whose money was taken
+// off-app (see hasGatewayRef). Matched on the v3 error code, with the message
+// text as a fallback for the shapes that omit it.
+function isMissingTransactionError(e) {
+  if (!e) return false;
+  const code = String(e.wxCode || '');
+  if (code === 'ORDERNOTEXIST' || code === 'RESOURCE_NOT_EXISTS') return true;
+  return /ORDERNOTEXIST|RESOURCE_NOT_EXISTS|订单不存在/i.test(String(e.message || ''));
 }
 
 // ─── Alipay API helpers ───────────────────────────────────────────────────
@@ -27278,13 +27290,40 @@ const STATUS_TRANSITIONS = {
 // of all manual payments collapsing into "unknown".
 const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other']);
 
+// Evidence that a settled payment row's money actually reached the gateway.
+// Either mark is conclusive on its own:
+//
+//   • out_trade_no carries WX_OUT_TRADE_PREFIX. The two ORDER-create paths seed
+//     the row with the bare order_no as a placeholder (customer checkout ~10730,
+//     staff-keyed order ~22739); only a PAY-create overwrites it with the
+//     prefixed ref it actually sends to the provider (/payment/create ~4827,
+//     guest pay ~5358). So the prefix is the mark of a charge having been raised
+//     — and its absence means no charge ever was.
+//   • A provider callback landed (transaction_id / raw_callback_json). Covers
+//     legacy rows minted before the prefix existed.
+//
+// Without this, a staff-keyed order (source='manual', channel e.g. 'wechat_chat')
+// where the operator picked plain 'wechat' looked like gateway money to both
+// guards below — method 'wechat' is not in OFFLINE_PAY_METHODS, and its bare
+// order_no ref does not start with 'MANUAL' — so a refund fired a real WeChat
+// refund against a transaction WeChat had never seen. That 502s the whole
+// request ('订单不存在'), leaving such an order un-refundable by ANY amount or
+// mode. The customer paid the shop by WeChat transfer in a chat; the money is
+// not at the gateway and must go back by hand.
+function hasGatewayRef(p) {
+  return String(p.out_trade_no || '').startsWith(WX_OUT_TRADE_PREFIX) ||
+    !!p.transaction_id || !!p.has_callback;
+}
+
 // A settled payment row holds real gateway money we can push back only when it
-// went through the WeChat gateway: a non-offline method AND a real provider
-// out_trade_no (the synthetic 'MANUAL…' refs are off-app bookkeeping).
+// went through the WeChat gateway: a non-offline method, a real provider
+// out_trade_no (the synthetic 'MANUAL…' refs are off-app bookkeeping), AND
+// evidence that a charge was actually raised there (hasGatewayRef).
 function isGatewayPayment(p) {
   return !!p && p.out_trade_no &&
     !OFFLINE_PAY_METHODS.has(p.method) &&
-    !String(p.out_trade_no).startsWith('MANUAL');
+    !String(p.out_trade_no).startsWith('MANUAL') &&
+    hasGatewayRef(p);
 }
 
 // Pure planner: decide how much of `amount` (¥) each settled payment row absorbs,
@@ -27323,8 +27362,13 @@ function planRefundAllocation(rows, amount) {
 // when the operator explicitly pays back off-app (cash/bank) or in dev mode.
 async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
   const payCtx = opts.payCtx || payContext();
+  // has_callback (not raw_callback_json itself — it is a whole provider payload)
+  // feeds hasGatewayRef via isGatewayPayment. Without these two columns every
+  // legacy pre-prefix row would read as off-app and stop being refunded.
   const rows = tdb().prepare(
-    `SELECT id, method, amount, out_trade_no, COALESCE(refunded_amount, 0) AS refunded_amount
+    `SELECT id, method, amount, out_trade_no, transaction_id,
+            (raw_callback_json IS NOT NULL) AS has_callback,
+            COALESCE(refunded_amount, 0) AS refunded_amount
        FROM retail_payments
       WHERE order_id = ? AND status IN ('success', 'refunded')
       ORDER BY id ASC`
@@ -27341,15 +27385,31 @@ async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
       const refundCents = Math.round(step.take * 100);
       // Unique per row even when several rows refund inside the same millisecond.
       const outRefundNo = ('RF' + p.id + 'X' + p.out_trade_no + Date.now().toString().slice(-5)).slice(0, 63);
-      const r = await wechatPayRefund({
-        outTradeNo: p.out_trade_no, outRefundNo, refundCents, totalCents,
-        reason: opts.reason || ('Refund order ' + orderId),
-      });
-      if (r.status === 'ABNORMAL') {
-        const e = new Error('wechat_refund_abnormal'); e.code = 'wechat_refund_abnormal'; e.abnormal = true; throw e;
+      let r;
+      try {
+        r = await wechatPayRefund({
+          outTradeNo: p.out_trade_no, outRefundNo, refundCents, totalCents,
+          reason: opts.reason || ('Refund order ' + orderId),
+        });
+      } catch (e) {
+        // Belt-and-braces for the same class isGatewayPayment now screens out:
+        // a row WeChat has no transaction for. hasGatewayRef catches these up
+        // front, but a row that slipped past it (an odd legacy ref, a charge
+        // raised against another merchant) must not fail the whole refund —
+        // there is no gateway money to return, so record it as an off-app
+        // payout the operator settles by hand, exactly like a cash row.
+        if (!isMissingTransactionError(e)) throw e;
+        console.warn('[refund] no gateway txn for', p.out_trade_no, '→ manual payout:', e.message);
+        manualAmount = +(manualAmount + step.take).toFixed(2);
+        r = null;
       }
-      refs.push(r.refund_id + (r.status ? ' (' + r.status + ')' : ''));
-      gatewayAmount = +(gatewayAmount + step.take).toFixed(2);
+      if (r) {
+        if (r.status === 'ABNORMAL') {
+          const e = new Error('wechat_refund_abnormal'); e.code = 'wechat_refund_abnormal'; e.abnormal = true; throw e;
+        }
+        refs.push(r.refund_id + (r.status ? ' (' + r.status + ')' : ''));
+        gatewayAmount = +(gatewayAmount + step.take).toFixed(2);
+      }
     } else {
       manualAmount = +(manualAmount + step.take).toFixed(2);
     }
@@ -27370,7 +27430,9 @@ async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
 // True when the order still holds gateway money we could refund (any settled,
 // not-fully-refunded WeChat payment row). Used to decide whether a refund/cancel
 // must claim + push money back, vs. a pure off-app order the operator settles by
-// hand. Mirrors isGatewayPayment in SQL.
+// hand. Mirrors isGatewayPayment in SQL — including the hasGatewayRef test (the
+// prefixed out_trade_no / callback evidence), so the two agree on a staff-keyed
+// order whose placeholder ref never became a real charge.
 function orderHasRefundableGatewayMoney(orderId) {
   const offline = [...OFFLINE_PAY_METHODS];
   const ph = offline.map(() => '?').join(',');
@@ -27380,8 +27442,10 @@ function orderHasRefundableGatewayMoney(orderId) {
         AND COALESCE(refunded_amount, 0) + 0.005 < amount
         AND out_trade_no IS NOT NULL AND out_trade_no NOT LIKE 'MANUAL%'
         AND method NOT IN (${ph})
+        AND (out_trade_no LIKE ? OR transaction_id IS NOT NULL
+             OR raw_callback_json IS NOT NULL)
       LIMIT 1`
-  ).get(orderId, ...offline);
+  ).get(orderId, ...offline, WX_OUT_TRADE_PREFIX + '%');
 }
 
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {

@@ -7556,6 +7556,10 @@
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.err  { background: rgba(120, 30, 40, .92); border-color: var(--danger); color: #fff; }
   .toast.ok   { background: rgba(46, 74, 34, .96); border-color: var(--success); color: #fff; }
+  /* The action SUCCEEDED but left the operator something to do (e.g. a refund
+     recorded against an off-app payment — the money still has to be sent by
+     hand). Green would read as "finished", red as "failed"; neither is true. */
+  .toast.warn { background: rgba(92, 64, 12, .96); border-color: var(--warn); color: #fff; }
 
   .empty-state {
     padding: 60px var(--s5);
