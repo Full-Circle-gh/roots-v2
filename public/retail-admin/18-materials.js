@@ -400,6 +400,22 @@
       menu.className = 'mat-fincat-menu';
       menu.id = 'mat-fincat-menu';
       menu.hidden = true;
+      // Picking is wired here, once, by delegation — NOT as an inline
+      // onmousedown per option. Category names are free text and many carry
+      // quotes/brackets ("Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）"),
+      // and an inline handler has to survive being embedded in an HTML
+      // attribute AND parsed as JS. It didn't: the JSON-quoted argument's own
+      // `"` closed the attribute early, leaving every option with a
+      // syntactically broken handler, so clicks did nothing at all. Reading
+      // the value back off data-val keeps the name out of both parsers.
+      menu.addEventListener('mousedown', (e) => {
+        const opt = e.target.closest && e.target.closest('.mat-fincat-opt');
+        if (!opt) return;
+        // Keep focus on the input: the deferred hide in matFinCatBlur would
+        // otherwise race the pick.
+        e.preventDefault();
+        matFinCatPick(opt.dataset.val);
+      });
       document.body.appendChild(menu);
     }
     return menu;
@@ -419,7 +435,7 @@
     const matches = _finCats.filter(c => !q || c.toLowerCase().includes(q)).slice(0, 30);
     if (!matches.length) { menu.hidden = true; menu.innerHTML = ''; return; }
     menu.innerHTML = matches.map(c =>
-      `<div class="mat-fincat-opt" onmousedown="event.preventDefault();matFinCatPick(${JSON.stringify(c)})">${esc(c)}</div>`).join('');
+      `<div class="mat-fincat-opt" data-val="${esc(c)}">${esc(c)}</div>`).join('');
     matFinCatReposition();
     menu.hidden = false;
   };
