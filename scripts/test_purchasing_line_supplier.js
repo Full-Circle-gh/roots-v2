@@ -95,7 +95,7 @@ const SOURCE_CHECKS = [
   {
     file: 'public/retail-admin/16-purchasing.js', src: () => UI_SRC,
     name: 'the modal saves through the line-level route, never the PO header',
-    anchor: "await api('/api/retail-admin/purchasing/lines/supplier', { method: 'PUT', body: { supplier: d.supplier, line_ids: ids } });",
+    anchor: "await api('/api/retail-admin/purchasing/lines/supplier', { method: 'PUT', body: { supplier, line_ids: ids } });",
     present: true,
   },
   {
