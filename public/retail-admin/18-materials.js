@@ -82,6 +82,9 @@
   let _init = false;
   let _rows = [];
   let _counts = {};
+  // 'bought' | 'made' | '' (both). Defaults to bought — see sourceTabs().
+  let _source = 'bought';
+  let _srcCounts = { bought: 0, made: 0 };
   let _kinds = [];        // categories WHERE kind='item_kind'
   let _cats = [];         // distinct ingredients.category
   let _finCats = [];      // categories WHERE kind='accounting' — the finance-category master list
@@ -140,10 +143,12 @@
     if (_cat) qs.set('category', _cat);
     if (_sup) qs.set('supplier', _sup);
     if (_archived) qs.set('archived', '1');
+    if (_source) qs.set('source', _source);
     try {
       const j = await api('/api/retail-admin/materials?' + qs.toString());
       _rows = j.data || [];
       _counts = j.counts || {};
+      _srcCounts = j.sourceCounts || { bought: 0, made: 0 };
     } catch (e) {
       _rows = [];
       if (r) r.innerHTML = `<div class="mat-emptyline">${esc(T('Could not load materials', '无法加载物料'))} — ${esc(e.message || '')}</div>`;
@@ -162,6 +167,36 @@
         <h1 class="mat-title">${esc(T('Materials', '物料'))}</h1>
         <p class="mat-sub">${esc(T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies. What each one costs per unit is worked out from the pack price.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。每单位成本由整包价格自动折算。'))}</p>
       </div>`;
+  }
+
+  // THE TWO JOBS THIS SCREEN DOES, TOLD APART. Every recipe save files its
+  // output here as a material, because a product's build list can only point at
+  // a material — that is how a cooked thing reaches a cost, and it is not
+  // optional. The side effect was that 122 kitchen outputs sat in the same list
+  // as the 630 things Roots actually buys, so the list stopped being about
+  // either. Worse, a bought material and the recipe that repacks it read as the
+  // same row twice (Ash, on Nour Dates) with nothing on screen saying which was
+  // which.
+  //
+  // DEFAULTS TO BOUGHT, because that is the job the screen's own subtitle
+  // describes — "everything you buy and hold" — and the one with re-ordering,
+  // suppliers and pack prices behind it. Made rows are never hidden, only
+  // filed: the tab carries its own live count, so "Made 122" is on screen
+  // whichever tab is open, and tableHtml()'s empty state points across when a
+  // search finds nothing here but something there.
+  //
+  // The PICKERS ARE NOT FILTERED BY THIS (see routes/retail-materials.js) —
+  // the build list and recipe lines keep seeing every row, so no tab on this
+  // screen can make a material impossible to cost with.
+  function sourceTabs() {
+    const tabs = [
+      ['bought', T('Bought', '采购'), _srcCounts.bought],
+      ['made', T('Made', '自制'), _srcCounts.made],
+      ['', T('All', '全部'), _srcCounts.bought + _srcCounts.made],
+    ];
+    return tabs.map(([key, label, n]) =>
+      `<button class="mat-srctab${_source === key ? ' on' : ''}" onclick="matSetSource('${esc(key)}')">${esc(label)}<b class="mat-num">${n}</b></button>`
+    ).join('');
   }
 
   function kindChips() {
@@ -201,7 +236,8 @@
     // node — so the field the operator is typing into is destroyed mid-word.
     // Remember whether it held focus and put the caret back at the end.
     const wasSearching = document.activeElement && document.activeElement.id === 'mat-q';
-    r.innerHTML = chrome() + `<div class="mat-chiprow">${kindChips()}</div>` + filterBar() + tableHtml();
+    r.innerHTML = chrome() + `<div class="mat-srcrow">${sourceTabs()}</div>`
+      + `<div class="mat-chiprow">${kindChips()}</div>` + filterBar() + tableHtml();
     if (wasSearching) {
       const q = document.getElementById('mat-q');
       if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
@@ -212,6 +248,15 @@
   function tableHtml() {
     if (!_rows.length) {
       const blank = _q || _kind || _cat || _sup;
+      // sourceCounts is taken with the search applied and the source tab NOT
+      // (routes/retail-materials.js), so this is the real number of matches
+      // sitting one tab over — the difference between "there is no such
+      // material" and "it is filed under the other job", which is the whole
+      // reason the tabs exist. Only offered when it is not zero.
+      const elsewhere = _source === 'bought' ? _srcCounts.made
+        : _source === 'made' ? _srcCounts.bought : 0;
+      const otherTab = _source === 'bought' ? 'made' : 'bought';
+      const otherLabel = otherTab === 'made' ? T('Made', '自制') : T('Bought', '采购');
       return `
         <div class="mat-card mat-empty">
           <div class="mat-empty-ico">${I.crate}</div>
@@ -219,6 +264,8 @@
           <p>${esc(blank
             ? T('Try a different search, or clear the filters.', '换个搜索词,或清除筛选条件。')
             : T('A material is anything you buy and keep — flour, cups, a mixer. Add the first one and its cost per unit is worked out for you.', '物料是你采购并留存的任何东西 —— 面粉、杯子、搅拌机。新建第一条,单位成本会自动算好。'))}</p>
+          ${elsewhere ? `<p class="mat-emptyline"><button class="mat-linkbtn" onclick="matSetSource('${otherTab}')">${esc(
+            T(`${elsewhere} in ${otherLabel} →`, `${otherLabel}中有 ${elsewhere} 条 →`))}</button></p>` : ''}
         </div>`;
     }
     const rows = _rows.map(m => {
@@ -229,7 +276,8 @@
       return `
         <tr onclick="matRecordOpen(${m.id})">
           <td>
-            <div class="mat-name">${esc(m.name_en || '')}</div>
+            <div class="mat-name">${esc(m.name_en || '')}${m.source_recipe_id != null
+              ? `<span class="mat-made" title="${esc(T('Created by a recipe, not bought', '由配方生成,非采购'))}">${esc(T('Made', '自制'))}</span>` : ''}</div>
             ${m.name_cn ? `<div class="mat-sub2">${esc(m.name_cn)}</div>` : ''}
           </td>
           <td><span class="mat-tag">${esc(kindLabel(m.item_kind || 'food'))}</span></td>
@@ -259,6 +307,7 @@
       </div>`;
   }
 
+  window.matSetSource = function (v) { _source = v; load(); };
   window.matSetKind = function (k) { _kind = k; load(); };
   window.matSetCat  = function (c) { _cat = c; load(); };
   window.matSetSup  = function (s) { _sup = s; load(); };
