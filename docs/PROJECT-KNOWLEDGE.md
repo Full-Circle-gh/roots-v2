@@ -78,6 +78,23 @@ shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
     timestamp, and `package-lock.json`, which the box's older npm rewrites without the `libc` optional-
     dependency hints. Anything else is real drift.
 - **Only `main` deploys.** Feature branches (and this repo's `claude/*` branches) are safe checkpoints.
+- **Local checkout (Ash, Windows):** `C:\Users\Asher\Desktop\full circle\full circle\roots-v2`.
+  The path **contains spaces** — quote it: `cd "C:\Users\Asher\Desktop\full circle\full circle\roots-v2"`.
+  A bare `scp scripts/foo.js root@…` run from PowerShell's default `C:\WINDOWS\system32` fails with
+  `stat local … No such file` — that is a wrong working directory, not a missing file or a bad key.
+- **Running a `scripts/` diagnostic against production before its branch merges.** `scripts/` is a
+  deployable path but only `main` deploys, so a `claude/*` branch's scripts are not on the box. Copy
+  the one file rather than merging early — no deploy, no `pm2 restart`:
+  ```
+  git fetch origin <branch> && git checkout <branch>
+  scp scripts/<name>.js root@47.239.89.63:/root/roots-v2/scripts/
+  ssh root@47.239.89.63 'cd /root/roots-v2 && node scripts/<name>.js'
+  ```
+  Back the DB up first if it has a `--write` mode — it is one file:
+  `ssh root@47.239.89.63 'cp /root/roots-v2/data/roots.db /root/roots-v2/data/roots.db.bak.<label>'`.
+  A script that reads production while pm2 serves from the same file should open it
+  `{ readonly: true }` unless actually writing, so SQLite enforces the no-writes promise rather than
+  every branch happening to be a SELECT.
 - Editing retail-admin JS needs **no `sw.js` bump** — the deploy appends `public/sw.js` to every ship and stamps its cache constant. The committed value is a fixed sentinel; editing it is a defect. *(Manual rule retired 2026-08-27; see `tacet-desktop-patterns.md` §7 / v4.8.)*
 - `.github/workflows/claude.yml` runs Claude on `@claude` mentions in issues/PRs.
 - Secrets live in a gitignored `.env` on the box (never commit). Reliability history: a crash→pm2
