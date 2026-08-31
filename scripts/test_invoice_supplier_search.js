@@ -1,16 +1,23 @@
 #!/usr/bin/env node
-// The supplier field in Purchasing → Invoices → "Set supplier"
-// (public/retail-admin/16-purchasing.js, renderAssignModal + the puSuggest*
-// menu it borrows from the payment fields).
+// BOTH supplier fields on Purchasing → Invoices: "Set supplier"
+// (renderAssignModal) and "Add invoice" (renderInvModal), in
+// public/retail-admin/16-purchasing.js, over the puSuggest* menu they borrow
+// from the payment fields.
 //
-// THE DEFECT THIS COVERS. The field was a native <select> carrying every
-// supplier the tenant has — 78 groups on the live one. There is no way to type
-// at a <select>: finding a name meant scrolling a popup drawn by the OS, which
-// is also the popup the payment fields moved away from because the chat-app
-// webview positions it against the wrong edge of the window entirely. It is a
-// search box now, drawn by us, matching the stored name and BOTH language
+// THE DEFECT THIS COVERS. Each was a native <select> carrying every supplier
+// the tenant has — 78 groups on the live one. There is no way to type at a
+// <select>: finding a name meant scrolling a popup drawn by the OS, which is
+// also the popup the payment fields moved away from because the chat-app
+// webview positions it against the wrong edge of the window entirely. Both are
+// search boxes now, drawn by us, matching the stored name and BOTH language
 // halves — a supplier is stored as one string with both glued together
 // ("Dry Fruit 果干"), so neither half alone would ever match it.
+//
+// THE TWO DIFFER IN ONE WAY, and it is asserted below: on "Add invoice" the
+// supplier is STRUCTURAL — it decides which lines the form can allocate
+// against — so a pick there clears the allocations and repaints, and a name
+// typed in full that names someone else switches the form rather than filing
+// against another supplier's lines.
 //
 // Nothing here asserts against what we meant to render — every check reads the
 // HTML back out of the DOM stub, the way test_wizard_line_supplier.js does.
@@ -89,7 +96,7 @@ async function api(p, opts) {
   if (q === '/api/retail-admin/stores') return { success: true, data: [{ id: 1, code: 'TH', name_en: 'Tianhe', is_active: 1 }] };
   if (q.startsWith('/api/retail-admin/suppliers')) return { success: true, data: SUPPLIERS };
   if (q === '/api/retail-admin/purchasing/invoices/outstanding') return { success: true, data: OUTSTANDING };
-  if (q === '/api/retail-admin/purchasing/invoices') return { success: true, data: [] };
+  if (q === '/api/retail-admin/purchasing/invoices') { if (opts && opts.method) { sent.push(opts.body); return { success: true, id: 7 }; } return { success: true, data: [] }; }
   return { success: true, data: [] };
 }
 
@@ -121,6 +128,7 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  ✓ ' + msg); }
 
 const modal = () => node('pu2-modal-host').innerHTML;
 const field = () => node('pu2-assign-sup');
+const invField = () => node('pu2-inv-sup');
 const menuEl = () => (nodes.has('pu2-suggest-menu') ? nodes.get('pu2-suggest-menu') : null);
 const menu = () => { const m = menuEl(); return m && !m.hidden ? m.innerHTML : ''; };
 // Typing, as the field itself does it: set the value, then fire what the
@@ -215,6 +223,44 @@ async function main() {
   ok(menu() !== '', 'the menu is open');
   sandbox.puInvCloseModal();
   ok(menu() === '', 'and does not outlive the modal it belonged to (it hangs off <body>)');
+
+  console.log('\n11. "Add invoice" — the same box, on the field beside it');
+  sent.length = 0; toasts.length = 0;
+  sandbox.puInvNew();
+  ok(modal().includes('id="pu2-inv-sup"'), 'its Supplier field is the search box too');
+  ok(!modal().includes('<option'), 'and no <select> is left in the form');
+  sandbox.puSuggestOpen('pu2-inv-sup', 'invsuppliers');
+  ok(menu().includes('Dry Fruit') && menu().includes('Nut House'), 'the whole book is offered');
+  invField().value = 'nut';
+  sandbox.puSuggestOpen('pu2-inv-sup', 'invsuppliers');
+  ok(menu().includes('Nut House') && !menu().includes('Dry Fruit'), 'typing narrows it');
+
+  console.log('\n12. picking there is STRUCTURAL — it repaints the form');
+  sandbox.puSuggestPick('Nut House 坚果屋', 'Nut House');
+  ok(invField().value === 'Nut House', 'the field shows the label');
+  ok(modal().includes('id="pu2-inv-sup"'), 'the form repainted around the pick');
+  ok(modal().includes('No open lines for this supplier'),
+     'and it now speaks for the picked supplier, not "pick a supplier to see what’s open"');
+
+  console.log('\n13. a full name typed for SOMEONE ELSE switches the form, it does not file');
+  invField().value = 'Dry Fruit';
+  await sandbox.puInvSave();
+  ok(sent.length === 0, 'nothing is filed against the other supplier’s lines');
+  ok(toasts.some(t => /switched to that supplier/i.test(t.msg)), 'the operator is told the form switched');
+  ok(invField().value === 'Dry Fruit', 'and the field now names who the form is for');
+
+  console.log('\n14. then it saves, carrying the STORED name');
+  sandbox.puInvField('amount', '120');
+  await sandbox.puInvSave();
+  ok(sent.length === 1 && sent[0].supplier === 'Dry Fruit 果干', 'the stored name goes on the wire');
+
+  console.log('\n15. and a name that is nobody is refused there too');
+  sandbox.puInvNew();
+  invField().value = 'Nobody At All';
+  toasts.length = 0;
+  await sandbox.puInvSave();
+  ok(sent.length === 1 && toasts.some(t => t.kind === 'err' && /pick one from the list/i.test(t.msg)),
+     'nothing sent, and the same message as the other field');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
