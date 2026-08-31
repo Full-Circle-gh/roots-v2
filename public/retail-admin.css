@@ -7556,6 +7556,10 @@
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.err  { background: rgba(120, 30, 40, .92); border-color: var(--danger); color: #fff; }
   .toast.ok   { background: rgba(46, 74, 34, .96); border-color: var(--success); color: #fff; }
+  /* The action SUCCEEDED but left the operator something to do (e.g. a refund
+     recorded against an off-app payment — the money still has to be sent by
+     hand). Green would read as "finished", red as "failed"; neither is true. */
+  .toast.warn { background: rgba(92, 64, 12, .96); border-color: var(--warn); color: #fff; }
 
   .empty-state {
     padding: 60px var(--s5);
@@ -10389,6 +10393,41 @@
   #prod-view-purchasing .pu2-fgroup:last-of-type { margin-bottom: 0; }
   #prod-view-purchasing .pu2-fgroup .pu2-kicker { margin: 0 0 12px; }
 
+  /* Payment-terms / payment-method suggestions (16-purchasing.js).
+     These two fields used to be <input list=…> + <datalist>, whose popup is
+     drawn by the OS combobox widget: unstyleable (it came up as a black OS
+     list against these light cards) and, inside an embedding webview, often
+     positioned at the wrong screen coordinates entirely — pinned to the far
+     edge of the window rather than under its field. We draw the list instead.
+     .pu2-suggest-menu is deliberately NOT scoped under #prod-view-purchasing:
+     puSuggestMenuEl() appends it straight to <body>, out of reach of any
+     ancestor that could clip it or paint over it, so a scoped selector would
+     silently match nothing. left/top/width come from JS, off the input's
+     getBoundingClientRect(). */
+  #prod-view-purchasing .pu2-suggestwrap { position: relative; display: block; }
+  #prod-view-purchasing .pu2-suggestwrap .pu2-input { padding-right: 34px; }
+  #prod-view-purchasing .pu2-suggestcaret {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+    background: none; color: var(--td-text2); cursor: pointer; }
+  #prod-view-purchasing .pu2-suggestcaret svg { width: 15px; height: 15px; }
+  #prod-view-purchasing .pu2-suggestcaret:hover { background: var(--td-raised); color: var(--td-text); }
+  .pu2-suggest-menu {
+    position: fixed; z-index: 400;
+    max-height: 240px; overflow-y: auto; background: var(--td-surface, #fff);
+    border: 1px solid var(--td-border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(17,26,43,.14); padding: 4px; }
+  .pu2-suggest-menu[hidden] { display: none; }
+  .pu2-suggest-opt {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 8px 10px; border-radius: 7px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); cursor: pointer; }
+  /* .on is the keyboard highlight; hover is the mouse's. Same treatment, so
+     the two can never disagree about which row is about to be chosen. */
+  .pu2-suggest-opt:hover, .pu2-suggest-opt.on { background: var(--td-raised); }
+  .pu2-suggest-opt .trail { color: var(--td-text2); font-size: 12.5px; }
+
   /* product picker */
   #prod-view-purchasing .pu2-picker-list { position: absolute; z-index: 30; left: 0; right: 0; top: 100%;
     max-height: 280px; overflow: auto; background: var(--td-surface, #fff); border: 1px solid var(--td-border);
@@ -10417,6 +10456,12 @@
   #prod-view-purchasing .pu2-suprow .val { font-size: 13.5px; color: var(--td-text); margin-top: 2px; }
   #prod-view-purchasing .pu2-suprow .val.cheap { color: var(--td-sage-ink); }
   #prod-view-purchasing .pu2-suprow.manual { color: var(--td-text2); }
+  /* the picker's type-it-yourself row — the only way to name a supplier this
+     product has never been bought from, so it spans the three stat columns
+     the history rows use and keeps the Use/Save button in the last one. */
+  #prod-view-purchasing .pu2-suprow .supfield { grid-column: 2 / 5; }
+  #prod-view-purchasing .pu2-suprow .supfield .pu2-input { padding: 7px 10px; font-size: 13.5px; }
+  #prod-view-purchasing .pu2-suprow .supfield .hint { display: block; margin-top: 6px; font-size: 12px; color: var(--td-text2); }
   #prod-view-purchasing .pu2-tagstar { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500;
     color: var(--td-amber-ink); }
   #prod-view-purchasing .pu2-tagstar svg { width: 11px; height: 11px; }
@@ -10427,6 +10472,12 @@
     border: 1px solid var(--td-border); border-radius: 999px; padding: 3px 10px; background: var(--td-surface, #fff);
     cursor: pointer; white-space: nowrap; transition: border-color .2s cubic-bezier(.16,1,.3,1); }
   #prod-view-purchasing .pu2-supchip:hover { border-color: var(--td-text2); }
+  #prod-view-purchasing .pu2-supchip.on { border-color: var(--td-dusk); }
+  /* the picker opens in the line's own row, right under the chip that opened
+     it — the popover slot at the top of the card is a screenful away on a long
+     order, which read as the chip doing nothing at all. */
+  #prod-view-purchasing tr.pu2-supedit > td { padding: 0 16px 14px; border-bottom: 1px solid var(--td-border); }
+  #prod-view-purchasing tr.pu2-supedit .pu2-pop { box-shadow: none; max-width: none; }
   #prod-view-purchasing .pu2-supchip .swap { color: var(--td-text2); }
   #prod-view-purchasing .pu2-lasthint.pricewarn { color: var(--td-amber-ink); }
   /* per-line note — sits under the supplier chip, one small text input */
@@ -10535,6 +10586,19 @@
     display: inline-flex; align-items: center; justify-content: center; color: var(--td-paper); cursor: pointer; }
   #prod-view-purchasing .pu2-chk svg { width: 11px; height: 11px; }
   #prod-view-purchasing .pu2-chk.on { background: var(--td-text); border-color: var(--td-text); }
+
+  /* Copy-from-kitchen picker — the same modal shell, but it holds a LIST that
+     can run to dozens of orders. So the shell stops scrolling as one block and
+     the body scrolls inside it: the store picker, the double-row warning and
+     the Copy button stay on screen however far down the list the buyer is. */
+  #prod-view-purchasing .pu2-modal#pu2-kmodal { width: min(880px, calc(100vw - 32px));
+    display: flex; flex-direction: column; overflow: hidden; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-body { overflow: auto; flex: 1 1 auto; }
+  #prod-view-purchasing #pu2-kmodal .pu2-toolbar { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot .pu2-f { min-width: 200px; }
+  /* The tick column is a cell, not a grid child like the allocation rows. */
+  #prod-view-purchasing #pu2-kmodal .pu2-tbl td .pu2-chk { vertical-align: middle; }
   @media (max-width: 820px) {
     #prod-view-purchasing .pu2-metricrow { grid-template-columns: 1fr 1fr; }
     #prod-view-purchasing .pu2-billcols { grid-template-columns: 1fr; }
@@ -12368,8 +12432,19 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
   #tab-materials-record .mat-freebox { margin-top: 16px; }
 
-  #tab-materials-record .mat-fincat-wrap { position: relative; }
-  /* .mat-fincat-menu is NOT scoped under #tab-materials-record — matFinCatMenuEl()
+  /* The two combo fields — Finance category, and Supplier. The chevron sits
+     inside the field, so the input reserves room for it on the right. */
+  #tab-materials-record .mat-combo-wrap { position: relative; }
+  #tab-materials-record .mat-combo-wrap .mat-input { padding-right: 36px; }
+  #tab-materials-record .mat-combo-caret {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px;
+    background: transparent; color: var(--td-text2); cursor: pointer; }
+  #tab-materials-record .mat-combo-caret:hover { background: var(--td-raised); color: var(--td-text); }
+  #tab-materials-record .mat-combo-caret svg { width: 15px; height: 15px; display: block; }
+
+  /* .mat-combo-menu is NOT scoped under #tab-materials-record — comboMenuEl()
      (18-materials.js) appends it straight to <body>, so this must be a bare
      selector or it silently matches nothing. Two separate ancestor effects
      forced that:
@@ -12385,16 +12460,37 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
           Only hoisting the element out to <body>, outside any
           stacking-context ancestor, fixes the paint order too.
      Position (left/top/width) is set in JS from the input's
-     getBoundingClientRect() in matFinCatReposition. */
-  .mat-fincat-menu {
+     getBoundingClientRect() in comboPlace. The list SCROLLS: the live
+     supplier book runs to ~80 names, and a menu that only shows what fits is
+     a menu that hides most of them. */
+  .mat-combo-menu {
     position: fixed; z-index: 400;
-    max-height: 220px; overflow-y: auto; background: var(--td-surface, #fff);
+    max-height: 300px; overflow-y: auto; background: var(--td-surface, #fff);
     border: 1px solid var(--td-border); border-radius: 8px;
     box-shadow: 0 8px 22px rgba(18,22,26,.12); padding: 4px; }
-  .mat-fincat-opt {
+  .mat-combo-opt {
+    display: flex; align-items: baseline; gap: 8px;
     padding: 7px 10px; border-radius: 6px; font: 400 13.5px var(--f-sans);
     color: var(--td-text); cursor: pointer; }
-  .mat-fincat-opt:hover { background: var(--td-raised); }
+  /* .on is the keyboard-highlighted row — it has to read the same as hover,
+     or arrowing down through the list shows nothing moving. */
+  .mat-combo-opt:hover, .mat-combo-opt.on { background: var(--td-raised); }
+  .mat-combo-opt .lead { min-width: 0; overflow-wrap: anywhere; }
+  /* The other language half, muted, reading straight on from the first —
+     the same treatment as .pu2-suggest-opt .trail on the Purchasing screens,
+     because these are the same control and a supplier row must not look like
+     two different things depending on which screen you found it on. */
+  .mat-combo-opt .trail { font-size: 12.5px; color: var(--td-text2); }
+  .mat-combo-opt.none { color: var(--td-text2); }
+  .mat-combo-opt.act { color: var(--td-dusk); border-top: 1px solid var(--td-border);
+    margin-top: 4px; padding-top: 9px; border-radius: 0 0 6px 6px; }
+
+  /* Under the supplier field: the button that makes a name real, and the
+     warning that says it isn't yet. */
+  #tab-materials-record .mat-supacts { display: flex; gap: 8px; margin-top: 12px; }
+  #tab-materials-record .mat-supnote:empty { display: none; }
+  #tab-materials-record .mat-supnote { margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+  #tab-materials-record .mat-supnote .warn { color: var(--td-amber-ink); }
 
   /* The derived cost, and — when it cannot be derived — the reason why. A blank
      here would read as "zero", which is the one thing it never means. */

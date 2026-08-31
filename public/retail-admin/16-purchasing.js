@@ -98,9 +98,13 @@
   const _supCache = {};      // store_product_id → { suppliers[], last } price list
   let _pickP = null;         // product the supplier popover is open for
   let _pickInfo = null;      // its loaded price list
+  let _supLine = null;       // index of the line whose supplier is being set
+  let _supLineInfo = null;   // that line's price list ({suppliers:[]} for a material)
+  let _supDraft = null;      // half-typed name, kept across a repaint of the lines
   let _invOut = null;        // supplier groups + KPI totals + aging, from the server
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
+  let _invAssign = null;     // the "set supplier" modal's working state
   let _invMonth = '';        // 'YYYY-MM' or '' for all
   let _invSearch = '';       // supplier / item / SKU / PO number
   let _invSearchTimer = null;
@@ -118,6 +122,14 @@
   let _phBack = 'orders';    // screen to return to from price history
   let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
   let _seg = 'open';         // orders segment: open | received | all
+  // "Copy from kitchen" — the picker modal's state. Kitchen orders (PO-####)
+  // live in the other app's list and are invisible to every retail screen; this
+  // is where the buyer chooses which of them to pull in as retail drafts.
+  let _kSrc = [];            // kitchen PO rows, each with its existing copy (if any)
+  let _kPick = new Set();    // kitchen po ids ticked
+  let _kStore = null;        // retail store the copies are filed under
+  let _kSearch = '';
+  let _kBusy = false;        // a copy is in flight — keep the button from double-firing
   let _supSeg = 'active';    // suppliers segment: active | disabled
   let _edit = null;          // draft PO in the wizard
   let _wstep = 1;            // wizard step 1..3
@@ -258,6 +270,9 @@
   // ── paint dispatch ────────────────────────────────────────────────────────
   function paint() {
     if (!root()) return;
+    // The suggestion menu lives on <body>, so a repaint would otherwise leave
+    // it floating beside a field that no longer exists.
+    if (typeof puSuggestClose === 'function') puSuggestClose();
     if (_screen === 'orders')     paintOrders();
     else if (_screen === 'wizard')    paintWizard();
     else if (_screen === 'receive')   paintReceive();
@@ -351,6 +366,7 @@
           <span class="pu2-ic">${I.search}</span>
           <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
         </span>
+        <button class="pu2-btn" data-cap="purchasing:edit" onclick="puKitchenOpen()" title="${esc(T('Bring an order bought through the kitchen app into Tacet', '把厨房端下的采购单导入 Tacet'))}"><span class="pu2-ic">${I.down}</span>${esc(T('Copy from kitchen', '从厨房复制'))}</button>
         <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
       </div>
 
@@ -390,7 +406,7 @@
         : `<span class="pu2-num">${esc(p.delivery_date || '—')}</span>`;
       const rcv = p.received_lines ? ` <span class="sub" style="display:inline">· ${p.received_lines} ${esc(T('in', '入库'))}</span>` : '';
       return `<tr onclick="puOpenPO(${p.id})">
-        <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}</div></td>
+        <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}${p.copied_from_po_number ? ` · ${esc(T('from', '来自'))} ${esc(p.copied_from_po_number)}` : ''}</div></td>
         <td>${supplierLabel(p)}</td>
         <td>${storeLabel(p)}</td>
         <td class="right pu2-num">${p.line_count || 0}${rcv}</td>
@@ -438,6 +454,179 @@
     };
     _wstep = 1; _screen = 'wizard'; paint();
   };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  COPY FROM KITCHEN — pulling a PO-#### order in as a retail draft
+  // ═══════════════════════════════════════════════════════════════════════════
+  // The kitchen buying list and this one filter each other apart on
+  // purchase_orders.scope, so an order placed in the kitchen app cannot be
+  // opened, re-quantified or received here. This modal is the bridge: tick the
+  // kitchen orders, name the store, and the server writes retail DRAFTS of them
+  // (POST /copy-from-kitchen). The kitchen originals are untouched.
+  //
+  // Say the double plainly, on the screen, not just in a route comment: after a
+  // copy the same real purchase has a row in each list, and placing the copy
+  // posts its cost to Finance a second time. A draft posts nothing, which is
+  // why the copies land as drafts and the note sits above the button.
+  function kitchenRows() {
+    const q = _kSearch.toLowerCase().trim();
+    if (!q) return _kSrc;
+    return _kSrc.filter(p => `${p.po_number} ${p.supplier || ''} ${p.line_suppliers || ''} ${p.warehouse || ''}`
+      .toLowerCase().includes(q));
+  }
+  // Already-copied orders can't be ticked — the server refuses them anyway
+  // (409 already_copied), and a checkbox that can't be honoured is a lie.
+  const kitchenPickable = p => !p.copy_id;
+
+  window.puKitchenOpen = async function () {
+    _kPick = new Set(); _kSearch = ''; _kBusy = false;
+    _kStore = _stores[0]?.id || null;
+    _kSrc = [];
+    renderKitchenModal(true);
+    try {
+      const r = await api('/api/retail-admin/purchases/kitchen-source');
+      _kSrc = r.data || [];
+    } catch (e) { _kSrc = []; toast(e.message, 'err'); }
+    if (document.getElementById('pu2-kmodal')) renderKitchenModal(false);
+  };
+  window.puKitchenClose = function () {
+    _kSrc = []; _kPick = new Set(); _kSearch = ''; _kBusy = false;
+    const h = document.getElementById('pu2-modal-host');
+    if (h) h.innerHTML = '';
+  };
+  window.puKitchenToggle = function (id) {
+    if (_kPick.has(id)) _kPick.delete(id); else _kPick.add(id);
+    renderKitchenBody();
+  };
+  // Ticks/unticks everything the CURRENT search shows, never the hidden rest —
+  // a "select all" that reaches past the filter is how a buyer copies twenty
+  // orders they never looked at.
+  window.puKitchenAll = function () {
+    const rows = kitchenRows().filter(kitchenPickable);
+    const allOn = rows.length > 0 && rows.every(p => _kPick.has(p.id));
+    rows.forEach(p => { if (allOn) _kPick.delete(p.id); else _kPick.add(p.id); });
+    renderKitchenBody();
+  };
+  window.puKitchenSearch = function (v) { _kSearch = v || ''; renderKitchenBody(); };
+  window.puKitchenStore = function (v) { _kStore = parseInt(v, 10) || null; renderKitchenFoot(); };
+
+  window.puKitchenCopy = async function () {
+    if (_kBusy || !_kPick.size) return;
+    if (!_kStore) { toast(T('Pick a store first.', '请先选择门店。'), 'err'); return; }
+    _kBusy = true; renderKitchenFoot();
+    try {
+      const r = await api('/api/retail-admin/purchases/copy-from-kitchen', {
+        method: 'POST', body: { po_ids: [..._kPick], store_id: _kStore },
+      });
+      const n = (r.data || []).length;
+      puKitchenClose();
+      await loadPOs();
+      _seg = 'open';
+      paint();
+      toast(T(`${n} order${n === 1 ? '' : 's'} copied in as draft${n === 1 ? '' : 's'} ✓`,
+              `已复制 ${n} 张采购单为草稿 ✓`), 'ok', 4000);
+    } catch (e) {
+      _kBusy = false;
+      // The server names the orders it refused; repeat them rather than the
+      // bare error code, so the buyer can see which ones are already here.
+      const dup = e && e.code === 'already_copied' ? (e.data && e.data.copies) : null;
+      if (dup && dup.length) {
+        toast(T('Already copied: ', '已复制过:') + dup.map(d => `${d.po_number} → ${d.copy_po_number}`).join(', '), 'err', 6000);
+        try { const r2 = await api('/api/retail-admin/purchases/kitchen-source'); _kSrc = r2.data || []; } catch (_) {}
+        renderKitchenBody();
+      } else {
+        toast(e.message, 'err');
+      }
+      renderKitchenFoot();
+    }
+  };
+
+  function renderKitchenModal(loading) {
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puKitchenClose()"></div>
+      <div class="pu2-modal" id="pu2-kmodal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('Copy from kitchen', '从厨房复制'))}</h2>
+               <div class="sub">${esc(T('Orders bought through the kitchen app. Copies arrive as drafts you can re-quantify here.', '厨房端下的采购单。复制后为草稿,可在此调整数量。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puKitchenClose()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <div class="pu2-toolbar" style="margin:0 0 10px">
+            <span class="pu2-search">
+              <span class="pu2-ic">${I.search}</span>
+              <input id="pu2-kq" type="text" placeholder="${esc(T('Find a kitchen order or supplier', '搜索厨房采购单或供应商'))}" value="${esc(_kSearch)}" oninput="puKitchenSearch(this.value)" autocomplete="off">
+            </span>
+            <button class="pu2-btn sm" onclick="puKitchenAll()">${esc(T('Select all shown', '全选当前'))}</button>
+          </div>
+          <div id="pu2-kbody">${loading ? `<div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div>` : ''}</div>
+        </div>
+        <div class="pu2-modal-foot" id="pu2-kfoot"></div>
+      </div>`;
+    if (!loading) renderKitchenBody(); else renderKitchenFoot();
+  }
+
+  function renderKitchenBody() {
+    const host = document.getElementById('pu2-kbody');
+    if (!host) return;
+    const rows = kitchenRows();
+    if (!rows.length) {
+      host.innerHTML = `<div class="pu2-emptyline">${esc(_kSrc.length
+        ? T('Nothing matches that search.', '没有匹配的采购单。')
+        : T('The kitchen app has no purchase orders to copy.', '厨房端没有可复制的采购单。'))}</div>`;
+      renderKitchenFoot();
+      return;
+    }
+    host.innerHTML = `
+      <table class="pu2-tbl">
+        <thead><tr>
+          <th style="width:34px"></th>
+          <th>${esc(T('Order', '单号'))}</th>
+          <th>${esc(T('Supplier', '供应商'))}</th>
+          <th class="right">${esc(T('Items', '商品'))}</th>
+          <th class="right">${esc(T('Total', '金额'))}</th>
+          <th>${esc(T('Status', '状态'))}</th>
+        </tr></thead>
+        <tbody>${rows.map(p => {
+          const done = !kitchenPickable(p);
+          const on = _kPick.has(p.id);
+          const tick = done
+            ? `<span class="pu2-chk on" title="${esc(T('Already copied', '已复制'))}">${I.check}</span>`
+            : `<span class="pu2-chk${on ? ' on' : ''}">${on ? I.check : ''}</span>`;
+          return `<tr${done ? ' style="opacity:.55"' : ` onclick="puKitchenToggle(${p.id})" style="cursor:pointer"`}>
+            <td>${tick}</td>
+            <td><div class="pu2-mono">${esc(p.po_number)}</div>
+                <div class="sub pu2-num">${esc(p.date || '')}${done ? ` · ${esc(T('copied to', '已复制为'))} ${esc(p.copy_po_number)}` : ''}</div></td>
+            <td>${supplierLabel(p)}${p.warehouse ? `<div class="sub">${esc(p.warehouse)}</div>` : ''}</td>
+            <td class="right pu2-num">${p.line_count || 0}</td>
+            <td class="right pu2-num">${money(p.total_cost)}</td>
+            <td>${statusPill(p)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    renderKitchenFoot();
+  }
+
+  function renderKitchenFoot() {
+    const foot = document.getElementById('pu2-kfoot');
+    if (!foot) return;
+    const n = _kPick.size;
+    const storeOpts = _stores.map(st =>
+      `<option value="${st.id}"${_kStore === st.id ? ' selected' : ''}>${esc([st.name_en, st.name_cn].filter(Boolean).join(' · '))}</option>`).join('');
+    foot.innerHTML = `
+      <label class="pu2-f" style="margin:0">
+        <span class="lbl">${esc(T('File under store', '归属门店'))}</span>
+        <select class="pu2-input" onchange="puKitchenStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
+      </label>
+      <span class="pu2-mut" style="max-width:340px;line-height:1.4">${esc(n
+        ? T('The kitchen keeps its originals. A copy is a second row for the same purchase — its cost only reaches Finance when you mark it Ordered.',
+            '厨房端原单保留。复制件是同一笔采购的第二条记录——标记"已下单"后其金额才会记入财务。')
+        : T('Tick the orders you need here.', '勾选需要导入的采购单。'))}</span>
+      <span class="spacer"></span>
+      <button class="pu2-btn ghost" onclick="puKitchenClose()">${esc(T('Cancel', '取消'))}</button>
+      <button class="pu2-btn primary" ${n && _kStore && !_kBusy ? '' : 'disabled'} onclick="puKitchenCopy()">${esc(_kBusy
+        ? T('Copying…', '复制中…')
+        : (n ? T(`Copy ${n} order${n === 1 ? '' : 's'}`, `复制 ${n} 张采购单`) : T('Copy', '复制')))}</button>`;
+  }
 
   window.puOpenPO = async function (id) {
     try {
@@ -489,6 +678,7 @@
         </div>
       </div>
       <div id="pu2-wizbody"></div>`;
+    _supLine = null; _supLineInfo = null; _supDraft = null;
     if (step === 1) wizStep1();
     else if (step === 2) wizStep2();
     else wizStep3();
@@ -497,11 +687,22 @@
     return esc([T('From & to', '来源与门店'), T('What to buy', '采购内容'), T('Review & place', '确认下单')][n - 1]);
   }
 
-  function supplierOptions(selected) {
-    return `<option value="">${esc(T('No supplier — mixed / one-off', '不指定 —— 混合/一次性'))}</option>` + _suppliers
-      .filter(s => s.is_active || s.name === selected)
-      .map(s => `<option value="${esc(s.name)}"${s.name === selected ? ' selected' : ''}>${esc(supName(s.name, s.name_cn))}</option>`)
-      .join('');
+  // The order's own supplier. It was a <select> carrying the whole book — 80+
+  // names on the live tenant, no way to type at it, and its popup is the OS
+  // combobox widget the Invoices fields moved away from (some embedding
+  // webviews position it against the wrong edge of the window). It is the same
+  // search box those use now; empty still means "mixed / one-off".
+  function supplierFieldHtml(selected) {
+    return `<span class="pu2-suggestwrap">
+        <input class="pu2-input" type="text" id="pu2-w-supplier" autocomplete="off"
+          role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+          value="${esc(selected || '')}"
+          placeholder="${esc(T('Type to search your suppliers', '输入以搜索供应商'))}"
+          onfocus="puSuggestOpen('pu2-w-supplier','posuppliers')" oninput="puSuggestOpen('pu2-w-supplier','posuppliers')"
+          onkeydown="puSuggestKey(event,'pu2-w-supplier','posuppliers')" onblur="puSuggestBlur('pu2-w-supplier')">
+        <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+          onmousedown="puSuggestToggle(event,'pu2-w-supplier','posuppliers')">${I.chevDown}</button>
+      </span>`;
   }
   function storeOptions(selected) {
     return _stores.map(s => `<option value="${s.id}"${s.id === selected ? ' selected' : ''}>${esc(s.name_en || s.code)}${s.name_cn ? ' · ' + esc(s.name_cn) : ''}</option>`).join('');
@@ -514,7 +715,7 @@
         <div class="pu2-fgrid">
           <label class="pu2-f">
             <span class="lbl">${esc(T('Supplier', '供应商'))}</span>
-            <select class="pu2-input" id="pu2-w-supplier">${supplierOptions(e.supplier)}</select>
+            ${supplierFieldHtml(e.supplier)}
             <span class="hint">${esc(T('Optional — leave empty for a mixed or one-off buy.', '可选 —— 混合或一次性采购可留空。'))}</span>
           </label>
           <label class="pu2-f">
@@ -539,17 +740,34 @@
       </div>`;
   }
 
-  // read step-1 fields off the DOM into state (called on every step change)
+  // read step-1 fields off the DOM into state (called on every step change).
+  // Returns false when the supplier box holds something that names nobody —
+  // the <select> it replaced could not express that, and letting it through
+  // would put an order under a supplier no screen can ever group it with.
   function grabStep1() {
     const g = id => document.getElementById(id);
-    if (g('pu2-w-supplier')) _edit.supplier = g('pu2-w-supplier').value || '';
+    const sup = g('pu2-w-supplier');
+    if (sup) {
+      const typed = String(sup.value || '').trim();
+      // A pick from the menu is already committed; a name typed out in full
+      // still counts, matched on the stored name or either language half.
+      const hit = typed && bookSuggestRows([_edit.supplier])
+        .find(o => [o.v, o.en, o.cn].some(x => x && String(x).toLowerCase() === typed.toLowerCase()));
+      if (typed && !hit) {
+        toast(T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。'), 'err');
+        if (sup.focus) sup.focus();
+        return false;
+      }
+      _edit.supplier = hit ? hit.v : '';
+    }
     if (g('pu2-w-store'))    _edit.store_id = parseInt(g('pu2-w-store').value, 10) || _edit.store_id;
     if (g('pu2-w-delivery')) _edit.delivery_date = g('pu2-w-delivery').value || '';
     if (g('pu2-w-notes'))    _edit.notes = g('pu2-w-notes').value || '';
+    return true;
   }
 
   window.puWizNext = function (n) {
-    if (_wstep === 1) grabStep1();
+    if (_wstep === 1 && !grabStep1()) return;
     _wstep = n; paintWizard();
   };
   window.puWizStep = function (n) { _wstep = n; paintWizard(); };
@@ -631,6 +849,12 @@
   function renderLines() {
     const body = document.getElementById('pu2-linebody');
     if (!body) return;
+    // A qty or note edit repaints this whole tbody, and the supplier picker
+    // lives inside it — keep whatever is half-typed in its box across that.
+    if (_supLine != null) {
+      const el = document.getElementById('pu2-supname');
+      if (el) _supDraft = el.value;
+    }
     if (!_edit.items.length) {
       const emptyMsg = materialsFeatureOn()
         ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
@@ -641,13 +865,17 @@
     body.innerHTML = _edit.items.map((it, i) => {
       const lineTotal = (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0);
       const supLabel = it.supplier_name ? esc(it.supplier_name) : esc(T('Choose supplier', '选择供应商'));
-      // A material has no per-supplier price list to pop open (that popover is
-      // built from retail PO history keyed on store_product_id — see
-      // routes/retail-purchasing.js /products/:spid/suppliers), so its
-      // supplier reads as plain text instead of a clickable chip.
-      const supBlock = it.ingredient_id
-        ? `<div class="pu2-supline"><span class="sub">${supLabel}</span></div>`
-        : `<div class="pu2-supline"><span class="pu2-supchip" onclick="puPick(${it.store_product_id})">${supLabel} <span class="swap">▾</span></span></div>`;
+      // Every line's supplier is retargetable from this chip — puLineSup opens
+      // the picker with whatever it can offer: the retail PO price list when
+      // this product has one (keyed on store_product_id, see
+      // routes/retail-purchasing.js /products/:spid/suppliers), plus the
+      // tenant's supplier book and a free-text box in every case. Before this
+      // the chip only opened that price list, so a product nobody had bought
+      // before had nothing to open, and a material line — which carries no
+      // retail PO history at all — rendered as dead text with no way to set
+      // or change its supplier.
+      const supOpen = _supLine === i;
+      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
       return `<tr>
@@ -667,7 +895,7 @@
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
         <td class="right"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
-      </tr>`;
+      </tr>${supOpen ? `<tr class="pu2-supedit"><td colspan="6">${supPickerHtml(it)}</td></tr>` : ''}`;
     }).join('');
     const total = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
     const units = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
@@ -701,6 +929,10 @@
   window.puRemoveLine = function (i) {
     if (!_edit) return;
     _edit.items.splice(i, 1);
+    // The open picker is addressed by line index, and every index after the
+    // removed one just shifted — put it away rather than let it point at a
+    // different product than the one it was opened on.
+    _supLine = null; _supLineInfo = null; _supDraft = null;
     renderLines(); renderSuggestions();
   };
 
@@ -842,6 +1074,168 @@
     if (host) { host.style.display = 'none'; host.innerHTML = ''; }
   };
 
+  // ── per-line supplier picker ───────────────────────────────────────────────
+  // The chip under every line opens this. It is the ONLY way to set a supplier
+  // on a line the order header doesn't already speak for, so it must have
+  // something to offer even when there is no purchase history to draw on:
+  // the rows above are history when history exists, and under them sits the
+  // supplier book plus a box you can simply type into.
+  //
+  // Names offered in the box: the supplier book first (that's the tenant's own
+  // list, and typing a name that matches one keeps the supplier screens' totals
+  // joined up — they match on the name string), then any other name this
+  // product's history or the line itself already mentions, which covers a
+  // retired supplier and a one-off typed onto an older order.
+  function supplierNameList(extra) {
+    const names = [];
+    const seen = new Set();
+    const push = n => {
+      const v = String(n == null ? '' : n).trim();
+      if (!v || seen.has(v.toLowerCase())) return;
+      seen.add(v.toLowerCase()); names.push(v);
+    };
+    _suppliers.filter(s => s.is_active).forEach(s => push(s.name));
+    (extra || []).forEach(push);
+    return names;
+  }
+  // Those "other names", for the line whose picker is OPEN: whoever this
+  // product was bought from before, and whatever the line itself carries.
+  function lineSupExtras() {
+    const s = (_supLineInfo && _supLineInfo.suppliers) || [];
+    const it = (_supLine != null && _edit && _edit.items[_supLine]) || null;
+    return s.map(x => x.supplier).concat(it ? [it.supplier_name] : []);
+  }
+
+  // Opening it is a toggle — a second tap on the same chip puts it away.
+  // The picker is painted INTO the line's own row (renderLines), not into the
+  // popover slot at the top of the card: on a long order that slot sits a
+  // screenful above whatever you clicked, so the picker opened where you could
+  // not see it and the chip read as dead.
+  window.puLineSup = async function (i) {
+    if (!_edit || !_edit.items[i]) return;
+    if (_supLine === i) { puCloseLineSup(); return; }
+    const it = _edit.items[i];
+    _pickP = null; _pickInfo = null;
+    puCloseSupPop();
+    _supLine = i; _supDraft = null; _supLineInfo = { suppliers: [] };
+    renderLines();       // paint it now — the price list, if any, follows
+    focusSupName();
+    if (!it.store_product_id) return;
+    const info = await loadProductSuppliers(it.store_product_id);
+    // The line can be removed, or another chip opened, while that fetch is out.
+    if (_supLine !== i || !_edit || _edit.items[i] !== it) return;
+    _supLineInfo = info;
+    if (info.suppliers && info.suppliers.length) { renderLines(); focusSupName(); }
+  };
+
+  function focusSupName() {
+    const el = document.getElementById('pu2-supname');
+    if (!el) return;
+    if (typeof el.focus === 'function') el.focus();
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }
+
+  window.puCloseLineSup = function () {
+    if (_supLine == null) return;
+    _supLine = null; _supLineInfo = null; _supDraft = null;
+    renderLines();
+  };
+
+  // The picker's markup — history rows when the product has any, and in every
+  // case the supplier book plus a box to type into.
+  function supPickerHtml(it) {
+    const s = (_supLineInfo && _supLineInfo.suppliers) || [];
+    const costs = s.map(x => Number(x.last_cost)).filter(n => isFinite(n));
+    const minCost = costs.length ? Math.min(...costs) : null;
+    const val = _supDraft != null ? _supDraft : (it.supplier_name || '');
+    return `<div class="pu2-pop">
+        <div class="pop-head">
+          <b>${esc(T('Who are we buying this from?', '这一行向谁采购？'))}</b>
+          <span class="sub">${nameLabel(it)}</span>
+          <span style="margin-left:auto;display:inline-flex;gap:14px">
+            ${it.store_product_id ? `<button class="pu2-link" style="margin:0" onclick="puPriceHistory(${it.store_product_id})">${esc(T('Price history', '价格历史'))}</button>` : ''}
+            <button class="pu2-link" style="margin:0" onclick="puCloseLineSup()">${esc(T('Close', '关闭'))}</button>
+          </span>
+        </div>
+        ${s.map((x, idx) => {
+          const preferred = idx === 0;
+          const cheapest = minCost != null && Number(x.last_cost) === minCost && s.length > 1;
+          const chosen = !!it.supplier_name && x.supplier === it.supplier_name;
+          return `<div class="pu2-suprow${preferred ? ' best' : ''}">
+            <div class="sname">${esc(x.supplier || T('Unrecorded', '未记录'))}${preferred ? ` <span class="pu2-tagstar">${I.star}${esc(T('Preferred', '常用'))}</span>` : ''}</div>
+            <div><div class="lab">${esc(T('Last paid', '上次'))}</div><div class="val pu2-num${cheapest ? ' cheap' : ''}">${money(x.last_cost)}${cheapest ? ' · ' + esc(T('cheapest', '最低')) : ''}</div></div>
+            <div><div class="lab">${esc(T('Average', '均价'))}</div><div class="val pu2-num">${x.avg_cost != null ? money(x.avg_cost) : '—'}</div></div>
+            <div><div class="lab">${esc(T('Bought', '采购'))}</div><div class="val pu2-num">${x.order_count}× · ${esc(x.last_date || '—')}</div></div>
+            <div><button class="pu2-btn sm${preferred && !chosen ? ' primary' : ''}" onclick="puLineSupUse(${idx})">${chosen ? esc(T('In use', '使用中')) : esc(T('Use', '选用')) + ' ' + money(x.last_cost)}</button></div>
+          </div>`;
+        }).join('')}
+        <div class="pu2-suprow manual">
+          <div class="sname">${esc(s.length ? T('Someone else', '其他供应商') : T('Supplier', '供应商'))}</div>
+          <div class="supfield">
+            <span class="pu2-suggestwrap">
+              <input class="pu2-input" type="text" id="pu2-supname" autocomplete="off"
+                role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                value="${esc(val)}"
+                placeholder="${esc(T('Type to search your suppliers', '输入以搜索供应商'))}"
+                onfocus="puSuggestOpen('pu2-supname','linesuppliers')" oninput="puSuggestOpen('pu2-supname','linesuppliers')"
+                onkeydown="puLineSupKey(event)" onblur="puSuggestBlur('pu2-supname')">
+              <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                onmousedown="puSuggestToggle(event,'pu2-supname','linesuppliers')">${I.chevDown}</button>
+            </span>
+            <span class="hint">${esc(T('Leave it empty and the line follows the order’s supplier.', '留空则该行沿用订单的供应商。'))}</span>
+          </div>
+          <div><button class="pu2-btn sm${s.length ? '' : ' primary'}" onclick="puLineSupSave()">${esc(T('Save', '保存'))}</button></div>
+        </div>
+      </div>`;
+  }
+
+  // Taking a supplier off the history list takes their last price with it —
+  // same bargain the add-time popover strikes, so the price shown on the row
+  // is the price the line ends up carrying.
+  window.puLineSupUse = function (idx) {
+    if (_supLine == null || !_edit || !_edit.items[_supLine]) return;
+    const it = _edit.items[_supLine];
+    const x = ((_supLineInfo && _supLineInfo.suppliers) || [])[idx];
+    if (!x) return;
+    it.supplier_name = x.supplier || '';
+    if (x.last_cost != null && x.last_cost !== '') it.cost_per_unit = x.last_cost;
+    if (it.store_product_id) _hist[it.store_product_id] = { previous: { cost_per_unit: x.last_cost } };
+    puCloseLineSup();
+  };
+
+  // A typed name only ever sets the name — never a price. We have no figure to
+  // put against a supplier we've never bought from, and inventing one would
+  // read as a quote.
+  window.puLineSupSave = function () {
+    if (_supLine == null || !_edit || !_edit.items[_supLine]) return;
+    const el = document.getElementById('pu2-supname');
+    _edit.items[_supLine].supplier_name = ((el && el.value) || '').trim();
+    puSuggestClose();
+    puCloseLineSup();
+  };
+  // Enter and Escape mean two things at this field, and the open menu gets
+  // first refusal: Enter takes the highlighted row, Escape puts the list away.
+  // Only once the menu is out of the way do they mean save and close-the-
+  // picker, which is what they meant before this field had a menu at all.
+  window.puLineSupKey = function (e) {
+    const menu = document.getElementById('pu2-suggest-menu');
+    const open = !!menu && !menu.hidden && _sugFor === 'pu2-supname';
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { puSuggestKey(e, 'pu2-supname', 'linesuppliers'); return; }
+    // First Escape shuts the list; a second one closes the picker.
+    if (e.key === 'Escape') {
+      if (open) puSuggestKey(e, 'pu2-supname', 'linesuppliers');
+      else puCloseLineSup();
+      return;
+    }
+    if (e.key === 'Enter') {
+      // A highlighted row is the pick. Enter with nothing highlighted still
+      // means what it always meant here — save the name as typed.
+      if (open && _sugIdx >= 0) { puSuggestKey(e, 'pu2-supname', 'linesuppliers'); return; }
+      e.preventDefault();
+      puLineSupSave();
+    }
+  };
+
   function wizStep3() {
     const e = _edit;
     const st = _stores.find(s => s.id === e.store_id);
@@ -891,7 +1285,9 @@
     };
   }
   async function saveWiz(markOrdered) {
-    if (_wstep === 1) grabStep1();
+    // Saving from step 1 obeys the same rule Next does: a supplier box holding
+    // a name that is nobody stops the save rather than being written as one.
+    if (_wstep === 1 && !grabStep1()) return null;
     const body = wizBody();
     if (!body.items.length) { toast(T('Add at least one product', '请先添加商品'), 'err'); return null; }
     let id = _edit.id;
@@ -1466,6 +1862,10 @@
   // paperwork lives. Invoices created here are stamped scope='retail' so the
   // kitchen screen can no longer delete them — which it did, once, to a real
   // row (see the note in routes/finance.js).
+  // The literal the server groups under when the whole supplier chain comes up
+  // empty (routes/retail-purchasing.js INV_UNSPECIFIED) — a bucket, not a
+  // vendor, so the screen treats it as one everywhere it appears.
+  const INV_UNSPECIFIED = '未指定 Unspecified';
   const INV_META = {
     fully_invoiced:      () => ({ label: T('Fully invoiced', '已开票'),  cls: 'sage'  }),
     partially_invoiced:  () => ({ label: T('Partial', '部分开票'),        cls: 'amber' }),
@@ -1658,8 +2058,8 @@
             ${cell(g.awaiting, 'awaiting')}
             ${cell(g.no_invoice_expected, 'no_invoice_expected')}
             <td class="right" onclick="event.stopPropagation()">
-              ${g.supplier === '未指定 Unspecified'
-                ? `<span class="pu2-mut sm">${esc(T('Set a supplier on these lines first', '请先为这些明细设置供应商'))}</span>`
+              ${g.supplier === INV_UNSPECIFIED
+                ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Nothing on these lines said who they came from — name the supplier and they move into that supplier’s group', '这些明细未记录来源 —— 指定供应商后即归入该供应商'))}" onclick="puInvAssign()">${esc(T('Set supplier', '设置供应商'))}</button>`
                 : (chase > 0.005
                     ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvNew(${i})">${esc(T('Add invoice', '添加发票'))}</button>`
                     : `<span class="pu2-mut sm">${esc(T('All invoiced', '已全部开票'))}</span>`)}
@@ -1674,6 +2074,10 @@
   // The lines inside one supplier, grouped by the buying order they sit on so
   // the PO-level "no invoice" mark has somewhere honest to live.
   function invLinesHtml(g) {
+    // Only the Unspecified bucket gets the "set supplier" affordances — a line
+    // already grouped under a real vendor is attributed, and re-pointing it is
+    // an order edit, not invoice chasing.
+    const unspec = g.supplier === INV_UNSPECIFIED;
     const byPo = new Map();
     for (const l of g.lines) {
       if (!byPo.has(l.po_number)) byPo.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, date: l.date, po_no_invoice: l.po_no_invoice, lines: [] });
@@ -1684,6 +2088,7 @@
         <span class="pu2-mono">${esc(po.po_number)}</span>
         <span class="pu2-mut">${esc(po.date || '')}</span>
         <span class="spacer"></span>
+        ${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${po.lines.map(l => l.line_id).join(',')}])">${esc(T('Set supplier for this order', '为整单设置供应商'))}</button>` : ''}
         ${po.po_no_invoice
           ? `<span class="pu2-pill grey">${esc(T('No invoice', '不开发票'))}</span>
              <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore', '恢复'))}</button>`
@@ -1696,7 +2101,7 @@
           <span class="pu2-num">${money(l.amount)}</span>
           <span class="pu2-num pu2-mut">${l.covered > 0.005 ? esc(T('invoiced', '已开票')) + ' ' + money(l.covered) : ''}</span>
           <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
-          <span class="act">${l.po_no_invoice ? ''
+          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice ? ''
             : l.line_no_invoice
               ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore', '恢复'))}</button>`
               : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This line will never have an invoice', '该明细不会开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},true)">${esc(T('No invoice', '不开发票'))}</button>`}</span>
@@ -1772,6 +2177,185 @@
     } catch (e) { toast(e.message, 'err'); }
   };
 
+  // ── "Set supplier" — the way out of the Unspecified bucket ────────────────
+  // A line lands there when NOTHING in the chain named a supplier: not the
+  // line, not its order's header, not the item's master record. The screen
+  // used to state that and stop — "set a supplier on these lines first" with
+  // nowhere to do it, because the order wizard only reopens drafts and most of
+  // these lines sit on placed kitchen-scope orders this admin never opens.
+  //
+  // So the fix lives here, on the row that names the problem. The modal opens
+  // on whatever was pointed at — one line, one order, or the whole bucket —
+  // every line ticked, so the common case (a whole order that came from one
+  // place) is one choice and Save. Untick anything that came from elsewhere
+  // and set it separately.
+  window.puInvAssign = function (lineIds) {
+    const g = invGroup(INV_UNSPECIFIED);
+    if (!g) return;
+    const want = Array.isArray(lineIds) && lineIds.length ? new Set(lineIds) : null;
+    const lines = g.lines.filter(l => !want || want.has(l.line_id));
+    if (!lines.length) return;
+    _invDraft = null;
+    _invAssign = { supplier: '', lines, picked: new Set(lines.map(l => l.line_id)) };
+    renderAssignModal();
+  };
+  function assignPicked() {
+    const d = _invAssign; if (!d) return [];
+    return d.lines.filter(l => d.picked.has(l.line_id));
+  }
+  function renderAssignModal() {
+    const d = _invAssign; if (!d) return;
+    const byPo = new Map();
+    d.lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
+    // The names on offer are the ones this tenant already uses — the master plus
+    // anything a placed order carries — which is exactly what the server will
+    // accept. A tenant with neither gets told where to add one rather than a
+    // second empty control to stare at.
+    //
+    // A SEARCH BOX, not a dropdown: this list is as long as the supplier book
+    // (78 groups on the live tenant), and a native <select> that long is a
+    // scroll hunt with no way to type. Same menu the payment fields use — drawn
+    // by us, so it renders correctly in the chat-app webview a native popup
+    // mispositions — searching the stored name and both language halves.
+    const sups = invSupplierList();
+    const supVal = d.supplier ? ((sups.find(o => o.name === d.supplier) || {}).label || d.supplier) : '';
+    const rows = [...byPo.entries()].map(([po, ls]) => `
+      <div class="pu2-pogrp">${esc(po)}</div>
+      ${ls.map(l => {
+        const on = d.picked.has(l.line_id);
+        const m = INV_META[l.status]();
+        return `<div class="pu2-allocrow">
+          <span class="pu2-chk${on ? ' on' : ''}" data-line="${l.line_id}" onclick="puInvAssignToggle(${l.line_id})">${on ? I.check : ''}</span>
+          <div>${nameLabel(l)}${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}</div>
+          <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
+          <div class="pu2-num">${money(l.amount)}</div>
+        </div>`;
+      }).join('')}`).join('');
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puInvCloseModal()"></div>
+      <div class="pu2-modal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('Set supplier', '设置供应商'))}</h2>
+               <div class="sub">${esc(T('Say who these lines came from. They move into that supplier’s group, ready to chase a 发票 for.', '指明这些明细的来源。设置后将归入该供应商,可开始跟进发票。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puInvCloseModal()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span>
+            <span class="pu2-suggestwrap">
+              <input class="pu2-input" id="pu2-assign-sup" autocomplete="off" value="${esc(supVal)}"
+                placeholder="${esc(T('Type to search your suppliers', '输入文字搜索供应商'))}"
+                role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                onfocus="puSuggestOpen('pu2-assign-sup','suppliers')"
+                oninput="puInvAssignTyped();puSuggestOpen('pu2-assign-sup','suppliers')"
+                onkeydown="puSuggestKey(event,'pu2-assign-sup','suppliers')" onblur="puSuggestBlur('pu2-assign-sup')">
+              <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                onmousedown="puSuggestToggle(event,'pu2-assign-sup','suppliers')">${I.chevDown}</button>
+            </span>
+            <span class="hint">${esc(sups.length
+              ? T('Type a few letters, English or 中文 — then pick from the list.', '输入几个字即可搜索,中英文均可 —— 然后从列表中选择。')
+              : T('No suppliers on file yet — add one on the Suppliers tab, then come back.', '还没有供应商 —— 请先在“供应商”中添加,然后返回。'))}</span></label>
+          <div class="pu2-alloc-head">
+            <span class="pu2-kicker" style="margin:0">${esc(T('Lines to move', '要设置的明细'))}</span>
+            <button class="pu2-btn sm" id="pu2-assignall" style="margin-left:auto" onclick="puInvAssignAll()">${esc(assignAllLabel())}</button>
+          </div>
+          <div class="pu2-alloclist" id="pu2-assignlist">${rows}</div>
+        </div>
+        <div class="pu2-modal-foot">
+          <span id="pu2-assignbadge">${assignBadgeHtml()}</span>
+          <span class="spacer"></span>
+          <button class="pu2-btn ghost" onclick="puInvCloseModal()">${esc(T('Cancel', '取消'))}</button>
+          <button class="pu2-btn primary" onclick="puInvAssignSave()">${esc(T('Set supplier', '设置供应商'))}</button>
+        </div>
+      </div>`;
+  }
+  function assignBadgeHtml() {
+    const d = _invAssign; if (!d) return '';
+    const picked = assignPicked();
+    const total = picked.reduce((s, l) => s + (l.amount || 0), 0);
+    if (!picked.length) return `<span class="pu2-mut">${esc(T('Nothing ticked', '未勾选'))}</span>`;
+    return `<span class="pu2-pill grey">${picked.length} ${esc(T('of', '/'))} ${d.lines.length} ${esc(T('lines', '条明细'))}</span> <span class="pu2-mut pu2-num">${money(total)}</span>`;
+  }
+  const assignAllLabel = () => (_invAssign && assignPicked().length === _invAssign.lines.length
+    ? T('Untick all', '全部取消') : T('Tick all', '全选'));
+
+  // Typing invalidates a previous pick: the field is a search box, and what is
+  // in it is no longer the supplier that was chosen from the list. Save resolves
+  // whatever is left standing (below).
+  window.puInvAssignTyped = function () { if (_invAssign) _invAssign.supplier = ''; };
+
+  // Ticking repaints the ROW, never the modal. A full re-render would throw
+  // away what is half-typed in the search box — and with it the open menu —
+  // every time someone unticked a line.
+  function assignSyncRow(lineId) {
+    const el = document.querySelector('#pu2-assignlist .pu2-chk[data-line="' + lineId + '"]');
+    if (!el || !_invAssign) return;
+    const on = _invAssign.picked.has(lineId);
+    el.classList.toggle('on', on);
+    el.innerHTML = on ? I.check : '';
+  }
+  function assignSyncFoot() {
+    const b = document.getElementById('pu2-assignbadge');
+    if (b) b.innerHTML = assignBadgeHtml();
+    const t = document.getElementById('pu2-assignall');
+    if (t) t.textContent = assignAllLabel();
+  }
+  window.puInvAssignToggle = function (lineId) {
+    const d = _invAssign; if (!d) return;
+    if (d.picked.has(lineId)) d.picked.delete(lineId); else d.picked.add(lineId);
+    assignSyncRow(lineId);
+    assignSyncFoot();
+  };
+  window.puInvAssignAll = function () {
+    const d = _invAssign; if (!d) return;
+    if (assignPicked().length === d.lines.length) d.picked.clear();
+    else d.lines.forEach(l => d.picked.add(l.line_id));
+    d.lines.forEach(l => assignSyncRow(l.line_id));
+    assignSyncFoot();
+  };
+  // What the field MEANS, resolved against the list it searched. A pick from
+  // the menu is already recorded; a name typed out in full and never picked
+  // still counts, matched on the stored name or either language half. Anything
+  // else names no supplier this tenant has — the server would refuse it, so say
+  // so at the field rather than after a round trip.
+  function assignSupplier() {
+    const d = _invAssign; if (!d) return '';
+    if (d.supplier) return d.supplier;
+    const el = document.getElementById('pu2-assign-sup');
+    const q = String((el && el.value) || '').trim().toLowerCase();
+    if (!q) return '';
+    const hit = invSupplierList().find(o => [o.name, o.en, o.cn, o.label]
+      .some(x => x && String(x).toLowerCase() === q));
+    return hit ? hit.name : '';
+  }
+  window.puInvAssignSave = async function () {
+    const d = _invAssign; if (!d) return;
+    const supplier = assignSupplier();
+    if (!supplier) {
+      const el = document.getElementById('pu2-assign-sup');
+      const typed = !!(el && el.value.trim());
+      toast(typed
+        ? T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。')
+        : T('Choose a supplier', '请选择供应商'), 'err');
+      if (el && el.focus) el.focus();
+      return;
+    }
+    const ids = assignPicked().map(l => l.line_id);
+    if (!ids.length) { toast(T('Tick at least one line', '请至少勾选一条明细'), 'err'); return; }
+    try {
+      await api('/api/retail-admin/purchasing/lines/supplier', { method: 'PUT', body: { supplier, line_ids: ids } });
+      // Open the group they just moved into, so the lines are visible where
+      // they landed rather than vanishing from the screen.
+      toast(T('Supplier set ✓', '已设置供应商 ✓'), 'ok');
+      puInvCloseModal();
+      _invExpanded.add(supplier);
+      await invReload();
+    } catch (e) {
+      toast(e.code === 'unknown_supplier'
+        ? T('That supplier isn’t on file — add them on the Suppliers tab first.', '该供应商不在名录中 —— 请先在“供应商”中添加。')
+        : e.message, 'err');
+    }
+  };
+
   // ── the invoice modal — the same form for a new one and an edit ───────────
   function billHost() {
     // Mounted as a sibling of #pu2-root inside the pane; CSS is keyed on
@@ -1787,13 +2371,15 @@
   }
   window.puInvCloseModal = function () {
     _invDraft = null;
+    _invAssign = null;
+    try { puSuggestClose(); } catch (_) {}   // the search menu hangs off <body>
     const h = document.getElementById('pu2-modal-host');
     if (h) h.innerHTML = '';
   };
   window.puInvNew = function (groupIdx) {
     const groups = (_invOut && _invOut.groups) || [];
     const sup = (typeof groupIdx === 'number' && groups[groupIdx]) ? groups[groupIdx].supplier : '';
-    _invDraft = { id: null, supplier: sup && sup !== '未指定 Unspecified' ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
+    _invDraft = { id: null, supplier: sup && sup !== INV_UNSPECIFIED ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
     renderInvModal();
   };
   // Editing loads the invoice's OWN allocations into the draft, so the lines it
@@ -1813,17 +2399,24 @@
       renderInvModal();
     } catch (e) { toast(e.message, 'err'); }
   };
-  // The stored name stays the option's VALUE — it is the key every filter and
-  // every save round-trips on. Only the label follows the current language.
+  // The stored name stays the VALUE — it is the key every filter and every save
+  // round-trips on. `label` follows the current language; `en`/`cn` are the two
+  // halves on their own, which is what a search box needs so typing either
+  // language finds the row (a live name reads "Dry Fruit 果干" — one string,
+  // both languages, and neither half alone would ever match it).
   function invSupplierList() {
     const cn = new Map();
     ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier_cn) cn.set(g.supplier, g.supplier_cn); });
     _suppliers.forEach(s => { if (s.name_cn) cn.set(s.name, s.name_cn); });
     const names = new Set();
-    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== '未指定 Unspecified') names.add(g.supplier); });
+    ((_invOut && _invOut.groups) || []).forEach(g => { if (g.supplier && g.supplier !== INV_UNSPECIFIED) names.add(g.supplier); });
     _suppliers.filter(s => s.is_active).forEach(s => names.add(s.name));
     if (_invDraft && _invDraft.supplier) names.add(_invDraft.supplier);
-    return [...names].sort((a, b) => a.localeCompare(b)).map(n => ({ name: n, label: supName(n, cn.get(n)) }));
+    return [...names].sort((a, b) => a.localeCompare(b)).map(n => {
+      const half = supSplit(n);
+      const cnName = String(cn.get(n) || '').trim() || half.cn;
+      return { name: n, label: T(half.en, cnName), en: half.en, cn: cnName };
+    });
   }
   function invAllocated() {
     const d = _invDraft; if (!d) return 0;
@@ -1850,8 +2443,12 @@
     const lines = invModalLines();
     const byPo = new Map();
     lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
-    const supOpts = ['<option value="">' + esc(T('Choose a supplier', '选择供应商')) + '</option>']
-      .concat(invSupplierList().map(o => `<option value="${esc(o.name)}"${o.name === d.supplier ? ' selected' : ''}>${esc(o.label)}</option>`)).join('');
+    // A SEARCH BOX, for the same reason the "Set supplier" one is: the book is
+    // as long as the tenant's supplier list, and a <select> that long can only
+    // be scrolled. The field shows one language; d.supplier keeps the stored
+    // name, which is what every filter and every save round-trips on.
+    const supVal = d.supplier
+      ? ((invSupplierList().find(o => o.name === d.supplier) || {}).label || d.supplier) : '';
     const allocRows = lines.length
       ? [...byPo.entries()].map(([po, ls]) => `
           <div class="pu2-pogrp">${esc(po)}</div>
@@ -1877,7 +2474,16 @@
         </div>
         <div class="pu2-modal-body">
           <div class="pu2-fgrid three">
-            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puInvField('supplier', this.value)">${supOpts}</select></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-inv-sup" autocomplete="off" value="${esc(supVal)}"
+                  placeholder="${esc(T('Type to search your suppliers', '输入文字搜索供应商'))}"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-inv-sup','invsuppliers')" oninput="puSuggestOpen('pu2-inv-sup','invsuppliers')"
+                  onkeydown="puSuggestKey(event,'pu2-inv-sup','invsuppliers')" onblur="puSuggestBlur('pu2-inv-sup')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-inv-sup','invsuppliers')">${I.chevDown}</button>
+              </span></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('invoice_number', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Amount', '金额') + ' ' + cur())}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puInvField('date', this.value)"></label>
@@ -1946,9 +2552,38 @@
     }
     renderInvModal();
   };
+  // What the search box MEANS, resolved against the book it searched: the
+  // stored name, plus the raw text, so the caller can tell "nothing typed" from
+  // "typed something that is nobody".
+  function invDraftSupplier() {
+    const el = document.getElementById('pu2-inv-sup');
+    const typed = String((el && el.value) || '').trim();
+    if (!typed) return { name: '', typed: '' };
+    const q = typed.toLowerCase();
+    const hit = invSupplierList().find(o => [o.name, o.en, o.cn, o.label]
+      .some(x => x && String(x).toLowerCase() === q));
+    return { name: hit ? hit.name : '', typed };
+  }
   window.puInvSave = async function () {
     const d = _invDraft; if (!d) return;
-    if (!d.supplier) { toast(T('Choose a supplier', '请选择供应商'), 'err'); return; }
+    const sup = invDraftSupplier();
+    if (!sup.name) {
+      toast(sup.typed
+        ? T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。')
+        : T('Choose a supplier', '请选择供应商'), 'err');
+      const el = document.getElementById('pu2-inv-sup');
+      if (el && el.focus) el.focus();
+      return;
+    }
+    // A name typed out in full, never picked, and NOT the one the open lines
+    // below belong to. Filing against those lines would attribute one
+    // supplier's goods to another's invoice, so switch the form to what the
+    // field says and let them tick the right lines.
+    if (sup.name !== d.supplier) {
+      puInvField('supplier', sup.name);
+      toast(T('Switched to that supplier — tick the lines it covers, then save.', '已切换到该供应商 —— 请勾选其对应明细后保存。'), 'ok');
+      return;
+    }
     if (!(parseFloat(d.amount) > 0)) { toast(T('Enter the invoice amount', '请输入发票金额'), 'err'); return; }
     const links = Object.entries(d.alloc)
       .map(([line_id, allocated_amount]) => ({ line_id: parseInt(line_id, 10), allocated_amount: parseFloat(allocated_amount) || 0 }))
@@ -2211,6 +2846,231 @@
   };
   window.puBackSuppliers = async function () { _sup = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
 
+  // ── Payment-field suggestions (our own menu, not a native <datalist>) ──────
+  // "When" and "How" used to be <input list=…> + <datalist>. The popup a
+  // datalist produces is drawn by the OS combobox widget, not by us: it takes
+  // no styling at all (it landed as a black OS list against these light cards)
+  // and some embedding webviews — the chat-app browser pane among them —
+  // position it at the wrong screen coordinates entirely, so it appeared
+  // pinned to the far edge of the window instead of under the field it
+  // belongs to. Same fix, same reasons, as the Finance-category menu in
+  // 18-materials.js: draw the list ourselves, position:fixed under the input
+  // from its getBoundingClientRect(), and hang it off <body> so no ancestor
+  // card can clip it or paint over it.
+  //
+  // `v` is what gets STORED, unchanged from the old <option value>s — the
+  // fields are still free text and the menu only saves typing. en/cn are the
+  // display halves, so one language leads and the other trails in muted type.
+  const PU_SUGGEST = {
+    terms: [
+      { v: 'Prepay 预付',   en: 'Prepay', cn: '预付' },
+      { v: 'COD 货到付款',  en: 'COD',    cn: '货到付款' },
+      { v: 'Net 15',        en: 'Net 15', cn: '月结15' },
+      { v: 'Net 30',        en: 'Net 30', cn: '月结30' },
+    ],
+    methods: [
+      { v: 'WeChat 微信',   en: 'WeChat',        cn: '微信' },
+      { v: 'Alipay 支付宝', en: 'Alipay',        cn: '支付宝' },
+      { v: 'Bank 银行转账', en: 'Bank transfer', cn: '银行转账' },
+      { v: 'Cash 现金',     en: 'Cash',          cn: '现金' },
+    ],
+  };
+  // The hint under the field is that same list read out loud — derived from it
+  // so the two can't drift (the hand-written hint said "On delivery" where the
+  // list offered "COD").
+  const puSuggestHint = key => PU_SUGGEST[key].map(o => T(o.en, o.cn)).join(' · ');
+
+  // A DYNAMIC source. The two above are fixed vocabularies whose value is free
+  // text; this is a list built from what's loaded, whose value is DATA — a
+  // supplier name the server will only accept if it already knows it. So a key
+  // here brings two extras: `rows()` for the current list, and `commit(v)` to
+  // record the pick where the screen keeps it, rather than leaving it in the
+  // field for someone to typo afterwards.
+  //
+  // `label` is what the FIELD shows, and it is not the value: a supplier name
+  // is stored as one string with both languages glued together ("Dry Fruit
+  // 果干"), and no screen here ever shows both at once.
+  // Both supplier fields on the Invoices screen search the same book; they
+  // differ only in where the pick lands. "Add invoice" is STRUCTURAL — the
+  // supplier decides which lines the form can allocate against, so committing
+  // there clears the allocations and repaints (puInvField's own rule, unchanged).
+  const supplierSuggestRows = () =>
+    invSupplierList().map(o => ({ v: o.name, en: o.en, cn: o.cn, label: o.label }));
+  // The two ORDER-side supplier fields — the order's own supplier on step 1 of
+  // the wizard, and a line's supplier in the picker — search the same book, and
+  // differ from the Invoices pair above in one way: their `label` is the WHOLE
+  // stored name, not one language half. Both write straight into the order (the
+  // step-1 field is read back off the DOM by grabStep1, the line field by
+  // puLineSupSave), and the order carries the name as one string — the recap on
+  // step 2 and the printed PO both show it whole. The menu still splits the
+  // halves for reading; only what lands in the box differs.
+  const bookSuggestRows = (extra) => supplierNameList(extra).map(n => {
+    const half = supSplit(n);
+    return { v: n, en: half.en, cn: half.cn, label: n };
+  });
+  const PU_SUGGEST_DYN = {
+    suppliers: {
+      rows: supplierSuggestRows,
+      commit: (v) => { if (_invAssign) _invAssign.supplier = v; },
+    },
+    invsuppliers: {
+      rows: supplierSuggestRows,
+      commit: (v) => { if (_invDraft) puInvField('supplier', v); },
+    },
+    // A draft placed against a supplier who has since been retired keeps
+    // offering that supplier — otherwise reopening the draft would quietly
+    // drop the name it was already carrying.
+    posuppliers: {
+      rows: () => bookSuggestRows([_edit && _edit.supplier]),
+      commit: (v) => { if (_edit) _edit.supplier = v; },
+    },
+    linesuppliers: {
+      rows: () => bookSuggestRows(lineSupExtras()),
+    },
+  };
+  const puSuggestOpts = key => (PU_SUGGEST_DYN[key] ? PU_SUGGEST_DYN[key].rows() : (PU_SUGGEST[key] || []));
+
+  let _sugFor = null;   // id of the input the open menu belongs to
+  let _sugKey = null;   // which list it is showing
+  let _sugIdx = -1;     // keyboard-highlighted row, -1 = none
+
+  function puSuggestMenuEl() {
+    let menu = document.getElementById('pu2-suggest-menu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'pu2-suggest-menu';
+      menu.className = 'pu2-suggest-menu';
+      menu.setAttribute('role', 'listbox');
+      menu.hidden = true;
+      // mousedown, not click: it fires before the input's blur, and
+      // preventDefault() stops the field losing focus at all.
+      menu.addEventListener('mousedown', (e) => {
+        const opt = e.target.closest('.pu2-suggest-opt');
+        if (!opt) return;
+        e.preventDefault();
+        puSuggestPick(opt.dataset.v, opt.dataset.label);
+      });
+      document.body.appendChild(menu);
+    }
+    return menu;
+  }
+  function puSuggestPlace(input) {
+    const menu = puSuggestMenuEl();
+    const r = input.getBoundingClientRect();
+    menu.style.left = r.left + 'px';
+    menu.style.width = r.width + 'px';
+    // Under the field by default; over it when the field sits low enough that
+    // the list would run off the bottom of the window.
+    const below = window.innerHeight - r.bottom;
+    if (below < menu.offsetHeight + 12 && r.top > below) menu.style.top = Math.max(8, r.top - menu.offsetHeight - 4) + 'px';
+    else menu.style.top = (r.bottom + 4) + 'px';
+  }
+  function puSuggestRows(inputId, key) {
+    const input = document.getElementById(inputId);
+    if (!input) return [];
+    const q = String(input.value || '').trim().toLowerCase();
+    // The rule the native popup used: case-insensitive substring, matched over
+    // the stored value and both display halves, so "wechat", "微信" and
+    // "WeChat 微信" all find the same row. A value that already IS an option
+    // keeps the whole list open instead of narrowing to itself — which is what
+    // lets a field you have already filled be reopened and changed.
+    const opts = puSuggestOpts(key);
+    const exact = o => [o.v, o.en, o.cn, o.label].some(x => x && String(x).toLowerCase() === q);
+    if (!q || opts.some(exact)) return opts;
+    return opts.filter(o => [o.v, o.en, o.cn, o.label].filter(Boolean).join(' ').toLowerCase().includes(q));
+  }
+  function puSuggestPaint(rows) {
+    puSuggestMenuEl().innerHTML = rows.map((o, i) => {
+      const lead = T(o.en, o.cn), trail = T(o.cn, o.en);
+      return `<div class="pu2-suggest-opt${i === _sugIdx ? ' on' : ''}" role="option"
+          aria-selected="${i === _sugIdx}" data-v="${esc(o.v)}" data-label="${esc(o.label || o.v)}">
+          <span class="lead">${esc(lead)}</span>${lead === trail ? '' : `<span class="trail">${esc(trail)}</span>`}
+        </div>`;
+    }).join('');
+  }
+  window.puSuggestOpen = function (inputId, key) {
+    const input = document.getElementById(inputId);
+    if (!input || (!PU_SUGGEST[key] && !PU_SUGGEST_DYN[key])) return;
+    if (_sugFor !== inputId) _sugIdx = -1;
+    const rows = puSuggestRows(inputId, key);
+    if (!rows.length) { puSuggestClose(); return; }
+    _sugFor = inputId; _sugKey = key;
+    if (_sugIdx >= rows.length) _sugIdx = -1;
+    puSuggestPaint(rows);
+    const menu = puSuggestMenuEl();
+    menu.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    puSuggestPlace(input);
+  };
+  window.puSuggestPick = function (v, label) {
+    const input = _sugFor && document.getElementById(_sugFor);
+    // Read the source BEFORE closing — puSuggestClose forgets which list it was.
+    const dyn = _sugKey && PU_SUGGEST_DYN[_sugKey];
+    if (input) { input.value = label == null ? v : label; input.focus(); }
+    if (dyn && dyn.commit) dyn.commit(v);
+    puSuggestClose();
+  };
+  window.puSuggestClose = function () {
+    const menu = document.getElementById('pu2-suggest-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    const input = _sugFor && document.getElementById(_sugFor);
+    if (input) input.setAttribute('aria-expanded', 'false');
+    _sugFor = null; _sugKey = null; _sugIdx = -1;
+  };
+  window.puSuggestBlur = function (inputId) {
+    // Deferred: an option's mousedown preventDefault()s the focus loss, but a
+    // click landing anywhere else still needs its turn before we tear down.
+    // Only close if the menu is still THIS field's — tabbing from When to How
+    // fires the first field's blur after the second has already opened its
+    // own list, and closing then would shut a menu the user just asked for.
+    setTimeout(() => { if (_sugFor === inputId) puSuggestClose(); }, 150);
+  };
+  // The chevron is inside the label, so a plain click would re-focus the input
+  // and toggle nothing. Handle it on mousedown, before focus moves.
+  window.puSuggestToggle = function (e, inputId, key) {
+    e.preventDefault(); e.stopPropagation();
+    if (_sugFor === inputId) { puSuggestClose(); return; }
+    const input = document.getElementById(inputId);
+    if (input) input.focus();
+    puSuggestOpen(inputId, key);
+  };
+  // Arrow keys / Enter / Escape — the keyboard the native popup gave us free.
+  window.puSuggestKey = function (e, inputId, key) {
+    const menu = document.getElementById('pu2-suggest-menu');
+    const open = !!menu && !menu.hidden && _sugFor === inputId;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { _sugIdx = -1; puSuggestOpen(inputId, key); }
+      const el = puSuggestMenuEl(), n = el.children.length;
+      if (!n) return;
+      _sugIdx = e.key === 'ArrowDown' ? (_sugIdx + 1) % n : (_sugIdx <= 0 ? n - 1 : _sugIdx - 1);
+      puSuggestPaint(puSuggestRows(inputId, key));
+      const on = el.children[_sugIdx];
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'Enter') {
+      const on = menu.children[_sugIdx];
+      // Enter with nothing highlighted means "I typed what I meant" — leave
+      // the free text alone and just get the menu out of the way.
+      if (_sugIdx >= 0 && on) { e.preventDefault(); puSuggestPick(on.dataset.v, on.dataset.label); }
+      else puSuggestClose();
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); puSuggestClose(); }
+  };
+  // A fixed menu doesn't follow the page under it — close on anything that
+  // would leave it stranded beside a field that has moved. Scroll events don't
+  // bubble, so a capturing listener is the only way to see the form's own
+  // scroller; that also catches scrolling INSIDE the menu, which must not
+  // close it.
+  document.addEventListener('scroll', (e) => {
+    const menu = document.getElementById('pu2-suggest-menu');
+    if (menu && !menu.hidden && !menu.contains(e.target)) puSuggestClose();
+  }, true);
+  window.addEventListener('resize', () => { if (_sugFor) puSuggestClose(); });
+
   const CH_OPTS = ['', 'taobao', 'alibaba', 'wechat', 'phone', 'website', 'other'];
   function paintSupplier() {
     const s = _sup;
@@ -2240,8 +3100,26 @@
         <div class="pu2-fgroup">
           <div class="pu2-kicker">${esc(T('How you pay them', '付款方式'))}</div>
           <div class="pu2-fgrid">
-            <label class="pu2-f"><span class="lbl">${esc(T('When', '付款时点'))}</span><input class="pu2-input" id="pu2-s-terms" list="pu2-terms" value="${esc(s.payment_terms || '')}"><span class="hint">${esc(T('Prepay · On delivery · Net 15 · Net 30', '预付 · 货到付款 · 月结15 · 月结30'))}</span></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span><input class="pu2-input" id="pu2-s-method" list="pu2-methods" value="${esc(s.payment_method || '')}"><span class="hint">${esc(T('WeChat · Alipay · Bank transfer · Cash', '微信 · 支付宝 · 银行转账 · 现金'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('When', '付款时点'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-s-terms" value="${esc(s.payment_terms || '')}" autocomplete="off"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-s-terms','terms')" oninput="puSuggestOpen('pu2-s-terms','terms')"
+                  onkeydown="puSuggestKey(event,'pu2-s-terms','terms')" onblur="puSuggestBlur('pu2-s-terms')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-s-terms','terms')">${I.chevDown}</button>
+              </span>
+              <span class="hint">${esc(puSuggestHint('terms'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-s-method" value="${esc(s.payment_method || '')}" autocomplete="off"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-s-method','methods')" oninput="puSuggestOpen('pu2-s-method','methods')"
+                  onkeydown="puSuggestKey(event,'pu2-s-method','methods')" onblur="puSuggestBlur('pu2-s-method')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-s-method','methods')">${I.chevDown}</button>
+              </span>
+              <span class="hint">${esc(puSuggestHint('methods'))}</span></label>
           </div>
         </div>
 
@@ -2257,9 +3135,6 @@
             <label class="pu2-f" style="grid-column:1 / -1"><span class="lbl">${esc(T('Notes', '备注'))}</span><textarea class="pu2-input" id="pu2-s-notes" rows="2" placeholder="${esc(T('Minimum order, delivery days, price quirks…', '起订量、送货日、价格说明……'))}">${esc(s.notes || '')}</textarea></label>
           </div>
         </div>
-
-        <datalist id="pu2-terms"><option value="Prepay 预付"></option><option value="COD 货到付款"></option><option value="Net 15"></option><option value="Net 30"></option></datalist>
-        <datalist id="pu2-methods"><option value="WeChat 微信"></option><option value="Alipay 支付宝"></option><option value="Bank 银行转账"></option><option value="Cash 现金"></option></datalist>
 
         <div class="pu2-wizfoot">
           ${s.id ? `<button class="pu2-btn ${s.is_active ? 'danger' : ''}" data-cap="purchasing:edit" onclick="puSupToggle()">${s.is_active ? esc(T('Disable', '停用')) : esc(T('Enable', '启用'))}</button>` : `<button class="pu2-btn ghost" onclick="puBackSuppliers()">${esc(T('Cancel', '取消'))}</button>`}

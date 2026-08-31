@@ -629,7 +629,10 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
            -- mixes several suppliers' items into one PO/store delivery. This
            -- gives the list something better than "No supplier" for that case
            -- (GROUP_CONCAT(DISTINCT ...) already drops NULL/blank on its own).
-           (SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(i.supplier_name),'')) FROM po_line_items i WHERE i.po_id = po.id) AS line_suppliers
+           (SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(i.supplier_name),'')) FROM po_line_items i WHERE i.po_id = po.id) AS line_suppliers,
+           -- Provenance for a copy pulled out of the kitchen list, so the row
+           -- can say which PO-#### it mirrors rather than looking native.
+           (SELECT k.po_number FROM purchase_orders k WHERE k.id = po.copied_from_po_id) AS copied_from_po_number
       FROM purchase_orders po
      WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ?`;
   const params = [currentTenantId()];
@@ -800,6 +803,144 @@ router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req,
     .filter(r => r.new_lines > 0)
     .map(decorateDelivery);
   res.json({ success: true, data: { deliveries: rows, untracked_lines: untrackedLines(po.id) } });
+});
+
+// ── Copying a kitchen order into Tacet ────────────────────────────────────
+// The kitchen buying list (routes/purchases.js, scope='kitchen', PO-####) and
+// this one (scope='retail', RPO-####) filter each other out, so an order bought
+// through the kitchen app can never be opened, re-quantified or received here.
+// These two routes are the bridge the buyer asked for: pick kitchen orders, get
+// retail DRAFTS of them that Tacet can edit.
+//
+// A copy, deliberately, not a move: the kitchen order stays exactly where it is
+// and keeps working for the kitchen. The cost of that choice is that the same
+// real-world purchase now has two rows, so the copy is built to stay out of
+// every ledger until someone deliberately places it:
+//   • status is always 'Requested' (Draft). postRetailPOExpenses only posts on
+//     Ordered/Delivered, and the invoice chase only reads INV_PO_STATUSES — so
+//     a fresh copy adds nothing to Finance and nothing to the paperwork chase.
+//     The moment the buyer marks it Ordered, its cost DOES post, and if the
+//     kitchen original was already Ordered that expense is in the books twice.
+//     That is the buyer's call to make, but nothing here makes it for them.
+//   • received counts, stock_applied_qty, lot/tracking, invoice_status and the
+//     invoice_lines allocations are NOT copied. Those belong to the kitchen
+//     order's own history; a draft has received nothing and is on no invoice.
+//   • copied_from_po_id records the source, which is also the duplicate guard.
+// Kitchen lines carry ingredient_id (materials), never store_product_id, so the
+// copies are material lines: receiving one is a price write-back, not a stock
+// movement (see the module header). The target store still has to be named —
+// every retail PO is store-scoped — it just isn't a shelf these lines land on.
+
+// What is available to copy: kitchen POs, newest first, with the same line
+// count / total the retail list computes, plus the copy (if any) already made.
+router.get('/api/retail-admin/purchases/kitchen-source', requireRetailAdmin, (req, res) => {
+  const { status, search } = req.query;
+  let q = `
+    SELECT po.id, po.po_number, po.date, po.delivery_date, po.status, po.supplier,
+           po.warehouse, po.notes,
+           (SELECT COUNT(*) FROM po_line_items i WHERE i.po_id = po.id)                      AS line_count,
+           (SELECT SUM(COALESCE(i.total_cost,0)) FROM po_line_items i WHERE i.po_id = po.id) AS total_cost,
+           (SELECT GROUP_CONCAT(DISTINCT NULLIF(TRIM(i.supplier_name),'')) FROM po_line_items i WHERE i.po_id = po.id) AS line_suppliers,
+           c.id        AS copy_id,
+           c.po_number AS copy_po_number,
+           c.status    AS copy_status
+      FROM purchase_orders po
+      LEFT JOIN purchase_orders c
+             ON c.copied_from_po_id = po.id
+            AND COALESCE(c.scope,'kitchen') = 'retail'
+            AND COALESCE(c.tenant_id,1) = ?
+     WHERE COALESCE(po.scope,'kitchen') = 'kitchen' AND COALESCE(po.tenant_id,1) = ?`;
+  // Tenant-scoped on BOTH sides. Every kitchen PO carries tenant_id 1 (the
+  // DEFAULT the column shipped with — the kitchen app is Roots' own), so this
+  // shows Roots its kitchen history and shows a second tenant an empty picker,
+  // rather than offering them another business's orders to copy.
+  const params = [currentTenantId(), currentTenantId()];
+  if (status) { q += ' AND po.status = ?'; params.push(status); }
+  if (search) {
+    q += ` AND (po.po_number LIKE ? OR po.supplier LIKE ? OR po.id IN (
+      SELECT po_id FROM po_line_items WHERE name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ? OR supplier_name LIKE ?))`;
+    const s = `%${search}%`;
+    params.push(s, s, s, s, s, s);
+  }
+  q += ' ORDER BY po.date DESC, po.id DESC';
+  res.json({ success: true, data: db.prepare(q).all(...params) });
+});
+
+// Copy the named kitchen orders in as retail drafts. All-or-nothing per batch:
+// one transaction, so a batch that trips the guard leaves nothing half-copied.
+router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin, express.json(), (req, res) => {
+  const { po_ids, store_id } = req.body || {};
+  const ids = [...new Set((Array.isArray(po_ids) ? po_ids : [])
+    .map(n => parseInt(n, 10)).filter(n => n > 0))];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'po_ids_required' });
+  const storeId = parseInt(store_id, 10);
+  if (!storeId || !inventory.getStore(storeId)) {
+    return res.status(400).json({ success: false, error: 'store_required' });
+  }
+  const marks = ids.map(() => '?').join(',');
+  const sources = db.prepare(
+    `SELECT * FROM purchase_orders
+      WHERE id IN (${marks}) AND COALESCE(scope,'kitchen') = 'kitchen'
+        AND COALESCE(tenant_id,1) = ?`).all(...ids, currentTenantId());
+  // An id that names no kitchen PO is a mistake worth reporting, not skipping:
+  // the buyer ticked something, and silence would read as "copied".
+  if (sources.length !== ids.length) {
+    const found = new Set(sources.map(p => p.id));
+    return res.status(404).json({ success: false, error: 'not_found',
+                                  missing: ids.filter(id => !found.has(id)) });
+  }
+  const already = db.prepare(
+    `SELECT copied_from_po_id AS src, po_number FROM purchase_orders
+      WHERE copied_from_po_id IN (${marks})
+        AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ?`
+  ).all(...ids, currentTenantId());
+  if (already.length) {
+    const bySrc = new Map(sources.map(p => [p.id, p.po_number]));
+    return res.status(409).json({ success: false, error: 'already_copied',
+      copies: already.map(a => ({ po_id: a.src, po_number: bySrc.get(a.src) || null,
+                                  copy_po_number: a.po_number })) });
+  }
+  const lineStmt = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id');
+  try {
+    const tx = db.transaction(() => {
+      const made = [];
+      // Newest kitchen order last, so the RPO numbers run in the same order the
+      // kitchen numbers do rather than in reverse.
+      for (const src of [...sources].sort((a, b) => a.id - b.id)) {
+        const po_number = nextRetailPONumber();
+        const poId = db.prepare(`
+          INSERT INTO purchase_orders
+            (po_number, date, delivery_date, status, supplier, notes, source, scope,
+             store_id, created_by, tenant_id, copied_from_po_id)
+          VALUES (?,?,?,'Requested',?,?,'kitchenCopy','retail',?,NULL,?,?)
+        `).run(po_number, src.date, src.delivery_date || null, src.supplier || null,
+               src.notes || null, storeId, currentTenantId(), src.id).lastInsertRowid;
+        const items = lineStmt.all(src.id).map(l => ({
+          // store_product_id is left off entirely: a kitchen line never has one,
+          // and passing it would risk a line_conflict against ingredient_id.
+          ingredient_id: l.ingredient_id || null,
+          name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
+          qty: l.qty, unit: l.unit, cost_per_unit: l.cost_per_unit,
+          expense_category: l.expense_category, supplier_name: l.supplier_name,
+          purchase_channel: l.purchase_channel, note: l.note,
+        }));
+        if (items.length) insertLineItems(poId, items, src.supplier || null);
+        made.push({ id: poId, po_number, from_po_id: src.id, from_po_number: src.po_number,
+                    line_count: items.length });
+      }
+      return made;
+    });
+    const made = tx();
+    for (const m of made) {
+      logActivity(req.user.id, req.user.username, 'create', 'purchase_order', m.id,
+                  { po_number: m.po_number, scope: 'retail', copied_from_po_id: m.from_po_id,
+                    copied_from_po_number: m.from_po_number }, req.ip);
+    }
+    res.json({ success: true, data: made });
+  } catch (e) {
+    console.error('[retail-purchasing copy-from-kitchen]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
@@ -1372,6 +1513,61 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requir
   db.prepare('UPDATE po_line_items SET no_invoice_expected = ? WHERE id = ?').run(flag ? 1 : 0, line.id);
   logActivity(req.user.id, req.user.username, 'line_no_invoice_toggle', 'po_line_item', line.id, { no_invoice_expected: flag }, req.ip);
   res.json({ success: true, no_invoice_expected: flag });
+});
+
+// ── Attributing lines to a supplier 指定供应商 ───────────────────────────────
+// The Invoices screen groups by the supplier chain (line → PO header →
+// ingredient master → "未指定 Unspecified"), and everything that falls all the
+// way through lands in the Unspecified group. That group could be described
+// but not fixed: the screen said "set a supplier on these lines first" and
+// offered nowhere to do it. The order wizard only reopens DRAFTS, and the
+// lines sitting there are on placed POs — most of them kitchen-scope, which
+// this admin never opens at all. So the instruction was unfollowable.
+//
+// THE WRITE IS AT LINE LEVEL, deliberately. Stamping po.supplier instead would
+// re-attribute every other blank line on the same order too, because the
+// header sits AHEAD of the ingredient master in the chain — a line grouped
+// today under its item's master supplier would silently move. The line's own
+// supplier_name is the most specific link in that chain, so it moves exactly
+// the lines that were picked and nothing else.
+//
+// The name must already be one this tenant uses — a supplier on the master, or
+// a name already carried by one of its POs. Grouping keys on the string, so a
+// typo here would not fail: it would quietly open a second, near-identical
+// supplier group.
+router.put('/api/retail-admin/purchasing/lines/supplier', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const supplier = String((req.body && req.body.supplier) || '').trim().slice(0, 120);
+  if (!supplier) return res.status(400).json({ success: false, error: 'supplier_required' });
+  const ids = [...new Set((Array.isArray(req.body && req.body.line_ids) ? req.body.line_ids : [])
+    .map(n => parseInt(n, 10)).filter(n => n > 0))];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'lines_required' });
+  if (ids.length > 400) return res.status(400).json({ success: false, error: 'too_many_lines' });
+
+  const known = db.prepare(
+    `SELECT 1 FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?
+      UNION ALL
+     SELECT 1 FROM purchase_orders WHERE TRIM(supplier) = ? AND COALESCE(tenant_id,1) = ?
+      UNION ALL
+     SELECT 1 FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+      WHERE TRIM(pli.supplier_name) = ? AND COALESCE(po.tenant_id,1) = ?
+     LIMIT 1`).get(supplier, tid, supplier, tid, supplier, tid);
+  if (!known) return res.status(400).json({ success: false, error: 'unknown_supplier' });
+
+  const upd = db.prepare(`UPDATE po_line_items SET supplier_name = ?
+                           WHERE id = ? AND po_id IN (SELECT id FROM purchase_orders
+                                                       WHERE COALESCE(tenant_id,1) = ?)`);
+  const updated = db.transaction(() => {
+    let n = 0;
+    for (const id of ids) n += upd.run(supplier, id, tid).changes;
+    return n;
+  })();
+  if (!updated) return res.status(404).json({ success: false, error: 'not_found' });
+  // One row for the whole assignment; the id is only meaningful when a single
+  // line moved, so a bulk one carries its ids in the details instead.
+  logActivity(req.user.id, req.user.username, 'set_line_supplier', 'po_line_item',
+              ids.length === 1 ? ids[0] : null, { supplier, line_ids: ids, updated }, req.ip);
+  res.json({ success: true, updated });
 });
 
 // The receive row's invoice picker, saved on its own. It used to ride along on
