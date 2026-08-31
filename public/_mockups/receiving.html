@@ -6,7 +6,7 @@
 <meta name="theme-color" id="mThemeColor" content="#FBF9F4">
 <meta name="color-scheme" content="light dark">
 <meta name="format-detection" content="telephone=no">
-<title>Receiving — layout mockup</title>
+<title>Receiving — mockup</title>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      THROWAWAY MOCKUP. Not wired to anything.
@@ -18,6 +18,9 @@
        • Dusk (#6E67AF) is not used anywhere — it is the AI colour. --accent
          resolves to ink, which is the same choice m.html's toggle() makes.
        • No WaveMark / "runs on tacet" mark.
+
+     The receive screen is Layout A, chosen. B and C are gone.
+     Below it, the two candidate homes for the receiving LIST, side by side.
      ═══════════════════════════════════════════════════════════════════════ -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -56,7 +59,7 @@ html,body{margin:0}
 body{background:#E9E5DC;font-family:var(--font-ui);color:var(--text-primary);
   padding-bottom:calc(env(safe-area-inset-bottom,0px) + 40px)}
 :root[data-theme="dark"] body{background:#0B121F}
-button,input,textarea{font-family:inherit}
+button,input{font-family:inherit}
 button,.row,.chip,.pill,.eyebrow,h1,h2{-webkit-user-select:none;user-select:none}
 button,a,.row,.chip,.stepbtn{touch-action:manipulation}
 
@@ -99,17 +102,32 @@ input:focus{outline:none;border-color:var(--border-focus)}
 .hscroll{scrollbar-width:none;-ms-overflow-style:none;overflow-x:auto}
 .hscroll::-webkit-scrollbar{display:none}
 @keyframes tRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes tFade{from{opacity:0}to{opacity:1}}
-.rise{animation:tRise .32s var(--ease-settle) both}
+.rise{animation:tRise .3s var(--ease-settle) both}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
 
-/* The quantity field. Tabular, large, and the same height as its steppers so
-   the three read as one control. */
-.qty{width:78px;height:52px;padding:0;text-align:center;font-size:22px;font-weight:500;
+/* The quantity field. Tabular, large, same height as its steppers so the
+   three read as one control. */
+.qty{width:72px;height:52px;padding:0;text-align:center;font-size:22px;font-weight:500;
   font-variant-numeric:tabular-nums;border-radius:10px;background:var(--surface-card);
   border:1px solid var(--border-default);color:var(--text-primary)}
 .qty.sm{width:60px;height:44px;font-size:17px}
 .qty.edit{border-color:var(--amber);background:var(--amber-tint);color:var(--amber-ink)}
+
+/* ── Damage control ───────────────────────────────────────────────────────
+   Sits at the right end of the quantity row. At zero it is an outline the eye
+   skips; carrying a count it fills brick AND SHOWS THE NUMBER, so a recorded
+   damage is legible while scrolling and never hides behind a tap. */
+.dmgbtn{min-width:52px;height:52px;padding:0 11px;border-radius:10px;background:transparent;
+  border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;gap:5px;
+  color:var(--text-secondary);cursor:pointer;flex:none}
+.dmgbtn.on{background:var(--brick-tint);border-color:var(--brick);color:var(--brick-ink)}
+.dmgbtn .n{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* Supplier-header secondary action — small, quiet, never the size of a CTA. */
+.minibtn{height:44px;padding:0 11px;border-radius:999px;border:1px solid var(--border-default);
+  background:transparent;color:var(--text-secondary);font-size:12.5px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;white-space:nowrap;flex:none}
+.minibtn.on{border-color:var(--text-primary);color:var(--text-primary)}
 
 /* ── Mockup chrome (NOT part of the app) ──────────────────────────────── */
 .chrome{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border-default);
@@ -125,7 +143,7 @@ input:focus{outline:none;border-color:var(--border-focus)}
   color:var(--text-secondary);display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
 .segb.on{background:var(--surface-card);color:var(--text-primary);box-shadow:0 1px 3px rgba(17,26,43,.08)}
 :root[data-theme="dark"] .segb.on{box-shadow:0 1px 3px rgba(0,0,0,.35)}
-.segb b{font-size:15px;font-weight:500;line-height:1.2}
+.segb b{font-size:14px;font-weight:500;line-height:1.25}
 .segb span{font-size:11px;font-weight:400;line-height:1.2;opacity:.9;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;max-width:100%}
 
@@ -133,6 +151,10 @@ input:focus{outline:none;border-color:var(--border-focus)}
 .caption{padding:0 16px 12px;max-width:520px;margin:0 auto}
 .caption h2{margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:-.01em}
 .caption p{margin:0;font-size:13px;line-height:1.5;color:var(--text-secondary)}
+/* The cost line. Deliberately set apart — it is the thing being weighed. */
+.cost{margin-top:8px;padding:9px 12px;border-radius:10px;background:var(--amber-tint);
+  font-size:12.5px;line-height:1.5;color:var(--amber-ink)}
+.cost b{font-weight:600}
 
 /* The device. Below 520px it simply fills the screen, exactly like m.html;
    above it, the drawn handset so this can be judged on a laptop too. */
@@ -144,27 +166,29 @@ input:focus{outline:none;border-color:var(--border-focus)}
   .chrome,.caption{max-width:520px;margin-left:auto;margin-right:auto}
   .stage{padding-bottom:8px}
 }
-.divider{height:14px;background:transparent}
+.divider{height:16px}
 </style>
 </head>
 <body>
 
 <div class="chrome">
   <div class="chrome-top">
-    <span class="chrome-title" id="chromeTitle">Receiving · layout mockup</span>
+    <span class="chrome-title" id="chromeTitle">Receiving · mockup</span>
     <button class="chrome-btn" onclick="APP.cmd('lang')" id="langBtn">EN</button>
     <button class="chrome-btn" onclick="APP.cmd('theme')" id="themeBtn">☾</button>
-    <button class="chrome-btn" onclick="APP.cmd('reset')" id="resetBtn">Reset</button>
+    <button class="chrome-btn" onclick="APP.cmd('reset')" id="resetBtn">Untouched</button>
   </div>
+  <span class="eyebrow" style="display:block;margin-bottom:6px;font-size:11.5px" id="navLabel">
+    Second screen below — where the receiving list lives</span>
   <div class="seg" id="segRoot"></div>
 </div>
 
 <div class="stage">
-  <div class="caption" id="caption"></div>
-  <div class="frame" id="frame"></div>
+  <div class="caption" id="capReceive"></div>
+  <div class="frame" id="frameReceive"></div>
   <div class="divider"></div>
-  <div class="caption" id="rcvCaption"></div>
-  <div class="frame" id="rcvFrame"></div>
+  <div class="caption" id="capNav"></div>
+  <div class="frame" id="frameNav"></div>
 </div>
 
 <script>
@@ -172,28 +196,32 @@ input:focus{outline:none;border-color:var(--border-focus)}
 
 /* ══ Icons ════════════════════════════════════════════════════════════════
    Lucide geometry, inlined rather than fetched from a CDN so the file is
-   genuinely standalone and works on a phone with no network. Same builder
-   signature as m.html's ic(). */
+   genuinely standalone and works on a phone with no network. */
 const ICONS = {
   'chevron-down':'<path d="m6 9 6 6 6-6"/>',
   'chevron-up':'<path d="m18 15-6-6-6 6"/>',
   'chevron-right':'<path d="m9 18 6-6-6-6"/>',
   'chevron-left':'<path d="m15 18-6-6 6-6"/>',
-  'x':'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'check':'<path d="M20 6 9 17l-5-5"/>',
   'minus':'<path d="M5 12h14"/>',
   'plus':'<path d="M5 12h14"/><path d="M12 5v14"/>',
   'search':'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   'package':'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  /* The damage mark: a carton with a cross through it. Distinct from the
+     amber triangle, which means "short", so the two never read as one thing. */
+  'package-x':'<path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0"/><path d="m7.5 4.27 9 5.15"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/><path d="m17 13 5 5"/><path d="m22 13-5 5"/>',
   'triangle-alert':'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   'map-pin':'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
   'user':'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   'circle-check':'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
-  'circle-dashed':'<path d="M10.1 2.18a10 10 0 0 1 3.8 0"/><path d="M17.6 3.71a10 10 0 0 1 2.69 2.7"/><path d="M21.82 10.1a10 10 0 0 1 0 3.8"/><path d="M20.29 17.6a10 10 0 0 1-2.7 2.69"/><path d="M13.9 21.82a10 10 0 0 1-3.8 0"/><path d="M6.4 20.29a10 10 0 0 1-2.69-2.7"/><path d="M2.18 13.9a10 10 0 0 1 0-3.8"/><path d="M3.71 6.4a10 10 0 0 1 2.7-2.69"/>',
   'pencil':'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
   'shopping-cart':'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
   'truck':'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
   'clock':'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  'message-square-text':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M7 8h10"/><path d="M7 12h6"/>',
+  'store':'<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M2 7h20"/>',
+  'trending-up':'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  'receipt':'<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
 };
 function ic(name, size, stroke){
   size = size || 20; stroke = stroke || 1.75;
@@ -223,14 +251,14 @@ function pill(tone, label){
 /* ══ FAKE DATA ════════════════════════════════════════════════════════════
    RPO-0003 · Tianhe · 5 lines · 3 suppliers. Nothing here is real. */
 const LOCATIONS = [
-  { id:1, en:'Tianhe',        zh:'天河'     },
-  { id:2, en:'Pearl River',   zh:'珠江新城' },
+  { id:1, en:'Tianhe',          zh:'天河'     },
+  { id:2, en:'Pearl River',     zh:'珠江新城' },
   { id:3, en:'Central Kitchen', zh:'中央厨房' },
 ];
 const SUPPLIERS = [
-  { id:'gf',  en:'Green Farm',      zh:'绿田农场' },
-  { id:'wdg', en:'Wong Dry Goods',  zh:'黄记杂货' },
-  { id:'so',  en:'Sun Oils',        zh:'阳光油品' },
+  { id:'gf',  en:'Green Farm',     zh:'绿田农场' },
+  { id:'wdg', en:'Wong Dry Goods', zh:'黄记杂货' },
+  { id:'so',  en:'Sun Oils',       zh:'阳光油品' },
 ];
 const LINES = [
   { id:'l1', sup:'gf',  en:'Mint',        zh:'薄荷',   sku:'HRB-MNT', ordered:5,  unit:'kg' },
@@ -239,16 +267,19 @@ const LINES = [
   { id:'l4', sup:'wdg', en:'Chickpeas',   zh:'鹰嘴豆', sku:'DRY-CKP', ordered:20, unit:'kg' },
   { id:'l5', sup:'so',  en:'Coconut oil', zh:'椰子油', sku:'OIL-CCO', ordered:12, unit:'L'  },
 ];
-/* Fixed list. No free text — the whole point of a reason CODE. */
+/* Fixed list. No free text — the point of a reason CODE.
+   DAMAGE IS NOT ON THIS LIST. A reason explains why the received count came in
+   BELOW what was ordered; damage is a count of what arrived broken, which can
+   happen on a line that is not short at all (Chickpeas, below). Having the word
+   in both places made the two facts look like one. */
 const REASONS = [
   { id:'short',    en:'Short delivery', zh:'少送'   },
-  { id:'damaged',  en:'Damaged',        zh:'破损'   },
   { id:'wrong',    en:'Wrong item',     zh:'错货'   },
   { id:'not_sent', en:'Not sent',       zh:'未发货' },
 ];
 
-/* The state the scenario asks for: Green Farm and Wong Dry Goods arrived,
-   Sun Oils did not; Mint is 1 short; 2 Chickpeas came in damaged. */
+/* The scenario: Green Farm and Wong Dry Goods arrived, Sun Oils did not;
+   Mint is 1 short; 2 Chickpeas came in damaged. */
 function seedLines(){
   return {
     l1:{ recv:4,  dmg:0, reason:'short'    },
@@ -258,28 +289,70 @@ function seedLines(){
     l5:{ recv:0,  dmg:0, reason:'not_sent' },
   };
 }
-/* Pristine — every line prefilled with the full ordered quantity, which is
-   what staff actually see before they touch anything. Reachable from Reset. */
+/* Every line prefilled with the full ordered quantity — what staff actually
+   meet before touching anything. Reachable from the chrome. */
 function pristineLines(){
   const o = {};
   LINES.forEach(l => { o[l.id] = { recv:l.ordered, dmg:0, reason:null }; });
   return o;
 }
 
-/* ══ Received tab — six past sessions over a fortnight ════════════════════ */
+/* ── Purchase orders ──────────────────────────────────────────────────────
+   OPEN_POS are still waiting on a delivery. DONE_POS have been received —
+   they are the orders the six sessions below were taken against, and they
+   matter because the real Purchasing screen's "All" segment shows every PO
+   regardless of status. Without them, Option 1's cost has to be asserted in
+   a caption; with them it can simply be read off the screen. */
+const OPEN_POS = [
+  { id:'p3', kind:'po', po:'RPO-0003', sort:'2026-08-31', status:'Ordered',
+    who:'3 suppliers', whoZh:'3 家供应商', loc:'Tianhe', locZh:'天河', lines:5,
+    arrives:'31 Aug', arrivesZh:'8月31日' },
+  { id:'p8', kind:'po', po:'RPO-0008', sort:'2026-08-30', status:'Requested',
+    who:'Hoi Kee Produce', whoZh:'海记果蔬', loc:'Pearl River', locZh:'珠江新城', lines:4,
+    arrives:'2 Sep', arrivesZh:'9月2日' },
+];
+const DONE_POS = [
+  { id:'p7', kind:'po', po:'RPO-0007', sort:'2026-08-30', status:'Delivered',
+    who:'Green Farm', whoZh:'绿田农场', loc:'Tianhe', locZh:'天河', lines:2,
+    arrives:'30 Aug', arrivesZh:'8月30日' },
+  { id:'p2', kind:'po', po:'RPO-0002', sort:'2026-08-29', status:'Delivered',
+    who:'Wong Dry Goods', whoZh:'黄记杂货', loc:'Tianhe', locZh:'天河', lines:3,
+    arrives:'29 Aug', arrivesZh:'8月29日' },
+  { id:'p6', kind:'po', po:'RPO-0006', sort:'2026-08-27', status:'Delivered',
+    who:'Sun Oils', whoZh:'阳光油品', loc:'Pearl River', locZh:'珠江新城', lines:1,
+    arrives:'27 Aug', arrivesZh:'8月27日' },
+  { id:'p5', kind:'po', po:'RPO-0005', sort:'2026-08-25', status:'Delivered',
+    who:'Green Farm', whoZh:'绿田农场', loc:'Tianhe', locZh:'天河', lines:3,
+    arrives:'25 Aug', arrivesZh:'8月25日' },
+  { id:'p4', kind:'po', po:'RPO-0004', sort:'2026-08-22', status:'Delivered',
+    who:'Hoi Kee Produce', whoZh:'海记果蔬', loc:'Central Kitchen', locZh:'中央厨房', lines:4,
+    arrives:'22 Aug', arrivesZh:'8月22日' },
+  { id:'p1', kind:'po', po:'RPO-0001', sort:'2026-08-19', status:'Delivered',
+    who:'Wong Dry Goods', whoZh:'黄记杂货', loc:'Tianhe', locZh:'天河', lines:2,
+    arrives:'19 Aug', arrivesZh:'8月19日' },
+];
+const ALL_POS = OPEN_POS.concat(DONE_POS).sort((a,b) => b.sort.localeCompare(a.sort));
+
+/* ── Past receiving sessions ─────────────────────────────────────────────── */
 const SESSIONS = [
-  { id:'s1', date:'30 Aug', time:'08:40', po:'RPO-0007', sup:'Green Farm',      supZh:'绿田农场',
-    loc:'Tianhe', locZh:'天河', by:'Shun Lai', byZh:'黎顺', lines:2, flags:[] },
-  { id:'s2', date:'29 Aug', time:'09:14', po:'RPO-0002', sup:'Wong Dry Goods',  supZh:'黄记杂货',
-    loc:'Tianhe', locZh:'天河', by:'Jing Wei', byZh:'魏静', lines:3, flags:['short'] },
-  { id:'s3', date:'27 Aug', time:'14:02', po:'RPO-0006', sup:'Sun Oils',        supZh:'阳光油品',
-    loc:'Pearl River', locZh:'珠江新城', by:'Mei Chan', byZh:'陈美', lines:1, flags:['damaged'] },
-  { id:'s4', date:'25 Aug', time:'08:05', po:'RPO-0005', sup:'Green Farm',      supZh:'绿田农场',
-    loc:'Tianhe', locZh:'天河', by:'Shun Lai', byZh:'黎顺', lines:3, flags:[] },
-  { id:'s5', date:'22 Aug', time:'10:31', po:'RPO-0004', sup:'Hoi Kee Produce', supZh:'海记果蔬',
-    loc:'Central Kitchen', locZh:'中央厨房', by:'Bao Tang', byZh:'汤宝', lines:4, flags:['over'] },
-  { id:'s6', date:'19 Aug', time:'09:22', po:'RPO-0001', sup:'Wong Dry Goods',  supZh:'黄记杂货',
-    loc:'Tianhe', locZh:'天河', by:'Jing Wei', byZh:'魏静', lines:2, flags:[] },
+  { id:'s1', kind:'session', date:'30 Aug', sort:'2026-08-30', time:'08:40', po:'RPO-0007',
+    sup:'Green Farm', supZh:'绿田农场', loc:'Tianhe', locZh:'天河',
+    by:'Shun Lai', byZh:'黎顺', lines:2, flags:[] },
+  { id:'s2', kind:'session', date:'29 Aug', sort:'2026-08-29', time:'09:14', po:'RPO-0002',
+    sup:'Wong Dry Goods', supZh:'黄记杂货', loc:'Tianhe', locZh:'天河',
+    by:'Jing Wei', byZh:'魏静', lines:3, flags:['short'] },
+  { id:'s3', kind:'session', date:'27 Aug', sort:'2026-08-27', time:'14:02', po:'RPO-0006',
+    sup:'Sun Oils', supZh:'阳光油品', loc:'Pearl River', locZh:'珠江新城',
+    by:'Mei Chan', byZh:'陈美', lines:1, flags:['damaged'] },
+  { id:'s4', kind:'session', date:'25 Aug', sort:'2026-08-25', time:'08:05', po:'RPO-0005',
+    sup:'Green Farm', supZh:'绿田农场', loc:'Tianhe', locZh:'天河',
+    by:'Shun Lai', byZh:'黎顺', lines:3, flags:[] },
+  { id:'s5', kind:'session', date:'22 Aug', sort:'2026-08-22', time:'10:31', po:'RPO-0004',
+    sup:'Hoi Kee Produce', supZh:'海记果蔬', loc:'Central Kitchen', locZh:'中央厨房',
+    by:'Bao Tang', byZh:'汤宝', lines:4, flags:['over'] },
+  { id:'s6', kind:'session', date:'19 Aug', sort:'2026-08-19', time:'09:22', po:'RPO-0001',
+    sup:'Wong Dry Goods', supZh:'黄记杂货', loc:'Tianhe', locZh:'天河',
+    by:'Jing Wei', byZh:'魏静', lines:2, flags:[] },
 ];
 /* The one expanded session's line detail, including a correction. */
 const S2_LINES = [
@@ -294,49 +367,49 @@ const S2_LINES = [
 
 /* ══ State ════════════════════════════════════════════════════════════════ */
 const state = {
-  layout:'A',
   loc:1, locOpen:false,
   lines:seedLines(),
-  groups:{ gf:true, wdg:true, so:true },   // A: expanded?
-  bOpen:null,                              // B: supplier sub-screen id
-  bDone:{ gf:true },                       // B: confirmed suppliers
-  cMode:'ready',                           // C: ready | pick | fix
-  cFlagged:{},                             // C: line id -> true
+  groups:{ gf:true, wdg:true, so:true },   // supplier group expanded?
+  dmgOpen:null,                            // line id whose damage counter is open
+  done:false,                              // delivery recorded?
   pristine:false,                          // showing the untouched prefill?
-  done:null,                               // 'A' | 'B' | 'C' once recorded
+
+  nav:'opt1',                              // opt1 = inside Purchasing | opt2 = own screen
+  p1seg:'received',                        // Option 1: open | received | all
+  o2seg:'received',                        // Option 2: toreceive | received
+  o2screen:'receiving',                    // Option 2: more | receiving
+
   rcvQuery:'', rcvFilter:'all', rcvOpen:'s2',
 };
 
 /* ══ Derived ══════════════════════════════════════════════════════════════ */
-const lineById  = id => LINES.find(l => l.id === id);
-const supById   = id => SUPPLIERS.find(s => s.id === id);
-const locById   = id => LOCATIONS.find(l => l.id === id);
-const supName   = s => T(s.en, s.zh);
-const locName   = l => T(l.en, l.zh);
-const lineName  = l => T(l.en, l.zh);
-const linesOf   = sid => LINES.filter(l => l.sup === sid);
-const st        = id => state.lines[id];
+const lineById = id => LINES.find(l => l.id === id);
+const locById  = id => LOCATIONS.find(l => l.id === id);
+const supName  = s => T(s.en, s.zh);
+const locName  = l => T(l.en, l.zh);
+const lineName = l => T(l.en, l.zh);
+const linesOf  = sid => LINES.filter(l => l.sup === sid);
+const st       = id => state.lines[id];
 /* Shortfall is CALCULATED. Nobody is ever asked to work it out. */
-const short     = l => Math.max(0, l.ordered - st(l.id).recv);
-const over      = l => Math.max(0, st(l.id).recv - l.ordered);
-const touched   = l => st(l.id).recv !== l.ordered || st(l.id).dmg > 0;
-const reasonOf  = id => REASONS.find(r => r.id === id);
+const short    = l => Math.max(0, l.ordered - st(l.id).recv);
+const over     = l => Math.max(0, st(l.id).recv - l.ordered);
+const reasonOf = id => REASONS.find(r => r.id === id);
 
 function supState(sid){
   const ls = linesOf(sid);
-  if (ls.every(l => st(l.id).recv === 0)) return 'none';       // nothing arrived
+  if (ls.every(l => st(l.id).recv === 0)) return 'none';
   if (ls.some(l => short(l) > 0 || st(l.id).dmg > 0 || over(l) > 0)) return 'issue';
   return 'ok';
 }
 function supPill(sid){
   const s = supState(sid);
   if (s === 'none')  return pill('muted',   T('Not arrived','未到货'));
-  if (s === 'issue') return pill('warning', T('Has issues','有异常'));
-  return pill('success', T('All arrived','全部到货'));
+  if (s === 'issue') return pill('warning', T('Issues','有异常'));
+  return pill('success', T('Complete','已齐'));
 }
 /* Lines bucketed by outcome. Kept as LISTS, not counts, so the summary can
    name what is wrong — "Mint, 1 kg short" is worth more at the door than
-   "1 short", and counting units across kg and L would be nonsense anyway. */
+   "1 short", and adding kg to L would be nonsense anyway. */
 function tally(){
   const complete=[], shortL=[], dmgL=[], overL=[], notSent=[];
   LINES.forEach(l => {
@@ -349,7 +422,6 @@ function tally(){
   });
   return { complete, shortL, dmgL, overL, notSent };
 }
-/* Every short line needs a reason before the delivery can be recorded. */
 function missingReasons(){
   return LINES.filter(l => short(l) > 0 && !st(l.id).reason);
 }
@@ -371,7 +443,7 @@ function pageHead(o){
     + '</div>';
 }
 
-/* The location control. Top of every layout, defaults to Tianhe, changeable. */
+/* The location control. Top of the screen, defaults to Tianhe, changeable. */
 function locationControl(){
   const cur = locById(state.loc);
   const head = '<button class="row" onclick="APP.cmd(\'locToggle\')" style="min-height:60px">'
@@ -396,26 +468,55 @@ function locationControl(){
 /* ── One line editor ──────────────────────────────────────────────────────
    Prefilled with the ordered quantity. Big steppers so it works one-handed
    with a box in the other. Units are display-only, straight off the PO. */
-function lineEditor(l, opt){
-  opt = opt || {};
+function lineEditor(l){
   const s = st(l.id);
   const sh = short(l), ov = over(l);
   /* The received box is tinted only when the RECEIVED count differs from what
-     was ordered. Damage is a separate fact with its own field and its own
+     was ordered. Damage is a separate fact with its own control and its own
      colour — tinting this box for it said the count had been changed when it
      had not. */
   const edited = s.recv !== l.ordered;
+  const dmgOpen = state.dmgOpen === l.id;
 
-  const stepper = '<div style="display:flex;align-items:center;gap:10px">'
+  /* [−][n][+] as one tight group, the unit beside it, and the damage mark at
+     the far right of the same row — one row, one hand, nothing hidden. */
+  const qtyRow = '<div style="display:flex;align-items:center;gap:8px">'
     + '<button class="stepbtn" onclick="APP.cmd(\'recv\',\''+l.id+'|-1\')" aria-label="minus" '
     +   (s.recv<=0?'disabled':'')+'>'+ic('minus',22,2)+'</button>'
     + '<input class="qty '+(edited?'edit':'')+'" inputmode="numeric" pattern="[0-9]*" value="'+s.recv+'" '
-    +   'onchange="APP.cmd(\'recvSet\',\''+l.id+'|\'+this.value)" '
-    +   'onfocus="this.select()">'
-    + '<span style="font-size:14px;color:var(--text-secondary);min-width:22px">'+esc(l.unit)+'</span>'
-    + '<button class="stepbtn" onclick="APP.cmd(\'recv\',\''+l.id+'|1\')" aria-label="plus" style="margin-left:auto">'
-    +   ic('plus',22,2)+'</button>'
+    +   'aria-label="'+T('Received','已收')+'" '
+    +   'onchange="APP.cmd(\'recvSet\',\''+l.id+'|\'+this.value)" onfocus="this.select()">'
+    + '<button class="stepbtn" onclick="APP.cmd(\'recv\',\''+l.id+'|1\')" aria-label="plus">'+ic('plus',22,2)+'</button>'
+    + '<span style="font-size:14px;color:var(--text-secondary)">'+esc(l.unit)+'</span>'
+    + '<button class="dmgbtn '+(s.dmg>0?'on':'')+(dmgOpen?' rise':'')+'" style="margin-left:auto'
+    +   (dmgOpen && s.dmg===0 ? ';border-color:var(--text-primary);color:var(--text-primary)':'')+'" '
+    +   'onclick="APP.cmd(\'dmgOpen\',\''+l.id+'\')" '
+    +   'aria-label="'+T('Damaged','破损')+'">'+ic('package-x',20)
+    +   (s.dmg>0 ? '<span class="n">'+s.dmg+'</span>' : '')+'</button>'
     + '</div>';
+
+  /* The damage counter. One tap from the mark, writes on every press, no OK to
+     dismiss — the count is already on the mark, so closing loses nothing. */
+  const dmgPanel = dmgOpen
+    ? '<div class="rise" style="margin-top:10px;padding:12px 14px;border-radius:12px;background:var(--surface-raised)">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+      +   '<span style="color:var(--text-secondary);display:flex">'+ic('package-x',16)+'</span>'
+      +   '<span style="flex:1;font-size:13.5px;font-weight:500">'+T('How many damaged?','破损几件？')+'</span>'
+      +   '<button class="btn2" style="min-height:32px;padding:0 10px;font-size:12.5px;'
+      +     'color:var(--text-secondary)" onclick="APP.cmd(\'dmgOpen\',\''+l.id+'\')">'+T('Done','完成')+'</button>'
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:10px">'
+      +   '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|-1\')" '+(s.dmg<=0?'disabled':'')+'>'
+      +     ic('minus',18,2)+'</button>'
+      +   '<input class="qty sm" inputmode="numeric" pattern="[0-9]*" value="'+s.dmg+'" '
+      +     'style="'+(s.dmg>0?'border-color:var(--brick);background:var(--brick-tint);color:var(--brick-ink)':'')+'" '
+      +     'onchange="APP.cmd(\'dmgSet\',\''+l.id+'|\'+this.value)" onfocus="this.select()">'
+      +   '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|1\')" '+(s.dmg>=s.recv?'disabled':'')+'>'
+      +     ic('plus',18,2)+'</button>'
+      +   '<span class="num" style="margin-left:auto;font-size:12.5px;color:var(--text-secondary);text-align:right">'
+      +     (LANG==='en' ? 'of '+s.recv+' '+l.unit+'<br>received' : '共收 '+s.recv+' '+l.unit)+'</span>'
+      + '</div></div>'
+    : '';
 
   /* The shortfall is stated, never asked for. */
   let note = '';
@@ -431,34 +532,19 @@ function lineEditor(l, opt){
   } else if (ov > 0) {
     note = '<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-secondary)">'
       + ic('triangle-alert',16) + '<span class="num" style="font-size:13.5px">'
-      + (LANG==='en' ? ov+' '+l.unit+' over ordered' : '多收 '+ov+' '+l.unit)
-      + '</span></div>';
+      + (LANG==='en' ? ov+' '+l.unit+' over ordered' : '多收 '+ov+' '+l.unit)+'</span></div>';
   }
 
-  /* Reason codes. Fixed list, single select, 44px targets.
-     A 2×2 GRID, not a horizontal scroller: at 380px a scroller fits about two
-     and a half chips, so the fourth reason ("Not sent") was off-screen behind
-     a sideways swipe inside a vertical list. All four have to be visible. */
+  /* Reason codes: three, in a 2-up grid so every one is on screen. A
+     horizontal scroller fits about two and a half at 380px, which put the last
+     reason behind a sideways swipe nested inside a vertical list. */
   const reasons = sh > 0
     ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
-      + REASONS.map(r => '<button class="chip '+(s.reason===r.id?'on':'')+'" style="justify-content:center;padding:0 10px" '
+      + REASONS.map(r => '<button class="chip '+(s.reason===r.id?'on':'')+'" '
+          + 'style="justify-content:center;padding:0 10px" '
           + 'onclick="APP.cmd(\'reason\',\''+l.id+'|'+r.id+'\')">'+esc(T(r.en,r.zh))+'</button>').join('')
       + '</div>'
     : '';
-
-  /* Damaged is its own quantity, not a reason code and not part of received. */
-  const dmg = '<div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;'
-    + 'border-top:1px solid var(--border-default)">'
-    + '<span style="flex:1;min-width:0;font-size:13.5px;'
-    +   (s.dmg>0?'color:var(--brick-ink);font-weight:500':'color:var(--text-secondary)')+'">'
-    +   T('Damaged on arrival','到货破损')+'</span>'
-    + '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|-1\')" '+(s.dmg<=0?'disabled':'')+'>'
-    +   ic('minus',18,2)+'</button>'
-    + '<input class="qty sm" inputmode="numeric" pattern="[0-9]*" value="'+s.dmg+'" '
-    +   'style="'+(s.dmg>0?'border-color:var(--brick);background:var(--brick-tint);color:var(--brick-ink)':'')+'" '
-    +   'onchange="APP.cmd(\'dmgSet\',\''+l.id+'|\'+this.value)" onfocus="this.select()">'
-    + '<button class="stepbtn sm" onclick="APP.cmd(\'dmg\',\''+l.id+'|1\')">'+ic('plus',18,2)+'</button>'
-    + '</div>';
 
   return '<div class="card" style="padding:14px">'
     + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">'
@@ -469,35 +555,51 @@ function lineEditor(l, opt){
     +   '<span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">'
     +     T('ordered','订购')+' '+l.ordered+' '+esc(l.unit)+'</span>'
     + '</div>'
-    + stepper + note + reasons + dmg
-    + (opt.unflag ? '<button class="btn2" style="width:100%;margin-top:12px;font-size:13.5px;'
-        + 'color:var(--text-secondary)" onclick="APP.cmd(\'cUnflag\',\''+l.id+'\')">'
-        + T('This one is fine after all','这项没问题') + '</button>' : '')
+    + qtyRow + dmgPanel + note + reasons
     + '</div>';
 }
 
-/* ── Supplier group action: nothing came from this supplier ─────────────── */
-function nothingArrivedBtn(sid){
-  const none = supState(sid) === 'none';
-  if (none) {
-    return '<button class="btn2" style="width:100%;font-size:13.5px;color:var(--text-secondary)" '
-      + 'onclick="APP.cmd(\'supAll\',\''+sid+'\')">'+T('Undo — it did arrive','撤销 — 其实到货了')+'</button>';
-  }
-  return '<button class="btn2" style="width:100%;font-size:13.5px;color:var(--text-secondary)" '
-    + 'onclick="APP.cmd(\'supNone\',\''+sid+'\')">'+T('Nothing arrived from this supplier','该供应商未到货')+'</button>';
+/* ── Supplier group header ────────────────────────────────────────────────
+   The no-show action lives HERE, beside the status pill, because it is a fact
+   about this supplier. Sitting under the group's last line it read as another
+   line item, and as belonging to whichever group came next. */
+function groupHeader(s){
+  const open = state.groups[s.id];
+  const ls = linesOf(s.id);
+  const none = supState(s.id) === 'none';
+  return '<div style="display:flex;align-items:center;gap:7px;padding:12px 2px">'
+    + '<button onclick="APP.cmd(\'grp\',\''+s.id+'\')" style="flex:1;min-width:0;min-height:44px;display:flex;'
+    +   'flex-direction:column;gap:3px;align-items:flex-start;justify-content:center;background:none;border:none;'
+    +   'padding:0;cursor:pointer;font-family:inherit;color:var(--text-primary);text-align:left">'
+    +   '<span style="max-width:100%;font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;'
+    +     'white-space:nowrap">'+esc(supName(s))+'</span>'
+    +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary)">'
+    +     ls.length+' '+T(ls.length===1?'line':'lines','项')+'</span>'
+    + '</button>'
+    + '<button class="minibtn'+(none?' on':'')+'" '
+    +   'onclick="APP.cmd(\''+(none?'supAll':'supNone')+'\',\''+s.id+'\')">'
+    /* "Undo", not "It did arrive". The pill beside this already reads "Not
+       arrived", and a button saying "It did arrive" next to it made two
+       statements about arrival sit side by side with nothing marking which one
+       was the state and which the action. */
+    +   esc(none ? T('Undo','撤销') : T('None arrived','未到货'))+'</button>'
+    + supPill(s.id)
+    + '<button onclick="APP.cmd(\'grp\',\''+s.id+'\')" aria-label="'+T('Collapse','收起')+'" '
+    +   'style="width:26px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;'
+    +   'background:none;border:none;padding:0;cursor:pointer;color:var(--text-secondary)">'
+    +   ic(open?'chevron-up':'chevron-down',18)+'</button>'
+    + '</div>';
 }
 
 /* ── The submit summary. No money, anywhere. ──────────────────────────── */
 function summaryCard(){
   const t = tally();
-  const loc = locById(state.loc);
   const row = (tone, txt) => '<div style="display:flex;align-items:center;gap:10px;padding:7px 0">'
     + '<span style="width:6px;height:6px;border-radius:999px;flex:none;background:'+tone+'"></span>'
     + '<span class="num" style="font-size:13.5px;color:var(--text-secondary)">'+txt+'</span></div>';
   let rows = '';
   if (t.complete.length) rows += row('var(--sage)', LANG==='en'
-    ? t.complete.length+' line'+(t.complete.length>1?'s':'')+' complete'
-    : t.complete.length+' 项完好');
+    ? t.complete.length+' line'+(t.complete.length>1?'s':'')+' complete' : t.complete.length+' 项完好');
   t.shortL.forEach(l => rows += row('var(--amber)', LANG==='en'
     ? esc(lineName(l))+' — '+short(l)+' '+esc(l.unit)+' short'
     : esc(lineName(l))+' — 短少 '+short(l)+' '+esc(l.unit)));
@@ -508,22 +610,21 @@ function summaryCard(){
     ? esc(lineName(l))+' — '+over(l)+' '+esc(l.unit)+' over ordered'
     : esc(lineName(l))+' — 多收 '+over(l)+' '+esc(l.unit)));
   t.notSent.forEach(l => rows += row('var(--graphite)', LANG==='en'
-    ? esc(lineName(l))+' — nothing arrived'
-    : esc(lineName(l))+' — 未到货'));
+    ? esc(lineName(l))+' — nothing arrived' : esc(lineName(l))+' — 未到货'));
 
   return '<div class="card" style="padding:14px 16px">'
     + '<span class="eyebrow" style="display:block;margin-bottom:4px">'+T('About to record','即将登记')+'</span>'
     + rows
     + '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;'
     +   'border-top:1px solid var(--border-default);color:var(--text-secondary)">'
-    +   ic('map-pin',15)+'<span style="font-size:13px">'+T('Into','收货至')+' '+esc(locName(loc))+'</span></div>'
+    +   ic('map-pin',15)+'<span style="font-size:13px">'+T('Into','收货至')+' '
+    +   esc(locName(locById(state.loc)))+'</span></div>'
     + '</div>';
 }
 
 function submitBlock(){
   const missing = missingReasons();
-  const blocked = missing.length > 0;
-  const warn = blocked
+  const warn = missing.length
     ? '<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;'
       + 'background:var(--amber-tint);margin-bottom:10px">'
       + '<span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">'+ic('triangle-alert',16)+'</span>'
@@ -534,14 +635,12 @@ function submitBlock(){
       + '</span></div>'
     : '';
   return '<div style="display:flex;flex-direction:column">'+warn
-    + '<button class="cta" '+(blocked?'disabled':'')+' onclick="APP.cmd(\'record\')">'
+    + '<button class="cta" '+(missing.length?'disabled':'')+' onclick="APP.cmd(\'record\')">'
     + T('Record delivery','登记收货')+'</button></div>';
 }
 
-/* ── The end state, so the flow has somewhere to land ───────────────────── */
 function recordedScreen(){
   const t = tally();
-  const loc = locById(state.loc);
   const bits = [];
   if (t.complete.length) bits.push(LANG==='en' ? t.complete.length+' complete' : t.complete.length+' 项完好');
   if (t.shortL.length)   bits.push(LANG==='en' ? t.shortL.length+' short'      : t.shortL.length+' 项短少');
@@ -554,34 +653,21 @@ function recordedScreen(){
     + '<span style="color:var(--sage-ink);display:flex">'+ic('circle-check',44,1.5)+'</span>'
     + '<span style="font-size:17px;font-weight:500">'+T('Delivery recorded','收货已登记')+'</span>'
     + '<span class="num" style="font-size:14px;color:var(--text-secondary);line-height:1.5">'
-    +   esc(bits.join(' · '))+'<br>'+T('Into','收货至')+' '+esc(locName(loc))+'</span>'
+    +   esc(bits.join(' · '))+'<br>'+T('Into','收货至')+' '+esc(locName(locById(state.loc)))+'</span>'
     + '<button class="btn2" style="margin-top:6px" onclick="APP.cmd(\'again\')">'
     +   T('Run it again','再看一次')+'</button>'
     + '</div>';
 }
 
-/* ══ LAYOUT A — full list ═════════════════════════════════════════════════
-   Everything expanded, one scroll, submit at the bottom. */
-function layoutA(){
-  if (state.done === 'A') return recordedScreen();
+/* ══ THE RECEIVE SCREEN ═══════════════════════════════════════════════════ */
+function receiveScreen(){
+  if (state.done) return recordedScreen();
   const groups = SUPPLIERS.map(s => {
-    const open = state.groups[s.id];
-    const ls = linesOf(s.id);
-    const head = '<button onclick="APP.cmd(\'grp\',\''+s.id+'\')" style="display:flex;align-items:center;gap:10px;'
-      + 'width:100%;padding:12px 4px 12px 2px;background:none;border:none;cursor:pointer;font-family:inherit;'
-      + 'text-align:left;color:var(--text-primary)">'
-      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">'
-      +   '<span style="font-size:15.5px;font-weight:500">'+esc(supName(s))+'</span>'
-      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary)">'
-      +     ls.length+' '+T(ls.length===1?'line':'lines','项')+'</span></span>'
-      + supPill(s.id)
-      + '<span style="color:var(--text-secondary);display:flex">'+ic(open?'chevron-up':'chevron-down',18)+'</span>'
-      + '</button>';
-    const body = open
+    const body = state.groups[s.id]
       ? '<div style="display:flex;flex-direction:column;gap:10px;padding-bottom:6px">'
-        + ls.map(l => lineEditor(l)).join('') + nothingArrivedBtn(s.id) + '</div>'
+        + linesOf(s.id).map(l => lineEditor(l)).join('') + '</div>'
       : '';
-    return '<div style="border-top:1px solid var(--border-default);padding-top:2px">'+head+body+'</div>';
+    return '<div style="border-top:1px solid var(--border-default)">'+groupHeader(s)+body+'</div>';
   }).join('');
 
   return pageHead({
@@ -596,192 +682,7 @@ function layoutA(){
     + '</div>';
 }
 
-/* ══ LAYOUT B — one supplier at a time ════════════════════════════════════
-   Groups collapsed; tapping one opens a focused sub-screen; each supplier is
-   confirmed and closed before moving on. */
-function layoutB(){
-  if (state.done === 'B') return recordedScreen();
-  if (state.bOpen) return layoutBSupplier(state.bOpen);
-
-  const rows = SUPPLIERS.map((s, i) => {
-    const ls = linesOf(s.id);
-    const done = !!state.bDone[s.id];
-    const t = ls.reduce((a,l) => {
-      if (short(l) > 0) a.sh++; if (st(l.id).dmg > 0) a.dm++; return a;
-    }, {sh:0, dm:0});
-    const sub = done
-      ? (t.sh || t.dm
-          ? (LANG==='en'
-              ? [t.sh?t.sh+' short':'', t.dm?t.dm+' damaged':''].filter(Boolean).join(' · ')
-              : [t.sh?t.sh+' 项短少':'', t.dm?t.dm+' 项破损':''].filter(Boolean).join(' · '))
-          : T('All as ordered','全部按订单'))
-      : ls.length+' '+T(ls.length===1?'line to check':'lines to check','项待核对');
-    return (i ? '<div class="sep"></div>' : '')
-      + '<button class="row" onclick="APP.cmd(\'bOpen\',\''+s.id+'\')" style="min-height:70px">'
-      + '<span class="rowico" style="'+(done?'background:var(--sage-tint);color:var(--sage-ink)':'')+'">'
-      +   ic(done?'circle-check':'circle-dashed',18)+'</span>'
-      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">'
-      +   '<span style="font-size:15.5px;font-weight:500">'+esc(supName(s))+'</span>'
-      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
-      +     'text-overflow:ellipsis;white-space:nowrap">'+esc(sub)+'</span></span>'
-      + (done ? supPill(s.id) : '')
-      + '<span style="color:var(--text-secondary);display:flex">'+ic('chevron-right',18)+'</span>'
-      + '</button>';
-  }).join('');
-
-  const left = SUPPLIERS.filter(s => !state.bDone[s.id]).length;
-  const ready = left === 0;
-  const progress = LANG==='en'
-    ? (SUPPLIERS.length - left)+' of '+SUPPLIERS.length+' suppliers confirmed'
-    : '已确认 '+(SUPPLIERS.length - left)+'/'+SUPPLIERS.length+' 家供应商';
-
-  return pageHead({
-      title:'RPO-0003', back:T('Purchasing','采购'),
-      right:pill('clear', T('Ordered','已下单')),
-      status:progress })
-    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
-    +   locationControl()
-    +   '<div class="list">'+rows+'</div>'
-    +   (ready ? summaryCard() : '')
-    +   (ready
-          ? submitBlock()
-          /* Outline, not a filled slab. A disabled primary button at 40%
-             opacity is still the heaviest thing on the screen, which is the
-             wrong emphasis for "you are not finished yet". */
-          : '<button class="btn2" style="width:100%;color:var(--text-secondary)" disabled>'
-            + (LANG==='en' ? left+' supplier'+(left>1?'s':'')+' still to confirm' : '还有 '+left+' 家待确认')
-            + '</button>')
-    + '</div>';
-}
-
-function layoutBSupplier(sid){
-  const s = supById(sid);
-  const ls = linesOf(sid);
-  const idx = SUPPLIERS.findIndex(x => x.id === sid) + 1;
-  const missing = ls.filter(l => short(l) > 0 && !st(l.id).reason);
-  return pageHead({
-      title:esc(supName(s)),
-      back:T('All suppliers','全部供应商'),
-      right:supPill(sid),
-      status:(LANG==='en'
-        ? 'Supplier '+idx+' of '+SUPPLIERS.length+' · '+ls.length+' line'+(ls.length>1?'s':'')
-        : '第 '+idx+'/'+SUPPLIERS.length+' 家 · '+ls.length+' 项') })
-    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:12px">'
-    +   '<div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">'
-    +     ic('map-pin',15)+'<span style="font-size:13px">'+T('Into','收货至')+' '+esc(locName(locById(state.loc)))+'</span></div>'
-    +   ls.map(l => lineEditor(l)).join('')
-    +   nothingArrivedBtn(sid)
-    +   (missing.length
-          ? '<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;'
-            + 'background:var(--amber-tint)"><span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">'
-            + ic('triangle-alert',16)+'</span><span style="font-size:13.5px;color:var(--amber-ink)">'
-            + (LANG==='en' ? 'Pick a reason for the short line before confirming.' : '确认前请为短少项选择原因。')
-            + '</span></div>'
-          : '')
-    +   '<button class="cta" '+(missing.length?'disabled':'')+' onclick="APP.cmd(\'bConfirm\',\''+sid+'\')">'
-    +     T('Confirm','确认')+' '+esc(supName(s))+'</button>'
-    + '</div>';
-}
-
-/* ══ LAYOUT C — exception-first ═══════════════════════════════════════════
-   The common case is one tap. Anything wrong is flagged line by line. */
-function layoutC(){
-  if (state.done === 'C') return recordedScreen();
-  const head = pageHead({
-    title:'RPO-0003', back:T('Purchasing','采购'),
-    right:pill('clear', T('Ordered','已下单')),
-    status:(LANG==='en' ? '3 suppliers · 5 lines · ordered 28 Aug' : '3 家供应商 · 5 项 · 8月28日下单') });
-
-  /* ── ready: the fast path ── */
-  if (state.cMode === 'ready') {
-    const manifest = SUPPLIERS.map(s =>
-      '<div style="padding:12px 16px">'
-      + '<span class="eyebrow" style="display:block;margin-bottom:6px">'+esc(supName(s))+'</span>'
-      + linesOf(s.id).map(l =>
-          '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:3px 0">'
-          + '<span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-          +   esc(lineName(l))+'</span>'
-          + '<span class="num" style="flex:none;font-size:14px;color:var(--text-secondary)">'
-          +   l.ordered+' '+esc(l.unit)+'</span></div>').join('')
-      + '</div>').join('<div class="sep"></div>');
-
-    return head
-      + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
-      +   locationControl()
-      +   '<button class="cta" style="min-height:60px;font-size:16px" onclick="APP.cmd(\'cAllOk\')">'
-      +     ic('check',20,2)+T('All arrived as ordered','全部按订单到货')+'</button>'
-      +   '<button class="btn2" style="width:100%" onclick="APP.cmd(\'cMode\',\'pick\')">'
-      +     T('Something is wrong','有问题')+'</button>'
-      +   '<div class="list">'
-      +     '<div style="padding:12px 16px 0"><span class="eyebrow">'
-      +       (LANG==='en' ? 'What you are confirming — 5 lines' : '你正在确认的内容 — 5 项')+'</span></div>'
-      +     manifest
-      +   '</div>'
-      + '</div>';
-  }
-
-  /* ── pick: which lines are wrong ── */
-  if (state.cMode === 'pick') {
-    const n = Object.keys(state.cFlagged).filter(k => state.cFlagged[k]).length;
-    const rows = SUPPLIERS.map(s =>
-      '<div style="padding:10px 16px 4px;background:var(--surface-raised)">'
-      + '<span class="eyebrow">'+esc(supName(s))+'</span></div>'
-      + linesOf(s.id).map(l => {
-          const on = !!state.cFlagged[l.id];
-          return '<button class="row" onclick="APP.cmd(\'cFlag\',\''+l.id+'\')" style="min-height:60px">'
-            + '<span style="width:26px;height:26px;border-radius:7px;flex:none;display:flex;align-items:center;'
-            +   'justify-content:center;border:1.5px solid '+(on?'var(--text-primary)':'var(--border-strong)')+';'
-            +   'background:'+(on?'var(--text-primary)':'transparent')+';color:var(--bg)">'
-            +   (on?ic('check',17,2.5):'')+'</span>'
-            + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">'
-            +   '<span style="font-size:15px;'+(on?'font-weight:500':'')+'">'+esc(lineName(l))+'</span>'
-            +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary)">'
-            +     T('ordered','订购')+' '+l.ordered+' '+esc(l.unit)+'</span></span>'
-            + '</button>';
-        }).join('')).join('<div class="sep"></div>');
-
-    return head
-      + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
-      +   '<div><span style="font-size:15px;font-weight:500;display:block;margin-bottom:3px">'
-      +     T('Which lines are wrong?','哪些项有问题？')+'</span>'
-      +     '<span style="font-size:13.5px;color:var(--text-secondary);line-height:1.5">'
-      +     T('Everything you do not tick is recorded as arrived in full.','未勾选的项将按订单全数记入。')+'</span></div>'
-      +   '<div class="list">'+rows+'</div>'
-      +   '<button class="cta" '+(n?'':'disabled')+' onclick="APP.cmd(\'cMode\',\'fix\')">'
-      +     (n ? (LANG==='en' ? 'Fix '+n+' line'+(n>1?'s':'') : '处理 '+n+' 项')
-                : T('Tick the lines that are wrong','请勾选有问题的项'))+'</button>'
-      +   '<button class="btn2" style="width:100%;color:var(--text-secondary)" onclick="APP.cmd(\'cMode\',\'ready\')">'
-      +     T('Back','返回')+'</button>'
-      + '</div>';
-  }
-
-  /* ── fix: editors for the flagged lines only ── */
-  const flagged = LINES.filter(l => state.cFlagged[l.id]);
-  return head
-    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">'
-    +   '<div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:14px;'
-    +     'background:var(--sage-tint);color:var(--sage-ink)">'+ic('check',16,2)
-    +     '<span class="num" style="font-size:13.5px">'
-    +     (LANG==='en'
-        ? (LINES.length - flagged.length)+' lines recorded as ordered'
-        : (LINES.length - flagged.length)+' 项按订单记入')+'</span></div>'
-    +   flagged.map(l => lineEditor(l, {unflag:true})).join('')
-    +   summaryCard()
-    +   submitBlock()
-    +   '<button class="btn2" style="width:100%;color:var(--text-secondary)" onclick="APP.cmd(\'cMode\',\'pick\')">'
-    +     T('Change which lines are flagged','修改勾选的项')+'</button>'
-    + '</div>';
-}
-
-/* ══ RECEIVED TAB ═════════════════════════════════════════════════════════
-   A list of past receiving SESSIONS, not purchase orders. */
-const RCV_FILTERS = [
-  { id:'all',     en:'All',       zh:'全部' },
-  { id:'issues',  en:'Issues',    zh:'有异常' },
-  { id:'short',   en:'Short',     zh:'短少' },
-  { id:'damaged', en:'Damaged',   zh:'破损' },
-  { id:'over',    en:'Over',      zh:'多收' },
-];
+/* ══ SESSION + PO ROWS ════════════════════════════════════════════════════ */
 function flagPills(f){
   if (!f.length) return pill('success', T('Clean','无异常'));
   return f.map(k =>
@@ -789,16 +690,37 @@ function flagPills(f){
     : k==='damaged' ? pill('danger',  T('Damaged','破损'))
     :                 pill('clear',   T('Over','多收'))).join('');
 }
-function sessionMatches(s){
-  const q = state.rcvQuery.trim().toLowerCase();
-  if (q) {
-    const hay = [s.sup, s.supZh, s.loc, s.locZh, s.by, s.byZh, s.po, s.date].join(' ').toLowerCase();
-    if (hay.indexOf(q) === -1) return false;
-  }
-  const f = state.rcvFilter;
-  if (f === 'all') return true;
-  if (f === 'issues') return s.flags.length > 0;
-  return s.flags.indexOf(f) !== -1;
+/* A tiny record-type tag. Only drawn in a list that holds more than one kind —
+   which is exactly the thing Option 1 asks the operator to live with. */
+function typeTag(kind){
+  return '<span class="pill" style="background:rgba(88,96,110,0.10);color:var(--text-secondary);'
+    + 'font-size:11px;padding:2px 8px">'
+    + (kind==='po' ? T('Order','采购单') : T('Delivery','收货'))+'</span>';
+}
+
+function sessionRow(s, opt){
+  opt = opt || {};
+  const open = state.rcvOpen === s.id;
+  const head = '<button class="row" onclick="APP.cmd(\'rcvOpen\',\''+s.id+'\')" '
+    + 'style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">'
+    + '<span class="rowico" style="'+(s.flags.length
+        ? 'background:var(--amber-tint);color:var(--amber-ink)'
+        : 'background:var(--sage-tint);color:var(--sage-ink)')+'">'
+    +   ic(s.flags.length?'triangle-alert':'circle-check',18)+'</span>'
+    + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'
+    +   '<span style="display:flex;align-items:baseline;gap:8px">'
+    +     '<span class="num" style="font-size:15px;font-weight:500;flex:none">'+esc(s.date)+'</span>'
+    +     '<span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+    +       esc(T(s.sup,s.supZh))+'</span></span>'
+    +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
+    +     'text-overflow:ellipsis;white-space:nowrap">'
+    +     esc(T(s.loc,s.locZh))+' · '+esc(T(s.by,s.byZh))+' · '+s.lines+' '+T(s.lines===1?'line':'lines','项')+'</span>'
+    +   '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'
+    +     (opt.tag?typeTag('session'):'')+flagPills(s.flags)+'</span></span>'
+    + '<span style="color:var(--text-secondary);display:flex;padding-top:4px">'
+    +   ic(open?'chevron-up':'chevron-down',18)+'</span>'
+    + '</button>';
+  return head + (open ? sessionDetail(s) : '');
 }
 
 /* The expanded session's body — line detail plus the correction trail. */
@@ -821,8 +743,7 @@ function sessionDetail(s){
                 ? esc(l.correction.fromWho)+' recorded '+l.correction.from+', '
                   + esc(l.correction.toWho)+' changed to '+l.correction.to
                 : esc(l.correction.fromWhoZh)+'登记 '+l.correction.from+'，'
-                  + esc(l.correction.toWhoZh)+'改为 '+l.correction.to)
-        +   '</span>'
+                  + esc(l.correction.toWhoZh)+'改为 '+l.correction.to)+'</span>'
         +   '<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">'
         +     esc(T(l.correction.why, l.correction.whyZh))+'</span>'
         +   '<span class="num" style="font-size:11.5px;color:var(--text-secondary);opacity:.85">'
@@ -833,7 +754,8 @@ function sessionDetail(s){
       + '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
       +   '<span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
       +     esc(T(l.en,l.zh))+'</span>'
-      +   '<span class="num" style="flex:none;font-size:14px;'+(sh?'color:var(--amber-ink);font-weight:500':'color:var(--text-secondary)')+'">'
+      +   '<span class="num" style="flex:none;font-size:14px;'
+      +     (sh?'color:var(--amber-ink);font-weight:500':'color:var(--text-secondary)')+'">'
       +     l.recv+' / '+l.ordered+' '+esc(l.unit)+'</span></div>'
       + (sh ? '<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">'
               + (LANG==='en' ? sh+' '+l.unit+' short · '+T(r.en,r.zh) : '短少 '+sh+' '+l.unit+' · '+T(r.en,r.zh))
@@ -841,24 +763,69 @@ function sessionDetail(s){
       + corr + '</div>';
   }).join('');
 
+  const fact = (icon, txt) => '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;'
+    + 'color:var(--text-secondary)">'+ic(icon,14)+txt+'</span>';
   return '<div style="padding:0 16px 16px">'
     + '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:2px 0 10px">'
-    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
-    +     ic('shopping-cart',14)+'<span class="num">'+esc(s.po)+'</span></span>'
-    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
-    +     ic('map-pin',14)+esc(T(s.loc,s.locZh))+'</span>'
-    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
-    +     ic('user',14)+esc(T(s.by,s.byZh))+'</span>'
-    +   '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">'
-    +     ic('clock',14)+'<span class="num">'+esc(s.date+' '+s.time)+'</span></span>'
-    + '</div>'
-    + lines
-    + '</div>';
+    +   fact('shopping-cart','<span class="num">'+esc(s.po)+'</span>')
+    +   fact('map-pin', esc(T(s.loc,s.locZh)))
+    +   fact('user', esc(T(s.by,s.byZh)))
+    +   fact('clock','<span class="num">'+esc(s.date+' '+s.time)+'</span>')
+    + '</div>' + lines + '</div>';
 }
 
-function receivedTab(){
-  const shown = SESSIONS.filter(sessionMatches);
-  const chips = '<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">'
+function poRow(p, opt){
+  opt = opt || {};
+  const word = p.status==='Requested' ? T('Draft','草稿')
+             : p.status==='Delivered' ? T('Received','已收货')
+             :                          T('Ordered','已下单');
+  return '<button class="row" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">'
+    + '<span class="rowico">'+ic('shopping-cart',18)+'</span>'
+    + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'
+    +   '<span style="display:flex;align-items:baseline;gap:8px">'
+    +     '<span class="num" style="font-size:15px;font-weight:500;flex:none">'+esc(p.po)+'</span>'
+    +     '<span style="font-size:15px;min-width:0;color:var(--text-secondary);overflow:hidden;'
+    +       'text-overflow:ellipsis;white-space:nowrap">'+esc(T(p.who,p.whoZh))+'</span></span>'
+    +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
+    +     'text-overflow:ellipsis;white-space:nowrap">'
+    +     esc(T(p.loc,p.locZh))+' · '+p.lines+' '+T('lines','项')+' · '
+    +     T('arrives','到货')+' '+esc(T(p.arrives,p.arrivesZh))+'</span>'
+    +   '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'
+    +     (opt.tag?typeTag('po'):'')+pill('clear', word)+'</span></span>'
+    + '<span style="color:var(--text-secondary);display:flex;padding-top:4px">'+ic('chevron-right',18)+'</span>'
+    + '</button>';
+}
+
+/* ── Search + filter chips + session rows ─────────────────────────────── */
+const RCV_FILTERS = [
+  { id:'all',     en:'All',     zh:'全部'   },
+  { id:'issues',  en:'Issues',  zh:'有异常' },
+  { id:'short',   en:'Short',   zh:'短少'   },
+  { id:'damaged', en:'Damaged', zh:'破损'   },
+  { id:'over',    en:'Over',    zh:'多收'   },
+];
+function sessionMatches(s){
+  const q = state.rcvQuery.trim().toLowerCase();
+  if (q) {
+    const hay = [s.sup, s.supZh, s.loc, s.locZh, s.by, s.byZh, s.po, s.date].join(' ').toLowerCase();
+    if (hay.indexOf(q) === -1) return false;
+  }
+  const f = state.rcvFilter;
+  if (f === 'all') return true;
+  if (f === 'issues') return s.flags.length > 0;
+  return s.flags.indexOf(f) !== -1;
+}
+function searchField(){
+  return '<div style="padding:0 16px 12px;position:relative">'
+    + '<span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);'
+    +   'display:flex;pointer-events:none">'+ic('search',17)+'</span>'
+    + '<input value="'+esc(state.rcvQuery)+'" style="padding-left:42px" '
+    +   'placeholder="'+T('Supplier, location or person','供应商、门店或收货人')+'" '
+    +   'oninput="APP.cmd(\'rcvQuery\', this.value)">'
+    + '</div>';
+}
+function filterChips(){
+  return '<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">'
     + RCV_FILTERS.map(f => {
         const n = f.id==='all' ? SESSIONS.length
                 : f.id==='issues' ? SESSIONS.filter(s=>s.flags.length).length
@@ -868,100 +835,166 @@ function receivedTab(){
           + '<span class="c">'+n+'</span></button>';
       }).join('')
     + '</div>';
+}
+const emptyNote = () => '<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">'
+  + T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')+'</div>';
 
-  const rows = shown.map((s, i) => {
-    const open = state.rcvOpen === s.id;
-    const head = '<button class="row" onclick="APP.cmd(\'rcvOpen\',\''+s.id+'\')" '
-      + 'style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">'
-      + '<span class="rowico" style="'+(s.flags.length?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)')+'">'
-      +   ic(s.flags.length?'triangle-alert':'circle-check',18)+'</span>'
-      + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">'
-      +   '<span style="display:flex;align-items:baseline;gap:8px">'
-      +     '<span class="num" style="font-size:15px;font-weight:500;flex:none">'+esc(s.date)+'</span>'
-      +     '<span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      +       esc(T(s.sup,s.supZh))+'</span></span>'
-      +   '<span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;'
-      +     'text-overflow:ellipsis;white-space:nowrap">'
-      +     esc(T(s.loc,s.locZh))+' · '+esc(T(s.by,s.byZh))+' · '
-      +     s.lines+' '+T(s.lines===1?'line':'lines','项')+'</span>'
-      +   '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'+flagPills(s.flags)+'</span></span>'
-      + '<span style="color:var(--text-secondary);display:flex;padding-top:4px">'
-      +   ic(open?'chevron-up':'chevron-down',18)+'</span>'
-      + '</button>';
-    return (i ? '<div class="sep"></div>' : '') + head + (open ? sessionDetail(s) : '');
-  }).join('');
-
-  const empty = '<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">'
-    + T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')+'</div>';
-
-  return pageHead({
-      title:T('Receiving','收货'),
-      status:(LANG==='en' ? '6 deliveries in the last fortnight · 3 with issues'
-                          : '近两周 6 次收货 · 3 次有异常') })
-    + '<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;margin:14px 16px 12px">'
-    +   '<button style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;'
-    +     'font-size:13.5px;font-weight:500;background:transparent;color:var(--text-secondary)">'
-    +     T('To receive','待收货')+' <span class="num" style="color:var(--text-secondary)">2</span></button>'
-    +   '<button style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;'
-    +     'font-size:13.5px;font-weight:500;background:var(--surface-card);color:var(--text-primary);'
-    +     'box-shadow:0 1px 3px rgba(17,26,43,.08)">'
-    +     T('Received','已收货')+' <span class="num" style="color:var(--text-secondary)">6</span></button>'
-    + '</div>'
-    + '<div style="padding:0 16px 12px;position:relative">'
-    +   '<span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);'
-    +     'display:flex;pointer-events:none">'+ic('search',17)+'</span>'
-    +   '<input value="'+esc(state.rcvQuery)+'" style="padding-left:42px" '
-    +     'placeholder="'+T('Supplier, location or person','供应商、门店或收货人')+'" '
-    +     'oninput="APP.cmd(\'rcvQuery\', this.value)">'
-    + '</div>'
-    + chips
+function sessionsList(opt){
+  const shown = SESSIONS.filter(sessionMatches);
+  return searchField() + filterChips()
     + '<div style="padding:12px 16px 28px">'
-    +   (shown.length ? '<div class="list">'+rows+'</div>' : empty)
+    + (shown.length
+        ? '<div class="list">'+shown.map((s,i) => (i?'<div class="sep"></div>':'')+sessionRow(s,opt)).join('')+'</div>'
+        : emptyNote())
     + '</div>';
 }
 
-/* ══ Captions + chrome ════════════════════════════════════════════════════ */
-const LAYOUTS = {
-  A:{ title:'A — Full list',
-      body:'All three suppliers expanded on one scrolling page. Everything is visible at once and the submit sits at the bottom. Longest page, fewest taps to reach any single line.' },
-  B:{ title:'B — One supplier at a time',
-      body:'Supplier groups start collapsed. Tapping one opens it as a focused sub-screen that must be confirmed before the next. Green Farm is already confirmed — open Wong Dry Goods, then Sun Oils.' },
-  C:{ title:'C — Exception-first',
-      body:'Assumes the delivery is correct. One tap records the whole PO. “Something is wrong” opens a line picker, and only the ticked lines get an editor. Fastest for the common case, slowest for a messy one.' },
+/* ══ OPTION 1 — the receiving list lives inside Purchasing ════════════════ */
+function option1(){
+  const seg = (k, label, n) => '<button onclick="APP.cmd(\'p1seg\',\''+k+'\')" '
+    + 'style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;'
+    + 'font-weight:500;background:'+(state.p1seg===k?'var(--surface-card)':'transparent')+';'
+    + 'color:'+(state.p1seg===k?'var(--text-primary)':'var(--text-secondary)')+';'
+    + 'box-shadow:'+(state.p1seg===k?'0 1px 3px rgba(17,26,43,.08)':'none')+'">'
+    + label+' <span class="num" style="color:var(--text-secondary)">'+n+'</span></button>';
+
+  /* Open and All list ORDERS, the way Purchasing does today. Received is the
+     one segment whose rows are deliveries. Every row is tagged with what it
+     is, in all three segments, because the difference only shows up when you
+     move between them — and that is the whole thing being weighed here. */
+  const poList = ps => '<div style="padding:12px 16px 28px"><div class="list">'
+    + ps.map((p,i) => (i?'<div class="sep"></div>':'')+poRow(p,{tag:true})).join('')
+    + '</div></div>';
+
+  const body = state.p1seg === 'open' ? poList(OPEN_POS)
+             : state.p1seg === 'all'  ? poList(ALL_POS)
+             :                          sessionsList({tag:true});
+
+  return pageHead({
+      title:T('Purchasing','采购'),
+      status:(LANG==='en' ? '2 orders open · 6 deliveries in the last fortnight'
+                          : '2 张进行中 · 近两周 6 次收货') })
+    + '<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;'
+    +   'margin:14px 16px 12px">'
+    +   seg('open', T('Open','进行中'), OPEN_POS.length)
+    +   seg('received', T('Received','已收货'), SESSIONS.length)
+    +   seg('all', T('All','全部'), ALL_POS.length)
+    + '</div>' + body;
+}
+
+/* ══ OPTION 2 — the receiving list gets its own screen ════════════════════ */
+/* Reached from More. Purchasing stays where it is, for orders. */
+const MORE_ROWS = [
+  { icon:'message-square-text', en:'Inbox',      zh:'消息' },
+  { icon:'store',               en:'Sales',      zh:'销售' },
+  { icon:'trending-up',         en:'Trend',      zh:'趋势' },
+  { icon:'truck',               en:'Delivery',   zh:'配送' },
+  { icon:'receipt',             en:'Invoices',   zh:'发票' },
+  { icon:'shopping-cart',       en:'Purchasing', zh:'采购' },
+  { icon:'package',             en:'Receiving',  zh:'收货', isNew:true },
+];
+function option2More(){
+  const rows = MORE_ROWS.map((r,i) => (i?'<div class="sep"></div>':'')
+    + '<button class="row" '+(r.isNew?'onclick="APP.cmd(\'o2screen\',\'receiving\')"':'')+' '
+    + 'style="'+(r.isNew?'background:var(--unseen);box-shadow:inset 4px 0 0 var(--sage)':'')+'">'
+    + '<span class="rowico">'+ic(r.icon,18)+'</span>'
+    + '<span style="flex:1;font-size:15.5px;'+(r.isNew?'font-weight:500':'')+'">'+esc(T(r.en,r.zh))+'</span>'
+    + (r.isNew ? pill('success', T('New','新')) : '')
+    + '<span style="color:var(--text-secondary);display:flex">'+ic('chevron-right',18)+'</span>'
+    + '</button>').join('');
+  return pageHead({ title:T('More','更多') })
+    + '<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:10px">'
+    +   '<span class="eyebrow">'+T('Operations','运营')+'</span>'
+    +   '<div class="list">'+rows+'</div>'
+    +   '<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;padding:0 2px">'
+    +     T('Purchasing stays where it is, for the orders themselves. Receiving is the new row.',
+              '“采购”保持不变,仍用于采购单本身。“收货”是新增的一行。')+'</span>'
+    + '</div>';
+}
+function option2(){
+  if (state.o2screen === 'more') return option2More();
+  const seg = (k, label, n) => '<button onclick="APP.cmd(\'o2seg\',\''+k+'\')" '
+    + 'style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;'
+    + 'font-weight:500;background:'+(state.o2seg===k?'var(--surface-card)':'transparent')+';'
+    + 'color:'+(state.o2seg===k?'var(--text-primary)':'var(--text-secondary)')+';'
+    + 'box-shadow:'+(state.o2seg===k?'0 1px 3px rgba(17,26,43,.08)':'none')+'">'
+    + label+' <span class="num" style="color:var(--text-secondary)">'+n+'</span></button>';
+
+  /* No type tags here: each segment holds one kind of record, so saying which
+     kind on every row would be noise. That absence is the option's argument. */
+  const body = state.o2seg === 'toreceive'
+    ? '<div style="padding:12px 16px 28px"><div class="list">'
+      + OPEN_POS.map((p,i) => (i?'<div class="sep"></div>':'')+poRow(p)).join('')
+      + '</div></div>'
+    : sessionsList();
+
+  /* The back link is live: it goes to More, which is how this screen is
+     reached in the first place. */
+  return '<div style="border-bottom:1px solid var(--border-default);padding:16px 10px 14px 16px">'
+    + '<button onclick="APP.cmd(\'o2screen\',\'more\')" style="display:flex;align-items:center;gap:6px;'
+    +   'margin:0 0 6px -4px;padding:4px;background:none;border:none;cursor:pointer;font-family:inherit;'
+    +   'font-size:13px;font-weight:500;color:var(--text-secondary)">'+ic('chevron-left',16,2)+T('More','更多')+'</button>'
+    + '<div style="display:flex;align-items:center;gap:12px;min-height:38px">'
+    +   '<h1 style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;'
+    +     'line-height:1.3">'+T('Receiving','收货')+'</h1></div>'
+    + '<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);'
+    +   'line-height:1.35">'
+    +   (LANG==='en' ? '2 waiting on a delivery · 6 taken in this fortnight' : '2 张待收货 · 近两周收货 6 次')
+    + '</p></div>'
+    + '<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;'
+    +   'margin:14px 16px 12px">'
+    +   seg('toreceive', T('To receive','待收货'), OPEN_POS.length)
+    +   seg('received', T('Received','已收货'), SESSIONS.length)
+    + '</div>' + body;
+}
+
+/* ══ Captions ═════════════════════════════════════════════════════════════ */
+const NAV_COPY = {
+  opt1:{
+    title:'Option 1 — inside Purchasing',
+    body:'Purchasing keeps its Open / Received / All segments. Open and All list purchase orders, as they do today; '
+       + 'the Received segment lists receiving sessions instead. Tap through all three to see the noun change '
+       + 'underneath you.',
+    cost:'Costs the operator: <b>one screen, two kinds of record, and counts that do not reconcile.</b> 2 open + 6 '
+       + 'received ≠ 8 all, because Open and All are counting orders and Received is counting deliveries. RPO-0002 '
+       + 'sits in All as an order and in Received as the delivery taken against it — two rows, same event.' },
+  opt2:{
+    title:'Option 2 — its own screen',
+    body:'A Receiving screen with To receive / Received. To receive lists orders still waiting on a delivery; Received '
+       + 'lists past sessions. Reached from a new row in More — tap the back link to see it there. Purchasing stays a '
+       + 'separate screen for the orders themselves.',
+    cost:'Costs the operator: <b>a second place to look.</b> Two screens to learn instead of one, and an order and the '
+       + 'delivery taken against it are never on the same screen — chasing a short line means going to Purchasing to '
+       + 'find the order it came from.' },
 };
 
 function renderChrome(){
-  const seg = ['A','B','C'].map(k => {
-    const on = state.layout === k;
-    const sub = k==='A' ? T('Full list','完整列表')
-              : k==='B' ? T('One supplier','逐个供应商')
-              :           T('Exception-first','异常优先');
-    return '<button class="segb '+(on?'on':'')+'" onclick="APP.cmd(\'layout\',\''+k+'\')">'
-      + '<b>'+k+'</b><span>'+esc(sub)+'</span></button>';
-  }).join('');
+  const seg = [['opt1','1',T('In Purchasing','在采购内')],['opt2','2',T('Own screen','独立页面')]]
+    .map(([k,n,label]) => '<button class="segb '+(state.nav===k?'on':'')+'" onclick="APP.cmd(\'nav\',\''+k+'\')">'
+      + '<b>'+T('Option','方案')+' '+n+'</b><span>'+esc(label)+'</span></button>').join('');
   document.getElementById('segRoot').innerHTML = seg;
-  document.getElementById('langBtn').textContent  = LANG === 'en' ? 'EN' : '中';
+  document.getElementById('langBtn').textContent = LANG === 'en' ? 'EN' : '中';
   /* Labelled with what the NEXT tap gives you, not with what it is called. */
-  document.getElementById('resetBtn').textContent = state.pristine
-    ? T('Scenario','情景') : T('Untouched','未填写');
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  document.getElementById('themeBtn').textContent = dark ? '☀' : '☾';
-  document.getElementById('chromeTitle').textContent = T('Receiving · layout mockup','收货 · 布局样稿');
+  document.getElementById('resetBtn').textContent = state.pristine ? T('Scenario','情景') : T('Untouched','未填写');
+  document.getElementById('themeBtn').textContent =
+    document.documentElement.getAttribute('data-theme') === 'dark' ? '☀' : '☾';
+  document.getElementById('chromeTitle').textContent = T('Receiving · mockup','收货 · 样稿');
+  document.getElementById('navLabel').textContent =
+    T('Second screen below — where the receiving list lives','下方第二屏 — 收货列表放在哪里');
 }
 
 function render(){
   renderChrome();
-  const L = LAYOUTS[state.layout];
-  document.getElementById('caption').innerHTML =
-    '<h2>'+esc(L.title)+'</h2><p>'+esc(L.body)+'</p>';
-  document.getElementById('frame').innerHTML =
-      state.layout === 'A' ? layoutA()
-    : state.layout === 'B' ? layoutB()
-    :                        layoutC();
-  document.getElementById('rcvCaption').innerHTML =
-    '<h2>The Received tab</h2><p>Past receiving sessions, not purchase orders — one row per delivery actually taken in. '
-    + 'The 29 Aug row is expanded to show a session detail with a correction on it.</p>';
-  document.getElementById('rcvFrame').innerHTML = receivedTab();
+  document.getElementById('capReceive').innerHTML =
+    '<h2>The receive screen</h2><p>All suppliers expanded, one scrolling page, submit at the bottom. '
+    + 'Every line is prefilled with the ordered quantity — staff only touch what is wrong. '
+    + 'The carton mark at the end of each quantity row records damage and keeps the count on show.</p>';
+  document.getElementById('frameReceive').innerHTML = receiveScreen();
+
+  const c = NAV_COPY[state.nav];
+  document.getElementById('capNav').innerHTML =
+    '<h2>'+esc(c.title)+'</h2><p>'+esc(c.body)+'</p><div class="cost">'+c.cost+'</div>';
+  document.getElementById('frameNav').innerHTML = state.nav === 'opt1' ? option1() : option2();
 }
 
 /* ══ Commands ═════════════════════════════════════════════════════════════ */
@@ -973,8 +1006,7 @@ const APP = {
     const parts = typeof arg === 'string' ? arg.split('|') : [];
     switch(name){
 
-      case 'layout': state.layout = arg; state.done = null; window.scrollTo({top:0, behavior:'smooth'}); break;
-      case 'lang':   LANG = LANG === 'en' ? 'zh' : 'en'; break;
+      case 'lang': LANG = LANG === 'en' ? 'zh' : 'en'; break;
       case 'theme': {
         const d = document.documentElement;
         const next = d.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -983,25 +1015,19 @@ const APP = {
         break;
       }
       /* Flips between the scenario and the pristine prefilled state, so the
-         "before anyone has touched it" screen can be seen too. Driven by an
-         explicit flag rather than by deep-comparing state against the seed —
-         that version needed two taps to get anywhere once anything had been
-         edited, because the first tap only put the scenario back. */
-      case 'reset': {
+         "before anyone has touched it" screen can be seen too. */
+      case 'reset':
         state.pristine = !state.pristine;
         state.lines = state.pristine ? pristineLines() : seedLines();
-        state.done = null; state.bOpen = null; state.bDone = state.pristine ? {} : { gf:true };
-        state.cMode = 'ready'; state.cFlagged = {}; state.locOpen = false;
+        state.done = false; state.locOpen = false; state.dmgOpen = null;
         break;
-      }
 
       case 'locToggle': state.locOpen = !state.locOpen; break;
       case 'loc':       state.loc = Number(arg); state.locOpen = false; break;
 
       case 'recv': {
-        const s = st(parts[0]);
+        const s = st(parts[0]), l = lineById(parts[0]);
         s.recv = clamp(s.recv + Number(parts[1]), 0, 999);
-        const l = lineById(parts[0]);
         s.dmg = Math.min(s.dmg, s.recv);            // can't damage what did not arrive
         if (s.recv >= l.ordered) s.reason = null;   // no shortfall, no reason needed
         break;
@@ -1013,65 +1039,31 @@ const APP = {
         if (s.recv >= l.ordered) s.reason = null;
         break;
       }
-      case 'dmg': {
-        const s = st(parts[0]);
-        s.dmg = clamp(s.dmg + Number(parts[1]), 0, s.recv);
-        break;
-      }
-      case 'dmgSet': {
-        const s = st(parts[0]);
-        s.dmg = clamp(whole(parts[1]), 0, s.recv);
-        break;
-      }
-      case 'reason': {
-        const s = st(parts[0]);
-        s.reason = s.reason === parts[1] ? null : parts[1];
-        break;
-      }
+      /* One counter open at a time — two half-filled steppers down a long list
+         is a way to lose track of which line you are counting. */
+      case 'dmgOpen': state.dmgOpen = state.dmgOpen === arg ? null : arg; break;
+      case 'dmg':     { const s = st(parts[0]); s.dmg = clamp(s.dmg + Number(parts[1]), 0, s.recv); break; }
+      case 'dmgSet':  { const s = st(parts[0]); s.dmg = clamp(whole(parts[1]), 0, s.recv); break; }
+
+      case 'reason': { const s = st(parts[0]); s.reason = s.reason === parts[1] ? null : parts[1]; break; }
 
       case 'grp': state.groups[arg] = !state.groups[arg]; break;
-      /* One tap for the supplier who simply did not turn up. */
+      /* One tap for the supplier who simply did not turn up, and one to undo it. */
       case 'supNone':
         linesOf(arg).forEach(l => { const s = st(l.id); s.recv = 0; s.dmg = 0; s.reason = 'not_sent'; });
+        state.dmgOpen = null;
         break;
       case 'supAll':
         linesOf(arg).forEach(l => { const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null; });
         break;
 
-      case 'bOpen':    state.bOpen = arg; window.scrollTo({top:0, behavior:'smooth'}); break;
-      case 'bConfirm': state.bDone[arg] = true; state.bOpen = null; window.scrollTo({top:0, behavior:'smooth'}); break;
+      case 'record': state.done = true; break;
+      case 'again':  state.done = false; state.lines = seedLines(); state.pristine = false; state.dmgOpen = null; break;
 
-      /* Entering the fix step MAKES GOOD ON WHAT THE PICKER PROMISED: every
-         line the operator did not tick is recorded as arrived in full, right
-         then, so the summary can never quietly carry a problem on a line they
-         just said was fine. Flagged lines keep whatever is already on them. */
-      case 'cMode':
-        if (arg === 'fix') {
-          LINES.forEach(l => {
-            if (state.cFlagged[l.id]) return;
-            const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null;
-          });
-        }
-        state.cMode = arg;
-        break;
-      case 'cFlag':   state.cFlagged[arg] = !state.cFlagged[arg]; break;
-      case 'cUnflag': {
-        state.cFlagged[arg] = false;
-        const l = lineById(arg), s = st(arg);
-        s.recv = l.ordered; s.dmg = 0; s.reason = null;
-        if (!Object.keys(state.cFlagged).some(k => state.cFlagged[k])) state.cMode = 'ready';
-        break;
-      }
-      case 'cAllOk':
-        LINES.forEach(l => { const s = st(l.id); s.recv = l.ordered; s.dmg = 0; s.reason = null; });
-        state.done = 'C';
-        break;
-
-      case 'record': state.done = state.layout; break;
-      case 'again':
-        state.done = null; state.lines = seedLines(); state.bOpen = null; state.bDone = { gf:true };
-        state.cMode = 'ready'; state.cFlagged = {};
-        break;
+      case 'nav':      state.nav = arg; break;
+      case 'p1seg':    state.p1seg = arg; break;
+      case 'o2seg':    state.o2seg = arg; break;
+      case 'o2screen': state.o2screen = arg; break;
 
       case 'rcvFilter': state.rcvFilter = arg; break;
       case 'rcvQuery':  state.rcvQuery = arg; break;
@@ -1080,7 +1072,7 @@ const APP = {
     render();
     /* The search field is rebuilt on every render, so put the caret back. */
     if (name === 'rcvQuery') {
-      const el = document.querySelector('#rcvFrame input');
+      const el = document.querySelector('#frameNav input');
       if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
     }
   }
