@@ -268,21 +268,26 @@ const LINES = [
   { id:'l5', sup:'so',  en:'Coconut oil', zh:'椰子油', sku:'OIL-CCO', ordered:12, unit:'L'  },
 ];
 /* Fixed list. No free text — the point of a reason CODE.
+   THE IDS ARE THE SERVER'S, VERBATIM (routes/purchases.js RECEIPT_REASONS,
+   stored in po_line_items.receipt_reason). They read as over-long next to the
+   labels beside them and they are not free to be tidied: the screen this mocks
+   sends these strings, and a prettier local set would be a second vocabulary
+   to translate at exactly the boundary where a typo is silent.
    DAMAGE IS NOT ON THIS LIST. A reason explains why the received count came in
    BELOW what was ordered; damage is a count of what arrived broken, which can
    happen on a line that is not short at all (Chickpeas, below). Having the word
    in both places made the two facts look like one. */
 const REASONS = [
-  { id:'short',    en:'Short delivery', zh:'少送'   },
-  { id:'wrong',    en:'Wrong item',     zh:'错货'   },
-  { id:'not_sent', en:'Not sent',       zh:'未发货' },
+  { id:'short_delivery', en:'Short delivery', zh:'少送'   },
+  { id:'wrong_item',     en:'Wrong item',     zh:'错货'   },
+  { id:'not_sent',       en:'Not sent',       zh:'未发货' },
 ];
 
 /* The scenario: Green Farm and Wong Dry Goods arrived, Sun Oils did not;
    Mint is 1 short; 2 Chickpeas came in damaged. */
 function seedLines(){
   return {
-    l1:{ recv:4,  dmg:0, reason:'short'    },
+    l1:{ recv:4,  dmg:0, reason:'short_delivery' },
     l2:{ recv:3,  dmg:0, reason:null       },
     l3:{ recv:25, dmg:0, reason:null       },
     l4:{ recv:20, dmg:2, reason:null       },
@@ -357,8 +362,8 @@ const SESSIONS = [
 /* The one expanded session's line detail, including a correction. */
 const S2_LINES = [
   { en:'Red lentils', zh:'红扁豆', ordered:25, recv:25, dmg:0, unit:'kg', reason:null },
-  { en:'Chickpeas',   zh:'鹰嘴豆', ordered:20, recv:18, dmg:0, unit:'kg', reason:'short' },
-  { en:'Split peas',  zh:'豌豆瓣', ordered:10, recv:9,  dmg:0, unit:'kg', reason:'short',
+  { en:'Chickpeas',   zh:'鹰嘴豆', ordered:20, recv:18, dmg:0, unit:'kg', reason:'short_delivery' },
+  { en:'Split peas',  zh:'豌豆瓣', ordered:10, recv:9,  dmg:0, unit:'kg', reason:'short_delivery',
     correction:{ fromWho:'Shun', fromWhoZh:'阿顺', from:7, toWho:'Jing', toWhoZh:'阿静', to:9,
                  at:'29 Aug 11:40',
                  why:'Miscounted — two sacks were behind the pallet',
