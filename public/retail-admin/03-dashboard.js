@@ -1916,14 +1916,20 @@ function tdRecapHeadPaint() {
   if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
 }
 
-// True when this operator's dashboard shows NO business money — warehouse and
-// the delivery roles (dispatch / customer-service). Money-gating rides the
-// RELIABLE role string, never the fail-open cap check: a ¥ must never leak on a
-// null-caps session, so this mirrors the money-card CSS gate, not caps. (This
-// gates REVENUE framing — "N paid — ¥1,240" — and the fold's amounts. It does
-// NOT touch the refund/invoice Needs-you cards, whose ¥ is the operational value
-// CS acts on, not the business's takings.)
-function tdRecapNoMoney() { return ['warehouse', 'dispatch', 'customer_service'].includes(dashPos()); }
+// True when this operator's dashboard shows NO business money. Rides the
+// CAPABILITY (`reports:view`) through canStrict — the fail-CLOSED predicate, so
+// an unresolved cap set means no ¥, same as the money-card CSS gate this mirrors.
+//
+// It used to name three roles. That made a rename a leak: a role called anything
+// but warehouse / dispatch / customer_service started printing takings with no
+// permission having changed, and a tenant-facing role editor is being built.
+// The role string was chosen originally because caps had two states and null
+// meant "allowed"; canStrict is the third state that made this move safe.
+//
+// (This gates REVENUE framing — "N paid — ¥1,240" — and the fold's amounts. It
+// does NOT touch the refund/invoice Needs-you cards, whose ¥ is the operational
+// value CS acts on, not the business's takings.)
+function tdRecapNoMoney() { return !canStrict('reports:view'); }
 
 // Aggregate the recap window's events into calm one-line rows, each with a
 // breathing Dusk dot — Dusk means "the system did this", and this card is the
@@ -1962,11 +1968,22 @@ function tdRecapRender() {
   const wh = dashPos() === 'warehouse';
   const delivery = ['dispatch', 'customer_service'].includes(dashPos());
   // paid — owner's money / warehouse's queue; the delivery roles don't handle it.
+  //
+  // The ¥ branch is chosen by noMoney, NOT by wh. Those used to be the same
+  // question — noMoney was true for exactly warehouse + dispatch + CS, so "not
+  // warehouse and not delivery" implied "may see money". Now that money is a
+  // capability and the wording is still a role, they are two questions and this
+  // row has to ask the money one. Asking `wh` here would print the takings to
+  // every cap-less operator who isn't literally the warehouse — including a
+  // null-caps session, which is the leak this whole gate exists to stop.
+  // wh still picks the WORDING, which is all it was ever good for.
   if (paid.length && !delivery) {
-    if (wh) push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} entered your queue`,
-                 `<b>${paid.length}</b> 笔订单进入待处理队列`);
-    else    push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
-                 `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
+    if (noMoney) push(wh ? `<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} entered your queue`
+                         : `<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid`,
+                      wh ? `<b>${paid.length}</b> 笔订单进入待处理队列`
+                         : `<b>${paid.length}</b> 笔订单已支付`);
+    else push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
+              `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
   }
   // dispatched — went out for delivery; relevant to everyone.
   if (dispatched.length) push(`<b>${dispatched.length}</b> ${dispatched.length === 1 ? 'order' : 'orders'} dispatched`,

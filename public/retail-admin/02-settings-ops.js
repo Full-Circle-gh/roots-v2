@@ -1643,11 +1643,17 @@ let ENTITLEMENTS = {};
     // DARK in Phase 0/1: owner/admin/staff resolve to the full set and an older
     // session sends caps:null (treated as all-allowed), so nothing hides yet.
     setCaps(u.caps);
-    // Dashboards by position — the role picks a fixed dashboard view (see
-    // 03-dashboard.js dashPos*). body.pos-* drives the CSS that removes the
-    // money blocks for warehouse / customer_service / dispatch; RA_STORE_LOCK
-    // pins a store-scoped operator (store_manager) to their own store on every
-    // dashboard pull. Full-access roles land on pos-default (unchanged view).
+    // Dashboards by position — the role picks a fixed dashboard LAYOUT (which
+    // board you get: see 03-dashboard.js dashPos*). Full-access roles land on
+    // pos-default. RA_STORE_LOCK pins a store-scoped operator (store_manager)
+    // to their own store on every dashboard pull.
+    //
+    // body.pos-* NO LONGER decides whether revenue is shown. That moved onto
+    // the capability (`reports:view` via canStrict → body.caps-reports, set by
+    // setCaps above) on 2026-08-31, because a tenant renaming a role would
+    // otherwise fall out of the hardcoded list here and start seeing takings
+    // with no permission having changed. Layout still rides the role string —
+    // that binding is its own pass. Do not put money back on it.
     const POSITIONS = ['store_manager', 'warehouse', 'customer_service', 'dispatch'];
     window.RA_POS = POSITIONS.includes(u.role) ? u.role : 'default';
     document.body.classList.add('pos-' + window.RA_POS.replace(/_/g, '-'));

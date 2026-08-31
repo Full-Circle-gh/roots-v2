@@ -10851,21 +10851,36 @@
    the operator's role (02-settings-ops bootstrap).
    · owner (pos-default) is the 4-card glance: Recap · Needs you ·
      Today · Customers. The operational cards are hidden for it.
-   · warehouse / customer-service / dispatch see NO revenue: the
-     Recap, the Orders + Customers blocks are removed — the "Needs you"
-     card (whose sub-cards are cap-gated in 03-dashboard dashCardWants /
-     tdAttnRender) IS their dashboard. They keep the block that matches
+   · warehouse / customer-service / dispatch keep the block that matches
      their job: warehouse gets Inventory + On-the-way/Drafts, dispatch
      gets On-the-road/Ready + Delivery, customer-service gets Delivery.
+     The "Needs you" card (whose sub-cards are cap-gated in 03-dashboard
+     dashCardWants / tdAttnRender) IS their dashboard. Whether they see
+     REVENUE is no longer decided here — see the money block below.
    · store-manager keeps the full pulse but locked to their store.
    ════════════════════════════════════════════════════════════════ */
-/* The Recap is now shown to every role (role-filtered + money-free in
-   tdRecapRender for warehouse / dispatch / customer-service), so it is not in
-   this hide list. The money blocks (Today, Customers) stay hidden for them. */
-body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
-body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
-body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
-/* role-restricted views are fixed — the Arrange control is hidden for them */
+/* ── MONEY PRESENCE IS NOT A ROLE ─────────────────────────────────────
+   The Today + Customers blocks and the Reports footer link used to be hidden
+   by naming three roles here (pos-warehouse / -customer-service / -dispatch).
+   That made a RENAME into a revenue leak: a role called anything else fell
+   through to pos-default and started printing takings, with no permission
+   having changed. Money now rides the capability — `reports:view`, resolved
+   per operator — and the role string decides layout only (the rules below).
+
+   DEFAULT HIDDEN, revealed by body.caps-reports, which applyCapGates()
+   (01-core.js) sets from canStrict('reports:view'). The direction matters and
+   is the whole point of the strict predicate: these blocks are in the static
+   HTML, so they paint before /api/backend/me resolves. Absent-until-permitted
+   means an unresolved session shows nothing; permitted-until-denied would
+   flash the takings and then take them away, which is the same leak with extra
+   steps. Do not invert this into `body.no-money`.
+
+   The Recap is shown to every role (money-free via tdRecapNoMoney, which is on
+   the same capability), so it is not in this list. */
+body:not(.caps-reports) #tab-dashboard [data-money] { display: none; }
+
+/* role-restricted views are fixed — the Arrange control is hidden for them.
+   LAYOUT, not money: this stays on the role string with the rules below. */
 body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, body.pos-dispatch .td-arrange-btn, body.pos-store-manager .td-arrange-btn {
   display: none;
 }

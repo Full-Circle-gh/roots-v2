@@ -1720,7 +1720,11 @@
            bottom edge so a row of cards ends flat whatever the tallest one
            holds. When this card is the one alone in its row it spans, and the
            four metrics run one row across (.td-span .bn-mgrid). -->
-      <div class="td-block" data-block="orders">
+      <!-- data-money: revenue. Hidden unless the operator holds reports:view
+           (canStrict — fail-CLOSED), via body.caps-reports in retail-admin.css.
+           NOT on the role string any more: a renamed role used to fall through
+           to pos-default and start printing takings. -->
+      <div class="td-block" data-block="orders" data-money>
         <button class="bn-hide" onclick="dashArrangeHide('orders')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div class="bn-card">
           <div class="bn-inner">
@@ -1774,7 +1778,8 @@
            Row one is the two counts, row two the two quality numbers. Sessions
            is the only denominator here; "New today" carries no sub-line because
            the number it used to quote is the cell beside it. -->
-      <div class="td-block" data-block="customers">
+      <!-- data-money: spend per customer / lifetime value. Same gate as Today. -->
+      <div class="td-block" data-block="customers" data-money>
         <button class="bn-hide" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div class="bn-card">
           <div class="bn-inner">
@@ -1952,7 +1957,9 @@
       <div class="td-tray-row" id="td-tray-row"></div>
     </div>
 
-    <div class="td-foot">
+    <!-- data-money: it points at Reports, which is reports:view's own screen —
+         an operator without the cap has no page to land on. -->
+    <div class="td-foot" data-money>
       <button type="button" class="td-foot-link" onclick="goTab('reports')">The full numbers live in Reports · 完整数据请见「报表」</button>
     </div>
 

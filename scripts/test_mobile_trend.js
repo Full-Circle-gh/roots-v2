@@ -14,10 +14,15 @@
  * of {bucket, orders, revenue, visits} — was already being fetched for a single
  * day; this asks for a window and draws the shape plus four numbers.
  *
- * The money gate is the Recap's, and it is asserted hardest: a warehouse
- * account must not be offered Revenue, must not DEFAULT to it, and must not see
- * a money figure anywhere on the screen. A tile that shows money for half a
- * second before hiding it has already shown it.
+ * The money gate is the Recap's, and it is asserted hardest: an account without
+ * `reports:view` must not be offered Revenue, must not DEFAULT to it, and must
+ * not see a money figure anywhere on the screen. A tile that shows money for
+ * half a second before hiding it has already shown it.
+ *
+ * That gate is a CAPABILITY, not a role name (it was `state.pos` until
+ * 2026-08-31), and it has THREE inputs, not two: holds the cap, resolved
+ * without it, and never resolved at all. The last is the one a role string
+ * could not express and the one that leaks — it is asserted here too.
  *
  * Needs a Chromium. Set CHROME_BIN, or let it find Playwright's.
  */
@@ -36,13 +41,19 @@ const WEEK = `state.trendKey='7'; state.trend=[
   {bucket:'2026-08-22',orders:20,revenue:2000,visits:400},
   {bucket:'2026-08-23',orders:10,revenue:1000,visits:200}];`;
 
+// The money gate, as the app now reads it: a resolved cap set that holds
+// reports:view, or a resolved one that does not. Both are DIFFERENT from an
+// unresolved set (state.caps === null), which the third gate case covers.
+const MONEY    = `state.caps=new Set(['reports:view','dashboard:view','orders:view']);`;
+const NO_MONEY = `state.caps=new Set(['dashboard:view','orders:view']);`;
+
 const STUB = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{trend:[]}})}}); };`;
 const asked = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
 
 const CASES = [
-  ['the window, and what is in it', WEEK + `APP.cmd('push','trend');`, [
+  ['the window, and what is in it', MONEY + WEEK + `APP.cmd('push','trend');`, [
     ['the total is the sum of the days', `txt('content').includes('¥9,000')`],
     // The day a shop remembers, and the only point on the line the eye asks
     // about — so it is named, with its date.
@@ -56,14 +67,14 @@ const CASES = [
     // promise every other phone screen makes about its desktop half.
     ['and says where the real charts are', `txt('content').includes('on desktop')`],
   ]],
-  ['a line, drawn zero-based', WEEK + `APP.cmd('push','trend');`, [
+  ['a line, drawn zero-based', MONEY + WEEK + `APP.cmd('push','trend');`, [
     // An area fill that does not start at zero turns a modest week into a
     // cliff. y(0) must be the bottom of the box.
     ['there is a line',  `document.querySelectorAll('#content svg path').length >= 2`],
     ['with no axes to be unreadable at 390px', `document.querySelectorAll('#content svg text').length === 0`],
   ]],
 
-  ['switching metric switches the numbers', WEEK + `APP.cmd('push','trend'); APP.cmd('trendMetric','orders');`, [
+  ['switching metric switches the numbers', MONEY + WEEK + `APP.cmd('push','trend'); APP.cmd('trendMetric','orders');`, [
     ['orders, not money',    `txt('content').includes('90') && !txt('content').includes('¥9,000')`],
     ['the head follows too', `txt('content').includes('90 orders · last 7 days')`],
   ]],
@@ -75,7 +86,13 @@ const CASES = [
   ]],
 
   // ── The money gate ─────────────────────────────────────────────────────
-  ['a warehouse account sees no money', `state.pos='warehouse'; ` + WEEK + `APP.cmd('push','trend');`, [
+  // Driven by the CAPABILITY, not the role string. It used to be
+  // `state.pos='warehouse'`, which stopped deciding anything the day money moved
+  // onto reports:view — a tenant renaming a role would otherwise have fallen out
+  // of a hardcoded list and started printing takings. MONEY seeds the cap;
+  // NO_MONEY seeds a resolved set without it; and the third case below seeds
+  // nothing at all, which is the state this whole gate exists for.
+  ['a warehouse account sees no money', NO_MONEY + WEEK + `APP.cmd('push','trend');`, [
     // The CHIP, not the word — the note at the bottom says "Revenue is not
     // shown on this account", which is the screen being honest about the gate
     // rather than a leak.
@@ -86,12 +103,20 @@ const CASES = [
     ['orders still are',            `txt('content').includes('Orders')`],
     ['and it says why',             `txt('content').includes('not shown on this account')`],
   ]],
-  ['dispatch too', `state.pos='dispatch'; ` + WEEK + `APP.cmd('push','trend');`, [
+  ['dispatch too', NO_MONEY + WEEK + `APP.cmd('push','trend');`, [
     ['no money anywhere', `!txt('content').includes('¥')`],
   ]],
-  ['an owner sees it', `state.pos='owner'; ` + WEEK + `APP.cmd('push','trend');`, [
+  ['an owner sees it', MONEY + WEEK + `APP.cmd('push','trend');`, [
     ['revenue is offered and shown', `txt('content').includes('Revenue') && txt('content').includes('¥9,000')`],
     ['and no gate note',             `!txt('content').includes('not shown on this account')`],
+  ]],
+  // The case the role string could never express, and the reason canStrict
+  // exists: /api/backend/me has not landed, or failed. Caps are UNKNOWN. An
+  // ordinary control would stay visible (fail-open); money must not.
+  ['caps that never resolved see no money', `state.caps=null; ` + WEEK + `APP.cmd('push','trend');`, [
+    ['no money anywhere',      `!txt('content').includes('¥')`],
+    ['revenue is not offered', `![].slice.call(document.querySelectorAll('#content button')).some(function(b){return b.innerText.trim()==='Revenue'})`],
+    ['orders still are',       `txt('content').includes('Orders')`],
   ]],
 
   ['a window with nothing in it', `state.trendKey='7'; state.trend=[]; APP.cmd('push','trend');`, [

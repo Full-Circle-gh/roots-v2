@@ -315,10 +315,18 @@ function fakeServer() {
         ACT_DIGEST=${dump(ACT_DIGEST)}, REFERRALS=${dump(REFERRALS)}, TOPUPS=${dump(TOPUPS)},
         ARCHIVED_ORDER=${dump(ARCHIVED_ORDER)},
         VOUCHERS=${dump(VOUCHERS)}, FLASH=${dump(FLASH)}, BROADCASTS=${dump(BROADCASTS)},
-        REVIEWS=${dump(REVIEWS)}, FEEDBACK=${dump(FEEDBACK)};
+        REVIEWS=${dump(REVIEWS)}, FEEDBACK=${dump(FEEDBACK)},
+        ALL_CAPS=${dump(require('../../lib/capabilities').ALL_KEYS)};
     function body(u){
+      // caps is not decoration: m.html gates its money surfaces on it
+      // (canStrict('reports:view')), so a /me without one is an operator whose
+      // caps never resolved and the phone correctly shows no revenue. Mei is
+      // the owner, and the real endpoint resolves an owner to every key
+      // (lib/operator-caps → resolveCaps), so this answers with the real list
+      // rather than a hand-typed subset that would drift the first time a
+      // capability is added.
       if(u.indexOf('/api/backend/me')>=0) return {user:{id:1,username:'mei',displayName:'Mei Chen',role:'owner',
-        tenant:{id:1,name:'Roots',entitlements:{}}}};
+        caps:ALL_CAPS, tenant:{id:1,name:'Roots',entitlements:{}}}};
       var p=u.replace(/^.*\\/api\\/retail-admin/,'');
       if(p.indexOf('/orders?')===0) return {success:true,data:ORDERS,meta:{total:31}};
       // Answers for the id that was ASKED for. It used to hand back ORDERS[0]

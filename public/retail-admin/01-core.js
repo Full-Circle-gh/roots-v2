@@ -196,15 +196,33 @@ function acMoney(n, dp) {
 //     behind tenant.rbac_enforce. The view gates; the server doesn't reject yet.
 // (An older note here claimed "everyone resolves to the FULL set, nothing hides."
 //  That was wrong and nearly cost a design — the differentiation is real.)
-// Fail-OPEN: caps is null only on a resolution hiccup or a stale session, and
-// null ⇒ all allowed. Fine for hiding actionable controls; do NOT gate anything
-// that leaks money/PII on caps alone without a reliable fallback (see the
-// dashboard's money-card presence, which stays on the role-string body.pos-* CSS).
-let CAPS = null;                                    // null = unknown ⇒ all allowed (fail-open)
-function can(key)     { return CAPS === null ? true : CAPS.has(key); }
-function canAny(keys) { return CAPS === null ? true : keys.some(k => CAPS.has(k)); }
-function _capAllows(v){ return Array.isArray(v) ? canAny(v) : can(v); }
-function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null; try { applyCapGates(); } catch (e) {} }
+// THREE states, not two, and the third is the point:
+//   • a Set          — caps are KNOWN. Both predicates read it.
+//   • null           — caps are UNKNOWN (a resolution hiccup, a stale session, a
+//                      /api/backend/me that hasn't landed or failed outright).
+//
+// UNKNOWN resolves differently depending on what is behind the gate:
+//   can() / canAny()  → ALLOW.  Fail-OPEN, and the rest of the product depends on
+//                       it: an operator must never lose a working control to a
+//                       slow fetch. Worst case is a button the server 403s once
+//                       enforcement lands.
+//   canStrict()       → DENY.   Fail-CLOSED, for money and PII only. "I don't
+//                       know yet" and "you may see the takings" are not the same
+//                       answer, and a ¥ shown for half a second has been shown.
+//
+// canStrict is what replaced the old body.pos-* role-string gate on the
+// dashboard's money blocks (2026-08-31). The reason that gate was on the role
+// string was precisely this missing third state — the role was reliable and caps
+// were not. Now they are, so money rides the capability (`reports:view`) and
+// survives a tenant renaming their roles. Do NOT reach for canStrict for an
+// ordinary control: hiding a working button on a hiccup is the failure mode
+// fail-open exists to prevent.
+let CAPS = null;                                    // null = unknown
+function can(key)      { return CAPS === null ? true : CAPS.has(key); }
+function canAny(keys)  { return CAPS === null ? true : keys.some(k => CAPS.has(k)); }
+function canStrict(key){ return CAPS === null ? false : CAPS.has(key); }
+function _capAllows(v) { return Array.isArray(v) ? canAny(v) : can(v); }
+function setCaps(list) { CAPS = Array.isArray(list) ? new Set(list) : null; try { applyCapGates(); } catch (e) {} }
 
 // Nav section (data-tab / mobile data-go) → the capability that reveals it. An
 // array means "any of these". Untracked tabs stay visible. Settings (config) is
@@ -276,10 +294,19 @@ function applyCapGates() {
     const v = el.dataset.cap.trim();
     el.style.display = _capAllows(v.includes(' ') ? v.split(/\s+/) : v) ? '' : 'none';
   });
+  // Money surfaces (#tab-dashboard [data-money]) — the fail-CLOSED gate, driven
+  // by a body class rather than an inline display, for one reason: the blocks are
+  // in the static HTML and this function first runs AFTER /api/backend/me lands.
+  // A class the page does not carry until caps are known means the default paint
+  // is HIDDEN and the reveal is the change — never the reverse. (An inline
+  // style:'' here would not work at all: it would clear the property and let the
+  // default-hidden rule win.) The CSS lives beside the old pos-* block.
+  document.body.classList.toggle('caps-reports', canStrict('reports:view'));
   // Last, because it counts what the passes above just hid.
   railSyncGroups();
 }
-window.can = can; window.canAny = canAny; window.applyCapGates = applyCapGates; window.setCaps = setCaps;
+window.can = can; window.canAny = canAny; window.canStrict = canStrict;
+window.applyCapGates = applyCapGates; window.setCaps = setCaps;
 
 // ── Payment-brand badge — small MONOCHROME chip with a WeChat / Alipay
 // mark + a single-language label. Used in the order drawer Payment tile and

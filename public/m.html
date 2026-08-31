@@ -555,6 +555,10 @@ const state = {
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* This operator's effective capabilities, from /api/backend/me. A Set once
+     they are KNOWN; null until then, and null after a failed read. The two are
+     different answers and the predicates below treat them differently. */
+  caps:null,
   /* The order sheet, when the thing that opened it was the customer record.
      detailFetch says the sheet has nothing to draw yet and must hold the
      screen; orderOverCust says which of the two sheets is on top, which
@@ -584,6 +588,28 @@ function copyText(t){
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(s) state.stack.push({route,title:s.title}); render(); }
 function pop(){ state.stack.pop(); render(); }
+
+/* ── Capabilities ──────────────────────────────────────────────────────────
+   The same three lines the desktop uses (01-core.js), and the same contract, so
+   a gate written on one surface reads the same on the other. state.caps is a Set
+   once /api/backend/me has landed and null until then — including after a failed
+   read, which is the case that matters.
+
+   UNKNOWN answers differently depending on what is behind the gate:
+     can/canAny  → ALLOW.  An operator must not lose a working control to a slow
+                   fetch. This app renders once before loadMe() resolves.
+     canStrict   → DENY.   Money and PII only. "Not known yet" is not "yes", and
+                   a ¥ shown for half a second has been shown.
+
+   Only canStrict has a caller today (recapNoMoney). can/canAny are here so the
+   next surface to need them does not invent a fourth spelling; nothing on this
+   phone is gated on them yet, and NAV IS NOT FILTERED — that is its own pass.
+   Deliberately NOT ported: applyCapGates / railSyncGroups. Those walk the
+   desktop rail's DOM after render; this app rebuilds #content from template
+   strings on every state change, so a gate here filters BEFORE render. */
+function can(key)      { return state.caps === null ? true  : state.caps.has(key); }
+function canAny(keys)  { return state.caps === null ? true  : keys.some(k=>state.caps.has(k)); }
+function canStrict(key){ return state.caps === null ? false : state.caps.has(key); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -1537,12 +1563,17 @@ function workFold(){
 
    Framing rules are the desktop's too: a gap under 25 minutes is a reload, not a
    departure, so it reads "Recently" rather than "While you were away"; the
-   window is floored at 30 minutes and capped at 7 days. And the money rows are
-   owner-only — a warehouse or dispatch account sees its own queue without the
-   revenue, exactly as tdRecapNoMoney decides on the desktop. */
+   window is floored at 30 minutes and capped at 7 days. And the money rows need
+   `reports:view` — an account without it sees its own queue without the revenue,
+   exactly as tdRecapNoMoney decides on the desktop.
+
+   This used to name three roles (warehouse / dispatch / customer_service). It
+   is a capability now, for the reason the desktop moved: a tenant renaming a
+   role would have fallen out of that list and started printing takings, with no
+   permission having changed. canStrict, not can — an unresolved cap set means
+   no money, and this app paints once before loadMe() lands. */
 const RECAP_SEEN_KEY='tacet.m.lastSeen';
-const RECAP_NO_MONEY=['warehouse','dispatch','customer_service'];
-function recapNoMoney(){ return RECAP_NO_MONEY.includes(state.pos); }
+function recapNoMoney(){ return !canStrict('reports:view'); }
 async function loadRecap(){
   if(state.recapTried) return; state.recapTried=true;
   let since=0;
@@ -1575,9 +1606,17 @@ function recapRows(){
   const delivery=state.pos==='dispatch'||state.pos==='customer_service';
   const rows=[];
   const n1=(a,one,many)=>a.length===1?one:many;
+  // The ¥ branch is chosen by noMoney, NOT by wh — the desktop's tdRecapRender
+  // carries the same fix and the same reason. The two used to be one question
+  // (noMoney was true for exactly warehouse + dispatch + CS, so "not warehouse,
+  // not delivery" implied "may see money"); now that money is a capability and
+  // the wording is still a role, asking `wh` here would print the takings to
+  // every operator without the cap who is not literally the warehouse — a
+  // null-caps session included. wh still picks the WORDING.
   if(paid.length&&!delivery){
-    rows.push(wh
-      ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
+    rows.push(noMoney
+      ? (wh ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
+            : T(paid.length+' '+n1(paid,'order','orders')+' paid', paid.length+' 笔订单已支付'))
       : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total')), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
   }
   if(disp.length) rows.push(T(disp.length+' '+n1(disp,'order','orders')+' dispatched', disp.length+' 个订单已发货'));
@@ -8377,6 +8416,12 @@ async function loadMe(){
     // preference nobody will ever honour is worse than an absent one. A
     // missing key means entitled, so the default is an empty object.
     state.ent=(u.tenant&&u.tenant.entitlements)||{};
+    // This operator's effective capabilities. The endpoint has always shipped
+    // them (routes/backend-auth.js) and this function has always thrown them
+    // away; recapNoMoney reads them now. An older session that sends no array
+    // leaves this null, which canStrict answers with "no money" — the safe way
+    // round, and the reason the early `return` above is not a hole.
+    state.caps=Array.isArray(u.caps)?new Set(u.caps):null;
     state.me={name:u.displayName||u.username||null, role:u.role||null};
   }catch(e){}
 }
