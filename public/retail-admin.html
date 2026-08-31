@@ -4623,7 +4623,21 @@
                      before their build lists exist. Step 4 revisits it. -->
                 <section class="pdb-card">
                   <div class="pdb-fields">
-                    <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-cost-source" style="margin-top:4px;display:none;"></div><div id="pd-cost-alert" style="margin-top:6px;display:none;"></div><div class="muted" id="pd-margin" style="margin-top:4px;"></div></div>
+                    <div class="field"><label class="stacked">Cost ¥ · 成本 <span class="muted" style="font-weight:400;">(what we pay)</span></label><input type="number" id="pd-cost" min="0" step="0.01" placeholder="—"><div class="muted" id="pd-cost-source" style="margin-top:4px;display:none;"></div><div id="pd-cost-alert" style="margin-top:6px;display:none;"></div><div class="muted" id="pd-margin" style="margin-top:4px;"></div>
+                      <!-- The operator's own tag, not a computed one. §31 rule 9 says an
+                           empty packaging list means UNKNOWN rather than zero, and the cost
+                           above cannot say which it is: a typed ¥12 that includes the jar
+                           and a typed ¥12 that forgot it are the same number. So the person
+                           who knows says so here, and the products list marks the margin
+                           wherever it is ticked — the figure still shows, it simply stops
+                           claiming to be the whole story.
+
+                           CN PENDING. No sourced Chinese exists for this sentence, and
+                           composing one is forbidden (§30 rule 3 / the locked-vocabulary
+                           rule: copy from the source, never compose). English on both
+                           halves until a translation is confirmed, exactly as the build
+                           list's own strings do. -->
+                      <label class="pd-cost-flag" title="Ticked, the products list marks this product’s margin so nobody reads it as the full picture. Untick it once the cost holds everything — contents and packaging both."><input type="checkbox" id="pd-cost-incomplete"> This cost is not complete</label></div>
                   </div>
                 </section>
               </aside>

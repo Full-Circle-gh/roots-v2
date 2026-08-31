@@ -20395,7 +20395,11 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
 // is also the exact column set written on restore, so capture and restore agree.
 const VERSION_COLUMNS = [
   'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
-  'sell_price', 'compare_at_price', 'unit_cost', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
+  // cost_incomplete travels WITH unit_cost, never apart from it: the tag is a
+  // statement about that exact figure, so a restore that rolled the cost back
+  // to a version recorded before the packaging was added would leave the tag
+  // cleared against a cost that is short again.
+  'sell_price', 'compare_at_price', 'unit_cost', 'cost_incomplete', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
   'is_market', 'is_restock_only', 'is_batch_made', 'oos_policy', 'status', 'is_published',
@@ -20786,6 +20790,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // ship_from_supplier, but persisted independently so toggling it back on is
   // one write.
   if ('supplier_paused' in body) { sets.push('supplier_paused = ?'); params.push(body.supplier_paused ? 1 : 0); }
+  // The operator's own "this cost is not the whole cost" tag (§31 rule 9 —
+  // unknown is not zero). Set and cleared by hand in the product editor; the
+  // system writes it exactly once, in the database.js seed, and never again.
+  // It says nothing about WHAT is missing and does not change unit_cost — the
+  // stored figure is still the stored figure, it is simply marked as partial
+  // wherever it is shown.
+  if ('cost_incomplete' in body) { sets.push('cost_incomplete = ?'); params.push(body.cost_incomplete ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
   if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
@@ -20862,6 +20873,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            cost_incomplete,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(id);
@@ -21175,6 +21187,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            cost_incomplete,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -21882,6 +21895,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     nutrition, bundle, bundle_items, bundle_mode, tags,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
                     is_batch_made, oos_policy, ship_from_supplier, supplier_paused, use_block_design,
+                    -- The operator's "this cost is not the whole cost" tag. Carried on
+                    -- every row because the Margin cell marks the figure with it, and
+                    -- a mark that arrived only when the editor had been opened would
+                    -- be absent on exactly the rows nobody has looked at.
+                    cost_incomplete,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks

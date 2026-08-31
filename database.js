@@ -4346,6 +4346,48 @@ try {
   // scripts/postgres-full-copy/plan.json; that migration was cancelled and the
   // census deleted, so REAL yuan alongside its neighbours is the live convention.)
   addColumn('store_products', 'unit_cost', 'REAL');
+  // ── "This cost is not the whole cost" ────────────────────────────────────
+  //
+  // The operator's own tag, set by hand in the product editor and shown as a
+  // mark beside the margin in the products list. 1 = what unit_cost holds is
+  // known to be missing something. See the three states below.
+  //
+  // WHY A STORED FLAG RATHER THAN A DERIVED ONE. §31 rule 9 (an empty packaging
+  // list means UNKNOWN, not zero) is about a fact the system usually cannot
+  // see. Most of this catalogue carries a cost somebody typed, and no query can
+  // tell a typed ¥12 that already includes the jar from a typed ¥12 that forgot
+  // it — deriving the answer would mean guessing it on every one of them. The
+  // person who typed the figure knows, so they say so, and the system stores
+  // what they said instead of inferring what they meant.
+  //
+  // (No count is stated here on purpose. §31's own "65 products" is recorded as
+  // UNSOURCED in docs/packaging-findings.md finding 19, which carries the
+  // read-only queries and the three choices that must be pinned before either
+  // is run. A second unsourced number would not be an improvement.)
+  //
+  // IT IS SEEDED ONCE AND THEN NEVER WRITTEN BY THE SYSTEM AGAIN — see the
+  // store_products_cost_incomplete_seed_v1 migration below, which ticks it for
+  // the one case that IS provable (a build list holding contents and not one
+  // packaging line). Ash's call: a tag that starts empty says "every cost is
+  // complete" on day one, which is the flattering default rule 9 exists to
+  // stop. After the seed the column belongs to the operator alone.
+  //
+  // NULLABLE, WITH THREE STATES, AND THE THIRD ONE IS LOAD-BEARING.
+  //   NULL — nobody has answered. The state every product starts in.
+  //   0    — answered: this cost holds everything it should. §31 rule 9's
+  //          "there must be an explicit way to say NO PACKAGING", so the
+  //          reseller selling loose goods is CORRECT rather than unfinished.
+  //   1    — answered: something is missing, mark the margin.
+  // A DEFAULT 0 would collapse the first two into one value, and the seed below
+  // could then never tell a product it has not reached yet from one the
+  // operator has deliberately cleared — it would re-tick the cleared one on any
+  // re-run. Unknown is not zero here for the same reason it is not zero for
+  // unit_cost three lines up.
+  //
+  // Both NULL and 0 render identically today (no mark) — the list only ever
+  // marks an explicit 1. The distinction is for the seed and for anyone later
+  // measuring how much of the catalogue has actually been through the pass.
+  addColumn('store_products', 'cost_incomplete', 'INTEGER');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
@@ -5698,6 +5740,63 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_product ON product_build_lines(product_id);
   CREATE INDEX IF NOT EXISTS idx_product_build_lines_ingredient ON product_build_lines(ingredient_id);
 `);
+
+// ── One-off: seed cost_incomplete from the build lists we can read ───────────
+//
+// The tag is the operator's from here on, but it must not START empty: an
+// untouched flag reads as "every cost on this catalogue is complete", which is
+// the flattering default §31 rule 9 was written against. So it is ticked once,
+// for the one shape the system can PROVE is missing something.
+//
+// THE RULE, AND ONLY THIS RULE: a product whose build list holds contents and
+// NOT ONE packaging line. Its cost is real, its margin publishes, and the jar,
+// the label and the sticker are provably not in it. Everything else is left
+// UNANSWERED (NULL) rather than asserted complete — the seed declines to
+// answer, which is not the same as answering "fine":
+//
+//   * A product with NO build list is left alone. Its cost was typed, and a
+//     typed ¥12 that includes the jar and a typed ¥12 that forgot it are the
+//     same number — Ash's call, made explicitly: do not guess on those. They
+//     are tickable by hand in the editor, one at a time, by whoever knows.
+//   * A packaging-ONLY list is left alone. lib/product-build-cost.js already
+//     refuses to publish a cost for it, so it shows an em dash and claims
+//     nothing; its problem is missing contents, which this tag does not name.
+//   * A list already carrying packaging is left alone. It is complete as far
+//     as anything here can tell.
+//
+// KIND IS THE TEST AND IT MIRRORS lib/product-build-cost.js EXACTLY —
+// item_kind = 'packaging' is packaging, everything else (including a line whose
+// material was deleted, which has no kind to read) is contents. Two readings of
+// "is this line packaging" would drift, and the seed would then tick products
+// the cost module thinks are fine.
+//
+// Guarded by _migrations, and idempotent on its own terms as well: it touches
+// only rows where nobody has answered (`cost_incomplete IS NULL`), so
+// re-running it by hand after clearing the guard cannot re-tick a product the
+// operator has since cleared — a cleared tag is a stored 0, which this skips.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('store_products_cost_incomplete_seed_v1');
+  const haveCol = db.pragma('table_info(store_products)').some(c => c.name === 'cost_incomplete');
+  if (!done && haveCol) {
+    const info = db.prepare(`
+      UPDATE store_products
+         SET cost_incomplete = 1
+       WHERE cost_incomplete IS NULL
+         AND EXISTS (
+               SELECT 1 FROM product_build_lines pbl
+                 LEFT JOIN ingredients i ON i.id = pbl.ingredient_id
+                WHERE pbl.product_id = store_products.id
+                  AND COALESCE(i.item_kind, 'food') != 'packaging')
+         AND NOT EXISTS (
+               SELECT 1 FROM product_build_lines pbl
+                 JOIN ingredients i ON i.id = pbl.ingredient_id
+                WHERE pbl.product_id = store_products.id
+                  AND i.item_kind = 'packaging')
+    `).run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('store_products_cost_incomplete_seed_v1');
+    console.log(`[store_products] cost_incomplete seed: ${info.changes} product(s) tagged — a build list with contents and no packaging line`);
+  }
+} catch (e) { console.error('[store_products] cost_incomplete seed failed:', e); }
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

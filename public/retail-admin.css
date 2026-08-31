@@ -2781,6 +2781,39 @@
      about one sales channel, not the product's headline number. */
   .pa-mgn-ch > b { color: var(--td-text2); }
   .pa-col-muted { color: var(--td-text2); }
+  /* ── The "cost is not complete" mark, beside the margin it qualifies ──
+     The operator's tag (store_products.cost_incomplete), painted where the
+     too-good number is actually read. Amber, because it is attention rather
+     than failure — the figure is still the figure and still shown; it has
+     simply stopped claiming to be the whole story.
+
+     A flex row rather than a floated glyph, so the mark sits to the LEFT of the
+     figures in this right-aligned column: the percentages keep the column's own
+     edge and stay aligned with the unmarked rows above and below them, which is
+     the whole reason the column is right-aligned. `align-items: center` centres
+     the one mark against a two-line cell — it qualifies the cost both figures
+     are drawn from, not either line on its own. */
+  .pa-mgn-flag {
+    display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;
+  }
+  /* 13px against the figure's own size: legible at a glance down a 200-row
+     list, and small enough that a marked row does not out-weigh the number it
+     is marking. Its own line-height of 0 keeps it off the row's height, so a
+     marked row is exactly as tall as an unmarked one. */
+  .pa-mgn-warn { display: inline-flex; color: var(--warn); line-height: 0; flex: 0 0 auto; }
+  .pa-mgn-warn svg { width: 13px; height: 13px; display: block; }
+  /* The same tag in the editor, under the Cost field it describes. A plain
+     checkbox line at the caption step — it belongs to the field above it and
+     must not read as a setting of its own. */
+  .pd-cost-flag {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    margin-top: 6px; font-size: 13px; color: var(--td-text2);
+  }
+  .pd-cost-flag input { width: 14px; height: 14px; cursor: pointer; }
+  /* Ticked, the line itself says so — the label stops being a quiet caption and
+     joins the mark it puts on the list, so the editor and the list agree on
+     screen and not only in the data. */
+  .pd-cost-flag:has(input:checked) { color: var(--warn); font-weight: 500; }
   /* The Meituan line under the editor's Cost field, matching the list cell:
      same measure, one step quieter than the list margin above it. */
   #pd-margin .pd-margin-ch { color: var(--td-text2); margin-top: 2px; }
