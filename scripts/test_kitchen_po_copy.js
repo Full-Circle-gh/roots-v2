@@ -32,12 +32,32 @@ const fs   = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const DB_FILE = path.join(ROOT, 'data', 'roots.db');
-// A FRESH database every run — this test seeds fixed ids and asserts on exact
-// PO numbers, so a leftover file from a previous run would poison it.
-for (const f of [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm']) { try { fs.unlinkSync(f); } catch {} }
 
-const db = require(path.join(ROOT, 'database.js'));
+// ── the fixture database ──────────────────────────────────────────────────
+// NEVER data/roots.db. scripts/ is a deployed directory (see the allowlist in
+// .github/workflows/deploy.yml), so this file exists on the production box, and
+// a test that reached for the app's real database path would be one stray
+// `node` away from destroying it.
+//
+// It still has to be a database database.js BUILT, though — the point of the
+// copy_from_po_id assertions is that the migration ran. So database.js is copied
+// into a scratch directory and required from there: it opens `__dirname/data`,
+// which is now the scratch copy's own. The scratch dir sits inside the repo so
+// that `require('better-sqlite3')` still resolves by walking up to node_modules.
+const SCRATCH = path.join(ROOT, `.test-scratch-${process.pid}`);
+fs.rmSync(SCRATCH, { recursive: true, force: true });
+fs.mkdirSync(SCRATCH, { recursive: true });
+fs.copyFileSync(path.join(ROOT, 'database.js'), path.join(SCRATCH, 'database.js'));
+fs.copyFileSync(path.join(ROOT, 'schema.sql'),  path.join(SCRATCH, 'schema.sql'));
+const cleanup = () => { try { fs.rmSync(SCRATCH, { recursive: true, force: true }); } catch {} };
+process.on('exit', cleanup);
+
+const db = require(path.join(SCRATCH, 'database.js'));
+// The router says `require('../database')`. Point that at the scratch handle,
+// so nothing in this process can open the real one.
+const realDbPath = require.resolve(path.join(ROOT, 'database.js'));
+require.cache[realDbPath] = { id: realDbPath, filename: realDbPath, path: ROOT,
+                              loaded: true, children: [], paths: [], exports: db };
 
 // ── stubs, primed before the router is required ───────────────────────────
 function stub(rel, exports) {
