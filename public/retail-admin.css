@@ -12428,8 +12428,19 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
   #tab-materials-record .mat-freebox { margin-top: 16px; }
 
-  #tab-materials-record .mat-fincat-wrap { position: relative; }
-  /* .mat-fincat-menu is NOT scoped under #tab-materials-record — matFinCatMenuEl()
+  /* The two combo fields — Finance category, and Supplier. The chevron sits
+     inside the field, so the input reserves room for it on the right. */
+  #tab-materials-record .mat-combo-wrap { position: relative; }
+  #tab-materials-record .mat-combo-wrap .mat-input { padding-right: 36px; }
+  #tab-materials-record .mat-combo-caret {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px;
+    background: transparent; color: var(--td-text2); cursor: pointer; }
+  #tab-materials-record .mat-combo-caret:hover { background: var(--td-raised); color: var(--td-text); }
+  #tab-materials-record .mat-combo-caret svg { width: 15px; height: 15px; display: block; }
+
+  /* .mat-combo-menu is NOT scoped under #tab-materials-record — comboMenuEl()
      (18-materials.js) appends it straight to <body>, so this must be a bare
      selector or it silently matches nothing. Two separate ancestor effects
      forced that:
@@ -12445,16 +12456,37 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
           Only hoisting the element out to <body>, outside any
           stacking-context ancestor, fixes the paint order too.
      Position (left/top/width) is set in JS from the input's
-     getBoundingClientRect() in matFinCatReposition. */
-  .mat-fincat-menu {
+     getBoundingClientRect() in comboPlace. The list SCROLLS: the live
+     supplier book runs to ~80 names, and a menu that only shows what fits is
+     a menu that hides most of them. */
+  .mat-combo-menu {
     position: fixed; z-index: 400;
-    max-height: 220px; overflow-y: auto; background: var(--td-surface, #fff);
+    max-height: 300px; overflow-y: auto; background: var(--td-surface, #fff);
     border: 1px solid var(--td-border); border-radius: 8px;
     box-shadow: 0 8px 22px rgba(18,22,26,.12); padding: 4px; }
-  .mat-fincat-opt {
+  .mat-combo-opt {
+    display: flex; align-items: baseline; gap: 8px;
     padding: 7px 10px; border-radius: 6px; font: 400 13.5px var(--f-sans);
     color: var(--td-text); cursor: pointer; }
-  .mat-fincat-opt:hover { background: var(--td-raised); }
+  /* .on is the keyboard-highlighted row — it has to read the same as hover,
+     or arrowing down through the list shows nothing moving. */
+  .mat-combo-opt:hover, .mat-combo-opt.on { background: var(--td-raised); }
+  .mat-combo-opt .lead { min-width: 0; overflow-wrap: anywhere; }
+  /* The other language half, muted, reading straight on from the first —
+     the same treatment as .pu2-suggest-opt .trail on the Purchasing screens,
+     because these are the same control and a supplier row must not look like
+     two different things depending on which screen you found it on. */
+  .mat-combo-opt .trail { font-size: 12.5px; color: var(--td-text2); }
+  .mat-combo-opt.none { color: var(--td-text2); }
+  .mat-combo-opt.act { color: var(--td-dusk); border-top: 1px solid var(--td-border);
+    margin-top: 4px; padding-top: 9px; border-radius: 0 0 6px 6px; }
+
+  /* Under the supplier field: the button that makes a name real, and the
+     warning that says it isn't yet. */
+  #tab-materials-record .mat-supacts { display: flex; gap: 8px; margin-top: 12px; }
+  #tab-materials-record .mat-supnote:empty { display: none; }
+  #tab-materials-record .mat-supnote { margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+  #tab-materials-record .mat-supnote .warn { color: var(--td-amber-ink); }
 
   /* The derived cost, and — when it cannot be derived — the reason why. A blank
      here would read as "zero", which is the one thing it never means. */

@@ -19,6 +19,17 @@
 // picker had something to show it opened out of sight and the chip still read
 // as dead. It now paints into the clicked line's own row.
 //
+// SECTIONS 9-11 cover the ORDER's own supplier on step 1, and sections 1-2 the
+// line box, over the change that made both search boxes. Each was a native
+// control carrying the whole book — a <select> on step 1, an <input list=…> +
+// <datalist> on the line — with no way to type at either, and both popups drawn
+// by the OS combobox widget, which some embedding webviews position against the
+// wrong edge of the window. They are the menu the Invoices fields already use:
+// drawn by us, scrollable, filtered over the stored name and both language
+// halves. Where they differ from Invoices is what lands in the box — the whole
+// stored name, because these two are read straight back off the DOM into the
+// order, and half a name names nobody the supplier screens can group with.
+//
 // Nothing here asserts against what we meant to render — every check reads the
 // HTML back out of the DOM stub, the way test_kitchen_po_picker.js does.
 //
@@ -37,24 +48,38 @@ const vm   = require('vm');
 // recording innerHTML is the supplier box — the module reads its .value back,
 // so a test can type into it.
 const nodes = new Map();
+function makeNode(id) {
+  return {
+    id, innerHTML: '', value: '', style: {}, hidden: false, children: [],
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    focus() {}, scrollIntoView() {}, addEventListener() {}, setAttribute() {},
+    getBoundingClientRect: () => ({ left: 40, top: 300, right: 340, bottom: 330, width: 300, height: 30 }),
+    insertAdjacentHTML(_pos, html) { this.innerHTML += html; },
+    appendChild(child) { if (child && child.id) nodes.set(child.id, child); this.children.push(child); return child; },
+    closest: () => null, querySelector: () => null, querySelectorAll: () => [],
+  };
+}
 function node(id) {
-  if (!nodes.has(id)) {
-    nodes.set(id, {
-      id, innerHTML: '', value: '', style: {},
-      classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-      focus() {}, scrollIntoView() {}, addEventListener() {},
-      insertAdjacentHTML(_pos, html) { this.innerHTML += html; },
-      closest: () => null, querySelector: () => null, querySelectorAll: () => [],
-    });
-  }
+  if (!nodes.has(id)) nodes.set(id, makeNode(id));
   return nodes.get(id);
 }
+// The body carries 'feat-production' (the tenant switch that puts materials in
+// the picker) AND takes appendChild: both supplier boxes hang their search menu
+// straight off <body>, so a stub that cannot receive it cannot see the list.
+const body = makeNode('body');
+body.classList = { add() {}, remove() {}, toggle() {}, contains: c => c === 'feat-production' };
+// Closing the picker takes its input out of the DOM with it, so the next
+// lookup finds NOTHING and the paint that follows makes it again. The stub
+// keeps every node it ever made, so `gone` models that one absent lookup —
+// which is the whole difference between "the box is empty" and "there is no
+// box", and renderLines' half-typed-name capture reads it.
+const gone = new Set();
 const document = {
-  getElementById: node,
+  getElementById: (id) => { if (gone.delete(id)) return null; return node(id); },
+  createElement: () => makeNode(''),
   querySelectorAll: () => [],
   addEventListener() {},
-  // 'feat-production' is the tenant switch that puts materials in the picker.
-  body: { classList: { contains: c => c === 'feat-production' } },
+  body,
 };
 
 // ── the server, faked ─────────────────────────────────────────────────────
@@ -94,9 +119,11 @@ async function api(p, opts) {
   return { success: true, data: [] };
 }
 
+const toasts = [];
 const sandbox = {
   document, console, setTimeout, clearTimeout, Promise, Date, Math, JSON, Set, Map, Array, Object, isFinite,
-  api, toast: () => {},
+  innerHeight: 900, innerWidth: 1200,
+  api, toast: (msg, kind) => toasts.push({ msg, kind }),
   // The module registers document- and window-level listeners at load.
   addEventListener: () => {}, removeEventListener: () => {},
   escapeHtml: s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -122,6 +149,12 @@ const topSlot = () => node('pu2-suppop').innerHTML;
 // The picker, as it actually reaches the operator: a row of the lines table.
 const picker  = () => { const m = lines().match(/<tr class="pu2-supedit">[\s\S]*?<\/tr>/); return m ? m[0] : ''; };
 const type    = v => { node('pu2-supname').value = v; };
+// The search menu both supplier boxes draw for themselves, hung off <body>.
+const menuEl  = () => (nodes.has('pu2-suggest-menu') ? nodes.get('pu2-suggest-menu') : null);
+const menu    = () => { const m = menuEl(); return m && !m.hidden ? m.innerHTML : ''; };
+// Stand where the browser stands after the picker closed: its box is gone, so
+// the next lookup finds nothing (see `gone` above).
+const forgetBox = id => { node(id).value = ''; gone.add(id); };
 
 async function main() {
   await sandbox.puInit();
@@ -136,8 +169,29 @@ async function main() {
   await sandbox.puLineSup(0);
   ok(picker().includes('pu2-supname'), 'the chip opens a picker even with no history to show');
   ok(topSlot() === '', 'and it opens in the line, not in the slot at the top of the card');
-  ok(picker().includes('Nut House 坚果屋') && picker().includes('Precious Soe'), 'the supplier book is offered');
-  ok(!picker().includes('Retired Ltd'), 'a disabled supplier is not offered');
+  // The book used to be dumped into the row as a <datalist>, whose popup the
+  // OS draws — the same popup the Invoices fields moved away from. It is the
+  // search menu now: nothing in the row until the box is opened, and then the
+  // whole book, filtered by what is typed.
+  ok(!picker().includes('<datalist'), 'the row no longer carries a native datalist');
+  ok(picker().includes('role="combobox"'), 'the box is a combobox');
+  sandbox.puSuggestOpen('pu2-supname', 'linesuppliers');
+  ok(menu().includes('Nut House') && menu().includes('Precious Soe'), 'the supplier book is offered');
+  ok(!menu().includes('Retired Ltd'), 'a disabled supplier is not offered');
+  type('preci');
+  sandbox.puSuggestOpen('pu2-supname', 'linesuppliers');
+  ok(menu().includes('Precious Soe') && !menu().includes('Nut House'), 'typing narrows it');
+  type('坚果');
+  sandbox.puSuggestOpen('pu2-supname', 'linesuppliers');
+  ok(menu().includes('Nut House'), 'and the Chinese half of a glued name finds it');
+  // A pick has to leave the WHOLE stored name in the box: puLineSupSave writes
+  // whatever the box holds straight onto the line, and half a name names
+  // nobody the supplier screens can group with.
+  const opt = menu().match(/data-v="([^"]*)"[^>]*data-label="([^"]*)"/);
+  ok(!!opt && opt[1] === 'Nut House 坚果屋' && opt[2] === 'Nut House 坚果屋',
+     'the row carries the whole stored name as both value and label');
+  sandbox.puSuggestPick(opt[1], opt[2]);
+  ok(node('pu2-supname').value === 'Nut House 坚果屋', 'and picking puts it in the box whole');
   type('  Nut House 坚果屋  ');
   sandbox.puLineSupSave();
   ok(lines().includes('>Nut House 坚果屋 <'), 'a typed name lands on the line, trimmed');
@@ -145,6 +199,7 @@ async function main() {
   ok(/value="0"/.test(lines()), 'a typed name sets no price — we have no figure for a supplier we never bought from');
 
   console.log('\n2. the chip is a toggle, and the name can be taken off again');
+  forgetBox('pu2-supname');
   await sandbox.puLineSup(0);
   ok(picker().includes('value="Nut House 坚果屋"'), 'reopening prefills the name the line carries');
   await sandbox.puLineSup(0);
@@ -208,6 +263,55 @@ async function main() {
   const items = saved.length ? saved[0].body.items : [];
   ok(items.length === 2 && items[0].supplier_name === 'Bean Bros' && items[1].supplier_name === 'Bean Bros',
      'each line carries its own supplier_name onto the wire');
+
+  // ── the ORDER's own supplier, on step 1 ─────────────────────────────────
+  // Same defect as the line box and the two Invoices fields: it was a <select>
+  // carrying the whole book, unsearchable, drawn by the OS. Its rule differs
+  // in one way — empty is a real answer here ("mixed / one-off"), and a name
+  // that is nobody is not, because the <select> it replaced could never say
+  // one and every supplier screen groups on the stored string.
+  console.log('\n9. the order’s own supplier is a search box too');
+  // A fresh order with a line on it — section 8 placed the last one, and an
+  // order with nothing on it would be refused by the save for that instead.
+  sandbox.puNewOrder();
+  sandbox.puWizNext(2);
+  await sandbox.puPick(340);
+  sandbox.puWizStep(1);
+  const step1 = () => node('pu2-wizbody').innerHTML;
+  ok(!/<select[^>]*id="pu2-w-supplier"/.test(step1()), 'it is no longer a <select>');
+  ok(!step1().includes('<option value="Nut House 坚果屋"'), 'the book is not dumped into the markup');
+  ok(/id="pu2-w-supplier"[\s\S]*?role="combobox"/.test(step1()), 'it is a combobox');
+  node('pu2-w-supplier').value = '';
+  sandbox.puSuggestOpen('pu2-w-supplier', 'posuppliers');
+  ok(menu().includes('Nut House') && menu().includes('Precious Soe'), 'the book is offered');
+  ok(!menu().includes('Retired Ltd'), 'a disabled supplier is not');
+  node('pu2-w-supplier').value = '坚果';
+  sandbox.puSuggestOpen('pu2-w-supplier', 'posuppliers');
+  ok(menu().includes('Nut House') && !menu().includes('Precious Soe'), 'and 中文 narrows it');
+  const poOpt = menu().match(/data-v="([^"]*)"[^>]*data-label="([^"]*)"/);
+  sandbox.puSuggestPick(poOpt[1], poOpt[2]);
+  ok(node('pu2-w-supplier').value === 'Nut House 坚果屋', 'a pick fills the box with the whole stored name');
+  sandbox.puWizNext(2);
+  ok(node('pu2-wizbody').innerHTML.includes('<b>Nut House 坚果屋</b>'), 'and step 2 recaps the order under it');
+
+  console.log('\n10. a name that is nobody stops there rather than being written as one');
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Totally Made Up Co';
+  toasts.length = 0;
+  sandbox.puWizNext(2);
+  ok(toasts.length === 1 && toasts[0].kind === 'err' && /pick one from the list/i.test(toasts[0].msg),
+     'the operator is told to pick from the list');
+  ok(step1().includes('id="pu2-w-supplier"'), 'and the wizard stays on step 1');
+  saved.length = 0;
+  await sandbox.puSaveDraft();
+  ok(saved.length === 0, 'saving from there is refused too — no order goes out under a supplier nobody has');
+
+  console.log('\n11. empty still means mixed / one-off');
+  node('pu2-w-supplier').value = '';
+  toasts.length = 0;
+  sandbox.puWizNext(2);
+  ok(!toasts.length, 'an empty box is not an error');
+  ok(node('pu2-wizbody').innerHTML.includes('<b>none</b>'), 'the recap says the order has no supplier');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
