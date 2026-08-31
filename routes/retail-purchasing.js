@@ -654,6 +654,18 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
     po.store_name_en = s?.name_en || null;
     po.store_name_cn = s?.name_cn || null;
   }
+  // The `search` above already reaches into po_line_items, so an order can
+  // match on a product nothing on its row mentions — the reader is then told
+  // "this one matched" and left to open it to find out why. Send back the
+  // lines that actually matched so the row can name them. Only computed when
+  // there is a search; an unsearched list pays nothing.
+  if (search) {
+    const like = `%${search}%`;
+    const lines = db.prepare(`SELECT name_en, name_cn, sku FROM po_line_items
+       WHERE po_id = ? AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)
+       ORDER BY sort_order, id LIMIT 4`);
+    for (const po of pos) po.matched_lines = lines.all(po.id, like, like, like);
+  }
   res.json({ success: true, data: pos });
 });
 
@@ -767,6 +779,19 @@ router.get('/api/retail-admin/receiving/deliveries', requireRetailAdmin, (req, r
     if (flag === 'issues' && !d.flags.length) return false;
     if (flag !== 'all' && flag !== 'issues' && d.flags.indexOf(flag) === -1) return false;
     if (!q) return true;
+    // WHAT ARRIVED IS THE QUESTION THIS SEARCH IS USUALLY ASKED. Somebody wants
+    // to know when the mint came in and how much of it — not which supplier
+    // they should have thought of first. Matching only the header fields left
+    // that answerable one purchase order at a time, which is the same as not
+    // answerable. The lines are already loaded by decorateDelivery, so this
+    // costs nothing but the comparison.
+    //
+    // The matching lines travel back with the row, so the list can say WHICH
+    // product it matched instead of making the reader open every result to
+    // find out why it is there.
+    d.matched_lines = d.lines.filter(l =>
+      [l.name_en, l.name_cn, l.sku].filter(Boolean).join(' ').toLowerCase().indexOf(q) !== -1);
+    if (d.matched_lines.length) return true;
     const hay = [d.po_number, d.actor_label, d.store_name_en, d.store_name_cn, ...d.suppliers]
       .filter(Boolean).join(' ').toLowerCase();
     return hay.indexOf(q) !== -1;

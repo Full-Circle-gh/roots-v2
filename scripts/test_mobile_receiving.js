@@ -72,6 +72,11 @@ const DETAIL = JSON.stringify({
         received_at: '2026-08-29 11:40:00', actor_label: 'Jing' }] },
   ],
 });
+const DELIVS_ONE = JSON.stringify({
+  id: 91, po_id: 3, po_number: 'RPO-0003', received_at: '2026-08-30 08:40:00', line_count: 2,
+  actor_label: 'Shun Lai', store_name_en: 'Tianhe', store_name_cn: '天河',
+  suppliers: ['Green Farm'], flags: ['short'],
+});
 const SEEN = `state.rcvTried=true; state.rcvDeliv=${DELIVS}; state.rcvSeg='received';
   APP.cmd('push','receiving');`;
 
@@ -179,6 +184,36 @@ const CASES = [
       `txt('content').includes('Jing changed this to 9')`],
     ['and says why there is nothing before it',
       `txt('content').includes('before deliveries were kept')`],
+  ]],
+
+  // The complaint this search exists to answer: "which delivery brought the
+  // mint?" Before this, the haystack was supplier / store / person only, so the
+  // answer was to open purchase orders one at a time.
+  ['searching Received by product', `state.rcvTried=true; state.rcvSeg='received'; state.rcvQ='mint';
+     state.rcvDeliv=[Object.assign(${DELIVS_ONE}, {matched_lines:[{name_en:'Mint',name_cn:'薄荷',sku:'HRB-MNT'}]})];
+     APP.cmd('push','receiving');`, [
+    ['the delivery that carried it is listed', `txt('content').includes('Green Farm')`],
+    ['and the row NAMES the product, so nothing has to be opened',
+      `txt('content').includes('Mint')`],
+    ['the box says products are searchable',
+      `!!document.querySelector('#mRcvQ') && /Product/.test(document.querySelector('#mRcvQ').placeholder)`],
+  ]],
+
+  ['To receive has its own search', `state.rcvToTried=true; state.rcvSeg='toreceive';
+     state.rcvTo=[{id:3,po_number:'RPO-0003',supplier:'Green Farm',status:'Ordered',line_count:5,
+       store_name_en:'Tianhe',store_name_cn:'天河',delivery_date:'2026-09-02',
+       matched_lines:[{name_en:'Mint',name_cn:'薄荷',sku:'HRB-MNT'}]}];
+     state.rcvToQ='mint'; APP.cmd('push','receiving');`, [
+    ['there is a search box at all', `!!document.querySelector('#mRcvToQ')`],
+    ['it says a product or SKU will do', `/Product|SKU/.test(document.querySelector('#mRcvToQ').placeholder)`],
+    ['the order bringing it is listed', `txt('content').includes('RPO-0003')`],
+    ['and the matching product is named on the row', `txt('content').includes('Mint')`],
+  ]],
+
+  ['a product nothing is bringing', `state.rcvToTried=true; state.rcvSeg='toreceive';
+     state.rcvTo=[]; state.rcvToQ='saffron'; APP.cmd('push','receiving');`, [
+    ['says so plainly', `txt('content').includes('No order on its way has that')`],
+    ['and does not read as an empty warehouse', `!txt('content').includes('Nothing on its way')`],
   ]],
 
   ['nothing received yet', `state.rcvTried=true; state.rcvDeliv=[]; state.rcvSeg='received';
