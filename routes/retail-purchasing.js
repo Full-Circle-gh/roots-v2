@@ -1337,6 +1337,61 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requir
   res.json({ success: true, no_invoice_expected: flag });
 });
 
+// ── Attributing lines to a supplier 指定供应商 ───────────────────────────────
+// The Invoices screen groups by the supplier chain (line → PO header →
+// ingredient master → "未指定 Unspecified"), and everything that falls all the
+// way through lands in the Unspecified group. That group could be described
+// but not fixed: the screen said "set a supplier on these lines first" and
+// offered nowhere to do it. The order wizard only reopens DRAFTS, and the
+// lines sitting there are on placed POs — most of them kitchen-scope, which
+// this admin never opens at all. So the instruction was unfollowable.
+//
+// THE WRITE IS AT LINE LEVEL, deliberately. Stamping po.supplier instead would
+// re-attribute every other blank line on the same order too, because the
+// header sits AHEAD of the ingredient master in the chain — a line grouped
+// today under its item's master supplier would silently move. The line's own
+// supplier_name is the most specific link in that chain, so it moves exactly
+// the lines that were picked and nothing else.
+//
+// The name must already be one this tenant uses — a supplier on the master, or
+// a name already carried by one of its POs. Grouping keys on the string, so a
+// typo here would not fail: it would quietly open a second, near-identical
+// supplier group.
+router.put('/api/retail-admin/purchasing/lines/supplier', requireRetailAdmin, express.json(), (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
+  const supplier = String((req.body && req.body.supplier) || '').trim().slice(0, 120);
+  if (!supplier) return res.status(400).json({ success: false, error: 'supplier_required' });
+  const ids = [...new Set((Array.isArray(req.body && req.body.line_ids) ? req.body.line_ids : [])
+    .map(n => parseInt(n, 10)).filter(n => n > 0))];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'lines_required' });
+  if (ids.length > 400) return res.status(400).json({ success: false, error: 'too_many_lines' });
+
+  const known = db.prepare(
+    `SELECT 1 FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?
+      UNION ALL
+     SELECT 1 FROM purchase_orders WHERE TRIM(supplier) = ? AND COALESCE(tenant_id,1) = ?
+      UNION ALL
+     SELECT 1 FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+      WHERE TRIM(pli.supplier_name) = ? AND COALESCE(po.tenant_id,1) = ?
+     LIMIT 1`).get(supplier, tid, supplier, tid, supplier, tid);
+  if (!known) return res.status(400).json({ success: false, error: 'unknown_supplier' });
+
+  const upd = db.prepare(`UPDATE po_line_items SET supplier_name = ?
+                           WHERE id = ? AND po_id IN (SELECT id FROM purchase_orders
+                                                       WHERE COALESCE(tenant_id,1) = ?)`);
+  const updated = db.transaction(() => {
+    let n = 0;
+    for (const id of ids) n += upd.run(supplier, id, tid).changes;
+    return n;
+  })();
+  if (!updated) return res.status(404).json({ success: false, error: 'not_found' });
+  // One row for the whole assignment; the id is only meaningful when a single
+  // line moved, so a bulk one carries its ids in the details instead.
+  logActivity(req.user.id, req.user.username, 'set_line_supplier', 'po_line_item',
+              ids.length === 1 ? ids[0] : null, { supplier, line_ids: ids, updated }, req.ip);
+  res.json({ success: true, updated });
+});
+
 // The receive row's invoice picker, saved on its own. It used to ride along on
 // the bulk receive route, which meant the only way to record "no 发票 for this
 // line" was to press Confirm delivery — booking stock and flipping the order
