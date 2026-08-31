@@ -200,6 +200,19 @@ addColumn('purchase_orders', 'backorder_of', 'INTEGER');
 addColumn('po_line_items', 'tracking_number', 'TEXT');
 addColumn('po_line_items', 'tracking_carrier', 'TEXT');
 addColumn('po_line_items', 'damaged_qty',     'REAL DEFAULT 0');
+// WHY a line's received count came in below what was ordered. A fixed list
+// validated server-side (routes/purchases.js RECEIPT_REASONS), not free text,
+// so "why do we keep coming up short on this supplier" is a question that can
+// be counted rather than read one note at a time.
+//
+// DAMAGE IS DELIBERATELY NOT ONE OF THE REASONS. It is its own quantity
+// (damaged_qty above) and it happens on lines that are not short at all — 20
+// of 20 arrived, 2 of them broken. Carrying the word in both places made one
+// fact look like two, and the mockup that had it in both is why this note
+// exists. A reason is only ever about the shortfall.
+//
+// NULL is the normal state: a line that arrived in full has nothing to explain.
+addColumn('po_line_items', 'receipt_reason', 'TEXT');
 // Per-ingredient accounting bucket. When a PO line is created from this
 // ingredient (kitchen order, autocomplete pick, bulk import), the line's
 // expense_category is auto-populated from this column so finance posts

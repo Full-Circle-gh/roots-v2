@@ -18,6 +18,97 @@ const { fireRecompute } = require('../lib/recipe-rollup');
 const { blockCostWrite, blockCostWriteIf } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
+// ── Receipt reasons ─────────────────────────────────────────────────────────
+// Why a line's received count came in BELOW what was ordered. Validated the
+// same way invoice_status is: a fixed set, checked server-side, no free text.
+//
+// DAMAGE IS NOT A REASON. It has its own quantity (po_line_items.damaged_qty)
+// and it happens on lines that are not short at all — 20 of 20 arrived, 2 of
+// them broken. A reason only ever explains the shortfall.
+const RECEIPT_REASONS = new Set(['short_delivery', 'wrong_item', 'not_sent']);
+
+// What one receipt payload should do to a line's receipt_reason.
+//   ordered  — the line's qty
+//   nextQty  — qty_received AFTER this save (null = nothing received yet)
+//   sent     — the payload's receipt_reason, or undefined if the key is absent
+//   current  — what the column holds now
+// → { write:false } leave it alone | { write:true, value } | { error:code }
+//
+// THE KEY BEING ABSENT IS ITS OWN ANSWER, and that is what keeps this additive.
+// The rule is "a short line carries a reason", but the desktop receive screen
+// (public/retail-admin/16-purchasing.js puReceiveSave) has no picker and sends
+// short quantities with no reason at all. Enforcing the rule against a payload
+// that cannot satisfy it would 400 every short receive on a screen the
+// warehouse uses daily — so the rule binds the callers that participate: send
+// the key and it is enforced in both directions, omit it and nothing is
+// written. That is the same present-vs-absent discipline qty_received already
+// uses on this endpoint, and puReceiveSave's own comment spells out why the
+// distinction matters there. Once every receive screen sends the key,
+// `sent === undefined` stops happening and the rule is live everywhere with no
+// further change here.
+//
+// A line that is no longer short is the one case a silent caller still moves:
+// the stale reason is cleared, because a row must never claim a shortfall it
+// does not have.
+function planReceiptReason({ ordered, nextQty, sent, current }) {
+  const isShort = nextQty != null && nextQty < ordered;
+  if (sent === undefined) {
+    return (!isShort && current != null) ? { write: true, value: null } : { write: false };
+  }
+  const value = (sent == null || sent === '') ? null : String(sent);
+  if (isShort) {
+    if (!RECEIPT_REASONS.has(value)) {
+      return { error: value == null ? 'reason_required' : 'reason_invalid' };
+    }
+    return { write: true, value };
+  }
+  if (value != null) return { error: 'reason_not_applicable' };
+  return { write: true, value: null };
+}
+
+// The received quantity a line will hold after this payload is applied. An
+// absent qty_received key preserves what is stored; a null blanks it.
+function nextReceivedQty(line, r) {
+  if (r.qty_received === undefined) {
+    return line.qty_received == null ? null : parseFloat(line.qty_received);
+  }
+  return (r.qty_received == null || r.qty_received === '')
+    ? null : Math.max(0, parseFloat(r.qty_received) || 0);
+}
+
+// Validate every line's reason BEFORE anything is written, so a bad code can
+// never leave half a delivery saved. Returns a Map of line_id → plan, or
+// { error, line_id } for the caller to turn into its own 400 shape.
+// Kitchen-side wording for the three refusals. The retail route answers in its
+// own shape (a bare code the screen translates), matching each file's existing
+// error convention rather than inventing a third.
+const RECEIPT_REASON_ERRORS = {
+  reason_required:       'A short line needs a reason · 短缺行需要填写原因',
+  reason_invalid:        'Unknown reason code · 收货原因无效',
+  reason_not_applicable: 'A reason belongs only on a short line · 仅短缺行可填写原因',
+};
+
+function planReceiptReasons(h, poId, receipts) {
+  const plans = new Map();
+  for (const r of receipts) {
+    const lineId = parseInt(r.line_id, 10);
+    if (!lineId) continue;
+    const line = h.prepare(
+      'SELECT qty, qty_received, receipt_reason FROM po_line_items WHERE id = ? AND po_id = ?'
+    ).get(lineId, poId);
+    if (!line) continue;
+    const plan = planReceiptReason({
+      ordered: parseFloat(line.qty) || 0,
+      nextQty: nextReceivedQty(line, r),
+      sent: r.receipt_reason,
+      current: line.receipt_reason,
+    });
+    if (plan.error) return { error: plan.error, line_id: lineId };
+    plans.set(lineId, plan);
+  }
+  return { plans };
+}
+
 // Web Push helpers — fan-out to subscribed devices when a PO event
 // happens. Lazy-loaded so a missing or mis-configured push module
 // doesn't break the rest of the route.
@@ -609,6 +700,11 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
     if (!Array.isArray(receipts)) return res.status(400).json({ error: 'receipts[] required · 收货数据必填' });
     const poId = parseInt(req.params.id, 10);
     if (!poId) return res.status(400).json({ error: 'invalid PO id · 采购单 ID 无效' });
+    // Reasons are resolved and refused up front — nothing below runs on a bad
+    // code. Kitchen receiving moves no stock, but it records the same fact.
+    const planned = planReceiptReasons(db, poId, receipts);
+    if (planned.error) return res.status(400).json({ error: RECEIPT_REASON_ERRORS[planned.error], line_id: planned.line_id });
+    const reasonUpd = db.prepare('UPDATE po_line_items SET receipt_reason = ? WHERE id = ? AND po_id = ?');
     const upd = db.prepare(`UPDATE po_line_items SET
       qty_received    = ?,
       damaged_qty     = ?,
@@ -642,6 +738,11 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
         } else {
           upd.run(q, dq, tn, tc, lineId, poId);
         }
+        // Written separately rather than folded into `upd`, so a tracking-only
+        // save can still clear a reason its quantity change made stale without
+        // that statement touching the receive columns it must leave alone.
+        const plan = planned.plans.get(lineId);
+        if (plan && plan.write) reasonUpd.run(plan.value, lineId, poId);
         if (q != null) any_qty_received = true;
         if (q != null && q < orderedQty) { missing_lines++; total_missing += orderedQty - q; }
         if (dq > 0)                       { damaged_lines++; total_damaged += dq; }
@@ -1030,4 +1131,10 @@ module.exports.firePriceAlertsForPO = firePriceAlertsForPO;
 // the store_products.unit_cost write-back so both cost paths split the same
 // extras the same way — a second copy is what let the pack-price bug happen.
 module.exports.allocateLandedExtras = allocateLandedExtras;
+// The ONE receipt-reason rule. routes/retail-purchasing.js consumes it so the
+// kitchen and retail receive endpoints cannot disagree about what a valid
+// reason is or when one is owed — a second copy is exactly how invoice_status
+// ended up with a no_invoice mark the invoice report never read.
+module.exports.RECEIPT_REASONS = RECEIPT_REASONS;
+module.exports.planReceiptReasons = planReceiptReasons;
 module.exports.backfillOrderedExpenses = backfillOrderedExpenses;

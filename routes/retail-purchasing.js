@@ -40,7 +40,7 @@ const { requireRetailAdmin } = require('./retail');
 // loads that module first (line ~344, before this one at ~370), so this
 // require resolves the already-cached router with firePriceAlertsForPO
 // attached to it. One alert path, not two.
-const { firePriceAlertsForPO, allocateLandedExtras } = require('./purchases');
+const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons } = require('./purchases');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
@@ -1617,6 +1617,12 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const { receipts } = req.body || {};
   if (!Array.isArray(receipts)) return res.status(400).json({ success: false, error: 'receipts_required' });
+  // Reasons are resolved and refused BEFORE the transaction opens, so a bad
+  // code cannot leave half a delivery saved, and no stock moves on a payload
+  // that was never going to be accepted. The rule itself lives in
+  // routes/purchases.js — one definition for both receive endpoints.
+  const planned = planReceiptReasons(db, po.id, receipts);
+  if (planned.error) return res.status(400).json({ success: false, error: planned.error, line_id: planned.line_id });
   let missing_lines = 0, damaged_lines = 0, any_qty = false;
   const tx = db.transaction(() => {
     for (const r of receipts) {
@@ -1645,6 +1651,12 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
         sets.push('invoice_status = ?'); vals.push(r.invoice_status);
         sets.push('no_invoice_expected = ?'); vals.push(r.invoice_status === 'no_invoice' ? 1 : 0);
       }
+      // Why this line came in short. { write:false } for a caller that sent no
+      // reason key and has no stale one to clear, which is every save the
+      // desktop screen makes today — so a payload that never mentions reasons
+      // still writes exactly the columns it always did.
+      const plan = planned.plans.get(lineId);
+      if (plan && plan.write) { sets.push('receipt_reason = ?'); vals.push(plan.value); }
       if (!sets.length) continue;
       vals.push(lineId, po.id);
       db.prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
