@@ -21,6 +21,7 @@
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
+    "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
     "test:phone": "node scripts/test_recipient_phone.js",
