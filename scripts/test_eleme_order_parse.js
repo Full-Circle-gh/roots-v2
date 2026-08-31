@@ -131,6 +131,73 @@ section('C · line items are not orders');
   ok('short id rejected', b.parseOrderPayload({ items: [{ name: 'x', quantity: 1, price: 5, id: 12 }] }).length === 0);
   const trap = { list: [{ id: '999999999999', name: 'x', quantity: 1 }] };
   ok('item-shaped row with a long id is skipped', b.parseOrderPayload(trap).length === 0);
+
+  // The shape that actually shipped three orders for one basket: ONE order whose
+  // three foods each carry a food id and a per-food 总价. Both halves of the old
+  // reading are exercised — the items qualified as orders ('has an id and a
+  // total'), and being three of them they outnumbered the single order row, so
+  // "largest array wins" chose them. The order arrived three times, once per
+  // product, each priced at that product's line total and carrying no items.
+  const basket = {
+    data: {
+      orderList: [{
+        orderId: '2000123456789012',
+        statusDesc: '待配送',
+        consumerTotal: 135,
+        createTime: 1787461712272,
+        items: [
+          { id: '10023456789', name: '龙井茶', quantity: 1, price: 38, totalPrice: 38, status: 1 },
+          { id: '10023456790', name: '茉莉花茶', quantity: 1, price: 47, totalPrice: 47, status: 1 },
+          { id: '10023456791', name: '普洱茶', quantity: 1, price: 50, totalPrice: 50, status: 1 },
+        ],
+      }],
+    },
+  };
+  const one = b.parseOrderPayload(basket);
+  ok('one order, not one per product', one.length === 1, one.length);
+  ok('the order id is the ORDER id, not a food id', one[0].elemeOrderId === '2000123456789012', one[0].elemeOrderId);
+  ok('the order total is the basket, not a line', one[0].total === 135, one[0].total);
+  ok('all three products stay on the one order', one[0].items.length === 3, one[0].items.length);
+  ok('line totals belong to the lines', one[0].items.map(i => i.lineTotal).join() === '38,47,50',
+     one[0].items.map(i => i.lineTotal));
+
+  // Same trap one nesting level further in, and with more foods than the
+  // envelope's own arrays, so it cannot pass on a lucky count.
+  const deep = { result: { data: { records: [
+    { id: '3000987654321098', baseInfo: { orderStatusDesc: '待接单', orderTime: 1787461712 },
+      feeInfo: { totalAmount: 13500 },
+      goodsList: [
+        { id: '900001', goodsName: 'A', num: 1, salePrice: 3800, sumPrice: 3800 },
+        { id: '900002', goodsName: 'B', num: 1, salePrice: 4700, sumPrice: 4700 },
+        { id: '900003', goodsName: 'C', num: 1, salePrice: 5000, sumPrice: 5000 },
+        { id: '900004', goodsName: 'D', num: 2, salePrice: 500, sumPrice: 1000 },
+      ] },
+  ] } } };
+  const nested = b.parseOrderPayload(deep);
+  ok('nested envelope: still one order', nested.length === 1, nested.length);
+  ok('nested envelope: four lines on it', nested[0].items.length === 4, nested[0].items.length);
+  ok('nested envelope: total is the order total', nested[0].total === 135, nested[0].total);
+
+  // Two real orders side by side must still both come back — the fix must not
+  // trade the split for a merge.
+  const two = b.parseOrderPayload({ orders: [
+    { orderId: '2000000000000001', statusDesc: '待配送', consumerTotal: 38,
+      items: [{ id: '900001', name: 'A', quantity: 1, price: 38, totalPrice: 38 }] },
+    { orderId: '2000000000000002', statusDesc: '待配送', consumerTotal: 97,
+      items: [{ id: '900002', name: 'B', quantity: 1, price: 47, totalPrice: 47 },
+              { id: '900003', name: 'C', quantity: 1, price: 50, totalPrice: 50 }] },
+  ] });
+  ok('two baskets stay two orders', two.length === 2, two.length);
+  ok('and keep their own lines', two.map(o => o.items.length).join() === '1,2', two.map(o => o.items.length));
+
+  // An order row is still an order when it happens to carry name-and-quantity
+  // fields of its own — the item test reads a row's own keys, but an address or
+  // an order time settles it either way.
+  const shopish = b.parseOrderPayload({ list: [{
+    orderId: '2000000000000003', name: '天河店', num: 3, statusDesc: '待配送',
+    consumerTotal: 88, deliveryAddress: '天河区**大厦 3*号',
+  }] });
+  ok('order-only fields outweigh an item-shaped row', shopish.length === 1, shopish.length);
 }
 
 // ── D. Unrecognised names degrade to null, never to a wrong value ────────────
