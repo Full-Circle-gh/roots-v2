@@ -105,6 +105,7 @@
     search:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>',
     plus:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
     crate:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>',
+    chevDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -330,8 +331,7 @@
     _recOpen = false;
     document.body.classList.remove('mat-viewing');
     window.removeEventListener('popstate', onPop);
-    const menu = document.getElementById('mat-fincat-menu');
-    if (menu) menu.hidden = true;
+    matComboClose();   // the combo menu hangs off <body>, not off the record
     if (!viaPop) history.back();
   }
 
@@ -373,10 +373,23 @@
 
   window.matDirty = function () { _dirty = true; };
 
-  // Finance-category suggestions render as our own menu: position:fixed,
-  // placed under the input by JS, and — critically — a direct child of
-  // <body>, never nested inside .mat-card. Two separate ancestor effects
-  // needed escaping, not one:
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  COMBO FIELDS — Finance category, and Supplier
+  // ═══════════════════════════════════════════════════════════════════════════
+  // One search-and-pick control, two fields. Both are free text with a long
+  // list behind them (the live tenant carries ~80 suppliers and ~30 finance
+  // categories), and both were unusable as the thing they started as: a
+  // native <select>/<datalist> you cannot type at, whose popup is drawn by
+  // the OS combobox widget — which some embedding webviews (chat-app browser
+  // panes) position at the wrong screen coordinates entirely, pinning it to
+  // the far edge of the window instead of under the field. Same conclusion,
+  // and the same implementation, as puSuggest* in 16-purchasing.js: draw the
+  // list ourselves, filter it as you type, scroll it, and keep the keyboard
+  // the native popup gave us free.
+  //
+  // The menu is position:fixed, placed under the input by JS, and —
+  // critically — a direct child of <body>, never nested inside .mat-card.
+  // Two separate ancestor effects needed escaping, not one:
   //  1. .mat-card rounds its corners with clip-path, which clips an
   //     absolutely-positioned descendant to the card same as overflow:hidden
   //     would (position:fixed alone escapes this — it repositions the box
@@ -389,66 +402,221 @@
   //     the dropdown wherever the two happened to overlap on screen. Only
   //     hoisting the element out to <body> — outside any stacking-context
   //     ancestor — puts it back at the top of the paint order.
-  // A native <input list>/<datalist> popup is drawn by the OS combobox
-  // widget, which some embedding webviews (e.g. chat-app browser panes)
-  // position at the wrong screen coordinates in the first place — it showed
-  // up pinned to the far edge of the window instead of under the field.
-  function matFinCatMenuEl() {
-    let menu = document.getElementById('mat-fincat-menu');
+  //
+  // A row's VALUE is what lands in the field, and it is not always what the
+  // row shows. Both fields store one bilingual string apiece; the supplier
+  // menu shows its two halves apart so a Chinese reader isn't hunting through
+  // English, while data keeps the whole name — see supplierComboRows.
+
+  // A supplier is stored as ONE free-text name, and most of the live ones glue
+  // both languages into it — "Dry Fruit 果干". Split the stored string at its
+  // language boundary (first 中文 character to last; the rest is the English
+  // half) so the menu never shows both at once. A name written in only one
+  // language has no boundary and survives whole in both. This is supSplit()
+  // from 16-purchasing.js, kept as its own small copy for the same reason
+  // SRC_BLOCK_REASON above is: this file has no module system, only
+  // sequential <script> globals.
+  const CJK_CHAR = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+  function supSplit(name) {
+    const raw = String(name == null ? '' : name).trim();
+    let first = -1, last = -1;
+    for (let i = 0; i < raw.length; i++) {
+      if (CJK_CHAR.test(raw[i])) { if (first < 0) first = i; last = i; }
+    }
+    if (first < 0) return { en: raw, cn: raw };
+    const trim = t => t.replace(/^[\s·\-–—/,|]+|[\s·\-–—/,|]+$/g, '').trim();
+    const cn = trim(raw.slice(first, last + 1));
+    const en = trim((raw.slice(0, first) + ' ' + raw.slice(last + 1)).replace(/\s{2,}/g, ' '));
+    return { en: en || raw, cn: cn || raw };
+  }
+
+  // The supplier book as menu rows. `v` is the WHOLE stored name, never a
+  // half: that string is what Purchasing groups orders, invoices and
+  // price history by (it joins on the name, not on an id), so filing this
+  // material under half of one would file it under a supplier that owns
+  // nothing. The halves are display only — lead in the reading language,
+  // trail muted beside it. suppliers.name_cn, when the master holds one,
+  // wins over the split.
+  function supplierComboRows() {
+    return _suppliers.filter(s => s.is_active !== 0).map(s => {
+      const half = supSplit(s.name);
+      const cn = String(s.name_cn || '').trim() || half.cn;
+      return { v: s.name, lead: T(half.en, cn), trail: T(cn, half.en) };
+    });
+  }
+
+  const COMBO = {
+    // Finance categories are stored whole and read whole — two strings that
+    // differ by one character are two categories in every Finance report
+    // (lib/category-text.js documents the live case) — so the row shows the
+    // whole string rather than a half.
+    accounting_category: {
+      rows: () => _finCats.map(c => ({ v: c, lead: c })),
+      limit: 30,
+    },
+    supplier: {
+      rows: supplierComboRows,
+      // "None" leads the list because clearing a supplier has to stay one
+      // click, the way it was when this field was a <select> whose first
+      // option was None.
+      lead: () => [{ v: '', lead: T('None', '无'), cls: 'none' }],
+      // …and when what you typed names nobody in the book, the way out is
+      // offered where you are looking, not only on the button below.
+      tail: (q, isExact) => (q && !isExact
+        ? [{ v: q, lead: T(`Add “${q}” as a new supplier`, `添加“${q}”为新供应商`), act: 'new', cls: 'act' }]
+        : []),
+    },
+  };
+
+  let _comboFor = null;   // field key whose menu is open ('supplier', …)
+  let _comboRows = [];    // what that menu is showing, in order
+  let _comboIdx = -1;     // keyboard-highlighted row, -1 = none
+
+  function comboMenuEl() {
+    let menu = document.getElementById('mat-combo-menu');
     if (!menu) {
       menu = document.createElement('div');
-      menu.className = 'mat-fincat-menu';
-      menu.id = 'mat-fincat-menu';
+      menu.className = 'mat-combo-menu';
+      menu.id = 'mat-combo-menu';
+      menu.setAttribute('role', 'listbox');
       menu.hidden = true;
       // Picking is wired here, once, by delegation — NOT as an inline
-      // onmousedown per option. Category names are free text and many carry
-      // quotes/brackets ("Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）"),
-      // and an inline handler has to survive being embedded in an HTML
-      // attribute AND parsed as JS. It didn't: the JSON-quoted argument's own
-      // `"` closed the attribute early, leaving every option with a
-      // syntactically broken handler, so clicks did nothing at all. Reading
-      // the value back off data-val keeps the name out of both parsers.
+      // onmousedown per option. Both vocabularies are free text and many
+      // entries carry quotes/brackets ("Ingredients(Kitchen+Retail Use)
+      // 原材料（厨房及零售通用）"), and an inline handler has to survive being
+      // embedded in an HTML attribute AND parsed as JS. It didn't: the
+      // quoted argument's own `"` closed the attribute early, leaving every
+      // option with a syntactically broken handler, so clicks did nothing at
+      // all. The row carries only its index; the value is read from
+      // _comboRows, out of reach of both parsers.
       menu.addEventListener('mousedown', (e) => {
-        const opt = e.target.closest && e.target.closest('.mat-fincat-opt');
+        const opt = e.target.closest && e.target.closest('.mat-combo-opt');
         if (!opt) return;
-        // Keep focus on the input: the deferred hide in matFinCatBlur would
+        // Keep focus on the input: the deferred hide in matComboBlur would
         // otherwise race the pick.
         e.preventDefault();
-        matFinCatPick(opt.dataset.val);
+        comboPick(Number(opt.dataset.i));
       });
       document.body.appendChild(menu);
     }
     return menu;
   }
-  function matFinCatReposition() {
-    const menu = matFinCatMenuEl();
-    const input = document.getElementById('mat-f-accounting_category');
-    if (!input) return;
+  function comboPlace(input) {
+    const menu = comboMenuEl();
     const r = input.getBoundingClientRect();
     menu.style.left = r.left + 'px';
     menu.style.width = r.width + 'px';
-    menu.style.top = (r.bottom + 4) + 'px';
+    // Under the field by default; over it when the field sits low enough that
+    // the list would run off the bottom of the window.
+    const below = window.innerHeight - r.bottom;
+    if (below < menu.offsetHeight + 12 && r.top > below) {
+      menu.style.top = Math.max(8, r.top - menu.offsetHeight - 4) + 'px';
+    } else {
+      menu.style.top = (r.bottom + 4) + 'px';
+    }
   }
-  window.matFinCatFilter = function (v) {
-    const menu = matFinCatMenuEl();
-    const q = String(v || '').trim().toLowerCase();
-    const matches = _finCats.filter(c => !q || c.toLowerCase().includes(q)).slice(0, 30);
-    if (!matches.length) { menu.hidden = true; menu.innerHTML = ''; return; }
-    menu.innerHTML = matches.map(c =>
-      `<div class="mat-fincat-opt" data-val="${esc(c)}">${esc(c)}</div>`).join('');
-    matFinCatReposition();
-    menu.hidden = false;
-  };
-  window.matFinCatPick = function (v) {
-    const el = document.getElementById('mat-f-accounting_category');
-    if (el) el.value = v;
+  function comboRowsFor(key) {
+    const cfg = COMBO[key];
+    const input = document.getElementById('mat-f-' + key);
+    if (!cfg || !input) return [];
+    const typed = String(input.value || '').trim();
+    const q = typed.toLowerCase();
+    const all = cfg.rows() || [];
+    const hay = r => [r.v, r.lead, r.trail].filter(Boolean).join(' ').toLowerCase();
+    // A value that already IS an option keeps the whole list open instead of
+    // narrowing to itself — that is what lets a field you have already filled
+    // be reopened and changed (same rule as puSuggest in 16-purchasing.js).
+    const isExact = all.some(r => String(r.v).toLowerCase() === q);
+    let matched = (!q || isExact) ? all : all.filter(r => hay(r).includes(q));
+    if (cfg.limit) matched = matched.slice(0, cfg.limit);
+    return [].concat(
+      cfg.lead ? cfg.lead() : [],
+      matched,
+      cfg.tail ? cfg.tail(typed, isExact) : [],
+    );
+  }
+  function comboPaint() {
+    comboMenuEl().innerHTML = _comboRows.map((r, i) => `
+      <div class="mat-combo-opt${r.cls ? ' ' + r.cls : ''}${i === _comboIdx ? ' on' : ''}"
+           role="option" aria-selected="${i === _comboIdx}" data-i="${i}">
+        <span class="lead">${esc(r.lead)}</span>${r.trail && r.trail !== r.lead ? `<span class="trail">${esc(r.trail)}</span>` : ''}
+      </div>`).join('');
+  }
+  function comboPick(i) {
+    const key = _comboFor;
+    const row = _comboRows[i];
+    if (!key || !row) return;
+    // The create row doesn't fill the field — it opens the dialog that makes
+    // the supplier real first, and that fills the field on success.
+    if (row.act === 'new') { const typed = row.v; matComboClose(); matSupNew(typed); return; }
+    const input = document.getElementById('mat-f-' + key);
+    if (input) { input.value = row.v; input.focus(); }
     matDirty();
-    matFinCatMenuEl().hidden = true;
+    matComboClose();
+    if (key === 'supplier') matSupNote();
+  }
+  window.matComboOpen = function (key) {
+    const input = document.getElementById('mat-f-' + key);
+    if (!input || !COMBO[key]) return;
+    if (_comboFor !== key) _comboIdx = -1;
+    _comboRows = comboRowsFor(key);
+    if (!_comboRows.length) { matComboClose(); return; }
+    _comboFor = key;
+    if (_comboIdx >= _comboRows.length) _comboIdx = -1;
+    comboPaint();
+    const menu = comboMenuEl();
+    menu.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    comboPlace(input);
   };
-  window.matFinCatBlur = function () {
-    // Deferred so a menu option's mousedown (which preventDefault()s the
-    // blur-causing focus loss) still has a chance to run its click first.
-    setTimeout(() => { matFinCatMenuEl().hidden = true; }, 150);
+  window.matComboClose = function () {
+    const menu = document.getElementById('mat-combo-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    const input = _comboFor && document.getElementById('mat-f-' + _comboFor);
+    if (input) input.setAttribute('aria-expanded', 'false');
+    _comboFor = null; _comboRows = []; _comboIdx = -1;
+  };
+  window.matComboBlur = function (key) {
+    // Deferred: an option's mousedown preventDefault()s the focus loss, but a
+    // click landing anywhere else still needs its turn before we tear down.
+    // Only close if the menu is still THIS field's — tabbing from one combo
+    // to the other fires the first field's blur after the second has already
+    // opened its list, and closing then would shut a menu just asked for.
+    setTimeout(() => { if (_comboFor === key) matComboClose(); }, 150);
+  };
+  // The chevron sits inside the field, so a plain click would re-focus the
+  // input and toggle nothing. Handle it on mousedown, before focus moves.
+  window.matComboToggle = function (e, key) {
+    e.preventDefault(); e.stopPropagation();
+    if (_comboFor === key) { matComboClose(); return; }
+    const input = document.getElementById('mat-f-' + key);
+    if (input) input.focus();
+    matComboOpen(key);
+  };
+  // Arrow keys / Enter / Escape — the keyboard the native popup gave us free.
+  window.matComboKey = function (e, key) {
+    const menu = document.getElementById('mat-combo-menu');
+    const open = !!menu && !menu.hidden && _comboFor === key;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { _comboIdx = -1; matComboOpen(key); }
+      const n = _comboRows.length;
+      if (!n) return;
+      _comboIdx = e.key === 'ArrowDown' ? (_comboIdx + 1) % n : (_comboIdx <= 0 ? n - 1 : _comboIdx - 1);
+      comboPaint();
+      const on = comboMenuEl().children[_comboIdx];
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'Enter') {
+      // Enter with nothing highlighted means "I typed what I meant" — leave
+      // the free text alone and just get the menu out of the way.
+      if (_comboIdx >= 0 && _comboRows[_comboIdx]) { e.preventDefault(); comboPick(_comboIdx); }
+      else matComboClose();
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); matComboClose(); }
   };
   // Fixed-position menu doesn't track the page under it on its own — close
   // it when the page underneath scrolls, so it never drifts away from the
@@ -458,13 +626,78 @@
   // option list (its target is a descendant, seen during capture), which
   // must not close it.
   document.addEventListener('scroll', (e) => {
-    const menu = document.getElementById('mat-fincat-menu');
-    if (menu && !menu.hidden && !menu.contains(e.target)) menu.hidden = true;
+    const menu = document.getElementById('mat-combo-menu');
+    if (menu && !menu.hidden && !menu.contains(e.target)) matComboClose();
   }, true);
-  window.addEventListener('resize', () => {
-    const menu = document.getElementById('mat-fincat-menu');
-    if (menu && !menu.hidden) menu.hidden = true;
-  });
+  window.addEventListener('resize', () => { if (_comboFor) matComboClose(); });
+
+  // ── the supplier field's own two extras ───────────────────────────────────
+  // A supplier here is free text, and every supplier screen joins on that
+  // exact string. A name that is nobody in the book therefore buys nothing —
+  // no orders group under it, no price history collects against it. Say that
+  // under the field rather than let a typo look filed.
+  function supNoteHtml(v) {
+    const name = String(v == null ? '' : v).trim();
+    if (!name) return '';
+    const known = _suppliers.some(s => String(s.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (known) return '';
+    return `<span class="warn">${esc(T('Not in your supplier book yet — purchasing won’t group orders under this name until it is added.',
+                                        '尚未加入供应商名录 —— 添加后采购才会按该名称归集。'))}</span>`;
+  }
+  // Global because the field's own oninput calls it — an inline handler is
+  // parsed in global scope and cannot see anything inside this IIFE.
+  window.matSupNote = function () {
+    const el = document.getElementById('mat-supnote');
+    if (el) el.innerHTML = supNoteHtml((document.getElementById('mat-f-supplier') || {}).value);
+  };
+  function matSupSet(name) {
+    const el = document.getElementById('mat-f-supplier');
+    if (el) el.value = name;
+    matDirty();
+    matSupNote();
+  }
+  // Adding a supplier from here writes to the shared supplier book
+  // immediately — it is the same master Purchasing → Suppliers keeps, not a
+  // draft that waits for this material's Save. Only the name is asked for:
+  // the rest of a supplier record (contact, terms, channel) belongs on that
+  // screen, and a half-filled record made in passing is worse than a named
+  // one to fill in later.
+  window.matSupNew = async function (prefill) {
+    const field = document.getElementById('mat-f-supplier');
+    const typed = String(prefill != null ? prefill : ((field && field.value) || '')).trim();
+    if (typeof askPrompt !== 'function') return;
+    const answer = await askPrompt({
+      titleEn: 'New supplier', titleCn: '新建供应商',
+      subEn: 'Added to Purchasing → Suppliers straight away, and set on this material.',
+      subCn: '立即加入「采购 → 供应商」,并设为该物料的供应商。',
+      labelEn: 'Name', labelCn: '名称',
+      phEn: 'e.g. Dry Fruit 果干', phCn: '例如:Dry Fruit 果干',
+      value: typed,
+      submitEn: 'Add supplier', submitCn: '添加',
+      cancelEn: 'Cancel', cancelCn: '取消',
+    });
+    const name = String(answer == null ? '' : answer).trim();
+    if (!name) return;
+    const already = _suppliers.find(s => String(s.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (already) { matSupSet(already.name); toast(T('Already in your supplier book — set on this material.', '该供应商已在名录中 —— 已设为本物料供应商。')); return; }
+    try {
+      const j = await api('/api/retail-admin/suppliers', { method: 'POST', body: { name } });
+      _suppliers.push({ id: j.id, name, is_active: 1 });
+      _suppliers.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+      matSupSet(name);
+      toast(T('Supplier added', '已添加供应商'));
+    } catch (e) {
+      // name_taken means the book already holds it — as an ARCHIVED supplier,
+      // which is why it wasn't in the list we loaded. Setting the name is
+      // still right: that is the name every supplier screen groups by.
+      if (e.code === 'name_taken') {
+        matSupSet(name);
+        toast(T('That supplier already exists (archived) — set on this material.', '该供应商已存在(已归档)—— 已设为本物料供应商。'));
+        return;
+      }
+      toast(T('Could not add supplier', '添加供应商失败') + ': ' + (e.message || ''), 'err');
+    }
+  };
 
   function paintRecord() {
     const host = recRoot();
@@ -474,7 +707,6 @@
     const kindOpts = (_kinds.length ? _kinds : ['food', 'packaging', 'equipment', 'retail', 'other'])
       .map(k => [k, kindLabel(k)]);
     const catOpts = [['', T('None', '无')]].concat(_cats.map(c => [c, c]));
-    const supOpts = [['', T('None', '无')]].concat(_suppliers.map(s => [s.name, s.name]));
 
     // The takeover header is static markup (so the section exists before any
     // paint) but its labels are baked here — the section is data-no-i18n, so the
@@ -501,10 +733,16 @@
               ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
                        T('Kept forever, even after archiving — so old orders keep pointing at the right thing.', '归档后仍永久保留 — 以免历史订单指向错误。'))}
               ${field(T('Finance category', '财务分类'),
-                       `<div class="mat-fincat-wrap">`
+                       `<div class="mat-combo-wrap">`
                        + input('accounting_category', m.accounting_category,
-                               'maxlength="80" autocomplete="off" onfocus="matFinCatFilter(this.value)" onblur="matFinCatBlur()"',
-                               'matFinCatFilter(this.value)')
+                               'maxlength="80" autocomplete="off" role="combobox" aria-expanded="false"'
+                               + ' aria-autocomplete="list" aria-controls="mat-combo-menu"'
+                               + ' onfocus="matComboOpen(\'accounting_category\')"'
+                               + ' onkeydown="matComboKey(event,\'accounting_category\')"'
+                               + ' onblur="matComboBlur(\'accounting_category\')"',
+                               'matComboOpen(\'accounting_category\')')
+                       + `<button type="button" class="mat-combo-caret" tabindex="-1" aria-hidden="true"`
+                       + ` onmousedown="matComboToggle(event,'accounting_category')">${I.chevDown}</button>`
                        + `</div>`)}
             </div>
           </div>
@@ -557,7 +795,22 @@
         <div class="mat-recside">
           <div class="mat-card mat-blk">
             <h3 class="mat-blk-h">${esc(T('Supplier', '供应商'))}</h3>
-            ${select('supplier', m.supplier, supOpts)}
+            <div class="mat-combo-wrap">
+              <input class="mat-input" id="mat-f-supplier" value="${esc(m.supplier == null ? '' : m.supplier)}"
+                maxlength="160" autocomplete="off" role="combobox" aria-expanded="false"
+                aria-autocomplete="list" aria-controls="mat-combo-menu"
+                placeholder="${esc(T('Search suppliers…', '搜索供应商…'))}"
+                oninput="matDirty();matSupNote();matComboOpen('supplier')"
+                onfocus="matComboOpen('supplier')"
+                onkeydown="matComboKey(event,'supplier')"
+                onblur="matComboBlur('supplier')">
+              <button type="button" class="mat-combo-caret" tabindex="-1" aria-hidden="true"
+                onmousedown="matComboToggle(event,'supplier')">${I.chevDown}</button>
+            </div>
+            <div class="mat-supnote" id="mat-supnote">${supNoteHtml(m.supplier)}</div>
+            <div class="mat-supacts">
+              <button class="mat-btn sm" data-cap="purchasing:edit" onclick="matSupNew()"><span class="mat-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
+            </div>
           </div>
           ${isNew ? '' : `
           <div class="mat-card mat-blk">
