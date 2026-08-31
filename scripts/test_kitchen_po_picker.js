@@ -88,6 +88,10 @@ async function api(p, opts) {
 const sandbox = {
   document, console, setTimeout, clearTimeout, Promise, Date, Math, JSON, Set, Map, Array, Object,
   api, toast: () => {},
+  // The module registers document- and window-level listeners at load time
+  // (picker dismissal, the suggestion popover's resize handler). They only have
+  // to exist; nothing here fires them.
+  addEventListener: () => {}, removeEventListener: () => {},
   escapeHtml: s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
   cuT: en => en,
