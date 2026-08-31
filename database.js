@@ -213,6 +213,90 @@ addColumn('po_line_items', 'damaged_qty',     'REAL DEFAULT 0');
 //
 // NULL is the normal state: a line that arrived in full has nothing to explain.
 addColumn('po_line_items', 'receipt_reason', 'TEXT');
+
+// ── Receipts — one record per delivery actually taken in ────────────────────
+// A purchase order is what was ASKED FOR. A receipt is what TURNED UP, and the
+// two are not one-to-one: a three-supplier order arrives over three days, and
+// the receive endpoint is built to be called again and again for exactly that.
+// Until now nothing recorded the difference. The traces were spread over three
+// places and none of them could answer "what arrived on Tuesday, who took it
+// in, and where did it go":
+//   • activity_log wrote one 'receive' row per save, but its `lines` is the
+//     COUNT OF LINES SENT, not the lines that moved — and the desktop screen
+//     sends every line every time, so it is always the PO's full line count.
+//     It also drops user_id for every Mini App Backend operator (no users row
+//     to satisfy the FK), leaving a bare username string.
+//   • retail_stock_ledger has the store and the actor, but skips any line whose
+//     delta was zero, skips material lines, and skips kitchen receiving
+//     entirely — and it keys on product_id, so two PO lines for one product
+//     collapse into one stream nothing can separate.
+//   • po_line_items holds only the LATEST values; a correction overwrites what
+//     it corrected.
+//
+// APPEND-ONLY, AND THAT IS THE WHOLE DESIGN. Nothing here is ever updated. A
+// correction is a NEW receipt carrying the new numbers, so the row before it is
+// the "before" value — which is why there are no qty_before / damaged_before
+// columns to drift out of step with the line they describe.
+//
+// NO BACKFILL, DELIBERATELY, AND DO NOT ADD ONE LATER. Purchase orders received
+// before this shipped have no receipt rows and must keep none. The three
+// sources above cannot reconstruct one — every attempt would have to invent the
+// per-line quantities activity_log never stored, split deliveries the ledger
+// cannot separate, and guess an actor whose id was already discarded. A history
+// that is honestly absent beats one that is quietly wrong.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS po_receipts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_id          INTEGER NOT NULL,
+    -- Where the goods ACTUALLY went, which is not necessarily the store the PO
+    -- was raised against. NULL for kitchen receipts, which move no stock.
+    store_id       INTEGER,
+    scope          TEXT NOT NULL DEFAULT 'kitchen',   -- mirrors purchase_orders.scope
+    -- WHO, in two parts, because there are two id spaces. A kitchen session is
+    -- a users(id); a Mini App Backend operator is a tenant_users(id); the two
+    -- collide. actor_realm says which one actor_user_id belongs to, so the
+    -- name is resolvable instead of merely stored. No FK for the same reason
+    -- retail_stock_ledger.actor_user_id has none — a hard FK to users(id)
+    -- rejects every operator-driven write.
+    actor_user_id  INTEGER,
+    actor_label    TEXT,
+    actor_realm    TEXT,                              -- 'kitchen' | 'backend'
+    note           TEXT,
+    received_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE
+    -- store_id carries no FK either: a receipt is history and must outlive the
+    -- store closing. retail_stock_ledger takes the other trade because it
+    -- describes live stock.
+  );
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_po    ON po_receipts(po_id);
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_at    ON po_receipts(received_at);
+  CREATE INDEX IF NOT EXISTS idx_po_receipts_store ON po_receipts(store_id);
+
+  -- One row per line per save. The receipt's own store/actor/time live on the
+  -- header above rather than repeating down every line.
+  CREATE TABLE IF NOT EXISTS po_receipt_lines (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_id     INTEGER NOT NULL,
+    line_id        INTEGER NOT NULL,
+    qty_received   REAL,
+    damaged_qty    REAL DEFAULT 0,
+    receipt_reason TEXT,
+    -- Why this line's number changed, when it is changing one already recorded.
+    -- "Miscounted — two sacks were behind the pallet". Free text on purpose:
+    -- receipt_reason is the countable fact, this is the sentence a person needs
+    -- to read the correction.
+    note           TEXT,
+    FOREIGN KEY (receipt_id) REFERENCES po_receipts(id)    ON DELETE CASCADE,
+    FOREIGN KEY (line_id)    REFERENCES po_line_items(id)  ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_receipt ON po_receipt_lines(receipt_id);
+  CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_line    ON po_receipt_lines(line_id);
+`);
+// NOTE (multi-tenant): no tenant_id here on purpose. A receipt reaches its
+// tenant through po_id → purchase_orders.tenant_id, which is one indexed join
+// and cannot drift out of step with the order it belongs to. If purchasing is
+// ever split per-tenant database, these two tables move with purchase_orders
+// and po_line_items — they are the same body of data.
 // Per-ingredient accounting bucket. When a PO line is created from this
 // ingredient (kitchen order, autocomplete pick, bulk import), the line's
 // expense_category is auto-populated from this column so finance posts

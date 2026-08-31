@@ -40,7 +40,8 @@ const { requireRetailAdmin } = require('./retail');
 // loads that module first (line ~344, before this one at ~370), so this
 // require resolves the already-cached router with firePriceAlertsForPO
 // attached to it. One alert path, not two.
-const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons } = require('./purchases');
+const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons,
+        recordReceipt, appliedReceiptStore } = require('./purchases');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
@@ -121,9 +122,15 @@ function postRetailPOExpenses(poId) {
 // MATERIAL LINES ARE UNTOUCHED BY THIS — they still `continue` on the very next
 // line and their pricing stays entirely with firePriceAlertsForPO /
 // ingredient_price_history / the ±5% alert, which this change does not go near.
-function applyReceivedToStock(poId, req) {
+// `storeId` is WHERE THIS RECEIPT ACTUALLY WENT, which is not always the store
+// the order was raised against — the receive route now takes an optional one
+// and defaults it to the PO's. Passing it in rather than reading po.store_id
+// here is the whole location fix: the shelf that gains the goods is the shelf
+// the person at the door named.
+function applyReceivedToStock(poId, req, storeId) {
   const po = getRetailPO(poId);
-  if (!po || !po.store_id) return { applied: 0, costed: 0, costSkippedRecipe: 0, landedSkipped: [] };
+  const targetStore = storeId ?? po?.store_id ?? null;
+  if (!po || !targetStore) return { applied: 0, costed: 0, costSkippedRecipe: 0, landedSkipped: [] };
   // The PO's freight/tax/handling, split over its lines by goods value — the
   // SAME allocation firePriceAlertsForPO uses for materials (routes/purchases.js
   // allocateLandedExtras). A product's stored cost is what it cost to get onto
@@ -164,7 +171,7 @@ function applyReceivedToStock(poId, req) {
     const delta = good - alreadyApplied;
     if (delta !== 0) {
       inventory.adjustStock({
-        storeId: po.store_id, productId: l.store_product_id, deltaQty: delta,
+        storeId: targetStore, productId: l.store_product_id, deltaQty: delta,
         actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
         note: po.po_number, reason: 'restock',
       });
@@ -242,7 +249,12 @@ function applyReceivedToStock(poId, req) {
 //      (lib/tenant-db.js CONTROL_PLANE_TABLES), so tdb() is the correct handle
 //      for those writes too — `db` would be the main database for a tenant
 //      running isolated.
-function planPOReversal(po) {
+// `storeId` — the shelf the goods actually landed on (appliedReceiptStore), not
+// necessarily po.store_id. For every order that existed before receipts did,
+// those are the same value, so this changes nothing about how any current PO
+// reverses; it only stops a receipt taken in at another store being clawed back
+// off the wrong shelf.
+function planPOReversal(po, storeId) {
   const lines = tdb().prepare(`
     SELECT id, store_product_id, name_en, name_cn, stock_applied_qty
       FROM po_line_items
@@ -272,7 +284,7 @@ function planPOReversal(po) {
   );
   const blocking = [];
   for (const p of byProduct.values()) {
-    const have = Math.round(parseFloat(readQty.get(po.store_id, p.product_id)?.physical_qty) || 0);
+    const have = Math.round(parseFloat(readQty.get(storeId, p.product_id)?.physical_qty) || 0);
     if (p.qty > have) blocking.push({ ...p, on_shelf: have, short: p.qty - have });
   }
   return { lines, products: [...byProduct.values()], blocking };
@@ -282,18 +294,18 @@ function planPOReversal(po) {
 // reversed_units, reversed_lines } having reversed every line in full.
 // reversed_units counts UNITS ACTUALLY RETURNED TO THE SHELF, not lines
 // attempted — the old count reported the latter and called it success.
-function reversePOStock(po, req) {
+function reversePOStock(po, req, storeId) {
   let outcome = { blocked: null, reversed_units: 0, reversed_lines: 0 };
   const tx = tdb().transaction(() => {
     // Planned INSIDE the transaction: the reads and the writes must not be
     // separable by a concurrent sale.
-    const plan = planPOReversal(po);
+    const plan = planPOReversal(po, storeId);
     if (plan.blocking.length) { outcome = { blocked: plan.blocking, reversed_units: 0, reversed_lines: 0 }; return; }
     if (!plan.products.length) return;
     let units = 0;
     for (const p of plan.products) {
       const r = inventory.adjustStock({
-        storeId: po.store_id, productId: p.product_id, deltaQty: -p.qty,
+        storeId, productId: p.product_id, deltaQty: -p.qty,
         actorUserId: req.user?.id || null, actorLabel: actorLabel(req),
         note: po.po_number, reason: 'restock_undo',
       });
@@ -1343,7 +1355,9 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   // PO's ingredients only on the next PO that prices them. Flagged, not papered
   // over: closing it means deciding whether a landed-cost edit deserves its own
   // history row, which is a pricing decision, not a code one.
-  const recosted = po.status === 'Delivered' ? applyReceivedToStock(po.id, req) : null;
+  // Same shelf the receipts used — see appliedReceiptStore. Identical to
+  // po.store_id for every order received before receipts existed.
+  const recosted = po.status === 'Delivered' ? applyReceivedToStock(po.id, req, appliedReceiptStore(db, po)) : null;
   logActivity(req.user.id, req.user.username, 'landed_cost', 'purchase_order', po.id, { freight: num(freight), tax: num(tax), handling: num(handling) }, req.ip);
   res.json({ success: true, posted,
              cost_lines_updated: recosted ? recosted.costed : 0,
@@ -1535,7 +1549,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
     if (costPlan.unrecoverable.length) {
       return res.status(409).json({ success: false, error: 'cost_not_recoverable', ingredients: costPlan.unrecoverable });
     }
-    const rev = reversePOStock(po, req);
+    const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
     if (rev.blocked) return blockedResponse(res, rev.blocked);
     if (rev.reversed_units) {
       logActivity(req.user.id, req.user.username, 'stock_reversed', 'purchase_order', po.id,
@@ -1559,7 +1573,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   // arrived" case); receive-route edits refine it afterwards.
   if (status === 'Delivered') {
     db.prepare('UPDATE po_line_items SET qty_received = COALESCE(qty_received, qty) WHERE po_id = ?').run(po.id);
-    applyReceivedToStock(po.id, req);
+    applyReceivedToStock(po.id, req, appliedReceiptStore(db, po));
   }
   // Price write-back + ±5% alert for material lines on this PO. Fires on
   // Ordered too, not just Delivered — mirrors routes/purchases.js exactly:
@@ -1597,7 +1611,9 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
-  const rev = reversePOStock(po, req);
+  // Reverse off the shelf the goods actually landed on. Identical to
+  // po.store_id for every order received before receipts existed.
+  const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
   if (rev.blocked) return blockedResponse(res, rev.blocked);
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpenses(po.id);
@@ -1623,7 +1639,41 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // routes/purchases.js — one definition for both receive endpoints.
   const planned = planReceiptReasons(db, po.id, receipts);
   if (planned.error) return res.status(400).json({ success: false, error: planned.error, line_id: planned.line_id });
-  let missing_lines = 0, damaged_lines = 0, any_qty = false;
+
+  // ── Where this delivery is going ──────────────────────────────────────────
+  // Optional. Absent — which is every call the desktop screen makes — means the
+  // store the order was raised against, so nothing about that screen changes.
+  //
+  // REFUSED WHEN STOCK IS ALREADY ON A DIFFERENT SHELF, and that refusal is
+  // load-bearing rather than cautious. po_line_items.stock_applied_qty is one
+  // number per line with no store in it, so it cannot describe five units at
+  // Tianhe and three at Pearl River. Let a second receipt name a different
+  // store and the delta lands on the new shelf while the old one keeps the
+  // units it already had — and undo-receive, which reverses one figure from one
+  // store, could never put that right. So the first receipt that books stock
+  // fixes the destination for the rest of the order; anything else needs a
+  // transfer (routes/restock.js), which is the mechanism that already moves
+  // stock between stores and ledgers both halves.
+  const rawStore = req.body?.store_id;
+  const wantStore = rawStore === undefined || rawStore === null || rawStore === ''
+    ? null : parseInt(rawStore, 10);
+  const appliedStore = appliedReceiptStore(db, po);
+  if (wantStore != null) {
+    if (!Number.isFinite(wantStore) || !inventory.getStore(wantStore)) {
+      return res.status(400).json({ success: false, error: 'store_not_found' });
+    }
+    if (wantStore !== appliedStore) {
+      const booked = db.prepare(
+        'SELECT 1 FROM po_line_items WHERE po_id = ? AND COALESCE(stock_applied_qty, 0) <> 0 LIMIT 1'
+      ).get(po.id);
+      if (booked) {
+        return res.status(409).json({ success: false, error: 'store_locked', store_id: appliedStore });
+      }
+    }
+  }
+  const storeId = wantStore != null ? wantStore : appliedStore;
+
+  let missing_lines = 0, damaged_lines = 0, any_qty = false, receipt = null;
   const tx = db.transaction(() => {
     for (const r of receipts) {
       const lineId = parseInt(r.line_id, 10);
@@ -1661,11 +1711,30 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       vals.push(lineId, po.id);
       db.prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
     }
+    // The delivery record, appended last so it reads the lines back as stored.
+    // Gated on any_qty for the same reason postRetailPOExpenses below is: a
+    // save carrying only a tracking number or an invoice mark is not a
+    // delivery, and must not leave a phantom row in the Received list.
+    if (any_qty) {
+      receipt = recordReceipt(db, {
+        poId: po.id, storeId, scope: 'retail',
+        actor: {
+          userId: req.user?.id || null,
+          label: actorLabel(req),
+          // Two id spaces, and this is the half that says which one the id
+          // above belongs to: a Mini App Backend operator is a tenant_users
+          // row, a kitchen-app session reaching this route through
+          // requireRetailAdmin's second branch is a users row.
+          realm: req.backendUser ? 'backend' : 'kitchen',
+        },
+        receipts, note: (req.body && req.body.receipt_note) || null,
+      });
+    }
   });
   tx();
   // Stock + finance follow the receive state (adjustStock runs outside the PO
   // transaction: it opens its own per-line transactions on the tenant handle).
-  const stock = applyReceivedToStock(po.id, req);
+  const stock = applyReceivedToStock(po.id, req, storeId);
   // Receiving IS the delivery, so record it as one. This route used to book
   // stock and leave the order at Ordered, which put /undo-receive out of reach
   // for the stock it had just booked — that route 409s on anything but
@@ -1690,10 +1759,13 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   }
   if (any_qty) postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
-              { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail' }, req.ip);
+              { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail',
+                store_id: storeId, receipt_id: receipt?.receiptId ?? null }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
              cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
              landed_lines_skipped: stock.landedSkipped,
+             store_id: storeId,
+             receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0,
              status: delivered ? 'Delivered' : po.status });
 });
 
