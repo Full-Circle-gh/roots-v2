@@ -10389,6 +10389,41 @@
   #prod-view-purchasing .pu2-fgroup:last-of-type { margin-bottom: 0; }
   #prod-view-purchasing .pu2-fgroup .pu2-kicker { margin: 0 0 12px; }
 
+  /* Payment-terms / payment-method suggestions (16-purchasing.js).
+     These two fields used to be <input list=…> + <datalist>, whose popup is
+     drawn by the OS combobox widget: unstyleable (it came up as a black OS
+     list against these light cards) and, inside an embedding webview, often
+     positioned at the wrong screen coordinates entirely — pinned to the far
+     edge of the window rather than under its field. We draw the list instead.
+     .pu2-suggest-menu is deliberately NOT scoped under #prod-view-purchasing:
+     puSuggestMenuEl() appends it straight to <body>, out of reach of any
+     ancestor that could clip it or paint over it, so a scoped selector would
+     silently match nothing. left/top/width come from JS, off the input's
+     getBoundingClientRect(). */
+  #prod-view-purchasing .pu2-suggestwrap { position: relative; display: block; }
+  #prod-view-purchasing .pu2-suggestwrap .pu2-input { padding-right: 34px; }
+  #prod-view-purchasing .pu2-suggestcaret {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+    background: none; color: var(--td-text2); cursor: pointer; }
+  #prod-view-purchasing .pu2-suggestcaret svg { width: 15px; height: 15px; }
+  #prod-view-purchasing .pu2-suggestcaret:hover { background: var(--td-raised); color: var(--td-text); }
+  .pu2-suggest-menu {
+    position: fixed; z-index: 400;
+    max-height: 240px; overflow-y: auto; background: var(--td-surface, #fff);
+    border: 1px solid var(--td-border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(17,26,43,.14); padding: 4px; }
+  .pu2-suggest-menu[hidden] { display: none; }
+  .pu2-suggest-opt {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 8px 10px; border-radius: 7px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); cursor: pointer; }
+  /* .on is the keyboard highlight; hover is the mouse's. Same treatment, so
+     the two can never disagree about which row is about to be chosen. */
+  .pu2-suggest-opt:hover, .pu2-suggest-opt.on { background: var(--td-raised); }
+  .pu2-suggest-opt .trail { color: var(--td-text2); font-size: 12.5px; }
+
   /* product picker */
   #prod-view-purchasing .pu2-picker-list { position: absolute; z-index: 30; left: 0; right: 0; top: 100%;
     max-height: 280px; overflow: auto; background: var(--td-surface, #fff); border: 1px solid var(--td-border);
