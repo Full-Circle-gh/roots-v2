@@ -118,6 +118,14 @@
   let _phBack = 'orders';    // screen to return to from price history
   let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
   let _seg = 'open';         // orders segment: open | received | all
+  // "Copy from kitchen" — the picker modal's state. Kitchen orders (PO-####)
+  // live in the other app's list and are invisible to every retail screen; this
+  // is where the buyer chooses which of them to pull in as retail drafts.
+  let _kSrc = [];            // kitchen PO rows, each with its existing copy (if any)
+  let _kPick = new Set();    // kitchen po ids ticked
+  let _kStore = null;        // retail store the copies are filed under
+  let _kSearch = '';
+  let _kBusy = false;        // a copy is in flight — keep the button from double-firing
   let _supSeg = 'active';    // suppliers segment: active | disabled
   let _edit = null;          // draft PO in the wizard
   let _wstep = 1;            // wizard step 1..3
@@ -351,6 +359,7 @@
           <span class="pu2-ic">${I.search}</span>
           <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
         </span>
+        <button class="pu2-btn" data-cap="purchasing:edit" onclick="puKitchenOpen()" title="${esc(T('Bring an order bought through the kitchen app into Tacet', '把厨房端下的采购单导入 Tacet'))}"><span class="pu2-ic">${I.down}</span>${esc(T('Copy from kitchen', '从厨房复制'))}</button>
         <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
       </div>
 
@@ -390,7 +399,7 @@
         : `<span class="pu2-num">${esc(p.delivery_date || '—')}</span>`;
       const rcv = p.received_lines ? ` <span class="sub" style="display:inline">· ${p.received_lines} ${esc(T('in', '入库'))}</span>` : '';
       return `<tr onclick="puOpenPO(${p.id})">
-        <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}</div></td>
+        <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}${p.copied_from_po_number ? ` · ${esc(T('from', '来自'))} ${esc(p.copied_from_po_number)}` : ''}</div></td>
         <td>${supplierLabel(p)}</td>
         <td>${storeLabel(p)}</td>
         <td class="right pu2-num">${p.line_count || 0}${rcv}</td>
@@ -438,6 +447,179 @@
     };
     _wstep = 1; _screen = 'wizard'; paint();
   };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  COPY FROM KITCHEN — pulling a PO-#### order in as a retail draft
+  // ═══════════════════════════════════════════════════════════════════════════
+  // The kitchen buying list and this one filter each other apart on
+  // purchase_orders.scope, so an order placed in the kitchen app cannot be
+  // opened, re-quantified or received here. This modal is the bridge: tick the
+  // kitchen orders, name the store, and the server writes retail DRAFTS of them
+  // (POST /copy-from-kitchen). The kitchen originals are untouched.
+  //
+  // Say the double plainly, on the screen, not just in a route comment: after a
+  // copy the same real purchase has a row in each list, and placing the copy
+  // posts its cost to Finance a second time. A draft posts nothing, which is
+  // why the copies land as drafts and the note sits above the button.
+  function kitchenRows() {
+    const q = _kSearch.toLowerCase().trim();
+    if (!q) return _kSrc;
+    return _kSrc.filter(p => `${p.po_number} ${p.supplier || ''} ${p.line_suppliers || ''} ${p.warehouse || ''}`
+      .toLowerCase().includes(q));
+  }
+  // Already-copied orders can't be ticked — the server refuses them anyway
+  // (409 already_copied), and a checkbox that can't be honoured is a lie.
+  const kitchenPickable = p => !p.copy_id;
+
+  window.puKitchenOpen = async function () {
+    _kPick = new Set(); _kSearch = ''; _kBusy = false;
+    _kStore = _stores[0]?.id || null;
+    _kSrc = [];
+    renderKitchenModal(true);
+    try {
+      const r = await api('/api/retail-admin/purchases/kitchen-source');
+      _kSrc = r.data || [];
+    } catch (e) { _kSrc = []; toast(e.message, 'err'); }
+    if (document.getElementById('pu2-kmodal')) renderKitchenModal(false);
+  };
+  window.puKitchenClose = function () {
+    _kSrc = []; _kPick = new Set(); _kSearch = ''; _kBusy = false;
+    const h = document.getElementById('pu2-modal-host');
+    if (h) h.innerHTML = '';
+  };
+  window.puKitchenToggle = function (id) {
+    if (_kPick.has(id)) _kPick.delete(id); else _kPick.add(id);
+    renderKitchenBody();
+  };
+  // Ticks/unticks everything the CURRENT search shows, never the hidden rest —
+  // a "select all" that reaches past the filter is how a buyer copies twenty
+  // orders they never looked at.
+  window.puKitchenAll = function () {
+    const rows = kitchenRows().filter(kitchenPickable);
+    const allOn = rows.length > 0 && rows.every(p => _kPick.has(p.id));
+    rows.forEach(p => { if (allOn) _kPick.delete(p.id); else _kPick.add(p.id); });
+    renderKitchenBody();
+  };
+  window.puKitchenSearch = function (v) { _kSearch = v || ''; renderKitchenBody(); };
+  window.puKitchenStore = function (v) { _kStore = parseInt(v, 10) || null; renderKitchenFoot(); };
+
+  window.puKitchenCopy = async function () {
+    if (_kBusy || !_kPick.size) return;
+    if (!_kStore) { toast(T('Pick a store first.', '请先选择门店。'), 'err'); return; }
+    _kBusy = true; renderKitchenFoot();
+    try {
+      const r = await api('/api/retail-admin/purchases/copy-from-kitchen', {
+        method: 'POST', body: { po_ids: [..._kPick], store_id: _kStore },
+      });
+      const n = (r.data || []).length;
+      puKitchenClose();
+      await loadPOs();
+      _seg = 'open';
+      paint();
+      toast(T(`${n} order${n === 1 ? '' : 's'} copied in as draft${n === 1 ? '' : 's'} ✓`,
+              `已复制 ${n} 张采购单为草稿 ✓`), 'ok', 4000);
+    } catch (e) {
+      _kBusy = false;
+      // The server names the orders it refused; repeat them rather than the
+      // bare error code, so the buyer can see which ones are already here.
+      const dup = e && e.code === 'already_copied' ? (e.data && e.data.copies) : null;
+      if (dup && dup.length) {
+        toast(T('Already copied: ', '已复制过:') + dup.map(d => `${d.po_number} → ${d.copy_po_number}`).join(', '), 'err', 6000);
+        try { const r2 = await api('/api/retail-admin/purchases/kitchen-source'); _kSrc = r2.data || []; } catch (_) {}
+        renderKitchenBody();
+      } else {
+        toast(e.message, 'err');
+      }
+      renderKitchenFoot();
+    }
+  };
+
+  function renderKitchenModal(loading) {
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puKitchenClose()"></div>
+      <div class="pu2-modal" id="pu2-kmodal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('Copy from kitchen', '从厨房复制'))}</h2>
+               <div class="sub">${esc(T('Orders bought through the kitchen app. Copies arrive as drafts you can re-quantify here.', '厨房端下的采购单。复制后为草稿,可在此调整数量。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puKitchenClose()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <div class="pu2-toolbar" style="margin:0 0 10px">
+            <span class="pu2-search">
+              <span class="pu2-ic">${I.search}</span>
+              <input id="pu2-kq" type="text" placeholder="${esc(T('Find a kitchen order or supplier', '搜索厨房采购单或供应商'))}" value="${esc(_kSearch)}" oninput="puKitchenSearch(this.value)" autocomplete="off">
+            </span>
+            <button class="pu2-btn sm" onclick="puKitchenAll()">${esc(T('Select all shown', '全选当前'))}</button>
+          </div>
+          <div id="pu2-kbody">${loading ? `<div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div>` : ''}</div>
+        </div>
+        <div class="pu2-modal-foot" id="pu2-kfoot"></div>
+      </div>`;
+    if (!loading) renderKitchenBody(); else renderKitchenFoot();
+  }
+
+  function renderKitchenBody() {
+    const host = document.getElementById('pu2-kbody');
+    if (!host) return;
+    const rows = kitchenRows();
+    if (!rows.length) {
+      host.innerHTML = `<div class="pu2-emptyline">${esc(_kSrc.length
+        ? T('Nothing matches that search.', '没有匹配的采购单。')
+        : T('The kitchen app has no purchase orders to copy.', '厨房端没有可复制的采购单。'))}</div>`;
+      renderKitchenFoot();
+      return;
+    }
+    host.innerHTML = `
+      <table class="pu2-tbl">
+        <thead><tr>
+          <th style="width:34px"></th>
+          <th>${esc(T('Order', '单号'))}</th>
+          <th>${esc(T('Supplier', '供应商'))}</th>
+          <th class="right">${esc(T('Items', '商品'))}</th>
+          <th class="right">${esc(T('Total', '金额'))}</th>
+          <th>${esc(T('Status', '状态'))}</th>
+        </tr></thead>
+        <tbody>${rows.map(p => {
+          const done = !kitchenPickable(p);
+          const on = _kPick.has(p.id);
+          const tick = done
+            ? `<span class="pu2-chk on" title="${esc(T('Already copied', '已复制'))}">${I.check}</span>`
+            : `<span class="pu2-chk${on ? ' on' : ''}">${on ? I.check : ''}</span>`;
+          return `<tr${done ? ' style="opacity:.55"' : ` onclick="puKitchenToggle(${p.id})" style="cursor:pointer"`}>
+            <td>${tick}</td>
+            <td><div class="pu2-mono">${esc(p.po_number)}</div>
+                <div class="sub pu2-num">${esc(p.date || '')}${done ? ` · ${esc(T('copied to', '已复制为'))} ${esc(p.copy_po_number)}` : ''}</div></td>
+            <td>${supplierLabel(p)}${p.warehouse ? `<div class="sub">${esc(p.warehouse)}</div>` : ''}</td>
+            <td class="right pu2-num">${p.line_count || 0}</td>
+            <td class="right pu2-num">${money(p.total_cost)}</td>
+            <td>${statusPill(p)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    renderKitchenFoot();
+  }
+
+  function renderKitchenFoot() {
+    const foot = document.getElementById('pu2-kfoot');
+    if (!foot) return;
+    const n = _kPick.size;
+    const storeOpts = _stores.map(st =>
+      `<option value="${st.id}"${_kStore === st.id ? ' selected' : ''}>${esc([st.name_en, st.name_cn].filter(Boolean).join(' · '))}</option>`).join('');
+    foot.innerHTML = `
+      <label class="pu2-f" style="margin:0">
+        <span class="lbl">${esc(T('File under store', '归属门店'))}</span>
+        <select class="pu2-input" onchange="puKitchenStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
+      </label>
+      <span class="pu2-mut" style="max-width:340px;line-height:1.4">${esc(n
+        ? T('The kitchen keeps its originals. A copy is a second row for the same purchase — its cost only reaches Finance when you mark it Ordered.',
+            '厨房端原单保留。复制件是同一笔采购的第二条记录——标记"已下单"后其金额才会记入财务。')
+        : T('Tick the orders you need here.', '勾选需要导入的采购单。'))}</span>
+      <span class="spacer"></span>
+      <button class="pu2-btn ghost" onclick="puKitchenClose()">${esc(T('Cancel', '取消'))}</button>
+      <button class="pu2-btn primary" ${n && _kStore && !_kBusy ? '' : 'disabled'} onclick="puKitchenCopy()">${esc(_kBusy
+        ? T('Copying…', '复制中…')
+        : (n ? T(`Copy ${n} order${n === 1 ? '' : 's'}`, `复制 ${n} 张采购单`) : T('Copy', '复制')))}</button>`;
+  }
 
   window.puOpenPO = async function (id) {
     try {

@@ -193,6 +193,12 @@ addColumn('waste_entries', 'cost_source', 'TEXT');
 addColumn('po_line_items', 'qty_received', 'REAL');
 // Track which PO each backorder PO came from for traceability.
 addColumn('purchase_orders', 'backorder_of', 'INTEGER');
+// A retail PO copied out of the kitchen list remembers the kitchen PO it came
+// from. Two jobs: provenance on screen (the copy says which PO-#### it mirrors)
+// and the duplicate guard — the copy endpoint refuses a second copy of the same
+// kitchen order, because the copy is a SECOND row for the same real purchase and
+// nothing else in the schema would catch it being made twice.
+addColumn('purchase_orders', 'copied_from_po_id', 'INTEGER');
 // Per-line shipment tracking + damage report. Tracking number is what the
 // supplier (Taobao etc) gives at ship time. carrier is optional ("sf"/"yto"/…)
 // — left null we link to 17track which auto-detects. damaged_qty is part of
