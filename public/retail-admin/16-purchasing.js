@@ -2379,8 +2379,12 @@
     const lines = invModalLines();
     const byPo = new Map();
     lines.forEach(l => { if (!byPo.has(l.po_number)) byPo.set(l.po_number, []); byPo.get(l.po_number).push(l); });
-    const supOpts = ['<option value="">' + esc(T('Choose a supplier', '选择供应商')) + '</option>']
-      .concat(invSupplierList().map(o => `<option value="${esc(o.name)}"${o.name === d.supplier ? ' selected' : ''}>${esc(o.label)}</option>`)).join('');
+    // A SEARCH BOX, for the same reason the "Set supplier" one is: the book is
+    // as long as the tenant's supplier list, and a <select> that long can only
+    // be scrolled. The field shows one language; d.supplier keeps the stored
+    // name, which is what every filter and every save round-trips on.
+    const supVal = d.supplier
+      ? ((invSupplierList().find(o => o.name === d.supplier) || {}).label || d.supplier) : '';
     const allocRows = lines.length
       ? [...byPo.entries()].map(([po, ls]) => `
           <div class="pu2-pogrp">${esc(po)}</div>
@@ -2406,7 +2410,16 @@
         </div>
         <div class="pu2-modal-body">
           <div class="pu2-fgrid three">
-            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span><select class="pu2-input" onchange="puInvField('supplier', this.value)">${supOpts}</select></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Supplier', '供应商'))}</span>
+              <span class="pu2-suggestwrap">
+                <input class="pu2-input" id="pu2-inv-sup" autocomplete="off" value="${esc(supVal)}"
+                  placeholder="${esc(T('Type to search your suppliers', '输入文字搜索供应商'))}"
+                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+                  onfocus="puSuggestOpen('pu2-inv-sup','invsuppliers')" oninput="puSuggestOpen('pu2-inv-sup','invsuppliers')"
+                  onkeydown="puSuggestKey(event,'pu2-inv-sup','invsuppliers')" onblur="puSuggestBlur('pu2-inv-sup')">
+                <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+                  onmousedown="puSuggestToggle(event,'pu2-inv-sup','invsuppliers')">${I.chevDown}</button>
+              </span></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('invoice_number', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Amount', '金额') + ' ' + cur())}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puInvField('date', this.value)"></label>
@@ -2475,9 +2488,38 @@
     }
     renderInvModal();
   };
+  // What the search box MEANS, resolved against the book it searched: the
+  // stored name, plus the raw text, so the caller can tell "nothing typed" from
+  // "typed something that is nobody".
+  function invDraftSupplier() {
+    const el = document.getElementById('pu2-inv-sup');
+    const typed = String((el && el.value) || '').trim();
+    if (!typed) return { name: '', typed: '' };
+    const q = typed.toLowerCase();
+    const hit = invSupplierList().find(o => [o.name, o.en, o.cn, o.label]
+      .some(x => x && String(x).toLowerCase() === q));
+    return { name: hit ? hit.name : '', typed };
+  }
   window.puInvSave = async function () {
     const d = _invDraft; if (!d) return;
-    if (!d.supplier) { toast(T('Choose a supplier', '请选择供应商'), 'err'); return; }
+    const sup = invDraftSupplier();
+    if (!sup.name) {
+      toast(sup.typed
+        ? T('No supplier matches that — pick one from the list.', '没有匹配的供应商 —— 请从列表中选择。')
+        : T('Choose a supplier', '请选择供应商'), 'err');
+      const el = document.getElementById('pu2-inv-sup');
+      if (el && el.focus) el.focus();
+      return;
+    }
+    // A name typed out in full, never picked, and NOT the one the open lines
+    // below belong to. Filing against those lines would attribute one
+    // supplier's goods to another's invoice, so switch the form to what the
+    // field says and let them tick the right lines.
+    if (sup.name !== d.supplier) {
+      puInvField('supplier', sup.name);
+      toast(T('Switched to that supplier — tick the lines it covers, then save.', '已切换到该供应商 —— 请勾选其对应明细后保存。'), 'ok');
+      return;
+    }
     if (!(parseFloat(d.amount) > 0)) { toast(T('Enter the invoice amount', '请输入发票金额'), 'err'); return; }
     const links = Object.entries(d.alloc)
       .map(([line_id, allocated_amount]) => ({ line_id: parseInt(line_id, 10), allocated_amount: parseFloat(allocated_amount) || 0 }))
@@ -2784,10 +2826,20 @@
   // `label` is what the FIELD shows, and it is not the value: a supplier name
   // is stored as one string with both languages glued together ("Dry Fruit
   // 果干"), and no screen here ever shows both at once.
+  // Both supplier fields on the Invoices screen search the same book; they
+  // differ only in where the pick lands. "Add invoice" is STRUCTURAL — the
+  // supplier decides which lines the form can allocate against, so committing
+  // there clears the allocations and repaints (puInvField's own rule, unchanged).
+  const supplierSuggestRows = () =>
+    invSupplierList().map(o => ({ v: o.name, en: o.en, cn: o.cn, label: o.label }));
   const PU_SUGGEST_DYN = {
     suppliers: {
-      rows: () => invSupplierList().map(o => ({ v: o.name, en: o.en, cn: o.cn, label: o.label })),
+      rows: supplierSuggestRows,
       commit: (v) => { if (_invAssign) _invAssign.supplier = v; },
+    },
+    invsuppliers: {
+      rows: supplierSuggestRows,
+      commit: (v) => { if (_invDraft) puInvField('supplier', v); },
     },
   };
   const puSuggestOpts = key => (PU_SUGGEST_DYN[key] ? PU_SUGGEST_DYN[key].rows() : (PU_SUGGEST[key] || []));
