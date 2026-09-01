@@ -48,6 +48,37 @@ function fmoney(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+// What the LINES of this order add up to, or null when they can't be trusted to
+// add up to anything: an empty basket, or one where any line arrived unpriced.
+// A partially priced basket sums to less than itself, and a number that is wrong
+// in an unknowable direction is worse than no number.
+function itemsTotalOf(items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  if (!items.every(it => Number(it.lineTotal) > 0)) return null;
+  return Math.round(items.reduce((a, it) => a + Number(it.lineTotal), 0) * 100) / 100;
+}
+
+// Do the channel's order total and its own line items tell the same story?
+// Returns null when they agree well enough, otherwise names the disagreement.
+//
+// Fees and discounts legitimately separate the two, so the tolerance is wide:
+// ¥5 or 30% of the basket, whichever is larger, absorbs packaging, delivery and
+// an ordinary promotion. What it does NOT absorb is EL20260901417897 — a ¥17.50
+// total over ¥267.00 of goods — or a ×100 unit slip, which is called out by name
+// because a scale bug and a discount need very different fixes and the ratio can
+// tell them apart.
+function totalDisagreement(channelTotal, itemsTotal) {
+  const c = Number(channelTotal), i = Number(itemsTotal);
+  if (!Number.isFinite(c) || !Number.isFinite(i) || i <= 0) return null;
+  const gap = Math.round((i - c) * 100) / 100;
+  const ratio = c > 0 ? i / c : Infinity;
+  if (c > 0 && Math.abs(ratio - 100) < 1)  return { kind: 'scale_x100', gap, ratio: 100 };
+  if (c > 0 && Math.abs(ratio - 0.01) < 0.0001) return { kind: 'scale_div100', gap, ratio: 0.01 };
+  const tolerance = Math.max(5, i * 0.3);
+  if (Math.abs(gap) <= tolerance) return null;
+  return { kind: c <= 0 ? 'no_channel_total' : (gap > 0 ? 'below_items' : 'above_items'), gap, ratio: c > 0 ? Math.round(ratio * 1000) / 1000 : null };
+}
+
 // Collapse a name for fuzzy comparison (drop spec parens, spaces, punctuation).
 function normName(s) {
   return String(s || '')
@@ -286,7 +317,36 @@ router.post('/ingest-order', (req, res) => {
     const ref      = order.elemeOrderId || orderNo;
 
     const items = (order.items || []).map(it => resolveProduct(it, storeId)).filter(i => i.qty > 0);
-    const total = parseFloat(order.total) || 0;
+    // TWO readings of this order's money, and they are not interchangeable.
+    //
+    //   channelTotal — the single figure Eleme's payload put on the order, read
+    //     by candidate key (lib/eleme-browser.js TOTAL_KEYS). It is what we
+    //     believe the customer was charged, and `total` is the refund ceiling
+    //     (routes/retail.js orderTenders), so it is never invented here.
+    //   itemsTotal — what the order's own priced lines add up to. This is the
+    //     value of the GOODS, which is what `subtotal` has always meant on every
+    //     other order in this table.
+    //
+    // Until now `subtotal` was assigned channelTotal — the two columns held one
+    // number twice — and the admin drawer printed it under a "subtotal" label
+    // beside a list of items that added up to something else entirely. That is
+    // EL20260901417897: a ¥17.50 banner over ¥38 + ¥29 + ¥200 of goods, with
+    // nothing in the row, the log or the import archive recording that the two
+    // figures had ever disagreed. Now subtotal is the goods (when every line is
+    // priced), total stays the platform's own claim, and a disagreement between
+    // them is written to the sync log instead of being averaged away.
+    const channelTotal = parseFloat(order.total) || 0;
+    // The parser computes this too; recomputing from the resolved lines means a
+    // caller that predates the field still gets the fix, and the number always
+    // matches the rows this ingest is about to write.
+    const itemsTotal = itemsTotalOf(items);
+    const subtotal   = itemsTotal != null ? itemsTotal : channelTotal;
+    // A missing/zero platform total with priced lines is the one case where the
+    // lines DO decide `total`: 0 is not a claim about what was charged, it is the
+    // absence of one, and an order that reads ¥0.00 can be neither reported nor
+    // refunded. Any non-zero platform figure is left exactly as it came.
+    const total = channelTotal > 0 ? channelTotal : (itemsTotal != null ? itemsTotal : 0);
+    const moneyGap = totalDisagreement(channelTotal, itemsTotal);
 
     // Platform-owned facts (Tier 0). Each is null when Eleme didn't give us one,
     // and every write below COALESCEs, so a missing field leaves the old
@@ -305,11 +365,11 @@ router.post('/ingest-order', (req, res) => {
     // now would drift the count low permanently and then under-report that number to
     // every other channel on the next push. Record the order, skip the deduction.
     const bornVoid = internalStatus === 'cancelled' || internalStatus === 'refunded';
-    // subtotal stays equal to total, matching the Meituan mirror. Packaging and
-    // delivery fees are deliberately NOT written to packing_fee/shipping_fee: on
-    // our own orders those are ADDENDS to subtotal, so writing them beside a
-    // subtotal that already equals the total would double-count in every place
-    // that re-adds them. They are kept intact in eleme_order_import.detail_json.
+    // Packaging and delivery fees are deliberately NOT written to
+    // packing_fee/shipping_fee: on our own orders those are ADDENDS to subtotal,
+    // and this subtotal is the goods value the lines agree on, so writing the
+    // fees beside it would re-add money the platform total already contains.
+    // They are kept intact in eleme_order_import.detail_json.
     //
     // The two that DO get columns: what Eleme keeps (服务费) and what actually
     // lands with us (商家实收). Same pair, same meaning, same columns Meituan
@@ -333,7 +393,7 @@ router.post('/ingest-order', (req, res) => {
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
                   ?, ?,
                   ?, ?)
-      `).run(orderNo, internalStatus, total, total, storeId, placedAt, placedAt,
+      `).run(orderNo, internalStatus, subtotal, total, storeId, placedAt, placedAt,
              channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
              commission, settleAmount);
       const oid = r.lastInsertRowid;
@@ -397,6 +457,33 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_unsynced log failed:', logErr.message); }
     }
 
+    // The order's own two money readings disagree by more than fees and a
+    // promotion can explain. NOT an error and never a reason to reject the order
+    // — Eleme's figure may well be right and the basket heavily discounted — but
+    // it is the one fact that has to survive the ingest, because the admin drawer
+    // shows both numbers and someone will have to decide which is true. The log
+    // row carries the field the total was read out of (totalKeyPath), which is
+    // what settles a wrong-key read without re-reading the order off the platform.
+    if (moneyGap) {
+      try {
+        db.prepare(`
+          INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_total_mismatch', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({
+            ref, orderNo, kind: moneyGap.kind, channelTotal, itemsTotal,
+            gap: moneyGap.gap, ratio: moneyGap.ratio,
+            totalKeyPath: order.totalKeyPath || null,
+            moneyDivisor: order.moneyDivisor != null ? order.moneyDivisor : null,
+            lines: items.map(i => ({ name: i.nameEn || i.name, qty: i.qty, lineTotal: i.lineTotal })),
+          }),
+          `channel total ¥${channelTotal.toFixed(2)} vs items ¥${Number(itemsTotal).toFixed(2)}` +
+            ` (${moneyGap.kind}${order.totalKeyPath ? `, total read from "${order.totalKeyPath}"` : ''})`
+        );
+      } catch (logErr) { console.error('[eleme-internal] order_total_mismatch log failed:', logErr.message); }
+    }
+
     // Visible in the admin's Eleme log rather than only in the response body —
     // "stock deliberately not deducted" is exactly the kind of silent decision that
     // looks like a bug six weeks later.
@@ -413,7 +500,8 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_born_void log failed:', logErr.message); }
     }
 
-    res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved, bornVoid });
+    res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved, bornVoid,
+                subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null });
   } catch (err) {
     console.error('[eleme-internal] ingest-order error:', err);
     res.status(500).json({ error: err.message });

@@ -278,6 +278,12 @@ function archiveFields(order) {
   return {
     daySeq: order.daySeq,
     moneyDivisor: order.moneyDivisor,
+    // Which payload field the order total was read out of, and what the LINES
+    // said the basket was worth. Stored because the two disagreeing is the whole
+    // of the EL20260901417897 bug and neither number, on its own, could say why.
+    totalKeyPath: order.totalKeyPath,
+    channelTotal: order.total,
+    itemsTotal: order.itemsTotal,
     merchantIncome: order.merchantIncome,
     commission: order.commission,
     platformSubsidy: order.platformSubsidy,
@@ -345,7 +351,12 @@ async function pollOrders(cfg) {
 
       logSync(storeCode, 'order_import', rootsOrderId ? 'ok' : 'error',
         { elemeOrderId: order.elemeOrderId, rootsOrderId, items: (order.items || []).length,
-          total: order.total, status: order.statusDesc });
+          // Both money readings, in the line that is already written for every
+          // import. The import log is the first place anyone looks when an order
+          // reads wrong, and "the total was ¥17.50" was never the useful half of
+          // that sentence on its own.
+          total: order.total, itemsTotal: order.itemsTotal,
+          totalKeyPath: order.totalKeyPath, status: order.statusDesc });
     }
 
     // Voids. These have dropped OUT of the list above, so they are read from the
