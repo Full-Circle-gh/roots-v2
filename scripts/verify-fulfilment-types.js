@@ -1628,7 +1628,7 @@ const DRAWER_SANDBOX = `
   function tdRange(){ return ''; }
   function tdDate(){ return 'Aug 21'; }
   ${OB.code.join('\n')}
-  return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel };
+  return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel, ordChannelLabel };
 `;
 
 let DRAWER = null;
@@ -1739,6 +1739,50 @@ if (DRAWER) {
   check('…and shows the platform arrival the ingest recorded instead of a dash',
     /arrival/.test(elemeCell) && !/^<span class="muted">—/.test(elemeCell), true);
 
+  // ── The same channel, named and marked ──────────────────────────────────
+  // ordChannelLabel ends in a raw-key fall-through, on purpose: an unknown
+  // channel should look odd rather than borrow a known one's name. That makes
+  // it a diagnostic no channel is meant to REST in, and Eleme rested in it —
+  // the column read a lowercase "eleme" beside Meituan and Gzgrocery. Assert
+  // the pair together, because a label with no glyph and a glyph with no label
+  // are each half a channel.
+  check('a mirrored channel is named, never left in the raw-key fall-through',
+    MIRROR_CHANNELS.map((c) => DRAWER.ordChannelLabel({ channel: c })),
+    ['Meituan', 'Gzgrocery', 'Eleme']);
+  // The glyph lives in 01-core.js, so read that file rather than the sandbox.
+  const CORE_JS = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'retail-admin', '01-core.js'), 'utf8');
+  check('…and carries a channel glyph of its own in CHAN_ICON',
+    MIRROR_CHANNELS.filter((c) => !new RegExp('^\\s*' + c + ':\\s*\'<svg', 'm').test(CORE_JS)), []);
+
+  // ── A channel you can filter to must be a channel the server filters by ──
+  // The chip chain runs UI key → ?channel= → the route's allowlist → the counts
+  // bucket, and Eleme was absent from the last two. A chip whose parameter the
+  // route drops does not narrow the list, it returns every channel while
+  // looking selected — a filter that lies is worse than one that isn't offered.
+  const RETAIL_JS = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+  // Anchored on the query param it guards, not on `const channel` alone — an
+  // unrelated route 21k lines earlier declares that same name and matched first,
+  // which had this gate reading a THREE-value allowlist that has nothing to do
+  // with order channels.
+  const chanAllow = /const channel = \[([^\]]*)\]\.includes\(String\(req\.query\.channel/.exec(RETAIL_JS);
+  check('the orders route accepts every mirrored channel as a filter',
+    MIRROR_CHANNELS.filter((c) => !chanAllow || !chanAllow[1].includes(`'${c}'`)), []);
+  const countBucket = /const out = \{ all: 0,([^}]*)\};/.exec(RETAIL_JS);
+  check('…and the channel-count buckets cover them, so the chips sum to All',
+    MIRROR_CHANNELS.filter((c) => !countBucket || !countBucket[1].includes(`${c}: 0`)), []);
+
+  // The phone draws the same list from its own three maps. Missing from any one
+  // of them, a channel is not just unlabelled — CH_BACK ends in `||'miniapp'`,
+  // so it wears the mini app's name and glyph.
+  const M_HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'm.html'), 'utf8');
+  const mMap = (name) => {
+    const m = new RegExp('const ' + name + '\\s*=\\s*\\{([^}]*)\\}').exec(M_HTML);
+    return m ? m[1] : '';
+  };
+  check('the phone maps every mirrored channel to its own glyph, key and filter',
+    ['CH_ICON', 'CH_BACK', 'CHANNEL_PARAM'].filter((n) => !/eleme:/.test(mMap(n))), []);
+
   // ── The whole drawer payload, not just the tile that broke ───────────────
   // §12 covers the till; this covers what the operator opens afterwards. Every
   // helper renderOpenOrder calls on the order object, run against a real
@@ -1755,7 +1799,7 @@ if (DRAWER) {
     available.length >= 20, true);
 
   const wide = new Function(DRAWER_SANDBOX.replace(
-    'return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel };',
+    'return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel, ordChannelLabel };',
     'return { ' + available.join(', ') + ' };'))();
   const counter = shape({ fulfillment_type: 'counter' });
   const helperThrows = available.filter((n) => {

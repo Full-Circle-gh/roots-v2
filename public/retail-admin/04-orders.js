@@ -255,6 +255,13 @@ function ordShortNo(no) {
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
   if (c === 'meituan')   return 'Meituan';
+  // The raw-key fall-through at the end of this function is a deliberate
+  // "visibly odd beats plausibly wrong" — but it is a diagnostic, not a name,
+  // and Eleme sat in it: the Channel column read a lowercase "eleme" beside
+  // properly-cased siblings. Brand name, uncased-by-language like the two
+  // around it (csName in 01-core.js carries the 饿了么 pairing for the surfaces
+  // that translate it).
+  if (c === 'eleme')     return 'Eleme';
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'wechat')    return 'WeChat';

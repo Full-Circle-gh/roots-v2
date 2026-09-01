@@ -23102,7 +23102,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(req.query.channel || '').toLowerCase())
+  // 'eleme' belongs in this list for the same reason 'meituan' does: Eleme rows
+  // are real retail_orders (routes/eleme-internal.js writes them) and already
+  // show in the unfiltered view, so a UI offering an Eleme filter needs the
+  // server to honour it. Left out, ?channel=eleme fell to '' and the filter
+  // silently returned EVERY channel — worse than having no Eleme filter at all,
+  // because the chip would look like it worked.
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'eleme', 'manual'].includes(String(req.query.channel || '').toLowerCase())
     ? String(req.query.channel).toLowerCase() : '';
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
@@ -23418,7 +23424,11 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
   sql += ' GROUP BY ch';
 
-  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, manual: 0 };
+  // Every channel the list can filter to needs a bucket here, or its orders are
+  // counted into `all` by the loop below and into nothing else — which is what
+  // Eleme did: the per-channel chips silently failed to sum to All, and an Eleme
+  // chip would have read 0 beside a list that had rows in it.
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, eleme: 0, manual: 0 };
   for (const r of tdb().prepare(sql).all(...params)) {
     if (r.ch in out) out[r.ch] += r.n;
     out.all += r.n;
