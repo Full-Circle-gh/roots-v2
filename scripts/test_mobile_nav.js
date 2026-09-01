@@ -138,6 +138,33 @@ run('mobile nav', [
       ['Receiving is not — its only action would 403', `${body}.indexOf('Receiving')===-1`],
     ]],
 
+  // ── the boot flash ────────────────────────────────────────────────────
+  // caps null means "all allowed", which is right for a resolution hiccup and
+  // wrong before anyone has asked. The app painted at once, so a narrowed
+  // operator got the whole of Tacet for as long as /api/backend/me took, then
+  // watched it collapse to their two tools — on every open, and on every Back
+  // from Quick Stock, which is a full page load.
+  //
+  // The probe runs on file://, where capsLoaded starts TRUE by design: there is
+  // no server to ask. So these cases put the flag back to where a real
+  // deployment starts and assert on that.
+  ['before the app knows who is looking, it paints nothing it might have to take back',
+    "state.capsLoaded=false;state.caps=null;render();", [
+      ['no tab bar', "!document.querySelector('.tabbar')"],
+      ['no Home board', "document.getElementById('app').innerText.indexOf('Revenue')===-1"],
+      ['not one destination named', "document.getElementById('app').innerText.indexOf('Customers')===-1"],
+      ['the mark holds the screen', "!!document.querySelector('#app svg')"],
+    ]],
+  // The hold RELEASES however the read ends — a 401, a network error, or a
+  // file:// page with no server behind it at all. That last one is this probe,
+  // so reaching any of these assertions at all is the proof: loadMe's finally
+  // ran, and the app is not sitting on the mark.
+  ['and it releases when there is nobody to ask', "render();", [
+    ['the hold is over', "state.capsLoaded===true"],
+    ['the app painted', `${bars}===5`],
+    ['on its sample data, as the static preview always did', `${body}.length>0`],
+  ]],
+
   // ── narrowed to nothing ───────────────────────────────────────────────
   ['a role this app holds nothing for says so',
     "state.caps=['billing:view'];state.tab='more';state.stack=[];render();", [
