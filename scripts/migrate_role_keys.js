@@ -83,12 +83,11 @@ const SURVEY = process.argv.includes('--survey');
 const tArg = process.argv.indexOf('--tenant');
 const ONLY = tArg !== -1 ? Number(process.argv[tArg + 1]) : null;
 
-// from → [to, the English name the seed gave it]
-const RENAMES = [
-  ['admin', 'manager', 'Manager'],
-  ['staff', 'shop_floor', 'Shop floor'],
-  ['warehouse', 'stockroom', 'Stockroom'],
-];
+// from → [to, the English name the seed gave it]. Owned by lib/roles.js, which
+// needs the same map to know that a migrated 'manager' row already satisfies
+// the 'admin' seed — two copies of it is how a tenant ended up with two
+// Managers on the Roles tab.
+const RENAMES = roles.RENAMES;
 
 // The nine role strings that existed before roles became data. Anything outside
 // this list AND without a tenant_roles row is an account pointing at nothing.
