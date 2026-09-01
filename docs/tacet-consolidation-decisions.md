@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.106
+# Tacet shared-core consolidation — decisions record, v4.107
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.107 — **§36 settles category normalisation: Finance calls `storeCategory` on every write, and the existing rows are corrected once.** Purchasing normalises earlier in the chain — `storeCategory` runs when a PO line's expense category is saved, so `postPOExpenses()` copies an already-normalised value — while Finance has no such upstream step and no `category-text` import at all, so three rent payments typed by three people can land as three categories differing by an invisible Kangxi radical or by ASCII spacing. **The failure mode is the dangerous kind:** Summary's breakdown then draws ¥8,000, ¥12,000 and ¥6,000 as three identical-looking lines instead of one ¥26,000 line, so the total is right, every line beneath it is wrong, and nothing on screen looks broken. **Normalise-on-read was rejected** because it leaves storage dirty, making correctness depend on every future reader remembering — one that forgets reintroduces the fault silently — and because Transactions lists rows rather than grouping them, so the operator would still face rows they cannot tell apart. **The one-time pass is treated as what it is, a script that edits live financial data:** category text only, never an amount or a date, with a backup immediately before and a dry run read by a person first. `scripts/normalise_finance_categories.js` already exists and is the starting point. **The open item is REPLACED, not closed** — income categories live in browser localStorage and have never been synced to the server, so normalising them yields consistent values and still no shared list; where they should live is a Settings question. Three open items remain on §36.
 
 2026-09-01 · v4.106 — **§36's PO-derived expenses subsection gains two rules the Transactions mockup surfaced.** First, the category hint **vanishes at exactly one category rather than reading "1 category"** — at N=1 nothing was collapsed, so the note would assert a breakdown that does not exist; a placeholder that looks like information is worse than silence. The rest of the row is unchanged at one category, because tint, posted-by mark and link out report provenance and editability, which do not depend on the split. Second, **the object is a purchase order**, matched to Purchasing's own shipped strings (bilingual, 采购单) rather than invented; "buying order" is the kitchen app's term and retires with it, and the row action says *Open purchase order* because a bare "order" on a Finance screen reads as a customer order. Both are recorded because the mockup now depends on them and neither was written down anywhere.
 
@@ -4636,12 +4638,30 @@ Roots' PO-0050 is the concrete case: ¥1,257.68 across two rows, ¥602.68 of ing
 
 **The object is called a purchase order.** Matched to what Tacet Purchasing already ships on screen (`16-purchasing.js`, bilingual with 采购单). "Buying order" is the kitchen app's term and dies with it. The row action reads *Open purchase order* rather than *Open order*, because a bare "order" on a Finance screen can be read as a customer order.
 
+### Categories are normalised on write, and the existing rows are corrected once — DECIDED 2026-09-01
+
+`routes/finance.js` never calls `storeCategory`. A manual income or expense entry writes whatever text the browser sent, with no normalisation of any kind. Purchasing normalises earlier in the chain — `storeCategory` is called when a PO line's expense category is saved, so `postPOExpenses()` copies an already-normalised value into `expense_entries` without calling it itself. Finance has no such upstream step and no `category-text` import at all, so its text is never normalised anywhere.
+
+The consequence is a wrong screen, not untidy data. Three rent payments typed by three people can be stored as three categories that differ only by an invisible Kangxi-radical character or by ASCII spacing — ¥8,000, ¥12,000 and ¥6,000. Summary's expense breakdown then draws three lines that read identically and cannot be told apart, where there should be one line of ¥26,000. **The total is right and every line beneath it is wrong**, which is worse than a visibly broken number because nothing on the screen looks wrong.
+
+**The decision, in two parts.**
+
+**1. Finance calls `storeCategory` on every write.** The same function Purchasing already uses, doing the same job: normalise the text, and snap it onto an existing entry in the `categories` table where one matches by spacing and case. Finance stops being the exception.
+
+**2. The existing rows are corrected once.** Normalising on write alone leaves every row already in the ledger carrying its variant, so the breakdown stays wrong for every month already recorded. A one-time pass rewrites the stored category text on the existing rows to its normalised form.
+
+**Why not normalise on read instead.** Grouping by normalised text at query time would fix history and new rows together without touching storage. Rejected on two counts: the stored values stay dirty, so **every future reader has to remember to normalise and one that forgets reintroduces the fault silently**; and the Transactions list would still draw rows the operator cannot distinguish, because it lists rows rather than grouping them.
+
+**The one-time pass rewrites live financial data and is treated as such.** It changes category text only and never touches an amount, a date or a location. It requires a backup taken immediately before it runs, and a dry run whose output is read by a person before anything is written. `scripts/normalise_finance_categories.js` exists from an earlier survey and is the likely starting point rather than a fresh script.
+
+**Income categories are a separate and unsolved problem.** Expense categories at least share the `categories` table with Purchasing and the ingredient picker. Income categories are held in each browser's localStorage and have never been synced to the server at all — `saveFinCats()` pushes only the expense list. Normalising income text therefore makes the stored values consistent but does not produce a shared list, because no shared list exists. **Where income categories live is a Settings question and is NOT decided here.**
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
 
 - Whether PO-derived expense rows remain delete-and-reinsert projections in storage. Their display is settled above — one row per purchase order, read-only, linking to Purchasing — but a projection and a persisted record both render that way, so storage is untouched by that decision.
-- Expense and income category normalisation. `routes/finance.js` never calls `storeCategory`, so manual entries write raw client text with no normalisation at all.
+- Where income categories live. Normalisation is settled above, but income categories have no server-side master list at all — they sit in browser localStorage and are never synced — so normalising them makes the values consistent without producing a shared list. This is a Settings question, not a Finance one.
 - What happens to the existing `income_entries` and `sales_entries` rows.
 
 ## 37. Related documents
