@@ -4588,14 +4588,23 @@ function maybeEnqueueQingyunPush(orderId) {
 }
 
 function markOrderPaid(orderId) {
-  // "wait_for_restock" orders transition to 'awaiting_restock' on payment,
-  // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
-  // promotes them to 'paid' once every missing product is restocked. No
+  // An order carrying awaiting_restock_pids transitions to 'awaiting_restock'
+  // on payment, not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
+  // promotes it to 'paid' once every missing product is restocked. No
   // stock is deducted on payment for these — they have no reservations.
+  //
+  // Two flows write those pids and this is deliberately blind to which: the
+  // Guangzhou "wait for restock" answer to the shortage modal (fallback_choice
+  // 'wait_for_restock'), and a shipped order holding a sold-out 'backorder_gz'
+  // pre-order line, which no modal precedes and so carries no fallback_choice
+  // at all. The column is written in exactly one place — the order INSERT — and
+  // never updated, so its presence is the whole test.
   const meta = tdb().prepare(
-    "SELECT fallback_choice, awaiting_restock_pids FROM retail_orders WHERE id = ?"
+    "SELECT awaiting_restock_pids FROM retail_orders WHERE id = ?"
   ).get(orderId);
-  const isWait = meta?.fallback_choice === 'wait_for_restock' && meta?.awaiting_restock_pids;
+  let isWait = false;
+  try { isWait = (JSON.parse(meta?.awaiting_restock_pids || '[]') || []).length > 0; }
+  catch { isWait = false; }
 
   const r = isWait
     ? tdb().prepare(
@@ -10292,6 +10301,63 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       if (transferable) short.push(ln.product_id);
     }
     if (short.length) fulfillmentShortPids = [...new Set(short)];
+  }
+
+  // ── Pre-order park: a shipped order nothing can fill yet ─────────────
+  // A sold-out 'backorder_gz' line stays orderable for the shoppers we ship to
+  // — that is the whole point of the policy — but the order it created was
+  // indistinguishable from any other paid one: it joined the Paid queue, took
+  // its stock at payment (driving physical_qty negative), and nothing anywhere
+  // said it was waiting on a delivery. The office found out by picking the
+  // order and not finding the item.
+  //
+  // Park it where the Guangzhou "wait for restock" choice already parks:
+  // status 'awaiting_restock', no stock taken, promoted to 'paid' by
+  // checkAwaitingRestockForRestock() the moment the shipping store's count
+  // covers every line. The two flows differ only in how the order got there —
+  // a modal the GZ shopper answered, versus a policy the operator set — so
+  // they share the column, the promotion, the Awaiting restock chip and the
+  // operator's manual "Restocked · start preparing".
+  //
+  // The demand below is deliberately NOT expandStockLines() — it is the demand
+  // checkAwaitingRestockForRestock() will re-derive when it decides whether to
+  // release this order, and that reads retail_order_items: one row per line,
+  // the line's own product_id, summed per product. Scoring the order any other
+  // way would let it park on a judgement the promotion never repeats.
+  //
+  // Three guards, each the difference between parked and STUCK, because the
+  // promotion only ever releases an order whose EVERY line the shipping store
+  // can cover:
+  //   • No bundle in the cart. The line carries the bundle's own id, which has
+  //     no stock row, so the release check could never pass. Same reason the
+  //     5-option flow refuses bundles (bundle_no_fallback).
+  //   • No stock-backed option add-on. Those hang off a line rather than
+  //     carrying one of their own, so the release would neither check nor
+  //     deduct them — where the ordinary paid path does both.
+  //   • Every short line is a backorder line. This is also what keeps a
+  //     supplier-direct line out: it holds no stock of ours, so it has no row,
+  //     so it reads short on every order it is on — and its effective policy is
+  //     'always', not 'backorder_gz'. Parking on it would be waiting for a
+  //     count nobody is ever going to write. ('strict' cannot reach here at
+  //     all; the hard out-of-stock gate refused it far above.)
+  // Anything failing a guard is left exactly as it was: paid, and decremented
+  // at payment as before.
+  const hasStockedAddon = mutatedItems.some(r => (r.options || []).some(o => o.stock_product_id));
+  if (!isPickup && !isWaitFlow && !stockGate && fulfillingStore
+      && !cartHasBundle && !hasStockedAddon && !awaitingRestockPids) {
+    const need = new Map();
+    const productById = new Map();
+    for (const r of mutatedItems) {
+      if (!r.product) continue;
+      need.set(r.product.id, (need.get(r.product.id) || 0) + r.qty);
+      productById.set(r.product.id, r.product);
+    }
+    const shortHere = [...need.entries()]
+      .filter(([pid, qty]) => inventory.getAvailable(fulfillingStore.id, pid, 'wechat').available < qty)
+      .map(([pid]) => pid);
+    const parkable = shortHere.length
+      && shortHere.every(pid => effectiveOosPolicy(productById.get(pid)) === 'backorder_gz');
+    if (parkable) awaitingRestockPids = shortHere;
   }
 
   resolved.length = 0; for (const r of mutatedItems) resolved.push(r); // keep `resolved` as the source of truth downstream
