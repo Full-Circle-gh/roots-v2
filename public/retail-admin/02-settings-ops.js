@@ -2152,6 +2152,13 @@ async function tmToggleEnforce() {
     const res = await api('/api/backend/rbac-enforce', { method: 'PUT', body: { enforce: turningOn ? 1 : 0 } });
     TM_RBAC_ENFORCE = !!res.rbacEnforce;
     tmPaintEnforce();
+    // The Roles editor holds its own copy (it loads from its own endpoint) and
+    // the Quick Stock lockdown tick is disabled while enforcement is off. Move
+    // both together, or turning enforcement on leaves that tick stuck until a
+    // reload — with a hint on screen telling the operator to do the thing they
+    // just did.
+    RL_RBAC_ENFORCE = TM_RBAC_ENFORCE;
+    if (RL_ROLES.length && $('#rlPane')) rlRenderPane();
   } catch (e) { toast(e.message || cuT('Couldn’t save', '保存失败'), 'err'); }
   finally { btn.disabled = false; }
 }
@@ -2439,10 +2446,14 @@ async function tmSavePerms() {
 // ══════════════════════════════════════════════════════════════════════════
 let RL_ROLES = [];
 let RL_SEL = null;            // selected role key
-let RL_DRAFT = null;          // { nameEn, nameCn, descEn, descCn, caps:Set, layout }
+let RL_DRAFT = null;          // { nameEn, nameCn, descEn, descCn, caps:Set, layout, stockAppOnly }
 let RL_OPEN = {};             // group key → expanded
 let RL_CAN_EDIT = false;
 let RL_LAYOUTS = ['default'];
+// Whether capabilities are actually enforced for this tenant. Read here as well
+// as on the Team tab, because the Quick Stock lockdown's one precondition has to
+// be answerable whichever of the two the operator opened first.
+let RL_RBAC_ENFORCE = false;
 let RL_BUSY = false;
 
 function rlRole(key) { return RL_ROLES.find(r => r.key === key) || null; }
@@ -2596,6 +2607,12 @@ function rlRenderPane() {
         : '')
     + `</div>`;
 
+  // The lockdown sits BELOW the blast radius and above the ticks it governs.
+  // Below, because it carries a checkbox and no checkbox on this pane precedes
+  // being told who it reaches. Above, because while it is on the ticks mean
+  // nothing, and a switch that decides that cannot be found underneath them.
+  if (!ro) html += rlStockOnlyField();
+
   html += `<div class="rl-tally">`
     + `<span class="rl-count"><b>${keys.size}</b> ${escapeHtml(cuT('of ' + total + ' on', '/ ' + total + ' 已开启'))}</span>`
     + `<span class="rl-count">${escapeHtml(rlMoneyLine(keys))}</span></div>`;
@@ -2668,12 +2685,51 @@ function rlLayoutLabel(key) {
   }[key] || key);
 }
 
+/* THE QUICK STOCK LOCKDOWN — the one switch on this pane that is not a
+   capability, and the reason the whole pane could lie. On, the role opens the
+   /stock app and nothing else, refused in server.js before any route runs; the
+   ticks below are then dead letters. So an owner could grant "Receive purchase
+   orders" to the kitchen role, watch it save, and watch the operator keep their
+   403 — which is exactly what happened, because the flag has been enforced
+   since roles became tenant data and nothing in the product could write it.
+
+   Turning it OFF has one precondition: capability enforcement must be on. With
+   it off, requireRetailAdmin never consults the route→capability map, so this
+   lockdown is the only thing between a restricted operator and the whole
+   backend. Said HERE, on a disabled box, with the reason — the server refuses
+   the same edit, but a control that looks available and then errors has already
+   wasted the decision. */
+function rlLockHint(on) {
+  // Only the widening direction has a precondition. A role that is already
+  // unlocked can always be locked down.
+  const blocked = on && !RL_RBAC_ENFORCE;
+  if (!on) {
+    return cuT('Off: this role reaches the backend, limited to the permissions ticked below.',
+               '关闭后:该角色可访问后台,权限以下方勾选为准。');
+  }
+  if (blocked) {
+    return cuT('To let this role out of the app, turn permissions enforcement on first (above, under People) — otherwise it would reach the whole backend rather than the tools ticked below.',
+               '若要让该角色使用其他功能,请先在上方“成员”中开启权限强制执行,否则该角色将可访问整个后台,而不仅是下方勾选的功能。');
+  }
+  return cuT('On: this role opens the Add Stock app and nothing else. The permissions below have no effect while it is on.',
+             '开启后:该角色仅可打开“加库存”应用,下方权限在此期间不生效。');
+}
+function rlStockOnlyField() {
+  const on = !!RL_DRAFT.stockAppOnly;
+  const blocked = on && !RL_RBAC_ENFORCE;
+  return `<div class="tm-field" style="margin-top:16px"><div class="rl-p rl-lock${blocked ? ' locked' : ''}">`
+    + `<input type="checkbox" id="rlStockOnly"${on ? ' checked' : ''}${blocked ? ' disabled' : ''}>`
+    + `<label for="rlStockOnly">${escapeHtml(cuT('Only the Add Stock app', '仅可使用“加库存”应用'))}</label>`
+    + `</div><div class="tm-fhint" id="rlStockOnlyHint">${escapeHtml(rlLockHint(on))}</div></div>`;
+}
+
 function rlDirty() {
   const r = rlRole(RL_SEL);
   if (!r || !RL_DRAFT) return false;
   if (RL_DRAFT.nameEn !== r.nameEn || RL_DRAFT.nameCn !== r.nameCn) return true;
   if (RL_DRAFT.descEn !== (r.descEn || '') || RL_DRAFT.descCn !== (r.descCn || '')) return true;
   if (RL_DRAFT.layout !== r.layout) return true;
+  if (RL_DRAFT.stockAppOnly !== !!r.stockAppOnly) return true;
   const was = new Set(r.caps || []);
   if (was.size !== RL_DRAFT.caps.size) return true;
   for (const k of RL_DRAFT.caps) if (!was.has(k)) return true;
@@ -2722,7 +2778,11 @@ function rlBindPane() {
     });
   });
   if (!RL_CAN_EDIT || !RL_DRAFT) return;
-  $$('#rlPane .rl-p input').forEach(cb => {
+  // [data-key] is load-bearing, not decoration: the Quick Stock lockdown row
+  // borrows .rl-p for its metrics but is not a capability. Without the
+  // attribute selector its tick would run this handler too and add `null` to
+  // the role's capability set.
+  $$('#rlPane .rl-p[data-key] input').forEach(cb => {
     cb.addEventListener('change', function () {
       const key = this.closest('.rl-p').getAttribute('data-key');
       if (this.checked) RL_DRAFT.caps.add(key); else RL_DRAFT.caps.delete(key);
@@ -2737,6 +2797,16 @@ function rlBindPane() {
   bindText('rlDescEn', 'descEn'); bindText('rlDescCn', 'descCn');
   const lay = $('#rlLayout');
   if (lay) lay.addEventListener('change', () => { RL_DRAFT.layout = lay.value; rlSyncCounts(); });
+  const so = $('#rlStockOnly');
+  if (so) so.addEventListener('change', () => {
+    RL_DRAFT.stockAppOnly = so.checked;
+    // Patch the sentence in place. rlRenderPane() would rebuild the seventy-row
+    // capability tree underneath and take the operator's scroll with it — the
+    // same reason rlSyncCounts exists for the ticks.
+    const h = $('#rlStockOnlyHint');
+    if (h) h.textContent = rlLockHint(so.checked);
+    rlSyncCounts();
+  });
   const save = $('#rlSave'); if (save) save.addEventListener('click', rlSave);
   const rev = $('#rlRevert'); if (rev) rev.addEventListener('click', () => rlSelect(RL_SEL, true));
   const del = $('#rlDelete'); if (del) del.addEventListener('click', rlDeleteRole);
@@ -2751,7 +2821,7 @@ function rlSelect(key, force) {
   const r = rlRole(key);
   RL_DRAFT = r && !r.isFixed
     ? { nameEn: r.nameEn || '', nameCn: r.nameCn || '', descEn: r.descEn || '', descCn: r.descCn || '',
-        caps: new Set(r.caps || []), layout: r.layout || 'default' }
+        caps: new Set(r.caps || []), layout: r.layout || 'default', stockAppOnly: !!r.stockAppOnly }
     : null;
   rlRenderList();
   rlRenderPane();
@@ -2764,6 +2834,7 @@ async function rlLoad(keepSel) {
     RL_ROLES = j.roles || [];
     RL_CAN_EDIT = !!j.canEdit;
     RL_LAYOUTS = j.layouts || ['default'];
+    RL_RBAC_ENFORCE = !!j.rbacEnforce;
     const want = keepSel && RL_ROLES.some(r => r.key === keepSel) ? keepSel
       : (RL_SEL && RL_ROLES.some(r => r.key === RL_SEL) ? RL_SEL
         : (RL_ROLES.find(r => !r.isFixed) || RL_ROLES[0] || {}).key);
@@ -2786,7 +2857,7 @@ async function rlSave() {
     await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'PUT', body: {
       name_en: RL_DRAFT.nameEn.trim(), name_cn: RL_DRAFT.nameCn.trim(),
       desc_en: RL_DRAFT.descEn.trim(), desc_cn: RL_DRAFT.descCn.trim(),
-      layout: RL_DRAFT.layout, caps: [...RL_DRAFT.caps],
+      layout: RL_DRAFT.layout, stock_app_only: RL_DRAFT.stockAppOnly, caps: [...RL_DRAFT.caps],
     } });
     toast(r.people
       ? cuT(r.people === 1 ? 'Saved · 1 person moves with it' : 'Saved · ' + r.people + ' people move with it',

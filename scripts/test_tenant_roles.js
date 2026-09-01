@@ -26,6 +26,8 @@
 //   14. money markers: every one of the 101 is classified, and the tallies hold
 //   15. the per-person read is gated, except on your own row
 //   16. forced-on and forced-off come back distinguishable
+//   17. the Quick Stock lockdown is writable at last — locking down is free,
+//       unlocking waits on capability enforcement being on
 
 'use strict';
 
@@ -296,6 +298,57 @@ function versionOf(tid) {
   is(r.body.grants, ['orders:refund'], 'forced-ON comes back as a grant');
   is(r.body.revokes, ['orders:edit'], 'forced-OFF comes back as a revoke');
   truthy(r.body.roleName && r.body.roleName.en, 'and the role’s own name travels with it');
+
+  // ─────────────────────────────────────────────────────────────────────
+  section('17 · the Quick Stock lockdown is writable, and only one way is free');
+  // The flag has been a column since roles became data, the seeder sets it on
+  // the two stocker roles, and server.js refuses every other route for a role
+  // carrying it — but no create or edit path could ever write it. So a kitchen
+  // role could be granted purchasing:receive, save cleanly, and keep its 403,
+  // with the permissions screen showing a tick that meant nothing.
+  const tS = mkTenant('Lockdown test');
+  const sOwner = mkUser(tS, 's_owner', 'owner');
+  // kitchen is a CARRIED role: it is only seeded where somebody holds it (§2),
+  // which is exactly the tenant this change is for.
+  mkUser(tS, 's_cook', 'kitchen', 3);
+  roles.seedTenant(tS);
+  SESSION = { tenantId: tS, backendUserId: sOwner };
+
+  r = await call('GET', '/api/backend/roles');
+  const kitchenRole = (r.body.roles || []).find(x => x.key === 'kitchen');
+  truthy(kitchenRole, 'the seeded tenant has a kitchen role');
+  is(kitchenRole.stockAppOnly, true, 'and the editor is TOLD it is locked to the app — it never used to be');
+  is(r.body.rbacEnforce, false, 'enforcement is off, as it is for every tenant by default');
+
+  // The refusal. Unlocking while enforcement is off does not hand the role the
+  // tools that were ticked — it hands it every route, because the cap map is
+  // only consulted under rbac_enforce.
+  r = await call('PUT', '/api/backend/roles/kitchen', { stock_app_only: 0 });
+  is(r.status, 400, 'unlocking is refused while capability enforcement is off');
+  is(r.body.need, 'rbac_enforce', 'and the refusal names what is missing');
+  is(roles.recordFor(tS, 'kitchen').stockAppOnly, true, 'the role is unchanged — a refused write writes nothing');
+
+  // Locking DOWN is a narrowing, so it needs no precondition at all.
+  r = await call('PUT', '/api/backend/roles/warehouse', { stock_app_only: 1 });
+  is(r.status, 200, 'locking a role DOWN is free — narrowing never waits on enforcement');
+  is(roles.recordFor(tS, 'warehouse').stockAppOnly, true, 'and it took');
+
+  // With enforcement on, the unlock goes through and the ticks start meaning
+  // something. This is the whole point of the change.
+  await call('PUT', '/api/backend/rbac-enforce', { enforce: 1 });
+  r = await call('PUT', '/api/backend/roles/kitchen',
+    { stock_app_only: 0, caps: ['quickstock:add', 'purchasing:view', 'purchasing:receive'] });
+  is(r.status, 200, 'with enforcement on, the kitchen role can be let out of the app');
+  is(roles.recordFor(tS, 'kitchen').stockAppOnly, false, 'the lockdown is off');
+  is(r.body.role.caps.sort(), ['purchasing:receive', 'purchasing:view', 'quickstock:add'],
+    'and it holds the two permissions that let it book a delivery in');
+
+  // A role created locked stays locked; the default is still unlocked.
+  r = await call('POST', '/api/backend/roles', { name_en: 'Prep kitchen', name_cn: '备餐', stock_app_only: 1 });
+  is(r.status, 200, 'a new role can be created locked to the app');
+  is(r.body.role.stockAppOnly, true, 'and it is');
+  r = await call('POST', '/api/backend/roles', { name_en: 'Buyer', name_cn: '采购员' });
+  is(r.body.role.stockAppOnly, false, 'while a role that does not ask for it is unlocked, as before');
 
   // ─────────────────────────────────────────────────────────────────────
   server.close();

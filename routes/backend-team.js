@@ -589,6 +589,12 @@ function roleDetail(tenantId, rec, counts, ent, withCaps) {
     descEn: rec.descEn, descCn: rec.descCn,
     layout: rec.layout,
     storePinned: rec.storePinned, storeScoped: rec.storeScoped,
+    // The Quick Stock lockdown (server.js, above the routes). Shipped here so
+    // the role editor can show and edit it: until it was, the flag was set once
+    // by the seeder and there was no switch anywhere in the product — a kitchen
+    // role could be granted purchasing:receive and still be blocked from it,
+    // with nothing on screen to say why.
+    stockAppOnly: rec.stockAppOnly,
     roster: rec.roster, isFixed: rec.isFixed, sortOrder: rec.sortOrder,
     people: c.people, activePeople: c.active, exceptions: c.exceptions,
     capCount: entVisible.length, capTotal: ent.size,
@@ -597,6 +603,33 @@ function roleDetail(tenantId, rec, counts, ent, withCaps) {
   if (withCaps) out.caps = entVisible;
   return out;
 }
+
+// Is capability enforcement live for this tenant? Only matters in one place
+// below — see the stock_app_only branches. Reads the column directly rather
+// than the whole tenants row; this runs on a role write, not a hot path.
+function rbacEnforceOn(tenantId) {
+  try { return !!db.prepare('SELECT rbac_enforce FROM tenants WHERE id = ?').get(tenantId)?.rbac_enforce; }
+  catch (e) { return false; }
+}
+
+// Refusing to UNLOCK a Quick Stock role while enforcement is off, in one place
+// because both the create and the edit path owe the same answer.
+//
+// WHY THIS IS A REFUSAL AND NOT A WARNING. The lockdown in server.js is the
+// ONLY thing standing between a restricted operator and the whole backend while
+// tenants.rbac_enforce is 0 (its default): requireRetailAdmin consults the
+// route→capability map exclusively under that flag, so with it off every
+// unmapped mutation is fail-open and even a mapped one is never checked. Clear
+// the lockdown on a tenant in that state and a kitchen account does not gain
+// receiving — it gains refunds, price edits and the team roster. So the switch
+// that widens is gated on the switch that makes capabilities real, and the
+// error says which one and where.
+const RBAC_FIRST = {
+  error: 'Turn permissions enforcement on first, in Settings → Team, or this role '
+       + 'would reach the whole backend rather than the tools you ticked · '
+       + '请先在“设置→团队”中开启权限强制执行，否则该角色将可访问整个后台，而不仅是所勾选的功能',
+  need: 'rbac_enforce',
+};
 
 // ── List this tenant's roles ─────────────────────────────────────────────
 // Any signed-in operator gets identity and counts — the roster renders role
@@ -614,6 +647,11 @@ router.get('/api/backend/roles', requireBackend, (req, res) => {
     success: true,
     canEdit,
     layouts: roles.LAYOUTS,
+    // Shipped so the role editor can explain the Quick Stock lockdown's one
+    // precondition on the spot instead of only when a save comes back refused.
+    // The Team tab reads the same field off /api/backend/team; the editor must
+    // not depend on which of the two loaded first.
+    rbacEnforce: rbacEnforceOn(tid),
     roles: list.map(r => roleDetail(tid, r, counts, ent, canEdit)),
   });
 });
@@ -627,6 +665,10 @@ router.post('/api/backend/roles', requireCap('team:permissions'), express.json()
   if (!nameEn && !nameCn) return res.status(400).json({ error: 'Give the role a name · 请为角色命名' });
   if (nameEn.length > 40 || nameCn.length > 40) return res.status(400).json({ error: 'Name is too long · 名称过长' });
   const layout = roles.LAYOUTS.includes(body.layout) ? body.layout : 'default';
+  // A NEW role defaults to unlocked, as it always has. Asking for the lockdown
+  // is a narrowing and needs no gate; the refusal below only guards the widening
+  // direction, which on create is simply the default.
+  const stockAppOnly = body.stock_app_only ? 1 : 0;
   const ent = entitledKeys(tid);
   const { caps: capList, refused } = vetRoleCaps(
     Array.isArray(body.caps) ? body.caps : [], [], req.backendCaps, ent);
@@ -641,11 +683,11 @@ router.post('/api/backend/roles', requireCap('team:permissions'), express.json()
       db.prepare(`INSERT INTO tenant_roles
           (tenant_id, role_key, name_en, name_cn, desc_en, desc_cn, caps_json,
            layout, store_pinned, store_scoped, stock_app_only, roster, is_fixed, sort_order, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,0,'team',0,?,CURRENT_TIMESTAMP)`)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,'team',0,?,CURRENT_TIMESTAMP)`)
         .run(tid, key, nameEn || nameCn, nameCn || nameEn,
           String(body.desc_en || '').slice(0, 200), String(body.desc_cn || '').slice(0, 200),
           JSON.stringify(capList), layout,
-          body.store_pinned ? 1 : 0, body.store_scoped ? 1 : 0, sort);
+          body.store_pinned ? 1 : 0, body.store_scoped ? 1 : 0, stockAppOnly, sort);
       roles.bumpVersion(tid);
     });
     write();
@@ -701,6 +743,19 @@ router.put('/api/backend/roles/:key', requireCap('team:permissions'), express.js
     sets.push('store_pinned = ?'); args.push(on);
   }
   if (body.store_scoped !== undefined) { sets.push('store_scoped = ?'); args.push(body.store_scoped ? 1 : 0); }
+  // THE QUICK STOCK LOCKDOWN. On = this role reaches the /stock app and nothing
+  // else, enforced in server.js before any route runs. Off = it reaches the
+  // backend, shaped by the capabilities ticked below.
+  //
+  // This branch is why the whole change exists. The flag has been a column since
+  // roles became tenant data, the seeder sets it on `kitchen` and `store_stock`,
+  // and the middleware reads it on every request — but nothing could ever write
+  // it. A kitchen role granted purchasing:receive kept its 403.
+  if (body.stock_app_only !== undefined) {
+    const on = body.stock_app_only ? 1 : 0;
+    if (!on && rec.stockAppOnly && !rbacEnforceOn(tid)) return res.status(400).json(RBAC_FIRST);
+    sets.push('stock_app_only = ?'); args.push(on);
+  }
 
   let capList = null;
   if (Array.isArray(body.caps)) {
