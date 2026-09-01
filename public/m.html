@@ -153,6 +153,13 @@
   --bg:var(--paper); --surface-card:#FFFFFF; --surface-raised:var(--raised); --surface-dark:var(--ink);
   --text-primary:var(--ink); --text-secondary:var(--graphite); --text-caption:var(--graphite);
   --border-default:var(--border); --border-strong:var(--graphite); --border-focus:var(--dusk);
+  /* THE EDGE OF SOMETHING YOU PRESS, and it is not --border-default. Separating
+     a card from the page and drawing the boundary of a control are different
+     jobs: the first may whisper, the second must clear 3:1 or the button is not
+     there. Measured on the receive screen, where it was reported: the old edge
+     is 1.34:1 in dark and 1.25:1 in light — the label reads and the BUTTON does
+     not. These are 3.71:1 and 3.21:1 on their grounds. */
+  --edge:#948B76;
   --accent:var(--dusk); --accent-hover:var(--dusk-hover); --accent-press:var(--dusk-press); --accent-tint:var(--dusk-tint);
   --success:var(--sage); --warning:var(--amber); --danger:var(--brick);
   --radius-card:14px;
@@ -163,7 +170,7 @@
 :root[data-theme="dark"]{
   --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40; --surface-dark:#0B121F;
   --text-primary:var(--paper); --text-secondary:#9AA2B0; --text-caption:#9AA2B0;
-  --border-default:#263149; --border-strong:#3A455D;
+  --border-default:#263149; --border-strong:#3A455D; --edge:#667491;
   --unseen:#182329;
   /* The tints were defined once, in the light block, and never again — so a
      Sage icon tile, an Amber count badge and a Brick warning banner all kept
@@ -298,7 +305,7 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .rowico{width:36px;height:36px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;
   justify-content:center;color:var(--text-secondary);flex:none}
 .num{font-variant-numeric:tabular-nums}
-.btn2{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;
+.btn2{min-height:44px;padding:0 16px;border-radius:8px;border:1.5px solid var(--edge);background:transparent;
   color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .btn2:disabled{opacity:.55;cursor:default}
@@ -312,10 +319,10 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
   animation:tSheetUp .4s var(--ease-settle) both;display:flex;flex-direction:column}
 .grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
 .pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
-.stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1px solid var(--border-default);
+.stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
 .chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
-  cursor:pointer;font-family:inherit;white-space:nowrap;border:1px solid var(--border-default);
+  cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid var(--edge);
   background:var(--surface-card);color:var(--text-secondary)}
 .chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
 .chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
@@ -562,6 +569,10 @@ const state = {
      not. `mode` still comes from the server — this screen is the ADD flow (log
      what you made, never see the shelf total); the absolute recount stays on
      /stock, which is also still the whole product for a role locked to it. */
+  /* Which answered line has been reopened to have its number corrected. One at
+     a time: opening another folds the last, so the screen never carries two
+     live counters and the operator is never asked which one they meant. */
+  recvOpenLine:null,
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
       add:{},inflight:{},rowErr:{},timers:{}},
@@ -1144,6 +1155,20 @@ reg('recvNotArrived', id=>{
    simply did not turn up, and pressing either again undoes it. Both answer
    every line in the group — the per-line control is still there to disagree
    with any one of them afterwards. */
+/* THE WHOLE ORDER CAME. It ANSWERS all of the lines — it does not skip them —
+   so "12 of 12 checked" is true afterwards and every one goes on the wire.
+   Pressing it again takes them all back to unanswered, the same undo a line
+   has. */
+/* Reopening keeps the answer and shows the counter — it does not un-answer.
+   Tapping a folded row used to call recvArrived, which toggles, so the one
+   gesture for "let me correct that number" threw the number away. */
+reg('recvOpenLine', id=>{ state.recvOpenLine=id; state.recvSaveErr=null; render(); });
+reg('recvAllArrived', ()=>{
+  const items=rcvItems(); if(!items.length) return;
+  const undo=items.every(it=>rcvOn(it)&&rcvVal(it.id).recv===rcvOrdered(it));
+  items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
+    if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
+  state.recvDmg=null; state.recvSaveErr=null; render(); });
 reg('recvGroupNone', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
   const undo=rcvGroupState(g.items)==='none';
   g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
@@ -3710,6 +3735,30 @@ function rcvDirty(it){
 }
 const rcvToSend=()=>((state.recvPo&&state.recvPo.items)||[]).filter(rcvDirty);
 function rcvSupplier(it,po){ return (it.supplier_name||'').trim()||(po.supplier||'').trim()||T('Unspecified','未指定'); }
+/* THE ORDER THE SHELF IS IN. A SKU is <area>-<slot>, so both halves compare
+   NUMERICALLY or 1-10 sorts before 1-2 and the list stops matching the walk.
+   Lines with no SKU sink rather than sorting as the smallest — an absent code
+   is not a low one. */
+function rcvSkuKey(s){ const m=/^(\d+)-(\d+)/.exec(s||''); return m?[+m[1],+m[2]]:null; }
+function rcvSkuCmp(a,b){
+  const sa=(a.sku||''), sb=(b.sku||'');
+  if(!sa&&!sb) return 0;
+  if(!sa) return 1;
+  if(!sb) return -1;
+  const ka=rcvSkuKey(sa), kb=rcvSkuKey(sb);
+  if(ka&&kb) return (ka[0]-kb[0])||(ka[1]-kb[1])||sa.localeCompare(sb,undefined,{numeric:true});
+  if(ka) return -1;
+  if(kb) return 1;
+  return sa.localeCompare(sb,undefined,{numeric:true,sensitivity:'base'});
+}
+/* Flat, and deliberately NOT grouped by supplier. The person at the door is
+   matching a box in their hands to a line on a screen, and the supplier does
+   not help them do that — it is who to chase afterwards, which is Purchasing's
+   question and is still in the record. Grouping also asked the same question
+   twice: on an order whose suppliers mostly carry one line each, the group row
+   and the line row were the same decision, in two different shapes. */
+function rcvItems(){ const po=state.recvPo; return po?(po.items||[]).slice().sort(rcvSkuCmp):[]; }
+function rcvAnswered(){ return rcvItems().filter(rcvOn).length; }
 function rcvGroups(){
   const po=state.recvPo; if(!po) return [];
   const g=new Map();
@@ -3807,22 +3856,54 @@ function rcvLocation(){
 function rcvLine(it){
   const v=rcvVal(it.id), ord=rcvOrdered(it), sh=rcvShort(it), ov=rcvOver(it);
   const on=rcvOn(it), came=rcvCame(it), no=rcvNo(it);
+  /* Declared HERE, not beside the counter it also feeds: the fold below returns
+     before that point, and a const read above its declaration is a TDZ throw
+     rather than an undefined — the whole screen, not one row. */
+  const edited=v.recv!==ord;
   /* Pressing the state a line is already in takes it back to unanswered. That
      is the undo, and it is where it is looked for — on the thing that was
      pressed — rather than in a separate control that would have to explain
      itself. */
-  const answer=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${on?'12px':'0'}">
-    <button class="chip${came?' on':''}" style="justify-content:center;padding:0 10px"
-      aria-pressed="${came}" onclick="APP.cmd('recvArrived','${it.id}')">${ic('check',16,2)}${T('Arrived','已到货')}</button>
-    <button class="chip${no?' on':''}" style="justify-content:center;padding:0 10px"
-      aria-pressed="${no}" onclick="APP.cmd('recvNotArrived','${it.id}')">${ic('x',16,2)}${T('Not arrived','未到货')}</button></div>`;
+  /* THE ORDERED QUANTITY IS THE BUTTON. An unanswered line offers the number it
+     is expecting — "10 kg arrived" — so confirming the ordinary case is one tap
+     and the figure being confirmed is on the control that confirms it. The
+     other half says "Not 10", which is the honest opposite and opens the
+     counter at zero to be counted up.
+     What it replaces: a bare [Arrived] / [Not arrived] pair that named no
+     number, above a counter that then had to be read separately. And what it
+     must never become: an untouched line that reads as delivered. Nothing here
+     is answered by silence — `on` is set by a press, and only a pressed line
+     goes on the wire. */
+  const unit=escAttr(it.unit||'');
+  const ordTxt=rcvFmt(ord)+(unit?' '+unit:'');
+  const answer=on?'':`<div style="display:flex;gap:8px">
+    <button class="chip" style="flex:1;justify-content:center;padding:0 10px"
+      onclick="APP.cmd('recvArrived','${it.id}')">${ic('check',16,2)}${LANG==='en'?(ordTxt+' arrived'):(ordTxt+' 已到货')}</button>
+    <button class="chip" style="flex:none;justify-content:center;padding:0 14px;color:var(--text-secondary)"
+      onclick="APP.cmd('recvNotArrived','${it.id}')">${LANG==='en'?('Not '+rcvFmt(ord)):('并非 '+rcvFmt(ord))}</button></div>`;
+  /* Answered AS ORDERED folds to one quiet row — the screen shortens as the
+     operator works instead of staying a wall of twelve. The number it was
+     answered with stays on the row, because "checked" must never be something
+     the reader has to infer. Pressing it is the undo. */
+  const folded=came&&!edited&&!v.dmg&&String(state.recvOpenLine)!==String(it.id);
+  if(folded) return `<button class="row" style="min-height:52px;padding:11px 14px;gap:10px;border-radius:12px;background:var(--surface-raised)"
+    onclick="APP.cmd('recvOpenLine','${it.id}')">
+    <span style="flex:none;color:var(--sage-ink);display:flex">${ic('check',17,2)}</span>
+    <span class="num" style="flex:none;font-size:13px;font-weight:500;color:var(--text-secondary)">${escAttr(it.sku||'')}</span>
+    <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvName(it))}</span>
+    <span class="num" style="flex:none;font-size:13.5px;color:var(--text-secondary)">${ordTxt}</span></button>`;
   /* Compared as strings: the command carries the id back through an onclick
      attribute, so it arrives as text while it.id is a number, and === between
      the two is quietly always false — the counter opened in state and never on
      the glass. */
   const open=on&&String(state.recvDmg)===String(it.id);
-  const edited=v.recv!==ord;
   const st=rcvStep(it);
+  /* THE WAY BACK from an answered line. With the ordered quantity acting as the
+     confirm button there is no chip left to press a second time, so the undo
+     that the pair used to carry has to be said out loud. It un-answers — it
+     does not set the count to zero, which is the opposite fact. */
+  const undo=!on?'':`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:12.5px;color:var(--text-secondary);align-self:flex-start;border:none"
+    onclick="APP.cmd('recvArrived','${it.id}')">${T('Not checked yet','尚未核对')}</button>`;
   const qty=!on?'':`<div style="display:flex;align-items:center;gap:8px">
     <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|${-st}')">${ic('minus',22,2)}</button>
     <input class="qty${edited?' edit':''}" inputmode="decimal" value="${rcvFmt(v.recv)}"
@@ -3873,7 +3954,7 @@ function rcvLine(it){
         <span style="font-size:15.5px;font-weight:500">${escAttr(rcvName(it))}</span>
         ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}</span>
       <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
-    ${answer}${qty}${dmg}${note}${reasons}</div>`;
+    ${answer}${qty}${dmg}${note}${reasons}${undo}</div>`;
 }
 /* The two whole-supplier answers, because those are the two things that happen
    to a whole supplier: the van came with everything on the list, or it did not
@@ -3944,8 +4025,14 @@ function screenReceive(){
     <span class="num" style="font-size:14px;color:var(--text-secondary);line-height:1.5">${escAttr(state.recvDone)}</span>
     <button class="btn2" style="margin-top:6px" onclick="APP.cmd('recvBackToList')">${T('Back to Receiving','返回收货')}</button></div>`;
   const missing=rcvMissingReasons();
-  const groups=rcvGroups().map(g=>`<div style="border-top:1px solid var(--border-default)">${rcvGroupHead(g)}
-    <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:6px">${g.items.map(rcvLine).join('')}</div></div>`).join('');
+  const items=rcvItems(), answered=rcvAnswered();
+  /* ONE TAP FOR THE ORDINARY DELIVERY, and it answers every line rather than
+     skipping them. Hidden once every line is spoken for — a control whose whole
+     job is already done is clutter on a screen read at a doorway. */
+  const allBtn=answered===items.length?'':`<button class="btn2" style="width:100%"
+    onclick="APP.cmd('recvAllArrived')">${ic('check',18,2)}${LANG==='en'
+      ?('All '+items.length+' arrived as ordered'):('全部 '+items.length+' 项按订单到货')}</button>`;
+  const lines=`<div style="display:flex;flex-direction:column;gap:9px">${items.map(rcvLine).join('')}</div>`;
   /* A failed save NEVER clears the screen: everything typed is in state.recvVals
      and stays exactly where it was, with the server's own words above the
      button and the button still there to press again. */
@@ -3965,7 +4052,8 @@ function screenReceive(){
     T('Mark at least one product before recording.','请先标记至少一项到货情况。')}</span>`:'';
   return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
     ${rcvLocation()}
-    <div>${groups}</div>
+    ${allBtn}
+    ${lines}
     ${rcvSummary()}
     <div style="display:flex;flex-direction:column">${err}${warn}
       <button class="cta" ${(missing.length||state.recvBusy||!send)?'disabled':''} onclick="APP.cmd('recvSave')">${
@@ -4620,10 +4708,13 @@ SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render
 SUBS.receive={title:['Receive','收货'],
   titleOf:()=>escAttr((state.recvPo&&state.recvPo.po_number)||(state.recvId?'#'+state.recvId:T('Receive','收货'))),
   backLabel:()=>T('Receiving','收货'),
+  /* HOW FAR THROUGH, not how many suppliers. The supplier count told the
+     operator nothing they could act on; the number of lines still to check is
+     the only question this screen leaves open. It is true because `on` is only
+     ever set by a press. */
   status:()=>{ const po=state.recvPo; if(!po) return '';
-    const n=(po.items||[]).length, s=rcvGroups().length;
-    return LANG==='en' ? (s+' supplier'+(s===1?'':'s')+' · '+n+' line'+(n===1?'':'s'))
-                       : (s+' 家供应商 · '+n+' 项'); },
+    const n=(po.items||[]).length, a=rcvAnswered();
+    return LANG==='en' ? (a+' of '+n+' checked') : ('已核对 '+a+'/'+n+' 项'); },
   render:()=>screenReceive()};
 
 /* Pausing a coupon is the one marketing action a phone should have: it is a
