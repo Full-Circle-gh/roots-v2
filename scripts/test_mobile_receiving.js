@@ -214,6 +214,27 @@ const CASES = [
       ['which is not the same as nothing arriving', `rcvNo(state.recvPo.items[0]) === false`],
       ['and the number it offers is the ordered one again', `txt('content').includes('5 kg arrived')`],
     ]],
+  // THE FLAG THAT WOULD NOT LET GO. recvOpenLine means "this line is being
+  // corrected right now". Nothing cleared it, so once a line had been reopened
+  // it would never fold again however often it was answered — press
+  // "0.5 kg arrived" and the counter opens instead of the row closing, with
+  // nothing on screen to explain it. Reported from a kitchen phone.
+  ['a line answered again after being reopened still folds',
+    OPEN + `APP.cmd('recvArrived','11');
+      [...document.querySelectorAll('#content .row')].find(b=>b.innerText.includes('Mint')).click();
+      APP.cmd('recvArrived','11');   // undo
+      APP.cmd('recvArrived','11');`, [
+      ['it is answered', `state.recvVals[11].on === true`],
+      ['the reopen flag let go', `state.recvOpenLine === null`],
+      ['and the row folded', `document.querySelectorAll('.qty:not(.sm)').length === 0`],
+    ]],
+  // An id is not unique across orders, so a flag holding one leaks: a
+  // correction left open on RPO-1 lands on whatever line shares that id on
+  // RPO-2, which then refuses to fold.
+  ['and a correction left open on one order does not follow you to the next',
+    `state.recvOpenLine='11'; loadReceive(3); render();`, [
+      ['the flag is cleared by opening an order', `state.recvOpenLine === null`],
+    ]],
   ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
     ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
     ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],

@@ -1145,12 +1145,12 @@ reg('recvArrived', id=>{
   const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v||!it) return;
   if(v.on&&v.recv>0){ v.on=false; }
   else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; }
-  state.recvDmg=null; state.recvSaveErr=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
 reg('recvNotArrived', id=>{
   const v=state.recvVals&&state.recvVals[id]; if(!v) return;
   if(v.on&&v.recv===0){ v.on=false; }
   else { v.on=true; v.recv=0; v.dmg=0; v.reason=v.reason||'not_sent'; }
-  state.recvDmg=null; state.recvSaveErr=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
 /* One tap for the supplier whose whole van came, one for the supplier who
    simply did not turn up, and pressing either again undoes it. Both answer
    every line in the group — the per-line control is still there to disagree
@@ -1161,24 +1161,30 @@ reg('recvNotArrived', id=>{
    has. */
 /* Reopening keeps the answer and shows the counter — it does not un-answer.
    Tapping a folded row used to call recvArrived, which toggles, so the one
-   gesture for "let me correct that number" threw the number away. */
+   gesture for "let me correct that number" threw the number away.
+
+   IT IS CLEARED BY EVERY ANSWER, and by opening any order. It means "this line
+   is being corrected right now", so answering the line ends it — and left
+   standing it is a line that will not fold however many times it is answered,
+   with nothing on screen to say why. That is the shape of the bug it caused:
+   press "0.5 kg arrived" and the counter opens instead of the row closing. */
 reg('recvOpenLine', id=>{ state.recvOpenLine=id; state.recvSaveErr=null; render(); });
 reg('recvAllArrived', ()=>{
   const items=rcvItems(); if(!items.length) return;
   const undo=items.every(it=>rcvOn(it)&&rcvVal(it.id).recv===rcvOrdered(it));
   items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
     if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
-  state.recvDmg=null; state.recvSaveErr=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
 reg('recvGroupNone', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
   const undo=rcvGroupState(g.items)==='none';
   g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
     if(undo){ v.on=false; } else { v.on=true; v.recv=0; v.dmg=0; v.reason='not_sent'; } });
-  state.recvDmg=null; state.recvSaveErr=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
 reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
   const s=rcvGroupState(g.items), undo=s==='ok'||s==='issue';
   g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
     if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
-  state.recvDmg=null; state.recvSaveErr=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
 /* The server's refusals, in words. Every one of these is reachable by a client
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
@@ -3666,6 +3672,10 @@ function loadDelivery(id){
 function loadReceive(poId){
   state.recvId=Number(poId); state.recvPo=null; state.recvErr=null; state.recvSaveErr=null;
   state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false; state.recvDone=null;
+  /* AND THE REOPEN FLAG. It is an id, so leaving it set carries a correction
+     that was open on one order onto whatever line happens to share that id on
+     the next — a line that then refuses to fold, for no reason on screen. */
+  state.recvOpenLine=null;
   api('/purchases/'+Number(poId)).then(d=>{
     if(state.recvId!==Number(poId)) return;
     state.recvPo=d;
