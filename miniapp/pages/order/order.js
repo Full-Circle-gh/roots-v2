@@ -16,9 +16,12 @@ function absUrl(u) {
   return u;
 }
 
+// See the note on the same map in pages/orders — awaiting_restock is a paid
+// order waiting on stock, and without a label the raw status string showed.
 const STATUS_LABELS_EN = {
   pending_payment: 'Awaiting payment',
   paid:            'Paid',
+  awaiting_restock: 'Awaiting stock',
   preparing:       'Preparing',
   dispatched:      'On the way',
   delivered:       'Delivered',
@@ -28,6 +31,7 @@ const STATUS_LABELS_EN = {
 const STATUS_LABELS_CN = {
   pending_payment: '待支付',
   paid:            '已支付',
+  awaiting_restock: '等待补货',
   preparing:       '准备中',
   dispatched:      '配送中',
   delivered:       '已送达',
