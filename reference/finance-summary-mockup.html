@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance — Summary · four states</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+   MOCKUP ONLY. Static HTML, hardcoded numbers, nothing wired.
+   Light theme only, matching the other files in reference/.
+   Token names below mirror the live --td-* block (retail-admin.css :8652,
+   the [data-theme="light"] half) so the mapping is one-to-one at build.
+   The ¥ is a placeholder so the page has a number on it. Currency is per
+   business (consolidation-decisions §0) and no currency logic exists here.
+   ───────────────────────────────────────────────────────────────────── */
+:root{
+  --td-paper:#FBF9F4;
+  --td-surface:#FFFFFF;
+  --td-raised:#F6F3EC;
+  --td-border:#E4E0D5;
+  --td-text:#111A2B;
+  --td-text2:#58606E;
+  --f-sans:'Inter',system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:var(--f-sans);background:var(--td-paper);color:var(--td-text);
+  font-size:15px;line-height:1.6;font-weight:400;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ══ mockup scaffolding — NOT part of the page ══════════════════════════ */
+.sheet{max-width:1120px;margin:0 auto;padding:48px 48px 96px}
+.sheet-title{font-size:24px;font-weight:500;letter-spacing:-.01em;margin-bottom:8px}
+.sheet-lede{font-size:15px;color:var(--td-text2);max-width:70ch}
+.sheet-lede + .sheet-lede{margin-top:12px}
+.sheet-lede code{font-family:var(--f-sans);background:var(--td-raised);border:1px solid var(--td-border);border-radius:4px;padding:0 5px;font-size:13px}
+.rule{height:1px;background:var(--td-border);margin:48px 0}
+.state-label{
+  font-size:13px;font-weight:500;color:var(--td-text2);letter-spacing:.04em;
+  margin:0 0 4px;
+}
+.state-sub{font-size:13px;color:var(--td-text2);margin-bottom:16px}
+.notes{margin-top:16px;max-width:70ch}
+.notes p{font-size:13px;color:var(--td-text2);margin-top:8px}
+.notes b{font-weight:500;color:var(--td-text)}
+.frame{
+  background:var(--td-paper);border:1px solid var(--td-border);border-radius:14px;
+  padding:32px;
+}
+
+/* ══ the page itself ════════════════════════════════════════════════════ */
+
+/* 1 · page header (§1.7) — title, no status line, empty CTA slot.
+   Range echo right-aligned on the title line (archetype A7). */
+.pg-head{display:flex;align-items:baseline;gap:24px}
+.pg-title{font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.3}
+.pg-echo{
+  margin-left:auto;font-size:15px;color:var(--td-text2);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+
+/* 2 · sub-view strip (§1.1a row 2) — segment, in-page, under the header */
+.subviews{display:flex;gap:24px;margin-top:24px;border-bottom:1px solid var(--td-border)}
+.subviews button{
+  font:400 15px var(--f-sans);color:var(--td-text2);background:none;border:0;
+  padding:0 0 10px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.subviews button.on{color:var(--td-text);font-weight:500;border-bottom-color:var(--td-text)}
+
+/* 3 · range bar (A7) — presets · dates · location · Apply · refresh.
+   Inert. Apply is Secondary; there is no Dusk on this page. */
+.rangebar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+.seg{display:inline-flex;border:1px solid var(--td-border);border-radius:8px;background:var(--td-surface);overflow:hidden}
+.seg button{
+  font:400 15px var(--f-sans);color:var(--td-text2);background:none;border:0;
+  border-right:1px solid var(--td-border);padding:6px 14px;cursor:pointer;
+}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--td-text);color:var(--td-paper);font-weight:500}
+.dates{display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
+.field{
+  font:400 15px var(--f-sans);color:var(--td-text);background:var(--td-surface);
+  border:1px solid var(--td-border);border-radius:8px;padding:6px 12px;
+  font-variant-numeric:tabular-nums;
+}
+.dash{color:var(--td-text2)}
+.dd{
+  font:400 15px var(--f-sans);color:var(--td-text);background:var(--td-surface);
+  border:1px solid var(--td-border);border-radius:8px;padding:6px 12px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.dd .caret{color:var(--td-text2);font-size:13px}
+.btn-sec{
+  font:500 15px var(--f-sans);color:var(--td-text);background:var(--td-surface);
+  border:1px solid var(--td-border);border-radius:8px;padding:6px 16px;cursor:pointer;
+}
+.btn-icon{
+  font:400 15px var(--f-sans);color:var(--td-text2);background:var(--td-surface);
+  border:1px solid var(--td-border);border-radius:8px;padding:6px 11px;cursor:pointer;
+}
+
+/* 4 · the staircase card */
+.stair-card{
+  margin-top:32px;background:var(--td-surface);
+  border:1px solid var(--td-border);border-radius:14px;
+}
+.stair-body{padding:24px 24px 0}
+
+/* every money row shares one grid: label | sign | figure.
+   The sign gets its own 14px column, so every minus lands on the same x and
+   the column of minus signs is itself the deduction cue — not the glyph alone. */
+.row{
+  display:grid;grid-template-columns:1fr 14px 78px;align-items:baseline;
+  column-gap:0;padding:7px 0;
+}
+.row .sign{
+  font-variant-numeric:tabular-nums;text-align:left;
+  color:var(--td-text2);
+}
+.row .fig{
+  font-variant-numeric:tabular-nums;text-align:right;
+}
+
+/* an INPUT row: body weight. Its figure is Ink when it adds… */
+.row.input .lbl{font-size:15px;font-weight:400;color:var(--td-text)}
+.row.input .fig{font-size:15px;font-weight:400;color:var(--td-text)}
+/* …and Graphite when it subtracts. Two cues, plus the sign column: three. */
+.row.less .fig,.row.less .sign{color:var(--td-text2)}
+
+/* a CONCLUSION row: section-title scale, Ink 500, a hairline above it and
+   room to breathe. The two conclusions are the only 18px things on the card. */
+.row.concl{padding:16px 0 4px;margin-top:8px;border-top:1px solid var(--td-border)}
+.row.concl .lbl,.row.concl .fig{font-size:18px;font-weight:500;color:var(--td-text)}
+
+/* the landing after gross profit — what makes the staircase read as steps */
+.tread{height:16px}
+
+/* the breakdown, as a disclosure on the operating-expenses row */
+details.exp{border:0}
+details.exp > summary{
+  list-style:none;cursor:pointer;display:grid;
+  grid-template-columns:1fr 14px 78px;align-items:baseline;padding:7px 0;
+}
+details.exp > summary::-webkit-details-marker{display:none}
+details.exp > summary .lbl{font-size:15px;font-weight:400;color:var(--td-text);display:flex;align-items:baseline;gap:8px}
+details.exp > summary .fig,details.exp > summary .sign{
+  font-size:15px;font-weight:400;color:var(--td-text2);font-variant-numeric:tabular-nums;
+}
+details.exp > summary .fig{text-align:right}
+details.exp > summary .chev{
+  color:var(--td-text2);font-size:13px;line-height:1.6;
+  display:inline-block;width:9px;transition:transform .2s cubic-bezier(.16,1,.3,1);
+}
+details.exp[open] > summary .chev{transform:rotate(90deg)}
+.breakdown{padding:2px 0 6px}
+.breakdown .row{padding:5px 0}
+.breakdown .lbl{padding-left:20px;font-size:15px;color:var(--td-text2)}
+.breakdown .fig{font-size:15px;color:var(--td-text2)}
+
+/* the terminus — the card's own bottom edge, so the final figure and
+   anything qualifying it cannot be separated from each other.
+   13px = 14px card radius − 1px border (§1.13a's derivation). */
+.terminus{
+  margin-top:24px;padding:18px 24px;background:var(--td-raised);
+  border-top:1px solid var(--td-border);border-radius:0 0 13px 13px;
+}
+.terminus .row{padding:0}
+.terminus .lbl,.terminus .fig{font-size:18px;font-weight:500;color:var(--td-text)}
+/* the not-included line. Body scale, Graphite, no fill, no border, no icon.
+   Nothing here went wrong, so nothing here is coloured. */
+.excluded{
+  margin-top:10px;font-size:15px;font-weight:400;color:var(--td-text2);
+  font-variant-numeric:tabular-nums;max-width:62ch;
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <h1 class="sheet-title">Finance — Summary</h1>
+  <p class="sheet-lede">Four states of one screen, stacked so they can be compared. <b>Mockup only.</b> Static HTML, hardcoded numbers, no routes, no schema, no data layer, nothing wired. The date range and location controls are chrome and do nothing. English view only — no Chinese strings are composed here; the pairs owed are listed in the report.</p>
+  <p class="sheet-lede">The <code>¥</code> is a placeholder so the page has a number on it. Currency is per business (<code>tacet-consolidation-decisions.md §0</code>) and there is no currency logic in this file.</p>
+  <p class="sheet-lede">Governing sections: page shell <code>§1.1a</code> · page header <code>§1.7</code> · archetype <code>A7 Report</code> · status colour <code>§1.10</code> · gated states <code>§1.9</code> · Finance decisions <code>§36</code>.</p>
+
+  <div class="rule"></div>
+
+  <!-- ═══════════════════════ STATE 1 ═══════════════════════════════════ -->
+  <p class="state-label">State 1</p>
+  <p class="state-sub">Multi-location tenant · filter set to All locations</p>
+
+  <div class="frame">
+    <div class="pg-head">
+      <h2 class="pg-title">Finance</h2>
+      <span class="pg-echo">Aug 3 – Sep 1 · 30 days · All locations</span>
+    </div>
+
+    <nav class="subviews">
+      <button class="on" type="button">Summary</button>
+      <button type="button">Transactions</button>
+    </nav>
+
+    <div class="rangebar">
+      <span class="seg">
+        <button type="button">Today</button>
+        <button type="button">7 days</button>
+        <button class="on" type="button">30 days</button>
+        <button type="button">90 days</button>
+      </span>
+      <span class="dates">
+        <span class="field">2026-08-03</span>
+        <span class="dash">–</span>
+        <span class="field">2026-09-01</span>
+      </span>
+      <span class="dd">All locations <span class="caret">▾</span></span>
+      <button class="btn-sec" type="button">Apply</button>
+      <button class="btn-icon" type="button" aria-label="Refresh">↻</button>
+    </div>
+
+    <div class="stair-card">
+      <div class="stair-body">
+
+        <div class="row input">
+          <span class="lbl">Revenue</span><span class="sign"></span><span class="fig">¥100,000</span>
+        </div>
+        <div class="row input less">
+          <span class="lbl">Cost of goods</span><span class="sign">−</span><span class="fig">¥40,000</span>
+        </div>
+
+        <div class="row concl">
+          <span class="lbl">Gross profit</span><span class="sign"></span><span class="fig">¥60,000</span>
+        </div>
+
+        <div class="tread"></div>
+
+        <details class="exp">
+          <summary>
+            <span class="lbl"><span class="chev">&#9656;</span>Operating expenses</span>
+            <span class="sign">−</span><span class="fig">¥39,000</span>
+          </summary>
+          <div class="breakdown">
+            <div class="row"><span class="lbl">Rent</span><span class="sign"></span><span class="fig">¥20,000</span></div>
+            <div class="row"><span class="lbl">Wages</span><span class="sign"></span><span class="fig">¥17,000</span></div>
+            <div class="row"><span class="lbl">Not location-specific</span><span class="sign"></span><span class="fig">¥2,000</span></div>
+          </div>
+        </details>
+
+      </div>
+      <div class="terminus">
+        <div class="row">
+          <span class="lbl">Net</span><span class="sign"></span><span class="fig">¥21,000</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>No status line.</b> §1.7's honesty rule wants a real wired number and its work rule wants work waiting. A finished period has neither. The title alone is the correct header, the same answer Customers ships.</p>
+    <p><b>No KPI strip.</b> A7 puts one above The read. Here it would restate Revenue and Net about 200px above the rows that already say them — the exact three-counts-in-one-glance failure §1.7's non-duplication rule was written from. The staircase is the pulse.</p>
+    <p><b>Expenses expand here too.</b> Click the row. The decision and the reasoning are under state 3.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- ═══════════════════════ STATE 2 ═══════════════════════════════════ -->
+  <p class="state-label">State 2</p>
+  <p class="state-sub">Same tenant · filter set to Tianhe</p>
+
+  <div class="frame">
+    <div class="pg-head">
+      <h2 class="pg-title">Finance</h2>
+      <span class="pg-echo">Aug 3 – Sep 1 · 30 days · Tianhe</span>
+    </div>
+
+    <nav class="subviews">
+      <button class="on" type="button">Summary</button>
+      <button type="button">Transactions</button>
+    </nav>
+
+    <div class="rangebar">
+      <span class="seg">
+        <button type="button">Today</button>
+        <button type="button">7 days</button>
+        <button class="on" type="button">30 days</button>
+        <button type="button">90 days</button>
+      </span>
+      <span class="dates">
+        <span class="field">2026-08-03</span>
+        <span class="dash">–</span>
+        <span class="field">2026-09-01</span>
+      </span>
+      <span class="dd">Tianhe <span class="caret">▾</span></span>
+      <button class="btn-sec" type="button">Apply</button>
+      <button class="btn-icon" type="button" aria-label="Refresh">↻</button>
+    </div>
+
+    <div class="stair-card">
+      <div class="stair-body">
+
+        <div class="row input">
+          <span class="lbl">Revenue</span><span class="sign"></span><span class="fig">¥60,000</span>
+        </div>
+        <div class="row input less">
+          <span class="lbl">Cost of goods</span><span class="sign">−</span><span class="fig">¥24,000</span>
+        </div>
+
+        <div class="row concl">
+          <span class="lbl">Gross profit</span><span class="sign"></span><span class="fig">¥36,000</span>
+        </div>
+
+        <div class="tread"></div>
+
+        <details class="exp" open>
+          <summary>
+            <span class="lbl"><span class="chev">&#9656;</span>Operating expenses</span>
+            <span class="sign">−</span><span class="fig">¥18,000</span>
+          </summary>
+          <div class="breakdown">
+            <div class="row"><span class="lbl">Rent</span><span class="sign"></span><span class="fig">¥8,000</span></div>
+            <div class="row"><span class="lbl">Wages</span><span class="sign"></span><span class="fig">¥10,000</span></div>
+          </div>
+        </details>
+
+      </div>
+      <div class="terminus">
+        <div class="row">
+          <span class="lbl">Contribution</span><span class="sign"></span><span class="fig">¥18,000</span>
+        </div>
+        <p class="excluded">Business-wide costs of ¥2,000 are not included in this figure.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>Contribution, not Net.</b> Same component, same weight, same place — the only thing that changed is the word, which is what makes the word read as meaningful rather than decorative. Three quiet things carry it: the word itself, the range echo naming Tianhe on the title line, and the line below.</p>
+    <p><b>The not-included line lives inside the terminus block</b>, on the same cream ground as the figure it qualifies, not at the foot of the card. Bound to the number, it cannot be skimmed past on the way out of the card. Body scale, Graphite, no fill, no border, no icon, no colour — §1.10: colour encodes state, and nothing here is in a state. It is a fact about scope, and it reads as one.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- ═══════════════════════ STATE 3 ═══════════════════════════════════ -->
+  <p class="state-label">State 3</p>
+  <p class="state-sub">Same tenant · filter set to Yuexiu</p>
+
+  <div class="frame">
+    <div class="pg-head">
+      <h2 class="pg-title">Finance</h2>
+      <span class="pg-echo">Aug 3 – Sep 1 · 30 days · Yuexiu</span>
+    </div>
+
+    <nav class="subviews">
+      <button class="on" type="button">Summary</button>
+      <button type="button">Transactions</button>
+    </nav>
+
+    <div class="rangebar">
+      <span class="seg">
+        <button type="button">Today</button>
+        <button type="button">7 days</button>
+        <button class="on" type="button">30 days</button>
+        <button type="button">90 days</button>
+      </span>
+      <span class="dates">
+        <span class="field">2026-08-03</span>
+        <span class="dash">–</span>
+        <span class="field">2026-09-01</span>
+      </span>
+      <span class="dd">Yuexiu <span class="caret">▾</span></span>
+      <button class="btn-sec" type="button">Apply</button>
+      <button class="btn-icon" type="button" aria-label="Refresh">↻</button>
+    </div>
+
+    <div class="stair-card">
+      <div class="stair-body">
+
+        <div class="row input">
+          <span class="lbl">Revenue</span><span class="sign"></span><span class="fig">¥40,000</span>
+        </div>
+        <div class="row input less">
+          <span class="lbl">Cost of goods</span><span class="sign">−</span><span class="fig">¥16,000</span>
+        </div>
+
+        <div class="row concl">
+          <span class="lbl">Gross profit</span><span class="sign"></span><span class="fig">¥24,000</span>
+        </div>
+
+        <div class="tread"></div>
+
+        <details class="exp" open>
+          <summary>
+            <span class="lbl"><span class="chev">&#9656;</span>Operating expenses</span>
+            <span class="sign">−</span><span class="fig">¥19,000</span>
+          </summary>
+          <div class="breakdown">
+            <div class="row"><span class="lbl">Rent</span><span class="sign"></span><span class="fig">¥12,000</span></div>
+            <div class="row"><span class="lbl">Wages</span><span class="sign"></span><span class="fig">¥7,000</span></div>
+          </div>
+        </details>
+
+      </div>
+      <div class="terminus">
+        <div class="row">
+          <span class="lbl">Contribution</span><span class="sign"></span><span class="fig">¥5,000</span>
+        </div>
+        <p class="excluded">Business-wide costs of ¥2,000 are not included in this figure.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>State 1 gets the same breakdown, expandable, closed by default.</b> Not filtered-only. §1.17 rule 1 — one word, one measure: if Operating expenses only itemises when you narrow to a location, the operator learns that filtering is the only way to see composition, which is backwards. Same component, one default flipped: closed unfiltered, open filtered, because the filtered view exists to answer <i>where does this location's money go</i> and the unfiltered one exists to answer <i>did we make money</i>.</p>
+    <p><b>And unfiltered is the only place the ¥2,000 is visible as a number rather than an absence.</b> Tianhe ¥18,000 + Yuexiu ¥19,000 = ¥37,000; the total is ¥39,000. Expand state 1 and the remainder shows up on its own line — <i>Not location-specific ¥2,000</i> — which is the same ¥2,000 the two filtered states say is missing. Collapsing state 1 hides the reconciliation on the one screen that could show it.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- ═══════════════════════ STATE 4 ═══════════════════════════════════ -->
+  <p class="state-label">State 4</p>
+  <p class="state-sub">Single-location tenant · no location dimension exists</p>
+
+  <div class="frame">
+    <div class="pg-head">
+      <h2 class="pg-title">Finance</h2>
+      <span class="pg-echo">Aug 3 – Sep 1 · 30 days</span>
+    </div>
+
+    <nav class="subviews">
+      <button class="on" type="button">Summary</button>
+      <button type="button">Transactions</button>
+    </nav>
+
+    <div class="rangebar">
+      <span class="seg">
+        <button type="button">Today</button>
+        <button type="button">7 days</button>
+        <button class="on" type="button">30 days</button>
+        <button type="button">90 days</button>
+      </span>
+      <span class="dates">
+        <span class="field">2026-08-03</span>
+        <span class="dash">–</span>
+        <span class="field">2026-09-01</span>
+      </span>
+      <button class="btn-sec" type="button">Apply</button>
+      <button class="btn-icon" type="button" aria-label="Refresh">↻</button>
+    </div>
+
+    <div class="stair-card">
+      <div class="stair-body">
+
+        <div class="row input">
+          <span class="lbl">Revenue</span><span class="sign"></span><span class="fig">¥100,000</span>
+        </div>
+        <div class="row input less">
+          <span class="lbl">Cost of goods</span><span class="sign">−</span><span class="fig">¥40,000</span>
+        </div>
+
+        <div class="row concl">
+          <span class="lbl">Gross profit</span><span class="sign"></span><span class="fig">¥60,000</span>
+        </div>
+
+        <div class="tread"></div>
+
+        <details class="exp">
+          <summary>
+            <span class="lbl"><span class="chev">&#9656;</span>Operating expenses</span>
+            <span class="sign">−</span><span class="fig">¥39,000</span>
+          </summary>
+          <div class="breakdown">
+            <div class="row"><span class="lbl">Rent</span><span class="sign"></span><span class="fig">¥22,000</span></div>
+            <div class="row"><span class="lbl">Wages</span><span class="sign"></span><span class="fig">¥17,000</span></div>
+          </div>
+        </details>
+
+      </div>
+      <div class="terminus">
+        <div class="row">
+          <span class="lbl">Net</span><span class="sign"></span><span class="fig">¥21,000</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><b>Nothing on this screen knows locations exist.</b> No dropdown, no "All locations" in the echo, no not-included line, and the last row says Net. §1.9's data-precondition axis already governs this and gives the answer as absence: self-hide, no empty state, no disabled control, no placeholder. The one-location tenant is not being denied a feature; there is nothing to choose between.</p>
+    <p><b>Its expense breakdown has no unallocated line either</b>, by construction: with one location every cost belongs to it. The <i>Not location-specific</i> row and the not-included line are the same fact seen twice, and both only exist where the dimension does. Its figures differ from state 1's breakdown because this is a different tenant that happens to share a top line.</p>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="notes" style="max-width:78ch">
+    <p style="font-size:15px;color:var(--td-text);font-weight:500;margin-bottom:4px">How subtraction reads, without leaning on the minus</p>
+    <p>Three cues, none of them loud. <b>One</b> — the sign has its own 14px column, so every minus lands on the same x and the deductions form a visible vertical column down the left of the figures; the eye picks up an aligned column pre-attentively in a way it does not pick up a glyph. <b>Two</b> — a deducted figure is Graphite, an added or concluded one is Ink. A deduction is not an error and gets no Brick, no Amber, no tint (§1.10, and the same reasoning as "a down delta renders in Graphite, never Brick"). <b>Three</b> — deductions are body weight 400 while the two conclusions are 500 at 18px, so subtraction sits in the layer the eye reads second.</p>
+    <p style="font-size:15px;color:var(--td-text);font-weight:500;margin:20px 0 4px">How the staircase reads</p>
+    <p>Two conclusions, two hairlines, one landing. Gross profit and the final row are the only 18px Inter 500 things on the card and each is preceded by a 1px rule; every input above them is 15px Inter 400. After Gross profit there is a 16px tread before Operating expenses starts the second flight — that gap is what stops the card reading as one list of five rows. The final row sits on the card's own cream bottom edge, so the terminus is a place rather than just a bigger number, and the type scale never leaves §1.3's six steps.</p>
+  </div>
+
+</div>
+</body>
+</html>
