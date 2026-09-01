@@ -113,6 +113,7 @@
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
   let _invAssign = null;     // the "set supplier" modal's working state
+  let _invRematch = null;    // the "re-match stranded 发票" modal's working state
   let _invMonth = '';        // 'YYYY-MM' or '' for all
   let _invSearch = '';       // supplier / item / SKU / PO number
   let _invSearchTimer = null;
@@ -2301,9 +2302,176 @@
         <span class="pu2-mut">${esc(T('Recorded, not counted above', '已登记发票，未计入上方'))}:</span>
         <span class="pu2-pill amber"><span class="dot"></span>${money(off.amount)}</span>
         <span class="pu2-mut">${esc(why)}</span>
+        ${orders.some(o => o.po_id) ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvRematchOpen()">${esc(T('Re-match…', '重新匹配…'))}</button>` : ''}
       </div>
       <div class="pu2-agingstrip">${shown}${more ? '<span class="pu2-mut"> · </span>' + more : ''}</div>`;
   }
+
+
+  // ── Re-match: putting a stranded 发票 back on the order that replaced its own ─
+  // The strip above names money the five figures cannot see. This is where the
+  // buyer does something about it.
+  //
+  // IT SHOWS THE PAIRING BEFORE IT MOVES ANYTHING, and that is not a nicety —
+  // it is the whole reason this exists as a screen. lib/po-supersede.js refuses
+  // to re-point an allocation by itself precisely because "the buyer has since
+  // edited the quantities", and says re-attributing line by line "needs the
+  // buyer to say which line covers which, and that is a screen, not a silent
+  // remap." So every order's proposed line-for-line pairing is here to be read
+  // (查看明细), and nothing is written until Move is pressed.
+  //
+  // The server plans and applies (lib/po-rematch.js); this asks and reports.
+  // Plans are fetched read-only on open — GET writes nothing — so opening this
+  // to look is always safe.
+  window.puInvRematchOpen = function () {
+    const off = (_invOut && _invOut.recorded_elsewhere) || {};
+    // Only a superseded order has anywhere to move TO; the server marks those
+    // by handing back a po_id, so that is the test rather than the reason text.
+    const orders = (off.orders || []).filter(o => o.po_id);
+    if (!orders.length) return;
+    _invDraft = null; _invAssign = null;
+    _invRematch = { orders, plans: new Map(), picked: new Set(), open: new Set(), busy: false };
+    renderRematchModal();
+    orders.forEach(async (o) => {
+      try {
+        const r = await api('/api/retail-admin/purchasing/invoices/rematch/' + o.po_id);
+        if (!_invRematch) return;
+        _invRematch.plans.set(o.po_id, r.data);
+        // Ticked by default only when the whole order pairs. An order with a
+        // line the copy no longer carries is left for the buyer to decide on,
+        // rather than half-moved by a default nobody chose.
+        if (r.data && !r.data.unmatched.length && r.data.moves.length) _invRematch.picked.add(o.po_id);
+      } catch (e) {
+        if (_invRematch) _invRematch.plans.set(o.po_id, { error: e.message });
+      }
+      if (_invRematch) renderRematchModal();
+    });
+  };
+  const rematchPicked = () => {
+    const d = _invRematch; if (!d) return [];
+    return d.orders.filter(o => d.picked.has(o.po_id))
+      .map(o => ({ o, plan: d.plans.get(o.po_id) }))
+      .filter(x => x.plan && !x.plan.error && x.plan.moves && x.plan.moves.length);
+  };
+  window.puInvRematchToggle = function (poId) {
+    const d = _invRematch; if (!d || d.busy) return;
+    if (d.picked.has(poId)) d.picked.delete(poId); else d.picked.add(poId);
+    renderRematchModal();
+  };
+  window.puInvRematchLines = function (poId) {
+    const d = _invRematch; if (!d) return;
+    if (d.open.has(poId)) d.open.delete(poId); else d.open.add(poId);
+    renderRematchModal();
+  };
+  window.puInvRematchAll = function () {
+    const d = _invRematch; if (!d || d.busy) return;
+    const eligible = d.orders.filter(o => {
+      const p = d.plans.get(o.po_id);
+      return p && !p.error && p.moves && p.moves.length;
+    });
+    if (eligible.every(o => d.picked.has(o.po_id))) d.picked.clear();
+    else eligible.forEach(o => d.picked.add(o.po_id));
+    renderRematchModal();
+  };
+  function rematchRow(o) {
+    const d = _invRematch;
+    const plan = d.plans.get(o.po_id);
+    const on = d.picked.has(o.po_id);
+    const head = `${esc(o.po_number)} → ${esc(o.copy_po_number || '')}`;
+    if (!plan) {
+      return `<div class="pu2-allocrow"><span class="pu2-chk"></span>
+        <div>${head}</div><div class="pu2-num pu2-mut">${money(o.amount)}</div>
+        <span class="pu2-mut">${esc(T('Loading…', '加载中…'))}</span></div>`;
+    }
+    if (plan.error) {
+      return `<div class="pu2-allocrow"><span class="pu2-chk"></span>
+        <div>${head}</div><div class="pu2-num pu2-mut">${money(o.amount)}</div>
+        <span class="pu2-pill brick"><span class="dot"></span>${esc(plan.error)}</span></div>`;
+    }
+    const credit = (plan.moves || []).reduce((s, m) => s + (m.credit_due || 0), 0);
+    const notes = [
+      plan.unmatched.length
+        ? `<span class="pu2-pill amber" title="${esc(T('These lines are not on the copy — their 发票 stays where it is', '副本中没有这些明细 —— 其发票将保持不动'))}"><span class="dot"></span>${plan.unmatched.length} ${esc(T('can’t be paired — left alone', '无法匹配，保持不动'))}</span>` : '',
+      credit > 0.005
+        ? `<span class="pu2-pill amber" title="${esc(T('The copy’s quantity was corrected down after the 发票 was recorded', '开票后副本数量被下调'))}"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(credit)}</span>` : '',
+    ].filter(Boolean).join(' ');
+    const detail = d.open.has(o.po_id) ? `<div class="pu2-alloclist" style="margin:2px 0 8px 28px">${
+      (plan.moves || []).map(m => `<div class="pu2-allocrow">
+        <div>${nameLabel(m.from)}${m.from && m.from.sku ? `<div class="sub pu2-mono">${esc(m.from.sku)}</div>` : ''}</div>
+        <span class="pu2-mut">→</span>
+        <div>${nameLabel(m.to)}<div class="sub pu2-mut">${esc(T('matched on', '匹配依据'))} ${esc(m.basis === 'sku' ? T('SKU', '货号') : T('name', '名称'))}</div></div>
+        <div class="pu2-num">${money(m.amount)}</div>
+      </div>`).join('')}${
+      (plan.unmatched || []).map(u => `<div class="pu2-allocrow">
+        <div>${nameLabel(u.from || {})}</div>
+        <span class="pu2-mut">→</span>
+        <div class="pu2-mut">${esc(T('nothing on the copy matches — stays put', '副本中无匹配项 —— 保持不动'))}</div>
+        <div class="pu2-num pu2-mut">${money(u.amount)}</div>
+      </div>`).join('')}</div>` : '';
+    return `<div class="pu2-allocrow">
+        <span class="pu2-chk${on ? ' on' : ''}" onclick="puInvRematchToggle(${o.po_id})">${on ? I.check : ''}</span>
+        <div>${head}<div class="sub pu2-mut">${plan.moves.length} ${esc(T('of', '/'))} ${plan.moves.length + plan.unmatched.length} ${esc(T('lines pair', '条明细可匹配'))}</div></div>
+        <div class="pu2-num">${money(plan.movable)}</div>
+        <span>${notes}</span>
+        <span class="act"><button class="pu2-btn ghost sm" onclick="puInvRematchLines(${o.po_id})">${esc(d.open.has(o.po_id) ? T('Hide lines', '收起明细') : T('Show lines', '查看明细'))}</button></span>
+      </div>${detail}`;
+  }
+  function renderRematchModal() {
+    const d = _invRematch; if (!d) return;
+    const picked = rematchPicked();
+    const sum = picked.reduce((s, x) => s + (x.plan.movable || 0), 0);
+    const loading = d.orders.some(o => !d.plans.has(o.po_id));
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puInvCloseModal()"></div>
+      <div class="pu2-modal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('Re-match recorded 发票', '重新匹配已登记发票'))}</h2>
+               <div class="sub">${esc(T('These 发票 were recorded against orders that have since been replaced by copies. Move each one onto the copy’s matching lines and it counts again.', '这些发票登记在已被副本替代的采购单上。将其移到副本的对应明细后，即可重新计入。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puInvCloseModal()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <div class="pu2-alloc-head">
+            <span class="pu2-kicker" style="margin:0">${esc(T('Orders to re-match', '要重新匹配的采购单'))}</span>
+            <button class="pu2-btn sm" style="margin-left:auto" onclick="puInvRematchAll()">${esc(T('Tick all', '全选'))}</button>
+          </div>
+          <div class="pu2-alloclist">${d.orders.map(rematchRow).join('')}</div>
+          <div class="sub pu2-mut" style="margin-top:8px">${esc(T('Lines are paired by SKU and name — never by their position on the order — so a quantity you corrected on the copy is safe. Anything that cannot be paired is listed and left exactly where it is.', '明细按货号与名称匹配，不按顺序匹配，因此您在副本上修改的数量不受影响。无法匹配的明细会列出并保持不动。'))}</div>
+        </div>
+        <div class="pu2-modal-foot">
+          <span>${loading ? `<span class="pu2-mut">${esc(T('Loading…', '加载中…'))}</span>`
+            : picked.length
+              ? `<span class="pu2-pill grey">${picked.length} ${esc(T('of', '/'))} ${d.orders.length} ${esc(T('orders', '个采购单'))}</span> <span class="pu2-mut pu2-num">${money(sum)}</span>`
+              : `<span class="pu2-mut">${esc(T('Nothing ticked', '未勾选'))}</span>`}</span>
+          <span class="spacer"></span>
+          <button class="pu2-btn ghost" onclick="puInvCloseModal()">${esc(T('Cancel', '取消'))}</button>
+          <button class="pu2-btn primary" ${d.busy || !picked.length ? 'disabled' : ''} onclick="puInvRematchSave()">${
+            esc(d.busy ? T('Moving…', '移动中…') : T('Move', '移动'))}</button>
+        </div>
+      </div>`;
+  }
+  window.puInvRematchSave = async function () {
+    const d = _invRematch; if (!d || d.busy) return;
+    const picked = rematchPicked();
+    if (!picked.length) return;
+    d.busy = true; renderRematchModal();
+    // One order at a time: each is its own transaction on the server, so a
+    // failure part-way leaves the ones already done ALONE rather than unwinding
+    // work that succeeded. What failed is named, not swallowed.
+    let moved = 0, amount = 0; const failed = [];
+    for (const { o } of picked) {
+      try {
+        const r = await api('/api/retail-admin/purchasing/invoices/rematch/' + o.po_id, { method: 'POST', body: {} });
+        moved += (r.data && r.data.moved) || 0;
+        amount += (r.data && r.data.amount) || 0;
+      } catch (e) { failed.push(o.po_number); }
+    }
+    _invRematch = null;
+    puInvCloseModal();
+    const what = money(amount) + T(` across ${moved} line${moved === 1 ? '' : 's'}`, ` · ${moved} 条明细`);
+    if (failed.length) toast(T('Moved ', '已移动 ') + what + T('; these could not be moved: ', '；以下未能移动：') + failed.join(', '), 'err');
+    else toast(T('Moved ', '已移动 ') + what + T(' onto the replacing orders ✓', ' 到替代采购单 ✓'), 'ok');
+    await invReload();
+  };
 
   function renderInvBody() {
     const host = document.getElementById('pu2-inv-body');
@@ -2779,6 +2947,10 @@
   window.puInvCloseModal = function () {
     _invDraft = null;
     _invAssign = null;
+    // Cleared here too, so the in-flight plan fetches puInvRematchOpen started
+    // find no state to paint into and quietly stop rather than re-opening a
+    // modal the buyer has just dismissed.
+    _invRematch = null;
     try { puSuggestClose(); } catch (_) {}   // the search menu hangs off <body>
     const h = document.getElementById('pu2-modal-host');
     if (h) h.innerHTML = '';

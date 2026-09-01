@@ -117,7 +117,11 @@ for (const tid of tenants) {
       + `${r.sku ? ' [' + r.sku + ']' : ''} — ${why}`);
   }
   console.log('');
-  console.log('  To put this money back on the chase: open each 发票 under Recorded,');
-  console.log('  and tick the lines of the order that replaced the one it names.');
+  console.log('  To put this money back on the chase: Purchasing → Invoices, the');
+  console.log('  "Recorded, not counted above" strip, then Re-match. It shows the');
+  console.log('  line-for-line pairing it proposes for each order before it moves');
+  console.log('  anything, and leaves alone whatever it cannot pair with certainty.');
+  console.log('  Anything listed above as not_placed or other_tenant has no');
+  console.log('  replacing order to move to, and needs the 发票 editing by hand.');
   console.log('');
 }
