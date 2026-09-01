@@ -263,6 +263,40 @@ const CASES = [
        `document.getElementById('content').scrollHeight > document.getElementById('content').clientHeight + 260`],
       ['the new screen is at the top', `document.getElementById('content').scrollTop === 0`],
     ]],
+  // A NEW BUILD MUST NOT TAKE THE SCREEN FROM SOMEBODY MID-TASK. Every deploy
+  // re-stamps sw.js, so the first open after one installs the new worker, which
+  // claims the page and posts sw-updated — and this used to answer with an
+  // immediate location.reload(). Reported as: open the app, tap Receiving, tap
+  // something, drop to the loading screen and back to the home. Once only,
+  // because the worker is current afterwards.
+  // The bounce is the visible half. Nothing on this screen is persisted, so the
+  // half that matters is the ticked lines it throws away.
+  ['a build that lands mid-receive waits', OPEN + `
+      APP.cmd('recvArrived','11');
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});
+      __swPending();`, [
+    ['there is work to lose', `mUnsavedWork() === true`],
+    ['so it does not reload, even hidden', `mReloadNow() === false`],
+  ]],
+  ['and takes it once the work is recorded and nobody is looking', OPEN + `
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});
+      __swPending();`, [
+    ['nothing is owed', `mUnsavedWork() === false`],
+    ['and it may reload', `mReloadNow() === true`],
+  ]],
+  ['but never while the operator is looking at it', OPEN + `
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'visible'});
+      __swPending();`, [
+    ['no work', `mUnsavedWork() === false`],
+    ['and still no reload — the screen is in use', `mReloadNow() === false`],
+  ]],
+  ['a pending add-stock count counts as work too', `
+      state.qs.add={7:3};
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});
+      __swPending();`, [
+    ['it is work', `mUnsavedWork() === true`],
+    ['so the build waits', `mReloadNow() === false`],
+  ]],
   ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
     ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
     ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],

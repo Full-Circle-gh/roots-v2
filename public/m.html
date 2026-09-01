@@ -7905,6 +7905,29 @@ if(IS_IOS&&!STANDALONE){
    /sw.js is the one shared worker for this origin (kitchen, stock and this all
    register it at scope '/'); it is network-first for HTML, so a deploy is never
    masked by a cached shell. */
+/* IS THERE ANYTHING THIS RELOAD WOULD THROW AWAY? Nothing on the receive screen
+   is persisted — state.recvVals lives in memory alone — so this is the whole
+   guard between a new build and eight ticked lines with a delivery on the
+   floor. Add stock is the same: a pending count is a number somebody is
+   holding in their head until it lands. */
+function mUnsavedWork(){
+  try{
+    if(state.recvPo&&rcvToSend().length) return true;
+    const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
+    const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
+  }catch(e){}
+  return false;
+}
+let swPending=false, swReloaded=false;
+/* Split from the reload itself so the DECISION can be asserted — a test cannot
+   let location.reload() run. */
+function mReloadNow(){
+  return swPending&&!swReloaded&&!mUnsavedWork()&&document.visibilityState==='hidden';
+}
+function mMaybeReload(){ if(mReloadNow()){ swReloaded=true; location.reload(); } }
+/* The one hook a test needs: it cannot post a service-worker message, and it
+   must never let the reload itself run. */
+function __swPending(){ swPending=true; }
 /* isSecureContext, not a hand-rolled protocol check: it is the browser's own
    answer to the question a service worker actually asks, and it already knows
    the exceptions a string comparison forgets — 127.0.0.1 and localhost count,
@@ -7918,10 +7941,27 @@ if('serviceWorker' in navigator && window.isSecureContext){
       if(document.visibilityState==='visible') reg.update().catch(()=>{});
     });
   }).catch(()=>{});
-  let reloaded=false;
+  /* A NEW BUILD MUST NOT TAKE THE SCREEN OUT FROM UNDER SOMEBODY.
+     ------------------------------------------------------------------------
+     Every deploy re-stamps sw.js, so the first open after one installs the new
+     worker, which claims this page and posts sw-updated — and this used to
+     answer with an immediate location.reload(). Reported as: open the app, tap
+     Receiving, tap something, and the app drops to the loading screen and back
+     to the home. Once only, because the worker is current afterwards.
+
+     The bounce is the visible half. The half that matters is that NOTHING ON
+     THE RECEIVE SCREEN IS PERSISTED — state.recvVals lives in memory alone — so
+     a reload landing on an operator who has ticked eight of twelve lines throws
+     all eight away, silently, with a delivery still on the floor.
+
+     So the reload waits for a moment when it costs nothing: no work in
+     progress, and the app not on screen. An operator who never backgrounds the
+     app simply gets the new build next time they open it, which is what would
+     have happened anyway. */
   navigator.serviceWorker.addEventListener('message',(e)=>{
-    if(e.data&&e.data.type==='sw-updated'&&!reloaded){ reloaded=true; location.reload(); }
+    if(e.data&&e.data.type==='sw-updated'){ swPending=true; mMaybeReload(); }
   });
+  document.addEventListener('visibilitychange',mMaybeReload);
 }
 
 /* ── 5. Alerts when the app is closed (Web Push) ───────────────────
