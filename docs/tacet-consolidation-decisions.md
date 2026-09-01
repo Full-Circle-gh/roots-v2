@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.101
+# Tacet shared-core consolidation — decisions record, v4.102
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.102 — **§36 gains the counter-sales decision and loses the open item it closes: a till or market-stall sale IS an order.** It writes to the order record with line items and `unit_cost_at_sale`, exactly as the four online channels do. **The rejected option is rejected for a specific reason, not on principle:** a typed-in daily total is less work and reproduces the fault §36 exists to fix — on a ¥3,500 day the ¥600 of counter trade would reach the revenue line and nothing else, giving Finance and Products two different accounts of the same day. **Second-order consequence, recorded because it was not the point of the decision:** with counter sales writing orders, `sales_entries` has no remaining live writer, so its §22 stage 8 retirement is unblocked — unblocked, not scheduled. Five open items remain on §36.
 
 2026-09-01 · v4.101 — **§36 and §37 swap: Finance takes §36, Related documents returns to last as §37.** v4.100 appended Finance behind the appendix, which broke the convention v4.97 established and v4.99 restated — the reference appendix stays last. No text in either section changed; this is a reorder, a renumber and the inbound pointers that followed from it. Recorded rather than done silently because the convention has now been broken once, and the correction is the evidence it is load-bearing rather than cosmetic.
 
@@ -4551,11 +4553,22 @@ Three things in the kitchen build are Roots-shaped and are rebuilt rather than c
 - Currency is `¥` throughout.
 - Neither ledger table records a location. A one-shop business does not notice; a fifteen-shop business cannot operate.
 
+### Counter and market sales become orders — DECIDED 2026-09-01
+
+A sale rung up at a till or a market stall is an ORDER. It is written to the order record the same way a Meituan, Eleme, mini-app or gzgrocery sale is, with its line items and with `unit_cost_at_sale` recorded per line.
+
+The rejected alternative was a typed-in daily total on the Transactions list — a single figure with no products attached. It is less work and it is the same mistake this section was written to correct. On a ¥3,500 day with ¥400 dine-in and ¥200 at a stall, that ¥600 would reach the revenue line and reach nothing else: no product margin, no cost of goods, no per-item reporting. Finance and Products would then disagree about the same day, for the same reason the kitchen app's income total has been wrong — a second place where sales live.
+
+§21 already governs: an order is a sale, there is one record, and reporting reads from it. A counter sale is a sale.
+
+**Consequence for tenants without a till.** Most will never create one of these. Nothing about this decision requires a tenant to have counter sales, and no screen should imply they must.
+
+**Consequence for `sales_entries`.** With this decided, every one of the six channels writes orders, and the table has no remaining live writer. Its retirement under §22 stage 8 is now unblocked. Retirement itself is NOT scheduled here.
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
 
-- Where counter and market sales live once `sales_entries` retires — an order, or a Transactions entry.
 - The location dimension on the ledger: column, join, or something else.
 - `tdb()` scoping. `routes/finance.js` uses the global handle on all thirteen routes and has no tenant handling anywhere.
 - Whether PO-derived expense rows remain projections that are deleted and recomputed on every PO status change.
