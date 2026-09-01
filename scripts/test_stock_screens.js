@@ -208,10 +208,11 @@ const CASES = {
   // server decides which they are (`home`), because only it knows whether the
   // role is locked to this app and would be redirected straight back.
   'no-way-back-for-a-locked-role': { rows: ROWS, expect: ['Quick stock'],
-    absent: ['Back', 'Kitchen'] },
+    absent: ['Back', 'Kitchen'], headStack: 'none' },
   'back-to-the-home-it-came-from': { rows: ROWS,
     ctxPatch: { home: '/m', home_label: { en: 'Kitchen', cn: '后厨' } },
-    expect: ['Kitchen', 'Quick stock'] },          // named for where it goes, not "Back"
+    expect: ['Kitchen', 'Quick stock'],            // named for where it goes, not "Back"
+    headStack: 'stacked' },                        // and ABOVE the title, as every pushed screen has it
   'back-in-chinese': { rows: ROWS,
     ctxPatch: { home: '/m', home_label: { en: 'Kitchen', cn: '后厨' } },
     pre: "localStorage.setItem('roots-admin-lang','cn');",
@@ -277,7 +278,19 @@ function main() {
       'var t0=Date.now();var iv=setInterval(function(){' +
       '  if(!window.__ready && Date.now()-t0 < ' + wait + ') return;' +
       '  clearInterval(iv);stamp();},40);' +
+      // THE HEAD'S SHAPE, measured rather than described. The back link went in
+      // as a third item of the title ROW, which put "Kitchen" and "Add stock"
+      // side by side — a header this screen shares with nothing else in the
+      // product, on the one screen an operator arrives at from another app.
+      // Text assertions cannot see that: both words are present either way.
+      // "stacked" = the back link ends above where the title begins.
+      'function headStack(){var b=document.getElementById("backHome"),h=document.querySelector("#pageHead h1");' +
+      '  if(!b||!h||b.hidden) return "none";' +
+      '  var rb=b.getBoundingClientRect(), rh=h.getBoundingClientRect();' +
+      '  if(!rb.height||!rh.height) return "none";' +
+      '  return rb.bottom<=rh.top+1 ? "stacked" : "inline";}' +
       'function stamp(){var n=document.querySelectorAll("#app *").length;' +
+      'document.body.setAttribute("data-headstack",headStack());' +
       'var seen=(document.getElementById("app").innerText||"").replace(/\\s+/g," ");' +
       'var sheets=[].slice.call(document.querySelectorAll(".sheet.show"));' +
       'seen+=" "+sheets.map(function(s){return s.innerText.replace(/\\s+/g," ")}).join(" ");' +
@@ -320,6 +333,10 @@ function main() {
     const open = (out.match(/data-open="([^"]*)"/) || [])[1] || '';
     const minTop = Number((out.match(/data-mintop="(-?\d+)"/) || [])[1]);
     const compact = (out.match(/data-compact="([01])"/) || [])[1];
+    const headStack = (out.match(/data-headstack="([a-z]+)"/) || [])[1];
+    if (c.headStack && headStack !== c.headStack) {
+      failures.push([name, `the back link is “${headStack}” with the title, expected “${c.headStack}”`]);
+    }
     if (Number.isFinite(minTop) && minTop < 8) {
       failures.push([name, `a control renders ${minTop}px from the top of the screen — nothing sits on the edge`]);
     }
