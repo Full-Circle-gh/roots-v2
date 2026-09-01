@@ -5,6 +5,10 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 // purchase as its RPO-#### copy, and only one of the two belongs on a 发票
 // chase. lib/po-supersede.js is the rule; this screen is one of its two readers.
 const { notSupersededByCopySql } = require('../lib/po-supersede');
+// What a purchase line is actually worth once the delivery and any return are
+// counted. lib/po-returns.js is the one definition site; this screen is the
+// third reader, after the two receive paths.
+const { billableQty } = require('../lib/po-returns');
 const router = express.Router();
 
 // Map a row from income_entries / expense_entries to the shape the
@@ -341,7 +345,7 @@ router.get('/api/finance/invoice-summary', requireAuth, requirePermission('finan
   const supplier = (req.query.supplier || '').trim();
   let q = `
     SELECT pli.id AS line_id, pli.po_id, pli.name_en, pli.name_cn, pli.sku,
-           pli.qty, pli.unit, pli.cost_per_unit, pli.total_cost,
+           pli.qty, pli.qty_received, pli.returned_qty, pli.unit, pli.cost_per_unit, pli.total_cost,
            COALESCE(NULLIF(TRIM(pli.supplier_name),''), '未指定 Unspecified') AS supplier_name,
            pli.purchase_channel,
            COALESCE(pli.invoice_status, 'not_received') AS invoice_status,
@@ -366,7 +370,11 @@ router.get('/api/finance/invoice-summary', requireAuth, requirePermission('finan
   const bySupplier = new Map();
   let gTotal = 0, gReceived = 0, gNotReceived = 0, gNoInvoice = 0;
   for (const l of lines) {
-    const amt = (parseFloat(l.qty)||0) * (parseFloat(l.cost_per_unit)||0);
+    // The ordered quantity used to stand here, which made this screen disagree
+    // with the Expenses beside it on the same purchase. billableQty is what
+    // Finance books and what the retail 发票 chase asks for — received, less
+    // anything sent back (lib/po-returns.js).
+    const amt = billableQty(l) * (parseFloat(l.cost_per_unit)||0);
     const s   = l.supplier_name;
     if (!bySupplier.has(s)) bySupplier.set(s, {
       supplier_name: s, total: 0, received: 0, not_received: 0, no_invoice: 0,

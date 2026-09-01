@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -393,6 +393,78 @@ of both strings and is not a substitute for a full stop.
 
 **APPROVED BY ASH, 2026-08-27.** Both halves of the pair are his; nothing in this
 section was composed.
+
+## Purchase returns — purchasing (LOCKED 2026-09-01)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the fifth such amendment, opened and closed 2026-09-01,
+the same day as the fourth and for the same feature area.
+
+WHY THE STRINGS ARE NEEDED. Receiving could say a delivery came up SHORT and it
+could say some of it arrived DAMAGED. It could not say the thing that happens
+after the door closes: 15 kg of buckwheat flour taken in on 25 August, found
+wrong on 1 September, sent back to the supplier. The only way to record that was
+to edit the arrived count down — which asserts the goods never turned up,
+contradicts the receipt that says they did, and afterwards cannot be told apart
+from a supplier who short-shipped. **Sent back and came up short are two
+different facts about a supplier, and this vocabulary is what keeps them apart
+on screen.** They are also two different facts about the money: a shortfall was
+never billed, a return has to be taken back off a bill that was.
+
+HOW THE CN HALVES WERE ARRIVED AT. Under the same delegation the fourth
+amendment records (Ash: "you decide the chinese"), and built the same way — from
+words ALREADY IN THE PRODUCT wherever the product had one:
+
+- `退货` is the word the admin already uses for goods going back
+  (`04-orders.js`, `03-dashboard.js`), and the column header is the bare noun so
+  it sits beside `实收` and `破损` in the same register — two characters, no verb.
+- `错货` for `wrong_item` is **not minted here**. It is the pair the mobile
+  receive screen already ships (`RCV_REASONS`, `public/m.html`) and it is reused
+  verbatim, per Rule 6 — one string, one definition site. It is the only reason
+  code the two lists share, which is itself the point: the other four are
+  reasons goods LEFT, not reasons fewer arrived.
+- `未作任何更改。` in `returnBlocked` is lifted character-for-character from
+  `undoBlocked` above. The two refusals rest on the same shelf test and must
+  make the same promise in the same words; only the half naming the operation
+  differs.
+
+**Ash should correct any of these if they read wrong to a Chinese operator;
+nothing else depends on the exact phrasing.**
+
+**THE PAIRS — minted 2026-09-01 by Ash's delegation, locked.**
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `returnedColumn` | Returned | 退货 | The receive table's fifth column, and the box in it. Sits beside 实收 and 破损. |
+| `returnReasonPrompt` | Why? | 原因？ | Empty state of the reason picker that appears with the first returned unit. |
+| `returnQuality` | Quality | 质量问题 | Return reason: arrived intact, not good enough to sell or cook with. |
+| `returnExpired` | Expired | 过期 | Return reason: out of date, or too near it to use. |
+| `returnOverDelivered` | Over-delivered | 多送 | Return reason: more turned up than was ordered, the surplus went back. |
+| `returnNotNeeded` | Not needed | 无需要 | Return reason: ordered in error, the supplier took it back. |
+| `returnBlockedTitle` | Cannot record this return | 无法登记此次退货 | Title of the refusal dialog when the shelf cannot cover the return. |
+| `returnBlocked` | Some of these goods are no longer in stock, so they cannot be sent back — nothing was changed. | 部分货品已不在库存中，无法退货 — 未作任何更改。 | Headline on a refused return. Names the reason and states that the operation wrote nothing. |
+| `returnedToSupplier` | Returned to supplier | 已退回供应商 | Label on the PO's Finance panel, above the value that came back off the books. |
+| `returnedNetted` | already taken off the total above, dated to the order | 已从上方合计中扣除，记在采购单原日期 | The rest of that sentence. Says the money has ALREADY moved and WHICH DATE it moved on. |
+| `returnsComeOffBoth` | Returned units come back off both. | 退货数量会从库存和支出中同时扣除。 | Third clause of the receive note, rendered only on an order that has a return. |
+| `returnSentBack` | sent back | 已退回 | The Receiving list's own word for a return row, where a delivery row counts lines. |
+| `creditDue` | credit due | 应退 | Pill on an invoice line covering more than the line is now worth. The supplier owes this back. |
+| `returnedAfterInvoicing` | Returned after invoicing | 开票后退货 | Label on the Invoices strip that totals those credits. |
+| `askForCreditNote` | ask the supplier for a credit note | 需向供应商索取红字发票 | The instruction beside that total. `红字发票` is the standing term for the document; it is named because nothing in this system issues one. |
+
+**`returnBlocked` CARRIES BOTH HALVES, ALWAYS**, exactly as `undoBlocked` does
+and for the reason that section gives: dropping the refusal turns it into a
+vague complaint, and dropping "nothing was changed" leaves the operator guessing
+whether the return half-landed — the one anxiety a refusal exists to prevent.
+
+**IT IS NOT `undoBlocked` AND MUST NOT BE COLLAPSED INTO IT.** The two share a
+shelf test, a shape and a second half. They do not share a subject: one says a
+DELIVERY cannot be taken back, the other that GOODS cannot go back to the
+supplier. An operator handed the wrong one goes looking for the wrong order.
+That is the mirror image of the rule `undoBlocked` states for its own three
+entry points — one condition, one wording — applied to a second condition.
+
+Sentence case, no exclamation marks. The em dash before the second half of
+`returnBlocked` is part of both strings and is not a substitute for a full stop.
 
 ## Deferred — recorded, not in scope of this lock
 

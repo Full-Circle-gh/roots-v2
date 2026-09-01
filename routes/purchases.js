@@ -12,6 +12,11 @@ const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 const { storeCategory } = require('../lib/category-text');
 const { nextKitchenPONumber } = require('../lib/po-number');
 const { supersedingCopy } = require('../lib/po-supersede');
+// Goods that arrived, were accepted, and went BACK. One definition site for
+// both receive endpoints and for every screen that reports the money — see the
+// header of lib/po-returns.js before touching anything below that nets a
+// return out of a quantity.
+const { planReturns, billableQtySql, resolveQty } = require('../lib/po-returns');
 // The nested-recipe recompute (§29 step 3) — fired after a PO price
 // write-back moves a non-linked ingredient's cost, since that can move a
 // linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
@@ -84,12 +89,14 @@ function planReceiptReason({ ordered, nextQty, sent, current }) {
 
 // The received quantity a line will hold after this payload is applied. An
 // absent qty_received key preserves what is stored; a null blanks it.
+//
+// The rule itself is resolveQty (lib/po-returns.js), which every quantity on a
+// receive payload now obeys — arrived, damaged and returned alike. Kept as a
+// named function here because planReceiptReason reads better for it, but there
+// is only one copy of the rule, and a change to how absence is treated can no
+// longer land on two of the three columns.
 function nextReceivedQty(line, r) {
-  if (r.qty_received === undefined) {
-    return line.qty_received == null ? null : parseFloat(line.qty_received);
-  }
-  return (r.qty_received == null || r.qty_received === '')
-    ? null : Math.max(0, parseFloat(r.qty_received) || 0);
+  return resolveQty(line.qty_received, r.qty_received, { nullable: true });
 }
 
 // Validate every line's reason BEFORE anything is written, so a bad code can
@@ -129,19 +136,34 @@ function receiptLineIds(receipts) {
 // `receipt_note` on a line, not `note`: po_line_items already has a `note`
 // column holding the buyer's own remark about the item ("substitute brand"),
 // and the two would have quietly overwritten each other's meaning.
-function recordReceipt(h, { poId, storeId, scope, actor, receipts, note }) {
-  const ids = receiptLineIds(receipts);
+//
+// ── kind + returns: the same table, the other direction ────────────────────
+// `kind` is 'receipt' (goods came in) or 'return' (goods went back), and it is
+// STAMPED rather than derived — see the column's comment in database.js for
+// why the delivery-vs-correction derivation cannot answer this one.
+//
+// `returns` is a Map of line_id → units that went back ON THIS EVENT. When it
+// is passed, it also decides which lines the receipt covers: a return covers
+// the lines that actually moved, not every line the payload happened to
+// mention, and receiptLineIds' arrived/damaged test would have covered all of
+// them. The quantity recorded is a MOVEMENT, unlike qty_received beside it,
+// which is the running total the line holds — the column comment in
+// database.js carries that distinction and it is the one asymmetry in this
+// table.
+function recordReceipt(h, { poId, storeId, scope, actor, receipts, note, kind, returns }) {
+  const ids = returns ? [...returns.keys()] : receiptLineIds(receipts);
   if (!ids.length) return null;
   const info = h.prepare(`INSERT INTO po_receipts
-      (po_id, store_id, scope, actor_user_id, actor_label, actor_realm, note)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      (po_id, store_id, scope, actor_user_id, actor_label, actor_realm, note, kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(poId, storeId ?? null, scope || 'kitchen',
-         actor?.userId ?? null, actor?.label ?? null, actor?.realm ?? null, note ?? null);
+         actor?.userId ?? null, actor?.label ?? null, actor?.realm ?? null, note ?? null,
+         kind === 'return' ? 'return' : 'receipt');
   const receiptId = info.lastInsertRowid;
-  const read = h.prepare('SELECT qty_received, damaged_qty, receipt_reason FROM po_line_items WHERE id = ? AND po_id = ?');
+  const read = h.prepare('SELECT qty_received, damaged_qty, receipt_reason, return_reason FROM po_line_items WHERE id = ? AND po_id = ?');
   const ins  = h.prepare(`INSERT INTO po_receipt_lines
-      (receipt_id, line_id, qty_received, damaged_qty, receipt_reason, note)
-      VALUES (?, ?, ?, ?, ?, ?)`);
+      (receipt_id, line_id, qty_received, damaged_qty, receipt_reason, note, returned_qty)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`);
   const notes = new Map();
   for (const r of receipts) {
     const id = parseInt(r.line_id, 10);
@@ -151,7 +173,14 @@ function recordReceipt(h, { poId, storeId, scope, actor, receipts, note }) {
   for (const id of ids) {
     const l = read.get(id, poId);
     if (!l) continue;
-    ins.run(receiptId, id, l.qty_received, l.damaged_qty || 0, l.receipt_reason, notes.get(id) ?? null);
+    // A return row carries the line's return_reason rather than its receipt
+    // one: a receipt_reason explains a SHORTFALL and a return has none — the
+    // goods turned up in full and went back afterwards. Putting the shortfall
+    // reason on a return row would have every return read as a short delivery,
+    // which is the confusion this whole feature exists to end.
+    ins.run(receiptId, id, l.qty_received, l.damaged_qty || 0,
+            returns ? l.return_reason : l.receipt_reason,
+            notes.get(id) ?? null, returns ? (returns.get(id) || 0) : 0);
     lines++;
   }
   return { receiptId, lines };
@@ -175,6 +204,18 @@ const RECEIPT_REASON_ERRORS = {
   reason_required:       'A short line needs a reason · 短缺行需要填写原因',
   reason_invalid:        'Unknown reason code · 收货原因无效',
   reason_not_applicable: 'A reason belongs only on a short line · 仅短缺行可填写原因',
+};
+
+// The return refusals, in the same shape and for the same callers. The retail
+// route answers in bare codes its screen translates (its own convention); this
+// one answers in words, which is this file's. Both refuse before writing.
+const RETURN_ERRORS = {
+  return_invalid:               'That returned quantity is not a number · 退货数量无效',
+  return_before_receipt:        'Nothing has been received on that line yet, so nothing can go back · 该行尚未收货，无法退货',
+  return_exceeds_received:      'More would go back than was accepted on that line · 退货数量超过该行实收数量',
+  return_reason_required:       'A return needs a reason · 退货需要填写原因',
+  return_reason_invalid:        'Unknown return reason · 退货原因无效',
+  return_reason_not_applicable: 'A reason belongs only on a line with a return · 仅退货行可填写原因',
 };
 
 function planReceiptReasons(h, poId, receipts) {
@@ -490,15 +531,23 @@ function postPOExpenses(poId) {
       result.superseded_by = copy.po_number;
       return result;
     }
-    // Group by expense_category, summing (received × cost) per category.
+    // Group by expense_category, summing (received − returned × cost) per
+    // category. The quantity is billableQtySql (lib/po-returns.js) — the same
+    // expression the retail poster and the 发票 chase use, so one purchase can
+    // no longer be worth one figure in the books and another on the chase.
+    //
+    // A return RESTATES THIS PURCHASE rather than opening a second entry: the
+    // DELETE above has already cleared the rows and these are written back
+    // against po.date, so goods bought in one month and sent back in the next
+    // leave the first month holding what it actually cost.
     const groups = db.prepare(`
       SELECT
         COALESCE(NULLIF(TRIM(expense_category),''),'未分类 Uncategorized') AS category,
-        SUM(COALESCE(qty_received, qty) * COALESCE(cost_per_unit, 0))     AS amount,
+        SUM(${billableQtySql()} * COALESCE(cost_per_unit, 0))             AS amount,
         COUNT(*)                                                            AS line_count
       FROM po_line_items
       WHERE po_id = ?
-        AND COALESCE(qty_received, qty) > 0
+        AND ${billableQtySql()} > 0
       GROUP BY COALESCE(NULLIF(TRIM(expense_category),''),'未分类 Uncategorized')
     `).all(poId);
     const insert = db.prepare('INSERT INTO expense_entries (date, amount, category, description, po_id) VALUES (?,?,?,?,?)');
@@ -819,6 +868,12 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
     // code. Kitchen receiving moves no stock, but it records the same fact.
     const planned = planReceiptReasons(db, poId, receipts);
     if (planned.error) return res.status(400).json({ error: RECEIPT_REASON_ERRORS[planned.error], line_id: planned.line_id });
+    // Returns, resolved and refused the same way. Kitchen receiving moves no
+    // stock, so there is no shelf to check against here — the whole of what a
+    // return means to this endpoint is the quantity, its reason, and the money
+    // that follows from both.
+    const returns = planReturns(db, poId, receipts);
+    if (returns.error) return res.status(400).json({ error: RETURN_ERRORS[returns.error], code: returns.error, line_id: returns.line_id });
     const reasonUpd = db.prepare('UPDATE po_line_items SET receipt_reason = ? WHERE id = ? AND po_id = ?');
     const upd = db.prepare(`UPDATE po_line_items SET
       qty_received    = ?,
@@ -828,7 +883,21 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
       WHERE id = ? AND po_id = ?`);
     let missing_lines = 0, damaged_lines = 0, total_missing = 0, total_damaged = 0;
     let any_qty_received = false;
-    let receipt = null;
+    let receipt = null, returnReceipt = null;
+    let returned_lines = 0, returned_units = 0;
+    const returnMoves = new Map();
+    // Three statements rather than one with a computed date, because
+    // returned_at answers a different question to the quantity beside it: it
+    // dates the LAST RETURN, so it moves when the figure grows, clears when the
+    // figure goes to zero, and is untouched by a correction that merely lowers
+    // it. CURRENT_TIMESTAMP for the reason the retail twin gives — it is read
+    // beside po_receipts.received_at, which takes the same default.
+    const returnUpd = db.prepare(
+      'UPDATE po_line_items SET returned_qty = ?, return_reason = ? WHERE id = ? AND po_id = ?');
+    const returnUpdNew = db.prepare(
+      'UPDATE po_line_items SET returned_qty = ?, return_reason = ?, returned_at = CURRENT_TIMESTAMP WHERE id = ? AND po_id = ?');
+    const returnUpdNone = db.prepare(
+      'UPDATE po_line_items SET returned_qty = 0, return_reason = NULL, returned_at = NULL WHERE id = ? AND po_id = ?');
     const tx = db.transaction(() => {
       for (const r of receipts) {
         const lineId = parseInt(r.line_id, 10);
@@ -859,6 +928,17 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
         // that statement touching the receive columns it must leave alone.
         const plan = planned.plans.get(lineId);
         if (plan && plan.write) reasonUpd.run(plan.value, lineId, poId);
+        // Written on its own statement for the same reason the reason above is:
+        // a tracking-only save must be able to leave every receive column alone,
+        // and a returns-aware save must be able to move a return without
+        // re-asserting an arrived count it was not sent.
+        const rPlan = returns.plans.get(lineId);
+        if (rPlan && rPlan.write) {
+          if (rPlan.delta > 0)      returnUpdNew.run(rPlan.qty, rPlan.reason, lineId, poId);
+          else if (rPlan.qty === 0) returnUpdNone.run(lineId, poId);
+          else                      returnUpd.run(rPlan.qty, rPlan.reason, lineId, poId);
+          if (rPlan.delta > 0) { returnMoves.set(lineId, rPlan.delta); returned_lines++; returned_units += rPlan.delta; }
+        }
         if (q != null) any_qty_received = true;
         if (q != null && q < orderedQty) { missing_lines++; total_missing += orderedQty - q; }
         if (dq > 0)                       { damaged_lines++; total_damaged += dq; }
@@ -877,17 +957,32 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
           receipts, note: (req.body && req.body.receipt_note) || null,
         });
       }
+      // The return is its own event, in the other direction, and never folded
+      // into the delivery record beside it — see recordReceipt's `kind`.
+      if (returnMoves.size) {
+        returnReceipt = recordReceipt(db, {
+          poId, storeId: null, scope: 'kitchen', kind: 'return', returns: returnMoves,
+          actor: { userId: req.user.id, label: req.user.display_name || req.user.username || null, realm: 'kitchen' },
+          receipts, note: (req.body && req.body.return_note) || null,
+        });
+      }
     });
     tx();
     // Only re-post expenses when an actual received quantity was entered.
     // Tracking-only saves leave Finance untouched — tracking is buyer-side
     // metadata, not a money event.
-    if (any_qty_received) postPOExpenses(poId);
+    // A return is a money event even when nothing arrived on this save, so the
+    // re-post follows either kind of change. Tracking-only saves still leave
+    // Finance alone, which is the distinction this gate was always drawing.
+    if (any_qty_received || returns.increased || returns.decreased) postPOExpenses(poId);
     logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', poId,
       { lines: receipts.length, missing_lines, damaged_lines, total_missing, total_damaged,
-        receipt_id: receipt?.receiptId ?? null }, req.ip);
+        receipt_id: receipt?.receiptId ?? null, returned_lines, returned_units,
+        return_receipt_id: returnReceipt?.receiptId ?? null }, req.ip);
     res.json({ success: true, missing_lines, damaged_lines, total_missing, total_damaged,
-               receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0 });
+               returned_lines, returned_units,
+               receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0,
+               return_receipt_id: returnReceipt?.receiptId ?? null });
   } catch (e) {
     console.error('[receive PO error]', e);
     res.status(500).json({ error: 'Receive failed · 收货失败: ' + (e.message || 'unknown error') });
