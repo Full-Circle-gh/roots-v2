@@ -592,5 +592,129 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('6. Every warning speaks Chinese in the Chinese UI');
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// THE CHECK THAT WAS MISSING. Section 3 and 4 above run with cuT/T stubbed to
+// return the ENGLISH half, so they pass whether or not a Chinese half exists —
+// which is exactly how four tooltips shipped reading English to the half of the
+// room that reads Chinese. These run the same shipped functions with the
+// language flipped and assert the output actually CHANGED.
+//
+// A pair is proved by three things together: the Chinese differs from the
+// English, it contains Han characters, and it is not merely the English with a
+// locked label bolted on the front.
+const HAN = /[\u4e00-\u9fff]/;
+function assertRealPair(label, en, cn) {
+  assert.notStrictEqual(cn, en, `${label}: the Chinese half is the English string`);
+  assert.ok(HAN.test(cn), `${label}: the Chinese half has no Chinese in it — ${cn}`);
+  // The English sentence must not be sitting inside the Chinese one. Compared on
+  // the longest English clause rather than the whole string, so a shared unit
+  // token like "ml" or a name cannot mask a copy-paste.
+  const clause = en.split(/[.。]/).map(x => x.trim()).sort((a, b) => b.length - a.length)[0];
+  if (clause && clause.length > 25) {
+    assert.ok(!cn.includes(clause), `${label}: the English sentence is embedded in the Chinese`);
+  }
+}
+
+// ── The recipe record's per-line tooltip and its save-time sentence ──────────
+{
+  const line = { name_en: 'Olive oil', qty: 160, unit: 'ml', master_unit: 'g' };
+  function titleIn(lang) {
+    const sb2 = { COST: () => RC, T: (en, cn) => (lang === 'cn' ? cn : en), _lines: [line], Number, String };
+    vm.createContext(sb2);
+    vm.runInContext(RCP_FNS + '\nthis.__t = lineMismatchTitle;', sb2, { filename: 'lineMismatchTitle' });
+    return sb2.__t(line);
+  }
+  check('the ingredient line’s tooltip has a real Chinese half', () =>
+    assertRealPair('lineMismatchTitle', titleIn('en'), titleIn('cn')));
+
+  check('the Chinese names the same two units the English does', () => {
+    const cn = titleIn('cn');
+    assert.ok(cn.includes('ml') && cn.includes('g'), 'the units are missing: ' + cn);
+  });
+
+  // 无法换算 was CONSIDERED AND REJECTED when the label pair was minted — it
+  // says impossible, and a recorded density will settle the volume↔mass cases.
+  // 待换算 was rejected for the mirror reason. Neither may reappear in the
+  // explanation, or the copy reopens a decision the vocabulary closed.
+  check('the Chinese avoids the two phrasings the vocabulary rejected', () => {
+    const cn = titleIn('cn');
+    assert.ok(!cn.includes('无法换算'), '无法换算 was rejected — it overstates: ' + cn);
+    assert.ok(!cn.includes('待换算'), '待换算 was rejected — it implies a remedy: ' + cn);
+  });
+
+  // The three distinctions the locked entry requires, in the Chinese as well as
+  // the English: the cost is UNKNOWN not missing, the LINE is at fault not the
+  // material, the total is INCOMPLETE not wrong.
+  check('the Chinese keeps the line at fault and clears the material', () => {
+    const cn = titleIn('cn');
+    assert.ok(cn.includes('不计入'), 'it does not say the cost is left out: ' + cn);
+    assert.ok(cn.includes('该物料本身的成本没有问题'), 'it does not clear the material: ' + cn);
+    assert.ok(!cn.includes('缺少成本'), '缺少成本 means MISSING cost — the wrong record: ' + cn);
+  });
+}
+
+// ── The Products list mark ──────────────────────────────────────────────────
+{
+  function markIn(lang, p) {
+    const saved = sandbox.cuT;
+    sandbox.cuT = (en, cn) => (lang === 'cn' ? cn : en);
+    try { return sandbox._paMarginWarn({ group: false, p }); } finally { sandbox.cuT = saved; }
+  }
+  const titleOf = html => (html.match(/title="([^"]*)"/) || [])[1] || '';
+
+  check('the list mark’s tooltip has a real Chinese half', () => {
+    const p = { recipe_unit_mismatch: 1 };
+    assertRealPair('_paMarginWarn/mismatch', titleOf(markIn('en', p)), titleOf(markIn('cn', p)));
+  });
+
+  // This one had been English-only since the cost_incomplete tag shipped, a day
+  // before any of this. It shares the tooltip, and half a tooltip in Chinese is
+  // worse than none.
+  check('the older cost_incomplete sentence got its Chinese too', () => {
+    const p = { cost_incomplete: 1 };
+    assertRealPair('_paMarginWarn/incomplete', titleOf(markIn('en', p)), titleOf(markIn('cn', p)));
+  });
+
+  // Joined AFTER translation, or a cell carrying both reasons gets one sentence
+  // of each language.
+  check('both reasons at once give TWO Chinese sentences, no English left', () => {
+    const cn = titleOf(markIn('cn', { cost_incomplete: 1, recipe_unit_mismatch: 1 }));
+    assert.ok(cn.includes('单位不符') && cn.includes('成本不完整'), 'a reason is missing: ' + cn);
+    assert.ok(!/[a-z]{6,}/.test(cn), 'an English clause survived the join: ' + cn);
+  });
+}
+
+// ── The save toast and the product editor pill ──────────────────────────────
+// Read off the source: both are composed inside async/DOM-bound functions that
+// a vm cannot drive without a live editor. The assertion is that each carries a
+// Chinese half at all — the shape the four bugs shared was a `T(x, x)` /
+// `cuT(x, x)` call passing the SAME string twice.
+{
+  const RECIPES_SRC = read('public', 'retail-admin', '19-recipes.js');
+  const PRODUCTS_SRC = read('public', 'retail-admin', '09-products.js');
+
+  check('no warning string passes the same variable as both halves', () => {
+    for (const [name, src] of [['19-recipes.js', RECIPES_SRC], ['09-products.js', PRODUCTS_SRC]]) {
+      const dup = src.match(/\b(?:cuT|T)\(\s*([A-Za-z_$][\w$]*)\s*,\s*\1\s*\)/g) || [];
+      assert.deepStrictEqual(dup, [], `${name} still has English-on-both-halves: ${dup.join(', ')}`);
+    }
+  });
+
+  check('the save toast carries a Chinese sentence', () => {
+    const save = extractFunction(RECIPES_SRC, 'window.rcpSave = async function ()');
+    assert.ok(HAN.test(save), 'rcpSave has no Chinese at all');
+    assert.ok(save.includes('单位不符'), 'the toast does not carry the locked label in Chinese');
+    assert.ok(/toast\(T\(en, cn\)/.test(save), 'the toast is not given both halves');
+  });
+
+  check('the product editor pill carries a Chinese sentence', () => {
+    assert.ok(/cuT\(tail, tailCn\)/.test(PRODUCTS_SRC), 'the pill tail has no Chinese half');
+    assert.ok(PRODUCTS_SRC.includes('本配方中有'), 'the pill’s Chinese sentence is missing');
+  });
+}
+
 console.log(failures ? `\n${failures} check(s) failed.` : '\nAll checks passed.');
 process.exit(failures ? 1 : 0);
