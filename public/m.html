@@ -481,6 +481,8 @@ const state = {
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
   chanSheet:null, chanBusy:null, chanErr:null,
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
+  roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
+  caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
@@ -5866,6 +5868,10 @@ function loadTeam(force){
   state.teamTried=true;
   api('/api/backend/team').then(d=>{
     state.team=Array.isArray(d&&d.team)?d.team:[];
+    /* The tenant's own roles ride along with the roster, so this screen names a
+       role the way its shop does. It used to carry a seven-entry map of the
+       nine shipped names and fall through to the raw key for the other two. */
+    state.roles=Array.isArray(d&&d.roles)?d.roles:[];
     state.teamEnforce=!!(d&&d.rbacEnforce); state.teamErr=null; render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.teamErr=E('Could not load the team.','加载团队失败。'); render(); });
@@ -5873,7 +5879,10 @@ function loadTeam(force){
 // Only these two can change a roster; requireCap('team:manage') is what the
 // server checks, and drawing an action a staff account cannot use is the kind
 // of promise this app has spent a long time removing.
-const TEAM_CAN_MANAGE=()=>['owner','admin'].includes((state.me&&state.me.role)||'');
+/* The capability the server actually checks, rather than two role names that a
+   tenant can now rename or delete. Null caps (an older session) means unknown,
+   and this layer has always failed OPEN on unknown — the server still refuses. */
+const TEAM_CAN_MANAGE=()=>!state.caps||state.caps.indexOf('team:manage')!==-1;
 function teamActiveOwners(){ return (state.team||[]).filter(u=>u.role==='owner'&&u.isActive).length; }
 /* Why this person cannot be switched off, or '' if they can. The server owns
    these rules; this is the same two, said early. */
@@ -5902,6 +5911,7 @@ function screenTeam(){
   if(!rows.length) return nothingYet(T('Nobody else yet','暂无其他成员'),
     T('People are invited on desktop, with a role and the stores they can see. Once they exist you can check who has access from here, and switch someone off.',
       '成员在电脑端邀请，并设置角色与可见门店。添加后可在此查看谁能登录，并可停用某人。'));
+  /* Still read-only, still true — and now it names where roles are shaped. */
   const store=id=>{ const st=(state.stores||[]).find(x=>String(x.id)===String(id));
     return st?(LANG==='en'?(st.name_en||st.name_cn):(st.name_cn||st.name_en)):null; };
   const can=TEAM_CAN_MANAGE();
@@ -5913,7 +5923,7 @@ function screenTeam(){
       const busy=state.teamBusy===u.id;
       const lock=teamLockReason(u);
       const tap=(can&&!lock&&!state.teamBusy)?`APP.cmd('teamToggle',${u.id})`:'';
-      const rl=ROLE_NAMES[u.role];
+      const rl=ROLE_NAMES(u.role);
 
       // Role, store, last seen, and why it cannot be switched — four facts that
       // do not fit one nowrap line beside a pill and a chevron, so the line
@@ -5940,19 +5950,24 @@ function screenTeam(){
           centred line every other screen uses to say where authoring lives. */''}
     ${state.teamEnforce?'':noteBar(T('Roles shape what people see, but the server is not enforcing them yet — that switch is on desktop.','角色仅影响界面显示，服务端尚未强制执行 — 该开关在电脑端。'))}
     <div style="text-align:center;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${
-      can?T('Inviting someone, and what each role can reach, are set on desktop.','邀请成员及各角色权限在电脑端设置。')
-         :T('Only an owner or an admin can switch someone off.','仅负责人或管理员可以停用成员。')}</div></div>`;
+      can?T('Inviting someone, and what each role reaches, are set on desktop — Settings → Team → Roles.','邀请成员及各角色权限在电脑端设置 — 设置 → 团队 → 角色。')
+         :T('Switching someone off needs permission to manage the team.','停用成员需要管理团队的权限。')}</div></div>`;
 }
 
-/* Who is signed in, in the operator's own words. The four positions are the
-   ones the backend recognises; anything else is an owner/admin/staff login and
-   is named rather than labelled. */
-const ROLE_NAMES={store_manager:['Store manager','店长'],warehouse:['Warehouse','仓库'],
-  customer_service:['Customer service','客服'],dispatch:['Dispatch','调度'],
-  owner:['Owner','店主'],admin:['Admin','管理员'],staff:['Staff','员工']};
+/* Who is signed in, in their shop's own words. This was a hardcoded map of
+   seven of the nine shipped roles, falling through to the raw key for the other
+   two — and wrong for any tenant that renamed one. Roles are per-tenant data
+   now, so the name comes from the record: /api/backend/me ships the signed-in
+   operator's own roleName, and the roster ships the rest for the list below. */
+function ROLE_NAMES(role){
+  if(!role) return null;
+  if(state.me&&state.me.role===role&&state.me.roleName) return [state.me.roleName.en,state.me.roleName.cn];
+  const r=(state.roles||[]).find(x=>x.key===role);
+  return r?[r.nameEn||r.nameCn,r.nameCn||r.nameEn]:null;
+}
 function ROLE_WORD(me){
   if(!me) return T('Signed in','已登录');
-  const r=ROLE_NAMES[me.role];
+  const r=ROLE_NAMES(me.role);
   if(me.name&&r) return me.name+' · '+T(...r);
   return me.name || (r?T(...r):T('Signed in','已登录'));
 }
@@ -8370,14 +8385,23 @@ async function loadMe(){
     if(!r.ok) return;
     const j=await r.json();
     const u=(j&&(j.user||j.data||j))||{};
-    const POS=['store_manager','warehouse','customer_service','dispatch'];
-    if(POS.includes(u.role)) state.pos=u.role;
+    /* HOME BOARD. This used to test the role STRING against a hardcoded list of
+       four, so renaming a role took its board away and quietly handed the
+       operator the owner's view instead. The board is a field on the role
+       record now (u.roleLayout); the values are unchanged, so recapNoMoney()
+       and the two reads at the top of this file did not have to move. */
+    const BOARDS=['store_manager','warehouse','customer_service','dispatch'];
+    if(BOARDS.includes(u.roleLayout)) state.pos=u.roleLayout;
     // The platform ceiling. A feature the tenant is not entitled to must not
     // carry a switch here — the desktop hides it, and a switch that writes a
     // preference nobody will ever honour is worse than an absent one. A
     // missing key means entitled, so the default is an empty object.
     state.ent=(u.tenant&&u.tenant.entitlements)||{};
-    state.me={name:u.displayName||u.username||null, role:u.role||null};
+    /* caps are kept, not gated on: this screen has no data-cap machinery and
+       re-renders template strings into #content, so what it does with them is
+       FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
+    state.caps=Array.isArray(u.caps)?u.caps:null;
+    state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null};
   }catch(e){}
 }
 async function loadLive(){

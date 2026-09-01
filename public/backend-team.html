@@ -259,7 +259,7 @@
     <!-- Team -->
     <section class="card">
       <h2><span class="en">Team</span><span class="cn">团队</span></h2>
-      <p class="lead"><span class="en">A <b>position</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to fine-tune, or limit someone to certain stores. The owner always keeps full access.</span><span class="cn"><b>职位</b>决定每个人可见、可做的内容,也决定其首页。打开<b>权限</b>可精细调整,或将成员限定到指定门店。负责人始终拥有完整权限。</span></p>
+      <p class="lead"><span class="en">A <b>role</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to give one person an exception, or limit them to certain stores. What each role reaches is set in Settings → Team → Roles. The owner always keeps full access.</span><span class="cn"><b>角色</b>决定每个人可见、可做的内容,也决定其首页。打开<b>权限</b>可为个人设置例外,或将成员限定到指定门店。各角色的权限在“设置 → 团队 → 角色”中设置。负责人始终拥有完整权限。</span></p>
 
       <div class="stats" id="stats">
         <div class="stat"><div class="n tnum" id="statPeople">—</div><div class="k"><span class="en">People</span><span class="cn">成员</span></div></div>
@@ -296,17 +296,8 @@
             <input id="iName" type="text" autocomplete="off" spellcheck="false" placeholder="Jane Lee" />
           </div>
           <div class="field">
-            <label class="flabel" for="iRole"><span class="en">Position</span><span class="cn">职位</span></label>
-            <select id="iRole">
-              <option value="staff">Staff · 员工</option>
-              <option value="store_manager">Store manager · 店长</option>
-              <option value="warehouse">Warehouse · 仓库</option>
-              <option value="customer_service">Customer service · 客服</option>
-              <option value="dispatch">Dispatch · 配送调度</option>
-              <option value="kitchen">Kitchen · 后厨</option>
-              <option value="admin">Admin · 管理员</option>
-              <option value="owner">Owner · 负责人</option>
-            </select>
+            <label class="flabel" for="iRole"><span class="en">Role</span><span class="cn">角色</span></label>
+            <select id="iRole"></select>
             <div class="fhint" id="iRoleDesc"></div>
           </div>
         </div>
@@ -353,17 +344,8 @@
         <input id="eName" type="text" autocomplete="off" spellcheck="false" />
       </div>
       <div class="field">
-        <label class="flabel" for="eRole"><span class="en">Position</span><span class="cn">职位</span></label>
-        <select id="eRole">
-          <option value="staff">Staff · 员工</option>
-          <option value="store_manager">Store manager · 店长</option>
-          <option value="warehouse">Warehouse · 仓库</option>
-          <option value="customer_service">Customer service · 客服</option>
-          <option value="dispatch">Dispatch · 配送调度</option>
-          <option value="kitchen">Kitchen · 后厨</option>
-          <option value="admin">Admin · 管理员</option>
-          <option value="owner">Owner · 负责人</option>
-        </select>
+        <label class="flabel" for="eRole"><span class="en">Role</span><span class="cn">角色</span></label>
+        <select id="eRole"></select>
         <div class="fhint" id="eRoleDesc"></div>
       </div>
       <div class="field" id="eStoreField" style="display:none">
@@ -415,7 +397,7 @@
         </div>
 
         <div class="perm-tools">
-          <button type="button" class="linkbtn" id="permResetPreset"><span class="en">Reset to position default</span><span class="cn">重置为职位默认</span></button>
+          <button type="button" class="linkbtn" id="permResetPreset"><span class="en">Clear exceptions</span><span class="cn">清除例外</span></button>
         </div>
         <div id="permMatrix"></div>
       </div>
@@ -463,39 +445,38 @@
     if (u.avatarUrl) return '<span class="av ' + (cls || '') + '"><img src="' + esc(u.avatarUrl) + '" alt=""></span>';
     return '<span class="av ' + (cls || '') + '">' + esc(initials(u)) + '</span>';
   }
-  function roleLabel(role){
-    return L(
-      { owner:'Owner', admin:'Admin', staff:'Staff', store_manager:'Store manager', warehouse:'Warehouse', customer_service:'Customer service', dispatch:'Dispatch', kitchen:'Kitchen', store_stock:'Store stock' }[role] || role,
-      { owner:'负责人', admin:'管理员', staff:'员工', store_manager:'店长', warehouse:'仓库', customer_service:'客服', dispatch:'配送调度', kitchen:'后厨', store_stock:'门店库存' }[role] || role
-    );
+  /* ── Roles come from the tenant's own records ──────────────────────────
+     This page is a standalone pre-matrix duplicate of the Team tab, still
+     served at server.js but no longer linked to from anywhere. It carried its
+     own role-name map, its own descriptions and sixteen hardcoded <option>
+     elements — every one of which is a statement about roles that is simply
+     untrue for a tenant that has renamed or deleted one. Rather than leave a
+     reachable page telling people the wrong thing, it reads the same records
+     the Team tab does. ROLES is filled by load(), from /api/backend/team.
+
+     It should probably be retired outright — it has no permission matrix, so
+     it cannot do the half of this screen that matters — but deleting a served
+     route is not something to do quietly, so it is reported and kept. */
+  var ROLES = [];
+  function roleRec(role){
+    for (var i = 0; i < ROLES.length; i++) if (ROLES[i].key === role) return ROLES[i];
+    return null;
   }
-  // owner/admin read as elevated (amber), operator presets as sage, staff neutral.
-  function roleClass(role){ return (role === 'owner' || role === 'admin') ? 'owner' : (role === 'staff') ? 'staff' : 'op'; }
+  function roleLabel(role){
+    var r = roleRec(role);
+    // An unknown role is shown raw, never guessed at: it means the record is
+    // gone, and inventing a friendly name for it hides the thing to fix.
+    return r ? L(r.nameEn || r.nameCn, r.nameCn || r.nameEn) : role;
+  }
+  // Owner reads as elevated (amber). Everything else is an ordinary role the
+  // tenant named itself — there is no shipped hierarchy left to encode.
+  function roleClass(role){ return role === 'owner' ? 'owner' : 'op'; }
 
   function roleDesc(role){
-    var en = {
-      staff: 'Day-to-day shop floor — orders, stock, customers. No money reports or setup.',
-      store_manager: 'Runs one store — its orders, stock and customers. Their home opens on that store.',
-      warehouse: 'Stock and shipments only. No revenue shown, anywhere.',
-      customer_service: 'Refunds, invoices, order fixes and customer feedback.',
-      dispatch: 'Keeps deliveries moving — orders waiting to go out and orders on the road.',
-      kitchen: 'Only the Add Stock app, for one store.',
-      admin: 'Runs everything and manages the team. Can’t change billing, edit others’ permissions, or delete a store.',
-      owner: 'Full access, always. Cannot be narrowed.'
-    }[role] || '';
-    var cn = {
-      staff: '门店日常——订单、库存、顾客。不含营收报表与设置。',
-      store_manager: '负责一家门店——该店的订单、库存与顾客,首页只看本店。',
-      warehouse: '只看库存与发货,任何地方都不显示营收。',
-      customer_service: '处理退款、发票、订单问题与顾客反馈。',
-      dispatch: '盯配送——待派单与在途订单。',
-      kitchen: '仅限一家门店的“加库存”应用。',
-      admin: '负责全部运营并管理团队。不能更改账单、编辑他人权限或删除门店。',
-      owner: '始终拥有完整权限,不可缩减。'
-    }[role] || '';
-    return L(en, cn);
+    var r = roleRec(role);
+    return r ? L(r.descEn || r.descCn || '', r.descCn || r.descEn || '') : '';
   }
-  function needsStore(role){ return role === 'kitchen' || role === 'store_manager'; }
+  function needsStore(role){ var r = roleRec(role); return !!(r && r.storePinned); }
 
   var STORES = [];
   function storeLabel(s){ return (lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) || s.code || ('#' + s.id); }
@@ -517,8 +498,9 @@
     var d = descId ? document.getElementById(descId) : null;
     if (d) d.textContent = roleDesc(role);
     var h = helpId ? document.getElementById(helpId) : null;
-    if (h) h.textContent = role === 'kitchen'
-      ? L('Kitchen members only get the Add Stock app, for this store.', '后厨成员仅可使用此门店的“加库存”应用。')
+    var rec = roleRec(role);
+    if (h) h.textContent = (rec && rec.stockAppOnly)
+      ? L('This role only reaches the Add Stock app, for this store.', '此角色仅可使用该门店的“加库存”应用。')
       : L('This is the store they run — their home and data stay on it.', '这是其负责的门店——首页与数据仅限本店。');
   }
 
@@ -566,9 +548,11 @@
       .then(function (r){ if (r.status === 401) { location.replace('/backend/login'); throw 0; } return r.json(); })
       .then(function (j){
         TEAM = (j && j.team) || [];
+        ROLES = (j && j.roles) || [];
         var me = TEAM.filter(function (u){ return u.isSelf; })[0];
         if (me) { SELF_ID = me.id; SELF_OWNER = me.role === 'owner'; }
         RBAC_ENFORCE = !!(j && j.rbacEnforce);
+        paintRoleOptions();
         paintEnforce();
         render();
       })
@@ -863,9 +847,9 @@
       var ctx;
       if (j.isOwner) ctx = L('Owner always has full access — nothing to change here.', '负责人始终拥有完整权限 — 此处无需更改。');
       else {
-        ctx = L('Position', '职位') + ': ' + roleLabel(m.role) + '. ';
+        ctx = L('Role', '角色') + ': ' + roleLabel(m.role) + '. ';
         ctx += j.isSelf ? L('You can’t edit your own permissions.', '不能编辑自己的权限。')
-                        : L('Tinted rows differ from the position default.', '带底色的行表示与职位默认不同。');
+                        : L('Tinted rows differ from what the role gives.', '带底色的行表示与角色权限不同。');
       }
       document.getElementById('permsCtx').textContent = ctx;
       permsSaveBtn.style.display = (j.isOwner || j.isSelf) ? 'none' : '';
@@ -930,9 +914,13 @@
     ['iRole','eRole'].forEach(function (id){
       var sel = document.getElementById(id);
       if (!sel) return;
-      Array.prototype.forEach.call(sel.options, function (opt){
-        if (opt.value) opt.textContent = roleLabel(opt.value);
-      });
+      var keep = sel.value;
+      sel.innerHTML = ROLES.map(function (r){
+        return '<option value="' + esc(r.key) + '">' + esc(roleLabel(r.key)) + '</option>';
+      }).join('');
+      if (keep) {
+        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === keep) { sel.value = keep; break; }
+      }
     });
   }
   function applyLang(){
