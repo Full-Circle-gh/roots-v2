@@ -87,7 +87,6 @@ const OUTSTANDING = {
     awaiting: 44, no_invoice_expected: 0, line_count: 2, po_numbers: ['RPO-0001'], reach: null, lines: LINES,
   }],
   totals: { total: 44, fully_invoiced: 0, partially_invoiced: 0, awaiting: 44, no_invoice_expected: 0, line_count: 2 },
-  aging: { notDue: 0, dueSoon: 0, overdue: 0, overdueCount: 0 },
 };
 const sent = [];
 async function api(p, opts) {

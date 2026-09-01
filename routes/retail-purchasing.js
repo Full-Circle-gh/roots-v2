@@ -640,23 +640,13 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
            MAX(po.date) AS last_date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}`).get(s.name) || {};
-  // `spend` above and `owed` below come from columns that do not share a unit:
-  // po_line_items.total_cost stays a decimal amount, while invoices.amount is a
-  // whole-cent integer in Postgres. They are built by two statements, so no
-  // single row ever carries both — but the scorecard folds them into one payload
-  // and the supplier screen renders them as adjacent tiles, which puts them back
-  // together with nothing to tell them apart. Reading the bill amounts as a
-  // plain column and summing them here keeps invoices.amount identifiable all
-  // the way to the boundary. `spend` needs nothing; its column never changes
-  // unit. The invoice count comes from the rows we already read.
-  const owedRows = db.prepare(
-    // Tenant-scoped, NOT scope-scoped — the same rule the invoice screen
-    // follows. Filtering to scope='retail' here would report ¥0 owed for
-    // every supplier, because every invoice on this tenant is a kitchen-scope
-    // row and that is exactly where the unpaid paperwork lives.
-    `SELECT amount FROM invoices WHERE COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL ORDER BY id`
-  ).all(s.name);
-  const owed = owedRows.reduce((sum, r) => sum + (r.amount || 0), 0);
+  // This tile used to be "Owed now": unpaid invoices, i.e. everything nobody
+  // had clicked Mark paid on. On a business that pays before the 发票 exists
+  // that was a balance of already-settled money. What the supplier actually
+  // still owes us is PAPER, so that is what the tile reports now — and it comes
+  // from the same computation the Invoices tab uses, so the two screens cannot
+  // disagree about one supplier.
+  const paper = awaitingForSupplier(tid, s.name);
   const priceList = db.prepare(`
     SELECT pli.store_product_id,
            MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku,
@@ -677,7 +667,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   }
   const scorecard = {
     order_count: stat.order_count || 0, spend: stat.spend || 0, last_date: stat.last_date || null,
-    owed, owed_count: owedRows.length, product_count: priceList.length,
+    awaiting: paper.awaiting, awaiting_lines: paper.awaiting_lines, product_count: priceList.length,
   };
   res.json({ success: true, data: { ...s, documents, recent_pos: recentPOs, scorecard, price_list: priceList } });
 });
@@ -1353,9 +1343,15 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
 // What Roots actually does here is CHASE MISSING 发票 — not run accounts
 // payable. So this screen is organised the way the kitchen one is: grouped by
 // supplier, expandable to the lines, with "awaiting" as the headline figure.
-// The due-date / paid / aging fields the earlier Bills port built are kept and
-// still served — another tenant may be tracking payables — but they are
-// secondary here, never the organising principle.
+// NO PAYABLES. The due-date / paid / aging fields the earlier Bills port built
+// are gone from what this file serves. Roots pays the supplier first and the
+// 发票 turns up afterwards, so every invoice that can be recorded here has
+// already been paid: `paid_at` could only ever be set to assert something
+// always true, and the aging it drove reported money that had already left the
+// account as debt still owed. The COLUMNS survive untouched — invoices.due_date
+// and invoices.paid_at keep every value they hold, and an edit round-trips the
+// due date it loaded — so a tenant on real terms loses no data and this is a
+// UI removal, not a migration.
 //
 // TENANT-SCOPED ONLY. Every read and write is filtered by tenant_id and by
 // nothing else. `scope` is stamped on create ('retail') and is never a filter
@@ -1378,7 +1374,6 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
 // each other. invoice_pos is dead with 0 rows and is left alone.
 const INV_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
 const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 const INV_UNSPECIFIED = '未指定 Unspecified';
 
 // Supplier resolution chain, most-specific first: the line's own supplier, the
@@ -1449,21 +1444,34 @@ function reachByName(tid) {
   return m;
 }
 
-// Payables aging — kept from the Bills port and still served, secondary to the
-// chase. Unpaid invoices only; a due date in the past is overdue.
-function agingFor(tid) {
-  const today = gzToday();
-  const soon = new Date(Date.now() + 8 * 3600 * 1000 + 7 * 86400 * 1000).toISOString().slice(0, 10);
-  const rows = db.prepare('SELECT amount, due_date FROM invoices WHERE COALESCE(tenant_id,1) = ? AND paid_at IS NULL').all(tid);
-  let notDue = 0, dueSoon = 0, overdue = 0, overdueCount = 0;
-  for (const b of rows) {
-    const amt = b.amount || 0;
-    if (!b.due_date) { notDue += amt; continue; }
-    if (b.due_date < today) { overdue += amt; overdueCount++; }
-    else if (b.due_date <= soon) dueSoon += amt;
-    else notDue += amt;
+// What one supplier still owes us ON PAPER — the supplier page's tile, and the
+// figure that replaced a payables balance there. It is computed HERE, with the
+// invoice screen's rules and no others, because the supplier page and the
+// Invoices tab must never put two different numbers on the same supplier:
+// tenant-scoped and never scope-scoped (filter to scope='retail' and every
+// supplier reports ¥0, since the paperwork all sits on kitchen-scope POs),
+// placed POs only, superseded copies stood down, billable qty net of returns.
+// 'awaiting' is the same status the tab's group total counts, so the two agree
+// line for line.
+function awaitingForSupplier(tid, name) {
+  const rows = db.prepare(`
+    SELECT pli.id AS line_id, pli.qty, pli.qty_received, pli.returned_qty, pli.cost_per_unit,
+           pli.no_invoice_expected AS line_no_invoice,
+           po.no_invoice_expected  AS po_no_invoice
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+      LEFT JOIN ingredients ing ON ing.id = pli.ingredient_id
+     WHERE COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${INV_PO_STATUSES}
+       AND ${notSupersededByCopySql('po')} AND ${SUPPLIER_EXPR} = ?`).all(name);
+  if (!rows.length) return { awaiting: 0, awaiting_lines: 0 };
+  const allocated = allocatedByLine(rows.map(r => r.line_id));
+  let awaiting = 0, lines = 0;
+  for (const r of rows) {
+    r.amount = round2(billableQty(r) * (r.cost_per_unit || 0));
+    r.covered = round2(allocated.get(r.line_id) || 0);
+    if (lineStatus(r) === 'awaiting') { awaiting += r.amount; lines++; }
   }
-  return { notDue: round2(notDue), dueSoon: round2(dueSoon), overdue: round2(overdue), overdueCount };
+  return { awaiting: round2(awaiting), awaiting_lines: lines };
 }
 
 // ── 发票 MONEY THE FOUR STATES CANNOT SEE ───────────────────────────────────
@@ -1487,9 +1495,10 @@ function agingFor(tid) {
 // here (lib/po-supersede.js spells out why), so what this does is name the
 // money, name the orders it is sitting on, and say why it is not upstairs.
 //
-// BOOK-LEVEL, NOT FILTERED, exactly like agingFor() beside it: it answers
-// "where did the invoices I recorded go?", and that question does not change
-// because a month is selected.
+// BOOK-LEVEL, NOT FILTERED: it answers "where did the invoices I recorded
+// go?", and that question does not change because a month is selected. (It
+// read "like agingFor() beside it" until the payables apparatus came out —
+// see NO PAYABLES above; this is now the only book-level read on the screen.)
 //
 // Three reasons cover every way a line can leave the chase, and they are the
 // chase's own WHERE clause read backwards:
@@ -1673,8 +1682,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   // selected, so there is no state to put it in and no honest way to fold it
   // into one. recordedOffChase() says why it is out there.
   const recorded_elsewhere = recordedOffChase(tid);
-  res.json({ success: true, data: { month: month || null, groups, totals,
-                                    recorded_elsewhere, aging: agingFor(tid) } });
+  res.json({ success: true, data: { month: month || null, groups, totals, recorded_elsewhere } });
 });
 
 // The recorded-invoice ledger for this tenant.
@@ -1699,7 +1707,6 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
       JOIN purchase_orders po ON po.id = pli.po_id
      WHERE il.invoice_id = ?
      ORDER BY po.date DESC, pli.id`);
-  const today = gzToday();
   const supCn = supplierCnByName(tid);
   const data = invs.map(inv => {
     const lines = linkStmt.all(inv.id);
@@ -1712,8 +1719,6 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
       // Surfaced, never corrected. Live invoice 25 is allocated exactly half
       // its header amount; the screen says so rather than quietly reconciling.
       unallocated: round2((inv.amount || 0) - allocated),
-      paid: !!inv.paid_at,
-      overdue: !inv.paid_at && !!inv.due_date && inv.due_date < today,
     };
   });
   res.json({ success: true, data });
@@ -1732,7 +1737,7 @@ router.get('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req
       JOIN purchase_orders po ON po.id = pli.po_id
      WHERE il.invoice_id = ? ORDER BY po.date DESC, pli.id`).all(inv.id);
   const allocated = round2(lines.reduce((s, l) => s + (l.allocated_amount || 0), 0));
-  res.json({ success: true, data: { ...inv, lines, allocated, unallocated: round2((inv.amount || 0) - allocated), paid: !!inv.paid_at } });
+  res.json({ success: true, data: { ...inv, lines, allocated, unallocated: round2((inv.amount || 0) - allocated) } });
 });
 
 // What this same request has already written for this invoice/line pair.
@@ -1826,18 +1831,6 @@ router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, expr
     console.error('[supplier invoice update]', e);
     res.status(400).json({ success: false, error: e.message });
   }
-});
-
-router.put('/api/retail-admin/purchasing/invoices/:id/paid', requireRetailAdmin, express.json(), (req, res) => {
-  const tid = Number(currentTenantId()) || 1;
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
-  if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
-  const paid = (req.body && req.body.paid === false) ? null : gzNow();
-  db.prepare('UPDATE invoices SET paid_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(paid, inv.id);
-  // This write had no activity_log entry at all, so a payment state could move
-  // with nothing recording who moved it.
-  logActivity(req.user.id, req.user.username, paid ? 'mark_paid' : 'mark_unpaid', 'supplier_invoice', inv.id, { paid_at: paid }, req.ip);
-  res.json({ success: true, paid: !!paid });
 });
 
 router.delete('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
@@ -2505,7 +2498,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       // date of a return it no longer claims, and it is left alone entirely by
       // a save that only restates the same number.
       //
-      // CURRENT_TIMESTAMP, not this file's gzNow(), and deliberately: the
+      // CURRENT_TIMESTAMP, not this file's GZ-local clock, and deliberately: the
       // column it will be read beside is po_receipts.received_at, which takes
       // the same SQLite default. Two timestamps in one story must not sit eight
       // hours apart. (Whether that pair should be local rather than UTC is a

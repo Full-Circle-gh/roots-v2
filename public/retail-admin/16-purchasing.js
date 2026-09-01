@@ -109,7 +109,7 @@
   // position; the totals row sums the array, not a range of it.
   let _lineSort = null;      // {key, dir} while a chip is lit; null = hand-arranged
   let _lineDrag = null;      // index of the line currently being dragged
-  let _invOut = null;        // supplier groups + KPI totals + aging, from the server
+  let _invOut = null;        // supplier groups + KPI totals, from the server
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
   let _invAssign = null;     // the "set supplier" modal's working state
@@ -2192,9 +2192,14 @@
   // ORGANISED AROUND THE CHASE, not around accounts payable. Roots' job here
   // is "who still hasn't sent us a 发票, and for how much" — so the screen is
   // grouped by supplier, expandable to the lines, with AWAITING as the
-  // headline. The due-date / paid / aging fields are kept and still shown,
-  // because another tenant may genuinely be tracking payables, but they sit in
-  // a secondary strip rather than organising the page.
+  // headline. The due-date / paid / aging apparatus the Bills port left behind
+  // is GONE. Roots pays first and the 发票 arrives afterwards, so every invoice
+  // that can be recorded here has already been paid: "Mark paid" asked the
+  // operator to assert a fact that is always true, and the aging strip read the
+  // absence of that click as debt — it announced ¥5,246 still owed on money
+  // that had already left the account. invoices.due_date and .paid_at are
+  // untouched in the database and an edit still round-trips the due date it
+  // loaded; nothing on this screen renders either one.
   //
   // Every figure comes from the server computed per line at read time
   // (routes/retail-purchasing.js lineStatus) — nothing here stores or caches a
@@ -2304,7 +2309,6 @@
     const host = document.getElementById('pu2-inv-body');
     if (!host) return;
     const tot = (_invOut && _invOut.totals) || { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, credit_due: 0, line_count: 0 };
-    const aging = (_invOut && _invOut.aging) || { notDue: 0, dueSoon: 0, overdue: 0, overdueCount: 0 };
     const offChase = (_invOut && _invOut.recorded_elsewhere) || { amount: 0, orders: [], by_reason: {} };
     const groups = (_invOut && _invOut.groups) || [];
     const filtered = !!(_invMonth || _invSearch);
@@ -2354,14 +2358,6 @@
         <span class="pu2-mut">${esc(T('Returned after invoicing', '开票后退货'))}:</span>
         <span class="pu2-pill amber"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(tot.credit_due)}</span>
         <span class="pu2-mut">${esc(T('ask the supplier for a credit note', '需向供应商索取红字发票'))}</span>
-      </div>` : ''}
-
-      ${(aging.overdue || aging.dueSoon || aging.notDue) ? `
-      <div class="pu2-agingstrip">
-        <span class="pu2-mut">${esc(T('Of what you’ve recorded', '已登记发票中'))}:</span>
-        ${aging.overdue ? `<span class="pu2-pill brick"><span class="dot"></span>${esc(T('Overdue', '逾期'))} ${money(aging.overdue)} · ${aging.overdueCount}</span>` : ''}
-        ${aging.dueSoon ? `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Due soon', '即将到期'))} ${money(aging.dueSoon)}</span>` : ''}
-        ${aging.notDue ? `<span class="pu2-pill grey">${esc(T('Not due', '未到期'))} ${money(aging.notDue)}</span>` : ''}
       </div>` : ''}
 
       <div class="pu2-invsection">${_invView === 'recorded'
@@ -2536,10 +2532,6 @@
       return;
     }
     el.innerHTML = `<table class="pu2-tbl"><tbody>${_invList.map(inv => {
-      const due = inv.paid ? `<span class="pu2-pill sage">${esc(T('Paid', '已付'))}</span>`
-        : inv.overdue ? `<span class="pu2-pill brick"><span class="dot"></span>${esc(T('Overdue', '逾期'))}</span>`
-        : inv.due_date ? `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Due', '应付'))} ${esc(inv.due_date)}</span>`
-        : `<span class="pu2-pill grey">${esc(T('No due date', '无到期'))}</span>`;
       const pos = (inv.pos || []).map(p => p.po_number).join(', ');
       // An invoice whose allocations don't add up to its own header says so.
       // Live invoice 25 is short by exactly half; the screen reports that
@@ -2551,12 +2543,8 @@
         <td><b>${esc(supName(inv.supplier, inv.supplier_cn))}</b>${inv.invoice_number ? `<div class="sub pu2-mono">${esc(inv.invoice_number)}</div>` : ''}
             <div class="sub pu2-num">${esc(inv.date)}${pos ? ' · ' + esc(pos) : ''}</div></td>
         <td class="right pu2-num">${money(inv.amount)}${gap ? '<div class="sub">' + gap + '</div>' : ''}</td>
-        <td>${due}</td>
         <td class="right" style="white-space:nowrap">
           <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvEdit(${inv.id})">${esc(T('Edit', '编辑'))}</button>
-          ${inv.paid
-            ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvPaid(${inv.id},false)">${esc(T('Undo', '撤销'))}</button>`
-            : `<button class="pu2-btn sm" data-cap="purchasing:invoices" onclick="puInvPaid(${inv.id},true)">${esc(T('Mark paid', '标记已付'))}</button>`}
           <button class="pu2-btn ghost sm danger" data-cap="purchasing:invoices" title="${esc(T('Delete', '删除'))}" onclick="puInvDelete(${inv.id})">✕</button>
         </td>
       </tr>`;
@@ -2906,7 +2894,6 @@
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice no.', '发票号'))}</span><input class="pu2-input" value="${esc(d.invoice_number)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('invoice_number', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Amount', '金额') + ' ' + cur())}</span><input class="pu2-input pu2-num" type="number" min="0" step="0.01" value="${esc(d.amount)}" oninput="puInvField('amount', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Invoice date', '开票日期'))}</span><input class="pu2-input" type="date" value="${esc(d.date)}" onchange="puInvField('date', this.value)"></label>
-            <label class="pu2-f"><span class="lbl">${esc(T('Due date', '到期日'))}</span><input class="pu2-input" type="date" value="${esc(d.due_date)}" onchange="puInvField('due_date', this.value)"></label>
             <label class="pu2-f"><span class="lbl">${esc(T('Note', '备注'))}</span><input class="pu2-input" value="${esc(d.notes)}" placeholder="${esc(T('Optional', '可选'))}" onchange="puInvField('notes', this.value)"></label>
           </div>
           <div class="pu2-alloc-head">
@@ -3009,6 +2996,9 @@
       .filter(l => l.allocated_amount > 0);
     const body = {
       supplier: d.supplier, invoice_number: d.invoice_number || null, amount: parseFloat(d.amount),
+      // due_date is no longer editable — Roots has already paid by the time a
+      // 发票 exists. It stays in the payload so an edit hands back the value it
+      // loaded instead of silently clearing a field nobody can see.
       date: d.date, due_date: d.due_date || null, notes: d.notes || null, links,
     };
     try {
@@ -3016,12 +3006,6 @@
       else      await api('/api/retail-admin/purchasing/invoices', { method: 'POST', body });
       toast(d.id ? T('Saved ✓', '已保存 ✓') : T('Invoice recorded ✓', '发票已登记 ✓'), 'ok');
       puInvCloseModal();
-      await invReload();
-    } catch (e) { toast(e.message, 'err'); }
-  };
-  window.puInvPaid = async function (id, paid) {
-    try {
-      await api('/api/retail-admin/purchasing/invoices/' + id + '/paid', { method: 'PUT', body: { paid } });
       await invReload();
     } catch (e) { toast(e.message, 'err'); }
   };
@@ -3582,7 +3566,7 @@
     return `<div class="pu2-metricrow" style="margin:0 0 16px">
       ${tile(T('Orders', '采购单'), sc.order_count || 0, sc.last_date ? T('last', '最近') + ' ' + sc.last_date : T('none yet', '暂无'))}
       ${tile(T('Spend, all time', '累计采购'), money(sc.spend || 0), '')}
-      ${tile(T('Owed now', '当前应付'), money(sc.owed || 0), (sc.owed_count || 0) + ' ' + T('invoices', '张发票'))}
+      ${tile(T('Awaiting 发票', '待开票'), money(sc.awaiting || 0), (sc.awaiting_lines || 0) + ' ' + T('lines', '条明细'))}
       ${tile(T('Products', '商品'), sc.product_count || 0, T('bought before', '曾采购'))}
     </div>`;
   }
