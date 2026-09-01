@@ -2093,10 +2093,42 @@
     scrim.querySelector('[data-close]').addEventListener('click', () => closer(null));
     return ready;
   }
+  // A material whose price this order set, with no record of what it was
+  // before. The transition is refused because completing it would leave that
+  // price standing with no order behind it — but the operator was being told
+  // so in a bare `cost_not_recoverable` toast, on a screen whose own advice is
+  // "return it to draft to change it". The wizard only opens a draft, so that
+  // code was the end of the road with no way past it.
+  //
+  // THE WAY OUT IS NAMED, and it is the only honest one: nothing here knows the
+  // old price, so a person has to decide what it should be. Setting the
+  // material's cost by hand makes this order's write no longer the standing
+  // one, and the transition is then allowed — the refusal clears itself.
+  function puShowCostBlocked(ingredients) {
+    const rows = (ingredients || []).map(g => {
+      const nm = (g.name_en || g.name_cn)
+        ? nameLabel({ name_en: g.name_en, name_cn: g.name_cn })
+        : esc('#' + g.ingredient_id);
+      return `<div class="lc-row"><span class="g">${nm}</span><span class="pu2-num">${
+        g.buy_price == null ? '' : money(g.buy_price)}</span></div>`;
+    }).join('');
+    const body = `
+      <h3 class="tdlg-title">${esc(T('This order cannot go back yet', '该采购单暂时无法退回'))}</h3>
+      <p class="tdlg-msg">${esc(T('These materials still carry the price this order set, and nothing recorded what they cost before it — nothing was changed.',
+                                  '这些物料当前的价格仍是本采购单写入的，而系统没有记录写入前的价格 — 未作任何更改。'))}</p>
+      ${rows ? `<div class="pu2-lc-grid" style="margin-top:12px">${rows}</div>` : ''}
+      <p class="tdlg-msg" style="margin-top:12px">${esc(T('Set their price yourself under Materials, then try again.',
+                                                          '请先在「物料」中手动设置这些物料的价格，然后再试。'))}</p>`;
+    const foot = `<button class="tdlg-btn tdlg-btn--primary" data-close>${esc(T('Close', '关闭'))}</button>`;
+    const { scrim, closer, ready } = askCustom('tdlg-danger', body, foot, '[data-close]');
+    scrim.querySelector('[data-close]').addEventListener('click', () => closer(null));
+    return ready;
+  }
   // Every reversal entry point funnels its failure through here so the refusal
   // is never reduced to a toast on one screen and a modal on another.
   async function puReversalError(e) {
     if (e && e.code === 'undo_blocked') { await puShowUndoBlocked(e.data && e.data.blocking); return; }
+    if (e && e.code === 'cost_not_recoverable') { await puShowCostBlocked(e.data && e.data.ingredients); return; }
     toast(e.message, 'err');
   }
   window.puSetStatus = async function (status) {

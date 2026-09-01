@@ -474,13 +474,42 @@ function returnBlockedResponse(res, blocking) {
 // a fact. A material line on this PO with no such row (written before this
 // logging existed, or the ingredient/PO predates it) has no recoverable prior
 // value — reported back, never defaulted to 0 or left silently wrong.
+//
+// ── AND IT ASKS FOR IT ONLY WHERE THERE IS SOMETHING TO GIVE BACK ──────────
+// The rule above is right; the population it was applied to was not. It
+// demanded a record for EVERY priced material line, and two kinds of line can
+// never have one and need none:
+//
+//   • THE ORDER NEVER PRICED IT. firePriceAlertsForPO refuses a line before it
+//     writes anything — marked free, made not bought, unit mismatch, no
+//     derivable cost — and records the refusal in ingredient_cost_skips. That
+//     table is positive proof this order left the ingredient's cost alone, so
+//     there is nothing for it to restore.
+//   • THE ORDER'S PRICE IS NO LONGER STANDING. Something newer — another order,
+//     a hand edit — has since moved the ingredient. rollbackMaterialCost
+//     already declines to clobber that (`stillCurrent`), so blocking the whole
+//     transition over a write it would not have touched protects nothing.
+//
+// WHAT THIS COST, before it was found: on the live database, SIX retail orders
+// were refused and every blocking line on all six was the first case —
+// packaging samples bought in `pcs` against a master in `bag`, and items with
+// no pack contents to divide by. None of them had ever had a cost written, so
+// the guard was holding orders hostage over ingredients it had nothing to say
+// about. The screen tells the buyer to return an order to draft to change it
+// and the wizard only opens a draft, so those orders could not be edited at
+// all — a deadlock with a bare error code for an explanation.
+//
+// `buy_price` is what "still standing" is tested against, deliberately, and NOT
+// cost_per_unit. buy_price is written STRAIGHT from po_line_items.cost_per_unit
+// (firePriceAlertsForPO), so the test is a comparison of two stored numbers.
+// cost_per_unit is derived through pack size and unit, and re-deriving it today
+// to compare would be exactly the guess the paragraph above refuses to make.
 function planMaterialCostRollback(po) {
-  const materialIds = [...new Set(
-    tdb().prepare(`
-      SELECT ingredient_id FROM po_line_items
+  const materialLines = tdb().prepare(`
+      SELECT ingredient_id, cost_per_unit FROM po_line_items
        WHERE po_id = ? AND ingredient_id IS NOT NULL AND cost_per_unit IS NOT NULL AND cost_per_unit > 0
-    `).all(po.id).map(r => r.ingredient_id)
-  )];
+    `).all(po.id);
+  const materialIds = [...new Set(materialLines.map(r => r.ingredient_id))];
   if (!materialIds.length) return { restorable: [], unrecoverable: [] };
   const placeholders = materialIds.map(() => '?').join(',');
   // activity_log stays on the GLOBAL handle deliberately — it is a control-plane
@@ -499,15 +528,33 @@ function planMaterialCostRollback(po) {
     if (!byIngredient.has(row.entity_id)) byIngredient.set(row.entity_id, []);
     byIngredient.get(row.entity_id).push(d);
   }
+  // Did this order refuse to price this ingredient? Guarded the same way
+  // firePriceAlertsForPO guards its own use of the table — a database restored
+  // from before it existed must not take the transition down with it. Absent,
+  // the standing-price test below still catches most of the same lines.
+  let skipped = new Set();
+  try {
+    skipped = new Set(tdb().prepare(`
+      SELECT DISTINCT ingredient_id FROM ingredient_cost_skips WHERE po_id = ?
+    `).all(po.id).map(r => r.ingredient_id));
+  } catch (e) { console.warn('[cost rollback] ingredient_cost_skips unavailable:', e.message); }
+
   const restorable = [], unrecoverable = [];
   for (const id of materialIds) {
     const entries = byIngredient.get(id) || [];
-    if (!entries.length) {
-      const ing = tdb().prepare('SELECT name_en, name_cn FROM ingredients WHERE id = ?').get(id);
-      unrecoverable.push({ ingredient_id: id, name_en: ing?.name_en || null, name_cn: ing?.name_cn || null });
+    if (entries.length) {
+      restorable.push({ ingredient_id: id, from: entries[0].from, to: entries[entries.length - 1].to });
       continue;
     }
-    restorable.push({ ingredient_id: id, from: entries[0].from, to: entries[entries.length - 1].to });
+    // No record of a prior value. Whether that matters depends on whether this
+    // order has anything standing to give back.
+    if (skipped.has(id)) continue;
+    const ing = tdb().prepare('SELECT name_en, name_cn, buy_price FROM ingredients WHERE id = ?').get(id);
+    const standing = materialLines.some(l => l.ingredient_id === id
+      && Math.abs((parseFloat(l.cost_per_unit) || 0) - (parseFloat(ing?.buy_price) || 0)) < 1e-9);
+    if (!standing) continue;
+    unrecoverable.push({ ingredient_id: id, name_en: ing?.name_en || null, name_cn: ing?.name_cn || null,
+                         buy_price: ing?.buy_price ?? null });
   }
   return { restorable, unrecoverable };
 }

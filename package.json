@@ -40,6 +40,7 @@
     "test:po-supersede": "node scripts/test_po_supersede.js",
     "test:undo-receive": "node scripts/test_undo_receive_clears.js",
     "test:purchase-returns": "node scripts/test_purchase_returns.js",
+    "test:cost-rollback-block": "node scripts/test_cost_rollback_block.js",
     "test:proxy": "node scripts/test_proxy_failover.js",
     "test:queue-window": "node scripts/test_meituan_queue_window.js",
     "test:queue-stall": "node scripts/test_meituan_queue_stall.js",
