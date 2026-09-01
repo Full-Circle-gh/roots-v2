@@ -293,7 +293,10 @@ try {
   const roles = require('../lib/roles');
   roles.ensureSchema();
   const made = roles.seedAllTenants();
-  if (made) console.log('[backend-auth] seeded ' + made + ' tenant role record(s)');
+  // Rows written OR cleared: the seed also drops the empty duplicate an
+  // earlier boot stamped beside a key-migrated role. Both are the same thing —
+  // bringing a tenant's roles back to one row per role.
+  if (made) console.log('[backend-auth] reconciled ' + made + ' tenant role record(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.

@@ -24,6 +24,7 @@
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:offapp-refund": "node scripts/test_offapp_refund_guard.js",
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
+    "test:purchasing-line-order": "node scripts/test_purchasing_line_order.js",
     "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",

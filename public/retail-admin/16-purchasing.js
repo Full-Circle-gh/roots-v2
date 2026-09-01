@@ -101,6 +101,14 @@
   let _supLine = null;       // index of the line whose supplier is being set
   let _supLineInfo = null;   // that line's price list ({suppliers:[]} for a material)
   let _supDraft = null;      // half-typed name, kept across a repaint of the lines
+  // Line order is the ONLY thing the sort touches. po_line_items.sort_order is
+  // written from the array index on save (insertLineItems in
+  // routes/retail-purchasing.js) and every read of a PO comes back
+  // ORDER BY sort_order, id — so reordering _edit.items is the whole feature,
+  // for the drag grip and the sort chips alike. Nothing else is derived from
+  // position; the totals row sums the array, not a range of it.
+  let _lineSort = null;      // {key, dir} while a chip is lit; null = hand-arranged
+  let _lineDrag = null;      // index of the line currently being dragged
   let _invOut = null;        // supplier groups + KPI totals + aging, from the server
   let _invList = [];         // the recorded-invoice ledger
   let _invDraft = null;      // the add/edit invoice modal's working state
@@ -452,7 +460,7 @@
       id: null, po_number: null, date: todayGz(), delivery_date: '',
       supplier: '', store_id: _stores[0]?.id || null, notes: '', items: [],
     };
-    _wstep = 1; _screen = 'wizard'; paint();
+    _wstep = 1; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -654,7 +662,7 @@
             supplier_name: i.supplier_name || '', current_stock: i.current_stock, note: i.note || '',
           })),
         };
-        _wstep = 2; _screen = 'wizard'; paint();
+        _wstep = 2; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
       } else {
         // Placed / received / cancelled → the receive & manage screen.
         _po = po; _hist = {}; _screen = 'receive'; paint();
@@ -801,8 +809,11 @@
 
         <div id="pu2-suggest"></div>
 
-        <table class="pu2-tbl pu2-lines" style="margin-top:18px">
+        <div id="pu2-sortbar"></div>
+
+        <table class="pu2-tbl pu2-lines" style="margin-top:10px">
           <thead><tr>
+            <th class="pu2-c-grip"></th>
             <th>${esc(T('Product', '商品'))}</th>
             <th class="right">${esc(T('On shelf', '现库存'))}</th>
             <th>${esc(T('Quantity', '数量'))}</th>
@@ -851,6 +862,7 @@
   function renderLines() {
     const body = document.getElementById('pu2-linebody');
     if (!body) return;
+    renderSortBar();
     // A qty or note edit repaints this whole tbody, and the supplier picker
     // lives inside it — keep whatever is half-typed in its box across that.
     if (_supLine != null) {
@@ -861,7 +873,7 @@
       const emptyMsg = materialsFeatureOn()
         ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
         : T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。');
-      body.innerHTML = `<tr class="pu2-noline"><td colspan="6">${esc(emptyMsg)}</td></tr>`;
+      body.innerHTML = `<tr class="pu2-noline"><td colspan="7">${esc(emptyMsg)}</td></tr>`;
       return;
     }
     body.innerHTML = _edit.items.map((it, i) => {
@@ -880,7 +892,8 @@
       const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
-      return `<tr>
+      return `<tr ondragover="puLineDragOver(event,${i})" ondragleave="puLineDragLeave(event)" ondrop="puLineDrop(event,${i})" ondragend="puLineDragEnd()">
+        <td class="pu2-c-grip"><span class="pu2-grip" draggable="true" title="${esc(T('Drag to reorder', '拖动排序'))}" ondragstart="puLineDragStart(event,${i})">⠿</span></td>
         <td>${matBadge(it)}${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
           ${supBlock}${noteBlock}</td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
@@ -897,16 +910,123 @@
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
         <td class="right"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
-      </tr>${supOpen ? `<tr class="pu2-supedit"><td colspan="6">${supPickerHtml(it)}</td></tr>` : ''}`;
+      </tr>${supOpen ? `<tr class="pu2-supedit"><td colspan="7">${supPickerHtml(it)}</td></tr>` : ''}`;
     }).join('');
     const total = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
     const units = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
     body.insertAdjacentHTML('beforeend', `
       <tr class="pu2-totrow">
-        <td colspan="4">${_edit.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))}</td>
+        <td colspan="5">${_edit.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))}</td>
         <td class="right pu2-num">${money(total)}</td><td></td>
       </tr>`);
   }
+  // ── ordering the lines ───────────────────────────────────────────────────
+  // Two ways to the same array, because they answer different questions. The
+  // chips answer "put the whole order in supplier groups / price order"; the
+  // grip answers "this one line belongs there". A chip sort therefore does NOT
+  // lock the order — drag afterwards and the chip goes dark, because the list
+  // is no longer what that chip claims.
+  //
+  // A blank supplier and a material's absent stock always sink to the bottom in
+  // BOTH directions. Neither is a small value; they are the absence of one, and
+  // sorting them to the top of an ascending list would bury the rows the buyer
+  // is sorting to look at under the rows that have nothing to say.
+  const SORT_KEYS = [
+    { key: 'supplier', dir: 1,  label: () => T('Supplier', '供应商'),
+      val: it => (it.supplier_name || '').trim(), blank: v => !v },
+    { key: 'name',     dir: 1,  label: () => T('Name', '名称'),
+      val: it => [it.name_en, it.name_cn].filter(Boolean).join(' · '), blank: v => !v },
+    { key: 'stock',    dir: -1, label: () => T('On shelf', '现库存'),
+      val: it => (it.current_stock == null ? null : parseFloat(it.current_stock)),
+      blank: v => v == null || Number.isNaN(v) },
+    { key: 'total',    dir: -1, label: () => T('Line total', '小计'),
+      val: it => (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), blank: () => false },
+  ];
+
+  function renderSortBar() {
+    const host = document.getElementById('pu2-sortbar');
+    if (!host) return;
+    // One line cannot be out of order, so the control that reorders lines has
+    // nothing to do and is not drawn.
+    const html = (_edit && _edit.items.length > 1)
+      ? `<div class="pu2-sortbar">
+           <span class="lbl">${esc(T('Sort', '排序'))}</span>
+           ${SORT_KEYS.map(k => {
+             const on = _lineSort && _lineSort.key === k.key;
+             const arrow = on ? `<span class="dir">${_lineSort.dir === 1 ? '↑' : '↓'}</span>` : '';
+             return `<button type="button" class="pu2-sortchip${on ? ' on' : ''}" onclick="puSortLines('${k.key}')">${esc(k.label())}${arrow}</button>`;
+           }).join('')}
+         </div>`
+      : '';
+    // Written only when it actually differs. Every qty and cost box repaints
+    // this tbody on change, and change fires on the blur that a click on a chip
+    // causes — replacing the chip between mousedown and mouseup would eat that
+    // click and the sort would silently not happen.
+    if (host.innerHTML !== html) host.innerHTML = html;
+  }
+
+  window.puSortLines = function (key) {
+    if (!_edit || _edit.items.length < 2) return;
+    const spec = SORT_KEYS.find(k => k.key === key);
+    if (!spec) return;
+    // Same chip again flips the direction; a new chip starts in the direction
+    // that key is usually read in — names up, money and stock down.
+    const dir = (_lineSort && _lineSort.key === key) ? -_lineSort.dir : spec.dir;
+    _lineSort = { key, dir };
+    _edit.items.sort((a, b) => {
+      const va = spec.val(a), vb = spec.val(b);
+      const ba = spec.blank(va), bb = spec.blank(vb);
+      if (ba || bb) return ba && bb ? 0 : (ba ? 1 : -1);
+      const c = (typeof va === 'string')
+        ? va.localeCompare(vb, undefined, { numeric: true, sensitivity: 'base' })
+        : (va < vb ? -1 : va > vb ? 1 : 0);
+      return c * dir;
+    });
+    closeLineSup();
+    renderLines();
+  };
+
+  // The picker is addressed by line index, so any move of the array leaves it
+  // pointing at a different product than the one it was opened on. Same reason
+  // puRemoveLine puts it away.
+  function closeLineSup() { _supLine = null; _supLineInfo = null; _supDraft = null; }
+
+  window.puLineDragStart = function (e, i) {
+    _lineDrag = i;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {}
+    const row = e.target.closest('tr');
+    if (row) row.classList.add('pu2-dragging');
+  };
+  window.puLineDragOver = function (e, i) {
+    if (_lineDrag == null || _lineDrag === i) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const row = e.currentTarget;
+    row.classList.toggle('pu2-drop-before', i < _lineDrag);
+    row.classList.toggle('pu2-drop-after', i > _lineDrag);
+  };
+  window.puLineDragLeave = function (e) {
+    e.currentTarget.classList.remove('pu2-drop-before', 'pu2-drop-after');
+  };
+  window.puLineDrop = function (e, i) {
+    e.preventDefault();
+    const from = _lineDrag;
+    if (from == null || from === i || !_edit || !_edit.items[from]) { window.puLineDragEnd(); return; }
+    const [moved] = _edit.items.splice(from, 1);
+    _edit.items.splice(i, 0, moved);
+    // The list is now hand-arranged, so no chip may keep claiming it is in
+    // supplier or price order.
+    _lineSort = null;
+    _lineDrag = null;
+    closeLineSup();
+    renderLines();
+  };
+  window.puLineDragEnd = function () {
+    _lineDrag = null;
+    document.querySelectorAll('#pu2-linebody tr').forEach(r =>
+      r.classList.remove('pu2-drop-before', 'pu2-drop-after', 'pu2-dragging'));
+  };
+
   function lastPaid(it) {
     const h = _hist[it.store_product_id];
     if (!h || !h.previous) return '';
@@ -931,10 +1051,7 @@
   window.puRemoveLine = function (i) {
     if (!_edit) return;
     _edit.items.splice(i, 1);
-    // The open picker is addressed by line index, and every index after the
-    // removed one just shifted — put it away rather than let it point at a
-    // different product than the one it was opened on.
-    _supLine = null; _supLineInfo = null; _supDraft = null;
+    closeLineSup();
     renderLines(); renderSuggestions();
   };
 
@@ -1006,6 +1123,7 @@
         purchase_channel: '', current_stock: p.physical_qty, supplier_name: '', note: '',
       };
       _edit.items.push(it);
+      _lineSort = null;
     }
     it.supplier_name = supplierName || '';
     if (cost != null && cost !== '') it.cost_per_unit = cost;
@@ -1023,6 +1141,7 @@
         current_stock: null, supplier_name: m.supplier || '', note: '',
       };
       _edit.items.push(it);
+      _lineSort = null;
     }
     renderLines(); renderSuggestions();
   }
@@ -1875,7 +1994,7 @@
           current_stock: i.current_stock,
         })),
       };
-      _wstep = 2; _screen = 'wizard'; paint();
+      _wstep = 2; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
     } catch (e) { toast(e.message, 'err'); }
   };
 
@@ -2724,7 +2843,7 @@
         purchase_channel: '', supplier_name: g.supplier || '', current_stock: it.physical_qty,
       })),
     };
-    _wstep = 2; _screen = 'wizard'; paint();
+    _wstep = 2; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
