@@ -5817,6 +5817,54 @@ try {
   }
 } catch (e) { console.error('[store_products] cost_incomplete seed failed:', e); }
 
+// ── One-off: remove the two placeholder ingredient rows named 'test' / 'test2' ──
+//
+// ids 557/558, surfaced by the null/zero-cost materials audit — literal test
+// data left in the live catalogue (0 recipes referenced either, per that
+// audit). Deleted only after checking every table that can hold a hard FK to
+// ingredients.id; a match on ANY of them keeps that row and reports why,
+// rather than assuming clean and deleting.
+//
+// Guarded by _migrations — runs once. Matches on id AND exact name_en
+// together, never id alone, so this can never delete a row some later
+// insert happens to reuse the id for.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('remove_test_placeholder_ingredients_v1');
+  if (!done) {
+    const TARGETS = [{ id: 557, name: 'test' }, { id: 558, name: 'test2' }];
+    const REF_TABLES = [
+      ['recipe_ingredients', 'ingredient_id'],
+      ['po_line_items', 'ingredient_id'],
+      ['product_build_lines', 'ingredient_id'],
+      ['ingredient_price_history', 'ingredient_id'],
+      ['price_alerts', 'ingredient_id'],
+      ['ingredient_cost_skips', 'ingredient_id'],
+      ['kitchen_order_items', 'ingredient_id'],
+      ['recipe_materialize_collisions', 'candidate_ingredient_id'],
+    ];
+    const report = [];
+    for (const t of TARGETS) {
+      const row = db.prepare('SELECT id FROM ingredients WHERE id = ? AND name_en = ?').get(t.id, t.name);
+      if (!row) { report.push(`${t.name} (id ${t.id}): not found, already gone — skipped`); continue; }
+      const refs = [];
+      for (const [table, col] of REF_TABLES) {
+        const haveTable = db.pragma('table_info(' + table + ')').length > 0;
+        if (!haveTable) continue;
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = ?`).get(t.id).n;
+        if (n > 0) refs.push(`${table}.${col} (${n})`);
+      }
+      if (refs.length) {
+        report.push(`${t.name} (id ${t.id}): KEPT — referenced by ${refs.join(', ')}`);
+      } else {
+        db.prepare('DELETE FROM ingredients WHERE id = ? AND name_en = ?').run(t.id, t.name);
+        report.push(`${t.name} (id ${t.id}): deleted — no references found`);
+      }
+    }
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('remove_test_placeholder_ingredients_v1');
+    console.log(`[ingredients] test-placeholder cleanup:\n  ${report.join('\n  ')}`);
+  }
+} catch (e) { console.error('[ingredients] test-placeholder cleanup failed:', e); }
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
