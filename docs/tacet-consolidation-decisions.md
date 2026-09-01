@@ -4655,7 +4655,7 @@ The rejected alternative was a typed-in daily total on the Transactions list —
 
 `routes/finance.js` has no tenant handling anywhere. All seventeen routes use the module-level global database handle; none calls `tdb()`. The count is seventeen router method declarations in `routes/finance.js`, verified 2026-09-01; an earlier reading of thirteen was wrong, and blocking "the thirteen write routes" by count would miss four. A second tenant reaching these routes would read and write Roots' ledger.
 
-This is a defect, not a design question, and the rule for it already exists. It is nonetheless NOT being fixed in place, and the reason is sequencing rather than severity: the file serves the kitchen app, which is being retired, and Tacet's own Finance routes do not exist yet. Correcting thirteen routes in a file scheduled for deletion spends the effort twice and lands new code in something leaving.
+This is a defect, not a design question, and the rule for it already exists. It is nonetheless NOT being fixed in place, and the reason is sequencing rather than severity: the file serves the kitchen app, which is being retired, and Tacet's own Finance routes do not exist yet. Correcting seventeen routes in a file scheduled for deletion spends the effort twice and lands new code in something leaving.
 
 **What ships instead.** The write routes are to be blocked at the route layer, using the same middleware pattern already applied to the thirteen kitchen cost-write routes. Reads are to be left alone.
 
