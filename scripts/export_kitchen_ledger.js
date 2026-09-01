@@ -29,15 +29,22 @@
  * The cutover date does NOT appear in any query in this file: the export is
  * the whole table, because a partial archive of money is not an archive.
  *
- * AMOUNTS ARE WRITTEN EXACTLY AS STORED. Seven expense rows carry sub-cent
+ * AMOUNTS ARE WRITTEN EXACTLY AS STORED. Some expense rows carry sub-cent
  * values written by the PO poster (a PO's line costs divided across expense
  * categories, landing on values like 602.6800000000001). Those digits are the
  * record. `String(n)` is used rather than `toFixed(2)` or any locale
  * formatter, because it emits the shortest decimal that round-trips to the
  * identical IEEE-754 double — the stored value, not a rendering of it. A
  * `Sub-cent amount?` column flags them so they can be found in the sheet
- * without hunting, and the receipt counts them so the count can be checked
- * against the seven known.
+ * without hunting, and the receipt counts them.
+ *
+ * HOW MANY THERE ARE IS NOT FIXED, AND THIS FILE DELIBERATELY DOES NOT SAY.
+ * The poster writes one whenever a purchase order's line costs divide
+ * unevenly across its categories, so the count rises with every received PO:
+ * a survey found 7 on 2026-08-04, and the export returned 25 on 2026-09-01.
+ * Those two are dated measurements, not a target. The receipt's figure is the
+ * answer for the run that printed it, and checking it against a number frozen
+ * in this comment would only ever catch the comment going stale.
  *
  * ── COLUMNS ARE DISCOVERED, NOT ASSUMED ───────────────────────────────────
  * The column list comes from `PRAGMA table_info` at run time, so a column
