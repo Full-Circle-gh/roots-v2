@@ -45,7 +45,8 @@ const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons,
 // The ONE rule for "this kitchen order has been replaced by the copy somebody
 // made of it here" — read lib/po-supersede.js before changing either ledger it
 // governs. Consumed by the expense poster below and by the 发票 chase.
-const { notSupersededByCopySql, invoicedOnSuperseded } = require('../lib/po-supersede');
+const { notSupersededByCopySql, supersededByCopySql, invoicedOnSuperseded,
+        PLACED_COPY_STATUSES } = require('../lib/po-supersede');
 // Goods that arrived, were accepted, and went BACK. lib/po-returns.js is the
 // one definition site for what a return does to stock, to the books and to the
 // 发票 chase — this file reads all three of those numbers and must not invent a
@@ -1465,6 +1466,79 @@ function agingFor(tid) {
   return { notDue: round2(notDue), dueSoon: round2(dueSoon), overdue: round2(overdue), overdueCount };
 }
 
+// ── 发票 MONEY THE FOUR STATES CANNOT SEE ───────────────────────────────────
+// A recorded 发票 is only counted by this screen through the PO LINE it was
+// allocated to: lineStatus() reads `covered`, and `covered` comes from the
+// lines the chase below actually selects. So an allocation whose line falls
+// out of that selection stops being counted anywhere on the screen — the four
+// figures go on adding up to the total without it, and the headline reads
+// "¥0.00 fully invoiced" over a ledger holding real, fully-allocated invoices.
+//
+// THAT IS THE BUG A BUYER REPORTED, and the ordinary way to reach it is
+// "Copy from kitchen": recording a 发票 against PO-0059's lines and then
+// placing the RPO copy of that order stands the original down
+// (lib/po-supersede.js), and the allocation goes down with it. The copy's own
+// lines then read "Awaiting" — the chase asking for a 发票 that is already
+// filed, which is the one thing lib/po-supersede.js says it must never do.
+//
+// SURFACED, NEVER CORRECTED — the stance this screen already takes on an
+// over-allocated invoice and on a credit due. Re-pointing an allocation at the
+// copy's lines is the buyer's call to make on a screen, not a silent remap
+// here (lib/po-supersede.js spells out why), so what this does is name the
+// money, name the orders it is sitting on, and say why it is not upstairs.
+//
+// BOOK-LEVEL, NOT FILTERED, exactly like agingFor() beside it: it answers
+// "where did the invoices I recorded go?", and that question does not change
+// because a month is selected.
+//
+// Three reasons cover every way a line can leave the chase, and they are the
+// chase's own WHERE clause read backwards:
+//   superseded    a placed retail copy stood this order down
+//   not_placed    the order is a draft or was cancelled after the 发票 landed
+//   other_tenant  the allocation sits on another tenant's order
+function recordedOffChase(tid) {
+  const rows = db.prepare(`
+    SELECT il.allocated_amount AS amount, po.po_number, po.status,
+           COALESCE(po.tenant_id,1) AS po_tenant,
+           ${supersededByCopySql('po')} AS superseded,
+           (SELECT c.po_number FROM purchase_orders c
+             WHERE c.copied_from_po_id = po.id
+               AND COALESCE(c.scope,'kitchen') = 'retail'
+               AND COALESCE(c.tenant_id,1)     = COALESCE(po.tenant_id,1)
+               AND c.status IN ${PLACED_COPY_STATUSES}
+             ORDER BY c.id LIMIT 1) AS copy_po_number
+      FROM invoice_lines il
+      JOIN invoices inv       ON inv.id = il.invoice_id
+      JOIN po_line_items pli  ON pli.id = il.line_id
+      JOIN purchase_orders po ON po.id  = pli.po_id
+     WHERE COALESCE(inv.tenant_id,1) = ?
+       AND (${supersededByCopySql('po')}
+            OR po.status NOT IN ${INV_PO_STATUSES}
+            OR COALESCE(po.tenant_id,1) <> ?)`).all(tid, tid);
+
+  let amount = 0;
+  // Keyed by order, because the buyer acts on an ORDER — one row per PO with
+  // what is sitting on it, not one row per allocation.
+  const byPo = new Map();
+  for (const r of rows) {
+    amount += r.amount || 0;
+    const reason = r.superseded ? 'superseded'
+                 : (r.po_tenant !== tid) ? 'other_tenant'
+                 : 'not_placed';
+    if (!byPo.has(r.po_number)) {
+      byPo.set(r.po_number, { po_number: r.po_number, reason, amount: 0,
+                              status: r.status, copy_po_number: r.copy_po_number || null });
+    }
+    byPo.get(r.po_number).amount += r.amount || 0;
+  }
+  const orders = [...byPo.values()]
+    .map(o => ({ ...o, amount: round2(o.amount) }))
+    .sort((a, b) => b.amount - a.amount);
+  const by_reason = {};
+  for (const o of orders) by_reason[o.reason] = round2((by_reason[o.reason] || 0) + o.amount);
+  return { amount: round2(amount), order_count: orders.length, by_reason, orders };
+}
+
 // GET .../invoices/outstanding?month=&q=&supplier=
 // Every line on a placed PO for this tenant, with its computed state, grouped
 // by supplier. This is the action-item view: "who do we still need a 发票 from?"
@@ -1594,7 +1668,13 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   })).sort((a, b) => (b.awaiting + b.partially_invoiced) - (a.awaiting + a.partially_invoiced) || b.total - a.total);
 
   for (const k of Object.keys(totals)) if (k !== 'line_count') totals[k] = round2(totals[k]);
-  res.json({ success: true, data: { month: month || null, groups, totals, aging: agingFor(tid) } });
+  // Recorded 发票 money none of the four figures above can account for. Sits
+  // beside them rather than inside them: it belongs to no line this read
+  // selected, so there is no state to put it in and no honest way to fold it
+  // into one. recordedOffChase() says why it is out there.
+  const recorded_elsewhere = recordedOffChase(tid);
+  res.json({ success: true, data: { month: month || null, groups, totals,
+                                    recorded_elsewhere, aging: agingFor(tid) } });
 });
 
 // The recorded-invoice ledger for this tenant.
