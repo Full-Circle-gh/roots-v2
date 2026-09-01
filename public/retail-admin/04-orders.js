@@ -244,6 +244,7 @@ function ordShortNo(no) {
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
   if (c === 'meituan')   return 'Meituan';
+  if (c === 'eleme')     return 'Eleme';
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'wechat')    return 'WeChat';
@@ -5125,6 +5126,54 @@ function orderDangerPick(id, next, ev) {
   orderDangerClose();
   transition(id, next, ev);
 }
+// What this order's LINES add up to, or null when they can't be trusted to add
+// up to anything — no items, or any line without a price. Same rule as the
+// server's itemsTotalOf (routes/eleme-internal.js), and the null case is what
+// keeps every Meituan order (whose lines carry ¥0 by design) out of the
+// disagreement check below.
+function ordItemsTotal(o) {
+  const items = (o && o.items) || [];
+  if (!items.length) return null;
+  if (!items.every(it => Number(it.line_total) > 0)) return null;
+  return Math.round(items.reduce((a, it) => a + Number(it.line_total), 0) * 100) / 100;
+}
+// Does the order total agree with the items listed under it? Mirrors
+// totalDisagreement() on the server, tolerance included: ¥5 or 30% of the basket,
+// which absorbs packing, delivery and an ordinary promotion.
+//
+// This exists because the drawer had no way to be wrong OUT LOUD. On
+// EL20260901417897 it printed "¥17.50 · subtotal ¥17.50 · shipping ¥0.00" as a hero
+// banner directly above ¥38 + ¥29 + ¥200 of items — an arithmetic claim its own
+// item list contradicted, rendered with a total's full authority. Neither figure
+// is knowably the wrong one from here (a channel order's total is the platform's
+// claim; the lines are the platform's other claim), so the drawer now says that,
+// instead of picking one and looking confident.
+function ordMoneyGap(o) {
+  const items = ordItemsTotal(o);
+  const total = Number(o && o.total);
+  if (items == null || !Number.isFinite(total)) return null;
+  const gap = Math.round((items - total) * 100) / 100;
+  if (Math.abs(gap) <= Math.max(5, items * 0.3)) return null;
+  return { items, total, gap };
+}
+// The band under the total banner when the two disagree. Amber, matching the
+// other "read this before you act" bands in the drawer — it is not an error, and
+// on a channel order it may well be a real platform discount. It names the
+// refund ceiling because that is the practical consequence: refunds are capped
+// at `total` (routes/retail.js orderTenders), so an operator refunding "all the
+// lines" on this order gets the smaller number and no explanation.
+function orderMoneyGapBand(o) {
+  const g = ordMoneyGap(o);
+  if (!g) return '';
+  const chan = ordChannelLabel(o);
+  return `
+    <div style="margin: 0 0 var(--s5); padding: 10px 14px; border-radius: var(--r-lg); background: #FBF0DC; color: #8A6516; font-size: 12px; line-height: 1.5; font-weight: 600;">
+      ${cuT(`Items add up to ¥${fmt(g.items)}, but this order records ¥${fmt(g.total)}.`,
+            `商品合计 ¥${fmt(g.items)}，但订单金额为 ¥${fmt(g.total)}。`)}
+      ${cuT(`Refunds on this order are capped at ¥${fmt(g.total)} — check ${escapeHtml(chan)} before refunding.`,
+            `本单退款上限为 ¥${fmt(g.total)}，退款前请先核对 ${escapeHtml(chan)}。`)}
+    </div>`;
+}
 // Money breakdown under the order total: subtotal · shipping · (packing) · (voucher).
 // Packing fee only renders when one was actually charged (zero on most delivery
 // orders), mirroring how the voucher segment is conditional.
@@ -5148,7 +5197,8 @@ function renderOrderTotalBanner(o) {
         <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
-    </div>`;
+    </div>
+    ${orderMoneyGapBand(o)}`;
 }
 
 // One line of the VIEW-ONLY manifest (Meituan / gzgrocery). Product name + its
@@ -5296,6 +5346,18 @@ function renderReadonlyOrder(o) {
           <div class="val"><b>¥${fmt(o.total)}</b></div>
           <div class="sub">${cuT(`${items.length} line${items.length === 1 ? '' : 's'}`, `${items.length} 项`)}</div>
         </div>
+        ${(() => {
+          // The mirrored drawer prints no per-line prices, so a total that
+          // disagrees with the lines is not merely unexplained here — it is
+          // unfalsifiable, with the contradicting evidence off-screen. Say it.
+          const g = ordMoneyGap(o);
+          if (!g) return '';
+          return `<div class="full" style="color:#8A6516;">
+            <div class="kicker">${cuT('Total disagrees with the items', '金额与商品不符')}</div>
+            <div class="sub">${cuT(`Items add up to ¥${fmt(g.items)} — check ${escapeHtml(chan)}.`,
+                                   `商品合计 ¥${fmt(g.items)}，请核对 ${escapeHtml(chan)}。`)}</div>
+          </div>`;
+        })()}
       </div>
 
       <div>

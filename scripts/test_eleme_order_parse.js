@@ -448,5 +448,73 @@ section('K · method selection is by priority, not recency');
     b.lastOrderCounts && b.lastOrderCounts.urgeOrderCount === 0, b.lastOrderCounts);
 }
 
+// ── L. The order total and the line items are TWO readings, not one ─────────
+// EL20260901417897: banner ¥17.50 over ¥38 + ¥29 + ¥200 of goods. The ingest had
+// written the one platform figure into both `subtotal` and `total` and nothing
+// compared it to the lines, so the drawer printed an arithmetic claim its own
+// item list contradicted — and no stored field could say which of the seven
+// TOTAL_KEYS the ¥17.50 had come out of.
+section('L · the order total vs the lines it sits above');
+{
+  // A payload shaped like the one that produced the bug: line money that adds up
+  // to ¥267, and an order-level figure that does not.
+  const payload = {
+    data: {
+      orderList: {
+        records: [{
+          id: '2000900901417897',
+          baseInfo: { orderStatusDesc: '商家已接单', orderTime: 1787461712 },
+          // No consumerTotal / totalAmount anywhere: TOTAL_KEYS falls through to
+          // payAmount, one tender's slice of the bill, and reads 17.50 as the
+          // whole order. Exactly the class of mis-read the path field now names.
+          feeInfo: { payAmount: 1750 },
+          goodsList: [
+            { goodsName: '中东鹰嘴豆泥', num: 1, salePrice: 3800, sumPrice: 3800, skuCode: '1-10' },
+            { goodsName: '香柠草康普茶', num: 1, salePrice: 2900, sumPrice: 2900, skuCode: '2-70' },
+            { goodsName: '洗手液三件套', num: 1, salePrice: 20000, sumPrice: 20000, skuCode: 'P-65' },
+          ],
+        }],
+      },
+    },
+  };
+  const o = b.parseOrderPayload(payload)[0];
+  ok('the lines are summed for the ingest', o.itemsTotal === 267, o.itemsTotal);
+  ok('the order figure is still reported verbatim', o.total === 17.5, o.total);
+  ok('and the field it came from is named', o.totalKeyPath === 'feeInfo.payAmount', o.totalKeyPath);
+
+  // The rule the ingest applies to those two numbers, run on the ingest's own
+  // source rather than a copy of it — a duplicated tolerance would pass this
+  // test forever while the shipped one drifted.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'eleme-internal.js'), 'utf8');
+  const grab = (name) => {
+    const m = src.match(new RegExp('^function ' + name + '\\([\\s\\S]*?^}', 'm'));
+    return m ? m[0] : null;
+  };
+  const itemsSrc = grab('itemsTotalOf'), disagreeSrc = grab('totalDisagreement');
+  ok('itemsTotalOf was found in routes/eleme-internal.js', !!itemsSrc);
+  ok('totalDisagreement was found in routes/eleme-internal.js', !!disagreeSrc);
+  if (itemsSrc && disagreeSrc) {
+    const { itemsTotalOf, totalDisagreement } =
+      new Function(itemsSrc + '\n' + disagreeSrc + '\nreturn { itemsTotalOf, totalDisagreement };')();
+
+    ok('a fully priced basket sums', itemsTotalOf([{ lineTotal: 38 }, { lineTotal: 29 }, { lineTotal: 200 }]) === 267);
+    ok('one unpriced line makes the sum unusable, not smaller',
+      itemsTotalOf([{ lineTotal: 38 }, { lineTotal: 0 }]) === null);
+    ok('an empty basket has no sum', itemsTotalOf([]) === null);
+
+    ok('¥17.50 against ¥267 of goods is flagged', !!totalDisagreement(17.5, 267));
+    ok('...as a shortfall, not a scale slip', totalDisagreement(17.5, 267).kind, 'below_items');
+    ok('a ×100 unit slip is named as one', totalDisagreement(2.67, 267).kind === 'scale_x100',
+      totalDisagreement(2.67, 267).kind);
+    ok('delivery + packing on top of the goods is NOT a disagreement',
+      totalDisagreement(275, 267) === null);
+    ok('a small basket keeps a ¥5 floor rather than a bare percentage',
+      totalDisagreement(9, 12) === null);
+    ok('an ordinary promotion stays inside the tolerance',
+      totalDisagreement(200, 267) === null);
+    ok('no lines to compare against → nothing to say', totalDisagreement(17.5, null) === null);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
