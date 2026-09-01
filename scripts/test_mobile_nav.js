@@ -165,6 +165,37 @@ run('mobile nav', [
     ['on its sample data, as the static preview always did', `${body}.length>0`],
   ]],
 
+  // ── the two things every operator needs, whatever their role ──────────
+  // Sign out lived only inside Settings, which is capability-gated, so the one
+  // action belonging to no capability was taken away from exactly the operators
+  // with the fewest other ways out. The Account row pushed Settings
+  // unconditionally too — a chevron promising a screen push() then refused.
+  ['a narrowed operator can still sign out', KITCHEN + "state.overflow=true;render();", [
+    ['the menu offers it', "document.querySelector('.sheet').innerText.indexOf('Sign out')>-1"],
+    ['it names who is signed in', "document.querySelector('.sheet').innerText.indexOf('Account')>-1"],
+    ['with no chevron promising a Settings they cannot open',
+     "!document.querySelector('.sheet button[onclick*=\"push\\',\\'settings\"]')"],
+  ]],
+  ['an operator who has Settings still reaches it from there',
+    "state.caps=['settings:shop','orders:view'];state.overflow=true;render();", [
+      ['Account still goes somewhere', "document.querySelector('.sheet').innerHTML.indexOf(\"push','settings'\")>-1"],
+      ['and Sign out is there too', "document.querySelector('.sheet').innerText.indexOf('Sign out')>-1"],
+    ]],
+
+  // ── an order is not everyone's work ───────────────────────────────────
+  // This polled, dinged and toasted "New order" for every operator, because it
+  // predates roles reaching this app at all: a kitchen account was woken by a
+  // sale it cannot see, cannot open and cannot act on.
+  ['a kitchen account is not woken by a sale it cannot see',
+    KITCHEN + "state.live=true;state.ordersUnseen=3;", [
+      ['the poll does not run', "pollUnseenOrders()===undefined && !window.__polled"],
+      ['and no dot claims work that is not theirs', "unseenOrders()===false"],
+    ]],
+  ['an order desk still hears its orders',
+    "state.caps=['orders:view'];state.ordersUnseen=2;", [
+      ['the dot lights', "unseenOrders()===true"],
+    ]],
+
   // ── narrowed to nothing ───────────────────────────────────────────────
   ['a role this app holds nothing for says so',
     "state.caps=['billing:view'];state.tab='more';state.stack=[];render();", [

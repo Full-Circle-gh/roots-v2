@@ -6237,11 +6237,28 @@ function sheetOverflow(){
      ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
      ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
      ${/* This row showed the STORE's name — not an account — behind a chevron
-          wired to noop. It names whoever is signed in, and goes to Settings,
-          which is where Sign out lives. */''}
-     ${row('circle-user-round',T('Account','账户'),
-        val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
-        "APP.cmd('closeOverflow');APP.cmd('push','settings')",false)}
+          wired to noop. It names whoever is signed in.
+
+          IT ONLY GOES ANYWHERE IF THERE IS SOMEWHERE TO GO. It pushed Settings
+          unconditionally, and Settings is capability-gated, so for an operator
+          without it the chevron promised a screen push() then silently refused:
+          a dead control, on the one row that names them. It states who is
+          signed in and nothing more for those operators. */''}
+     ${canRoute('settings')
+        ? row('circle-user-round',T('Account','账户'),
+            val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
+            "APP.cmd('closeOverflow');APP.cmd('push','settings')",false)
+        : `<div class="row" style="min-height:52px;padding:12px 20px;cursor:default">
+            <span style="color:var(--text-secondary);display:flex;flex:none">${ic('circle-user-round')}</span>
+            <span style="flex:1;font-size:15px">${T('Account','账户')}</span>${val(ROLE_WORD(state.me))}</div>`}
+     ${/* SIGN OUT LIVES HERE, not only inside Settings. It is the one action
+          every operator needs and the only one that belongs to no capability —
+          so putting it behind a capability-gated screen took it away from
+          exactly the operators with the fewest other ways out. Duplicating an
+          ACTION is cheap in a way duplicating a switch is not: there is no
+          state to go stale between the two copies. */''}
+     <div class="sep" style="margin-left:54px"></div>
+     ${row('log-out',T('Sign out','退出登录'),'',"APP.cmd('closeOverflow');APP.cmd('signout')",false)}
      <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
      ${/* Installed, this app has no reload button — the browser's is not there
           to borrow. The pull-down gesture is the everyday way to refresh and
@@ -7049,6 +7066,13 @@ function fetchUnseenOrders(){
     .then(j=>(j&&j.data!==undefined)?j.data:j);
 }
 function pollUnseenOrders(){
+  /* ORDERS ARE NOT EVERYONE'S WORK. This polled, dinged and toasted "New order"
+     for every operator, because it predates roles reaching this app at all. A
+     kitchen account was woken by a sale it cannot see, cannot open and cannot
+     act on — arriving work as an alarm, and not even its own. Gated on the same
+     capability that reveals the Orders screen, and gated HERE so the request is
+     never made rather than made and its answer discarded. */
+  if(!canRoute('orders')) return;
   if(!state.live||_ordersPollBusy) return;
   /* One request in flight at a time. Coming back to the app fires focus AND
      visibilitychange together, and two answers racing to compare themselves
@@ -7104,7 +7128,8 @@ function pollUnseenOrders(){
    loaded, and the server's count of what is un-actioned — which is the only
    one that knows about an order that arrived while the operator sat on Home
    and never opened the list. */
-function unseenOrders(){ return state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew); }
+function unseenOrders(){ return canRoute('orders') &&
+  (state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew)); }
 function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
