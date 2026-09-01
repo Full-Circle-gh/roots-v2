@@ -137,8 +137,17 @@ input{font-family:inherit;-webkit-user-select:text;user-select:text;}
    The negative bottom margin absorbs the safe-area inset the pinned band below
    carries for itself: without it, a notched phone shows the inset TWICE at rest
    (once here, once as the band's own top padding) and the head floats. ── */
-.page-head{display:flex;align-items:flex-start;gap:16px;
+/* §1.7, and the same shape every pushed screen on the phone uses: the back link
+   states where you came from on its own line, then the title, then the status.
+   The back link was a third item in the title ROW at first, which put "Kitchen"
+   and "Add stock" side by side — a header this app shares with no other screen
+   in the product, on the one screen an operator reaches from another app. */
+.page-head{display:flex;flex-direction:column;
   padding:calc(var(--sa-top) + 20px) 16px 12px;margin-bottom:calc(-1 * var(--sa-top));}
+/* 6px off the top when the back link is there to carry it, so the head does not
+   grow by a whole row. Mirrors the phone's own pageHead. */
+.page-head.has-back{padding-top:calc(var(--sa-top) + 14px);}
+.page-head .headrow{display:flex;align-items:flex-start;gap:16px;}
 .page-head .headmain{flex:1;min-width:0;}
 .page-head h1{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25;}
 
@@ -392,17 +401,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
       <span id="backHomeLbl"></span>
     </button>
-    <div class="headmain">
-      <h1 id="hTitle"></h1>
-      <div class="toolbar" id="toolbar" hidden>
-        <button class="btn btn-store" id="storeBtn">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
-          <span class="nm" id="storeName">—</span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
+    <div class="headrow">
+      <div class="headmain">
+        <h1 id="hTitle"></h1>
+        <div class="toolbar" id="toolbar" hidden>
+          <button class="btn btn-store" id="storeBtn">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
+            <span class="nm" id="storeName">—</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+        </div>
       </div>
+      <button class="avatar" id="acctBtn" hidden aria-label="Account"><span id="acctInitial">·</span></button>
     </div>
-    <button class="avatar" id="acctBtn" hidden aria-label="Account"><span id="acctInitial">·</span></button>
   </div>
 
   <div class="band" id="band" hidden>
@@ -690,6 +701,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     // every other one in this head.
     var back = $('#backHome');
     back.hidden = !state.home;
+    $('#pageHead').classList.toggle('has-back', !!state.home);
     back.onclick = function () { if (state.home) window.location.href = state.home; };
     $('#langSeg').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-lang]'); if (!btn) return;
