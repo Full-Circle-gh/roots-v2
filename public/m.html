@@ -8321,7 +8321,7 @@ const money0=(cur,n)=>(cur||'¥')+Math.round(Number(n||0)).toLocaleString();
 // typical day was measured over. `by now` when the server clipped the baseline
 // days to the current time, or a slow morning reads as a collapse.
 //
-// Returns '' for a metric with no baseline at all (average order value). The
+// Returns null for a metric with no baseline at all (average order value). The
 // caller renders no line rather than a comparison label with nothing to compare
 // — the dangling "vs a typical day" under Avg. order was exactly that.
 const DOW_ABBR_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -9222,10 +9222,27 @@ async function loadLive(){
       // the average, where the number is small enough for it to mean something.
       [['Revenue (all channels)','营收（全渠道）'], money0(CUR,rev), deltaText(rev, b.revenue, bl)],
       [['Orders (storefront)','订单（自营）'], String(ord), deltaText(ord, b.orders, bl)],
+      // Average order is the SERVER'S `aov`, never rev/ord. The two tiles above
+      // are deliberately different measures — revenue is all-channels and
+      // carries money that produced no storefront order (wallet top-up cash,
+      // booked cash-basis the day it lands, and gzgrocery wholesale takings from
+      // the stock ledger), while the order count is the storefront alone — so
+      // dividing one by the other charges every yuan of that money to a handful
+      // of orders. Reported from a real day: one ¥3,000 wallet top-up against 17
+      // storefront orders pushed this tile to ¥417.59 — roughly ¥176 of it the
+      // top-up alone, on money nobody spent on goods — and the better the
+      // top-up, the further the tile drifted. The dashboard computes the honest
+      // figure (AVG of storefront order totals, top-ups and wholesale excluded
+      // by construction) and the desktop has always shown that one; this is the
+      // same number, so the two screens finally agree.
+      //
+      // No local fallback: rev/ord is precisely the wrong answer, so an older
+      // server that sends no `aov` gets a dash rather than a confident lie.
+      //
       // The server sends no baseline for average order value, so this tile has
       // nothing to compare against and says nothing — rather than printing a
       // comparison label with no comparison under it.
-      [['Avg. order','客单价'], money(CUR, ord? rev/ord : 0), null],
+      [['Avg. order','客单价'], k.aov!=null ? money(CUR, Number(k.aov)) : (CUR||'¥')+'—', null],
       [['New customers','新客'], String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // The desktop's Today strip carries a fifth figure and its Customers card
