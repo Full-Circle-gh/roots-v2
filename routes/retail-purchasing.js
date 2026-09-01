@@ -46,6 +46,12 @@ const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons,
 // made of it here" — read lib/po-supersede.js before changing either ledger it
 // governs. Consumed by the expense poster below and by the 发票 chase.
 const { notSupersededByCopySql, invoicedOnSuperseded } = require('../lib/po-supersede');
+// Goods that arrived, were accepted, and went BACK. lib/po-returns.js is the
+// one definition site for what a return does to stock, to the books and to the
+// 发票 chase — this file reads all three of those numbers and must not invent a
+// fourth. Read that header before changing anything below that mentions a
+// return.
+const { planReturns, billableQtySql, billableQty, onHandQty } = require('../lib/po-returns');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
@@ -82,7 +88,22 @@ function actorFor(req) {
 // ── Expense auto-posting — mirror of routes/purchases.js postPOExpenses ────
 // Idempotent DELETE-then-INSERT keyed on po_id; posts on Ordered/Delivered,
 // wiped when the PO drops back to Requested (or is Cancelled). Amount uses
-// qty_received once receiving started, so shortages adjust the books.
+// qty_received once receiving started, so shortages adjust the books — LESS
+// anything sent back to the supplier (lib/po-returns.js billableQtySql).
+//
+// A RETURN CORRECTS THE PURCHASE IN PLACE; IT DOES NOT OPEN A SECOND ENTRY.
+// The rows are rewritten under the same po_id and re-dated to po.date, so
+// flour bought on 25 August and sent back on 1 September leaves August holding
+// what August actually cost. That is the whole reason this poster has always
+// been DELETE-then-INSERT rather than append: there is one purchase, so there
+// is one set of expense rows, and every correction restates them.
+//
+// The cost of that choice, stated rather than hidden: a return restates a month
+// that may already have been reported, and nothing in this codebase locks a
+// period to stop it (docs/purchase-returns.md, WHAT THIS DOES NOT DO). The
+// alternative — booking the credit in the month the goods went back — is a
+// different accounting policy, not a bug fix, and it is not one this file may
+// choose on a tenant's behalf.
 function postRetailPOExpenses(poId) {
   const po = db.prepare('SELECT id, date, supplier, po_number, status, extra_freight, extra_tax, extra_handling FROM purchase_orders WHERE id = ?').get(poId);
   if (!po) return { skipped: 'po-missing' };
@@ -90,10 +111,10 @@ function postRetailPOExpenses(poId) {
   if (!['Ordered', 'Delivered'].includes(po.status)) return { skipped: 'not-postable' };
   const groups = db.prepare(`
     SELECT COALESCE(NULLIF(TRIM(expense_category),''),'门店进货 Retail stock') AS category,
-           SUM(COALESCE(qty_received, qty) * COALESCE(cost_per_unit, 0))       AS amount,
+           SUM(${billableQtySql()} * COALESCE(cost_per_unit, 0))               AS amount,
            COUNT(*)                                                            AS line_count
       FROM po_line_items
-     WHERE po_id = ? AND COALESCE(qty_received, qty) > 0
+     WHERE po_id = ? AND ${billableQtySql()} > 0
      GROUP BY 1
   `).all(poId);
   const insert = db.prepare('INSERT INTO expense_entries (date, amount, category, description, po_id) VALUES (?,?,?,?,?)');
@@ -134,9 +155,18 @@ function postRetailPOExpensesWithSource(poId) {
 }
 
 // ── Stock application — push received goods into store inventory ───────────
-// good = qty_received − damaged_qty; apply (good − stock_applied_qty) as a
-// delta through inventory.adjustStock (ledger row + channel sync fan-out).
-// Safe to call repeatedly; corrections move stock in either direction.
+// good = qty_received − damaged_qty − returned_qty (lib/po-returns.js
+// onHandQty); apply (good − stock_applied_qty) as a delta through
+// inventory.adjustStock (ledger row + channel sync fan-out). Safe to call
+// repeatedly; corrections move stock in either direction.
+//
+// A RETURN NEEDS NO PATH OF ITS OWN HERE, and that is the point of expressing
+// it as a quantity on the line rather than as an event to replay: goods going
+// back out lower `good`, which makes the delta negative, which is a mechanism
+// this function has always had and which /undo-receive already proved. What a
+// return does NOT get to do is drive the shelf below zero unnoticed —
+// adjustStock clamps at zero, so the receive route refuses a return the shelf
+// cannot honour BEFORE any of this runs (planReturnRemoval below).
 //
 // A PRODUCT line also writes its price back to store_products.unit_cost — the
 // mirror of what firePriceAlertsForPO does for a MATERIAL line, and the reason
@@ -171,7 +201,8 @@ function applyReceivedToStock(poId, req, storeId) {
   // on the global handle, which meant a non-Roots receipt read its own PO lines
   // through one connection and stamped Roots' unit_cost through another.
   const lines = tdb().prepare(`
-    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en, cost_per_unit
+    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, returned_qty,
+           stock_applied_qty, name_en, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
   const readCost   = tdb().prepare('SELECT unit_cost FROM store_products WHERE id = ?');
@@ -189,7 +220,7 @@ function applyReceivedToStock(poId, req, storeId) {
     // Whole units: retail_store_stock.physical_qty is an INTEGER, so both the
     // applied bookkeeping and the delta are rounded the same way — repeated
     // saves always converge instead of drifting on a fractional entry.
-    const good = Math.round(Math.max(0, (parseFloat(l.qty_received) || 0) - (parseFloat(l.damaged_qty) || 0)));
+    const good = Math.round(onHandQty(l) || 0);
     const alreadyApplied = Math.round(parseFloat(l.stock_applied_qty) || 0);
     const delta = good - alreadyApplied;
     if (delta !== 0) {
@@ -361,6 +392,71 @@ function reversePOStock(po, req, storeId) {
 // to the route. One shape for all three entry points, so they cannot diverge.
 function blockedResponse(res, blocking) {
   return res.status(409).json({ success: false, error: 'undo_blocked', blocking });
+}
+
+// ── Can this return actually come off the shelf? ───────────────────────────
+// The same test planPOReversal makes, asked of a return instead of an undo,
+// and asked for the same reason: inventory.adjustStock CLAMPS at zero, so a
+// return of three units against one on the shelf would remove one, write
+// stock_applied_qty as though it had removed three, and leave the line and the
+// shelf disagreeing with nothing on any screen saying so. REFUSES RATHER THAN
+// CLAMPS, exactly as the undo path does, and refuses the WHOLE save — a return
+// half-applied is worse than one not applied at all.
+//
+// ONLY WHEN THE SAVE INCREASES A RETURN. A save that merely lowers an arrived
+// count reaches adjustStock the same way and has always been allowed to clamp;
+// tightening that is a separate change to a path the warehouse uses daily, and
+// is recorded in docs/purchase-returns.md rather than smuggled in here. So the
+// caller gates on plan.increased, and within such a save the removal is
+// measured in full — including any the corrected counts add — because by then
+// the operator is being refused anyway and half a rule would be a lie.
+//
+// AGGREGATED BY PRODUCT for the reason planPOReversal spells out: two lines of
+// one PO may carry the same store_product_id, and per-line checks would each
+// pass against stock only one of them can have.
+function planReturnRemoval(po, storeId, plans) {
+  const byProduct = new Map();
+  for (const plan of plans.values()) {
+    const l = plan.line;
+    // A material line moves no stock at all (§28) and a line with no arrived
+    // count is skipped by applyReceivedToStock, so neither can be the reason a
+    // shelf comes up short.
+    if (l.ingredient_id || !l.store_product_id) continue;
+    if (plan.next.received == null) continue;
+    const applied = Math.round(parseFloat(l.stock_applied_qty) || 0);
+    // What the shelf will hold for this line once this save lands — computed
+    // through the same onHandQty() and the same rounding applyReceivedToStock
+    // will use, so the check and the write cannot disagree about a half unit.
+    const next = Math.round(onHandQty({
+      qty_received: plan.next.received, damaged_qty: plan.next.damaged, returned_qty: plan.qty,
+    }) || 0);
+    const remove = applied - next;
+    if (remove <= 0) continue;
+    const seen = byProduct.get(l.store_product_id);
+    if (seen) seen.qty += remove;
+    else byProduct.set(l.store_product_id, {
+      product_id: l.store_product_id, qty: remove,
+      name_en: l.name_en || null, name_cn: l.name_cn || null,
+    });
+  }
+  const readQty = tdb().prepare(
+    'SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+  );
+  const blocking = [];
+  for (const pr of byProduct.values()) {
+    const have = Math.round(parseFloat(readQty.get(storeId, pr.product_id)?.physical_qty) || 0);
+    if (pr.qty > have) blocking.push({ ...pr, on_shelf: have, short: pr.qty - have });
+  }
+  return blocking;
+}
+
+// Its own code, not undo_blocked. The two refusals share a shape and a shelf
+// test but say different things: one is "this delivery cannot be taken back",
+// the other "these goods cannot go back to the supplier", and an operator told
+// the wrong one goes looking for the wrong order. docs/tacet-delivery-
+// vocabulary.md carries both headlines and forbids collapsing them into one.
+function returnBlockedResponse(res, blocking) {
+  return res.status(409).json({ success: false, error: 'return_blocked', blocking });
 }
 
 // ── Material cost rollback — undo the ingredients.cost_per_unit / buy_price
@@ -715,13 +811,20 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
 // words instead of leaving a gap.
 const DELIVERY_SQL = `
   SELECT r.id, r.po_id, r.store_id, r.actor_label, r.actor_realm, r.note, r.received_at,
+         COALESCE(r.kind, 'receipt') AS kind,
          po.po_number, po.supplier, po.status AS po_status,
          (SELECT COUNT(*) FROM po_receipt_lines l WHERE l.receipt_id = r.id) AS line_count,
+         -- Coverage is counted from RECEIPTS ONLY. A return row also names the
+         -- line, but it is not a claim that the line was received — it is the
+         -- opposite claim — so letting one count as coverage would make the
+         -- next genuine correction to that line look like it had a delivery
+         -- ahead of it and quietly drop it out of the list.
          (SELECT COUNT(*) FROM po_receipt_lines l
            WHERE l.receipt_id = r.id
              AND NOT EXISTS (
                SELECT 1 FROM po_receipt_lines l2 JOIN po_receipts r2 ON r2.id = l2.receipt_id
-                WHERE l2.line_id = l.line_id AND r2.po_id = r.po_id AND r2.id < r.id)
+                WHERE l2.line_id = l.line_id AND r2.po_id = r.po_id AND r2.id < r.id
+                  AND COALESCE(r2.kind, 'receipt') = 'receipt')
          ) AS new_lines
     FROM po_receipts r
     JOIN purchase_orders po ON po.id = r.po_id
@@ -732,6 +835,7 @@ const DELIVERY_SQL = `
 function receiptLines(receiptId) {
   return db.prepare(`
     SELECT l.id, l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
+           l.returned_qty,
            pli.name_en, pli.name_cn, pli.sku, pli.unit, pli.qty AS ordered,
            pli.supplier_name
       FROM po_receipt_lines l
@@ -742,7 +846,15 @@ function receiptLines(receiptId) {
 
 // short / damaged / over, from the lines of one delivery. The same three words
 // the list marks a row with and the detail repeats per line.
-function deliveryFlags(lines) {
+//
+// A RETURN IS FLAGGED AND NOTHING ELSE IS. Its lines carry the arrived counts
+// the delivery left on them — they are a snapshot of the line, not a fresh
+// claim — so running the three delivery tests over a return row would flag the
+// original delivery's shortfall a second time, on the event that took goods
+// back. Sent-back and came-up-short are the two facts this feature exists to
+// keep apart, so the return row says only what it did.
+function deliveryFlags(lines, kind) {
+  if (kind === 'return') return ['returned'];
   const f = [];
   if (lines.some(l => l.qty_received != null && +l.qty_received < +l.ordered)) f.push('short');
   if (lines.some(l => +l.damaged_qty > 0)) f.push('damaged');
@@ -777,7 +889,10 @@ function decorateDelivery(row) {
   return {
     ...row,
     lines,
-    flags: deliveryFlags(lines),
+    // Units that left on THIS event — zero on every delivery, and the headline
+    // number on a return.
+    returned_units: lines.reduce((n, l) => n + (parseFloat(l.returned_qty) || 0), 0),
+    flags: deliveryFlags(lines, row.kind),
     suppliers: deliverySuppliers(lines, row.supplier),
     store_name_en: store?.name_en || null,
     store_name_cn: store?.name_cn || null,
@@ -785,11 +900,22 @@ function decorateDelivery(row) {
 }
 
 // GET /api/retail-admin/receiving/deliveries — the Received list.
-// Deliveries only; corrections stay inside the delivery they correct.
+// Deliveries and returns; corrections stay inside the delivery they correct.
+//
+// A RETURN EARNS ITS OWN ROW ON DIFFERENT TERMS TO A DELIVERY, and the two
+// tests below are not interchangeable. A delivery qualifies by bringing at
+// least one line in for the first time (`new_lines`, the derivation the
+// DELIVERY_SQL header explains). A return can never satisfy that — the goods it
+// sends back were received by an earlier event, by definition — so it qualifies
+// on being a return at all. Judged by the delivery test a return would be
+// invisible in the one list that should show it; judged by neither, a PO
+// received before the receipt tables existed would have its first return
+// render as a delivery of goods that were leaving.
+const isJournalRow = r => (r.kind === 'return' ? true : r.new_lines > 0);
 router.get('/api/retail-admin/receiving/deliveries', requireRetailAdmin, (req, res) => {
   const rows = db.prepare(DELIVERY_SQL + ' ORDER BY r.received_at DESC, r.id DESC LIMIT 200')
     .all(currentTenantId())
-    .filter(r => r.new_lines > 0);
+    .filter(isJournalRow);
   const out = rows.map(decorateDelivery);
 
   // Search and filter here rather than in SQL: both read the DERIVED shape —
@@ -830,12 +956,17 @@ router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (re
   const d = decorateDelivery(row);
   // Every later receipt row for these lines, on this PO. Ordered, so the
   // screen reads them as "recorded N, changed to M" straight down the list.
+  // RECEIPTS ONLY. A later return touches these same lines, but it is not a
+  // revision of what this delivery says arrived — it is its own event with its
+  // own row in the list above, and nesting it here would show the same return
+  // twice while reading as "recorded 15, changed to 15".
   const corr = db.prepare(`
     SELECT l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
            r.id AS receipt_id, r.received_at, r.actor_label
       FROM po_receipt_lines l
       JOIN po_receipts r ON r.id = l.receipt_id
-     WHERE r.po_id = ? AND r.id > ? AND l.line_id IN (${d.lines.map(() => '?').join(',') || 'NULL'})
+     WHERE r.po_id = ? AND r.id > ? AND COALESCE(r.kind, 'receipt') = 'receipt'
+       AND l.line_id IN (${d.lines.map(() => '?').join(',') || 'NULL'})
      ORDER BY r.id`).all(row.po_id, row.id, ...d.lines.map(l => l.line_id));
   for (const l of d.lines) l.corrections = corr.filter(c => c.line_id === l.line_id);
   res.json({ success: true, data: d });
@@ -848,7 +979,7 @@ router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req,
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const rows = db.prepare(DELIVERY_SQL + ' AND r.po_id = ? ORDER BY r.received_at, r.id')
     .all(currentTenantId(), po.id)
-    .filter(r => r.new_lines > 0)
+    .filter(isJournalRow)
     .map(decorateDelivery);
   res.json({ success: true, data: { deliveries: rows, untracked_lines: untrackedLines(po.id) } });
 });
@@ -1329,6 +1460,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   }
   const rows = db.prepare(`
     SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
+           pli.qty_received, pli.returned_qty, pli.return_reason, pli.returned_at,
            pli.no_invoice_expected AS line_no_invoice,
            po.id AS po_id, po.po_number, po.date, po.status,
            po.no_invoice_expected AS po_no_invoice,
@@ -1359,23 +1491,42 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   const reach = reachByName(tid);
   const supCn = supplierCnByName(tid);
   const bySup = new Map();
-  const totals = { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, line_count: rows.length };
+  const totals = { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0,
+                   credit_due: 0, line_count: rows.length };
 
   for (const r of rows) {
-    r.amount = round2((r.qty || 0) * (r.cost_per_unit || 0));
+    // WHAT WE OWE, WHICH IS NOT WHAT WE ORDERED. This used to be qty ×
+    // cost_per_unit — the ordered quantity — while Finance had always expensed
+    // COALESCE(qty_received, qty). One purchase, two figures: a delivery that
+    // came up five short was expensed at what turned up and chased at what was
+    // asked for, and nothing on either screen said why they differed.
+    //
+    // billableQty (lib/po-returns.js) is now the single answer for both, and it
+    // is the reason a return reaches the paperwork at all: send 15 kg back and
+    // the supplier is asked for a 发票 covering what we kept, not what was
+    // delivered.
+    r.billable_qty = billableQty(r);
+    r.amount = round2(r.billable_qty * (r.cost_per_unit || 0));
     r.covered = round2(allocated.get(r.line_id) || 0);
     r.outstanding = round2(Math.max(0, r.amount - r.covered));
+    // A 发票 already recorded for MORE than the line is now worth — almost
+    // always a return against goods invoiced before they went back. SURFACED,
+    // NEVER CORRECTED, which is the stance this screen already takes on an
+    // invoice allocated past its own header (`unallocated`, below): the money
+    // is real, it is in the ledger, and what closes the gap is a credit note
+    // from the supplier, not this route quietly writing the allocation down.
+    r.credit_due = round2(Math.max(0, r.covered - r.amount));
     r.status = lineStatus(r);
     r.line_no_invoice = !!r.line_no_invoice;
     r.po_no_invoice = !!r.po_no_invoice;
     r.supersedes_invoiced = r.copied_from_po_id ? (supersededInvoiced.get(r.copied_from_po_id) || 0) : 0;
     if (!bySup.has(r.supplier)) bySup.set(r.supplier, {
       supplier: r.supplier, total: 0, fully_invoiced: 0, partially_invoiced: 0,
-      awaiting: 0, no_invoice_expected: 0, lines: [],
+      awaiting: 0, no_invoice_expected: 0, credit_due: 0, lines: [],
     });
     const g = bySup.get(r.supplier);
-    g.total += r.amount; g[r.status] += r.amount; g.lines.push(r);
-    totals.total += r.amount; totals[r.status] += r.amount;
+    g.total += r.amount; g[r.status] += r.amount; g.credit_due += r.credit_due; g.lines.push(r);
+    totals.total += r.amount; totals[r.status] += r.amount; totals.credit_due += r.credit_due;
   }
 
   // Awaiting first, because awaiting is the job. Partial counts as unfinished
@@ -1388,6 +1539,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
     partially_invoiced: round2(g.partially_invoiced),
     awaiting: round2(g.awaiting),
     no_invoice_expected: round2(g.no_invoice_expected),
+    credit_due: round2(g.credit_due),
     line_count: g.lines.length,
     po_numbers: [...new Set(g.lines.map(l => l.po_number))],
     reach: reach.get(g.supplier) || null,
@@ -2093,7 +2245,21 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   // all — that is the promise undoBlocked makes in so many words
   // (docs/tacet-delivery-vocabulary.md, LOCKED 2026-08-27) — and clearing the
   // counts on the way to a 409 would break it.
-  db.prepare('UPDATE po_line_items SET qty_received = NULL, damaged_qty = 0 WHERE po_id = ?').run(po.id);
+  // The returns go with the counts, for the same reason the counts go at all.
+  // An undo asserts THE GOODS NEVER ARRIVED, and goods that never arrived
+  // cannot have been sent back — a line left claiming "3 returned" against a
+  // line claiming nothing was received is a contradiction the screens would
+  // then have to render. The stock side needs no separate reversal: a returned
+  // unit was already out of stock_applied_qty, so reversePOStock above has
+  // already put back exactly what this PO still had on the shelf.
+  //
+  // The RETURN EVENTS survive, exactly as the delivery does — po_receipts /
+  // po_receipt_lines are append-only and keep their own numbers, so what went
+  // back is still readable in Receiving after the undo.
+  db.prepare(`UPDATE po_line_items
+                 SET qty_received = NULL, damaged_qty = 0,
+                     returned_qty = 0, return_reason = NULL, returned_at = NULL
+               WHERE po_id = ?`).run(po.id);
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
@@ -2118,6 +2284,13 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // routes/purchases.js — one definition for both receive endpoints.
   const planned = planReceiptReasons(db, po.id, receipts);
   if (planned.error) return res.status(400).json({ success: false, error: planned.error, line_id: planned.line_id });
+  // Returns are resolved and refused in the same breath and for the same
+  // reason. lib/po-returns.js holds every rule this enforces — how much may go
+  // back, that it needs a reason, and that a payload lowering an arrived count
+  // may not strand a return above it — so nothing about what a return IS is
+  // decided in this route.
+  const returns = planReturns(db, po.id, receipts);
+  if (returns.error) return res.status(400).json({ success: false, error: returns.error, line_id: returns.line_id });
 
   // ── Where this delivery is going ──────────────────────────────────────────
   // Optional. Absent — which is every call the desktop screen makes — means the
@@ -2152,7 +2325,17 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   }
   const storeId = wantStore != null ? wantStore : appliedStore;
 
+  // Goods cannot go back to a supplier off a shelf that has not got them.
+  // Checked BEFORE the transaction opens, so a refusal writes nothing at all —
+  // the promise `undoBlocked` makes for the reversal path, kept here too.
+  if (returns.increased) {
+    const blocking = planReturnRemoval(po, storeId, returns.plans);
+    if (blocking.length) return returnBlockedResponse(res, blocking);
+  }
+
   let missing_lines = 0, damaged_lines = 0, any_qty = false, receipt = null;
+  let returned_lines = 0, returned_units = 0, returnReceipt = null;
+  const returnMoves = new Map();
   const tx = db.transaction(() => {
     for (const r of receipts) {
       const lineId = parseInt(r.line_id, 10);
@@ -2186,6 +2369,29 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       // still writes exactly the columns it always did.
       const plan = planned.plans.get(lineId);
       if (plan && plan.write) { sets.push('receipt_reason = ?'); vals.push(plan.value); }
+      // What went back to the supplier.
+      //
+      // `returned_at` MOVES ONLY WHEN THE FIGURE GROWS. It dates the most
+      // recent return, and a correction that lowers one — miscounted the
+      // pallet, two sacks came back off the van — is not a new return to be
+      // dated. It is cleared with the quantity, so a line can never carry the
+      // date of a return it no longer claims, and it is left alone entirely by
+      // a save that only restates the same number.
+      //
+      // CURRENT_TIMESTAMP, not this file's gzNow(), and deliberately: the
+      // column it will be read beside is po_receipts.received_at, which takes
+      // the same SQLite default. Two timestamps in one story must not sit eight
+      // hours apart. (Whether that pair should be local rather than UTC is a
+      // real question and an older one — it belongs to received_at, and
+      // answering it for one column only would be the drift, not the fix.)
+      const rPlan = returns.plans.get(lineId);
+      if (rPlan && rPlan.write) {
+        sets.push('returned_qty = ?');   vals.push(rPlan.qty);
+        sets.push('return_reason = ?');  vals.push(rPlan.reason);
+        if (rPlan.delta > 0) sets.push('returned_at = CURRENT_TIMESTAMP');
+        else if (rPlan.qty === 0) sets.push('returned_at = NULL');
+        if (rPlan.delta > 0) { returnMoves.set(lineId, rPlan.delta); returned_lines++; returned_units += rPlan.delta; }
+      }
       if (!sets.length) continue;
       vals.push(lineId, po.id);
       db.prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
@@ -2194,6 +2400,23 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     // Gated on any_qty for the same reason postRetailPOExpenses below is: a
     // save carrying only a tracking number or an invoice mark is not a
     // delivery, and must not leave a phantom row in the Received list.
+    // The return, recorded as its own event rather than folded into the
+    // delivery record. TWO ROWS, NOT ONE, when a save does both: they are
+    // different movements in different directions, and the Received list reads
+    // `kind` to keep them apart. A save that only corrects an arrived count
+    // writes no return row at all — returnMoves holds only lines whose returned
+    // figure actually grew.
+    if (returnMoves.size) {
+      returnReceipt = recordReceipt(db, {
+        poId: po.id, storeId, scope: 'retail', kind: 'return', returns: returnMoves,
+        actor: {
+          userId: req.user?.id || null,
+          label: actorLabel(req),
+          realm: req.backendUser ? 'backend' : 'kitchen',
+        },
+        receipts, note: (req.body && req.body.return_note) || null,
+      });
+    }
     if (any_qty) {
       receipt = recordReceipt(db, {
         poId: po.id, storeId, scope: 'retail',
@@ -2230,21 +2453,32 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // to Ordered (see the /status route's comment), and re-running it here would
   // append a duplicate price-history row — the same reason /undo-receive gives
   // for not re-firing it on the way back.
+  // A return-only save is still a money event and still a stock event, so
+  // neither of the two `any_qty` gates below may be the only way to reach them.
+  // It is NOT a delivery, though: it must not move an Ordered PO to Delivered
+  // (nothing turned up) and it must not write a phantom row in the Received
+  // list — which is why `delivered` and the receipt record above stay gated on
+  // an arrived count while stock and Finance follow either kind of change.
+  const anyReturnChange = returns.increased > 0 || returns.decreased > 0;
   const delivered = any_qty && po.status === 'Ordered';
   if (delivered) {
     db.prepare("UPDATE purchase_orders SET status = 'Delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
     logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
                 { from: po.status, to: 'Delivered', scope: 'retail', via: 'receive' }, req.ip);
   }
-  if (any_qty) postRetailPOExpensesWithSource(po.id);
+  if (any_qty || anyReturnChange) postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail',
-                store_id: storeId, receipt_id: receipt?.receiptId ?? null }, req.ip);
+                store_id: storeId, receipt_id: receipt?.receiptId ?? null,
+                returned_lines, returned_units,
+                return_receipt_id: returnReceipt?.receiptId ?? null }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
              cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
              landed_lines_skipped: stock.landedSkipped,
              store_id: storeId,
              receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0,
+             returned_lines, returned_units,
+             return_receipt_id: returnReceipt?.receiptId ?? null,
              status: delivered ? 'Delivered' : po.status });
 });
 

@@ -239,6 +239,47 @@ addColumn('po_line_items', 'damaged_qty',     'REAL DEFAULT 0');
 // NULL is the normal state: a line that arrived in full has nothing to explain.
 addColumn('po_line_items', 'receipt_reason', 'TEXT');
 
+// ── Returns — goods that arrived, were accepted, and then went BACK ────────
+// The receiving path could say a delivery came up short, and it could say some
+// of it arrived broken. It could not say the one thing that happens after the
+// door closes: 15 kg of buckwheat flour taken in on the 25th, found wrong on
+// the 1st, and sent back to the supplier. Until now the only way to record
+// that was to edit the arrived count down to 0 — which asserts the flour never
+// turned up, contradicts the receipt that says it did, and leaves nothing
+// anywhere that can be counted as "how much did we send back to this supplier
+// this quarter".
+//
+// returned_qty IS CUMULATIVE AND ABSOLUTE, exactly like qty_received: it is how
+// much of this line has gone back in total, not how much went back on the last
+// save. Every consumer therefore reads one number and needs no history, and a
+// re-save of the same figure is a no-op rather than a second return. The
+// per-event movement lives in po_receipt_lines.returned_qty (below), which is
+// where "what went back on Tuesday" is answered.
+//
+// A RETURN COMES OUT OF THE UNITS THAT WERE ACCEPTED — qty_received minus
+// damaged_qty — and lib/po-returns.js holds that rule for every path that
+// touches it. Damaged units are deliberately NOT returnable through this
+// column: they never reached the shelf, they are already their own quantity,
+// and letting a return draw from both would need an allocation rule ("were
+// those 2 the broken ones?") that nothing on any screen could answer honestly.
+// A supplier making good on breakage is a credit against the damage, not a
+// return of stock, and it stays where it already was — out of scope, recorded
+// in docs/purchase-returns.md rather than guessed at here.
+addColumn('po_line_items', 'returned_qty',  'REAL DEFAULT 0');
+// WHY it went back. A fixed list validated server-side (lib/po-returns.js
+// RETURN_REASONS), the same discipline receipt_reason above uses, so "what do
+// we keep sending back to this supplier" is countable rather than readable one
+// note at a time. Required whenever returned_qty > 0 and cleared with it, so a
+// line can never claim a reason for a return it does not have.
+addColumn('po_line_items', 'return_reason', 'TEXT');
+// WHEN the most recent return was recorded, which is NOT the PO's date and
+// usually not the delivery's either — that gap is the whole point of the
+// feature. The money still books against purchase_orders.date (the expense
+// poster corrects the original purchase in place rather than opening a second
+// entry in a later month); this column is what lets a screen say "returned
+// 1 Sep" next to a purchase dated 25 Aug instead of silently restating it.
+addColumn('po_line_items', 'returned_at',   'DATETIME');
+
 // ── Receipts — one record per delivery actually taken in ────────────────────
 // A purchase order is what was ASKED FOR. A receipt is what TURNED UP, and the
 // two are not one-to-one: a three-supplier order arrives over three days, and
@@ -317,6 +358,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_receipt ON po_receipt_lines(receipt_id);
   CREATE INDEX IF NOT EXISTS idx_po_receipt_lines_line    ON po_receipt_lines(line_id);
 `);
+
+// ── What KIND of event a receipt row is ────────────────────────────────────
+// Added by ALTER rather than written into the CREATE TABLE above, so the two
+// halves of this schema keep ONE definition site each: the CREATE describes the
+// table as it shipped, every later column arrives here, and a fresh database
+// and a live one take the same path in the same order.
+//
+// 'receipt' — goods came IN. Everything written before this column existed, and
+// the default, which is why no backfill is needed or wanted.
+// 'return'  — goods went BACK OUT to the supplier. Its lines carry the units
+// that left in po_receipt_lines.returned_qty below.
+//
+// THE DELIVERY LIST READS THIS AT THE TOP OF ITS QUERY, and that is the reason
+// the column exists rather than the kind being derived like delivery-vs-
+// correction is (see DELIVERY_SQL, routes/retail-purchasing.js). That derivation
+// asks "is this the first receipt to cover this line", and a return is always
+// LATER than the delivery it takes back — so a return would derive as a
+// correction to the delivery, which is exactly the confusion this feature was
+// asked to end: a return must never read as "we were sent less than we thought".
+// The direction goods moved is not something a reader can infer from ordering;
+// it is a property of the event, so it is stamped at write time.
+addColumn('po_receipts', 'kind', "TEXT DEFAULT 'receipt'");
+// The units this ONE event sent back — a MOVEMENT, deliberately not the running
+// total its po_line_items twin holds. The two columns answer different
+// questions and neither can answer the other's: the line says how much of this
+// purchase we no longer own, this says what left the building on Tuesday. A
+// snapshot here would make every consumer diff consecutive rows to recover the
+// only number a return event actually has.
+addColumn('po_receipt_lines', 'returned_qty', 'REAL DEFAULT 0');
 // NOTE (multi-tenant): no tenant_id here on purpose. A receipt reaches its
 // tenant through po_id → purchase_orders.tenant_id, which is one indexed join
 // and cannot drift out of step with the order it belongs to. If purchasing is

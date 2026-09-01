@@ -1102,6 +1102,15 @@ function recvErrText(e){
   if(c==='reason_required')       return T('A short line needs a reason. Pick one and try again.','短少的项需要选择原因，请选择后重试。');
   if(c==='reason_not_applicable') return T('A reason belongs only on a line that came up short.','只有短少的项才需要填写原因。');
   if(c==='reason_invalid')        return T('That reason is not one this app knows. Reopen the order and try again.','该原因无效，请重新打开采购单后重试。');
+  /* Reachable from this screen without it ever offering a return: the desk
+     records one, and the next save from the door lowers the arrived count
+     below what has already gone back. The server refuses rather than letting a
+     line claim it sent back more than it took in, and the phone has to say so
+     in words the person at the door can act on. */
+  if(c==='return_exceeds_received') return T('Some of this line has already been returned to the supplier, so it cannot be received for less than that. Reopen the order to see the return.','该行已有部分退回供应商，实收数量不能少于已退数量。请重新打开采购单查看退货记录。');
+  if(c==='return_before_receipt')   return T('Nothing has arrived on that line yet, so nothing can go back.','该行尚未收货，无法退货。');
+  if(c==='return_reason_required')  return T('A return needs a reason.','退货需要填写原因。');
+  if(c==='return_reason_invalid')   return T('That return reason is not one this app knows. Reopen the order and try again.','该退货原因无效，请重新打开采购单后重试。');
   if(c==='store_locked')          return T('Stock from this order is already on another shelf, so it cannot be received here. Reopen the order to see where it is going.','本单库存已入到其他门店，无法在此收货。请重新打开采购单查看收货门店。');
   if(c==='store_not_found')       return T('That store is not available any more. Reopen the order and pick another.','该门店已不可用，请重新打开采购单另选。');
   if(c==='not_found')             return T('This order is no longer there. It may have been cancelled.','该采购单已不存在，可能已被取消。');
@@ -3424,7 +3433,8 @@ function settingsGroupCard(rows){
    argument about money at the one moment nobody can check it.
    ========================================================================== */
 const RCV_FLAGS=[{key:'all',en:'All',zh:'全部'},{key:'issues',en:'Issues',zh:'有异常'},
-  {key:'short',en:'Short',zh:'短少'},{key:'damaged',en:'Damaged',zh:'破损'},{key:'over',en:'Over',zh:'多收'}];
+  {key:'short',en:'Short',zh:'短少'},{key:'damaged',en:'Damaged',zh:'破损'},{key:'over',en:'Over',zh:'多收'},
+  {key:'returned',en:'Returned',zh:'退货'}];
 /* The three shipped reason codes, verbatim. These strings go on the wire
    (po_line_items.receipt_reason) — a prettier local set would be a second
    vocabulary to translate at the one boundary where a typo is silent and the
@@ -3433,6 +3443,15 @@ const RCV_FLAGS=[{key:'all',en:'All',zh:'全部'},{key:'issues',en:'Issues',zh:'
 const RCV_REASONS=[{key:'short_delivery',en:'Short delivery',zh:'少送'},
   {key:'wrong_item',en:'Wrong item',zh:'错货'},{key:'not_sent',en:'Not sent',zh:'未发货'}];
 const rcvReason=k=>{ const r=RCV_REASONS.find(x=>x.key===k); return r?T(r.en,r.zh):''; };
+/* Why goods went BACK, which is a different question to why fewer arrived —
+   and a different list, sharing only `wrong_item`. Verbatim on the wire for the
+   same reason RCV_REASONS is (lib/po-returns.js RETURN_REASONS), and read off
+   po_receipt_lines.receipt_reason, which on a return row carries the line's
+   return reason (recordReceipt, routes/purchases.js). */
+const RCV_RETURN_REASONS=[{key:'wrong_item',en:'Wrong item',zh:'错货'},
+  {key:'quality',en:'Quality',zh:'质量问题'},{key:'expired',en:'Expired',zh:'过期'},
+  {key:'over_delivery',en:'Over-delivered',zh:'多送'},{key:'not_needed',en:'Not needed',zh:'无需要'}];
+const rcvReturnReason=k=>{ const r=RCV_RETURN_REASONS.find(x=>x.key===k); return r?T(r.en,r.zh):''; };
 const rcvInt=v=>{ const n=parseInt(String(v==null?'':v).replace(/[^0-9]/g,''),10); return Number.isFinite(n)?n:0; };
 const rcvName=o=>(LANG==='en'?(o.name_en||o.name_cn):(o.name_cn||o.name_en))||'—';
 const rcvStoreName=o=>(LANG==='en'?(o.store_name_en||o.store_name_cn):(o.store_name_cn||o.store_name_en))||'';
@@ -3705,10 +3724,20 @@ function screenReceive(){
 }
 
 /* ── The Receiving screen: To receive / Received ─────────────────────────── */
+/* One pill per flag. A lookup rather than the ternary chain this used to be:
+   `returned` made it a fourth branch, and the chain's final `else` had quietly
+   become "anything I don't recognise is 多收", which a return would have
+   inherited. Unknown flags now render nothing instead of a wrong word. */
+function rcvFlagPill(f){
+  if(f==='short')    return pill('restock',T('Short','短少'));
+  if(f==='damaged')  return pill('refund',T('Damaged','破损'));
+  if(f==='over')     return pill('draft',T('Over','多收'));
+  if(f==='returned') return pill('refund',T('Returned','退货'));
+  return '';
+}
 function rcvFlagPills(flags){
   if(!flags||!flags.length) return pill('delivered',T('Clean','无异常'));
-  return flags.map(f=>f==='short'?pill('restock',T('Short','短少'))
-    :f==='damaged'?pill('refund',T('Damaged','破损')):pill('draft',T('Over','多收'))).join('');
+  return flags.map(rcvFlagPill).join('');
 }
 function rcvSupText(d){
   const s=d.suppliers||[];
@@ -3755,6 +3784,7 @@ function rcvDetailBody(d){
       ${sh?`<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">${LANG==='en'?(sh+' '+(l.unit||'')+' short'):('短少 '+sh+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReason(l.receipt_reason):''}</div>`:''}
       ${ov?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${LANG==='en'?(ov+' '+(l.unit||'')+' over'):('多收 '+ov+' '+(l.unit||''))}</div>`:''}
       ${+l.damaged_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(Math.round(+l.damaged_qty)+' '+(l.unit||'')+' damaged'):('破损 '+Math.round(+l.damaged_qty)+' '+(l.unit||''))}</div>`:''}
+      ${+l.returned_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(Math.round(+l.returned_qty)+' '+(l.unit||'')+' sent back'):('退回 '+Math.round(+l.returned_qty)+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReturnReason(l.receipt_reason):''}</div>`:''}
       ${corr}</div>`;}).join('');
   return `<div style="padding:0 16px 16px">
     <div style="display:flex;flex-wrap:wrap;gap:14px;padding:2px 0 10px">
@@ -3765,18 +3795,28 @@ function rcvDetailBody(d){
     ${d.note?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;padding-bottom:6px">${escAttr(d.note)}</div>`:''}
     ${lines}</div>`;
 }
+/* Deliveries and returns share this list, because they are the same journal:
+   what came in and what went back out, in the order it happened. They must not
+   share a face, though — a row that says "3 lines" over a returned-goods event
+   reads as another delivery, and telling those two apart at a glance is the
+   whole reason `kind` is stamped on the record (database.js). So a return says
+   which direction the goods went, in its icon and in its own line of text. */
 function rcvDeliveryRow(d,i){
   const open=state.rcvOpen===d.id;
+  const ret=d.kind==='return';
   const issues=(d.flags||[]).length;
+  const units=Math.round(+d.returned_units||0);
   return `${i?'<div class="sep"></div>':''}
     <button class="row" onclick="APP.cmd('rcvOpen',${d.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
-      <span class="rowico" style="${issues?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)'}">${ic(issues?'triangle-alert':'circle-check',18)}</span>
+      <span class="rowico" style="${ret?'background:var(--brick-tint);color:var(--brick-ink)':issues?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)'}">${ic(ret?'undo-2':issues?'triangle-alert':'circle-check',18)}</span>
       <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
         <span style="display:flex;align-items:baseline;gap:8px">
           <span class="num" style="font-size:15px;font-weight:500;flex:none">${fmtDay(d.received_at)}</span>
           <span style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvSupText(d))}</span></span>
         <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
-          [rcvStoreName(d),d.actor_label,(d.line_count||0)+' '+T(d.line_count===1?'line':'lines','项')].filter(Boolean).join(' · ')}</span>
+          [rcvStoreName(d),d.actor_label,
+           ret?(LANG==='en'?('sent back'+(units?' · '+units:'')):('已退回'+(units?' · '+units:'')))
+              :((d.line_count||0)+' '+T(d.line_count===1?'line':'lines','项'))].filter(Boolean).join(' · ')}</span>
         ${rcvMatched(d)}
         <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${rcvFlagPills(d.flags)}</span></span>
       <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic(open?'chevron-up':'chevron-down',18)}</span></button>

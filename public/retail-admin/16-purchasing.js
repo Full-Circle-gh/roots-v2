@@ -1540,6 +1540,7 @@
             <th class="right">${esc(T('Ordered', '订购'))}</th>
             <th>${esc(T('Arrived', '实收'))}</th>
             <th>${esc(T('Damaged', '破损'))}</th>
+            <th>${esc(T('Returned', '退货'))}</th>
             <th>${esc(T('Tracking no.', '运单号'))}</th>
             <th>${esc(T('Invoice', '发票'))}</th>
             <th class="right">${esc(T('In stock', '已入库'))}</th>
@@ -1570,7 +1571,30 @@
         ${(p.expenses || []).length
           ? `<div class="pu2-num">${p.expenses.map(x => `${esc(catLabel(x.category))} — ${money(x.amount)}`).join('<br>')}<div class="sub">${esc(T('Posted to Expenses', '已记入支出'))} · ${money(expTotal)}</div></div>`
           : `<div class="sub">${esc(T('Posts to Expenses when the order is placed.', '下单后自动记入支出。'))}</div>`}
+        ${returnedNote(p)}
       </div>`;
+  }
+  // WHAT THE RETURN DID TO THE MONEY, said on the PO rather than left for
+  // somebody to find in Finance.
+  //
+  // ALREADY NETTED OFF, not "will be": the figure above it is the rewritten
+  // expense, because postRetailPOExpenses restates this purchase in place
+  // rather than appending a credit. Saying "netted off" of a total that had not
+  // moved yet would be the one misreading that matters here, so the sentence is
+  // only ever rendered next to a total that has.
+  //
+  // AND IT SAYS THE DATE THE BOOKS USE, which is the PO's, not the return's.
+  // Flour bought on 25 August and sent back on 1 September lowers August. That
+  // is the deliberate choice (lib/po-returns.js, and the expense poster's own
+  // comment) and the operator is told it here rather than discovering it in a
+  // month-end report that no longer matches the one they printed.
+  function returnedNote(p) {
+    const items = p.items || [];
+    const units = items.reduce((n, i) => n + (Number(i.returned_qty) || 0), 0);
+    if (!units) return '';
+    const value = items.reduce((n, i) => n + (Number(i.returned_qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
+    return `<div class="sub" style="margin-top:6px">${esc(T('Returned to supplier', '已退回供应商'))} · ${money(value)}
+      — ${esc(T('already taken off the total above, dated to the order', '已从上方合计中扣除，记在采购单原日期'))} ${esc(p.date || '')}</div>`;
   }
   // The invoice picker and the Invoices screen's no-invoice mark are ONE fact,
   // not two. "None" here writes po_line_items.no_invoice_expected — the column
@@ -1624,11 +1648,75 @@
       ? ' ' + esc(T('and sync out to every sales channel.', ',并同步到各销售渠道。'))
       : '';
     const damagedClause = ' ' + esc(T('Damaged units are kept out of stock.', '破损数量不计入库存。'));
+    // Said only when the order has a return on it, and said in the same breath
+    // as the stock claim above because it is the same claim in reverse: what
+    // goes back comes off the same shelf the delivery filled, and off the
+    // expense the delivery posted. An operator who has just recorded a return
+    // should not have to open Finance to find out whether it counted.
+    const returnedClause = items.some(i => (i.returned_qty || 0) > 0)
+      ? ' ' + esc(T('Returned units come back off both.', '退货数量会从库存和支出中同时扣除。'))
+      : '';
     return `<div class="pu2-autonote">
         <span class="dot"></span>
-        <span>${stockClause}${channelClause}${damagedClause}</span>
+        <span>${stockClause}${channelClause}${damagedClause}${returnedClause}</span>
       </div>`;
   }
+
+  // ── The Returned box, and the reason that has to travel with it ──────────
+  //
+  // WHAT IT IS FOR, since the Arrived box can already be edited downwards and
+  // looks like it would do the job. It would not, and the difference is the
+  // whole feature: lowering Arrived asserts THE GOODS NEVER TURNED UP, which
+  // contradicts the receipt that says they did, erases the delivery's own
+  // history, and cannot be told apart afterwards from a supplier who short-
+  // shipped. A return says the opposite — 15 kg arrived, we accepted it, and on
+  // the 1st we sent it back — and both halves of that stay on the record.
+  //
+  // ON EVERY LINE, MATERIAL INCLUDED, for the same reason the Arrived box is
+  // (see its comment below): a material line moves no stock, but its return is
+  // still money — postRetailPOExpenses nets it out of the books with no kind
+  // branch — so a box only on product lines would leave the recordable half of
+  // a material return unrecordable.
+  //
+  // DISABLED UNTIL SOMETHING HAS ARRIVED. Nothing can go back that has not come
+  // in; the server refuses it (`return_before_receipt`) and the screen must not
+  // offer a number the save is going to reject.
+  //
+  // The reason picker appears with the first unit and hides again at zero. It
+  // is not optional decoration: the server requires a reason for any return, so
+  // that "what do we keep sending back to this supplier" is a countable
+  // question rather than one answered note by note.
+  function returnCell(it, canReceive) {
+    const arrived = it.qty_received != null;
+    const dis = canReceive && arrived ? '' : 'disabled';
+    const qty = (it.returned_qty || 0) > 0 ? it.returned_qty : '';
+    const sel = it.return_reason || '';
+    const opt = (v, en, cn) => `<option value="${v}"${sel === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`;
+    // `错货` is the pair the mobile receive screen already ships for
+    // wrong_item (RCV_REASONS, public/m.html) and is reused here rather than
+    // re-minted. The other four are locked in docs/tacet-delivery-vocabulary.md.
+    return `<span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rr pu2-num"
+              value="${qty}" ${dis} oninput="puReturnToggle(this)"></span>
+      <select class="pu2-input pu2-rrn" style="margin-top:4px;width:118px" ${dis} ${qty ? '' : 'hidden'}>
+        <option value="">${esc(T('Why?', '原因？'))}</option>
+        ${opt('wrong_item', 'Wrong item', '错货')}
+        ${opt('quality', 'Quality', '质量问题')}
+        ${opt('expired', 'Expired', '过期')}
+        ${opt('over_delivery', 'Over-delivered', '多送')}
+        ${opt('not_needed', 'Not needed', '无需要')}
+      </select>
+      ${it.returned_at ? `<div class="sub pu2-num">${esc(String(it.returned_at).slice(0, 10))}</div>` : ''}`;
+  }
+  // The picker follows the box: a return with no reason is refused by the
+  // server, so the operator must be able to see the reason the moment there is
+  // something to explain, and must not be left staring at one when there is not.
+  window.puReturnToggle = function (input) {
+    const sel = input.closest('td')?.querySelector('.pu2-rrn');
+    if (!sel) return;
+    const on = (parseFloat(input.value) || 0) > 0;
+    sel.hidden = !on;
+    if (!on) sel.value = '';
+  };
 
   function receiveRow(it, canReceive, poNoInvoice) {
     const applied = (it.stock_applied_qty || 0) > 0 ? `✓ ${it.stock_applied_qty}` : '—';
@@ -1653,6 +1741,7 @@
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
+      <td>${returnCell(it, canReceive)}</td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
       <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
@@ -1808,6 +1897,7 @@
   window.puReceiveSave = async function () {
     if (!_po) return;
     const receipts = [];
+    let missingReason = false;
     document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
       const ri = tr.querySelector('.pu2-ri');
       // Every row renders an Arrived box today, so this guard never fires. It
@@ -1818,6 +1908,9 @@
       // at the full ordered quantity (postRetailPOExpenses coalesces to qty).
       // Same shape as the `ri` guard above, which does fire.
       const rq = tr.querySelector('.pu2-rq');
+      const rr = tr.querySelector('.pu2-rr');
+      const rrn = tr.querySelector('.pu2-rrn');
+      const retQty = rr ? (parseFloat(rr.value) || 0) : 0;
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
         ...(rq ? { qty_received: rq.value === '' ? null : rq.value } : {}),
@@ -1826,14 +1919,35 @@
         // Absent on a PO-level no-invoice line — leave the field off entirely
         // there rather than sending a value the row never offered.
         ...(ri ? { invoice_status: ri.value } : {}),
+        // Returns. OMITTED ENTIRELY when the box is disabled — a line with
+        // nothing received has no return to state, and the same present-vs-
+        // absent rule that governs qty_received governs this: send the key and
+        // the server enforces the rule in both directions, omit it and the
+        // stored figure is left exactly as it stands. That is what lets this
+        // screen and the phone save the same order without either wiping what
+        // the other recorded.
+        ...(rr && !rr.disabled ? {
+          returned_qty: rr.value === '' ? 0 : rr.value,
+          return_reason: retQty > 0 ? (rrn ? rrn.value : null) : null,
+        } : {}),
       });
+      // Caught here as well as on the server, because the server's refusal
+      // costs a round trip and lands on a screen that has already forgotten
+      // which row was at fault. The server still enforces it — this is the
+      // courtesy, not the rule.
+      if (retQty > 0 && !(rrn && rrn.value)) missingReason = true;
     });
+    if (missingReason) {
+      toast(T('Pick a reason for the return', '请选择退货原因'), 'err');
+      return;
+    }
     try {
       const r = await api('/api/retail-admin/purchases/' + _po.id + '/receive', { method: 'PUT', body: { receipts } });
       const bits = [];
       if (r.stock_lines_adjusted) bits.push(T(`stock updated ×${r.stock_lines_adjusted}`, `库存已更新 ×${r.stock_lines_adjusted}`));
       if (r.missing_lines) bits.push(T(`${r.missing_lines} short`, `${r.missing_lines} 短缺`));
       if (r.damaged_lines) bits.push(T(`${r.damaged_lines} damaged`, `${r.damaged_lines} 破损`));
+      if (r.returned_lines) bits.push(T(`${r.returned_lines} returned`, `${r.returned_lines} 退货`));
       toast(T('Received ✓', '已收货 ✓') + (bits.length ? ' — ' + bits.join(' · ') : ''), 'ok', 4000);
       // A receipt that carried arrived counts now moves the order to Delivered
       // server-side, so the LIST behind this screen is stale too — its segment
@@ -1841,8 +1955,29 @@
       // the same way puSetStatus does, for the same reason.
       if (r.status && r.status !== _po.status) await loadPOs();
       puOpenPO(_po.id);
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { await puReceiveError(e); }
   };
+  // The server's refusals on a receive, in words. Every one of them is
+  // reachable by a screen that has drifted from the rule — an order received on
+  // a phone while this tab sat open is the ordinary case — so each says what to
+  // do rather than echoing a code nobody can act on. Mirrors the mobile
+  // screen's recvErrText (public/m.html), which answers the same codes.
+  const PU_RECEIVE_ERRORS = () => ({
+    return_before_receipt: T('Nothing has arrived on that line yet, so nothing can go back. Record the delivery first.',
+                             '该行尚未收货，无法退货。请先登记收货。'),
+    return_exceeds_received: T('That is more than the line accepted. A return can only send back what was taken in.',
+                               '退货数量超过该行实收数量。退货不能超过已接收的数量。'),
+    return_reason_required: T('Pick a reason for the return', '请选择退货原因'),
+    return_reason_invalid: T('That return reason is not one this app knows. Reopen the order and try again.',
+                             '该退货原因无效，请重新打开采购单后重试。'),
+    return_reason_not_applicable: T('A reason belongs only on a line with a return.', '只有退货的项才需要填写原因。'),
+    return_invalid: T('That returned quantity is not a number.', '退货数量无效。'),
+  });
+  async function puReceiveError(e) {
+    if (e && e.code === 'return_blocked') { await puShowReturnBlocked(e.data && e.data.blocking); return; }
+    const msg = e && e.code ? PU_RECEIVE_ERRORS()[e.code] : null;
+    toast(msg || e.message, 'err');
+  }
   // The invoice picker saves the moment it changes. It used to ride along on
   // Confirm delivery, so recording "this supplier issues no 发票" meant booking
   // stock and flipping the order to received — for goods still in transit. The
@@ -1894,6 +2029,28 @@
   // building .tdlg-scrim markup by hand skips injectStyle() and paints
   // unstyled divs (see public/tacet-dialogs.js).
   function puShowUndoBlocked(blocking) {
+    return puShowStockBlocked(blocking, {
+      title: T('Cannot undo this delivery', '无法撤销此次收货'),
+      msg: T('Some of these goods have already left stock, so this delivery cannot be undone — nothing was changed.',
+             '部分货品已出库，此次收货无法撤销 — 未作任何更改。'),
+    });
+  }
+  // The same refusal, asked of a RETURN instead of an undo, and it gets its own
+  // headline rather than borrowing `undoBlocked`. The shelf test behind the two
+  // is identical, but the sentences are not interchangeable: one says a
+  // delivery cannot be taken back, the other that goods cannot go back to the
+  // supplier, and an operator handed the wrong one goes looking for the wrong
+  // order. `returnBlocked` is locked in docs/tacet-delivery-vocabulary.md and
+  // carries both halves — refused, AND nothing was written — for the reason
+  // that document gives.
+  function puShowReturnBlocked(blocking) {
+    return puShowStockBlocked(blocking, {
+      title: T('Cannot record this return', '无法登记此次退货'),
+      msg: T('Some of these goods are no longer in stock, so they cannot be sent back — nothing was changed.',
+             '部分货品已不在库存中，无法退货 — 未作任何更改。'),
+    });
+  }
+  function puShowStockBlocked(blocking, words) {
     const rows = (blocking || []).map(b => {
       // nameLabel already escapes, and returns '—' when a line carries no name
       // at all — show the product id in that case rather than a bare dash.
@@ -1903,9 +2060,8 @@
       return `<div class="lc-row"><span class="g">${nm}</span><span class="pu2-num">${esc(T(`${b.short} short`, `${b.short} 短缺`))}</span></div>`;
     }).join('');
     const body = `
-      <h3 class="tdlg-title">${esc(T('Cannot undo this delivery', '无法撤销此次收货'))}</h3>
-      <p class="tdlg-msg">${esc(T('Some of these goods have already left stock, so this delivery cannot be undone — nothing was changed.',
-                                  '部分货品已出库，此次收货无法撤销 — 未作任何更改。'))}</p>
+      <h3 class="tdlg-title">${esc(words.title)}</h3>
+      <p class="tdlg-msg">${esc(words.msg)}</p>
       ${rows ? `<div class="pu2-lc-grid" style="margin-top:12px">${rows}</div>` : ''}`;
     const foot = `<button class="tdlg-btn tdlg-btn--primary" data-close>${esc(T('Close', '关闭'))}</button>`;
     const { scrim, closer, ready } = askCustom('tdlg-danger', body, foot, '[data-close]');
@@ -2047,7 +2203,7 @@
   function renderInvBody() {
     const host = document.getElementById('pu2-inv-body');
     if (!host) return;
-    const tot = (_invOut && _invOut.totals) || { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, line_count: 0 };
+    const tot = (_invOut && _invOut.totals) || { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, credit_due: 0, line_count: 0 };
     const aging = (_invOut && _invOut.aging) || { notDue: 0, dueSoon: 0, overdue: 0, overdueCount: 0 };
     const groups = (_invOut && _invOut.groups) || [];
     const filtered = !!(_invMonth || _invSearch);
@@ -2091,6 +2247,12 @@
         ${kpi('awaiting', tot.awaiting, T('chase these', '需跟进'))}
         ${kpi('no_invoice_expected', tot.no_invoice_expected)}
       </div>
+      ${tot.credit_due > 0.005 ? `
+      <div class="pu2-agingstrip">
+        <span class="pu2-mut">${esc(T('Returned after invoicing', '开票后退货'))}:</span>
+        <span class="pu2-pill amber"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(tot.credit_due)}</span>
+        <span class="pu2-mut">${esc(T('ask the supplier for a credit note', '需向供应商索取红字发票'))}</span>
+      </div>` : ''}
 
       ${(aging.overdue || aging.dueSoon || aging.notDue) ? `
       <div class="pu2-agingstrip">
@@ -2246,6 +2408,16 @@
           <span class="pu2-num">${money(l.amount)}</span>
           <span class="pu2-num pu2-mut">${l.covered > 0.005 ? esc(T('invoiced', '已开票')) + ' ' + money(l.covered) : ''}</span>
           <span class="pu2-pill ${m.cls}">${esc(m.label)}</span>
+          ${l.credit_due > 0.005
+            // A 发票 recorded for more than the line is now worth — nearly
+            // always goods invoiced before they went back. Reported, never
+            // reconciled away: the money is in the ledger and what closes the
+            // gap is a credit note from the supplier, not this screen editing
+            // an allocation. Same stance, and the same amber pill, the
+            // recorded-invoice row already takes on an allocation that
+            // overshoots its own header.
+            ? `<span class="pu2-pill amber" title="${esc(T('More has been invoiced than this line is now worth — goods went back after it was recorded', '该明细已开票金额高于当前应付金额 —— 开票后有退货'))}"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(l.credit_due)}</span>`
+            : ''}
           <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice ? ''
             : l.line_no_invoice
               ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore', '恢复'))}</button>`
