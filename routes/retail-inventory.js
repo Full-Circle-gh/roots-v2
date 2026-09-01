@@ -623,11 +623,31 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     name_en: s.name_en, name_cn: s.name_cn,
   }));
 
+  // THE WAY OUT. Quick Stock is a single-purpose app with no navigation, which
+  // is right for a role that only stocks — and a dead end for one that also
+  // takes deliveries. Kitchen staff who receive POs had the /stock icon on their
+  // phone and no route from it to Receiving, so the answer to "where do I book
+  // this delivery in" was "you can't, from here".
+  //
+  // Two conditions, and BOTH are the operator's real situation rather than a
+  // preference: they must hold purchasing:receive, and their role must not be
+  // stock-app-locked — server.js blocks /m outright for a locked role, so
+  // offering the door would open onto a redirect straight back here. Anyone
+  // else (a plain store clerk, a kitchen-realm staffer) gets no extra row.
+  let canReceive = false;
+  if (req.backendUser && req.caps && req.caps.has('purchasing:receive')) {
+    try {
+      const rec = require('../lib/roles').recordFor(req.backendUser.tenant_id, req.backendUser.role);
+      canReceive = rec ? !rec.stockAppOnly : true;
+    } catch (e) { canReceive = false; }
+  }
+
   res.json({
     success: true,
     data: {
       enabled,
       mode,                       // 'add' (kitchen) | 'recount' (warehouse)
+      can_receive: canReceive,    // offer the Receiving door in the account sheet
       user: {
         name: req.user?.display_name || req.user?.username || null,
         full_access: fullAccess,
