@@ -434,7 +434,7 @@
   function renderSubbody(key) {
     const el = document.querySelector('.rcp-subbody[data-t="' + key + '"]');
     if (!el) return;
-    if (key === 'ingredients') el.innerHTML = ingredientsTab();
+    if (key === 'ingredients') { el.innerHTML = ingredientsTab(); paintLineWarns(); }
     else if (key === 'steps') el.innerHTML = stepsTab();
   }
   // The Ingredients tab's missing-cost count, shown as a badge on its own tab
@@ -505,6 +505,7 @@
     try { applyCapGates(); } catch (_) {}
     paintSummary();
     paintBreakdown();
+    paintLineWarns();
   }
 
   // ── Details ──────────────────────────────────────────────────────────────
@@ -547,6 +548,48 @@
       </div>`;
   }
 
+  // ── Does THIS line's unit disagree with its material's stocking unit? ─────
+  //
+  // The rule is lib/recipe-cost.js's own (unitsReconcilable), read off the
+  // shared module rather than restated here — a second copy of the dimension
+  // table is exactly how a per-line mark and the recipe total end up
+  // disagreeing about which line was left out. With the module not yet loaded
+  // the answer is "no complaint": a screen that cannot check must not accuse.
+  //
+  // free_by_design outranks the unit question, exactly as buildLines() has it:
+  // a line that costs nothing costs nothing in any unit, and it is not excluded
+  // from anything, so there is nothing to warn about.
+  function lineUnitMismatch(l) {
+    if (!l || l.master_free) return false;
+    const c = COST();
+    if (!c || typeof c.unitsReconcilable !== 'function') return false;
+    return !c.unitsReconcilable(l.unit, l.master_unit);
+  }
+  // Every mismatched line, with the index the operator sees, for the sentence
+  // said at save time.
+  function mismatchedLines() {
+    return _lines
+      .map((l, i) => ({ l, i }))
+      .filter(x => lineUnitMismatch(x.l));
+  }
+  // What the mark says, in full, on the line it is attached to. The locked pair
+  // (docs/tacet-delivery-vocabulary.md, minted by Ash 2026-08-27) is UNIT
+  // MISMATCH · 单位不符 and it is the LABEL; this is the explanation behind it,
+  // and it has to name all three of the distinctions that document requires —
+  // the cost is UNKNOWN rather than missing, the LINE is at fault rather than
+  // the material, and the total is INCOMPLETE rather than wrong.
+  //
+  // CN PENDING on the explanation. No sourced Chinese exists for this sentence
+  // and composing one is forbidden (§30 rule 3), so it is English on both
+  // halves — the label above it is not, because that pair IS sourced.
+  function lineMismatchTitle(l) {
+    const t = `This line is counted in ${l.unit || '—'} but the material is stocked in `
+            + `${l.master_unit || '—'}. Those measure different kinds of thing and nothing is `
+            + `converted, so this ingredient's cost is NOT included in the recipe total. `
+            + `The material's own cost is fine — change the line's unit to fix it.`;
+    return T(t, t);
+  }
+
   // ── Ingredients ──────────────────────────────────────────────────────────
   // Drag-to-reorder mirrors the variant table's own pattern (09-products.js
   // vaDragStart/vaDragOver/vaDrop/vaDragEnd) — same grip gesture, same
@@ -564,6 +607,14 @@
         <div class="rcp-line-name">
           <div class="n">${esc(l.name_en || l.master_name_en || '')}</div>
           <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn ? ' · ' : ''}${esc(per)}${l.ingredient_id == null ? ' · ' + esc(T('material deleted', '物料已删除')) : ''}</div>
+          <!-- The mark, on the line it is about. Painted here rather than only
+               once per recipe because the summary pill names the CONDITION and
+               this names the ROW — an operator who reads UNIT MISMATCH on the
+               card and cannot see which of eleven lines caused it has been told
+               a fact he cannot act on. Same amber triangle as everywhere else
+               (I.warn), same colour, and it is emptied/refilled in place by
+               paintLineWarns() so a unit change does not repaint the tab. -->
+          <div class="rcp-line-warn" data-line="${idx}"></div>
         </div>
         <input class="rcp-input rcp-line-qty" type="number" min="0" step="any" value="${esc(l.qty)}"
                oninput="rcpLineField(${idx},'qty',this.value)" placeholder="${esc(T('qty', '数量'))}">
@@ -572,6 +623,16 @@
         </select>
         <input class="rcp-input rcp-line-note" type="text" value="${esc(l.notes || '')}"
                placeholder="${esc(T('Note', '备注'))}" oninput="rcpLineField(${idx},'notes',this.value)">
+        <!-- THE FIGURE STAYS, STRUCK THROUGH, when the line is excluded. It
+             was being printed as a plain ¥ that the batch total below did not
+             contain — the one number on this row that said the cost had been
+             counted. Struck rather than blanked: the same idiom
+             breakdownHtml() uses for a packaging figure that no longer counts,
+             and it keeps what the multiplication WOULD have said visible for
+             whoever has to judge whether the unit or the material is wrong.
+             The strike is a CLASS on the row, applied by paintLineWarns(), so
+             changing the unit re-marks the line without repainting the tab.
+             Nothing stored moves. -->
         <span class="rcp-line-cost">${hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—')}</span>
         <button type="button" class="rcp-line-rm" title="${esc(T('Remove', '移除'))}" onclick="rcpLineRemove(${idx})">${I.x}</button>
       </div>`;
@@ -787,10 +848,42 @@
     if (bk) bk.innerHTML = breakdownHtml(liveCost());
   }
 
+  // ── The per-line marks, refreshed in place ────────────────────────────────
+  //
+  // NOT A REPAINT. rcpLineField() runs on every keystroke in the qty and note
+  // boxes, and re-rendering the ingredients tab underneath a typing operator is
+  // the caret-loss failure that function's own comment exists to avoid. So this
+  // only ever writes into the one empty div each row already carries, and
+  // toggles one class on the row — the inputs, their values and the focus are
+  // never touched.
+  //
+  // A no-op when the tab is not mounted (the record renders all four bodies at
+  // once today, but this must not depend on that).
+  function paintLineWarns() {
+    const host = document.getElementById('rcp-lines');
+    if (!host) return;
+    host.querySelectorAll('.rcp-line-warn').forEach((el) => {
+      const idx = Number(el.getAttribute('data-line'));
+      const l = _lines[idx];
+      const row = el.closest('.rcp-line');
+      const bad = !!l && lineUnitMismatch(l);
+      if (row) row.classList.toggle('is-unit-mismatch', bad);
+      const want = bad
+        ? `<span class="rcp-line-warnic" title="${esc(lineMismatchTitle(l))}">${I.warn}</span>`
+          + `<span class="rcp-line-warntx" title="${esc(lineMismatchTitle(l))}">${esc(T('UNIT MISMATCH', '单位不符'))}</span>`
+        : '';
+      // Compared before writing so an unchanged row is not re-created on every
+      // keystroke — a title attribute being torn down mid-hover closes the
+      // tooltip the operator is reading.
+      if (el.innerHTML !== want) el.innerHTML = want;
+    });
+  }
+
   window.rcpRecompute = function () {
     _dirty = true;
     paintSummary();
     paintBreakdown();
+    paintLineWarns();
   };
 
   function breakdownHtml(c) {
@@ -1108,7 +1201,43 @@
       // upsert on an untouched recipe just stores the defaults it already had).
       await api('/api/retail-admin/recipes/' + recipeId + '/cost', { method: 'PUT', body: draftCostData() });
       _dirty = false;
-      toast(T('Saved', '已保存'));
+      // ── SAVED, AND HERE IS WHAT THE SAVE DID NOT COST ───────────────────
+      //
+      // THE SAVE IS NEVER BLOCKED AND THE UNIT IS NEVER CHANGED. A line in ml
+      // against a material stocked in g may be exactly what the kitchen does;
+      // what is not acceptable is that it was stored, silently left out of the
+      // cost (lib/recipe-cost.js, the §7 addendum — no conversion without a
+      // stated factor), and the operator told only "Saved". This says the
+      // second half out loud at the one moment he is looking.
+      //
+      // It NAMES the ingredients rather than counting them, because the fix is
+      // per line and a count sends him back to hunt for it. Three at most, then
+      // "+N more" — the marks on the rows themselves carry the rest, and they
+      // are still on screen when this fades.
+      //
+      // 'err' is the toast's LONG-LIVED variant (6s against 2.6s) and this
+      // needs the reading time; it is not a claim that the save failed — the
+      // sentence says Saved first, and the record behind it is written.
+      //
+      // CN PENDING on the sentence. UNIT MISMATCH · 单位不符 is the locked pair
+      // (docs/tacet-delivery-vocabulary.md) and is used as the label; the
+      // explanation around it has no sourced Chinese and composing one is
+      // forbidden (§30 rule 3), so it is English on both halves.
+      const bad = mismatchedLines();
+      if (bad.length) {
+        const names = bad.slice(0, 3)
+          .map(x => `${x.l.name_en || x.l.master_name_en || '?'} (${x.l.unit || '—'} vs ${x.l.master_unit || '—'})`)
+          .join(', ');
+        const more = bad.length > 3 ? ` +${bad.length - 3} more` : '';
+        const en = `Saved — but ${bad.length} ingredient${bad.length === 1 ? '' : 's'} `
+                 + `${bad.length === 1 ? 'is' : 'are'} NOT included in this recipe's cost: `
+                 + `${names}${more}. ${T('UNIT MISMATCH', '单位不符')} — the line's unit and the `
+                 + `material's stocking unit measure different kinds of thing, so nothing was `
+                 + `converted. The cost shown is incomplete.`;
+        toast(T(en, en), 'err');
+      } else {
+        toast(T('Saved', '已保存'));
+      }
       const fresh = await api('/api/retail-admin/recipes/' + recipeId);
       setRecord(fresh.data);
       paintRecord();
