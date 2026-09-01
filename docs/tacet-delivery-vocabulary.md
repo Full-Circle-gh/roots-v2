@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.7 · 2026-09-01 · adds a SIXTH amendment section, A cost that cannot be put back — purchasing, locking three pairs. It is the first refusal in this document that names a remedy the operator can carry out: the two before it state a condition and stop, while this one ends in an instruction, because the system cannot know the old price and a person can decide it. Shipped without it, the condition reached the operator as a bare error code on a screen that had already told them to do the thing it was refusing. v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.8 · 2026-09-01 · adds a SEVENTH amendment section, Confirming arrival per product — receiving, locking ten pairs. It is the first section in this document to separate WHAT THE GOODS DID from WHAT THE RECORD SAYS: `未到货` is the supplier not sending, `待确认` is nobody having answered yet, and the phone's receive screen had one word for both because it opened with every line pre-filled at the quantity ordered and one button that booked all of them. Two of its pairs are reused rather than minted — the receive screen's own `未到货` and the PO sheet's `全部到货` — and the whole-order button's body no longer sends the operator to a desktop for per-product work, which stopped being true when Receive became a screen on the phone. v1.7 · 2026-09-01 · adds a SIXTH amendment section, A cost that cannot be put back — purchasing, locking three pairs. It is the first refusal in this document that names a remedy the operator can carry out: the two before it state a condition and stop, while this one ends in an instruction, because the system cannot know the old price and a person can decide it. Shipped without it, the condition reached the operator as a bare error code on a screen that had already told them to do the thing it was refusing. v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -519,6 +519,72 @@ the operator can carry out, which is why only this one has a third line.
 
 Sentence case, no exclamation marks. The em dash before the second half of
 `costBlocked` is part of both strings and is not a substitute for a full stop.
+
+## Confirming arrival per product — receiving (LOCKED 2026-09-01)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the seventh such amendment, opened and closed 2026-09-01.
+
+WHY THE STRINGS ARE NEEDED. The phone's receive screen (`public/m.html`,
+`screenReceive`) opened with every line already showing the quantity ordered and
+one button underneath, so the only sentence it could say was THE WHOLE ORDER
+CAME. A buyer looking at a twelve-line order with one box on the step had no way
+to say which box: "I only see an option to mark that all the PO arrived." The
+screen now takes the answer PER PRODUCT, and a product nobody has answered is
+not sent at all — it stays outstanding on the order for the van that brings it.
+
+THE DISTINCTION EVERY PAIR HERE EXISTS TO HOLD. **Nothing arrived** and **nobody
+has said yet** are different facts, and the old screen had one word for both.
+`未到货` is a statement about the goods — the supplier did not send them, it is
+recorded, it books a zero and takes a reason. `待确认` is a statement about the
+RECORD — nothing has been claimed either way, nothing will be written, and the
+order keeps waiting. A screen that renders the first where it means the second
+tells the buyer their delivery is short when it has simply not been counted yet.
+
+TWO EXISTING PAIRS WERE REUSED RATHER THAN RE-MINTED, recorded so the search is
+not repeated. `Not arrived` / `未到货` is the receive screen's own pair and is
+unchanged — it is now on every product as well as on the supplier. `All arrived`
+takes the CN half of the PO sheet's `Everything arrived` / `全部到货`, which is
+the same claim about the same goods made one screen earlier.
+
+HOW THE CN HALVES WERE ARRIVED AT. Under the delegation the fourth amendment
+records, and built the same way — from words already shipped: `到货` is this
+feature's verb throughout (`未到货`, `全部到货`, `到货` on the order rows), and
+`待确认` is lifted from the payments and drops queues in the same app, where it
+already means "recorded nothing yet, still needs a person". `逐项收货` is the PO
+sheet's own button name, quoted in 「」 as that screen quotes screen names.
+
+**Ash should correct these if they read wrong to a Chinese operator; nothing
+else depends on the exact phrasing.**
+
+**THE PAIRS — minted 2026-09-01 by Ash's delegation, locked.**
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `lineArrived` | Arrived | 已到货 | The per-product answer, on the product. Its counter opens at the quantity ordered; pressing it again takes the answer back. The direct antonym of `未到货` beside it, and deliberately not `已送达` (that pair is a customer's parcel reaching them, a different subject). |
+| `groupAllArrived` | All arrived | 全部到货 | The same answer for one supplier's whole group, in one tap. CN reused from the PO sheet. |
+| `stateNotConfirmed` | Not confirmed | 待确认 | Supplier pill: nobody has answered any of this supplier's products. NOT `未到货` — nothing is being claimed about the goods. |
+| `statePartConfirmed` | Part confirmed | 部分确认 | Supplier pill: some of this supplier's products are answered and some are not. |
+| `statePartArrived` | Part arrived | 部分到货 | Row pill in To receive: this order has been received in part and still has products to come. About the GOODS, unlike the two above, which is why it is `到货` and not `确认`. |
+| `stillToCome` | %d of %d still to come | 还有 %d/%d 项待收 | Under a part-received order in To receive. Counts what is LEFT, which is the reason the row is in that list. |
+| `nothingConfirmed` | Nothing confirmed yet. Mark what arrived, product by product. | 尚未确认。请逐项标记到货情况。 | The summary card before anything has been answered. |
+| `markOneFirst` | Mark at least one product before recording. | 请先标记至少一项到货情况。 | Under the disabled record button. Says what would make it live; not a warning, and not amber. |
+| `restStayOnOrder` | %d products not answered yet — they stay on this order for a later delivery. | 还有 %d 项未确认 —— 将保留在本单，可在下次到货时收货。 | The last line of the summary. States what the save does NOT say, so a part-confirmed delivery does not read as one that dropped the rest. |
+| `stillToComeShort` | %d still to come | %d 项待收 | On the confirmation screen after a part delivery, beside the counts that were recorded. |
+
+**`restStayOnOrder` MUST CARRY BOTH HALVES** — what is unanswered, and that it
+stays. The first half alone reads as an accusation of unfinished work; the
+second is the promise that makes leaving products unanswered safe to do.
+
+The whole-order button on the PO sheet keeps its title `Everything arrived?` /
+`全部到货了吗？` and now names the other way in its body: `If only some of it
+came, close this and use Receive line by line — you can mark each product on
+its own.` / `如只到了部分商品，请返回并使用「逐项收货」，可逐项标记到货情况。` It used
+to send the operator to a desktop for per-line work, which stopped being true
+when Receive became a screen on the phone.
+
+Sentence case, no exclamation marks. `%d` marks a number the screen fills in; the
+EN halves take a plural `s` on their nouns and the CN halves do not.
 
 ## Deferred — recorded, not in scope of this lock
 
