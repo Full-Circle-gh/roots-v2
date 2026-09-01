@@ -1099,17 +1099,17 @@ reg('recvRetryLoad', ()=>{ if(state.recvId) loadReceive(state.recvId); });
 reg('recvBackToList', ()=>{ state.rcvSeg='received'; state.rcvTried=false; state.rcvToTried=false; APP.cmd('back'); loadDeliveries(true); });
 reg('recvStoreToggle', ()=>{ state.recvStoreOpen=!state.recvStoreOpen; render(); });
 reg('recvStore', id=>{ state.recvStore=Number(id); state.recvStoreOpen=false; render(); });
-/* Whole numbers only, and damage can never exceed what arrived — you cannot
-   break what did not turn up. Raising the count past the order clears the
-   reason: there is no shortfall left to explain.
+/* Fractions are kept (see rcvRound), and damage can never exceed what arrived —
+   you cannot break what did not turn up. Raising the count past the order clears
+   the reason: there is no shortfall left to explain.
    TOUCHING A COUNT CONFIRMS THE LINE. Somebody who types 3 into a line has
    said the product arrived as surely as somebody who pressed Arrived, and
    making them press it afterwards would be the app arguing with them. */
 function recvSet(id,recv,dmg,reason){
   const v=state.recvVals[id]; if(!v) return;
   v.on=true;
-  if(recv!=null) v.recv=Math.max(0,Math.min(9999,recv));
-  if(dmg!=null)  v.dmg=Math.max(0,dmg);
+  if(recv!=null) v.recv=rcvRound(Math.max(0,Math.min(9999,recv)));
+  if(dmg!=null)  v.dmg=rcvRound(Math.max(0,dmg));
   v.dmg=Math.min(v.dmg,v.recv);
   if(reason!==undefined) v.reason=reason;
   const it=(state.recvPo.items||[]).find(x=>String(x.id)===String(id));
@@ -1117,9 +1117,9 @@ function recvSet(id,recv,dmg,reason){
   state.recvSaveErr=null; render();
 }
 reg('recvQty', a=>{ const [id,d]=String(a).split('|'); recvSet(id,rcvVal(id).recv+Number(d)); });
-reg('recvQtySet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),rcvInt(a.slice(i+1))); });
+reg('recvQtySet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),rcvNum(a.slice(i+1))); });
 reg('recvDmg', a=>{ const [id,d]=String(a).split('|'); recvSet(id,null,rcvVal(id).dmg+Number(d)); });
-reg('recvDmgSet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),null,rcvInt(a.slice(i+1))); });
+reg('recvDmgSet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),null,rcvNum(a.slice(i+1))); });
 reg('recvDmgOpen', id=>{ state.recvDmg=state.recvDmg===String(id)?null:String(id); render(); });
 reg('recvReason', a=>{ const [id,r]=String(a).split('|'); const v=rcvVal(id); recvSet(id,null,null,v.reason===r?null:r); });
 /* ── Confirming one product ────────────────────────────────────────────────
@@ -3577,7 +3577,30 @@ const RCV_RETURN_REASONS=[{key:'wrong_item',en:'Wrong item',zh:'错货'},
   {key:'quality',en:'Quality',zh:'质量问题'},{key:'expired',en:'Expired',zh:'过期'},
   {key:'over_delivery',en:'Over-delivered',zh:'多送'},{key:'not_needed',en:'Not needed',zh:'无需要'}];
 const rcvReturnReason=k=>{ const r=RCV_RETURN_REASONS.find(x=>x.key===k); return r?T(r.en,r.zh):''; };
-const rcvInt=v=>{ const n=parseInt(String(v==null?'':v).replace(/[^0-9]/g,''),10); return Number.isFinite(n)?n:0; };
+/* QUANTITIES ARE FRACTIONAL. Herbs are bought by the tenth of a kilo — 0.1 kg
+   of coriander is an ordinary line, not a rounding error — and this screen used
+   to force every figure through Math.round/parseInt. That did not merely look
+   wrong: 0.1 kg rendered as "ordered 0 kg" beside a stepper pinned at 0, so the
+   line could not be received at all, and 0.5 kg of dill silently became 1. The
+   server has always stored these as REAL and read them with parseFloat
+   (routes/purchases.js), so the loss was ours alone, on the way in and out.
+   Three decimals is the resolution: finer than any kitchen scale reads, coarse
+   enough that 0.1+0.1+0.1 is 0.3 rather than binary floating point's answer. */
+const rcvRound=n=>Math.round((+n||0)*1000)/1000;
+/* Trailing zeros are noise on a count: 1 reads as "1", not "1.000". */
+const rcvFmt=n=>String(rcvRound(n));
+/* Typed entry. Digits and ONE decimal point survive — the second dot in
+   "1.2.3" is a slip of the thumb, not a second number, so it closes up to 1.23
+   rather than throwing the whole entry away. Anything that is not a number at
+   all reads as zero, never NaN. */
+const rcvNum=v=>{ const p=String(v==null?'':v).replace(/[^0-9.]/g,'').split('.');
+  const n=parseFloat(p.length>1?p[0]+'.'+p.slice(1).join(''):p[0]);
+  return Number.isFinite(n)?rcvRound(Math.max(0,n)):0; };
+/* What one press of [−]/[+] is worth. A line ordered in whole units steps by
+   one, as it always has; a line ordered in fractions steps by a tenth, which is
+   the granularity such a line was written in. Odd fractions (0.25) are reached
+   by typing — the keypad is a decimal one now. */
+const rcvStep=it=>Number.isInteger(rcvOrdered(it))?1:0.1;
 const rcvName=o=>(LANG==='en'?(o.name_en||o.name_cn):(o.name_cn||o.name_en))||'—';
 const rcvStoreName=o=>(LANG==='en'?(o.store_name_en||o.store_name_cn):(o.store_name_cn||o.store_name_en))||'';
 
@@ -3641,13 +3664,13 @@ function loadReceive(poId){
        received opens confirmed, holding its own counts, so re-opening a
        part-received order shows the work somebody already did. */
     const v={};
-    (d.items||[]).forEach(it=>{ const had=it.qty_received==null?null:Math.round(+it.qty_received||0);
+    (d.items||[]).forEach(it=>{ const had=it.qty_received==null?null:rcvRound(+it.qty_received||0);
       v[it.id]={
       on: had!=null,
-      recv: had==null ? Math.round(+it.qty||0) : had,
-      dmg: Math.round(+it.damaged_qty||0),
+      recv: had==null ? rcvRound(+it.qty||0) : had,
+      dmg: rcvRound(+it.damaged_qty||0),
       reason: it.receipt_reason||null,
-      was: {recv:had, dmg:Math.round(+it.damaged_qty||0), reason:it.receipt_reason||null} }; });
+      was: {recv:had, dmg:rcvRound(+it.damaged_qty||0), reason:it.receipt_reason||null} }; });
     state.recvVals=v; render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.recvErr=E('Could not open this order.','无法打开这张采购单。'); render(); });
@@ -3661,10 +3684,13 @@ function loadPoReceipts(poId){
 }
 
 /* ── Derived ─────────────────────────────────────────────────────────────── */
-const rcvOrdered=it=>Math.round(+it.qty||0);
+const rcvOrdered=it=>rcvRound(+it.qty||0);
 const rcvVal=id=>(state.recvVals&&state.recvVals[id])||{recv:0,dmg:0,reason:null,on:false,was:null};
-const rcvShort=it=>Math.max(0,rcvOrdered(it)-rcvVal(it.id).recv);
-const rcvOver=it=>Math.max(0,rcvVal(it.id).recv-rcvOrdered(it));
+/* Rounded after the subtraction as well as before it: 0.3 − 0.1 is not 0.2 in
+   binary, and an unrounded difference puts "0.19999999999999998 kg short" on
+   the glass. */
+const rcvShort=it=>rcvRound(Math.max(0,rcvOrdered(it)-rcvVal(it.id).recv));
+const rcvOver=it=>rcvRound(Math.max(0,rcvVal(it.id).recv-rcvOrdered(it)));
 /* Confirmed, and which way. `on` is the statement; the count says what it
    states. Nothing else in this screen may ask "did it arrive?" of a number
    alone — a zero on an unconfirmed line means "not spoken for", and a zero on
@@ -3796,14 +3822,15 @@ function rcvLine(it){
      the glass. */
   const open=on&&String(state.recvDmg)===String(it.id);
   const edited=v.recv!==ord;
+  const st=rcvStep(it);
   const qty=!on?'':`<div style="display:flex;align-items:center;gap:8px">
-    <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|-1')">${ic('minus',22,2)}</button>
-    <input class="qty${edited?' edit':''}" inputmode="numeric" pattern="[0-9]*" value="${v.recv}"
+    <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|${-st}')">${ic('minus',22,2)}</button>
+    <input class="qty${edited?' edit':''}" inputmode="decimal" value="${rcvFmt(v.recv)}"
       aria-label="${T('Arrived','已收')}" onfocus="this.select()" onchange="APP.cmd('recvQtySet','${it.id}|'+this.value)">
-    <button class="stepbtn" aria-label="${T('More','增加')}" onclick="APP.cmd('recvQty','${it.id}|1')">${ic('plus',22,2)}</button>
+    <button class="stepbtn" aria-label="${T('More','增加')}" onclick="APP.cmd('recvQty','${it.id}|${st}')">${ic('plus',22,2)}</button>
     <span style="font-size:14px;color:var(--text-secondary)">${escAttr(it.unit||'')}</span>
     <button class="dmgbtn${v.dmg>0?' on':''}" style="margin-left:auto${open&&!v.dmg?';border-color:var(--text-primary);color:var(--text-primary)':''}"
-      aria-label="${T('Damaged','破损')}" onclick="APP.cmd('recvDmgOpen','${it.id}')">${ic('package-x',20)}${v.dmg>0?`<span class="n">${v.dmg}</span>`:''}</button></div>`;
+      aria-label="${T('Damaged','破损')}" onclick="APP.cmd('recvDmgOpen','${it.id}')">${ic('package-x',20)}${v.dmg>0?`<span class="n">${rcvFmt(v.dmg)}</span>`:''}</button></div>`;
   /* Damage: one tap to the counter, every press writes, nothing to confirm —
      the count is already on the mark, so closing loses nothing. */
   const dmg=open?`<div class="rise" style="margin-top:10px;padding:12px 14px;border-radius:12px;background:var(--surface-raised)">
@@ -3812,24 +3839,24 @@ function rcvLine(it){
       <span style="flex:1;font-size:13.5px;font-weight:500">${T('How many damaged?','破损几件？')}</span>
       <button class="btn2" style="min-height:32px;padding:0 10px;font-size:12.5px;color:var(--text-secondary)" onclick="APP.cmd('recvDmgOpen','${it.id}')">${T('Done','完成')}</button></div>
     <div style="display:flex;align-items:center;gap:10px">
-      <button class="stepbtn sm" ${v.dmg<=0?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|-1')">${ic('minus',18,2)}</button>
-      <input class="qty sm" inputmode="numeric" pattern="[0-9]*" value="${v.dmg}"
+      <button class="stepbtn sm" ${v.dmg<=0?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|${-st}')">${ic('minus',18,2)}</button>
+      <input class="qty sm" inputmode="decimal" value="${rcvFmt(v.dmg)}"
         style="${v.dmg>0?'border-color:var(--brick);background:var(--brick-tint);color:var(--brick-ink)':''}"
         onfocus="this.select()" onchange="APP.cmd('recvDmgSet','${it.id}|'+this.value)">
-      <button class="stepbtn sm" ${v.dmg>=v.recv?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|1')">${ic('plus',18,2)}</button>
+      <button class="stepbtn sm" ${v.dmg>=v.recv?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|${st}')">${ic('plus',18,2)}</button>
       <span class="num" style="margin-left:auto;font-size:12.5px;color:var(--text-secondary);text-align:right">${
-        LANG==='en'?('of '+v.recv+' '+(it.unit||'')+'<br>arrived'):('共收 '+v.recv+' '+(it.unit||''))}</span></div></div>`:'';
+        LANG==='en'?('of '+rcvFmt(v.recv)+' '+(it.unit||'')+'<br>arrived'):('共收 '+rcvFmt(v.recv)+' '+(it.unit||''))}</span></div></div>`:'';
   /* The shortfall is STATED. Nobody is asked to work out the difference.
      Only once the line has been confirmed: an unanswered line is not short of
      anything, and saying so would be the screen filling in the answer again. */
   let note='';
   if(!on){ note=''; }
   else if(sh>0){ const txt=v.recv===0?T('Nothing arrived — what happened?','未到货 — 原因？')
-      :(LANG==='en'?(sh+' '+(it.unit||'')+' short of '+ord+' — what happened?'):('短少 '+sh+' '+(it.unit||'')+'（订购 '+ord+'）— 原因？'));
+      :(LANG==='en'?(rcvFmt(sh)+' '+(it.unit||'')+' short of '+rcvFmt(ord)+' — what happened?'):('短少 '+rcvFmt(sh)+' '+(it.unit||'')+'（订购 '+rcvFmt(ord)+'）— 原因？'));
     note=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--amber-ink)">${ic('triangle-alert',16)}<span class="num" style="font-size:13.5px">${txt}</span></div>`;
   } else if(ov>0){
     note=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text-secondary)">${ic('triangle-alert',16)}<span class="num" style="font-size:13.5px">${
-      LANG==='en'?(ov+' '+(it.unit||'')+' over ordered'):('多收 '+ov+' '+(it.unit||''))}</span></div>`;
+      LANG==='en'?(rcvFmt(ov)+' '+(it.unit||'')+' over ordered'):('多收 '+rcvFmt(ov)+' '+(it.unit||''))}</span></div>`;
   }
   /* Three reasons, 2-up. A horizontal scroller fits about two and a half at
      380px, which put the last one behind a sideways swipe nested inside a
@@ -3845,7 +3872,7 @@ function rcvLine(it){
       <span style="display:flex;flex-direction:column;min-width:0">
         <span style="font-size:15.5px;font-weight:500">${escAttr(rcvName(it))}</span>
         ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}</span>
-      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${ord} ${escAttr(it.unit||'')}</span></div>
+      <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
     ${answer}${qty}${dmg}${note}${reasons}</div>`;
 }
 /* The two whole-supplier answers, because those are the two things that happen
@@ -3879,9 +3906,9 @@ function rcvSummary(){
     <span class="num" style="font-size:13.5px;color:var(--text-secondary)">${txt}</span></div>`;
   let rows='';
   if(t.complete.length) rows+=row('var(--sage)',LANG==='en'?(t.complete.length+' line'+(t.complete.length>1?'s':'')+' complete'):(t.complete.length+' 项完好'));
-  t.short.forEach(it=>rows+=row('var(--amber)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvShort(it)+' '+(it.unit||'')+' short'):(escAttr(rcvName(it))+' — 短少 '+rcvShort(it)+' '+(it.unit||''))));
-  t.dmg.forEach(it=>rows+=row('var(--brick)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvVal(it.id).dmg+' '+(it.unit||'')+' damaged'):(escAttr(rcvName(it))+' — 破损 '+rcvVal(it.id).dmg+' '+(it.unit||''))));
-  t.over.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvOver(it)+' '+(it.unit||'')+' over ordered'):(escAttr(rcvName(it))+' — 多收 '+rcvOver(it)+' '+(it.unit||''))));
+  t.short.forEach(it=>rows+=row('var(--amber)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvFmt(rcvShort(it))+' '+(it.unit||'')+' short'):(escAttr(rcvName(it))+' — 短少 '+rcvFmt(rcvShort(it))+' '+(it.unit||''))));
+  t.dmg.forEach(it=>rows+=row('var(--brick)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvFmt(rcvVal(it.id).dmg)+' '+(it.unit||'')+' damaged'):(escAttr(rcvName(it))+' — 破损 '+rcvFmt(rcvVal(it.id).dmg)+' '+(it.unit||''))));
+  t.over.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvFmt(rcvOver(it))+' '+(it.unit||'')+' over ordered'):(escAttr(rcvName(it))+' — 多收 '+rcvFmt(rcvOver(it))+' '+(it.unit||''))));
   t.none.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — nothing arrived'):(escAttr(rcvName(it))+' — 未到货')));
   /* What this save does NOT say, stated as plainly as what it does. A line
      nobody answered is left exactly as the order has it: it stays outstanding,
@@ -3976,10 +4003,10 @@ function rcvCorrection(c,prev){
              before deliveries were recorded has no earlier row to sit beside,
              so the trail does not begin with a blank — it says what is known
              and what is not. */
-          ? (LANG==='en'?(escAttr(c.actor_label||T('Someone','某人'))+' changed this to '+c.qty_received)
-                        :(escAttr(c.actor_label||'某人')+'改为 '+c.qty_received))
-          : (LANG==='en'?(escAttr(prev.who||T('Someone','某人'))+' recorded '+prev.qty+', '+escAttr(c.actor_label||T('someone','某人'))+' changed to '+c.qty_received)
-                        :(escAttr(prev.who||'某人')+'登记 '+prev.qty+'，'+escAttr(c.actor_label||'某人')+'改为 '+c.qty_received))}</span>
+          ? (LANG==='en'?(escAttr(c.actor_label||T('Someone','某人'))+' changed this to '+rcvFmt(c.qty_received))
+                        :(escAttr(c.actor_label||'某人')+'改为 '+rcvFmt(c.qty_received)))
+          : (LANG==='en'?(escAttr(prev.who||T('Someone','某人'))+' recorded '+rcvFmt(prev.qty)+', '+escAttr(c.actor_label||T('someone','某人'))+' changed to '+rcvFmt(c.qty_received))
+                        :(escAttr(prev.who||'某人')+'登记 '+rcvFmt(prev.qty)+'，'+escAttr(c.actor_label||'某人')+'改为 '+rcvFmt(c.qty_received)))}</span>
       ${prev==null?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${T('The earlier count was recorded before deliveries were kept, so there is no record of who entered it.','此前的数量在收货记录启用之前登记，因此没有登记人记录。')}</span>`:''}
       ${c.note?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.45">${escAttr(c.note)}</span>`:''}
       <span class="num" style="font-size:11.5px;color:var(--text-secondary);opacity:.85">${fmtDay(c.received_at)} ${fmtTime(c.received_at)}</span></span></div>`;
@@ -3987,8 +4014,8 @@ function rcvCorrection(c,prev){
 function rcvDetailBody(d){
   const fact=(icon,txt)=>`<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-secondary)">${ic(icon,14)}${txt}</span>`;
   const lines=(d.lines||[]).map(l=>{
-    const ord=Math.round(+l.ordered||0), got=l.qty_received==null?null:Math.round(+l.qty_received);
-    const sh=got==null?0:Math.max(0,ord-got), ov=got==null?0:Math.max(0,got-ord);
+    const ord=rcvRound(+l.ordered||0), got=l.qty_received==null?null:rcvRound(+l.qty_received);
+    const sh=got==null?0:rcvRound(Math.max(0,ord-got)), ov=got==null?0:rcvRound(Math.max(0,got-ord));
     /* Corrections hang under the line they correct, oldest first. Each reads
        against the value before it — which is this line's own figure for the
        first correction, and the previous correction's for the rest. */
@@ -4002,11 +4029,11 @@ function rcvDetailBody(d){
     return `<div style="padding:11px 0;border-top:1px solid var(--border-default)">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
         <span style="font-size:14.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcvName(l))}</span>
-        <span class="num" style="flex:none;font-size:14px;${sh?'color:var(--amber-ink);font-weight:500':(ov?'color:var(--text-secondary)':'color:var(--text-secondary)')}">${got==null?'—':got} / ${ord} ${escAttr(l.unit||'')}</span></div>
-      ${sh?`<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">${LANG==='en'?(sh+' '+(l.unit||'')+' short'):('短少 '+sh+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReason(l.receipt_reason):''}</div>`:''}
-      ${ov?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${LANG==='en'?(ov+' '+(l.unit||'')+' over'):('多收 '+ov+' '+(l.unit||''))}</div>`:''}
-      ${+l.damaged_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(Math.round(+l.damaged_qty)+' '+(l.unit||'')+' damaged'):('破损 '+Math.round(+l.damaged_qty)+' '+(l.unit||''))}</div>`:''}
-      ${+l.returned_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(Math.round(+l.returned_qty)+' '+(l.unit||'')+' sent back'):('退回 '+Math.round(+l.returned_qty)+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReturnReason(l.receipt_reason):''}</div>`:''}
+        <span class="num" style="flex:none;font-size:14px;${sh?'color:var(--amber-ink);font-weight:500':(ov?'color:var(--text-secondary)':'color:var(--text-secondary)')}">${got==null?'—':rcvFmt(got)} / ${rcvFmt(ord)} ${escAttr(l.unit||'')}</span></div>
+      ${sh?`<div class="num" style="font-size:12.5px;color:var(--amber-ink);margin-top:3px">${LANG==='en'?(rcvFmt(sh)+' '+(l.unit||'')+' short'):('短少 '+rcvFmt(sh)+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReason(l.receipt_reason):''}</div>`:''}
+      ${ov?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${LANG==='en'?(rcvFmt(ov)+' '+(l.unit||'')+' over'):('多收 '+rcvFmt(ov)+' '+(l.unit||''))}</div>`:''}
+      ${+l.damaged_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(rcvFmt(l.damaged_qty)+' '+(l.unit||'')+' damaged'):('破损 '+rcvFmt(l.damaged_qty)+' '+(l.unit||''))}</div>`:''}
+      ${+l.returned_qty>0?`<div class="num" style="font-size:12.5px;color:var(--brick-ink);margin-top:3px">${LANG==='en'?(rcvFmt(l.returned_qty)+' '+(l.unit||'')+' sent back'):('退回 '+rcvFmt(l.returned_qty)+' '+(l.unit||''))}${l.receipt_reason?' · '+rcvReturnReason(l.receipt_reason):''}</div>`:''}
       ${corr}</div>`;}).join('');
   return `<div style="padding:0 16px 16px">
     <div style="display:flex;flex-wrap:wrap;gap:14px;padding:2px 0 10px">
@@ -4027,7 +4054,10 @@ function rcvDeliveryRow(d,i){
   const open=state.rcvOpen===d.id;
   const ret=d.kind==='return';
   const issues=(d.flags||[]).length;
-  const units=Math.round(+d.returned_units||0);
+  /* Kept as a NUMBER: the ' · N' suffix below hangs off its truthiness, and a
+     pre-formatted "0" is a truthy string that would print a returned count of
+     none. */
+  const units=rcvRound(+d.returned_units||0);
   return `${i?'<div class="sep"></div>':''}
     <button class="row" onclick="APP.cmd('rcvOpen',${d.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
       <span class="rowico" style="${ret?'background:var(--brick-tint);color:var(--brick-ink)':issues?'background:var(--amber-tint);color:var(--amber-ink)':'background:var(--sage-tint);color:var(--sage-ink)'}">${ic(ret?'undo-2':issues?'triangle-alert':'circle-check',18)}</span>

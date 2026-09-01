@@ -12,9 +12,15 @@ function absUrl(u) {
   return u;
 }
 
+// awaiting_restock is a PAID order held until the item it is waiting on is
+// back on the shelf — a pre-order line the shopper was told about at checkout,
+// or the "wait for restock" answer they gave the shortage modal. Without a
+// label here the chip fell through to `labels[o.status] || o.status` and showed
+// the raw column value, 'awaiting_restock', to the customer.
 const STATUS_LABELS_EN = {
   pending_payment: 'Awaiting payment',
   paid:            'Paid',
+  awaiting_restock: 'Awaiting stock',
   preparing:       'Preparing',
   dispatched:      'On the way',
   delivered:       'Delivered',
@@ -24,6 +30,7 @@ const STATUS_LABELS_EN = {
 const STATUS_LABELS_CN = {
   pending_payment: '待支付',
   paid:            '已支付',
+  awaiting_restock: '等待补货',
   preparing:       '准备中',
   dispatched:      '配送中',
   delivered:       '已送达',
