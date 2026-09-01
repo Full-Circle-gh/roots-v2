@@ -232,6 +232,25 @@ it: `.rcp-warn` is a RECIPE-RECORD pill (`retail-admin.css` `#tab-recipes-record
 .rcp-warn`) and there is no per-line variant of it, so the string paints once per
 recipe beside the other cost warnings, not once per offending line.
 
+**AMENDED 2026-09-01 — three more places, same pair, no new Chinese.** The note
+above is now historic: a per-line variant exists (`.rcp-line-warn`), and the pair
+is reused, not extended. Reuse of a locked pair in a new place needs no
+amendment; this records where, so the search is not repeated.
+
+| Where | File | What it qualifies |
+|---|---|---|
+| The offending ingredient row itself | `public/retail-admin/19-recipes.js` `paintLineWarns()` | Which line. The record pill names the condition once; the operator still had to guess which of eleven lines caused it. |
+| The recipe save | `public/retail-admin/19-recipes.js` `rcpSave()` | The moment the line is stored. The save is never blocked and the unit is never converted — it simply stops being silent. |
+| The Products list margin cell, and the product editor's cost pill | `public/retail-admin/09-products.js` `_paMarginWarn()` / `pdRecipeHealthPaint()` | That the cost the percentage is drawn from is short an ingredient — the flattering direction. |
+
+In all four places the LABEL is this pair, copied. The sentence around it is
+English on both halves and marked CN PENDING in the source, exactly as the build
+list's own strings are: rule 4 forbids composing the Chinese, and none is
+sourced. Each of those sentences keeps the three distinctions above — UNKNOWN
+rather than missing, the LINE at fault rather than the material, the total
+INCOMPLETE rather than wrong — and `scripts/test_recipe_unit_mismatch_warnings.js`
+asserts that (it fails the copy if it says "missing").
+
 **DO NOT CONFUSE WITH UNCONVERTED**, which is the §6 addendum's state for a recipe
 with a blank serving size. Different state, different screen region, different
 cause.

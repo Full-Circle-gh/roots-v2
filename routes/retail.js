@@ -23,7 +23,7 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 // recipe an operator just picked can actually yield a figure — the same
 // function applyProductCosts() decides that with, so the answer the modal
 // reports and the answer the cascade acts on can never disagree.
-const { computeRecipeCost } = require('../lib/recipe-cost');
+const { computeRecipeCost, unitsReconcilable } = require('../lib/recipe-cost');
 const { productionEnabled } = require('../lib/features');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
@@ -21047,6 +21047,15 @@ router.get('/api/retail-admin/products/:id/recipe-health', requireRetailAdmin, (
     // "what counts as missing" is exactly how the two screens end up disagreeing
     // about one recipe.
     missing: c.zeroCostIngredientLines,
+    // Lines whose unit measures a different kind of thing than their material's
+    // stocking unit (§7 addendum). NOT the same fact as `missing` and never
+    // folded into it: those materials are not missing a cost, they have a good
+    // one this line's quantity cannot be multiplied by. Same separation
+    // lib/recipe-cost.js keeps between the two counters, and the same one the
+    // recipe record's two pills keep on screen. This is what the Products list
+    // mark (markRecipeUnitMismatch) points at, so opening the product explains
+    // the mark rather than leaving it unexplained.
+    unreconciled: c.unreconciledUnitLines,
     ingredient_lines: c.ingredientLines,
     // What applyProductCosts() would actually write. null (or 0) means the
     // cascade writes nothing and the Cost field is frozen at whatever is there.
@@ -21839,6 +21848,83 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
   res.json({ success: true });
 });
 
+// ═══ A cost that is short some ingredients says so, in the list ════════════
+//
+// THE SAME SILENCE THE RECIPE SCREEN ALREADY BROKE, ON THE SCREEN THE FIGURE IS
+// SCANNED FROM. lib/recipe-cost.js has excluded a line whose unit measures a
+// different kind of thing than its material's stocking unit since the §7
+// addendum — 160 ml of an oil stocked in grams cannot be multiplied by a
+// per-gram price without a density, and there is no density to find. The recipe
+// record says so on its own card (the UNIT MISMATCH pill). The Products grid
+// printed the resulting margin with nothing beside it, and it is the higher
+// number of the two — a cost missing an ingredient always flatters.
+//
+// ONE QUERY FOR THE PAGE, WHICH IS WHY THIS IS NOT computeRecipeCost().
+// /products/:id/recipe-health says in so many words why it is not folded into
+// the list: costing one recipe is three queries, so a 200-row page would be
+// 600. This asks a narrower question — does this recipe hold ANY line whose
+// unit disagrees with its material's — and it is one statement for every recipe
+// on the page regardless of row count. The RULE is still lib/recipe-cost.js's
+// (unitsReconcilable, exported for exactly this), never a second copy of the
+// dimension table in SQL.
+//
+// WHOSE COST IT HAS TO BE. The mark qualifies the figure in the cell, so it is
+// only painted where the figure is the recipe's:
+//
+//   * Production off, or no recipe_id → recipeOwnsProductCost() is false and
+//     the number came from a purchase order or a person. Not marked.
+//   * A build list → §31's addendum: the list owns the cost outright and
+//     recipe_id is not consulted by anything. lib/product-build-cost.js already
+//     BLOCKS the whole product on an unreconciled build line, so that case
+//     shows an em dash rather than a flattering number and needs no mark here.
+//   * A bundle → applyBundleCost() has just overwritten unit_cost with the
+//     components' own. Marking it would be an alarm about a number this row
+//     does not show — the same reason pdApplyCostSource() suppresses the
+//     recipe-health pill on a bundle.
+//
+// free_by_design is honoured exactly as buildLines() honours it: a line that
+// costs a real zero is not excluded from anything, so it cannot be short.
+// Mutates `rows` in place; sets the flag only where it is true, so a row that
+// is fine carries no new key.
+function markRecipeUnitMismatch(db, rows) {
+  try {
+    if (!Array.isArray(rows) || !rows.length) return;
+    if (!productionEnabled(db)) return;
+    const withBuildLines = (() => {
+      try {
+        return new Set(db.prepare('SELECT DISTINCT product_id FROM product_build_lines').all().map(r => r.product_id));
+      } catch (e) { return new Set(); }   // a handle predating build lists
+    })();
+    const candidates = rows.filter(r => r.recipe_id != null && !r.is_bundle && !withBuildLines.has(r.id));
+    if (!candidates.length) return;
+    const recipeIds = [...new Set(candidates.map(r => r.recipe_id))];
+    const ph = recipeIds.map(() => '?').join(',');
+    // Every line of every recipe on this page, with the unit its material is
+    // stocked in. A LEFT JOIN so a line whose material was deleted still
+    // arrives: master_unit is then null, unitDimension() returns null for it,
+    // and unitsReconcilable() reads that as reconcilable — the same escape
+    // buildLines() takes, so the two agree about that row rather than the list
+    // inventing a mismatch the recipe screen does not show.
+    const lines = db.prepare(
+      `SELECT ri.recipe_id AS recipe_id, ri.unit AS unit,
+              i.unit AS master_unit, i.free_by_design AS master_free
+         FROM recipe_ingredients ri
+         LEFT JOIN ingredients i ON i.id = ri.ingredient_id
+        WHERE ri.recipe_id IN (${ph})`
+    ).all(...recipeIds);
+    const bad = new Set();
+    for (const l of lines) {
+      if (l.master_free) continue;
+      if (!unitsReconcilable(l.unit, l.master_unit)) bad.add(l.recipe_id);
+    }
+    if (!bad.size) return;
+    for (const r of candidates) if (bad.has(r.recipe_id)) r.recipe_unit_mismatch = 1;
+  } catch (e) {
+    // A check that could not run leaves the rows exactly as they were. The
+    // grid is the catalogue; it must not fail to load over a warning.
+  }
+}
+
 // List products for the CMS picker (Storefront Editor) + the retail-admin
 // Products tab. Returns the master fields the picker needs PLUS the
 // mini-app surface fields (keywords/tagline/description_blocks) so the
@@ -21959,6 +22045,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     if (r.is_bundle) applyBundleCost(r);
     return r;
   });
+  // Which of these rows show a cost that is missing ingredients, because the
+  // recipe behind it carries a unit its material is not stocked in.
+  markRecipeUnitMismatch(tdb(), rows);
   // Trailing-30-day units, batched in one extra query keyed off the rows just
   // fetched — only when asked (the command search palette's typeahead), never
   // on the full 500-row grid load. One query regardless of row count, not a
