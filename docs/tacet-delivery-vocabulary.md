@@ -299,6 +299,44 @@ order is now half-reversed, which is the exact anxiety the refusal exists to
 prevent. This follows the same requirement `cannotCheck` carries in the
 channel-mapping section above, and for the same reason.
 
+## Undo receiving clears the counts — purchasing (OPEN, awaiting a minted pair)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the fourth such amendment, and it is OPEN: the string
+below runs English on both halves in the product right now, because composing
+its Chinese is exactly what Rule 4 forbids and no existing pair covers it.
+
+WHY THE STRING IS NEEDED. Undo receiving now clears `qty_received` and
+`damaged_qty` on the order's lines, where it used to leave them in place. The
+old behaviour left an order sitting at Sent with every ARRIVED box holding a
+number, which reads as fully received — RPO-0001 went to Delivered and back
+three times on 2026-08-27 and looked received for days afterwards, and was
+reported as the system filling in counts by itself. An undo asserts the goods
+never arrived, so the counts going with it is the honest reading, and it is the
+same assertion `undoBlocked` above is built on.
+
+WHAT THE OPERATOR MUST BE TOLD, AND WHEN. Before they confirm, not after. The
+undo is already destructive of stock and says so; it is now also destructive of
+the counts, and an operator who expected to re-confirm without re-entering
+anything would otherwise find out by losing them. The sentence also carries the
+reassurance that the receipt itself survives — `po_receipts` /
+`po_receipt_lines` keep their own copy of every number, so the delivery stays
+readable in Receiving.
+
+**THE PAIR — EN minted, CN PENDING.**
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `undoClearsCounts` | The arrived and damaged counts are cleared — the delivery stays in Receiving. | *(pending)* | Second sentence of the Undo receiving confirmation. Says what the undo destroys and what it does not. |
+
+**BOTH HALVES ALWAYS**, for the same reason `undoBlocked` carries two: dropping
+the first hides what is about to be lost, and dropping the second leaves the
+operator believing the delivery record is gone too. Closing this amendment means
+minting the CN half and swapping it into
+`public/retail-admin/16-purchasing.js` (puUndoReceive), then deleting the
+CN PENDING note there.
+
+
 **THE PER-PRODUCT LINES BENEATH IT ARE NOT MINTED HERE.** Each blocking product
 renders under the headline using the pair already live on the purchasing screen,
 `${n} short` / `${n} 短缺` (`public/retail-admin/16-purchasing.js`, the receive

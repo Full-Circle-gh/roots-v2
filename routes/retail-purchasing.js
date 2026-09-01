@@ -2041,9 +2041,35 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
 // Undo an accidental "Delivered" — pulls back whatever stock this PO's own
 // receiving pushed in (reversing exactly stock_applied_qty per line, so a
 // correction made after the fact is never double-reversed) and drops the
-// order back to Ordered/Sent. qty_received/damaged_qty are left as they were:
-// the counts stay on screen so the next confirm just re-applies the same
-// delta, it doesn't ask the operator to re-enter them. Deliberately does NOT
+// order back to Ordered/Sent.
+//
+// qty_received AND damaged_qty ARE CLEARED, and that reverses an earlier
+// decision here. They used to be left in place so that a re-confirm re-applied
+// the same delta without the operator re-entering anything — a real
+// convenience, and the reason the old behaviour was chosen. What it cost was
+// worse: an order sitting at Sent with every ARRIVED box holding a number
+// reads as fully received, because the box shows the ordered qty as a grey
+// PLACEHOLDER when nothing is recorded and a solid VALUE when something is
+// (receiveRow, public/retail-admin/16-purchasing.js). RPO-0001 went to
+// Delivered and back three times on 2026-08-27 and has looked received ever
+// since; the buyer read it as the system filling counts on its own. An undo
+// asserts THE GOODS NEVER ARRIVED — the same assertion the refusal below is
+// built on — so leaving the counts behind contradicts the operation.
+//
+// The convenience is not lost: "All arrived as ordered" refills every line in
+// one click, which is where those numbers came from in the first place.
+//
+// NOTHING IS ERASED. po_receipts / po_receipt_lines keep their OWN
+// qty_received and damaged_qty per receipt (receiptLines() reads them and
+// never touches po_line_items), so the delivery that was taken and undone is
+// still in Receiving, with its numbers, exactly as before.
+//
+// Expenses follow honestly: postRetailPOExpenses sums COALESCE(qty_received,
+// qty), so a cleared line re-posts at the ORDERED quantity — which is what a
+// placed-but-undelivered order should carry, and the same figure it held
+// before it was ever marked Delivered.
+//
+// Deliberately does NOT
 // re-fire firePriceAlertsForPO (that already ran once on the way to
 // Delivered — re-running it on the way back would append a duplicate price
 // history row for no reason) or fire it again when re-confirmed later.
@@ -2063,6 +2089,11 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   // po.store_id for every order received before receipts existed.
   const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
   if (rev.blocked) return blockedResponse(res, rev.blocked);
+  // AFTER the refusal, never before it. A blocked reversal writes nothing at
+  // all — that is the promise undoBlocked makes in so many words
+  // (docs/tacet-delivery-vocabulary.md, LOCKED 2026-08-27) — and clearing the
+  // counts on the way to a 409 would break it.
+  db.prepare('UPDATE po_line_items SET qty_received = NULL, damaged_qty = 0 WHERE po_id = ?').run(po.id);
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
