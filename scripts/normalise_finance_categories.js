@@ -10,10 +10,31 @@
  *   node scripts/normalise_finance_categories.js --apply    # take backup, then write
  *
  * ── WHAT IT FIXES ─────────────────────────────────────────────────────────
- * Three columns hold one vocabulary as free text, and Finance groups by that
- * text: ingredients.accounting_category, po_line_items.expense_category and
- * expense_entries.category. Values that read identically on screen but differ
- * by one code point group as two categories in every report.
+ * Four columns hold one vocabulary as free text, and Finance groups by that
+ * text: ingredients.accounting_category, po_line_items.expense_category,
+ * expense_entries.category and income_entries.category. Values that read
+ * identically on screen but differ by one code point group as two categories
+ * in every report.
+ *
+ * ── WHAT THE DRY RUN REPORTS (decisions §36, the categories subsection) ────
+ * The plan is grouped BY THE VALUE BEING LANDED ON, not printed as a flat
+ * FROM → TO list, because the collapse is the thing being decided and it
+ * should not have to be spotted by eye. Each block names its sources, the
+ * rows and money moving from each, and what the line totals afterwards.
+ *
+ * Money is summed for the two LEDGER tables only. po_line_items' amount is
+ * qty × cost_per_unit and ingredients has none, so those report rows alone
+ * rather than a number nobody could reconcile against a Summary line.
+ *
+ * INCOME HAS NO MASTER VOCABULARY, AND THAT IS NOT A DEGRADED MODE. The
+ * picker list is the expense vocabulary — income categories live in each
+ * browser's localStorage and have never been synced (decisions §36). So an
+ * income value matches no master entry, falls to the glyph/whitespace repair
+ * branch, and is normalised IN PLACE. Two spellings of one category collapse
+ * because normalising makes them the same string; two genuinely different
+ * categories do not, because nothing snaps them together. Income is never
+ * snapped onto an expense category: the only way onto a master value is a
+ * spacingKey match, and that is the whole vocabulary's decision, not a guess.
  *
  * Measured on production 2026-08-24:
  *
@@ -74,10 +95,16 @@ const APPLY   = process.argv.includes('--apply');
 const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
 
 // column → its table, keyed for reporting.
+//
+// `money` marks the two LEDGER tables, the only ones with a single amount per
+// row. po_line_items' value is qty × cost_per_unit and ingredients has no
+// amount at all, so those two report rows only — an invented money column on
+// them would be a number nobody could reconcile against a Summary line.
 const TARGETS = [
   { table: 'ingredients',    column: 'accounting_category', label: 'ingredients.accounting_category' },
   { table: 'po_line_items',  column: 'expense_category',    label: 'po_line_items.expense_category' },
-  { table: 'expense_entries',column: 'category',            label: 'expense_entries.category' },
+  { table: 'expense_entries',column: 'category',            label: 'expense_entries.category', money: true },
+  { table: 'income_entries', column: 'category',            label: 'income_entries.category',  money: true },
 ];
 
 function main() {
@@ -104,6 +131,50 @@ function main() {
     console.error('value from the data is exactly what this script exists not to do.');
     process.exit(1);
   }
+  // ── Refuse on a colliding master list ────────────────────────────────────
+  // masterByKey is keyed on spacingKey, so two picker entries that differ only
+  // by spacing or case share a key and the Map silently keeps the LAST one.
+  // Every row matching that key would then snap onto an arbitrary winner with
+  // nothing in the output saying which, or that a choice was made at all.
+  //
+  // This is a HARD REFUSAL and it fires on the DRY RUN too: a plan computed
+  // against a colliding list is wrong whether or not anyone applies it, and a
+  // warning buried in a long dry run is a warning nobody reads. The fix is to
+  // clean the picker list, which is a human decision about the vocabulary.
+  //
+  // Null keys are skipped rather than compared — a picker entry that
+  // normalises to nothing is malformed, but it is not a collision, and
+  // masterByKey below is left exactly as it was so nothing about what the
+  // script DECIDES changes here.
+  const byKey = new Map();
+  for (const name of master) {
+    const k = spacingKey(name);
+    if (k === null) continue;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(name);
+  }
+  const collisions = [...byKey.entries()].filter(([, names]) => names.length > 1);
+  if (collisions.length) {
+    console.error('');
+    console.error('  REFUSING TO RUN — the picker list has entries that differ only by');
+    console.error('  spacing or case, so there is no single canonical value to snap onto.');
+    console.error('');
+    for (const [k, names] of collisions) {
+      console.error(`  shared key ${JSON.stringify(k)}`);
+      for (const n of names) {
+        console.error(`      ${JSON.stringify(n)}`);
+        console.error(`      ${hexOf(n)}`);
+      }
+      console.error('');
+    }
+    console.error('  No plan was produced. Resolve the duplicates in `categories`');
+    console.error("  (kind='accounting') — which of them is the real category is a");
+    console.error('  decision about the vocabulary, not one this script can make.');
+    console.error('');
+    db.close();
+    process.exit(1);
+  }
+
   const masterByKey = new Map();
   for (const name of master) masterByKey.set(spacingKey(name), name);
 
@@ -114,15 +185,20 @@ function main() {
   console.log('='.repeat(78));
 
   // ── Build the plan ───────────────────────────────────────────────────────
-  const plan   = [];   // { label, table, column, from, to, rows }
-  const review = [];   // { label, value, rows, why }
+  const plan   = [];   // { label, table, column, from, to, rows, money, why }
+  const review = [];   // { label, value, rows, money, why }   money: null off-ledger
   let totalRows = 0;
+
+  // label → (value → { n, m }). Used to price the target line a collapse lands
+  // on: the post-merge total is what moves PLUS what already sits there.
+  const census = new Map();
 
   for (const t of TARGETS) {
     let rows;
     try {
       rows = db.prepare(
-        `SELECT ${t.column} AS v, COUNT(*) AS n FROM ${t.table}
+        `SELECT ${t.column} AS v, COUNT(*) AS n, ${t.money ? 'COALESCE(SUM(amount),0)' : 'NULL'} AS m
+           FROM ${t.table}
           WHERE ${t.column} IS NOT NULL AND TRIM(${t.column}) <> ''
           GROUP BY ${t.column} ORDER BY n DESC`
       ).all();
@@ -130,6 +206,9 @@ function main() {
       console.log(`\n  ! ${t.label}: could not read (${e.message}) — skipped`);
       continue;
     }
+    const seen = new Map();
+    for (const r of rows) seen.set(r.v, { n: r.n, m: r.m });
+    census.set(t.label, seen);
     for (const r of rows) {
       const current = r.v;
       const key     = spacingKey(current);
@@ -140,15 +219,15 @@ function main() {
         const norm = normaliseCategory(current);
         if (norm !== current) {
           // Still worth repairing the bytes even with nothing to snap to.
-          plan.push({ ...t, from: current, to: norm, rows: r.n, why: 'glyph/whitespace repair only' });
+          plan.push({ ...t, from: current, to: norm, rows: r.n, money: r.m, why: 'glyph/whitespace repair only' });
           totalRows += r.n;
         } else {
-          review.push({ label: t.label, value: current, rows: r.n, why: 'not in the picker list — left alone' });
+          review.push({ label: t.label, value: current, rows: r.n, money: r.m, why: 'not in the picker list — left alone' });
         }
         continue;
       }
       if (canon === current) continue;                 // already canonical
-      plan.push({ ...t, from: current, to: canon, rows: r.n, why: 'snapped to the picker list' });
+      plan.push({ ...t, from: current, to: canon, rows: r.n, money: r.m, why: 'snapped to the picker list' });
       totalRows += r.n;
     }
   }
@@ -157,13 +236,40 @@ function main() {
   if (!plan.length) {
     console.log('\n  Nothing to change. Every value is already canonical.\n');
   } else {
-    console.log(`\n  ${plan.length} value(s) to rewrite, ${totalRows} row(s) total:\n`);
+    // Grouped by the value being landed on, because THE COLLAPSE IS THE THING
+    // BEING DECIDED. A flat FROM → TO list makes the reader notice a merge by
+    // eye, across pages of output; grouping states it.
+    const groups = new Map();
     for (const p of plan) {
-      console.log(`  ${p.label}   (${p.rows} row${p.rows === 1 ? '' : 's'})   — ${p.why}`);
-      console.log(`      FROM  ${JSON.stringify(p.from)}`);
-      console.log(`            ${hexOf(p.from)}`);
-      console.log(`      TO    ${JSON.stringify(p.to)}`);
-      console.log(`            ${hexOf(p.to)}`);
+      const k = `${p.label}\u0000${p.to}`;
+      if (!groups.has(k)) groups.set(k, { label: p.label, to: p.to, sources: [] });
+      groups.get(k).sources.push(p);
+    }
+    const collapses = [...groups.values()].filter(g => g.sources.length > 1);
+    console.log(`\n  ${plan.length} value(s) to rewrite, ${totalRows} row(s) total, ` +
+                `landing on ${groups.size} target(s) — ${collapses.length} of them a collapse:\n`);
+
+    for (const g of groups.values()) {
+      const movedRows  = g.sources.reduce((s, p) => s + p.rows, 0);
+      const hasMoney   = g.sources.some(p => p.money != null);
+      const movedMoney = hasMoney ? g.sources.reduce((s, p) => s + (p.money || 0), 0) : null;
+      const already    = (census.get(g.label) || new Map()).get(g.to) || { n: 0, m: 0 };
+
+      console.log(`  ${g.label}  →  ${JSON.stringify(g.to)}`);
+      console.log(g.sources.length > 1
+        ? `      ${g.sources.length} values COLLAPSE into this line · ${tally(movedRows, movedMoney)} moving`
+        : `      renamed in place, no collapse · ${tally(movedRows, movedMoney)} moving`);
+      console.log('');
+      for (const p of g.sources) {
+        console.log(`      FROM  ${JSON.stringify(p.from)}   ${tally(p.rows, p.money)}   — ${p.why}`);
+        console.log(`            ${hexOf(p.from)}`);
+      }
+      console.log(`      TO    ${JSON.stringify(g.to)}`);
+      console.log(`            ${hexOf(g.to)}`);
+      console.log('');
+      console.log(`      This line after the pass: ${tally(movedRows + already.n,
+        hasMoney ? movedMoney + (already.m || 0) : null)}` +
+        `   (${tally(already.n, hasMoney ? (already.m || 0) : null)} already on it)`);
       console.log('');
     }
   }
@@ -172,7 +278,7 @@ function main() {
     console.log('  ' + '-'.repeat(74));
     console.log('  REVIEW — untouched, needs a human decision:\n');
     for (const r of review) {
-      console.log(`  ${r.label}  ${JSON.stringify(r.value)}  (${r.rows} row${r.rows === 1 ? '' : 's'}) — ${r.why}`);
+      console.log(`  ${r.label}  ${JSON.stringify(r.value)}  ${tally(r.rows, r.money)} — ${r.why}`);
     }
     console.log('');
   }
@@ -228,6 +334,16 @@ function main() {
   for (const a of applied) { console.log(`    ${a.label}: ${a.changed} row(s)`); n += a.changed; }
   console.log(`\n  ${n} row(s) rewritten in one transaction. Backup: ${backup}\n`);
   db.close();
+}
+
+// "3 rows · ¥8,000.00", or "3 rows" where the table has no amount to sum.
+// money is null for ingredients and po_line_items by design — see TARGETS.
+function tally(rows, money) {
+  const r = `${rows} row${rows === 1 ? '' : 's'}`;
+  if (money == null) return r;
+  return `${r} · ¥${Number(money).toLocaleString('en-US', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  })}`;
 }
 
 // Bytes of a string, so two values that look identical can be told apart in the
