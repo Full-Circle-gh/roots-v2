@@ -516,5 +516,76 @@ section('L · the order total vs the lines it sits above');
   }
 }
 
+// ── M. The REAL payload, as EL20260901417897 actually carried it ────────────
+// Not an invented envelope: this is the money shape read back out of
+// eleme_order_import on the live database (scripts/diagnose_eleme_payload_shape.js),
+// trimmed to the fields that carry money. The file header's premise — that
+// Eleme's payload was never captured — stopped being true here, and this is the
+// capture.
+//
+// The order: ¥267 of goods, ¥1.50 packaging, ¥18 delivery, ¥269 paid by the
+// customer, ¥28.51 to the platform, ¥240.49 to us, and a ¥17.50 SHOP-FUNDED
+// PROMOTION. We recorded the promotion as the order total.
+section('M · the real payload — a promotion must not read as the bill');
+{
+  const payload = {
+    orders: [{
+      id: '8037806204802293000',
+      shopId: 1304930646,
+      statusDesc: '骑手已取餐',
+      createTime: 1788243799000,
+      foodInfo: {
+        deliveryFee: 18,
+        packageFee: 1.5,
+        groups: [{ items: [
+          { name: '中东鹰嘴豆泥', quantity: 1, price: 38,  total: 38,  shopPrice: 0, userPrice: 0, extCode: '1-10' },
+          { name: '香柠草康普茶', quantity: 1, price: 29,  total: 29,  shopPrice: 0, userPrice: 0, extCode: '2-70' },
+          { name: '洗手液三件套', quantity: 1, price: 200, total: 200, shopPrice: 0, userPrice: 0, extCode: 'P-65' },
+        ] }],
+      },
+      // settlementInfo comes BEFORE printDataInfo in the real payload, and
+      // merchantActivityInfo before customerPaidInfo inside it. That ordering is
+      // the entire bug: pick() walks objects and tries every candidate at each,
+      // so the bare 'total' on the promotion won against 'payAmount' one
+      // sub-object later. Keep the order — a fixture that tidies it would pass
+      // against the broken reader.
+      settlementInfo: {
+        merchantActivityInfo: { total: 17.5, feeGroup: [{ fees: [{ price: 0.5 }] }] },
+        platformServiceFeeInfo: { total: 28.51, feeGroup: [{ fees: [{ price: 28.51 }] }] },
+        expectedIncomeInfo: { total: 240.49 },
+        customerPaidInfo: { total: 269, feeGroup: [{ fees: [{ price: 269 }] }] },
+        subTotalFeeInfo: { total: 269 },
+        orderTotalPrice: 268.5,
+      },
+      printDataInfo: {
+        customerActualFee: 17.5,
+        deliveryFeeTotal: 18,
+        payAmount: 269,
+        ticketPrintContext: { totalAmount: 286 },
+        activities: [{ amount: -12, orderAllPartiesPartList: [{ partAmount: 12 }] }],
+      },
+    }],
+  };
+  const o = b.parseOrderPayload(payload)[0];
+  ok('the customer-paid total is the order total', o.total === 269, o.total);
+  ok('...read from the field that holds it', o.totalKeyPath === 'settlementInfo.customerPaidInfo.total', o.totalKeyPath);
+  ok('the ¥17.50 promotion is NOT the total', o.total !== 17.5, o.total);
+  ok('the three lines still add up to the goods', o.itemsTotal === 267, o.itemsTotal);
+  ok('decimals present → read as 元, not 分', o.moneyDivisor === 1, o.moneyDivisor);
+  ok('the promotion lands where a promotion belongs', o.shopDiscount === 17.5, o.shopDiscount);
+  ok('commission is no longer null on a live order', o.commission === 28.51, o.commission);
+  ok('merchant income is no longer null either', o.merchantIncome === 240.49, o.merchantIncome);
+  ok('packaging fee read', o.packagingFee === 1.5, o.packagingFee);
+  ok('delivery fee read', o.deliveryFee === 18, o.deliveryFee);
+  ok('items ¥267 vs total ¥269 is agreement, not a gap',
+    Math.abs(o.itemsTotal - o.total) <= Math.max(5, o.itemsTotal * 0.3), o.total - o.itemsTotal);
+
+  // Priority beats position: the same payload with the promotion moved to the
+  // front of the whole envelope must still read 269.
+  const shuffled = { orders: [Object.assign({ settlementInfo: payload.orders[0].settlementInfo }, payload.orders[0])] };
+  ok('a promotion first in key order still loses to the paid total',
+    b.parseOrderPayload(shuffled)[0].total === 269, b.parseOrderPayload(shuffled)[0].total);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
