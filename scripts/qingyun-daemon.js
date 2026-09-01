@@ -272,27 +272,53 @@ function heartbeatTick(storeCode) {
   }
 }
 
+// Mirror tables that record a marketplace's own order number against the retail
+// order we created for it, newest channel last. Table and column names only —
+// interpolated into SQL below, so this list is the ONLY place they may come from.
+const CHANNEL_IMPORT_KEYS = [
+  ['meituan_order_import', 'meituan_order_no'],
+  ['eleme_order_import',   'eleme_order_id'],
+];
+
 // ── Match a Qingyun delivery to a roots order ──────────────────────────────────
 // Primary: the roots order_no (e.g. R2026...) stamped into the 备注/userRemark at
 // dispatch. Fallback: the recipient phone against a recent non-delivered roots order.
 // Returns retail_orders.id or null. Never throws.
 function matchRetailOrderId(d) {
   try {
-    // Channel deliveries dispatched THROUGH Qingyun (Meituan's own delivery is
-    // fulfilled by a Qingyun rider) carry the upstream platform order number as
-    // channelOrderId. Our Meituan mirror stores that number in
-    // meituan_order_import.meituan_order_no → retail_order_id, so an exact match
-    // links the rider to the right mirrored order. This is the reliable key for
-    // Meituan: the 备注/phone fallbacks below don't apply — Meituan masks the
-    // customer phone and never stamps our order ref into the 备注. A contains-
-    // match backs up the exact one in case the aggregator wraps our id with a
-    // prefix/suffix; meituan_order_no is a long unique id so it won't over-match.
+    // Channel deliveries dispatched THROUGH Qingyun (a marketplace's own delivery
+    // is fulfilled by a Qingyun rider) carry the upstream platform order number as
+    // channelOrderId, and each channel's mirror table stores that number against
+    // the retail order it created — so an exact match links the rider to the right
+    // mirrored order. This is the reliable key for a marketplace: the 备注/phone
+    // fallbacks below don't apply — these platforms mask the customer phone and
+    // never stamp our order ref into the 备注. A contains-match backs up the exact
+    // one in case the aggregator wraps our id with a prefix/suffix; both are long
+    // unique platform ids, so they won't over-match.
+    //
+    // Eleme was missing here, which is the whole reason an Eleme order showed no
+    // rider, no ETA countdown and no map while Meituan showed all three. Its
+    // deliveries do not announce themselves as Eleme either: Qingyun files them
+    // under the consumer-facing brand (淘宝闪购·餐饮 — Alibaba runs Taobao Instant
+    // Commerce on Eleme's merchant and rider network), so no channel_name test
+    // would ever have found them. The platform order number is what identifies
+    // one, which is exactly what this lookup keys on — channel_name is never read
+    // here, and deliberately so.
+    //
+    // Per-table try/catch: a tenant DB missing one mirror table must skip that
+    // channel, NOT abort the whole match. Without it a missing table would throw
+    // past the 备注 and phone fallbacks below and unlink every first-party order
+    // too — a much bigger failure than the one this branch exists to fix.
     const chanNo = String(d.channelOrderId || '').trim();
     if (chanNo.length >= 6) {
-      const byChan =
-           db.prepare('SELECT retail_order_id FROM meituan_order_import WHERE meituan_order_no = ? AND retail_order_id IS NOT NULL').get(chanNo)
-        || db.prepare("SELECT retail_order_id FROM meituan_order_import WHERE ? LIKE '%' || meituan_order_no || '%' AND retail_order_id IS NOT NULL ORDER BY rowid DESC LIMIT 1").get(chanNo);
-      if (byChan && byChan.retail_order_id) return byChan.retail_order_id;
+      for (const [table, col] of CHANNEL_IMPORT_KEYS) {
+        try {
+          const byChan =
+               db.prepare(`SELECT retail_order_id FROM ${table} WHERE ${col} = ? AND retail_order_id IS NOT NULL`).get(chanNo)
+            || db.prepare(`SELECT retail_order_id FROM ${table} WHERE ? LIKE '%' || ${col} || '%' AND retail_order_id IS NOT NULL ORDER BY rowid DESC LIMIT 1`).get(chanNo);
+          if (byChan && byChan.retail_order_id) return byChan.retail_order_id;
+        } catch (e) { log('match', `${table} lookup skipped: ${e.message}`); }
+      }
     }
     const remark = String(d.userRemark || '');
     // Our own pushes stamp `<order_no> · <slot>` into the 备注, so the FIRST token is

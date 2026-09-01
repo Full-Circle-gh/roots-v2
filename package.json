@@ -39,6 +39,7 @@
     "test:po-supersede": "node scripts/test_po_supersede.js",
     "test:undo-receive": "node scripts/test_undo_receive_clears.js",
     "test:proxy": "node scripts/test_proxy_failover.js",
+    "test:qingyun-match": "node scripts/test_qingyun_order_match.js",
     "test:queue-window": "node scripts/test_meituan_queue_window.js",
     "test:queue-stall": "node scripts/test_meituan_queue_stall.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
