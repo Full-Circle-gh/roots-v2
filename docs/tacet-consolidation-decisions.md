@@ -1,10 +1,14 @@
-# Tacet shared-core consolidation — decisions record, v4.102
+# Tacet shared-core consolidation — decisions record, v4.104
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.104 — **§36 gains the location dimension: an expense MAY carry a location, blank means the whole business, and the per-location figure is called CONTRIBUTION rather than profit.** Revenue and cost of goods already carry a location because they come from orders; operating expenses carry none today. **The rejected options are recorded with the arithmetic that rejected them**, because each fails in a way that looks like success: no location at all reports Tianhe losing ¥3,000 on a month it made ¥18,000, with nothing on screen admitting the filter did not work; a required location forces an accountant's ¥2,000 onto one shop and makes both figures wrong; and apportioning shared costs by a rule produces a complete-looking per-shop profit from an opinion that cannot be checked, which would mean shipping a settings screen for a judgement call and rendering its output as a measurement. **CONTRIBUTION is a guard, not a preference** — the word exists so that a later session cannot make the label honest by building the apportionment option. Single-location tenants see no filter, no excluded-costs line and the word Net; the dimension is invisible until a second location exists. Column shape is explicitly still open. Three open items remain on §36.
+
+2026-09-01 · v4.103 — **§36 records that `routes/finance.js` will NOT be given `tdb()`: its writes are blocked at the route layer and the file is left to die with the kitchen app.** All thirteen routes run on the global handle with no tenant handling anywhere, which is a defect and not an open question — **the decision is about where the fix lands, not whether the rule applies.** Fixing a file scheduled for deletion spends the work twice; Tacet's Finance routes are built on `tdb()` from their first commit, so there is no migration to forget. **Blocking writes and leaving reads is deliberate and its sufficiency rests on §22:** no second tenant may be onboarded before stage 5, so the read half has no reachable victim, while the write half is the half that would corrupt a ledger if that ordering ever failed. **Explicitly not a precedent** — the carve-out requires both a scheduled death and a live replacement under construction; a route with neither is fixed, not blocked. Four open items remain on §36.
 
 2026-09-01 · v4.102 — **§36 gains the counter-sales decision and loses the open item it closes: a till or market-stall sale IS an order.** It writes to the order record with line items and `unit_cost_at_sale`, exactly as the four online channels do. **The rejected option is rejected for a specific reason, not on principle:** a typed-in daily total is less work and reproduces the fault §36 exists to fix — on a ¥3,500 day the ¥600 of counter trade would reach the revenue line and nothing else, giving Finance and Products two different accounts of the same day. **Second-order consequence, recorded because it was not the point of the decision:** with counter sales writing orders, `sales_entries` has no remaining live writer, so its §22 stage 8 retirement is unblocked — unblocked, not scheduled. Five open items remain on §36.
 
@@ -4565,12 +4569,53 @@ The rejected alternative was a typed-in daily total on the Transactions list —
 
 **Consequence for `sales_entries`.** With this decided, every one of the six channels writes orders, and the table has no remaining live writer. Its retirement under §22 stage 8 is now unblocked. Retirement itself is NOT scheduled here.
 
+### `routes/finance.js` is not fixed — it is blocked and left to die — DECIDED 2026-09-01
+
+`routes/finance.js` has no tenant handling anywhere. All thirteen routes use the module-level global database handle; none calls `tdb()`. A second tenant reaching these routes would read and write Roots' ledger.
+
+This is a defect, not a design question, and the rule for it already exists. It is nonetheless NOT being fixed in place, and the reason is sequencing rather than severity: the file serves the kitchen app, which is being retired, and Tacet's own Finance routes do not exist yet. Correcting thirteen routes in a file scheduled for deletion spends the effort twice and lands new code in something leaving.
+
+**What ships instead.** The write routes are blocked at the route layer, using the same middleware pattern already applied to the thirteen kitchen cost-write routes. Reads are left alone.
+
+**Why blocking writes is sufficient and reads are not urgent.** The exposure is a second tenant, and §22 already forbids onboarding one before stage 5 completes. So the read half of the leak has no reachable victim today, while the write half is what would corrupt a ledger if the ordering assumption ever failed. The cheap half is done; the expensive half is deleted rather than repaired.
+
+**This is not a precedent for leaving `tdb()` gaps open.** It applies to code with a scheduled death and a live replacement being built. Any route without both of those is fixed, not blocked.
+
+**Tacet's Finance routes are built on `tdb()` from the first commit.** There is no migration step here to forget, because there is nothing to migrate — the correct version is the only version that will ever exist.
+
+### An expense may carry a location, and blank means the whole business — DECIDED 2026-09-01
+
+Revenue and cost of goods already carry a location, because they come from the order record. Operating expenses do not, and today neither ledger table can record one at all.
+
+**The decision: location is an optional field on an expense. Blank means the cost belongs to the business, not to any one place.**
+
+Worked on Roots, one month. Revenue ¥100,000 (Tianhe ¥60,000, Yuexiu ¥40,000), cost of goods ¥40,000 (¥24,000 / ¥16,000). Typed expenses: Tianhe rent ¥8,000 and wages ¥10,000; Yuexiu rent ¥12,000 and wages ¥7,000; an accountant's fee of ¥2,000 belonging to neither.
+
+- Tianhe: ¥36,000 gross profit − ¥18,000 = **¥18,000**
+- Yuexiu: ¥24,000 gross profit − ¥19,000 = **¥5,000**
+- Business-wide: **−¥2,000**
+- ¥18,000 + ¥5,000 − ¥2,000 = **¥21,000**, the unfiltered net.
+
+The three views reconcile. That is the test the rejected options fail.
+
+**Why the alternatives were rejected.**
+
+*No location at all, as today.* Filtering the Summary to Tianhe would show its ¥60,000 revenue against all ¥39,000 of expenses — Yuexiu's rent included — and report a ¥3,000 loss on a shop that made ¥18,000. **A filter that silently returns a wrong answer is worse than no filter**, because nothing on the screen says it failed.
+
+*Location required on every expense.* The accountant's ¥2,000 would have to be forced onto one shop, making that shop ¥2,000 too expensive and the other ¥2,000 too cheap. The form would be demanding a fact that does not exist.
+
+*Apportion shared costs across locations by a rule.* Sixty-forty on revenue gives Tianhe ¥1,200 and Yuexiu ¥800, and every shop then shows a complete-looking profit. Rejected because the rule is an opinion — one business splits by revenue, another by floor area, another by headcount — and the resulting figure cannot be checked against anything. It would mean building a settings screen for a judgement call and then presenting its output as a measurement.
+
+**The per-location figure is called CONTRIBUTION, never profit.** Profit implies business-wide costs have been taken off, and they have not. The filtered view says Contribution and states the amount it excludes; only the unfiltered view says Net. **The word is the guard against a later session building the apportionment option in order to make the label true.**
+
+**A single-location tenant sees none of this.** No location filter, no excluded-costs line, and the last row reads Net. The dimension exists in the data and is invisible in the interface until a second location does.
+
+**Where the column goes, and its shape, are NOT decided here.** This decides that the dimension exists, what blank means, and what the figure is called.
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
 
-- The location dimension on the ledger: column, join, or something else.
-- `tdb()` scoping. `routes/finance.js` uses the global handle on all thirteen routes and has no tenant handling anywhere.
 - Whether PO-derived expense rows remain projections that are deleted and recomputed on every PO status change.
 - Expense and income category normalisation. `routes/finance.js` never calls `storeCategory`, so manual entries write raw client text with no normalisation at all.
 - What happens to the existing `income_entries` and `sales_entries` rows.

@@ -1042,15 +1042,17 @@ function pdRecipeHealthPaint(id) {
       //
       // UNIT MISMATCH · 单位不符 is the LOCKED pair
       // (docs/tacet-delivery-vocabulary.md, minted by Ash 2026-08-27) and is
-      // copied, not retyped. The sentence after it has no sourced Chinese and
-      // composing one is forbidden (§30 rule 3), so it is English on both
-      // halves — CN PENDING.
+      // copied, not retyped. The sentence after it was minted 2026-09-01 and is
+      // locked in the same document — see 19-recipes.js lineMismatchTitle() for
+      // why the Chinese says 不作换算 rather than the rejected 无法换算.
       const um = Number(d.unreconciled) || 0;
       if (um > 0) {
         const tail = ` — ${um} ingredient${um === 1 ? '' : 's'} in this recipe `
                    + `${um === 1 ? 'is' : 'are'} counted in a unit the material is not stocked in, `
                    + `so ${um === 1 ? 'its' : 'their'} cost is left out. The cost shown is incomplete.`;
-        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符') + cuT(tail, tail)));
+        const tailCn = ` —— 本配方中有 ${um} 项原料所用单位与物料的库存单位计量的不是同一类量,`
+                     + `其成本不计入。显示成本不完整。`;
+        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符') + cuT(tail, tailCn)));
       }
       // NO COST AT ALL — the cascade writes nothing, so whatever sits in the
       // field is stale or blank. The same sentence the link modal shows at link
@@ -1374,22 +1376,31 @@ function _paRecipeUnitMismatch(u) {
 // read as a severity, not as two facts, and the cell is qualifying one figure
 // either way. Both sentences go in the one tooltip when both are true.
 //
-// CN PENDING on both — no sourced Chinese for either sentence, and composing
-// one is forbidden (§30 rule 3). English on both halves, as the build list's
-// own strings do.
+// BOTH HALVES, minted by Ash 2026-09-01 and locked in
+// docs/tacet-delivery-vocabulary.md. The cost_incomplete sentence had been
+// English-only since that tag shipped (2026-08-31) and is minted here too — it
+// sits in the same tooltip, and half a tooltip in Chinese is worse than none.
+//
+// Each reason is paired independently and joined AFTER translation, so a cell
+// carrying both gets two Chinese sentences rather than one of each.
 function _paMarginWarn(u) {
   const reasons = [];
   if (_paCostIncomplete(u)) {
-    reasons.push('Marked “cost is not complete” — this percentage is drawn from a cost '
-               + 'that is missing something, so the real margin is lower.');
+    reasons.push(cuT(
+      'Marked “cost is not complete” — this percentage is drawn from a cost '
+      + 'that is missing something, so the real margin is lower.',
+      '已标记“成本不完整” —— 此百分比所依据的成本缺少内容,实际毛利更低。'));
   }
   if (_paRecipeUnitMismatch(u)) {
-    reasons.push('UNIT MISMATCH — this product’s recipe has an ingredient counted in a unit '
-               + 'the material is not stocked in, so that ingredient’s cost is left out. '
-               + 'The cost shown is incomplete and the real margin is lower.');
+    reasons.push(cuT(
+      'UNIT MISMATCH — this product’s recipe has an ingredient counted in a unit '
+      + 'the material is not stocked in, so that ingredient’s cost is left out. '
+      + 'The cost shown is incomplete and the real margin is lower.',
+      '单位不符 —— 本产品的配方中有原料所用单位与物料的库存单位计量的不是同一类量,'
+      + '该原料的成本不计入。显示成本不完整,实际毛利更低。'));
   }
   const t = reasons.join(' ');
-  return `<span class="pa-mgn-warn" title="${escapeHtml(cuT(t, t))}" aria-label="${escapeHtml(cuT(t, t))}">${PD_ICON_WARN}</span>`;
+  return `<span class="pa-mgn-warn" title="${escapeHtml(t)}" aria-label="${escapeHtml(t)}">${PD_ICON_WARN}</span>`;
 }
 // Wraps a finished cell body in the flag row when either reason holds. Returns
 // the body untouched when neither does, so an unflagged row keeps the exact

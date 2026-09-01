@@ -187,6 +187,20 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       // (3 of the 4 recipes named in the build gate have both unset).
       batchCost: c.batchCost, costPerServing: c.costPerServing, costPerGram: c.costPerGram,
       zeroCostIngredientLines: c.zeroCostIngredientLines,
+      // Lines whose unit measures a different kind of thing than their
+      // material's stocking unit (§7 addendum), left out of the cost entirely.
+      // Carried for the SAME reason zeroCostIngredientLines is: the list paints
+      // a warning icon on the recipes whose cost is understated, and until now
+      // it could only see one of the two ways that happens. computeRecipeCost
+      // already derived this figure on the line above — forwarding it costs no
+      // query, and re-deriving it in SQL would be the second copy of the
+      // dimension rule that lib/recipe-cost.js exists to prevent.
+      //
+      // NOT folded into the count above and never will be: those materials are
+      // not missing a cost, they have a good one this line's quantity cannot be
+      // multiplied by. Two facts, two counters, two sentences — the separation
+      // the recipe record's two pills already keep on screen.
+      unreconciledUnitLines: c.unreconciledUnitLines,
       backsMaterial: material ? { id: material.id, name_en: material.name_en, cost_per_unit: material.cost_per_unit, unit: material.unit } : null,
       materialBlock: material ? materialBlockState(r.id) : null,
     };
