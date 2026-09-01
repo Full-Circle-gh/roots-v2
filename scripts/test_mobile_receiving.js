@@ -55,8 +55,9 @@ const OPEN = `state.recvId=3; state.recvPo=${PO}; state.recvStore=1;
 // The whole order answered "it all came", which is what the old screen assumed
 // before anyone had touched it. Reached the way an operator reaches it: one tap
 // per supplier.
-const ALLIN = `APP.cmd('recvGroupAll','Green Farm'); APP.cmd('recvGroupAll','Wong Dry Goods');
-  APP.cmd('recvGroupAll','Sun Oils');`;
+// One press answers the whole order. It used to take one per supplier, which
+// is the grouping the screen no longer has.
+const ALLIN = `APP.cmd('recvAllArrived');`;
 const OPEN_ALL = OPEN + ALLIN;
 
 // Two deliveries against one order, and a correction on the second.
@@ -115,32 +116,47 @@ const OPEN_FRAC = `state.recvId=4; state.recvPo=${PO_FRAC}; state.recvStore=1;
 // The fractional order with every product answered "it came". The counters are
 // only on the glass once a line is confirmed, so a case that reads a stepper
 // has to say so first — one tap per supplier, exactly as the door does it.
-const OPEN_FRAC_ALL = OPEN_FRAC + `APP.cmd('recvGroupAll','Grain & Oil Shop');
-  APP.cmd('recvGroupAll','Haoyouxian'); APP.cmd('recvGroupAll','Pupu supermarket');
-  APP.cmd('recvGroupAll','Handan Chuanglan');`;
+const OPEN_FRAC_ALL = OPEN_FRAC + `APP.cmd('recvAllArrived');`;
 
 const CASES = [
   ['the receive screen', OPEN, [
     ['the order is the title',            `txt('content').includes('RPO-0003')`],
-    ['suppliers are the groups',          `txt('content').includes('Green Farm') && txt('content').includes('Wong Dry Goods') && txt('content').includes('Sun Oils')`],
+    // The supplier is NOT on the line any more. The person at the door is
+    // matching a box in their hands to a line on a screen and the supplier does
+    // not help them do it; it is who to chase afterwards, which is Purchasing's
+    // question and is still in the record. This assertion used to require the
+    // opposite — three supplier headings — which is the grouping that made the
+    // screen ask the same question twice on a one-line supplier.
+    ['the supplier is not on the line',   `!txt('content').includes('Green Farm') && !txt('content').includes('Wong Dry Goods')`],
+    ['the SKU is, because that is the handle', `txt('content').includes('HRB-MNT')`],
+    // THE ORDER OF THE LIST IS THE ORDER OF THE SHELF. The PO arrives grouped by
+    // supplier (Mint, Coriander, Red lentils, Chickpeas, Coconut oil); the
+    // screen sorts by SKU, so a walk down the list is a walk down the racking
+    // rather than a walk between six vans. Without the sort this reads
+    // HRB-MNT,HRB-COR,… — the order the server happened to send.
+    ['the list runs in SKU order, not the order the PO arrived in',
+      `rcvItems().map(i=>i.sku).join(',') === 'DRY-CKP,DRY-RLN,HRB-COR,HRB-MNT,OIL-CCO'`],
     // The complaint this screen was rebuilt for: it used to open with five
     // filled counters and one button that booked all five, so the only thing
     // it could say was "the whole order came".
     ['nothing is claimed until somebody says it arrived',
       `document.querySelectorAll('.qty:not(.sm)').length === 0`],
+    // Still one answer per product — but the control now says the NUMBER it is
+    // confirming ("5 kg arrived"), so it can no longer be found by the bare word.
     ['every product carries its own answer',
-      `[...document.querySelectorAll('.chip')].filter(c=>c.innerText.trim()==='Arrived').length === 5
-       && [...document.querySelectorAll('.chip')].filter(c=>c.innerText.trim()==='Not arrived').length === 5`],
+      `[...document.querySelectorAll('.chip')].filter(c=>/arrived$/i.test(c.innerText.trim())).length === 5
+       && [...document.querySelectorAll('.chip')].filter(c=>/^Not /.test(c.innerText.trim())).length === 5`],
     ['and nothing can be recorded until one is given',
       `document.querySelector('.cta').disabled === true && txt('content').includes('Mark at least one product')`],
-    // Two answers per product and two per supplier is four more controls on a
-    // screen used one-handed at a door. Measured against the app's own column,
-    // not the window: nothing may sit outside it, and nothing may be smaller
-    // than a thumb that is carrying a box.
+    // TWO controls per product and none per supplier: 10, where two-per-product
+    // plus two-per-supplier was 16. The count is asserted so a control that
+    // quietly stops rendering is caught; the rule is the two after it, measured
+    // against the app's own column rather than the window — nothing may sit
+    // outside it, and nothing may be smaller than a thumb carrying a box.
     ['every answer is inside the column and thumb-sized',
       `(function(){ var r=document.getElementById('content').getBoundingClientRect();
          var b=[...document.querySelectorAll('.chip'),...document.querySelectorAll('.minibtn')];
-         return b.length === 16 && b.every(function(x){ var q=x.getBoundingClientRect();
+         return b.length === 10 && b.every(function(x){ var q=x.getBoundingClientRect();
            return q.left >= r.left-0.5 && q.right <= r.right+0.5 && q.height >= 44; }); })()`],
     ['nothing is short yet, so no reason picker', `!txt('content').includes('Short delivery')`],
     ['no cost figure anywhere',           `!/¥|CNY/.test(txt('content'))`],
@@ -152,8 +168,13 @@ const CASES = [
   // four are not a shortfall, a no-show, or a refusal — they are unanswered,
   // and they must stay on the order for the van that brings them.
   ['one product arrives and the rest have not', OPEN + `APP.cmd('recvArrived','11');`, [
-    ['only that product opens a counter',
-      `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '5'`],
+    // Answered AS ORDERED folds: the number it was answered with is on the row
+    // as text, and no counter is open anywhere — the operator confirmed the
+    // figure that was already written on the button they pressed.
+    ['no counter is left open', `document.querySelectorAll('.qty:not(.sm)').length === 0`],
+    ['the line says what it was answered with', `txt('content').includes('5 kg')`],
+    ['and it counts as checked', `state.recvVals[11].on === true && state.recvVals[11].recv === 5`],
+    ['the others are still unanswered', `state.recvVals[12].on === false`],
     ['it can be recorded on its own',   `document.querySelector('.cta').disabled === false`],
     ['and it is the only thing on the wire',
       `rcvToSend().map(it=>it.id).join(',') === '11'`],
@@ -168,6 +189,31 @@ const CASES = [
         && document.querySelector('.cta').disabled === true)`],
   ]],
 
+  // THE CORRECTION. A folded row is one tap from its counter — and that tap must
+  // not be the undo. Wiring it to recvArrived (which toggles) meant the single
+  // gesture for "let me fix that number" threw the number away, which on this
+  // screen is the count somebody just walked the shelf for.
+  // TAPPED, not commanded. Calling recvOpenLine directly proves the command and
+  // nothing about the row that is supposed to call it — which is exactly where
+  // the bug was: the row was wired to recvArrived.
+  ['a folded line reopens to be corrected, and does not lose its answer',
+    OPEN + `APP.cmd('recvArrived','11');
+      [...document.querySelectorAll('#content .row')].find(b=>b.innerText.includes('Mint')).click();`, [
+      ['it is still answered', `state.recvVals[11].on === true`],
+      ['with the figure it was answered with', `state.recvVals[11].recv === 5`],
+      ['and its counter is open to change it',
+        `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '5'`],
+      ['only that one — the rest stay folded',
+        `document.querySelectorAll('.qty:not(.sm)').length === 1`],
+    ]],
+  ['and un-answering is said out loud, not hidden in the same tap',
+    OPEN + `APP.cmd('recvArrived','11');
+      [...document.querySelectorAll('#content .row')].find(b=>b.innerText.includes('Mint')).click();
+      APP.cmd('recvArrived','11');`, [
+      ['it goes back to unanswered', `state.recvVals[11].on === false`],
+      ['which is not the same as nothing arriving', `rcvNo(state.recvPo.items[0]) === false`],
+      ['and the number it offers is the ordered one again', `txt('content').includes('5 kg arrived')`],
+    ]],
   ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
     ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
     ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],
@@ -196,13 +242,23 @@ const CASES = [
       `(APP.cmd('recvQtySet','11|4'), rcvToSend().map(it=>it.id).sort().join(',') === '11,13')`],
   ]],
 
-  ['a line ordered by the tenth of a kilo', OPEN_FRAC_ALL, [
-    ['0.1 kg is not rounded away to nothing', `txt('content').includes('ordered 0.1 kg')`],
-    ['0.5 kg is not rounded up to 1',         `txt('content').includes('ordered 0.5 kg')`],
-    ['whole lines keep their plain figures',  `txt('content').includes('ordered 2 box') && txt('content').includes('ordered 20 kg')`],
-    ['and carry no invented decimals',        `!/ordered (2\\.0|20\\.0)/.test(txt('content'))`],
-    ['every stepper is prefilled at what was ordered',
-      `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '0.1,0.5,2,20'`],
+  // UNANSWERED, the figure is on the button that confirms it — which is the
+  // point of the design: you press the number you are agreeing to.
+  ['a line ordered by the tenth of a kilo', OPEN_FRAC, [
+    ['0.1 kg is offered as itself',           `txt('content').includes('0.1 kg arrived')`],
+    ['0.5 kg is not rounded up to 1',         `txt('content').includes('0.5 kg arrived')`],
+    ['whole lines keep their plain figures',  `txt('content').includes('2 box arrived') && txt('content').includes('20 kg arrived')`],
+    ['and carry no invented decimals',        `!/(2\\.0|20\\.0) (box|kg) arrived/.test(txt('content'))`],
+    ['the denial carries the figure too',     `txt('content').includes('Not 0.1')`],
+  ]],
+  // ANSWERED, it survives into the folded row rather than into a counter: an
+  // as-ordered line has nothing left to adjust.
+  ['and once every fractional line is answered', OPEN_FRAC_ALL, [
+    ['the tenth is still a tenth',            `txt('content').includes('0.1 kg')`],
+    ['the half is still a half',              `txt('content').includes('0.5 kg')`],
+    ['no counter invents a decimal',          `document.querySelectorAll('.qty:not(.sm)').length === 0`],
+    ['and the state holds the real figures',
+      `state.recvPo.items.map(it=>state.recvVals[it.id].recv).join(',') === '0.1,0.5,2,20'`],
     // "Not arrived" is on every product as a button now, so the no-show test
     // is asked of the STATE rather than of the text: no line may be sitting at
     // zero, and nothing may be reported as a no-show in the summary.
@@ -338,7 +394,16 @@ const CASES = [
   ['a save that fails keeps the work', OPEN_ALL
     + `APP.cmd('recvQtySet','11|4'); APP.cmd('recvReason','11|short_delivery');
        state.recvSaveErr='That did not save.'; render();`, [
-    ['the counts are still on screen', `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '4,3,25,20,12'`],
+    // NOTHING TYPED IS LOST — the rule this case exists for. What moved is where
+    // it is visible: the line that was corrected keeps its counter open, and the
+    // four answered as ordered carry their figures on their folded rows. So the
+    // count is asserted in the state, and the corrected figure on the glass.
+    ['every figure is still held',
+      `state.recvPo.items.map(it=>state.recvVals[it.id].recv).join(',') === '4,3,25,20,12'`],
+    ['the corrected line still shows its counter',
+      `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '4'`],
+    ['and the untouched lines still show theirs',
+      `txt('content').includes('3 kg') && txt('content').includes('25 kg')`],
     ['the reason is still picked',     `state.recvVals[11].reason === 'short_delivery'`],
     ['the failure is stated',          `txt('content').includes('That did not save')`],
     ['and the button is still there',  `!!document.querySelector('.cta')`],
