@@ -48,11 +48,20 @@ git rev-parse --verify --quiet "$TIP^{commit}" >/dev/null \
   || { echo "[deploy] '$REF' is not a commit this repo knows."; exit 1; }
 [ "$REF" = "HEAD" ] || echo "[deploy] shipping $REF (not HEAD)"
 
-# Honour an opt-out token in the commit message.
-MSG=$(git log -1 --pretty=%B "$TIP" 2>/dev/null || echo "")
-case "$MSG" in
-  *"[skip deploy]"*|*"[no deploy]"*) echo "[deploy] skip token in commit message — not deploying."; exit 0 ;;
-esac
+# THE OPT-OUT TOKEN IS FOR THE HOOK, AND ONLY THE HOOK. It exists so a commit
+# can say "don't ship me" to the post-commit hook that fires unasked. Running
+# this script by hand with a ref is a PERSON asking for that ref to ship, and a
+# word in some commit's message is not an answer to them — it read one anyway,
+# and refused a deploy the operator had just typed out in full. It cannot mean
+# anything coherent over a range either: many messages, none of them "the"
+# deploy. So the token is consulted on the hook path and nowhere else.
+if [ $# -eq 0 ]; then
+  MSG=$(git log -1 --pretty=%B "$TIP" 2>/dev/null || echo "")
+  case "$MSG" in
+    *"[skip deploy]"*|*"[no deploy]"*)
+      echo "[deploy] skip token in commit message — not deploying."; exit 0 ;;
+  esac
+fi
 
 # Only paths the production Node app actually serves/uses are deployable.
 # Intentionally excluded: miniapp/ (WeChat build, uploaded separately via
