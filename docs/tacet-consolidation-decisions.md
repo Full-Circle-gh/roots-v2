@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.109
+# Tacet shared-core consolidation — decisions record, v4.110
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.110 — **§36 settles where settlement receipts belong by ruling that they belong nowhere in Finance: revenue comes from the order record, and a platform payout is that same money arriving in the bank.** A sale is counted at the moment the order exists, so recording the payout as income counts the same yuan twice — settlement receipts therefore have no representation in the Finance staircase, no row in Transactions, and no income category. **Transactions keeps exactly two directions; no third "payout" type is added.** **The absence of a category meaning "platform payout" was the original cause of the Mini App mis-filing, and the fix is explicitly NOT to add one** — adding it would turn a one-off mistake into a repeatable, correctly-labelled double-count. **The ¥152,309 filed under Mini App is confirmed as two hand-totalled summaries of daily platform arrivals**, described `6月` and `7月`, plus one real ¥413.30 sale: not monthly transfers, not sales, and only the ¥413.30 is revenue. Settlement receipts belong to settlement reconciliation, attached to the channel connection, not to the Finance staircase. **A second decision corrects a working assumption carried through the Finance design sessions: Meituan settles DAILY, not monthly**, which reshapes the reconciliation already queued on §36 — per channel per day, summing `channel_settle_amount` across that day's orders against the amount that arrived in the bank, so a mismatch localises to one day's orders rather than a month's, which is the practical argument for the daily cadence. **`channel_settle_amount` is 预计 — a forecast, revised on refund, not a bank confirmation** — so the daily check compares a forecast against an actual arrival, and small divergences are expected and are the signal the check exists to surface rather than errors in themselves. **Eleme is explicitly not covered**: its settlement semantics remain unresolved, and the two channels do not even store the field alike — Meituan keeps the latest poll, Eleme the first seen. Reconciliation is not scheduled, designed or built here. **The superseded open item is LEFT STANDING** in *Explicitly NOT decided here* rather than struck, on the same convention that leaves superseded text unedited; the new subsections supersede it in place. Docs only; no code, no schema, no routes.
 
 2026-09-01 · v4.109 — **The export ran, and its receipt corrects two figures §36 asserted a day earlier.** Income landed exactly as predicted — 26 rows, ¥239,841.06, 13 June to 31 July. **Expenses did not: 168 rows against the 92 a survey found on 4 August, and 25 sub-cent rows against 7.** Neither is an error in the export or in the earlier survey; both counts grew because **Purchasing has kept posting expense rows all along**, and each received purchase order can produce another sub-cent value. **The correction that matters is conceptual rather than numerical:** the expense table spans 8 May to 29 August, so about a month of it post-dates the 1 August cutover and is live data rather than history. Tacet counting from 1 August handles it correctly and nothing is broken — but §36 now says plainly that "the kitchen app's ledger" names a table still being written to, so no later session reads it as a closed set. The export itself is recorded with its date, paths, counts and totals.
 
@@ -4681,6 +4683,39 @@ Order coverage was still being switched on across those months — gzgrocery run
 **Two things were seen in the data and are deliberately NOT resolved here.** `wechat_chat` and `pickup` appear as order channels in August, ¥4,043 between them, and are named in no mapping anywhere in the repository. And settlement — money arriving from a platform after the sale it belongs to — has no home in Tacet's model; recording it in Transactions would double-count revenue the order record has already counted. Both are recorded so a later session finds them rather than rediscovering them.
 
 **The export ran on 2026-09-01.** Two CSVs, UTF-8 with BOM, written to `/root/backups/` by `scripts/export_kitchen_ledger.js` and taken off the box. Income: 26 rows, ¥239,841.06, 13 June to 31 July 2026. Expenses: 168 rows, ¥214,876.88, 8 May to 29 August 2026, 25 of them carrying sub-cent values written exactly as stored. The income figures match the live queries this decision was built on, to the cent.
+
+### Settlement receipts are excluded from Finance entirely — DECIDED 2026-09-01
+
+**Revenue comes from the order record. A settlement receipt has no representation in Finance: no place in the staircase, no row in Transactions, and no income category.**
+
+A sale is counted at the moment the order exists. A platform payout is that same money arriving in the bank — the same yuan, later, by a different route. Recording a payout as income therefore does not add a second sale; it counts one sale twice.
+
+**This closes "Where settlement receipts belong", the open item §36 has carried since v4.108.** That bullet is left standing in *Explicitly NOT decided here* below rather than struck out, on the convention that superseded text is not edited. This subsection supersedes it: a reader who meets the bullet first should read it as answered here.
+
+**Four consequences, recorded because each is a thing a later session might otherwise build.**
+
+**1. Transactions keeps exactly two directions.** Money in and money out. No third "payout" type is added to hold settlement, and no direction is added for anything else on the strength of this decision.
+
+**2. No income category means, or is permitted to imply, "platform payout."** The absence of such a category is what caused the Mini App mis-filing in the first place — the operator had money arriving from a platform and a category list with nowhere to put it, so it went under the channel it came from. **The fix is not to add the category.** Adding it would take a mistake that happened twice and make it easy, repeatable and correctly labelled, which is worse than leaving the operator with nowhere to file a thing that does not belong in this ledger at all.
+
+**3. The ¥152,309 filed under Mini App is confirmed, and its shape is now known.** It is two hand-totalled summaries of daily platform arrivals — ¥76,105.69 described `6月` and ¥75,790.00 described `7月` — plus one genuine ¥413.30 sale. **They are not monthly transfers and they are not sales.** The month names describe the period each summary covers, not a single month-end movement of money, which is what "month-end settlement receipts" above was read to mean before the daily cadence below was established. **Only the ¥413.30 is revenue.**
+
+**4. Settlement receipts belong to settlement reconciliation, attached to the channel connection.** That is where a bank arrival is checked against what the orders said the channel owed. It is not the Finance staircase, and nothing about this decision puts it there.
+
+### Meituan settles daily, not monthly — DECIDED 2026-09-01
+
+**A correction to the working assumption carried through the Finance design sessions.** Meituan pays into the company bank account per day, not as a month-end lump.
+
+This does not change what Finance counts — the decision above already excludes settlement from Finance entirely. It changes the shape of the settlement reconciliation work already queued on §36:
+
+- **The comparison is per channel per day, not per channel per month.**
+- **For each day:** sum `channel_settle_amount` across that day's orders for the channel, and compare it against the amount that arrived in the bank.
+- **A mismatch localises to one day's orders rather than a month's**, which is the practical argument for the daily cadence rather than merely a consequence of it. A month-shaped check tells the operator that something is wrong somewhere in several hundred orders; a day-shaped one hands them the orders to look at.
+- **`channel_settle_amount` is 预计 — a forecast, revised on refund, not a bank confirmation.** The daily check therefore compares a forecast against an actual arrival, which is not a like-for-like comparison and is not meant to be. **Small divergences are expected, and they are the signal the check exists to surface. They are not by themselves errors.**
+
+**Eleme's settlement semantics remain unresolved, and this cadence is recorded for Meituan specifically.** The two channels do not even store the field the same way: Meituan's writer takes the latest poll (`channel_settle_amount = COALESCE(?, channel_settle_amount)`, `routes/meituan-internal.js`), while Eleme's keeps the first value it ever saw (`COALESCE(channel_settle_amount, ?)`, `routes/eleme-internal.js`). A forecast that is revised and a forecast that is frozen do not support the same check. **Do not extend the daily cadence to another channel on the strength of this entry.**
+
+**Nothing is scheduled, designed or built here.** Settlement reconciliation remains unbuilt work. This records its cadence and the comparison it makes, not its delivery.
 
 ### Explicitly NOT decided here
 
