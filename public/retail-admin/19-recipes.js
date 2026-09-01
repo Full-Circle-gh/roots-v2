@@ -292,8 +292,38 @@
       const costCell = pc
         ? `<span title="${esc(pc.title)}">${pc.text}</span>`
         : `<span title="${esc(T('No batch size or servings recorded — showing the whole-batch cost instead', '未记录批量大小或份数 — 显示整批成本'))}">${money(rcp.batchCost)}<span class="rcp-per"> ${esc(T('(batch)', '(整批)'))}</span></span>`;
-      const warnIcon = rcp.zeroCostIngredientLines > 0
-        ? `<span class="rcp-warnic" title="${esc(T(`${rcp.zeroCostIngredientLines} ingredient(s) missing cost — costs shown are too low`, `${rcp.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`))}">${I.warn}</span>`
+      // ── THE ONE ICON, FOR EITHER WAY THE COST COMES OUT TOO LOW ───────────
+      //
+      // This row's cost can be understated for two different reasons, and until
+      // now the icon could only see one of them. A recipe whose only fault was
+      // a unit mismatch — 36 of them on live data — sat in this list with a
+      // clean cost column and nothing beside the name, which is the exact
+      // silence the record screen's UNIT MISMATCH pill was added to break. The
+      // pill only speaks once the recipe is OPEN; this list is what gets
+      // scanned.
+      //
+      // ONE TRIANGLE, NOT TWO. Two icons side by side in a name cell read as a
+      // severity rather than as two facts, and both are saying the same thing
+      // about the same column — the figure to the right is lower than the truth.
+      // Both sentences go in the one tooltip when both hold, ordered as the
+      // record card orders its pills.
+      //
+      // UNIT MISMATCH · 单位不符 is the LOCKED pair
+      // (docs/tacet-delivery-vocabulary.md, minted by Ash 2026-08-27), copied
+      // rather than retyped, and it carries no count — the locked string has no
+      // slot for one and widening it here would be composing a variant of a
+      // locked pair. The missing-cost sentence keeps its count and its own
+      // sourced Chinese exactly as it was.
+      const warnBits = [];
+      if (rcp.zeroCostIngredientLines > 0) {
+        warnBits.push(T(`${rcp.zeroCostIngredientLines} ingredient(s) missing cost — costs shown are too low`,
+                        `${rcp.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`));
+      }
+      if (rcp.unreconciledUnitLines > 0) {
+        warnBits.push(T('UNIT MISMATCH', '单位不符'));
+      }
+      const warnIcon = warnBits.length
+        ? `<span class="rcp-warnic" title="${esc(warnBits.join(' · '))}">${I.warn}</span>`
         : '';
       const matBadge = rcp.backsMaterial
         ? `<span class="rcp-badge${rcp.materialBlock && !rcp.materialBlock.ok ? ' blocked' : ''}" title="${esc(rcp.materialBlock && !rcp.materialBlock.ok ? blockReasonText(rcp.materialBlock.reason, rcp.materialBlock.unpriced) : T('Backs material', '产出为物料'))}">${esc(T('Material', '物料'))}</span>`
