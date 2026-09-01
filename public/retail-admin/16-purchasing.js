@@ -1100,6 +1100,19 @@
     (extra || []).forEach(push);
     return names;
   }
+  // The 中文 name the suppliers master holds for each stored name, when it
+  // holds one. A supplier is stored as ONE free-text string and the master
+  // keeps the two languages apart (name / name_cn) — so a book whose names are
+  // all English carries its 中文 here and nowhere else. Keyed by the stored
+  // name because that is the only thing an order, a line or an invoice carries.
+  function supCnByName() {
+    const m = new Map();
+    _suppliers.forEach(s => {
+      const cn = String(s.name_cn == null ? '' : s.name_cn).trim();
+      if (cn) m.set(s.name, cn);
+    });
+    return m;
+  }
   // Those "other names", for the line whose picker is OPEN: whoever this
   // product was bought from before, and whatever the line itself carries.
   function lineSupExtras() {
@@ -1208,10 +1221,22 @@
   // A typed name only ever sets the name — never a price. We have no figure to
   // put against a supplier we've never bought from, and inventing one would
   // read as a quote.
+  //
+  // A name typed out in full resolves to the STORED name, matched on either
+  // language — grabStep1's rule for the order's own supplier, and it matters
+  // here for the same reason: the 中文 name a supplier carries in the master is
+  // not the string any supplier screen groups on, and the server refuses a
+  // supplier_name it cannot find. Now that the box can be SEARCHED in 中文,
+  // typing 中文 and pressing save had to land on the supplier, not beside them.
+  // A name that is nobody is still kept as typed — a one-off supplier the book
+  // has never heard of is what this field has always been allowed to say.
   window.puLineSupSave = function () {
     if (_supLine == null || !_edit || !_edit.items[_supLine]) return;
     const el = document.getElementById('pu2-supname');
-    _edit.items[_supLine].supplier_name = ((el && el.value) || '').trim();
+    const typed = ((el && el.value) || '').trim();
+    const hit = typed && bookSuggestRows(lineSupExtras())
+      .find(o => [o.v, o.en, o.cn].some(x => x && String(x).toLowerCase() === typed.toLowerCase()));
+    _edit.items[_supLine].supplier_name = hit ? hit.v : typed;
     puSuggestClose();
     puCloseLineSup();
   };
@@ -2930,10 +2955,22 @@
   // puLineSupSave), and the order carries the name as one string — the recap on
   // step 2 and the printed PO both show it whole. The menu still splits the
   // halves for reading; only what lands in the box differs.
-  const bookSuggestRows = (extra) => supplierNameList(extra).map(n => {
-    const half = supSplit(n);
-    return { v: n, en: half.en, cn: half.cn, label: n };
-  });
+  //
+  // The 中文 half comes off the MASTER first (suppliers.name_cn) and only falls
+  // back to the split, which is the whole of why these two boxes could be
+  // searched in English and nothing else. A split only ever finds 中文 that is
+  // already inside the stored string — "Dry Fruit 果干" has some, but a book
+  // entered under translated shop titles ("Abaxiang Whole Grains Store") has
+  // none at all, and its 中文 name is sitting in name_cn where nothing here was
+  // reading it. Same source the Invoices fields, the Materials picker and the
+  // supplier list all search on; these two were the last ones not to.
+  const bookSuggestRows = (extra) => {
+    const cn = supCnByName();
+    return supplierNameList(extra).map(n => {
+      const half = supSplit(n);
+      return { v: n, en: half.en, cn: cn.get(n) || half.cn, label: n };
+    });
+  };
   const PU_SUGGEST_DYN = {
     suppliers: {
       rows: supplierSuggestRows,
