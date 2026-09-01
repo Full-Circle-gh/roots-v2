@@ -92,6 +92,9 @@ const SUPPLIERS = [
   { id: 2, name: 'Precious Soe', is_active: 1 },
   { id: 3, name: 'Retired Ltd', is_active: 0 },
   { id: 4, name: 'Abaxiang Whole Grains Store', name_cn: '阿巴香杂粮店', is_active: 1 },
+  // On 341's price list but never in the book until now: section 17 needs the
+  // ORDER to be placed under a supplier who is NOT the preferred one.
+  { id: 5, name: 'Bean Bros', is_active: 1 },
 ];
 const STOCK = [
   { product_id: 340, name_en: 'Almonds (Raw)', name_cn: '杏仁（生）', sku: '2-340', physical_qty: 82, safety_buffer: 0 },
@@ -106,6 +109,11 @@ const MATERIALS = [
 const PRICE_LISTS = {
   340: { suppliers: [] },
   341: { suppliers: [
+    // The route hands back `supplier: r.supplier || null` — history we cannot
+    // attribute to anybody, drawn as "Unrecorded" rather than as a name. It is
+    // FIRST here, which is where the most-bought row sits, so a pick that took
+    // the head of the list without looking would land on it.
+    { supplier: null, last_cost: 40, avg_cost: 40, order_count: 9, last_date: '2026-02-11' },
     { supplier: 'Nut House 坚果屋', last_cost: 31, avg_cost: 33, order_count: 4, last_date: '2026-08-01' },
     { supplier: 'Bean Bros', last_cost: 29, avg_cost: 30, order_count: 1, last_date: '2026-05-02' },
   ] },
@@ -150,7 +158,9 @@ let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; console.log('  ✓ ' + msg); }
                             else { fail++; console.log('  ✗ ' + msg); } };
 const lines   = () => node('pu2-linebody').innerHTML;
-const topSlot = () => node('pu2-suppop').innerHTML;
+// The add-time popover painted into #pu2-suppop, a slot near the top of the
+// wizard card. Both are gone — the card no longer carries the slot at all.
+const wiz     = () => node('pu2-wizbody').innerHTML;
 // The picker, as it actually reaches the operator: a row of the lines table.
 const picker  = () => { const m = lines().match(/<tr class="pu2-supedit">[\s\S]*?<\/tr>/); return m ? m[0] : ''; };
 const type    = v => { node('pu2-supname').value = v; };
@@ -173,7 +183,7 @@ async function main() {
   ok(picker() === '', 'nothing is open before the chip is clicked');
   await sandbox.puLineSup(0);
   ok(picker().includes('pu2-supname'), 'the chip opens a picker even with no history to show');
-  ok(topSlot() === '', 'and it opens in the line, not in the slot at the top of the card');
+  ok(!wiz().includes('pu2-suppop'), 'and the card carries no top slot for a picker to open into');
   // The book used to be dumped into the row as a <datalist>, whose popup the
   // OS draws — the same popup the Invoices fields moved away from. It is the
   // search menu now: nothing in the row until the box is opened, and then the
@@ -235,17 +245,22 @@ async function main() {
   sandbox.puLineSupSave();
   ok(lines().includes('Bean Bros'), 'and the material’s supplier can be changed');
 
-  console.log('\n5. a product WITH history — the price list is still the point');
+  console.log('\n5. a product WITH history — it lands, it does not ask');
   await sandbox.puPick(341);
-  sandbox.puChooseSupplier(0);
-  ok(lines().includes('Walnuts'), 'the line came in through the add-time popover');
-  ok(lines().includes('value="31"'), 'carrying the preferred supplier’s last price');
+  ok(lines().includes('Walnuts'), 'the pick puts the line on the order by itself');
+  ok(lines().includes('>Nut House 坚果屋 <'),
+     'under the supplier we buy it from most, the order naming nobody to follow');
+  ok(lines().includes('value="31"'), 'carrying that supplier’s last price');
+  ok(!lines().includes('Unrecorded'),
+     'history with no supplier on it is not a name and never becomes a line’s answer, however much of it there is');
+  ok(typeof sandbox.puChooseSupplier === 'undefined',
+     'and the popover that used to stand in the way is gone, not merely unopened');
   await sandbox.puLineSup(2);
   ok(picker().includes('Preferred') && picker().includes('Bean Bros'), 'the history rows render in the line picker');
   ok(picker().includes('In use'), 'the supplier the line already carries is marked, not offered again');
   ok(picker().includes('cheapest'), 'the cheapest of them is flagged');
   ok(picker().includes('puPriceHistory(341)'), 'and price history is one click away');
-  sandbox.puLineSupUse(1);
+  sandbox.puLineSupUse(2);
   ok(lines().includes('>Bean Bros <'), 'taking another supplier retargets the line');
   ok(lines().includes('value="29"'), 'and brings their last price with it');
 
@@ -368,6 +383,77 @@ async function main() {
   type('Some One-Off Guy');
   sandbox.puLineSupSave();
   ok(lines().includes('Some One-Off Guy'), 'a name that is nobody is still kept as typed on a line');
+
+  // ── the order's supplier answers for every line ─────────────────────────
+  // THE DEFECT THESE COVER. Adding a product opened a popover asking who it was
+  // coming from, and the line was not added until a row in it was clicked — on
+  // every line, on an order where the answer is the same one step 1 already
+  // gave. The line picker's own hint has always said what a blank line means:
+  // it follows the order's supplier, which is also exactly what the server
+  // stores for one (insertLineItems, routes/retail-purchasing.js). So the
+  // question is not asked again; the answer is inherited and shown.
+  console.log('\n14. the order names a supplier — every line follows it, unasked');
+  sandbox.puNewOrder();
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Nut House 坚果屋';
+  sandbox.puWizNext(2);
+  await sandbox.puPick(340);
+  ok(lines().includes('Almonds (Raw)'), 'the product lands on the order with nothing to click through');
+  ok(!lines().includes('Choose supplier'), 'and does not ask again for an answer step 1 already holds');
+  ok(/class="pu2-supchip follows"[^>]*>Nut House 坚果屋 /.test(lines()),
+     'the chip carries the order’s supplier, marked as followed rather than chosen');
+  await sandbox.puPickMaterial(20);
+  ok(!lines().includes('Precious Soe'),
+     'a material follows the order too — its master supplier does not outrank one the order names, and the save would not have let it either');
+  await sandbox.puPick(341);
+  ok(lines().includes('value="31"'),
+     'and a product the order’s supplier has sold us before comes in at THEIR last price, not the cheapest on file');
+
+  console.log('\n15. changing it on step 1 moves every following line at once');
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Precious Soe';
+  sandbox.puWizNext(2);
+  ok(lines().includes('Precious Soe') && !lines().includes('Nut House'),
+     'all three lines follow the new name — there is nothing to re-edit');
+
+  console.log('\n16. a line set by hand is an override, and stays one');
+  await sandbox.puLineSup(0);
+  type('Bean Bros');
+  sandbox.puLineSupSave();
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Nut House 坚果屋';
+  sandbox.puWizNext(2);
+  ok(/class="pu2-supchip"[^>]*>Bean Bros /.test(lines()), 'it does not follow the order along');
+  ok(lines().includes('Nut House 坚果屋'), 'while the lines that were following still do');
+  await sandbox.puPick(340);
+  ok(lines().includes('Bean Bros'),
+     'and picking the same product again does not throw the override away — the chip is where a line is retargeted now');
+
+  console.log('\n17. the price follows the name, not the ranking');
+  sandbox.puNewOrder();
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Bean Bros';
+  sandbox.puWizNext(2);
+  await sandbox.puPick(341);
+  ok(lines().includes('value="29"'),
+     'the order’s supplier is second on this product’s list — the line comes in at THEIR last price');
+  ok(!lines().includes('value="31"'),
+     'and not at the preferred supplier’s, which would read as a quote from a shop we are not buying from');
+
+  console.log('\n18. what a following line actually sends');
+  sandbox.puNewOrder();
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = 'Nut House 坚果屋';
+  sandbox.puWizNext(2);
+  await sandbox.puPick(340);
+  await sandbox.puPickMaterial(20);
+  saving = true; saved.length = 0;
+  await sandbox.puSaveDraft();
+  const wire = saved.length ? saved[0].body : {};
+  ok((wire.items || []).length === 2 && wire.items.every(i => !i.supplier_name),
+     'neither line carries a supplier of its own — blank IS how a line says "the order’s"');
+  ok(wire.supplier === 'Nut House 坚果屋',
+     'the name travels once, on the order, which is where insertLineItems resolves a blank line from');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

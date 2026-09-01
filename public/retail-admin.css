@@ -10471,8 +10471,9 @@
   #prod-view-purchasing .pu2-pick.muted { color: var(--td-text2); cursor: default; }
   #prod-view-purchasing .pu2-pick .sub { display: inline; margin-left: 6px; }
 
-  /* product → supplier price popover (who sells it, what we paid last time) */
-  #prod-view-purchasing .pu2-suppop { margin-top: 14px; }
+  /* the supplier price list — who sells it, what we paid last time. It opens in
+     the line's own row now; the add-time popover that used to sit at the top of
+     the wizard card, and the #pu2-suppop slot it painted into, are both gone. */
   #prod-view-purchasing .pu2-pop { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface, #fff);
     box-shadow: 0 8px 24px rgba(17,26,43,.14); overflow: hidden; max-width: 660px; }
   #prod-view-purchasing .pu2-pop .pop-head { display: flex; align-items: baseline; gap: 10px; padding: 13px 18px;
@@ -10506,6 +10507,11 @@
     cursor: pointer; white-space: nowrap; transition: border-color .2s cubic-bezier(.16,1,.3,1); }
   #prod-view-purchasing .pu2-supchip:hover { border-color: var(--td-text2); }
   #prod-view-purchasing .pu2-supchip.on { border-color: var(--td-dusk); }
+  /* the line carries no supplier of its own and is following the order's. The
+     name is real — it is the one the save will store — but it was not chosen
+     here, so it is drawn as quieter than one that was, and the dashed edge says
+     the chip is still the place to override it. */
+  #prod-view-purchasing .pu2-supchip.follows { color: var(--td-text2); border-style: dashed; }
   /* the picker opens in the line's own row, right under the chip that opened
      it — the popover slot at the top of the card is a screenful away on a long
      order, which read as the chip doing nothing at all. */

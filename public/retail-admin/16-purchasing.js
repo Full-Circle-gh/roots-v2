@@ -96,8 +96,6 @@
   let _matCache = null;      // materials list (not store-scoped — one cache)
   let _hist = {};            // store_product_id → last-paid, for the open PO
   const _supCache = {};      // store_product_id → { suppliers[], last } price list
-  let _pickP = null;         // product the supplier popover is open for
-  let _pickInfo = null;      // its loaded price list
   let _supLine = null;       // index of the line whose supplier is being set
   let _supLineInfo = null;   // that line's price list ({suppliers:[]} for a material)
   let _supDraft = null;      // half-typed name, kept across a repaint of the lines
@@ -805,8 +803,6 @@
           <div id="pu2-picker-list" class="pu2-picker-list" style="display:none"></div>
         </div>
 
-        <div id="pu2-suppop" class="pu2-suppop" style="display:none"></div>
-
         <div id="pu2-suggest"></div>
 
         <div id="pu2-sortbar"></div>
@@ -878,7 +874,15 @@
     }
     body.innerHTML = _edit.items.map((it, i) => {
       const lineTotal = (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0);
-      const supLabel = it.supplier_name ? esc(it.supplier_name) : esc(T('Choose supplier', '选择供应商'));
+      // A line carrying no supplier of its own is not a to-do — it FOLLOWS the
+      // order's, on screen and in what the server stores (orderSupplier). So it
+      // shows that name, marked as inherited rather than chosen, and changing
+      // step 1 moves every one of them at once. "Choose supplier" is kept for
+      // the only case that really is unanswered: no supplier on the line and
+      // none on the order either.
+      const follows = !it.supplier_name && !!orderSupplier();
+      const supLabel = it.supplier_name ? esc(it.supplier_name)
+        : (follows ? esc(orderSupplier()) : esc(T('Choose supplier', '选择供应商')));
       // Every line's supplier is retargetable from this chip — puLineSup opens
       // the picker with whatever it can offer: the retail PO price list when
       // this product has one (keyed on store_product_id, see
@@ -889,7 +893,8 @@
       // retail PO history at all — rendered as dead text with no way to set
       // or change its supplier.
       const supOpen = _supLine === i;
-      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
+      const supTitle = follows ? ` title="${esc(T('Leave it empty and the line follows the order’s supplier.', '留空则该行沿用订单的供应商。'))}"` : '';
+      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}${follows ? ' follows' : ''}"${supTitle} onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
       return `<tr ondragover="puLineDragOver(event,${i})" ondragleave="puLineDragLeave(event)" ondrop="puLineDrop(event,${i})" ondragend="puLineDragEnd()">
@@ -933,7 +938,10 @@
   // is sorting to look at under the rows that have nothing to say.
   const SORT_KEYS = [
     { key: 'supplier', dir: 1,  label: () => T('Supplier', '供应商'),
-      val: it => (it.supplier_name || '').trim(), blank: v => !v },
+      // A line following the order is not a line with no supplier — it sorts
+      // under the name it will be saved with, or every inherited line would
+      // sink to the bottom as an absence.
+      val: it => (it.supplier_name || '').trim() || orderSupplier(), blank: v => !v },
     { key: 'name',     dir: 1,  label: () => T('Name', '名称'),
       val: it => [it.name_en, it.name_cn].filter(Boolean).join(' · '), blank: v => !v },
     { key: 'stock',    dir: -1, label: () => T('On shelf', '现库存'),
@@ -1077,9 +1085,35 @@
       list.style.display = '';
     }, 150);
   };
-  // Picking a product (from search or a suggestion, or tapping a line's supplier
-  // chip) opens the supplier popover: who sells it and what we paid last time.
-  // With no history it just drops a blank line — no invented vendors.
+  // The order's own supplier, as step 1 left it. A line that carries no
+  // supplier of its own follows this one — that is not a convention invented
+  // here, it is what the server stores for such a line: insertLineItems
+  // resolves `item.supplier_name || headerSupplier || the material master's`
+  // (routes/retail-purchasing.js), and every screen that groups a line by
+  // supplier reads it back the same way, COALESCE(line, po.supplier).
+  function orderSupplier() {
+    return ((_edit && _edit.supplier) || '').trim();
+  }
+
+  // Picking a product — from the search box or a running-low suggestion — puts
+  // it on the order and does NOT ask who it is coming from.
+  //
+  // It used to ask. Any product with purchase history opened a popover, and the
+  // line was not added until a row in that popover was clicked. On a thirty-line
+  // order going to the one supplier that is thirty answers to a question step 1
+  // already asked once, and the line picker's own hint has always said what a
+  // blank line means: it follows the order's supplier.
+  //
+  // So the supplier is INHERITED, not asked for:
+  //   * the order names a supplier → the line is left blank and follows it, and
+  //     keeps following it if step 1 is changed afterwards;
+  //   * the order names nobody → the product's own history answers, with the
+  //     supplier we buy it from most — the row the popover pre-selected and
+  //     labelled Preferred — or nothing at all when there is no history.
+  //
+  // The whole price list is still one tap away, on the line's own chip, which
+  // is where it belonged: comparing suppliers is a thing you do sometimes, and
+  // adding a line is a thing you do on every line.
   window.puPick = async function (productId) {
     const prods = await products(_edit.store_id);
     const p = prods.find(x => x.product_id === productId);
@@ -1090,17 +1124,33 @@
     if (pl) pl.style.display = 'none';
     const info = await loadProductSuppliers(productId);
     if (info.last) _hist[productId] = { previous: { cost_per_unit: info.last.cost } };
-    _pickP = p; _pickInfo = info;
-    if (info.suppliers && info.suppliers.length) renderSupPop();
-    else addOrSetLine(p, _edit.supplier || '', null);   // nothing on file → blank line
+    // Rows with no supplier on them are history we cannot attribute to anybody
+    // — they must not become a line's answer, and they are already drawn as
+    // "Unrecorded" in the picker rather than as a name.
+    const rows = (info.suppliers || []).filter(x => (x.supplier || '').trim());
+    const own = rows.length ? rows[0].supplier.trim() : '';
+    const supplierName = orderSupplier() ? '' : own;
+    // The price is only ever taken from the supplier the line will actually buy
+    // from. Handing over the preferred supplier's figure under a different name
+    // reads as a quote from that name, which is the same reason puLineSupSave
+    // sets no price for a typed one. Where we have no figure for them the field
+    // stays at zero and the "last paid" hint under it says what we last paid.
+    const buying = supplierName || orderSupplier();
+    const row = buying ? rows.find(x => x.supplier.trim() === buying) : null;
+    addOrSetLine(p, supplierName, row ? row.last_cost : null);
   };
 
   // Picking a material — no per-supplier price list to compare (materials
   // don't carry retail PO history the way store_products do), so it drops
-  // straight onto the line, defaulting the supplier + unit + price from the
-  // material's own master record. Unit MUST default to buy_unit, not 'pcs' —
-  // firePriceAlertsForPO (routes/purchases.js) refuses to write back a price
-  // whose line unit doesn't match ingredients.buy_unit.
+  // straight onto the line, defaulting the unit + price from the material's
+  // own master record. Unit MUST default to buy_unit, not 'pcs': firePriceAlertsForPO
+  // (routes/purchases.js) refuses to write back a price whose line unit doesn't
+  // match ingredients.buy_unit.
+  //
+  // The supplier follows the same rule as a product's, and it is the same rule
+  // the server keeps: the order's supplier outranks the material master's, so
+  // where the order names one the line is left blank and follows it rather than
+  // being stamped with a name the save would have overridden anyway.
   window.puPickMaterial = async function (ingredientId) {
     const mats = await materials();
     const m = mats.find(x => x.id === ingredientId);
@@ -1112,22 +1162,25 @@
     addOrSetMaterialLine(m);
   };
 
-  // Add the line if new, or just retarget its supplier + price if it's already
-  // on the order. Never bumps quantity — that's the steppers' job.
+  // Add the line if new. A product already on the order is NOT retargeted: the
+  // supplier and price it carries were either inherited or set by hand on its
+  // own chip, and picking the same product a second time out of the search box
+  // is not an instruction to throw either away. It was a retarget while the
+  // add-time popover existed, because that popover was the only place a choice
+  // could be made; the line's own chip is that place now.
+  // Quantity is never bumped here either — that's the steppers' job.
   function addOrSetLine(p, supplierName, cost) {
     let it = _edit.items.find(x => x.store_product_id === p.product_id);
     if (!it) {
       it = {
         store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
         qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
-        purchase_channel: '', current_stock: p.physical_qty, supplier_name: '', note: '',
+        purchase_channel: '', current_stock: p.physical_qty, supplier_name: supplierName || '', note: '',
       };
+      if (cost != null && cost !== '') it.cost_per_unit = cost;
       _edit.items.push(it);
       _lineSort = null;
     }
-    it.supplier_name = supplierName || '';
-    if (cost != null && cost !== '') it.cost_per_unit = cost;
-    puCloseSupPop();
     renderLines(); renderSuggestions();
   }
 
@@ -1138,62 +1191,13 @@
         ingredient_id: m.id, name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
         qty: 1, unit: m.buy_unit || 'pcs', cost_per_unit: m.buy_price || 0,
         expense_category: m.accounting_category || '', purchase_channel: '',
-        current_stock: null, supplier_name: m.supplier || '', note: '',
+        current_stock: null, supplier_name: orderSupplier() ? '' : (m.supplier || ''), note: '',
       };
       _edit.items.push(it);
       _lineSort = null;
     }
     renderLines(); renderSuggestions();
   }
-
-  function renderSupPop() {
-    const host = document.getElementById('pu2-suppop');
-    if (!host || !_pickP || !_pickInfo) return;
-    const s = _pickInfo.suppliers || [];
-    const minCost = s.length ? Math.min(...s.map(x => Number(x.last_cost) || Infinity)) : null;
-    host.innerHTML = `
-      <div class="pu2-pop">
-        <div class="pop-head">
-          <b>${nameLabel(_pickP)}</b>
-          <span class="sub pu2-mono">${esc(_pickP.sku || '')}${_pickP.sku ? ' · ' : ''}${esc(T('stock', '库存'))} ${_pickP.physical_qty}</span>
-          <span style="margin-left:auto;display:inline-flex;gap:14px">
-            <button class="pu2-link" style="margin:0" onclick="puPriceHistory(${_pickP.product_id})">${esc(T('Price history', '价格历史'))}</button>
-            <button class="pu2-link" style="margin:0" onclick="puCloseSupPop()">${esc(T('Close', '关闭'))}</button>
-          </span>
-        </div>
-        ${s.map((x, idx) => {
-          const preferred = idx === 0;
-          const cheapest = minCost != null && Number(x.last_cost) === minCost && s.length > 1;
-          return `<div class="pu2-suprow${preferred ? ' best' : ''}">
-            <div class="sname">${esc(x.supplier || T('Unrecorded', '未记录'))}${preferred ? ` <span class="pu2-tagstar">${I.star}${esc(T('Preferred', '常用'))}</span>` : ''}</div>
-            <div><div class="lab">${esc(T('Last paid', '上次'))}</div><div class="val pu2-num${cheapest ? ' cheap' : ''}">${money(x.last_cost)}${cheapest ? ' · ' + esc(T('cheapest', '最低')) : ''}</div></div>
-            <div><div class="lab">${esc(T('Average', '均价'))}</div><div class="val pu2-num">${x.avg_cost != null ? money(x.avg_cost) : '—'}</div></div>
-            <div><div class="lab">${esc(T('Bought', '采购'))}</div><div class="val pu2-num">${x.order_count}× · ${esc(x.last_date || '—')}</div></div>
-            <div><button class="pu2-btn sm${preferred ? ' primary' : ''}" onclick="puChooseSupplier(${idx})">${esc(T('Use', '选用'))} ${money(x.last_cost)}</button></div>
-          </div>`;
-        }).join('')}
-        <div class="pu2-suprow manual">
-          <div class="sname">${esc(T('Someone else / type it myself', '其他 / 手动填写'))}</div>
-          <div class="lab" style="grid-column:2 / 5">${esc(T('Adds the line — set the supplier and price by hand.', '先添加,再手动填写供应商与价格。'))}</div>
-          <div><button class="pu2-btn sm" onclick="puChooseSupplier(-1)">${esc(T('Add', '添加'))}</button></div>
-        </div>
-      </div>`;
-    host.style.display = '';
-  }
-
-  window.puChooseSupplier = function (idx) {
-    if (!_pickP || !_pickInfo) return;
-    if (idx < 0) { addOrSetLine(_pickP, _edit.supplier || '', null); return; }
-    const x = (_pickInfo.suppliers || [])[idx];
-    if (!x) return;
-    _hist[_pickP.product_id] = { previous: { cost_per_unit: x.last_cost } };
-    addOrSetLine(_pickP, x.supplier || '', x.last_cost);
-  };
-  window.puCloseSupPop = function () {
-    _pickP = null; _pickInfo = null;
-    const host = document.getElementById('pu2-suppop');
-    if (host) { host.style.display = 'none'; host.innerHTML = ''; }
-  };
 
   // ── per-line supplier picker ───────────────────────────────────────────────
   // The chip under every line opens this. It is the ONLY way to set a supplier
@@ -1241,16 +1245,16 @@
   }
 
   // Opening it is a toggle — a second tap on the same chip puts it away.
-  // The picker is painted INTO the line's own row (renderLines), not into the
-  // popover slot at the top of the card: on a long order that slot sits a
-  // screenful above whatever you clicked, so the picker opened where you could
-  // not see it and the chip read as dead.
+  // The picker is painted INTO the line's own row (renderLines), not into a
+  // slot at the top of the card: on a long order that slot sits a screenful
+  // above whatever you clicked, so the picker opened where you could not see it
+  // and the chip read as dead. It is also the ONLY supplier picker now — the
+  // add-time popover that used to sit in that slot has gone, and this one
+  // carries everything it offered.
   window.puLineSup = async function (i) {
     if (!_edit || !_edit.items[i]) return;
     if (_supLine === i) { puCloseLineSup(); return; }
     const it = _edit.items[i];
-    _pickP = null; _pickInfo = null;
-    puCloseSupPop();
     _supLine = i; _supDraft = null; _supLineInfo = { suppliers: [] };
     renderLines();       // paint it now — the price list, if any, follows
     focusSupName();
