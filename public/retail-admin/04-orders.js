@@ -212,11 +212,22 @@ function ordShipsNothing(o) {
   return t === 'pickup' || t === 'counter';
 }
 // Which non-storefront channels are shown read-only in the combined list — the
-// storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
-// now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
+// storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime.
+//
+// Eleme belongs here for the same reason Meituan does, and was missing: its rows
+// are written by its own daemon (routes/eleme-internal.js ingest-order), their
+// status is only ever advanced by Eleme's own poll (/update-order-status), and
+// the platform runs the courier — inventory.js keeps 'eleme' out of
+// QINGYUN_PUSH_CHANNELS precisely because "marketplace orders carry their OWN
+// delivery". So an Eleme order has no waybill of ours and never will. Left off
+// this list, a dispatched one fell through to the courier branch of
+// renderTrackingCell and flew a red "⚠ missing / 缺运单号" — an office to-do that
+// can never be actioned — while the channel_eta the ingest DOES store went
+// unread. routes/retail.js already documents Eleme as read-only here (see the
+// manual-order channel allowlist); this is the code catching up to that.
 function ordIsReadonlyChannel(o) {
   const c = String(o.channel || '').toLowerCase();
-  return c === 'meituan' || c === 'gzgrocery';
+  return c === 'meituan' || c === 'gzgrocery' || c === 'eleme';
 }
 // Short display for the list glance. Channel/legacy numbers look like
 // PREFIX + [sep] + yyyymmdd + sequence (e.g. MT20260706256422, GZ-138616).
@@ -1253,8 +1264,9 @@ async function loadOrders(opts = {}) {
     // mark, or chime for unpaid orders (pending_payment) or dead ones
     // (cancelled); those just show their status pill and sit quiet. The mark
     // + chime kick in when there's actually something to fulfil.
-    // Read-only channel rows (Meituan) never count as actionable: no NEW mark,
-    // no unread bold, no arrival chime — they're a mirrored ledger, not work.
+    // Read-only channel rows (Meituan / Eleme / gzgrocery) never count as
+    // actionable: no NEW mark, no unread bold, no arrival chime — they're a
+    // mirrored ledger, not work.
     const isActionable = o => o.status !== 'pending_payment' && o.status !== 'cancelled' && !ordIsReadonlyChannel(o);
     const actionableIds = new Set(j.data.filter(isActionable).map(o => o.id));
     const prevNotified = _ORDERS_NOTIFIED_IDS;
@@ -1274,8 +1286,8 @@ async function loadOrders(opts = {}) {
       // .is-unseen, not .is-unread — same name Customers uses, and it leaves
       // retail-admin.css's `tr.order-row.is-unread` wash/bold matching nothing.
       const unread = isUnread ? ' is-unseen' : '';
-      // Read-only channels (Meituan / gzgrocery) show a channel tag + "view
-      // only". They still open a view-only detail drawer (product / SKU / qty) —
+      // Read-only channels (Meituan / Eleme / gzgrocery) show a channel tag +
+      // "view only". They still open a view-only detail drawer (product / SKU / qty) —
       // renderOpenOrder branches to renderReadonlyOrder for these, with no
       // fulfilment actions. data-readonly is kept as the branch signal.
       const ro = ordIsReadonlyChannel(o);
@@ -2007,9 +2019,9 @@ function shipByUrgency(p, actionable) {
 }
 
 function renderShipByCell(o) {
-  // Read-only channels (Meituan, gzgrocery) are mirrored ledgers — we don't
-  // fulfil them, so there's no ship-by deadline we own. "As soon as possible"
-  // reads as a to-do we'll never action; blank it out.
+  // Read-only channels (Meituan, Eleme, gzgrocery) are mirrored ledgers — we
+  // don't fulfil them, so there's no ship-by deadline we own. "As soon as
+  // possible" reads as a to-do we'll never action; blank it out.
   if (ordIsReadonlyChannel(o)) return '<span class="muted">—</span>';
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   const p = shipByPlan(o);
@@ -2553,10 +2565,11 @@ function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
   }
-  // Read-only channels (Meituan): Meituan owns the rider, so we have no waybill —
-  // show the platform's delivery time instead, and never the "missing waybill"
-  // warning below (which doesn't apply). Once the order lands, the ETA gives way
-  // to the real arrival — quiet grey, since nothing is pending any more.
+  // Read-only channels (Meituan / Eleme): the marketplace owns the rider, so we
+  // have no waybill — show the platform's delivery time instead, and never the
+  // "missing waybill" warning below (which doesn't apply). Once the order lands,
+  // the ETA gives way to the real arrival — quiet grey, since nothing is pending
+  // any more.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     // Live Qingyun rider stage (Wave A): Meituan's delivery IS a Qingyun rider we
     // now track, so prefer the real stage + ETA over the platform's static ETA.
@@ -5382,8 +5395,9 @@ function orderPayLinkTile(o) {
   </div>`;
 }
 function renderOpenOrder(o) {
-  // Read-only channels (Meituan / gzgrocery) get a stripped view-only panel —
-  // no fulfilment, refund or edit controls, which don't apply to a mirrored order.
+  // Read-only channels (Meituan / Eleme / gzgrocery) get a stripped view-only
+  // panel — no fulfilment, refund or edit controls, which don't apply to a
+  // mirrored order.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     return renderReadonlyOrder(o);
   }

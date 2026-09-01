@@ -1628,7 +1628,7 @@ const DRAWER_SANDBOX = `
   function tdRange(){ return ''; }
   function tdDate(){ return 'Aug 21'; }
   ${OB.code.join('\n')}
-  return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter };
+  return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel };
 `;
 
 let DRAWER = null;
@@ -1704,12 +1704,40 @@ if (DRAWER) {
     ['delivery, scheduled',      { fulfillment_type: 'delivery', scheduled_for: '2026-08-23 10:00:00' }],
     ['fulfilment type missing',  { fulfillment_type: null }],
     ['read-only mirror channel', { fulfillment_type: 'delivery', channel: 'meituan' }],
+    ['read-only mirror, Eleme',  { fulfillment_type: 'delivery', channel: 'eleme' }],
   ];
   const shapeThrows = SHAPES.filter(([, over]) => {
     try { DRAWER.renderShipByTile(shape(over)); DRAWER.renderShipByCell(shape(over)); return false; }
     catch (e) { return true; }
   }).map(([label]) => label);
   check('every other order shape still renders, delivery or not', shapeThrows, []);
+
+  // ── A marketplace order must never be asked for a waybill ────────────────
+  // Eleme mirrors its orders in through routes/eleme-internal.js and delivers
+  // them with its OWN rider — nothing in this tree can attach a waybill to one
+  // (inventory.js keeps 'eleme' out of QINGYUN_PUSH_CHANNELS for exactly that
+  // reason). It was missing from ordIsReadonlyChannel, so every dispatched Eleme
+  // row flew a red "⚠ missing / 缺运单号" the office could never clear, while the
+  // ETA the ingest stores went unrendered. Asserted per channel, because the
+  // whole bug was one channel quietly falling out of a list of three.
+  const MIRROR_CHANNELS = ['meituan', 'gzgrocery', 'eleme'];
+  check('every mirrored marketplace channel is classified read-only',
+    MIRROR_CHANNELS.filter((c) => !DRAWER.ordIsReadonlyChannel({ channel: c })), []);
+  // The cell itself, at the status the warning fired on. Two claims, because a
+  // blank cell would satisfy the first one alone and still lose the ETA.
+  const elemeMoving = shape({
+    fulfillment_type: 'delivery', channel: 'eleme', status: 'dispatched',
+    delivered_at: null, channel_eta: '2026-09-01 13:55:00', tracking_number: null,
+  });
+  const elemeCell = safe(() => DRAWER.renderDeliveryCell(elemeMoving));
+  check('a dispatched Eleme order is never asked for a waybill it cannot have',
+    /missing|缺运单号/.test(elemeCell), false);
+  // …and the cell is not merely blanked: it takes the platform-ETA branch, the
+  // one fact we hold about when this order lands. (The clock itself can't be
+  // asserted here — tdWhen is one of the browser globals this sandbox stubs —
+  // so the branch's own label stands in for it.)
+  check('…and shows the platform arrival the ingest recorded instead of a dash',
+    /arrival/.test(elemeCell) && !/^<span class="muted">—/.test(elemeCell), true);
 
   // ── The whole drawer payload, not just the tile that broke ───────────────
   // §12 covers the till; this covers what the operator opens afterwards. Every
@@ -1727,7 +1755,7 @@ if (DRAWER) {
     available.length >= 20, true);
 
   const wide = new Function(DRAWER_SANDBOX.replace(
-    'return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter };',
+    'return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter, ordIsReadonlyChannel };',
     'return { ' + available.join(', ') + ' };'))();
   const counter = shape({ fulfillment_type: 'counter' });
   const helperThrows = available.filter((n) => {

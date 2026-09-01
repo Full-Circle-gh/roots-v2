@@ -7589,6 +7589,16 @@ const ORDER_STATUS={
   cancelled:['cancelled','Cancelled','已取消'],refunded:['refund','Refunded','已退款'],
 };
 const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
+/* Mirrored channels: rows a platform daemon writes, that the platform itself
+   fulfils and delivers — we never accept, print, dispatch or waybill one. The
+   phone's twin of ordIsReadonlyChannel (public/retail-admin/04-orders.js), and
+   Eleme belongs in it for the same reason Meituan does: routes/eleme-internal.js
+   mirrors the order, Eleme's own poll advances its status, and Eleme's rider
+   carries it. Keyed on the RAW channel, never on the CH_BACK-mapped key —
+   CH_BACK has no 'eleme' entry, so an Eleme order maps to 'miniapp' and would
+   otherwise read as a first-party order the shop still owes work on. */
+const RO_CHANNELS=['meituan','gzgrocery','eleme'];
+const isReadonlyChannel=r=>RO_CHANNELS.includes(String((r&&r.channel)||'').toLowerCase());
 let CUR='¥';
 
 /* The desktop's paymentCheckLine, on a phone. Only while unpaid — once a person
@@ -7716,7 +7726,7 @@ function deliveryState(r){
 }
 /* One line, the way the desktop picks one cell: the live fact for THIS row. */
 function deliveryLine(r){
-  const readonly=['meituan','gzgrocery'].includes(String(r.channel||'').toLowerCase());
+  const readonly=isReadonlyChannel(r);
   if(r.fulfillment_type==='counter') return null;
   if(readonly){
     if(['cancelled','refunded'].includes(r.status)) return null;
@@ -7876,7 +7886,7 @@ function mapOrderRow(r){
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     deliv,
-    viewOnly: ch==='meituan'||ch==='gzgrocery',
+    viewOnly: isReadonlyChannel(r),
     // A proof is not a status — the order never moved, it is still
     // pending_payment. It rides its own row as a mark, exactly as the desktop
     // does, so the Pending list can be scanned for the one that needs a person.
