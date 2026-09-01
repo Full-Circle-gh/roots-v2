@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meituan money panel — order drawer</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ==================================================================
+   MEITUAN MONEY PANEL — three states, static reference
+   MOCKUP ONLY. Hardcoded numbers. No routes, no schema, no wiring.
+
+   WHAT THIS IS
+   A money panel for the body of the existing read-only order drawer
+   (04-orders.js renderReadonlyOrder, ~5231-5396). That drawer shows
+   ONE money field today — Total, at :5346. The order carries nine
+   more, already at the browser: retail.js:23445 selects o.*.
+
+   MEITUAN ONLY. Eleme is deliberately out of scope: meituan-internal
+   .js:750 writes COALESCE(?, col) — latest poll wins — while
+   eleme-internal.js:573 writes COALESCE(col, ?) — first seen wins.
+   The same label would mean two different measurements. That is an
+   open decision, not something to design around.
+
+   CHROME IS QUOTED, NEVER DRAWN (§0). The drawer's pinned header is
+   NOT reproduced here — it is marked as a quoted region at its
+   measured 94px (§1.13a rule 4). Nothing below it pushes it.
+
+   ENGLISH VIEW ONLY (§1.11). No Chinese anywhere: the locked pairs do
+   not exist yet, and CN strings are copied from locked sources, never
+   composed. Every string this panel needs is listed in the PR.
+
+   SENTENCE CASE THROUGHOUT (§1.6). The live drawer's .kicker carries
+   text-transform: uppercase (retail-admin.css:7153) and .val b carries
+   font-weight 600 (:7172). Both are pre-§1.6 and neither is copied
+   here — §1.6's job is stopping new ones.
+
+   Tokens copied from reference/finance-transactions-mockup.html, which
+   copied them from retail-admin.css :root[data-theme="light"]. ¥ is
+   hardcoded so numbers appear. No currency logic — §0 governs.
+   ================================================================== */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --dusk-hi:  #7E77BF;
+
+  --surface:   #FFFFFF;
+  --cream:     #F6F3EC;
+  --border:    #E4E0D5;
+  --band:      #DAD5C6;
+  --dusk-tint: #EEEDF6;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--font-text); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- mockup scaffolding only. Not part of the page. ---------------- */
+.mk-wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px 96px; }
+.mk-doc-title { font-family: var(--font-display); font-weight: 300; font-size: 30px; margin: 0 0 4px; }
+.mk-doc-sub { color: var(--graphite); font-size: 14px; margin: 0 0 40px; max-width: 74ch; }
+.mk-label {
+  font-size: 13px; font-weight: 500; color: var(--graphite);
+  letter-spacing: .04em; margin: 0 0 10px;
+}
+.mk-label b { color: var(--ink); font-weight: 500; }
+.mk-state { margin-bottom: 52px; }
+.mk-note { font-size: 13px; color: var(--graphite); margin: 10px 2px 0; max-width: 74ch; }
+
+/* The pinned header is QUOTED, not drawn (§0). This block stands in for
+   it at its measured height so the body below can be seen not to push
+   it. It carries no order number, no pill, no control — inventing that
+   furniture would read as a decision already made. */
+.mk-quoted {
+  height: 94px; border: 1px dashed var(--band); border-bottom: none;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: repeating-linear-gradient(135deg,
+    transparent 0 8px, rgba(88,96,110,.045) 8px 16px);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--graphite); font-size: 12px; text-align: center; padding: 0 16px;
+}
+
+/* ---- the drawer body region ---------------------------------------- */
+.dw {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 0 0 var(--r-card) var(--r-card);
+  padding: 20px; box-shadow: var(--shadow-soft);
+}
+
+/* The existing metadata grid, matching .order-detail (css:7137): two
+   columns, .full spans both. Reproduced only as far as the panel needs
+   for context — the cells around it are the ones it must sit beside. */
+.od {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 20px;
+  background: var(--cream); border: 1px solid var(--border);
+  border-radius: var(--r-card); padding: 16px 20px; margin-bottom: 16px;
+}
+.od .full { grid-column: 1 / -1; }
+/* Sentence case, 13px/500 — §1.6's replacement for the live uppercase
+   mono kicker. */
+.od .k { font-size: 13px; font-weight: 500; color: var(--graphite); margin-bottom: 3px; }
+.od .v { font-size: 14px; font-weight: 500; color: var(--ink); }
+.od .v.num { font-variant-numeric: tabular-nums; }
+.od .s { font-size: 12px; color: var(--graphite); margin-top: 2px; }
+
+/* ---- THE PANEL ------------------------------------------------------ */
+.mp {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-card); padding: 16px 20px 14px; margin-bottom: 16px;
+}
+.mp-h {
+  font-size: 13px; font-weight: 500; color: var(--graphite);
+  margin: 0 0 12px; letter-spacing: .01em;
+}
+
+/* Two columns: label flexes, amount is a fixed measure so every figure
+   right-aligns on one edge. Not a list table, so §1.19's <col>
+   percentages do not apply — but its discipline does, and 88px is
+   MEASURED in Chromium at 15px/500, not estimated:
+
+     ¥118.00     53.11px      ¥1,234.56    66.73px
+     −¥11.76     53.53px      ¥12,345.67   75.08px
+     ¥106.24     54.23px      −¥1,234.56   75.50px   ← worst case
+
+   88px clears the worst case by 12.5px. An earlier draft of this
+   comment claimed the widest figure was −¥11.76; it is ¥106.24 among
+   the values shown, and neither is the one the column has to hold.
+   That is what estimating costs, in the file whose rule says do not. */
+.mp-row {
+  display: grid; grid-template-columns: 1fr 88px;
+  align-items: baseline; column-gap: 16px; padding: 3px 0;
+}
+.mp-k { color: var(--ink); }
+.mp-v {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+  color: var(--ink);
+}
+
+/* Beat 1 — what the customer paid. */
+.mp-lead .mp-k, .mp-lead .mp-v { font-size: 15px; font-weight: 500; }
+
+/* The three components. Subordinate BY STRUCTURE, not by a smaller
+   font alone: indented under the figure they make up, tied together by
+   one hairline down their left edge, and set in graphite so the eye
+   reads them as detail rather than as three more charges. This is the
+   difference the panel exists to show — components of what was paid,
+   not separate line items. */
+.mp-parts { margin: 2px 0 2px 10px; padding-left: 12px; border-left: 1px solid var(--border); }
+.mp-parts .mp-row { grid-template-columns: 1fr 88px; padding: 2px 0; }
+.mp-parts .mp-k, .mp-parts .mp-v { font-size: 13px; color: var(--graphite); }
+
+/* The deduction. A rule above it, because a subtraction is a different
+   operation from a component — the line is the arithmetic, not
+   decoration. No status colour: money leaving is not an error (§1.10,
+   and the same call the Finance mockup makes at .dir). */
+.mp-deduct { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 9px; }
+/* 14px, deliberately between the 13px components and the 15px figures:
+   the commission is an OPERATION on the two numbers that bracket it, not
+   a third fact competing with them. Three equal 15px rows would give the
+   eye three stops and bury the answer the panel exists to give. */
+.mp-deduct .mp-k, .mp-deduct .mp-v { font-size: 14px; color: var(--ink); }
+
+/* Beat 3 — the answer. Sits on cream with a rule above so it reads as
+   the result of the two lines over it. */
+.mp-net {
+  border-top: 1px solid var(--band); margin-top: 8px; padding: 10px 12px 10px;
+  background: var(--cream); border-radius: var(--r-control);
+  margin-left: -12px; margin-right: -12px;
+  grid-template-columns: 1fr 88px;
+}
+.mp-net .mp-k, .mp-net .mp-v { font-size: 15px; font-weight: 500; }
+
+/* The forecast caveat. It is not a warning and takes no warning colour:
+   the number is correct, it is simply an estimate — "expected income" is
+   what Meituan itself calls the field we store. (Its Chinese name is
+   omitted here only because this file is English-only; it belongs in the
+   builder's note, not in a mockup.) */
+.mp-foot {
+  font-size: 12px; color: var(--graphite); margin: 10px 0 0; line-height: 1.5;
+}
+
+/* STATE 2 — the history note.
+   Deliberately NOT: a dash per absent row, an alarm colour, an icon, a
+   "retry", or the word unavailable. See the PR for the argument. It is
+   graphite body text at the same size as the forecast caveat, because
+   it is the same kind of remark: a true thing about the number above
+   it. Its only distinguishing mark is a cream ground, which groups it
+   with the figure it qualifies without raising its voice. */
+.mp-hist {
+  background: var(--cream); border-radius: var(--r-control);
+  padding: 9px 12px; margin: 12px -12px 0; max-width: none;
+}
+</style>
+</head>
+<body>
+<div class="mk-wrap">
+
+  <h1 class="mk-doc-title">Meituan money panel</h1>
+  <p class="mk-doc-sub">
+    Three states for a money panel in the body of the read-only order drawer.
+    Mockup only — hardcoded numbers, nothing computed, nothing fetched.
+    Meituan only: Eleme stores a first-seen settlement figure where Meituan
+    stores the latest, so one label would mean two things.
+  </p>
+
+  <!-- ============================= STATE 1 ============================= -->
+  <div class="mk-state">
+    <p class="mk-label"><b>State 1</b> — full data. A Meituan order from 24 August or later.</p>
+
+    <div class="mk-quoted">Pinned header — 94px, two rows (§1.13a rule 4). Quoted, not drawn: the panel is body content and does not reach it.</div>
+    <div class="dw">
+
+      <div class="od">
+        <div>
+          <div class="k">Store</div>
+          <div class="v">Tianhe</div>
+        </div>
+        <div>
+          <div class="k">Meituan status</div>
+          <div class="v">Delivered</div>
+        </div>
+        <div class="full">
+          <div class="k">Customer</div>
+          <div class="v">Chen Jing</div>
+          <div class="s">4 items</div>
+        </div>
+      </div>
+
+      <section class="mp">
+        <h3 class="mp-h">Meituan settlement</h3>
+
+        <div class="mp-row mp-lead">
+          <span class="mp-k">Customer paid</span>
+          <span class="mp-v">¥118.00</span>
+        </div>
+
+        <div class="mp-parts">
+          <div class="mp-row"><span class="mp-k">Goods</span><span class="mp-v">¥98.00</span></div>
+          <div class="mp-row"><span class="mp-k">Delivery</span><span class="mp-v">¥17.00</span></div>
+          <div class="mp-row"><span class="mp-k">Packaging</span><span class="mp-v">¥3.00</span></div>
+        </div>
+
+        <div class="mp-row mp-deduct">
+          <span class="mp-k">Meituan commission</span>
+          <span class="mp-v">−¥11.76</span>
+        </div>
+
+        <div class="mp-row mp-net">
+          <span class="mp-k">Expected from Meituan</span>
+          <span class="mp-v">¥106.24</span>
+        </div>
+
+        <p class="mp-foot">Meituan's own estimate, taken at the last check. It is re-cut if a refund lands, and it is not a confirmation that money has arrived.</p>
+      </section>
+
+    </div>
+    <p class="mk-note">
+      Three beats at 15px carry the answer — paid, taken, expected. The three
+      components sit at 13px graphite behind one hairline, so they read as the
+      make-up of ¥118.00 rather than as three more charges. The rule above the
+      commission is the subtraction.
+    </p>
+  </div>
+
+  <!-- ============================= STATE 2 ============================= -->
+  <div class="mk-state">
+    <p class="mk-label"><b>State 2</b> — no money detail. A Meituan order from 1 to 22 August.</p>
+
+    <div class="mk-quoted">Pinned header — 94px, two rows (§1.13a rule 4). Quoted, not drawn.</div>
+    <div class="dw">
+
+      <div class="od">
+        <div>
+          <div class="k">Store</div>
+          <div class="v">Tianhe</div>
+        </div>
+        <div>
+          <div class="k">Meituan status</div>
+          <div class="v">Delivered</div>
+        </div>
+        <div class="full">
+          <div class="k">Customer</div>
+          <div class="v">Chen Jing</div>
+          <div class="s">4 items</div>
+        </div>
+      </div>
+
+      <section class="mp">
+        <h3 class="mp-h">Meituan settlement</h3>
+
+        <div class="mp-row mp-lead">
+          <span class="mp-k">Customer paid</span>
+          <span class="mp-v">¥118.00</span>
+        </div>
+
+        <p class="mp-foot mp-hist">
+          The fee breakdown was never recorded for this order. Meituan's
+          commission and payout figures began arriving on 24 August 2026;
+          orders mirrored before then kept only the total.
+        </p>
+      </section>
+
+    </div>
+    <p class="mk-note">
+      One true figure and one sentence. No dashed rows: five blanks would send
+      the eye hunting for something that was never there. Past tense throughout
+      — <i>was never recorded</i>, not <i>unavailable</i> — because nothing is
+      pending and there is nothing to retry.
+    </p>
+  </div>
+
+  <!-- ============================= STATE 3 ============================= -->
+  <div class="mk-state">
+    <p class="mk-label"><b>State 3</b> — a mini-app order. No platform takes a cut, so there is no panel.</p>
+
+    <div class="mk-quoted">Pinned header — 94px, two rows (§1.13a rule 4). Quoted, not drawn.</div>
+    <div class="dw">
+
+      <div class="od">
+        <div>
+          <div class="k">Store</div>
+          <div class="v">Tianhe</div>
+        </div>
+        <div>
+          <div class="k">Payment</div>
+          <div class="v">WeChat</div>
+        </div>
+        <div class="full">
+          <div class="k">Ship to</div>
+          <div class="v">Chen Jing</div>
+          <div class="s">Tianhe district, Guangzhou</div>
+        </div>
+        <div>
+          <div class="k">Total</div>
+          <div class="v num">¥118.00</div>
+          <div class="s">4 items</div>
+        </div>
+      </div>
+
+      <div class="od">
+        <div class="full">
+          <div class="k">Items</div>
+          <div class="v">4 lines</div>
+          <div class="s">The order's own sections continue here, unchanged.</div>
+        </div>
+      </div>
+
+    </div>
+    <p class="mk-note">
+      No panel, not an empty one. Nothing announces the absence, because for a
+      mini-app order there is nothing absent — the money the customer paid is
+      the money that lands. An empty settlement block here would invent a
+      question the order does not have.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
