@@ -1,8 +1,12 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────
-# deploy-changed.sh — ship the files changed in the latest commit (HEAD) to
-# the live roots-v2 app. Wired to run automatically from .git/hooks/post-commit
-# (every `git commit` deploys), but also safe to run by hand to re-ship HEAD.
+# deploy-changed.sh — ship the files changed in a commit to the live roots-v2
+# app. Wired to run automatically from .git/hooks/post-commit (every `git
+# commit` deploys), but also safe to run by hand.
+#
+# USAGE   bash scripts/deploy-changed.sh            # HEAD (what the hook does)
+#         bash scripts/deploy-changed.sh <commit>   # one commit, e.g. 14b62eb
+#         bash scripts/deploy-changed.sh <A>..<B>   # everything in a range
 #
 # Flow:  list changed+still-present app files in HEAD
 #     -> scp them into the server's __stage__/ at matching relative paths
@@ -26,8 +30,26 @@ if [ "$BRANCH" != "main" ]; then
   exit 0
 fi
 
+# WHAT TO SHIP — HEAD unless a commit or an A..B range is given.
+#
+# A MERGE COMMIT USED TO SHIP NOTHING. `git diff-tree -r <merge>` prints no
+# paths at all, so a PR merged on GitHub and pulled down here ran this script,
+# found an empty list, and reported "nothing deployable — skipping". Not an
+# error, not a warning: a silent no-op that looked exactly like a commit with
+# no app files in it. Every such merge left the live server behind main.
+#
+# Diffing a commit against its FIRST PARENT is the fix and costs nothing: on a
+# merge it lists what the merge brought in, and on an ordinary commit it is
+# byte-identical to the diff-tree call it replaces.
+REF=${1:-HEAD}
+TIP=${REF##*..}
+[ -z "$TIP" ] && TIP=HEAD
+git rev-parse --verify --quiet "$TIP^{commit}" >/dev/null \
+  || { echo "[deploy] '$REF' is not a commit this repo knows."; exit 1; }
+[ "$REF" = "HEAD" ] || echo "[deploy] shipping $REF (not HEAD)"
+
 # Honour an opt-out token in the commit message.
-MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+MSG=$(git log -1 --pretty=%B "$TIP" 2>/dev/null || echo "")
 case "$MSG" in
   *"[skip deploy]"*|*"[no deploy]"*) echo "[deploy] skip token in commit message — not deploying."; exit 0 ;;
 esac
@@ -47,9 +69,12 @@ is_deployable() {
   esac
 }
 
-# Files touched by the latest commit that still exist locally. Deletions are
-# skipped: deploy-apply.sh only installs files, it can't remove live ones.
-mapfile -t CHANGED < <(git diff-tree --no-commit-id --name-only -r HEAD)
+# Files touched, that still exist locally. Deletions are skipped: deploy-apply.sh
+# only installs files, it can't remove live ones.
+case "$REF" in
+  *..*) mapfile -t CHANGED < <(git diff --name-only "$REF" | sort -u) ;;
+  *)    mapfile -t CHANGED < <(git diff --name-only "$REF^" "$REF" | sort -u) ;;
+esac
 FILES=()
 for f in "${CHANGED[@]}"; do
   [ -z "$f" ] && continue
