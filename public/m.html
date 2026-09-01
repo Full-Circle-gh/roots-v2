@@ -584,7 +584,7 @@ function copyText(t){
   else fallback();
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
-function push(route){ const s=SUBS[route]; if(s) state.stack.push({route,title:s.title}); render(); }
+function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return; state.stack.push({route,title:s.title}); render(); }
 function pop(){ state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -598,7 +598,9 @@ const CMD={}; function reg(n,f){CMD[n]=f;}
    dispatcher cannot feed. */
 window.APP={cmd:(n,...a)=>{ if(CMD[n]) CMD[n](...a); }};
 
-reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null;
+/* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
+reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
+reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
      Stamped before the render so the dot goes out on the tap rather than on
      the next poll fifteen seconds later. */
@@ -2143,12 +2145,31 @@ function screenSales(){
    Catalogue, Categories and Stock activity are gone from this list: they are
    sub-views of Products now, and a page reachable two ways drifts in one. */
 const MORE_GROUPS=[
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货']]},
+  /* A row is [key, icon, en, zh] and, for a destination that LEAVES this app,
+     a fifth element: its href. Quick Stock is its own PWA on its own manifest,
+     so it can only be linked to — and until it was, an operator who held both
+     tools had no route between them in either direction. */
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
   {h:null,rows:[['settings','settings','Settings','设置']]},
 ];
+/* MORE_GROUPS filtered to what this operator can reach, with each row resolved
+   to its label and its action. Three callers — the More list, the tab bar and
+   the search index — and they must agree, so none of them reads MORE_GROUPS
+   directly any more. */
+function moreGroups(){
+  return MORE_GROUPS.map(g=>({h:g.h, rows:g.rows.filter(r=>canRoute(r[0])).map(moreRow)}))
+                    .filter(g=>g.rows.length);
+}
+function moreRow(r){
+  const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
+  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href:r[4]||null,
+          cmd: r[4] ? `APP.cmd('leave','${r[4]}')` : `APP.cmd('push','${r[0]}')`};
+}
+function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]); }
+
 /* One source for setup progress, and it is the server's. The card used to
    compute a percentage from a hardcoded list of steps, so every store on earth
    read "50% set up · 3 steps left" whatever it had actually done. */
@@ -2697,8 +2718,21 @@ function screenSetup(){
 }
 function screenMore(){
   const su=setupState();
+  // "Open your store" is the owner's onboarding checklist, not a tool. It is
+  // gated on the same keys as Settings, so a stocker is not handed a progress
+  // bar for work they cannot do.
+  const setupCard = canRoute('setup');
+  const groups = moreGroups();
+  /* A role can be narrowed until this app holds nothing for it — a stocker whose
+     only tool is the separate Quick Stock PWA. Say so, and say who can change
+     it, rather than painting an empty page under a heading. */
+  if(!setupCard && !groups.length){
+    return nothingYet(T('Nothing here for you yet','这里暂时没有可用功能'),
+      T('Your role does not open any of this app\u2019s screens. Whoever manages your team can widen it.',
+        '您的角色尚未开通本应用中的任何页面,可请团队管理员调整权限。'));
+  }
   return `<div style="padding:16px 0 8px">
-    <div style="padding:0 16px 6px"><div class="card" style="padding:16px">
+    ${setupCard?`<div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
         <span style="flex:1;min-width:0">
@@ -2707,13 +2741,13 @@ function screenMore(){
             ? (su.left?T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`):T('Everything is set up','已全部完成'))
             : T('Checking…','检查中…')}</span>
           ${su.real?`<span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span>`:''}</span>
-        <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>
-    ${MORE_GROUPS.map(g=>`<div style="margin-top:14px">
+        <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>`:''}
+    ${groups.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
-        <button class="row" onclick="APP.cmd('push','${r[0]}')"><span class="rowico">${ic(r[1])}</span>
-        <span style="flex:1;min-width:0;font-size:15px">${T(r[2],r[3])}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
+        <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic(r.href?'arrow-up-right':'chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
   </div>`;
 }
@@ -6073,8 +6107,8 @@ function sheetOverflow(){
 /* The jump list is built from the nav itself, so it can never drift from what
    the app actually has — the five destinations and every row of More. */
 function searchIndex(){
-  const out=Object.keys(TAB_META).filter(k=>k!=='more').map(k=>({icon:TAB_META[k].icon,p:[TAB_META[k].en,TAB_META[k].zh],g:['Go to','前往'],cmd:`APP.cmd('closeSearch');APP.cmd('tab','${k}')`}));
-  MORE_GROUPS.forEach(gr=>gr.rows.forEach(r=>out.push({icon:r[1],p:[r[2],r[3]],g:gr.h||['More','更多'],cmd:`APP.cmd('closeSearch');APP.cmd('push','${r[0]}')`})));
+  const out=Object.keys(TAB_META).filter(k=>k!=='more'&&canRoute(k)).map(k=>({icon:TAB_META[k].icon,p:[TAB_META[k].en,TAB_META[k].zh],g:['Go to','前往'],cmd:`APP.cmd('closeSearch');APP.cmd('tab','${k}')`}));
+  moreGroups().forEach(gr=>gr.rows.forEach(r=>out.push({icon:r.icon,p:[r.en,r.zh],g:gr.h||['More','更多'],cmd:`APP.cmd('closeSearch');${r.cmd}`})));
   return out;
 }
 function sheetSearch(){
@@ -6632,6 +6666,68 @@ function screenProducts(){
    never more than one tap away). There is no drill-down here: a five-item bar
    and a fourteen-row rail are different problems, and More stays one flat,
    grouped list. */
+/* ══════════════════════════════════════════════════════════════════════════
+   WHAT THIS OPERATOR CAN REACH
+   ──────────────────────────────────────────────────────────────────────────
+   The desktop has hidden nav by capability since caps went live (01-core.js
+   applyCapGates + TAB_CAP). This app never did: TAB_META and MORE_GROUPS were
+   static lists, so every operator got the owner's app. A kitchen account let
+   out of the Add Stock app landed on a Home board of revenue it may not see,
+   over five tabs and thirty More rows it cannot use — its two actual tools,
+   Add stock and Receiving, buried among them.
+
+   Same map, same keys and the same fail-open rule as the desktop, because two
+   maps drift and the one that drifts is the one nobody looks at. What differs
+   is only HOW it is applied: this screen re-renders template strings into
+   #content rather than walking a live DOM, so the filter runs BEFORE the render
+   instead of hiding nodes after it.
+
+   A route with no entry here is ungated, deliberately — the same "untracked
+   tabs stay visible" rule the desktop states. Adding a screen never hides it by
+   accident; it just does not gate until somebody maps it. */
+const ROUTE_CAP={
+  // The five destinations.
+  home:'dashboard:view', orders:'orders:view', customers:'customers:view', products:'products:view',
+  // More → Operations. sales and trend both read /dashboard, so they are gated
+  // on the capability that endpoint belongs to and not on a reports key they
+  // never touch.
+  inbox:['reviews:view','feedback:view'], sales:'dashboard:view', trend:'dashboard:view',
+  delivery:'delivery:view', invoices:'invoices:view', purchasing:'purchasing:view',
+  /* RECEIVING IS GATED ON RECEIVE, NOT ON VIEW. It is a screen whose entire
+     purpose is the save at the bottom of it, and that save is gated on
+     purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
+     of purchasing:view alone would be a screen whose only action 403s. */
+  receiving:'purchasing:receive', receive:'purchasing:receive',
+  stockapp:['quickstock:add','quickstock:recount'],
+  // More → Marketing.
+  coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
+  sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
+  // More → Loyalty & Wallet.
+  membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit',
+  // More → Content.
+  editor:'editor:view', about:'content:view', media:'media:view', legal:'content:view', faq:'content:view',
+  // Settings, and the screens reached from inside it or from the Products strip.
+  settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
+  setup:['settings:shop','stores:view'],
+  team:'team:view', categories:'categories:view', activity:'activity:view',
+};
+/* Fail-OPEN on null, exactly as the desktop's can()/canAny(): caps are null only
+   on a resolution hiccup or a stale session, and an operator locked out of their
+   own app by a hiccup is worse than one shown a row they cannot use. */
+function mCan(v){
+  if(!state.caps) return true;
+  if(v===undefined) return true;
+  return Array.isArray(v) ? v.some(k=>state.caps.indexOf(k)!==-1) : state.caps.indexOf(v)!==-1;
+}
+function canRoute(k){ return mCan(ROUTE_CAP[k]); }
+/* The Quick Stock app is a separate PWA, so its row LEAVES rather than pushing a
+   screen. Its label is the mode the operator will actually land in: /stock picks
+   add-vs-recount by role, and recount is what anyone holding both resolves to
+   (routes/retail-inventory.js quick-stock/context), so recount wins here too. */
+function stockAppLabel(){
+  return mCan('quickstock:recount') ? ['Quick stock','快速库存'] : ['Add stock','加库存'];
+}
+
 const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package'},
   customers:{en:'Customers',zh:'顾客',icon:'users'},products:{en:'Products',zh:'产品',icon:'shopping-bag'},
   more:{en:'More',zh:'更多',icon:'menu'}};
@@ -6827,7 +6923,11 @@ function pollUnseenOrders(){
    and never opened the list. */
 function unseenOrders(){ return state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew); }
 function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
-function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
+/* The More dot counts unseen REVIEWS, so it must not light for an operator who
+   cannot open the Inbox: a dot promising work, over a folder that does not
+   contain it. Unknown keys (a flattened bar's rows) carry no dot. */
+function tabDot(k){ return k==='orders' ? unseenOrders()
+  : k==='more' ? (canRoute('inbox') && unseenReviews()>0) : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
    acting, not the system: it does not earn Dusk either. */
@@ -6894,11 +6994,53 @@ function pageHead({title, status, cta, back, controls}){
     ${status?`<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
+/* THE BAR IS THE OPERATOR'S TOOLS, and for most operators that is unchanged.
+   Four destinations plus More, each dropping out if its capability is missing.
+
+   THE FLATTEN. An operator who holds none of the four — a stocker, a receiver —
+   would be left with a bar containing only More: one button, opening a list of
+   two rows, to reach the two things they do all day. So when nothing above More
+   survives, More stops being a folder and its rows become the bar itself. Same
+   call the desktop's rail makes when a folder is down to one child: a folder
+   around the whole of somebody's job is not navigation, it is a lid.
+
+   Four is the ceiling for a flattened bar, with More kept for the rest, so the
+   row can never overflow on a narrow phone. Nothing here changes what an owner
+   sees: they hold all four, so nothing flattens. */
+const TAB_KEYS=['home','orders','customers','products'];
+function navTabs(){
+  const primary=TAB_KEYS.filter(canRoute);
+  const rows=moreRowsFlat();
+  if(primary.length){
+    const out=primary.map(k=>({key:k,icon:TAB_META[k].icon,en:TAB_META[k].en,zh:TAB_META[k].zh,
+                               cmd:`APP.cmd('tab','${k}')`,tab:k}));
+    if(rows.length) out.push({key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
+                              cmd:"APP.cmd('tab','more')",tab:'more'});
+    return out;
+  }
+  if(!rows.length) return [];
+  if(rows.length<=5) return rows.map(r=>({key:r.key,icon:r.icon,en:r.en,zh:r.zh,cmd:r.cmd,
+                                          route:r.href?null:r.key}));
+  return rows.slice(0,4).map(r=>({key:r.key,icon:r.icon,en:r.en,zh:r.zh,cmd:r.cmd,
+                                  route:r.href?null:r.key}))
+    .concat([{key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
+              cmd:"APP.cmd('tab','more')",tab:'more'}]);
+}
+/* Lit when you are ON it. A flattened bar's buttons are pushed SCREENS rather
+   than tabs, so what counts as "on" is the top of the stack, not state.tab. */
+function tabOn(t){
+  const top=state.stack[state.stack.length-1];
+  if(t.route) return !!top && top.route===t.route;
+  if(t.tab) return state.tab===t.tab && !state.stack.length;
+  return false;
+}
 function tabbar(){
-  return `<div class="tabbar">${Object.keys(TAB_META).map(k=>{const m=TAB_META[k];const on=state.tab===k&&!state.stack.length;const col=on?'var(--text-primary)':'var(--text-secondary)';
-    return `<button onclick="APP.cmd('tab','${k}')" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
+  const tabs=navTabs();
+  if(!tabs.length) return '';
+  return `<div class="tabbar">${tabs.map(m=>{const on=tabOn(m);const col=on?'var(--text-primary)':'var(--text-secondary)';
+    return `<button onclick="${m.cmd}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
       <span style="position:relative;display:flex;align-items:center;justify-content:center;height:24px;width:24px">${ic(m.icon,22,on?2:1.75)}
-      ${tabDot(k)?`<span style="position:absolute;top:-2px;left:16px;width:6px;height:6px;border-radius:50%;background:var(--sage)"></span>`:''}</span>
+      ${tabDot(m.key)?`<span style="position:absolute;top:-2px;left:16px;width:6px;height:6px;border-radius:50%;background:var(--sage)"></span>`:''}</span>
       <span style="font-size:13px;letter-spacing:-.01em;font-weight:${on?'500':'400'};line-height:1.15;color:${col};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(m.en,m.zh)}</span></button>`;}).join('')}</div>`;
 }
 function bodyHtml(){
@@ -8442,7 +8584,29 @@ async function loadMe(){
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null};
+    landOnSomethingReachable();
   }catch(e){}
+}
+/* THE APP OPENS ON HOME, and Home is a board of revenue. An operator without
+   dashboard:view was therefore shown, for the length of one render, the one
+   screen their role exists to exclude — and then had no way to leave it, since
+   every tab was equally ungated. Runs once, as soon as the caps arrive, and
+   only moves an operator who has not already navigated somewhere themselves. */
+function landOnSomethingReachable(){
+  // The ?to= / ?tab= deep link is read at boot, BEFORE this operator's caps
+  // arrive, so it can name a screen they may not open — a shortcut kept from a
+  // wider role, or a notification aimed at the whole team. Drop it now that the
+  // answer is known; push() refuses the same route on any later tap.
+  state.stack=state.stack.filter(f=>canRoute(f.route));
+  if(state.stack.length) return;                 // the deep link stands
+  if(canRoute(state.tab)) return;                // Home is theirs; leave it alone
+  const primary=TAB_KEYS.filter(canRoute);
+  if(primary.length){ state.tab=primary[0]; return; }
+  // Flattened: open the first tool that is a SCREEN. Landing on Quick Stock
+  // would navigate straight out of this app every time it was opened.
+  const inApp=moreRowsFlat().filter(r=>!r.href);
+  if(inApp.length){ state.tab='more'; push(inApp[0].key); return; }
+  state.tab='more';
 }
 async function loadLive(){
   // Role first, and awaited: the Recap renders money rows or does not depending
@@ -8586,6 +8750,9 @@ document.documentElement.setAttribute('data-theme',state.theme);
           notification an operator just tapped opened Home. */
        to=q.get('to')||q.get('tab')||''; }catch(e){}
   if(!to) return;
+  // Caps have not arrived yet at this point, so this only records the request;
+  // landOnSomethingReachable() re-decides once they have, and push() refuses a
+  // route the operator cannot reach.
   if(TAB_META[to]) state.tab=to;
   else if(SUBS[to]){ state.stack=[{route:to,title:SUBS[to].title}]; if(to==='inbox') markInboxSeen(); }
 })();
