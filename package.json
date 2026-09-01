@@ -23,6 +23,7 @@
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:offapp-refund": "node scripts/test_offapp_refund_guard.js",
+    "test:material-arrived-tooltip": "node scripts/test_material_arrived_tooltip.js",
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
     "test:purchasing-line-order": "node scripts/test_purchasing_line_order.js",
     "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
