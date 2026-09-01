@@ -498,12 +498,21 @@ app.get('/backend/account', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
 });
 
-// Mini App Backend team — manage operators within the tenant (invite / role /
-// deactivate / reset password). Reached from the topbar profile menu.
+// Mini App Backend team — RETIRED as a page. public/backend-team.html was a
+// standalone duplicate of the Team screen, written before the permission matrix
+// existed: it carried its own role-name map, its own descriptions, its own
+// sixteen hardcoded role <option> elements and its own owner-count logic, and
+// it could not edit permissions at all. The rail stopped linking to it in
+// 2026-07-14 when Team became a native tab; roles becoming per-tenant data is
+// what settled it, because every role statement the page made would have been
+// untrue for any tenant that renamed or deleted one.
+//
+// The URL survives as a redirect rather than a 404: it was reached from the
+// topbar profile menu for months, so bookmarks exist, and ?tab= is the shell's
+// own deep-link convention (see 10-extras.js).
 app.get('/backend/team', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'backend-team.html'));
+  res.redirect('/retail-admin?tab=team');
 });
 
 // Co-brand identity editor (logo + brand name). Moved out of the profile page

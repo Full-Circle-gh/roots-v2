@@ -1969,8 +1969,10 @@ function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
 
 // ══════════════════════════════════════════════════════════════════
 // Team — native tab (2026-07-16), ported from the old standalone
-// backend-team.html (route still exists as a fallback, no longer linked to
-// from the rail). Lists/invites/edits operators via /api/backend/team* using
+// backend-team.html, which is now GONE: the page and its route were retired
+// once roles became per-tenant data, because every role name and description it
+// carried was a second copy free to disagree with the record. /backend/team
+// redirects here. Lists/invites/edits operators via /api/backend/team* using
 // the app's own api()/toast()/can()/cuT() helpers instead of the standalone
 // page's raw fetch + local L()/setMsg(). Namespaced tm* to match the scoped
 // CSS in #tab-team's <style> block (retail-admin.html).
