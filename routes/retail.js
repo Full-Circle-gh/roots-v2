@@ -145,6 +145,12 @@ function requireRetailAdmin(req, res, next) {
           // takes effect immediately. NOT yet enforced — route gates that read
           // req.caps land behind a per-tenant flag in a later phase; for now
           // owner/admin/staff resolve to ALL caps, so this changes nothing.
+          //
+          // The role's own capability list now comes from the tenant's
+          // tenant_roles record rather than a code literal. The whole `tenant`
+          // row is passed on purpose: it carries roles_version, which is what
+          // lets lib/roles.js answer from its cache without a query. That is the
+          // entire cost of roles-as-data on this path — nothing, when warm.
           try {
             const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
             req.caps = new Set(r.caps);
