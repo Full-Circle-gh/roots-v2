@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.7 · 2026-09-01 · adds a SIXTH amendment section, A cost that cannot be put back — purchasing, locking three pairs. It is the first refusal in this document that names a remedy the operator can carry out: the two before it state a condition and stop, while this one ends in an instruction, because the system cannot know the old price and a person can decide it. Shipped without it, the condition reached the operator as a bare error code on a screen that had already told them to do the thing it was refusing. v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -465,6 +465,60 @@ entry points — one condition, one wording — applied to a second condition.
 
 Sentence case, no exclamation marks. The em dash before the second half of
 `returnBlocked` is part of both strings and is not a substitute for a full stop.
+
+## A cost that cannot be put back — purchasing (LOCKED 2026-09-01)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the sixth such amendment, opened and closed 2026-09-01.
+
+WHY THE STRINGS ARE NEEDED. Taking a purchase order off its placed state has to
+give back what the order took, including any ingredient cost its material lines
+wrote. Where nothing recorded what the cost was BEFORE the order touched it, the
+transition is refused — correctly. What the operator got was the bare code
+`cost_not_recoverable` in a toast, on a screen whose own advice is "return it to
+draft to change it", and the purchasing wizard only opens a draft. So the code
+was the end of the road: the order could not be edited, and nothing on screen
+said why or what to do about it.
+
+WHAT MUST BE SAID, AND THE ORDER IT IS SAID IN. The refusal first, then the
+materials it is about, then the way out. The way out is the part with no
+precedent in this document: the system does not know the old price, so a PERSON
+has to decide what it should be, and setting the material's cost by hand makes
+the order's write no longer the standing one — which clears the refusal by
+itself. A refusal that names its own remedy is the difference between a rule and
+a dead end.
+
+HOW THE CN HALVES WERE ARRIVED AT. Under the delegation the fourth amendment
+records, and built the same way — from words already shipped:
+`物料` is the Materials tab's own name (`18-materials.js`), quoted in 「」 as
+that screen's settings copy already quotes it (`02-settings-ops.js`), and
+`未作任何更改。` is lifted character-for-character from `undoBlocked`, because
+this refusal makes the same promise and must make it in the same words.
+
+**Ash should correct these if they read wrong to a Chinese operator; nothing
+else depends on the exact phrasing.**
+
+**THE PAIRS — minted 2026-09-01 by Ash's delegation, locked.**
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `costBlockedTitle` | This order cannot go back yet | 该采购单暂时无法退回 | Title of the refusal dialog. "Yet" is load-bearing — there is a way out, and the next lines give it. |
+| `costBlocked` | These materials still carry the price this order set, and nothing recorded what they cost before it — nothing was changed. | 这些物料当前的价格仍是本采购单写入的，而系统没有记录写入前的价格 — 未作任何更改。 | Headline. Names the reason and states that the operation wrote nothing. |
+| `costBlockedWayOut` | Set their price yourself under Materials, then try again. | 请先在「物料」中手动设置这些物料的价格，然后再试。 | The remedy. A person decides the price; that clears the refusal. |
+
+**BOTH HALVES OF `costBlocked`, ALWAYS**, for the reason `undoBlocked` and
+`returnBlocked` each carry two: dropping the first leaves a vague complaint,
+dropping the second leaves the operator guessing whether the order is now
+half-reversed.
+
+**IT IS NOT `undoBlocked` OR `returnBlocked`.** All three refuse a transition and
+all three end in the same six characters, and they are still three different
+conditions: stock that has left the shelf, goods that cannot go back to a
+supplier, and a price with no recorded predecessor. Only this one has a remedy
+the operator can carry out, which is why only this one has a third line.
+
+Sentence case, no exclamation marks. The em dash before the second half of
+`costBlocked` is part of both strings and is not a substitute for a full stop.
 
 ## Deferred — recorded, not in scope of this lock
 
