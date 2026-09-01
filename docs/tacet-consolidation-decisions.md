@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.99
+# Tacet shared-core consolidation — decisions record, v4.100
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.100 — **§37 added: Finance is a Tacet module for every tenant, and its revenue comes from the order record.** Finance is NOT gated on Production — every business has money in and money out, and Production changes only where cost of goods comes from, not what the screen is. Finance is NOT accounting: no chart of accounts, no double-entry, no tax engine, no bank reconciliation, and no attempt at the per-country compliance that a real accounting product carries. **The load-bearing finding is that the kitchen app's income total is already wrong and nobody knew** — it derives from `sales_entries`, which is live only for manual entry and market POS; Eleme has never reached it once, and Meituan, mini-app and gzgrocery arrived only via one-time scripts an operator ran by hand and which are wired into no route or cron. On a ¥3,500 day across six channels that table shows ¥600 while the order record already holds ¥2,900 with no new sync built. Six kitchen tabs collapse to two screens; Invoices is dropped rather than moved, because Tacet Purchasing already reads the same `invoices` table. Six items are named as explicitly NOT decided, including where counter sales live, the location dimension, and `tdb()` scoping on a file that has none.
 
 2026-08-27 · v4.99 — **DAMAGE ON A DELIVERY IS A MONEY QUESTION, NOT A STOCK QUESTION, RECORDED AS §35.** A NEW DECISION THAT REVERSES NO EARLIER RULE — it settles what happens to the VALUE of damaged units, which the record had never ruled on, and no existing § is narrowed, withdrawn or contradicted by it. Every damaged quantity now carries an outcome the operator chooses when the damage is recorded — **REPLACING**, **CREDITED** or **UNRESOLVED** — and there is no default that resolves itself. **THE THREE OUTCOMES DIFFER IN WHAT IS OWED AND WHETHER THE ORDER IS DONE.** REPLACING leaves the amount owed unchanged and the order open until the replacements arrive; CREDITED drops the amount owed by the damaged units' value and completes the delivery; UNRESOLVED holds that value — neither owed nor written off — and leaves the order open. **NO ACCOUNT IS FORCED INTO ONE OUTCOME.** A business whose suppliers always replace picks REPLACING every time at the cost of one click, a business whose suppliers always credit picks CREDITED, and neither is the product's assumption or hardcoded — §0 governs, and a rule that only fits one supplier relationship is not a rule. **AN ORDER DOES NOT CLOSE WHILE GOODS ARE OWED**: REPLACING or UNRESOLVED damage keeps it open, because an order that closes with units outstanding is an order nobody chases. **WHAT THIS SECTION DOES NOT REOPEN: damaged units never enter stock**, under any outcome. That is unchanged from current behaviour — §34's key is untouched and the exclusion at receiving time stands — and it is restated inside §35 only so the new outcomes are not misread as putting some of them back. **RENUMBERING: Related documents moves from §35 to §36** so the reference appendix stays last, the shape v4.97 established. One live pointer followed it — v4.92's entry, which cites the waste-survey line as §35's, now reads §36. v4.97's own record of the earlier §34/§35 swap is left exactly as written: like v4.92's "moves from §33 to §34" sentence, it is a dated account of a past move, not a claim about where anything lives today.
 
@@ -4514,3 +4516,68 @@ Three decisions made when the first build against §32 was scoped, and made beca
 - ~~docs/tacet-postgres-status.md~~ — **DELETED 2026-08-23** with the migration (§24 THE POSTGRES MIGRATION IS CANCELLED). Recoverable from git history; the two things in it worth keeping were moved out first.
 - docs/tacet-write-surface.md — **what writes to this database**, v1.0, 2026-08-23. Eight processes, twelve in-process schedulers of which eleven run, the read-triggered writes, the inbound callbacks classified by what they tell the caller when the write fails. **Read before anything that takes the database away.**
 - docs/tacet-operating-findings.md — **the findings that outlived the Postgres migration**, v1.0, 2026-08-23. Five instruments that lied, ten refusal rules, the live defects, the operational facts about this box.
+
+## 37. Finance — a Tacet module for every tenant
+
+**Decided 2026-09-01.**
+
+### It is not Production-gated
+
+Finance ships to every tenant. Every business has money coming in and money going out; a pure reseller with no production still buys stock, pays rent, and needs to know whether it made money. Gating Finance on the Production module would leave a reseller with no accounts screen at all.
+
+Production changes exactly one thing: where the cost of a sold item comes from. For a reseller it is the purchase price of the thing. For a maker it is the recipe rollup — materials, labour, overhead, packaging. That difference lives in the cost engine, which is already gated on Production. Finance reads `unit_cost_at_sale`, which by then is a number, and does not know or care which way it was derived.
+
+This is confirmed by how the category treats the same figure. Restaurant software calls it food cost percentage — cost of goods divided by sales — which is the identical formula to retail gross margin with a different cost source. Same screen, different input.
+
+### It is not accounting
+
+Tacet builds an operational money view, not a bookkeeping system. Explicitly out of scope: chart of accounts, double-entry, tax engine, bank reconciliation, jurisdiction-specific compliance. Odoo does build these and ships fiscal localisations for over a hundred countries to do it; that is a product in its own right and Tacet is not going to become one. Every other system in the category — Shopify, Loyverse, Lightspeed — produces an operational report and hands off to the accountant's own software.
+
+The universal spine, and the whole of what Finance computes:
+
+    Revenue − cost of goods = gross profit − operating expenses = net
+
+Only the top two lines are ever automatic. Operating expenses are typed in by a person, in every system that exists. So Finance is one calculated report plus one hand-entry list, and nothing more.
+
+### Revenue derives from orders, not from `sales_entries`
+
+**DECIDED: Finance reads revenue from the order record.**
+
+`sales_entries` is not a revenue source and never was a complete one. It is written live only by manual Sales entry and by market POS. Eleme revenue has never reached it at any point. Meituan, mini-app and gzgrocery reached it only through one-time import scripts run by hand against a specific data dump, wired into no route, cron or startup path. Anyone reading the kitchen app's Finance income total as "all sales" is reading a number that structurally omits one channel entirely and is stale for three others.
+
+Worked example, on a day where Roots takes ¥3,500 across six channels — Meituan ¥1,200, Eleme ¥800, mini-app ¥600, gzgrocery ¥300, dine-in ¥400, market POS ¥200:
+
+- Reading `sales_entries`: **¥600**. Four channels missing or frozen. Reaching ¥3,500 means building sync for four channels into a table §22 already has down for retirement.
+- Reading the order record: **¥2,900** on day one with no new sync, because those four channels already write orders. The remaining ¥600 is counter and market trade, which is not an order today.
+
+The rejected option is not merely more work; it is work invested in a table scheduled to die. §21 already governs: an order is a sale, there is one record, and reporting reads from it.
+
+### Structure — two screens
+
+The kitchen app presents six tabs: Dashboard, Income, Expenses, Ledger, Invoices, Categories. Income, Expenses and Ledger are three views of one list. Categories is settings. Invoices is Purchasing's job and is already built there. Tacet ships two:
+
+- **Summary** — the staircase above. Filtered by date range, location and channel.
+- **Transactions** — one list, both directions, filterable to in or out. The only surface where a person types.
+
+Categories move to Settings. They are a per-account list a business writes in its own words — not a chart of accounts, not a fixed set, not seeded with anyone else's vocabulary.
+
+**Invoices is not moved and not rebuilt.** Tacet Purchasing already reads the same `invoices` table — the supplier scorecard's "Owed now · 当前应付" tile and bill count come from it. The kitchen Finance Invoices tab is a second front door onto rows Purchasing already owns. It is dropped, not migrated.
+
+### §0 consequences, recorded so they are not re-imported
+
+Three things in the kitchen build are Roots-shaped and are rebuilt rather than carried:
+
+- Expense categories are hardcoded Chinese strings. Income categories are worse: they live in each browser's localStorage and are never synced to the server at all, so there is no shared list, only a per-device accident.
+- Currency is `¥` throughout.
+- Neither ledger table records a location. A one-shop business does not notice; a fifteen-shop business cannot operate.
+
+### Explicitly NOT decided here
+
+Do not treat any of the following as settled:
+
+- Where counter and market sales live once `sales_entries` retires — an order, or a Transactions entry.
+- The location dimension on the ledger: column, join, or something else.
+- `tdb()` scoping. `routes/finance.js` uses the global handle on all thirteen routes and has no tenant handling anywhere.
+- Whether PO-derived expense rows remain projections that are deleted and recomputed on every PO status change.
+- Expense and income category normalisation. `routes/finance.js` never calls `storeCategory`, so manual entries write raw client text with no normalisation at all.
+- What happens to the existing `income_entries` and `sales_entries` rows.
