@@ -464,10 +464,12 @@
   // kitchen orders, name the store, and the server writes retail DRAFTS of them
   // (POST /copy-from-kitchen). The kitchen originals are untouched.
   //
-  // Say the double plainly, on the screen, not just in a route comment: after a
-  // copy the same real purchase has a row in each list, and placing the copy
-  // posts its cost to Finance a second time. A draft posts nothing, which is
-  // why the copies land as drafts and the note sits above the button.
+  // Say what the handover is, on the screen, not just in a route comment: after
+  // a copy the same real purchase has a row in each list, and placing the copy
+  // is what decides which of the two the books and the 发票 chase believe — the
+  // copy takes over, the kitchen original stands down (lib/po-supersede.js). A
+  // draft decides nothing, which is why the copies land as drafts and the note
+  // sits above the button.
   function kitchenRows() {
     const q = _kSearch.toLowerCase().trim();
     if (!q) return _kSrc;
@@ -618,8 +620,8 @@
         <select class="pu2-input" onchange="puKitchenStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
       </label>
       <span class="pu2-mut" style="max-width:340px;line-height:1.4">${esc(n
-        ? T('The kitchen keeps its originals. A copy is a second row for the same purchase — its cost only reaches Finance when you mark it Ordered.',
-            '厨房端原单保留。复制件是同一笔采购的第二条记录——标记"已下单"后其金额才会记入财务。')
+        ? T('The kitchen keeps its originals. A copy is the same purchase, not a second one — mark it Ordered and it takes over the books and the 发票 chase from the kitchen order it came from.',
+            '厨房端原单保留。复制件是同一笔采购,不是第二笔——标记"已下单"后,由它接管账目与发票跟进,原单同时退出。')
         : T('Tick the orders you need here.', '勾选需要导入的采购单。'))}</span>
       <span class="spacer"></span>
       <button class="pu2-btn ghost" onclick="puKitchenClose()">${esc(T('Cancel', '取消'))}</button>
@@ -2080,13 +2082,28 @@
     const unspec = g.supplier === INV_UNSPECIFIED;
     const byPo = new Map();
     for (const l of g.lines) {
-      if (!byPo.has(l.po_number)) byPo.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, date: l.date, po_no_invoice: l.po_no_invoice, lines: [] });
+      if (!byPo.has(l.po_number)) byPo.set(l.po_number, {
+        po_id: l.po_id, po_number: l.po_number, date: l.date, po_no_invoice: l.po_no_invoice,
+        // An RPO-#### copied out of the kitchen list REPLACES the PO-#### it came
+        // from once it is placed, and the server stops listing that original
+        // here (lib/po-supersede.js). Say so on the copy: the buyer knows both
+        // orders exist, and an order that simply stopped appearing reads as a
+        // bug rather than as the duplicate being gone.
+        supersedes: l.supersedes_po_number || null,
+        supersedes_invoiced: l.supersedes_invoiced || 0,
+        lines: [] });
       byPo.get(l.po_number).lines.push(l);
     }
     return `<div class="pu2-invlines">${[...byPo.values()].map(po => `
       <div class="pogrp">
         <span class="pu2-mono">${esc(po.po_number)}</span>
         <span class="pu2-mut">${esc(po.date || '')}</span>
+        ${po.supersedes ? `<span class="pu2-mut">${esc(T('replaces', '替代'))} ${esc(po.supersedes)}${
+          // Only when there IS money on the replaced order — otherwise this is
+          // noise on every copied line. The 发票 is recorded and stays recorded;
+          // it is named here so nobody chases it a second time.
+          po.supersedes_invoiced > 0.005
+            ? ` · ${T('already invoiced', '已登记发票')} ${money(po.supersedes_invoiced)}` : ''}</span>` : ''}
         <span class="spacer"></span>
         ${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${po.lines.map(l => l.line_id).join(',')}])">${esc(T('Set supplier for this order', '为整单设置供应商'))}</button>` : ''}
         ${po.po_no_invoice

@@ -188,7 +188,10 @@ stub('../middleware/auth', { logActivity: (...a) => logged.push(a) });
 stub('./retail', {
   requireRetailAdmin: (req, _res, next) => { req.user = { id: 1, username: 'tester' }; next(); },
 });
-stub('./purchases', { firePriceAlertsForPO: () => {}, allocateLandedExtras: () => {} });
+stub('./purchases', { firePriceAlertsForPO: () => {}, allocateLandedExtras: () => {},
+                      // Called by the retail expense poster for the kitchen order
+                      // a copy came from — see lib/po-supersede.js.
+                      postPOExpenses: () => ({ skipped: 'stubbed' }) });
 stub('../lib/recipe-rollup', { recipeOwnsProductCost: () => false });
 
 let express, router;

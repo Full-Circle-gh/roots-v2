@@ -148,8 +148,13 @@ async function main() {
   ok(modalHtml().includes('Copy 1 order'), 'and the button counts what is ticked');
   sandbox.puKitchenToggle(49);
   ok(modalHtml().includes('Copy 2 orders'), 'the count follows a second tick');
-  ok(modalHtml().includes('second row for the same purchase'),
-     'the double-row warning is on the screen, not only in the code');
+  // The note used to warn that a copy is "a second row for the same purchase"
+  // whose cost posts again. It no longer does post again — placing the copy
+  // hands the books and the 发票 chase over from the kitchen original
+  // (lib/po-supersede.js) — so the note now says what actually happens, and
+  // this asserts the handover is on the SCREEN and not only in a route comment.
+  ok(modalHtml().includes('takes over the books'),
+     'the handover note is on the screen, not only in the code');
 
   console.log('\n══ 5 · "select all" never reaches past the search ══');
   sandbox.puKitchenToggle(48); sandbox.puKitchenToggle(49);   // clear

@@ -79,8 +79,13 @@ stub('middleware/auth.js', { logActivity: () => {}, requireAuth: (q, s, n) => n(
                              requirePermission: () => (q, s, n) => n() });
 stub('routes/retail.js',   { requireRetailAdmin: (req, res, next) => {
                                req.user = { id: 1, username: 'tester' }; next(); } });
+// postPOExpenses is stubbed alongside them because the retail expense poster
+// now calls it for the KITCHEN source of a copy — handing the books back and
+// forth as the copy is placed and unplaced (lib/po-supersede.js). That handover
+// has its own test, scripts/test_po_supersede.js, which runs the real one.
 stub('routes/purchases.js', { firePriceAlertsForPO: () => {},
-                              allocateLandedExtras: () => ({}) });
+                              allocateLandedExtras: () => ({}),
+                              postPOExpenses: () => ({ skipped: 'stubbed' }) });
 stub('lib/recipe-rollup.js', { recipeOwnsProductCost: () => false, planRollup: () => ({}) });
 
 const express = require('express');

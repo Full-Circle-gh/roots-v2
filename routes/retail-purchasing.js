@@ -41,7 +41,11 @@ const { requireRetailAdmin } = require('./retail');
 // require resolves the already-cached router with firePriceAlertsForPO
 // attached to it. One alert path, not two.
 const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons,
-        recordReceipt, appliedReceiptStore } = require('./purchases');
+        recordReceipt, appliedReceiptStore, postPOExpenses } = require('./purchases');
+// The ONE rule for "this kitchen order has been replaced by the copy somebody
+// made of it here" — read lib/po-supersede.js before changing either ledger it
+// governs. Consumed by the expense poster below and by the 发票 chase.
+const { notSupersededByCopySql, invoicedOnSuperseded } = require('../lib/po-supersede');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 
 const router = express.Router();
@@ -108,6 +112,25 @@ function postRetailPOExpenses(poId) {
     inserted++; total += extras;
   }
   return { inserted, total };
+}
+
+// A copy pulled out of the kitchen list shares its purchase with the kitchen
+// order it came from, and the two must never both be in the books. postPOExpenses
+// refuses to post a kitchen order while a placed copy stands it down
+// (lib/po-supersede.js), but it only learns that when something asks it to
+// re-post — and nothing touches the kitchen row when the buyer places the copy
+// HERE. So the copy asks on its behalf, on every one of its own posts: placing
+// this copy wipes the original's expense rows, and putting it back to Draft or
+// cancelling it posts them again. Both directions, one call, no stored flag.
+//
+// Wrapped rather than folded into postRetailPOExpenses' body so that the five
+// call sites keep reading as "re-post this order" and get the pair kept honest
+// for free.
+function postRetailPOExpensesWithSource(poId) {
+  const posted = postRetailPOExpenses(poId);
+  const src = db.prepare('SELECT copied_from_po_id FROM purchase_orders WHERE id = ?').get(poId);
+  if (src && src.copied_from_po_id) postPOExpenses(src.copied_from_po_id);
+  return posted;
 }
 
 // ── Stock application — push received goods into store inventory ───────────
@@ -840,17 +863,28 @@ router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req,
 // A copy, deliberately, not a move: the kitchen order stays exactly where it is
 // and keeps working for the kitchen. The cost of that choice is that the same
 // real-world purchase now has two rows, so the copy is built to stay out of
-// every ledger until someone deliberately places it:
+// every ledger until someone deliberately places it, and the ledgers are built
+// to believe exactly one of the two once they have:
 //   • status is always 'Requested' (Draft). postRetailPOExpenses only posts on
 //     Ordered/Delivered, and the invoice chase only reads INV_PO_STATUSES — so
 //     a fresh copy adds nothing to Finance and nothing to the paperwork chase.
-//     The moment the buyer marks it Ordered, its cost DOES post, and if the
-//     kitchen original was already Ordered that expense is in the books twice.
-//     That is the buyer's call to make, but nothing here makes it for them.
+//   • THE MOMENT THE BUYER PLACES THE COPY, THE COPY TAKES OVER. Its cost posts
+//     and its lines join the 发票 chase, and in the same breath the kitchen
+//     original is SUPERSEDED: its expense rows are wiped and its lines drop out
+//     of both chases. That is lib/po-supersede.js, and the reason it exists is
+//     that this used to be left to the buyer — the same goods went into the
+//     books twice and were chased for a 发票 twice, differing only by whatever
+//     the buyer had corrected on the copy. Nothing about the kitchen row itself
+//     changes, and putting the copy back to Draft hands it straight back.
 //   • received counts, stock_applied_qty, lot/tracking, invoice_status and the
 //     invoice_lines allocations are NOT copied. Those belong to the kitchen
 //     order's own history; a draft has received nothing and is on no invoice.
-//   • copied_from_po_id records the source, which is also the duplicate guard.
+//     A 发票 recorded against the original before the handover therefore stays
+//     recorded against the original — the chase reports that figure on the copy
+//     rather than re-pointing allocations at lines whose quantities have since
+//     been edited (see lib/po-supersede.js, WHAT IT DOES NOT DO).
+//   • copied_from_po_id records the source, which is also the duplicate guard,
+//     and now also the supersede link.
 // Kitchen lines carry ingredient_id (materials), never store_product_id, so the
 // copies are material lines: receiving one is a price write-back, not a stock
 // movement (see the module header). The target store still has to be named —
@@ -1266,7 +1300,13 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   const supplier = (req.query.supplier || '').trim();
   const search = (req.query.q || '').trim();
   const params = [];
-  let where = `COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${INV_PO_STATUSES}`;
+  // …and not standing behind a copy of itself. A kitchen order somebody pulled
+  // into Tacet and then placed here is the SAME purchase as the RPO-#### below
+  // it, and listing both asked for the same 发票 twice, line for line. The copy
+  // is the version the buyer corrected, so the original stands down — the rule,
+  // and every reason for it, is lib/po-supersede.js.
+  let where = `COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${INV_PO_STATUSES}
+               AND ${notSupersededByCopySql('po')}`;
   if (month) { where += ' AND substr(po.date,1,7) = ?'; params.push(month); }
   if (supplier) {
     if (supplier === INV_UNSPECIFIED) {
@@ -1292,6 +1332,12 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
            pli.no_invoice_expected AS line_no_invoice,
            po.id AS po_id, po.po_number, po.date, po.status,
            po.no_invoice_expected AS po_no_invoice,
+           -- Which kitchen order this one replaced. Every copy in this result is
+           -- placed (the status filter says so), so a copy here has by
+           -- definition stood its source down — the number is what lets the
+           -- screen say where PO-#### went instead of just losing it.
+           po.copied_from_po_id,
+           (SELECT k.po_number FROM purchase_orders k WHERE k.id = po.copied_from_po_id) AS supersedes_po_number,
            ${SUPPLIER_EXPR} AS supplier
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
@@ -1300,6 +1346,16 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
      ORDER BY po.date DESC, pli.sort_order, pli.id`).all(...params);
 
   const allocated = allocatedByLine(rows.map(r => r.line_id));
+  // 发票 already recorded against the order this copy replaced. Normally 0 — the
+  // copy is made and placed long before anyone has an invoice to record — but
+  // when it isn't, that money must not vanish with the row it was allocated to.
+  // It stays where it is in the ledger and is REPORTED here, on the copy, so
+  // the chase never asks for a 发票 somebody has already filed. See
+  // lib/po-supersede.js on why it is reported rather than re-attributed.
+  const supersededInvoiced = new Map();
+  for (const srcId of new Set(rows.map(r => r.copied_from_po_id).filter(Boolean))) {
+    supersededInvoiced.set(srcId, invoicedOnSuperseded(db, srcId));
+  }
   const reach = reachByName(tid);
   const supCn = supplierCnByName(tid);
   const bySup = new Map();
@@ -1312,6 +1368,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
     r.status = lineStatus(r);
     r.line_no_invoice = !!r.line_no_invoice;
     r.po_no_invoice = !!r.po_no_invoice;
+    r.supersedes_invoiced = r.copied_from_po_id ? (supersededInvoiced.get(r.copied_from_po_id) || 0) : 0;
     if (!bySup.has(r.supplier)) bySup.set(r.supplier, {
       supplier: r.supplier, total: 0, fully_invoiced: 0, partially_invoiced: 0,
       awaiting: 0, no_invoice_expected: 0, lines: [],
@@ -1726,7 +1783,7 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   const { freight, tax, handling } = req.body || {};
   db.prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(num(freight), num(tax), num(handling), po.id);
-  const posted = postRetailPOExpenses(po.id);
+  const posted = postRetailPOExpensesWithSource(po.id);
   // The extras now feed per-unit cost (allocateLandedExtras), and on this screen
   // they are typed AFTER the goods arrive — so a save has to re-run the cost
   // write-back or the new figure would sit on the header and never reach a
@@ -1887,7 +1944,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   if (Array.isArray(items) && (po.status === 'Ordered' || po.status === 'Delivered')) {
     firePriceAlertsForPO(po.id, po.status === 'Ordered' ? 'po_ordered' : 'po_delivery', actorFor(req));
   }
-  postRetailPOExpenses(po.id);
+  postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'update', 'purchase_order', po.id, { scope: 'retail' }, req.ip);
   if (lineDiff && lineDiff.orphaned_links) {
     logActivity(req.user.id, req.user.username, 'invoice_links_dropped', 'purchase_order', po.id, lineDiff, req.ip);
@@ -1970,8 +2027,12 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   if (status === 'Ordered' || status === 'Delivered') {
     firePriceAlertsForPO(po.id, status === 'Ordered' ? 'po_ordered' : 'po_delivery', actorFor(req));
   }
-  if (status === 'Ordered' || status === 'Delivered') postRetailPOExpenses(po.id);
-  else db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(po.id);
+  // One call for both directions, where a status test and a bare DELETE stood.
+  // The poster already refuses to post anything a Draft or a Cancelled order
+  // owns, and wipes its rows on the way — and going through it rather than
+  // round it is what hands the books BACK to the kitchen original when this
+  // copy stands down (see postRetailPOExpensesWithSource).
+  postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
               { from: po.status, to: status, scope: 'retail' }, req.ip);
   res.json({ success: true });
@@ -2003,7 +2064,7 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
   if (rev.blocked) return blockedResponse(res, rev.blocked);
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
-  postRetailPOExpenses(po.id);
+  postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
               { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true,
                 reversed_units: rev.reversed_units, reversed_lines: rev.reversed_lines }, req.ip);
@@ -2144,7 +2205,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
                 { from: po.status, to: 'Delivered', scope: 'retail', via: 'receive' }, req.ip);
   }
-  if (any_qty) postRetailPOExpenses(po.id);
+  if (any_qty) postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail',
                 store_id: storeId, receipt_id: receipt?.receiptId ?? null }, req.ip);
