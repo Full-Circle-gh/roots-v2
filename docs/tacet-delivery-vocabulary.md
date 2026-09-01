@@ -336,12 +336,22 @@ order is now half-reversed, which is the exact anxiety the refusal exists to
 prevent. This follows the same requirement `cannotCheck` carries in the
 channel-mapping section above, and for the same reason.
 
-## Undo receiving clears the counts — purchasing (OPEN, awaiting a minted pair)
+## Undo receiving clears the counts — purchasing (LOCKED 2026-09-01)
 
 Rule 4 says never compose new Chinese and that additions require an amendment to
-this document. This is the fourth such amendment, and it is OPEN: the string
-below runs English on both halves in the product right now, because composing
-its Chinese is exactly what Rule 4 forbids and no existing pair covers it.
+this document. This is the fourth such amendment, opened and closed 2026-09-01.
+
+HOW THE CN HALF WAS ARRIVED AT, since Rule 4 exists to stop exactly this being
+waved through. Ash delegated the wording explicitly ("you decide the chinese")
+rather than minting it himself, which is the owner exercising the rule, not a
+route around it — but a delegated pair is still weaker than a minted one, so it
+was built from words ALREADY IN THE PRODUCT rather than composed fresh:
+`实收` and `破损` are the two column headers standing directly above this dialog
+(`receiveRow`, public/retail-admin/16-purchasing.js), and `已收货` is the segment
+name the undone delivery remains in. That is the rule's own instruction — copy
+from the source — applied to the screen rather than to this document. **Ash
+should correct the wording if it reads wrong to a Chinese operator; nothing else
+depends on the exact phrasing.**
 
 WHY THE STRING IS NEEDED. Undo receiving now clears `qty_received` and
 `damaged_qty` on the order's lines, where it used to leave them in place. The
@@ -360,18 +370,15 @@ reassurance that the receipt itself survives — `po_receipts` /
 `po_receipt_lines` keep their own copy of every number, so the delivery stays
 readable in Receiving.
 
-**THE PAIR — EN minted, CN PENDING.**
+**THE PAIR — minted 2026-09-01 by Ash's delegation, locked.**
 
 | Key | EN | CN | What it says |
 |---|---|---|---|
-| `undoClearsCounts` | The arrived and damaged counts are cleared — the delivery stays in Receiving. | *(pending)* | Second sentence of the Undo receiving confirmation. Says what the undo destroys and what it does not. |
+| `undoClearsCounts` | The arrived and damaged counts are cleared — the delivery stays in Receiving. | 实收与破损数量将被清空 —— 该次收货记录仍保留在「已收货」中。 | Second sentence of the Undo receiving confirmation. Says what the undo destroys and what it does not. |
 
 **BOTH HALVES ALWAYS**, for the same reason `undoBlocked` carries two: dropping
 the first hides what is about to be lost, and dropping the second leaves the
-operator believing the delivery record is gone too. Closing this amendment means
-minting the CN half and swapping it into
-`public/retail-admin/16-purchasing.js` (puUndoReceive), then deleting the
-CN PENDING note there.
+operator believing the delivery record is gone too.
 
 
 **THE PER-PRODUCT LINES BENEATH IT ARE NOT MINTED HERE.** Each blocking product
