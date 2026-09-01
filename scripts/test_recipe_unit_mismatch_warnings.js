@@ -473,5 +473,124 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
     'the line mark is not amber');
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('5. The Recipes LIST — the screen this is scanned from');
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The record card's pill only speaks once a recipe is OPEN. The list is where
+// an operator reads 100 costs in one pass, and it already paints a triangle for
+// the OTHER way a cost comes out too low (an unpriced line). A recipe whose only
+// fault was a unit mismatch sat here with a clean-looking cost column and
+// nothing beside the name — which was exactly the silence this work exists to
+// break, on the busiest of the three screens.
+
+const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
+
+// The route's row shape, checked against a real database rather than asserted
+// from the source: computeRecipeCost already derives the figure, so the only
+// thing that can go wrong is the row forgetting to carry it.
+{
+  const db = freshDb();
+  const gram = material(db, 'Tahini', 'g');
+  const oil  = material(db, 'Olive oil', 'g');
+  const r = recipe(db, 'One line in ml');
+  rline(db, r, gram, 200, 'g');
+  rline(db, r, oil, 160, 'ml');
+  const lines = db.prepare(`
+    SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
+           i.free_by_design AS master_free, i.name_en AS master_name_en
+      FROM recipe_ingredients ri
+      LEFT JOIN ingredients i ON ri.ingredient_id = i.id
+     WHERE ri.recipe_id = ?`).all(r);
+  const c = RC.computeRecipeCost({ recipe: db.prepare('SELECT * FROM recipes WHERE id = ?').get(r), ingredients: lines, costData: null });
+
+  check('the breakdown the list route already runs carries the count', () =>
+    assert.strictEqual(c.unreconciledUnitLines, 1));
+  check('the list row forwards it — no second query, no second rule', () => {
+    const at = RECIPES_ROUTE_JS.indexOf('zeroCostIngredientLines: c.zeroCostIngredientLines');
+    assert.notStrictEqual(at, -1, 'the recipes list row shape has moved');
+    const row = RECIPES_ROUTE_JS.slice(at, at + 1400);
+    assert.ok(row.includes('unreconciledUnitLines: c.unreconciledUnitLines'),
+      'the list row does not carry unreconciledUnitLines');
+    // It must come off the SAME breakdown, never a fresh SQL derivation.
+    assert.ok(!/UNIT_DIMENSION|unitsReconcilable/.test(RECIPES_ROUTE_JS),
+      'the list route re-derives the unit rule instead of reading the breakdown');
+  });
+}
+
+// The list cell, executed. tableHtml() is private to the module's IIFE, so it
+// is lifted out with the two helpers it calls and run against stubs — every
+// assertion reads the HTML the shipped function returned.
+{
+  const LIST_FNS = ['function tableHtml()', 'function primaryCost(row)', 'function rowsInView()']
+    .map(d => extractFunction(RECIPES_JS, d)).join('\n');
+  const esc = s2 => String(s2 == null ? '' : s2)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  function listHtml(rows) {
+    const sb2 = {
+      _rows: rows, _type: '', _q: '', _cat: '',
+      esc, T: (en) => en, dash: v => (v == null || v === '' ? '—' : v),
+      money: n => '¥' + (Number(n) || 0).toFixed(2),
+      moneyU: n => '¥' + (Number(n) || 0).toFixed(4),
+      I: { warn: '<svg id="the-triangle"></svg>', book: '' },
+      blockReasonText: () => '', Number, String,
+    };
+    vm.createContext(sb2);
+    vm.runInContext(LIST_FNS + '\nthis.__t = tableHtml;', sb2, { filename: '19-recipes.js#tableHtml' });
+    return sb2.__t();
+  }
+  const R = extra => ({ id: 1, name_en: 'Quinoa salad dressing', category: 'Homemade',
+    batch_size: 432, servings: null, costPerGram: 0.0456, costPerServing: null,
+    batchCost: 19.7, zeroCostIngredientLines: 0, unreconciledUnitLines: 0, ...extra });
+
+  check('a recipe whose ONLY fault is a unit mismatch now carries the triangle', () => {
+    const html = listHtml([R({ unreconciledUnitLines: 2 })]);
+    assert.ok(html.includes('rcp-warnic'), 'no icon on a mismatched recipe: ' + html);
+    assert.ok(/title="[^"]*UNIT MISMATCH[^"]*"/.test(html), 'the icon does not say why: ' + html);
+  });
+
+  check('a clean recipe still carries no icon at all', () => {
+    assert.ok(!listHtml([R()]).includes('rcp-warnic'));
+  });
+
+  // The behaviour that was already there must be untouched, word for word.
+  check('the missing-cost icon keeps its own count and its own sentence', () => {
+    const html = listHtml([R({ zeroCostIngredientLines: 3 })]);
+    assert.ok(/title="3 ingredient\(s\) missing cost — costs shown are too low"/.test(html),
+      'the missing-cost wording changed: ' + html);
+    assert.ok(!html.includes('UNIT MISMATCH'), 'a clean-unit recipe was accused: ' + html);
+  });
+
+  // Two triangles in a name cell read as a severity, not as two facts.
+  check('both faults at once paint ONE triangle carrying both sentences', () => {
+    const html = listHtml([R({ zeroCostIngredientLines: 1, unreconciledUnitLines: 2 })]);
+    assert.strictEqual(html.split('rcp-warnic').length - 1, 1, 'painted twice: ' + html);
+    assert.ok(/title="1 ingredient[^"]*too low · UNIT MISMATCH"/.test(html),
+      'the one tooltip does not carry both, in the record card’s order: ' + html);
+    assert.strictEqual(html.split('the-triangle').length - 1, 1, 'two icons in one cell: ' + html);
+  });
+
+  // The locked pair carries no count — the string has no slot for one, and
+  // widening it here would be composing a variant of a locked pair.
+  check('the locked string is copied whole, never given a count', () => {
+    const html = listHtml([R({ unreconciledUnitLines: 7 })]);
+    assert.ok(!/7[^"]*UNIT MISMATCH|UNIT MISMATCH[^"·]*7/.test(html),
+      'a count was spliced into the locked pair: ' + html);
+  });
+
+  check('the icon is the same triangle the list already used', () => {
+    assert.ok(listHtml([R({ unreconciledUnitLines: 1 })]).includes('the-triangle'));
+  });
+
+  // The list is the catalogue of recipes; a row must render whatever the field
+  // says. An older cached payload has no such key.
+  check('a row from a payload predating the field renders unmarked, not broken', () => {
+    const r = R(); delete r.unreconciledUnitLines;
+    const html = listHtml([r]);
+    assert.ok(html.includes('Quinoa salad dressing') && !html.includes('rcp-warnic'), html);
+  });
+}
+
 console.log(failures ? `\n${failures} check(s) failed.` : '\nAll checks passed.');
 process.exit(failures ? 1 : 0);
