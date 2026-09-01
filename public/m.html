@@ -6906,10 +6906,13 @@ function headControls(){
   const unseen=unseenReviews();
   return `<span style="display:flex;flex:none">
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
-    <span style="position:relative;display:flex;flex:none">
+    ${/* The Inbox icon rode every header ungated, so an operator without
+         reviews:view got a button that push() silently refuses — a control
+         that does nothing at all, which is worse than one that is absent. */''}
+    ${canRoute('inbox')?`<span style="position:relative;display:flex;flex:none">
       <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
       ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
-    </span>
+    </span>`:''}
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
       <span style="width:28px;height:28px;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',16)}</span>
     </button></span>`;
@@ -6954,46 +6957,43 @@ function pageHead({title, status, cta, back, controls}){
     ${status?`<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
-/* THE BAR IS THE OPERATOR'S TOOLS, and for most operators that is unchanged.
-   Four destinations plus More, each dropping out if its capability is missing.
+/* THE BAR IS FOR OPERATORS WITH SOMEWHERE ELSE TO BE, and for most of them it
+   is unchanged: four destinations plus More, each dropping out if its
+   capability is missing.
 
-   THE FLATTEN. An operator who holds none of the four — a stocker, a receiver —
-   would be left with a bar containing only More: one button, opening a list of
-   two rows, to reach the two things they do all day. So when nothing above More
-   survives, More stops being a folder and its rows become the bar itself. Same
-   call the desktop's rail makes when a folder is down to one child: a folder
-   around the whole of somebody's job is not navigation, it is a lid.
+   AN OPERATOR WHOSE WHOLE JOB IS "More" GETS NO BAR AT ALL. Their tools become
+   the HOME SCREEN — the list itself, under their role's name — and every tool
+   pushes a screen that comes back to it.
 
-   Four is the ceiling for a flattened bar, with More kept for the rest, so the
-   row can never overflow on a narrow phone. Nothing here changes what an owner
-   sees: they hold all four, so nothing flattens. */
+   The bar was tried first and rejected, for the reason a bar always fails here:
+   it is a fixed number of slots, and a role is not. Two tools fit; eight do not,
+   and a bar that quietly becomes "four plus More" has put the lid back on. A
+   list has no such ceiling — it is the same control at two tools and at thirty,
+   it can carry headings, and it is what More already was. The cost is one tap
+   to the most-used tool, paid once, instead of a design that breaks at seven.
+
+   Nothing here changes what an owner sees: they hold the four, so they keep the
+   bar and More stays a folder. */
 const TAB_KEYS=['home','orders','customers','products'];
+/* Does this operator navigate by bar, or is the tool list their home? */
+function flatNav(){ return !TAB_KEYS.some(canRoute); }
+/* The home screen's name. A role-scoped app is named for the role — it is the
+   most useful true thing on the screen, and it tells an operator which account
+   they are signed in as without opening anything. */
+function homeTitle(){
+  const r=state.me&&state.me.roleName;
+  if(r&&(r.en||r.cn)) return T(r.en||r.cn, r.cn||r.en);
+  return state.storeName||'Tacet';
+}
 function navTabs(){
-  const primary=TAB_KEYS.filter(canRoute);
-  const rows=moreRowsFlat();
-  if(primary.length){
-    const out=primary.map(k=>({key:k,icon:TAB_META[k].icon,en:TAB_META[k].en,zh:TAB_META[k].zh,
-                               cmd:`APP.cmd('tab','${k}')`,tab:k}));
-    if(rows.length) out.push({key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
-                              cmd:"APP.cmd('tab','more')",tab:'more'});
-    return out;
-  }
-  if(!rows.length) return [];
-  if(rows.length<=5) return rows.map(r=>({key:r.key,icon:r.icon,en:r.en,zh:r.zh,cmd:r.cmd,
-                                          route:r.href?null:r.key}));
-  return rows.slice(0,4).map(r=>({key:r.key,icon:r.icon,en:r.en,zh:r.zh,cmd:r.cmd,
-                                  route:r.href?null:r.key}))
-    .concat([{key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
-              cmd:"APP.cmd('tab','more')",tab:'more'}]);
+  if(flatNav()) return [];
+  const out=TAB_KEYS.filter(canRoute).map(k=>({key:k,icon:TAB_META[k].icon,en:TAB_META[k].en,zh:TAB_META[k].zh,
+                                               cmd:`APP.cmd('tab','${k}')`,tab:k}));
+  if(moreRowsFlat().length) out.push({key:'more',icon:TAB_META.more.icon,en:TAB_META.more.en,zh:TAB_META.more.zh,
+                                      cmd:"APP.cmd('tab','more')",tab:'more'});
+  return out;
 }
-/* Lit when you are ON it. A flattened bar's buttons are pushed SCREENS rather
-   than tabs, so what counts as "on" is the top of the stack, not state.tab. */
-function tabOn(t){
-  const top=state.stack[state.stack.length-1];
-  if(t.route) return !!top && top.route===t.route;
-  if(t.tab) return state.tab===t.tab && !state.stack.length;
-  return false;
-}
+function tabOn(t){ return state.tab===t.tab && !state.stack.length; }
 function tabbar(){
   const tabs=navTabs();
   if(!tabs.length) return '';
@@ -7019,7 +7019,7 @@ function bodyHtml(){
        goes to Receiving, not More. Every other screen passes neither and reads
        exactly as it always did. */
     return pageHead({title:def.titleOf?def.titleOf():T(...sub.title),
-      back:def.backLabel?def.backLabel():T('More','更多'),
+      back:def.backLabel?def.backLabel():(flatNav()?escAttr(homeTitle()):T('More','更多')),
       cta:def.cta?def.cta():'', status:def.status?def.status():''}) + def.render();
   }
   switch(state.tab){
@@ -7027,7 +7027,10 @@ function bodyHtml(){
     case 'orders': return screenOrders();
     case 'customers': return screenCustomers();
     case 'products': return screenProducts();
-    case 'more': return pageHead({title:T('More','更多'), controls:true}) + screenMore();
+    // Titled for what it IS. With no bar under it this list is not a drawer of
+    // extras, it is the operator's home, and calling it "More" would name it
+    // after a bar that is not there.
+    case 'more': return pageHead({title:flatNav()?escAttr(homeTitle()):T('More','更多'), controls:true}) + screenMore();
   }
 }
 function render(){
@@ -8561,12 +8564,10 @@ function landOnSomethingReachable(){
   if(state.stack.length) return;                 // the deep link stands
   if(canRoute(state.tab)) return;                // Home is theirs; leave it alone
   const primary=TAB_KEYS.filter(canRoute);
-  if(primary.length){ state.tab=primary[0]; return; }
-  // Flattened: open the first tool that is a SCREEN. Landing on Quick Stock
-  // would navigate straight out of this app every time it was opened.
-  const inApp=moreRowsFlat().filter(r=>!r.href);
-  if(inApp.length){ state.tab='more'; push(inApp[0].key); return; }
-  state.tab='more';
+  // The tool list is the home screen for everyone else, so landing is simply
+  // arriving at it — never being pushed inside one of the tools, which would
+  // hide the others behind a Back nobody has a reason to press.
+  state.tab = primary.length ? primary[0] : 'more';
 }
 async function loadLive(){
   // Role first, and awaited: the Recap renders money rows or does not depending

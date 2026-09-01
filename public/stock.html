@@ -340,14 +340,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .srow{display:flex;align-items:center;gap:16px;min-height:56px;padding:12px 16px;}
 .srow + .srow{border-top:1px solid var(--line);}
 .srow .lbl{flex:1;min-width:0;}
-/* A row that GOES somewhere rather than setting something. Same rhythm as the
-   preference rows so the sheet stays one list, with a chevron to say it leaves.
-   It hides on [hidden] like the other three regions here — the !important at the
-   top of this file is what makes that hold against .srow's display:flex. */
-button.srow{width:100%;appearance:none;background:none;border:0;font:inherit;color:var(--text);
-  text-align:left;cursor:pointer;}
-button.srow:active{background:var(--raised);}
-button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
+/* The way back, above the title. Sized and coloured as the secondary line it
+   is: the page's own name stays the biggest thing in the head. */
+.backlink{display:flex;align-items:center;gap:6px;margin:0 0 4px -4px;padding:8px 4px;
+  background:none;border:0;font:inherit;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;}
+.backlink:active{color:var(--text);}
+.backlink svg{width:16px;height:16px;flex:none;}
 .seg{display:flex;gap:4px;padding:3px;background:var(--raised);border-radius:8px;flex:none;}
 .seg button{min-height:34px;padding:0 12px;border-radius:8px;font-size:13px;color:var(--text2);}
 .seg button.on{background:var(--surface);color:var(--text);font-weight:500;}
@@ -383,6 +381,17 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
        The status line and the Dusk CTA slot stay empty (§1.7) — the chips carry
        every real number, and nothing is created on this page. -->
   <div class="page-head" id="pageHead" hidden>
+    <!-- THE WAY BACK, and it belongs in the head rather than in the account
+         sheet, where the first attempt put it. An operator who arrived here
+         from their tool list is looking for the control every pushed screen on
+         a phone has, in the place every one of them has it; a row three taps
+         deep behind an avatar is not a way back, it is a fact about the app
+         filed under settings. Hidden unless the server says there is a home to
+         return to — see `home` in /quick-stock/context. -->
+    <button class="backlink" id="backHome" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      <span id="backHomeLbl"></span>
+    </button>
     <div class="headmain">
       <h1 id="hTitle"></h1>
       <div class="toolbar" id="toolbar" hidden>
@@ -449,16 +458,6 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
       <circle cx="305" cy="55" r="5" fill="#6E67AF"/>
     </svg></div>
   <div class="sheet-h" id="acctWho"></div>
-  <!-- THE WAY OUT. Quick Stock has no navigation by design — it is one job on a
-       phone. But a kitchen account that also books deliveries in had this app
-       installed and no route from it to Receiving, so the app WAS the product
-       and the rest of the tools may as well not have existed. Shown only when
-       the server says this operator holds purchasing:receive and is not locked
-       to this app (can_receive); everyone else keeps the sheet they had. -->
-  <button class="srow" id="acctReceiving" hidden>
-    <span class="lbl" id="acctReceivingLbl"></span>
-    <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
-  </button>
   <div class="srow">
     <span class="lbl" id="acctLangLbl"></span>
     <div class="seg" id="langSeg">
@@ -535,7 +534,8 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
 
   var state = {
     enabled: true, fullAccess: false, userName: '',
-    canReceive: false,    // server says this operator may leave for Receiving (/m)
+    home: null,           // server says where back goes, or that there is no back
+    homeLabel: null,      // and what that screen is called, so Back can say it
     mode: 'recount',      // 'recount' (warehouse: set the count) | 'add' (kitchen: log what you made)
     stores: [], storeId: null,
     items: [],
@@ -617,7 +617,8 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
       state.enabled = d.enabled;
       state.mode = d.mode === 'add' ? 'add' : 'recount';
       state.fullAccess = d.user.full_access;
-      state.canReceive = !!d.can_receive;
+      state.home = typeof d.home === 'string' ? d.home : null;
+      state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
       state.userName = d.user.name || '';
       state.stores = d.stores || [];
       mountAccount();
@@ -643,7 +644,10 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
     $('#acctWho').textContent = state.userName
       ? t('Signed in as ' + state.userName, '已登录:' + state.userName)
       : t('Account', '账号');
-    $('#acctReceivingLbl').textContent = t('Receiving', '收货');
+    // Names its destination when the server told us what that is; otherwise the
+    // honest generic, never a guess at the screen's name.
+    var hl = state.homeLabel;
+    $('#backHomeLbl').textContent = hl ? t(hl.en || hl.cn, hl.cn || hl.en) : t('Back', '返回');
     $('#acctLangLbl').textContent = t('Language', '语言');
     $('#acctThemeLbl').textContent = t('Appearance', '外观');
     $('#thLight').textContent = t('Light', '浅色');
@@ -682,12 +686,11 @@ button.srow .chev{width:18px;height:18px;flex:none;color:var(--text2);}
     b.onclick = openAccount;
     pinned.onclick = openAccount;
     $('#acctBack').onclick = closeAccount;
-    // Tacet Mobile owns Receiving; this is a door to it, not a second copy of
-    // it. A location assignment rather than a link so the row can stay a button
-    // like every other control in this sheet.
-    var rcv = $('#acctReceiving');
-    rcv.hidden = !state.canReceive;
-    rcv.onclick = function () { window.location.href = '/m'; };
+    // A location assignment rather than an <a> so the control is a button like
+    // every other one in this head.
+    var back = $('#backHome');
+    back.hidden = !state.home;
+    back.onclick = function () { if (state.home) window.location.href = state.home; };
     $('#langSeg').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-lang]'); if (!btn) return;
       setLang(btn.getAttribute('data-lang'));
