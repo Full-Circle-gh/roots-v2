@@ -43,11 +43,21 @@ const PO = JSON.stringify({
     { id: 15, name_en: 'Coconut oil', name_cn: '椰子油', sku: 'OIL-CCO', qty: 12, unit: 'L', supplier_name: 'Sun Oils' },
   ],
 });
+// The screen as it OPENS: every product unanswered, every counter preloaded at
+// the ordered quantity but claiming nothing. Built the way loadReceive builds
+// it (`on` false, `was.recv` null — nothing received on the server yet) so the
+// probe is testing the shape the app actually holds.
 const OPEN = `state.recvId=3; state.recvPo=${PO}; state.recvStore=1;
-  state.recvVals={11:{recv:5,dmg:0,reason:null},12:{recv:3,dmg:0,reason:null},
-                  13:{recv:25,dmg:0,reason:null},14:{recv:20,dmg:0,reason:null},
-                  15:{recv:12,dmg:0,reason:null}};
+  state.recvVals=(function(){ var v={};
+    state.recvPo.items.forEach(function(it){ v[it.id]={on:false,recv:Math.round(+it.qty),
+      dmg:0,reason:null,was:{recv:null,dmg:0,reason:null}}; }); return v; })();
   state.stack=[{route:'receive',title:SUBS.receive.title}]; render();`;
+// The whole order answered "it all came", which is what the old screen assumed
+// before anyone had touched it. Reached the way an operator reaches it: one tap
+// per supplier.
+const ALLIN = `APP.cmd('recvGroupAll','Green Farm'); APP.cmd('recvGroupAll','Wong Dry Goods');
+  APP.cmd('recvGroupAll','Sun Oils');`;
+const OPEN_ALL = OPEN + ALLIN;
 
 // Two deliveries against one order, and a correction on the second.
 const DELIVS = JSON.stringify([
@@ -98,33 +108,109 @@ const PO_FRAC = JSON.stringify({
   ],
 });
 const OPEN_FRAC = `state.recvId=4; state.recvPo=${PO_FRAC}; state.recvStore=1;
-  state.recvVals={21:{recv:0.1,dmg:0,reason:null},22:{recv:0.5,dmg:0,reason:null},
-                  23:{recv:2,dmg:0,reason:null},24:{recv:20,dmg:0,reason:null}};
+  state.recvVals=(function(){ var v={};
+    state.recvPo.items.forEach(function(it){ v[it.id]={on:false,recv:rcvRound(+it.qty),
+      dmg:0,reason:null,was:{recv:null,dmg:0,reason:null}}; }); return v; })();
   state.stack=[{route:'receive',title:SUBS.receive.title}]; render();`;
+// The fractional order with every product answered "it came". The counters are
+// only on the glass once a line is confirmed, so a case that reads a stepper
+// has to say so first — one tap per supplier, exactly as the door does it.
+const OPEN_FRAC_ALL = OPEN_FRAC + `APP.cmd('recvGroupAll','Grain & Oil Shop');
+  APP.cmd('recvGroupAll','Haoyouxian'); APP.cmd('recvGroupAll','Pupu supermarket');
+  APP.cmd('recvGroupAll','Handan Chuanglan');`;
 
 const CASES = [
   ['the receive screen', OPEN, [
     ['the order is the title',            `txt('content').includes('RPO-0003')`],
     ['suppliers are the groups',          `txt('content').includes('Green Farm') && txt('content').includes('Wong Dry Goods') && txt('content').includes('Sun Oils')`],
-    ['every line is prefilled at ordered', `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '5,3,25,20,12'`],
+    // The complaint this screen was rebuilt for: it used to open with five
+    // filled counters and one button that booked all five, so the only thing
+    // it could say was "the whole order came".
+    ['nothing is claimed until somebody says it arrived',
+      `document.querySelectorAll('.qty:not(.sm)').length === 0`],
+    ['every product carries its own answer',
+      `[...document.querySelectorAll('.chip')].filter(c=>c.innerText.trim()==='Arrived').length === 5
+       && [...document.querySelectorAll('.chip')].filter(c=>c.innerText.trim()==='Not arrived').length === 5`],
+    ['and nothing can be recorded until one is given',
+      `document.querySelector('.cta').disabled === true && txt('content').includes('Mark at least one product')`],
+    // Two answers per product and two per supplier is four more controls on a
+    // screen used one-handed at a door. Measured against the app's own column,
+    // not the window: nothing may sit outside it, and nothing may be smaller
+    // than a thumb that is carrying a box.
+    ['every answer is inside the column and thumb-sized',
+      `(function(){ var r=document.getElementById('content').getBoundingClientRect();
+         var b=[...document.querySelectorAll('.chip'),...document.querySelectorAll('.minibtn')];
+         return b.length === 16 && b.every(function(x){ var q=x.getBoundingClientRect();
+           return q.left >= r.left-0.5 && q.right <= r.right+0.5 && q.height >= 44; }); })()`],
     ['nothing is short yet, so no reason picker', `!txt('content').includes('Short delivery')`],
     ['no cost figure anywhere',           `!/¥|CNY/.test(txt('content'))`],
     ['the destination is named',          `txt('content').includes('Tianhe')`],
     ['and it can still be changed',       `!txt('content').includes('cannot be received somewhere else')`],
   ]],
 
-  ['a line ordered by the tenth of a kilo', OPEN_FRAC, [
+  // THE CASE THE REWRITE EXISTS FOR. One product of five turns up; the other
+  // four are not a shortfall, a no-show, or a refusal — they are unanswered,
+  // and they must stay on the order for the van that brings them.
+  ['one product arrives and the rest have not', OPEN + `APP.cmd('recvArrived','11');`, [
+    ['only that product opens a counter',
+      `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '5'`],
+    ['it can be recorded on its own',   `document.querySelector('.cta').disabled === false`],
+    ['and it is the only thing on the wire',
+      `rcvToSend().map(it=>it.id).join(',') === '11'`],
+    ['the screen says the rest stay on the order',
+      `txt('content').includes('4 products not answered yet')`],
+    ['its supplier reads as part done, not complete',
+      `rcvGroupState(rcvGroups().find(g=>g.name==='Green Farm').items) === 'part'`],
+    ['a supplier nobody has answered is waiting, not arrived',
+      `rcvGroupState(rcvGroups().find(g=>g.name==='Sun Oils').items) === 'wait'`],
+    ['pressing Arrived again takes the answer back',
+      `(APP.cmd('recvArrived','11'), state.recvVals[11].on === false
+        && document.querySelector('.cta').disabled === true)`],
+  ]],
+
+  ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
+    ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
+    ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],
+    ['so the save is not blocked on one', `document.querySelector('.cta').disabled === false`],
+    ['and it is recorded, not skipped', `rcvToSend().map(it=>it.id).join(',') === '12'`],
+    ['the summary says nothing arrived', `txt('content').includes('Coriander — nothing arrived')`],
+  ]],
+
+  // Re-opening a part-received order. The four lines already booked are shown
+  // as they stand and are NOT sent again: a receipt row restating a count the
+  // server already holds reads as "recorded 5, changed to 5" in the journal.
+  ['the second van', `state.recvId=3; state.recvPo=${PO}; state.recvStore=1;
+     state.recvPo.items[0].qty_received=5; state.recvPo.items[1].qty_received=3;
+     state.recvVals=(function(){ var v={};
+       state.recvPo.items.forEach(function(it){ var had=it.qty_received==null?null:Math.round(+it.qty_received);
+         v[it.id]={on:had!=null,recv:had==null?Math.round(+it.qty):had,dmg:0,reason:null,
+                   was:{recv:had,dmg:0,reason:null}}; }); return v; })();
+     state.stack=[{route:'receive',title:SUBS.receive.title}]; render();`, [
+    ['what already came is shown, already answered',
+      `state.recvVals[11].on === true && state.recvVals[12].on === true`],
+    ['what has not is still unanswered', `state.recvVals[13].on === false`],
+    ['nothing is re-sent on its own',    `rcvToSend().length === 0 && document.querySelector('.cta').disabled === true`],
+    ['ticking in the new arrival sends only that',
+      `(APP.cmd('recvArrived','13'), rcvToSend().map(it=>it.id).join(',') === '13')`],
+    ['and correcting an old count sends that too',
+      `(APP.cmd('recvQtySet','11|4'), rcvToSend().map(it=>it.id).sort().join(',') === '11,13')`],
+  ]],
+
+  ['a line ordered by the tenth of a kilo', OPEN_FRAC_ALL, [
     ['0.1 kg is not rounded away to nothing', `txt('content').includes('ordered 0.1 kg')`],
     ['0.5 kg is not rounded up to 1',         `txt('content').includes('ordered 0.5 kg')`],
     ['whole lines keep their plain figures',  `txt('content').includes('ordered 2 box') && txt('content').includes('ordered 20 kg')`],
     ['and carry no invented decimals',        `!/ordered (2\\.0|20\\.0)/.test(txt('content'))`],
     ['every stepper is prefilled at what was ordered',
       `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '0.1,0.5,2,20'`],
+    // "Not arrived" is on every product as a button now, so the no-show test
+    // is asked of the STATE rather than of the text: no line may be sitting at
+    // zero, and nothing may be reported as a no-show in the summary.
     ['so no fractional line reads as a no-show',
-      `!txt('content').includes('Not arrived') && !txt('content').includes('nothing arrived')`],
+      `state.recvPo.items.every(it=>!rcvNo(it)) && !txt('content').includes('nothing arrived')`],
   ]],
 
-  ['stepping a fractional line', OPEN_FRAC, [
+  ['stepping a fractional line', OPEN_FRAC_ALL, [
     ['+ moves it by a tenth, not a whole kilo',
       `(APP.cmd('recvQty','21|0.1'), state.recvVals[21].recv === 0.2)`],
     ['and repeated taps do not drift into binary floating point',
@@ -151,7 +237,7 @@ const CASES = [
   // Typed entry is the path that used to mangle fractions worst: the old reader
   // stripped every non-digit, so "0.1" arrived as 1 — a tenth of a kilo of
   // damage booked as a whole one, then quietly capped at whatever turned up.
-  ['damage on a fractional line', OPEN_FRAC + `APP.cmd('recvDmgOpen','22');`, [
+  ['damage on a fractional line', OPEN_FRAC_ALL + `APP.cmd('recvDmgOpen','22');`, [
     ['a typed tenth stays a tenth',
       `(APP.cmd('recvDmgSet','22|0.1'), state.recvVals[22].dmg === 0.1)`],
     ['the mark shows the fraction, not a rounded whole',
@@ -175,7 +261,7 @@ const CASES = [
     ['damage below a whole unit is still shown',   `txt('content').includes('0.05 kg damaged')`],
   ]],
 
-  ['a line comes up short', OPEN + `APP.cmd('recvQtySet','11|4');`, [
+  ['a line comes up short', OPEN_ALL + `APP.cmd('recvQtySet','11|4');`, [
     ['the shortfall is stated, not asked for', `txt('content').includes('1 kg short of 5')`],
     ['all three reasons are offered',    `txt('content').includes('Short delivery') && txt('content').includes('Wrong item') && txt('content').includes('Not sent')`],
     ['damage is not one of them',        `!/\\bDamaged\\b/.test(txt('content'))`],
@@ -193,13 +279,21 @@ const CASES = [
       `txt('content').includes('Mint — 1 kg short')`],
   ]],
 
-  ['raising the count back clears the reason', OPEN
+  ['raising the count back clears the reason', OPEN_ALL
     + `APP.cmd('recvQtySet','11|4'); APP.cmd('recvReason','11|short_delivery'); APP.cmd('recvQtySet','11|5');`, [
     ['no shortfall left to explain', `state.recvVals[11].reason === null`],
     ['and the picker is gone',       `!txt('content').includes('Short delivery')`],
   ]],
 
-  ['damage', OPEN + `APP.cmd('recvDmgOpen','14'); APP.cmd('recvDmg','14|1'); APP.cmd('recvDmg','14|1');`, [
+  // Typing a number IS an answer. Making someone press Arrived after they had
+  // already told the screen how many arrived would be the app arguing with them.
+  ['a count typed straight in', OPEN + `APP.cmd('recvQtySet','13|20');`, [
+    ['the line is confirmed by the typing', `state.recvVals[13].on === true`],
+    ['at what was typed',                   `state.recvVals[13].recv === 20`],
+    ['and it is on the wire',               `rcvToSend().map(it=>it.id).join(',') === '13'`],
+  ]],
+
+  ['damage', OPEN_ALL + `APP.cmd('recvDmgOpen','14'); APP.cmd('recvDmg','14|1'); APP.cmd('recvDmg','14|1');`, [
     ['the counter opened on one tap',  `txt('content').includes('How many damaged?')`],
     ['two are recorded',               `state.recvVals[14].dmg === 2`],
     ['and it is NOT treated as short', `!txt('content').includes('short of 20')`],
@@ -209,17 +303,27 @@ const CASES = [
     ['the summary names it as damage', `txt('content').includes('Chickpeas — 2 kg damaged')`],
   ]],
 
-  ['damage cannot exceed what arrived', OPEN
+  ['damage cannot exceed what arrived', OPEN_ALL
     + `APP.cmd('recvDmgSet','14|20'); APP.cmd('recvQtySet','14|3');`, [
     ['lowering the arrival lowers the damage with it', `state.recvVals[14].dmg === 3`],
   ]],
 
   ['a supplier that did not turn up', OPEN + `APP.cmd('recvGroupNone','Sun Oils');`, [
     ['its line goes to zero',        `state.recvVals[15].recv === 0`],
+    ['answered, not merely empty',   `state.recvVals[15].on === true`],
     ['stamped not_sent',             `state.recvVals[15].reason === 'not_sent'`],
-    ['the header says so',           `txt('content').includes('Not arrived')`],
+    ['the header says so',           `rcvGroupState(rcvGroups().find(g=>g.name==='Sun Oils').items) === 'none'`],
     ['the summary reads as a no-show', `txt('content').includes('Coconut oil — nothing arrived')`],
     ['and it can be undone',         `(APP.cmd('recvGroupAll','Sun Oils'), state.recvVals[15].recv === 12 && state.recvVals[15].reason === null)`],
+  ]],
+
+  ['a supplier whose whole van came', OPEN + `APP.cmd('recvGroupAll','Wong Dry Goods');`, [
+    ['both its lines are answered at what was ordered',
+      `state.recvVals[13].recv === 25 && state.recvVals[14].recv === 20
+       && state.recvVals[13].on === true && state.recvVals[14].on === true`],
+    ['nobody else was answered for',  `state.recvVals[11].on === false && state.recvVals[15].on === false`],
+    ['pressing it again takes it back',
+      `(APP.cmd('recvGroupAll','Wong Dry Goods'), state.recvVals[13].on === false && state.recvVals[14].on === false)`],
   ]],
 
   ['the destination, once stock is booked', `state.recvId=3;
@@ -231,7 +335,7 @@ const CASES = [
     ['and no other store is offered',             `!txt('content').includes('Pearl River')`],
   ]],
 
-  ['a save that fails keeps the work', OPEN
+  ['a save that fails keeps the work', OPEN_ALL
     + `APP.cmd('recvQtySet','11|4'); APP.cmd('recvReason','11|short_delivery');
        state.recvSaveErr='That did not save.'; render();`, [
     ['the counts are still on screen', `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '4,3,25,20,12'`],
@@ -292,6 +396,26 @@ const CASES = [
     ['it says a product or SKU will do', `/Product|SKU/.test(document.querySelector('#mRcvToQ').placeholder)`],
     ['the order bringing it is listed', `txt('content').includes('RPO-0003')`],
     ['and the matching product is named on the row', `txt('content').includes('Mint')`],
+  ]],
+
+  // The receive route moves a PO to Delivered on the first arrived count it is
+  // given. Without this, confirming the one product that turned up would drop
+  // the other four out of the only list that leads back to them.
+  ['an order with goods still to come', `state.rcvToTried=true; state.rcvSeg='toreceive';
+     state.rcvTo=[{id:3,po_number:'RPO-0003',supplier:'Green Farm',status:'Delivered',
+       line_count:5,received_lines:1,store_name_en:'Tianhe',store_name_cn:'天河'}];
+     state.rcvToQ=''; APP.cmd('push','receiving');`, [
+    ['is still waiting to be received',  `rcvToReceive().length === 1`],
+    ['and says how much of it is left',  `txt('content').includes('4 of 5 still to come')`],
+    ['read as part arrived, not received', `txt('content').includes('Part arrived')`],
+  ]],
+
+  ['an order with nothing left to come', `state.rcvToTried=true; state.rcvSeg='toreceive';
+     state.rcvTo=[{id:3,po_number:'RPO-0003',supplier:'Green Farm',status:'Delivered',
+       line_count:5,received_lines:5,store_name_en:'Tianhe',store_name_cn:'天河'}];
+     state.rcvToQ=''; APP.cmd('push','receiving');`, [
+    ['has left the list',        `rcvToReceive().length === 0`],
+    ['and does not linger on it', `!txt('content').includes('RPO-0003')`],
   ]],
 
   ['a product nothing is bringing', `state.rcvToTried=true; state.rcvSeg='toreceive';

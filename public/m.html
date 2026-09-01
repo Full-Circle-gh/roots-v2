@@ -1101,9 +1101,13 @@ reg('recvStoreToggle', ()=>{ state.recvStoreOpen=!state.recvStoreOpen; render();
 reg('recvStore', id=>{ state.recvStore=Number(id); state.recvStoreOpen=false; render(); });
 /* Fractions are kept (see rcvRound), and damage can never exceed what arrived —
    you cannot break what did not turn up. Raising the count past the order clears
-   the reason: there is no shortfall left to explain. */
+   the reason: there is no shortfall left to explain.
+   TOUCHING A COUNT CONFIRMS THE LINE. Somebody who types 3 into a line has
+   said the product arrived as surely as somebody who pressed Arrived, and
+   making them press it afterwards would be the app arguing with them. */
 function recvSet(id,recv,dmg,reason){
   const v=state.recvVals[id]; if(!v) return;
+  v.on=true;
   if(recv!=null) v.recv=rcvRound(Math.max(0,Math.min(9999,recv)));
   if(dmg!=null)  v.dmg=rcvRound(Math.max(0,dmg));
   v.dmg=Math.min(v.dmg,v.recv);
@@ -1118,13 +1122,38 @@ reg('recvDmg', a=>{ const [id,d]=String(a).split('|'); recvSet(id,null,rcvVal(id
 reg('recvDmgSet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),null,rcvNum(a.slice(i+1))); });
 reg('recvDmgOpen', id=>{ state.recvDmg=state.recvDmg===String(id)?null:String(id); render(); });
 reg('recvReason', a=>{ const [id,r]=String(a).split('|'); const v=rcvVal(id); recvSet(id,null,null,v.reason===r?null:r); });
-/* One tap for the supplier who simply did not turn up, and one to undo it. */
+/* ── Confirming one product ────────────────────────────────────────────────
+   The answer this screen exists to take, and the only way a line ever enters
+   the payload. Pressing the answer a line already holds clears it back to
+   unanswered — an undo on the control that made the statement.
+   `not_sent` is pre-picked on a no-show because it is true of a no-show by
+   definition, and the other two reasons are still one tap away; leaving it
+   blank would block the save on a fact the operator has already stated. */
+function recvLineFind(id){ return ((state.recvPo&&state.recvPo.items)||[]).find(x=>String(x.id)===String(id)); }
+reg('recvArrived', id=>{
+  const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v||!it) return;
+  if(v.on&&v.recv>0){ v.on=false; }
+  else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; }
+  state.recvDmg=null; state.recvSaveErr=null; render(); });
+reg('recvNotArrived', id=>{
+  const v=state.recvVals&&state.recvVals[id]; if(!v) return;
+  if(v.on&&v.recv===0){ v.on=false; }
+  else { v.on=true; v.recv=0; v.dmg=0; v.reason=v.reason||'not_sent'; }
+  state.recvDmg=null; state.recvSaveErr=null; render(); });
+/* One tap for the supplier whose whole van came, one for the supplier who
+   simply did not turn up, and pressing either again undoes it. Both answer
+   every line in the group — the per-line control is still there to disagree
+   with any one of them afterwards. */
 reg('recvGroupNone', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
-  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(v){ v.recv=0; v.dmg=0; v.reason='not_sent'; } });
+  const undo=rcvGroupState(g.items)==='none';
+  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
+    if(undo){ v.on=false; } else { v.on=true; v.recv=0; v.dmg=0; v.reason='not_sent'; } });
   state.recvDmg=null; state.recvSaveErr=null; render(); });
 reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
-  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(v){ v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
-  state.recvSaveErr=null; render(); });
+  const s=rcvGroupState(g.items), undo=s==='ok'||s==='issue';
+  g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
+    if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
+  state.recvDmg=null; state.recvSaveErr=null; render(); });
 /* The server's refusals, in words. Every one of these is reachable by a client
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
@@ -1151,15 +1180,26 @@ reg('recvSave', ()=>{
   const po=state.recvPo; if(!po||state.recvBusy) return;
   if(rcvMissingReasons().length) return;
   state.recvBusy=true; state.recvSaveErr=null; render();
-  /* The reason key is sent on EVERY line, null where the line is not short.
-     That is what makes this a reason-aware caller: the server enforces the
-     rule in both directions for anyone who sends the key, and does nothing for
-     anyone who omits it (routes/purchases.js planReceiptReason). Sending it
-     only on short lines would leave a stale reason standing on a line that had
-     just been corrected upwards. */
-  const receipts=(po.items||[]).map(it=>{ const v=rcvVal(it.id);
+  /* ONLY THE PRODUCTS SOMEBODY ANSWERED GO ON THE WIRE, and that is the whole
+     of per-product receiving. A line left out of `receipts` is a line the
+     receive route never touches (routes/retail-purchasing.js: every column is
+     written under an `!== undefined` test), so its qty_received stays null —
+     the product is still outstanding, the order still has goods to come, and
+     the next van can bring it. Sending every line, which is what this screen
+     used to do, booked twelve deliveries the moment one of them arrived.
+     An UNCHANGED confirmed line is left out too (rcvDirty): re-asserting a
+     count the server already holds appends a receipt row that the delivery
+     journal reads as a correction of itself — "recorded 2, changed to 2".
+     The reason key is sent on EVERY line that IS sent, null where the line is
+     not short. That is what makes this a reason-aware caller: the server
+     enforces the rule in both directions for anyone who sends the key, and
+     does nothing for anyone who omits it (routes/purchases.js
+     planReceiptReason). Sending it only on short lines would leave a stale
+     reason standing on a line that had just been corrected upwards. */
+  const receipts=rcvToSend().map(it=>{ const v=rcvVal(it.id);
     return { line_id:it.id, qty_received:v.recv, damaged_qty:v.dmg,
              receipt_reason: v.recv<rcvOrdered(it) ? v.reason : null }; });
+  if(!receipts.length){ state.recvBusy=false; render(); return; }
   const body={receipts};
   /* Only when the operator actually moved it, and never when locked — the
      screen does not offer the choice then, and sending it anyway would be
@@ -1173,6 +1213,10 @@ reg('recvSave', ()=>{
     if(t.dmg.length)      bits.push(LANG==='en'?(t.dmg.length+' damaged'):(t.dmg.length+' 项破损'));
     if(t.over.length)     bits.push(LANG==='en'?(t.over.length+' over'):(t.over.length+' 项多收'));
     if(t.none.length)     bits.push(LANG==='en'?(t.none.length+' not sent'):(t.none.length+' 项未发货'));
+    /* What is still coming, said on the confirmation screen — the operator has
+       just deliberately left products unanswered and needs to see that the app
+       understood it as "later", not as "no". */
+    if(t.waiting.length)  bits.push(LANG==='en'?(t.waiting.length+' still to come'):(t.waiting.length+' 项待收'));
     state.recvDone=bits.join(' · ');
     /* Both lists the save just changed are now stale. */
     state.posTried=false; state.rcvTried=false; state.rcvToTried=false; state.poReceiptsFor=null;
@@ -1199,9 +1243,13 @@ reg('poStatus', st=>{
     });
   };
   if(st!=='Delivered'){ run(); return; }
+  /* Says where the OTHER answer lives, because this button is the one that
+     speaks for the whole order and somebody reaching it with half a van
+     outside needs the way out named here, not discovered. It used to send them
+     to a desktop; Receive is a screen on this phone now. */
   state.ask={title:T('Everything arrived?','全部到货了吗？'),
-    body:T('Every line is counted in at the quantity ordered, stock goes up across your stores, and the cost posts to the books. Short counts and damage are recorded per line on desktop.',
-           '所有项目按下单数量入库，各门店库存增加，采购金额记入账目。缺货与破损需在电脑端逐项登记。'),
+    body:T('Every line is counted in at the quantity ordered, stock goes up across your stores, and the cost posts to the books. If only some of it came, close this and use Receive line by line — you can mark each product on its own.',
+           '所有项目按下单数量入库，各门店库存增加，采购金额记入账目。如只到了部分商品，请返回并使用「逐项收货」，可逐项标记到货情况。'),
     confirmLabel:T('Tick it in','确认收货'), run};
   render();
 });
@@ -3423,9 +3471,10 @@ function sheetPO(){
   const items=d.items||[];
   const lines=items.length;
   const done=d.status==='Delivered'||d.status==='Cancelled';
-  // The one PO action that belongs on a phone: you are at the door, the boxes
-  // are all there. Anything partial — short counts, damage — is per-line work
-  // and stays on the desktop, which is where the receive screen lives.
+  // The fast path, and only the fast path: you are at the door and the boxes
+  // are ALL there. Anything else — one product of twelve, a short count,
+  // damage — is per-product work and belongs on Receive, which is a screen on
+  // this phone (the button below this one).
   const cta = d.status==='Requested'
     ? {label:T('Mark ordered','标记已下单'),status:'Ordered'}
     : d.status==='Ordered'
@@ -3596,15 +3645,32 @@ function loadReceive(poId){
     if(state.recvId!==Number(poId)) return;
     state.recvPo=d;
     state.recvStore=d.receiving_store_id||d.store_id||null;
-    /* Prefilled at the FULL ORDERED QUANTITY, which is the whole ergonomic
-       argument of this screen: staff touch only what is wrong. A line already
-       received keeps what it holds, so re-opening a part-received order shows
-       the counts somebody already entered rather than resetting their work. */
+    /* EVERY LINE IS CONFIRMED ONE AT A TIME. `on` is the confirmation: false
+       means nobody has said anything about this product yet, and a line nobody
+       has spoken for is NOT SENT — the server leaves qty_received null and the
+       product stays outstanding for the van that brings it (recvSave).
+       A whole order arriving at once is still one tap: "All arrived" on the
+       supplier header. What the old screen could not say at all is the case
+       this exists for — one product of twelve turned up.
+
+       The counter is still preloaded at the FULL ORDERED QUANTITY, so
+       confirming a line that came in whole needs no number typed; the preload
+       is what the count STARTS at, not a claim that it arrived.
+
+       `was` is what the SERVER holds, kept so a second visit can tell an
+       untouched line from a corrected one — re-sending a line unchanged writes
+       a receipt row that reads "recorded 2, changed to 2" in the delivery
+       journal (routes/retail-purchasing.js, corrections). A line already
+       received opens confirmed, holding its own counts, so re-opening a
+       part-received order shows the work somebody already did. */
     const v={};
-    (d.items||[]).forEach(it=>{ v[it.id]={
-      recv: it.qty_received==null ? rcvRound(+it.qty||0) : rcvRound(+it.qty_received||0),
+    (d.items||[]).forEach(it=>{ const had=it.qty_received==null?null:rcvRound(+it.qty_received||0);
+      v[it.id]={
+      on: had!=null,
+      recv: had==null ? rcvRound(+it.qty||0) : had,
       dmg: rcvRound(+it.damaged_qty||0),
-      reason: it.receipt_reason||null }; });
+      reason: it.receipt_reason||null,
+      was: {recv:had, dmg:rcvRound(+it.damaged_qty||0), reason:it.receipt_reason||null} }; });
     state.recvVals=v; render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.recvErr=E('Could not open this order.','无法打开这张采购单。'); render(); });
@@ -3619,12 +3685,30 @@ function loadPoReceipts(poId){
 
 /* ── Derived ─────────────────────────────────────────────────────────────── */
 const rcvOrdered=it=>rcvRound(+it.qty||0);
-const rcvVal=id=>(state.recvVals&&state.recvVals[id])||{recv:0,dmg:0,reason:null};
+const rcvVal=id=>(state.recvVals&&state.recvVals[id])||{recv:0,dmg:0,reason:null,on:false,was:null};
 /* Rounded after the subtraction as well as before it: 0.3 − 0.1 is not 0.2 in
    binary, and an unrounded difference puts "0.19999999999999998 kg short" on
    the glass. */
 const rcvShort=it=>rcvRound(Math.max(0,rcvOrdered(it)-rcvVal(it.id).recv));
 const rcvOver=it=>rcvRound(Math.max(0,rcvVal(it.id).recv-rcvOrdered(it)));
+/* Confirmed, and which way. `on` is the statement; the count says what it
+   states. Nothing else in this screen may ask "did it arrive?" of a number
+   alone — a zero on an unconfirmed line means "not spoken for", and a zero on
+   a confirmed one means "it did not come", which are opposite facts. */
+const rcvOn=it=>!!rcvVal(it.id).on;
+const rcvCame=it=>rcvOn(it)&&rcvVal(it.id).recv>0;
+const rcvNo=it=>rcvOn(it)&&rcvVal(it.id).recv===0;
+const rcvWaiting=it=>!rcvOn(it);
+/* A confirmed line worth sending: one the server has no count for yet, or one
+   whose count/damage/reason has actually moved. Re-asserting an unchanged line
+   appends a receipt row that reads as a correction of itself in the delivery
+   journal (routes/retail-purchasing.js), so an untouched line is left alone. */
+function rcvDirty(it){
+  const v=rcvVal(it.id); if(!v.on) return false;
+  const w=v.was; if(!w||w.recv==null) return true;
+  return v.recv!==w.recv||v.dmg!==w.dmg||(v.reason||null)!==(w.reason||null);
+}
+const rcvToSend=()=>((state.recvPo&&state.recvPo.items)||[]).filter(rcvDirty);
 function rcvSupplier(it,po){ return (it.supplier_name||'').trim()||(po.supplier||'').trim()||T('Unspecified','未指定'); }
 function rcvGroups(){
   const po=state.recvPo; if(!po) return [];
@@ -3632,27 +3716,39 @@ function rcvGroups(){
   (po.items||[]).forEach(it=>{ const k=rcvSupplier(it,po); if(!g.has(k)) g.set(k,[]); g.get(k).push(it); });
   return [...g].map(([name,items])=>({name,items}));
 }
+/* Five states, because "nothing has been said yet" is not "nothing arrived".
+   The old three could not tell them apart: every line opened at its ordered
+   quantity, so a group nobody had touched read `ok · Complete` — the screen
+   asserting a delivery on the operator's behalf, which is the whole complaint
+   this rewrite answers. */
 function rcvGroupState(items){
-  if(items.every(it=>rcvVal(it.id).recv===0)) return 'none';
+  if(items.every(rcvWaiting)) return 'wait';
+  if(items.some(rcvWaiting))  return 'part';
+  if(items.every(rcvNo))      return 'none';
   if(items.some(it=>rcvShort(it)>0||rcvVal(it.id).dmg>0||rcvOver(it)>0)) return 'issue';
   return 'ok';
 }
 function rcvGroupPill(items){
   const s=rcvGroupState(items);
+  if(s==='wait')  return pill('draft',T('Not confirmed','待确认'));
+  if(s==='part')  return pill('restock',T('Part confirmed','部分确认'));
   if(s==='none')  return pill('view',T('Not arrived','未到货'));
   if(s==='issue') return pill('restock',T('Issues','有异常'));
   return pill('delivered',T('Complete','已齐'));
 }
 /* Every short line owes a reason — the server refuses the save without one
    (routes/purchases.js planReceiptReason), so the button says so BEFORE the
-   tap rather than letting a 400 explain it afterwards. */
+   tap rather than letting a 400 explain it afterwards. Only CONFIRMED lines
+   owe one: an unconfirmed line is not short, it is unanswered, and it is not
+   going in the payload at all. */
 function rcvMissingReasons(){
   const po=state.recvPo; if(!po) return [];
-  return (po.items||[]).filter(it=>rcvShort(it)>0&&!rcvVal(it.id).reason);
+  return (po.items||[]).filter(it=>rcvOn(it)&&rcvShort(it)>0&&!rcvVal(it.id).reason);
 }
 function rcvTally(){
-  const po=state.recvPo, t={complete:[],short:[],dmg:[],over:[],none:[]};
+  const po=state.recvPo, t={complete:[],short:[],dmg:[],over:[],none:[],waiting:[]};
   (po.items||[]).forEach(it=>{ const v=rcvVal(it.id);
+    if(!v.on) { t.waiting.push(it); return; }
     if(v.recv===0) t.none.push(it);
     else if(rcvShort(it)>0) t.short.push(it);
     else if(rcvOver(it)>0) t.over.push(it);
@@ -3699,18 +3795,35 @@ function rcvLocation(){
       <span style="flex:1;font-size:15px;${on?'font-weight:500':'color:var(--text-secondary)'}">${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span>
       ${on?`<span style="color:var(--sage-ink);display:flex">${ic('check',18,2)}</span>`:''}</button>`;}).join('')}</div>`;
 }
-/* One line. [−][n][+] as one control, the unit beside it, and the damage mark
-   at the right end of the SAME row — one row, one hand, nothing hidden. */
+/* One line, and the thing it must be able to say: THIS PRODUCT ARRIVED —
+   about itself, not about the order it happens to sit in.
+   [Arrived] / [Not arrived] is the confirmation; the counter appears once one
+   of them is pressed, because a number with nothing behind it was exactly the
+   old screen's problem: twelve lines showing their ordered quantity and one
+   button that recorded all twelve.
+   Below that, unchanged: [−][n][+] as one control, the unit beside it, and the
+   damage mark at the right end of the SAME row — one row, one hand, nothing
+   hidden. */
 function rcvLine(it){
   const v=rcvVal(it.id), ord=rcvOrdered(it), sh=rcvShort(it), ov=rcvOver(it);
+  const on=rcvOn(it), came=rcvCame(it), no=rcvNo(it);
+  /* Pressing the state a line is already in takes it back to unanswered. That
+     is the undo, and it is where it is looked for — on the thing that was
+     pressed — rather than in a separate control that would have to explain
+     itself. */
+  const answer=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${on?'12px':'0'}">
+    <button class="chip${came?' on':''}" style="justify-content:center;padding:0 10px"
+      aria-pressed="${came}" onclick="APP.cmd('recvArrived','${it.id}')">${ic('check',16,2)}${T('Arrived','已到货')}</button>
+    <button class="chip${no?' on':''}" style="justify-content:center;padding:0 10px"
+      aria-pressed="${no}" onclick="APP.cmd('recvNotArrived','${it.id}')">${ic('x',16,2)}${T('Not arrived','未到货')}</button></div>`;
   /* Compared as strings: the command carries the id back through an onclick
      attribute, so it arrives as text while it.id is a number, and === between
      the two is quietly always false — the counter opened in state and never on
      the glass. */
-  const open=String(state.recvDmg)===String(it.id);
+  const open=on&&String(state.recvDmg)===String(it.id);
   const edited=v.recv!==ord;
   const st=rcvStep(it);
-  const qty=`<div style="display:flex;align-items:center;gap:8px">
+  const qty=!on?'':`<div style="display:flex;align-items:center;gap:8px">
     <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|${-st}')">${ic('minus',22,2)}</button>
     <input class="qty${edited?' edit':''}" inputmode="decimal" value="${rcvFmt(v.recv)}"
       aria-label="${T('Arrived','已收')}" onfocus="this.select()" onchange="APP.cmd('recvQtySet','${it.id}|'+this.value)">
@@ -3733,9 +3846,12 @@ function rcvLine(it){
       <button class="stepbtn sm" ${v.dmg>=v.recv?'disabled':''} onclick="APP.cmd('recvDmg','${it.id}|${st}')">${ic('plus',18,2)}</button>
       <span class="num" style="margin-left:auto;font-size:12.5px;color:var(--text-secondary);text-align:right">${
         LANG==='en'?('of '+rcvFmt(v.recv)+' '+(it.unit||'')+'<br>arrived'):('共收 '+rcvFmt(v.recv)+' '+(it.unit||''))}</span></div></div>`:'';
-  /* The shortfall is STATED. Nobody is asked to work out the difference. */
+  /* The shortfall is STATED. Nobody is asked to work out the difference.
+     Only once the line has been confirmed: an unanswered line is not short of
+     anything, and saying so would be the screen filling in the answer again. */
   let note='';
-  if(sh>0){ const txt=v.recv===0?T('Nothing arrived — what happened?','未到货 — 原因？')
+  if(!on){ note=''; }
+  else if(sh>0){ const txt=v.recv===0?T('Nothing arrived — what happened?','未到货 — 原因？')
       :(LANG==='en'?(rcvFmt(sh)+' '+(it.unit||'')+' short of '+rcvFmt(ord)+' — what happened?'):('短少 '+rcvFmt(sh)+' '+(it.unit||'')+'（订购 '+rcvFmt(ord)+'）— 原因？'));
     note=`<div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--amber-ink)">${ic('triangle-alert',16)}<span class="num" style="font-size:13.5px">${txt}</span></div>`;
   } else if(ov>0){
@@ -3745,29 +3861,43 @@ function rcvLine(it){
   /* Three reasons, 2-up. A horizontal scroller fits about two and a half at
      380px, which put the last one behind a sideways swipe nested inside a
      vertical list — invisible unless you knew to look. */
-  const reasons=sh>0?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${
+  const reasons=(on&&sh>0)?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${
     RCV_REASONS.map(r=>`<button class="chip${v.reason===r.key?' on':''}" style="justify-content:center;padding:0 10px"
       onclick="APP.cmd('recvReason','${it.id}|${r.key}')">${T(r.en,r.zh)}</button>`).join('')}</div>`:'';
-  return `<div class="card" style="padding:14px">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">
+  /* An unanswered line is DIMMED, not hidden and not disabled: it has to stay
+     readable while the eye runs down the order looking for the one product
+     that came, and it is one tap from being answered. */
+  return `<div class="card" style="padding:14px${on?'':';border-style:dashed'}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px${on?'':';opacity:.72'}">
       <span style="display:flex;flex-direction:column;min-width:0">
         <span style="font-size:15.5px;font-weight:500">${escAttr(rcvName(it))}</span>
         ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}</span>
       <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
-    ${qty}${dmg}${note}${reasons}</div>`;
+    ${answer}${qty}${dmg}${note}${reasons}</div>`;
 }
-/* The no-show action sits in the HEADER, beside the pill, because it is a fact
-   about this supplier. Under the group's last line it read as another line
-   item — and as belonging to whichever group came next. */
+/* The two whole-supplier answers, because those are the two things that happen
+   to a whole supplier: the van came with everything on the list, or it did not
+   come. Both are one tap for the group and both are still per-product
+   underneath — they answer every line in the group, and any single line can be
+   changed afterwards without disturbing the rest.
+   They sit on their OWN ROW under the supplier name rather than beside it: two
+   buttons and a pill on one line push the supplier name into an ellipsis at
+   380px, which is where the name matters most.
+   Pressing the answer a group already holds clears it, the same undo the lines
+   have. */
 function rcvGroupHead(g){
-  const none=rcvGroupState(g.items)==='none';
-  return `<div style="display:flex;align-items:center;gap:7px;padding:12px 2px">
-    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
-      <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(g.name)}</span>
-      <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${g.items.length} ${T(g.items.length===1?'line':'lines','项')}</span></span>
-    <button class="minibtn${none?' on':''}" onclick="APP.cmd('${none?'recvGroupAll':'recvGroupNone'}','${escAttr(g.name)}')">${
-      none?T('Undo','撤销'):T('None arrived','未到货')}</button>
-    ${rcvGroupPill(g.items)}</div>`;
+  const s=rcvGroupState(g.items);
+  const all=s==='ok'||s==='issue', none=s==='none';
+  const act=(cmd,on,label)=>`<button class="minibtn${on?' on':''}" style="flex:1;justify-content:center"
+    aria-pressed="${on}" onclick="APP.cmd('${cmd}','${escAttr(g.name)}')">${label}</button>`;
+  return `<div style="padding:12px 2px;display:flex;flex-direction:column;gap:9px">
+    <div style="display:flex;align-items:center;gap:7px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(g.name)}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${g.items.length} ${T(g.items.length===1?'line':'lines','项')}</span></span>
+      ${rcvGroupPill(g.items)}</div>
+    <div style="display:flex;gap:8px">
+      ${act('recvGroupAll',all,T('All arrived','全部到货'))}${act('recvGroupNone',none,T('None arrived','未到货'))}</div></div>`;
 }
 function rcvSummary(){
   const t=rcvTally();
@@ -3780,8 +3910,18 @@ function rcvSummary(){
   t.dmg.forEach(it=>rows+=row('var(--brick)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvFmt(rcvVal(it.id).dmg)+' '+(it.unit||'')+' damaged'):(escAttr(rcvName(it))+' — 破损 '+rcvFmt(rcvVal(it.id).dmg)+' '+(it.unit||''))));
   t.over.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — '+rcvFmt(rcvOver(it))+' '+(it.unit||'')+' over ordered'):(escAttr(rcvName(it))+' — 多收 '+rcvFmt(rcvOver(it))+' '+(it.unit||''))));
   t.none.forEach(it=>rows+=row('var(--graphite)',LANG==='en'?(escAttr(rcvName(it))+' — nothing arrived'):(escAttr(rcvName(it))+' — 未到货')));
+  /* What this save does NOT say, stated as plainly as what it does. A line
+     nobody answered is left exactly as the order has it: it stays outstanding,
+     the order stays in To receive, and the next van can bring it. Without this
+     sentence a part-confirmed save looks like it silently dropped the rest. */
+  const rest=t.waiting.length?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);
+      font-size:12.5px;line-height:1.5;color:var(--text-secondary)">${LANG==='en'
+      ?(t.waiting.length+' product'+(t.waiting.length>1?'s':'')+' not answered yet — '+(t.waiting.length>1?'they stay':'it stays')+' on this order for a later delivery.')
+      :('还有 '+t.waiting.length+' 项未确认 —— 将保留在本单，可在下次到货时收货。')}</div>`:'';
+  if(!rows) rows=`<div style="padding:7px 0;font-size:13.5px;color:var(--text-secondary)">${
+    T('Nothing confirmed yet. Mark what arrived, product by product.','尚未确认。请逐项标记到货情况。')}</div>`;
   return `<div class="card" style="padding:14px 16px">
-    <span class="eyebrow" style="display:block;margin-bottom:4px">${T('About to record','即将登记')}</span>${rows}</div>`;
+    <span class="eyebrow" style="display:block;margin-bottom:4px">${T('About to record','即将登记')}</span>${rows}${rest}</div>`;
 }
 function screenReceive(){
   if(state.recvErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -3817,13 +3957,19 @@ function screenReceive(){
     <span style="font-size:13.5px;color:var(--amber-ink)">${LANG==='en'
       ?(missing.length+' short line'+(missing.length>1?'s':'')+' still need'+(missing.length>1?'':'s')+' a reason.')
       :('还有 '+missing.length+' 项短少未选原因。')}</span></div>`:'';
+  /* Nothing to send is not a failure and gets no alarm colour — it is the
+     screen as it opens. The button is simply not live until a product has been
+     answered, and the line under it says what would make it live. */
+  const send=rcvToSend().length;
+  const hint=!send?`<span style="font-size:12.5px;color:var(--text-secondary);text-align:center;margin-top:9px">${
+    T('Mark at least one product before recording.','请先标记至少一项到货情况。')}</span>`:'';
   return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
     ${rcvLocation()}
     <div>${groups}</div>
     ${rcvSummary()}
     <div style="display:flex;flex-direction:column">${err}${warn}
-      <button class="cta" ${(missing.length||state.recvBusy)?'disabled':''} onclick="APP.cmd('recvSave')">${
-        state.recvBusy?T('Recording…','登记中…'):T('Record delivery','登记收货')}</button></div></div>`;
+      <button class="cta" ${(missing.length||state.recvBusy||!send)?'disabled':''} onclick="APP.cmd('recvSave')">${
+        state.recvBusy?T('Recording…','登记中…'):T('Record delivery','登记收货')}</button>${hint}</div></div>`;
 }
 
 /* ── The Receiving screen: To receive / Received ─────────────────────────── */
@@ -3930,9 +4076,19 @@ function rcvDeliveryRow(d,i){
       :state.rcvDetail&&state.rcvDetail.id===d.id?rcvDetailBody(state.rcvDetail)
       :`<div style="padding:0 16px 16px;font-size:13.5px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`):''}`;
 }
+/* AN ORDER WITH GOODS STILL TO COME BELONGS HERE, whatever its status says.
+   The receive route moves a PO to Delivered on the first arrived count it is
+   given (routes/retail-purchasing.js), which was harmless while a save always
+   covered every line and is not now: confirming the one product that turned up
+   would otherwise drop the other eleven out of this list, with no way back to
+   them. `received_lines < line_count` is the honest test — a line is counted
+   the moment somebody answers it either way, including "nothing arrived", so
+   what is left is only what nobody has spoken for. */
+const rcvPartial=p=>p.status==='Delivered'
+  && Number(p.line_count||0)>0 && Number(p.received_lines||0)<Number(p.line_count||0);
 function rcvToReceive(){
   const all=state.rcvTo||[];
-  return all.filter(p=>p.status==='Requested'||p.status==='Ordered');
+  return all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p));
 }
 /* The products a search matched, named on the row. Without this a hit reads as
    "this order matched, open it to find out why", which is the one-by-one hunt
@@ -3981,9 +4137,17 @@ function screenReceiving(){
             <span class="num" style="font-size:15px;font-weight:500;flex:none">${escAttr(p.po_number||('#'+p.id))}</span>
             <span style="font-size:15px;min-width:0;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}</span></span>
           <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
-            [poStore(p),(p.line_count||0)+' '+T('lines','项'),p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):''].filter(Boolean).join(' · ')}</span>
+            [poStore(p),
+             /* A part-received order counts what is LEFT, not what it holds:
+                the reason it is in this list is the products still to come. */
+             rcvPartial(p)
+               ? (LANG==='en'?((p.line_count-p.received_lines)+' of '+p.line_count+' still to come')
+                             :('还有 '+(p.line_count-p.received_lines)+'/'+p.line_count+' 项待收'))
+               : (p.line_count||0)+' '+T('lines','项'),
+             p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):''].filter(Boolean).join(' · ')}</span>
           ${rcvMatched(p)}
-          <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${poPill(p)}</span></span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${
+            rcvPartial(p)?pill('restock',T('Part arrived','部分到货')):poPill(p)}</span></span>
         <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic('chevron-right',18)}</span></button>`).join('')}</div></div>`;
   }
   const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
