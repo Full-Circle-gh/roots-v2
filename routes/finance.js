@@ -1,6 +1,10 @@
 const express = require('express');
 const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+// A kitchen order that has been copied into Tacet and placed there is the same
+// purchase as its RPO-#### copy, and only one of the two belongs on a 发票
+// chase. lib/po-supersede.js is the rule; this screen is one of its two readers.
+const { notSupersededByCopySql } = require('../lib/po-supersede');
 const router = express.Router();
 
 // Map a row from income_entries / expense_entries to the shape the
@@ -685,7 +689,8 @@ router.get('/api/finance/outstanding-lines', requireAuth, requirePermission('fin
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
       LEFT JOIN ingredients ing ON ing.id = pli.ingredient_id
-     WHERE po.status IN ('Ordered','Delivered','Confirmed')`;
+     WHERE po.status IN ('Ordered','Delivered','Confirmed')
+       AND ${notSupersededByCopySql('po')}`;
   const params = [];
   if (month)    { q += " AND substr(po.date, 1, 7) = ?"; params.push(month); }
   if (supplier) {

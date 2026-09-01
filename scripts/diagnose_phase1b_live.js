@@ -279,7 +279,7 @@ async function main() {
       'lib/category-text.js':   { storeCategory: (_d, v) => v || null },
       'middleware/auth.js':     { logActivity: () => {} },
       'routes/retail.js':       { requireRetailAdmin: (req, res, next) => next() },
-      'routes/purchases.js':    { firePriceAlertsForPO: () => {} },
+      'routes/purchases.js':    { firePriceAlertsForPO: () => {}, postPOExpenses: () => ({ skipped: 'stubbed' }) },
     };
     for (const [rel, exp] of Object.entries(stubs)) {
       const abs = path.join(DEPLOY_ROOT, rel);

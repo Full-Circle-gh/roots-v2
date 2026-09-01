@@ -11,6 +11,7 @@ const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
 const { nextKitchenPONumber } = require('../lib/po-number');
+const { supersedingCopy } = require('../lib/po-supersede');
 // The nested-recipe recompute (§29 step 3) — fired after a PO price
 // write-back moves a non-linked ingredient's cost, since that can move a
 // linked material's recipe-derived cost transitively. See lib/recipe-rollup.js.
@@ -477,6 +478,18 @@ function postPOExpenses(poId) {
     db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(poId);
     const POSTABLE = new Set(['Ordered', 'Delivered', 'Confirmed']);
     if (!POSTABLE.has(po.status)) { result.skipped = 'not-postable'; return result; }
+    // STOOD DOWN BY ITS RETAIL COPY. Somebody copied this order into Tacet and
+    // placed the copy, so postRetailPOExpenses() is posting the same goods
+    // against RPO-####; posting them here as well is the same purchase in the
+    // books twice. lib/po-supersede.js holds the rule and the reasoning. The
+    // DELETE above has already run, which is the whole reversal: when the copy
+    // goes back to Draft or is cancelled the next call posts these rows again.
+    const copy = supersedingCopy(db, poId);
+    if (copy) {
+      result.skipped = 'superseded-by-' + copy.po_number;
+      result.superseded_by = copy.po_number;
+      return result;
+    }
     // Group by expense_category, summing (received × cost) per category.
     const groups = db.prepare(`
       SELECT
