@@ -80,6 +80,28 @@ const DELIVS_ONE = JSON.stringify({
 const SEEN = `state.rcvTried=true; state.rcvDeliv=${DELIVS}; state.rcvSeg='received';
   APP.cmd('push','receiving');`;
 
+// Herbs are bought by the tenth of a kilo. This order is the one from the bug
+// report, quantities and all: the screen used to round every figure to a whole
+// number, so 0.1 kg of cilantro read "ordered 0 kg" over a stepper stuck at 0 —
+// a line that could not be received at all — and 0.5 kg of dill silently became
+// 1, booking half a kilo of stock that never arrived. The whole-number lines
+// ride along to prove the fix did not put "2.000" on every other row.
+const PO_FRAC = JSON.stringify({
+  id: 4, po_number: 'RPO-0004', supplier: 'Grain & Oil Shop', status: 'Ordered',
+  store_id: 1, receiving_store_id: 1, store_name_en: 'Tianhe', store_name_cn: '天河',
+  store_locked: false, stores: [{ id: 1, name_en: 'Tianhe', name_cn: '天河' }],
+  items: [
+    { id: 21, name_en: 'Cilantro (coriander)', name_cn: '香菜', sku: 'A-18', qty: 0.1, unit: 'kg', supplier_name: 'Grain & Oil Shop' },
+    { id: 22, name_en: 'Dill', name_cn: '莳萝', sku: 'A-38', qty: 0.5, unit: 'kg', supplier_name: 'Haoyouxian' },
+    { id: 23, name_en: 'Old tofu', name_cn: '老豆腐', sku: 'A-79', qty: 2, unit: 'box', supplier_name: 'Pupu supermarket' },
+    { id: 24, name_en: 'Pure Buckwheat Flour', name_cn: '纯荞麦粉', sku: 'B-33', qty: 20, unit: 'kg', supplier_name: 'Handan Chuanglan' },
+  ],
+});
+const OPEN_FRAC = `state.recvId=4; state.recvPo=${PO_FRAC}; state.recvStore=1;
+  state.recvVals={21:{recv:0.1,dmg:0,reason:null},22:{recv:0.5,dmg:0,reason:null},
+                  23:{recv:2,dmg:0,reason:null},24:{recv:20,dmg:0,reason:null}};
+  state.stack=[{route:'receive',title:SUBS.receive.title}]; render();`;
+
 const CASES = [
   ['the receive screen', OPEN, [
     ['the order is the title',            `txt('content').includes('RPO-0003')`],
@@ -89,6 +111,68 @@ const CASES = [
     ['no cost figure anywhere',           `!/¥|CNY/.test(txt('content'))`],
     ['the destination is named',          `txt('content').includes('Tianhe')`],
     ['and it can still be changed',       `!txt('content').includes('cannot be received somewhere else')`],
+  ]],
+
+  ['a line ordered by the tenth of a kilo', OPEN_FRAC, [
+    ['0.1 kg is not rounded away to nothing', `txt('content').includes('ordered 0.1 kg')`],
+    ['0.5 kg is not rounded up to 1',         `txt('content').includes('ordered 0.5 kg')`],
+    ['whole lines keep their plain figures',  `txt('content').includes('ordered 2 box') && txt('content').includes('ordered 20 kg')`],
+    ['and carry no invented decimals',        `!/ordered (2\\.0|20\\.0)/.test(txt('content'))`],
+    ['every stepper is prefilled at what was ordered',
+      `[...document.querySelectorAll('.qty:not(.sm)')].map(i=>i.value).join(',') === '0.1,0.5,2,20'`],
+    ['so no fractional line reads as a no-show',
+      `!txt('content').includes('Not arrived') && !txt('content').includes('nothing arrived')`],
+  ]],
+
+  ['stepping a fractional line', OPEN_FRAC, [
+    ['+ moves it by a tenth, not a whole kilo',
+      `(APP.cmd('recvQty','21|0.1'), state.recvVals[21].recv === 0.2)`],
+    ['and repeated taps do not drift into binary floating point',
+      `(APP.cmd('recvQty','21|0.1'), state.recvVals[21].recv === 0.3)`],
+    ['− brings it back down',
+      `(APP.cmd('recvQty','21|-0.1'), state.recvVals[21].recv === 0.2)`],
+    ['a whole-number line still steps by one',
+      `(APP.cmd('recvQty','23|1'), state.recvVals[23].recv === 3)`],
+    ['a fraction can be typed straight in',
+      `(APP.cmd('recvQtySet','22|0.25'), state.recvVals[22].recv === 0.25)`],
+    ['the keypad offered is the one with a decimal point on it',
+      `[...document.querySelectorAll('.qty')].every(i=>i.getAttribute('inputmode')==='decimal')`],
+  ]],
+
+  ['half of a half-kilo line arrives', OPEN_FRAC + `APP.cmd('recvQtySet','22|0.2');`, [
+    ['the shortfall is stated in the same fractions',
+      `txt('content').includes('0.3 kg short of 0.5')`],
+    ['and not as a whole-number difference',
+      `!txt('content').includes('1 kg short')`],
+    ['the summary agrees with the line',
+      `txt('content').includes('Dill — 0.3 kg short')`],
+  ]],
+
+  // Typed entry is the path that used to mangle fractions worst: the old reader
+  // stripped every non-digit, so "0.1" arrived as 1 — a tenth of a kilo of
+  // damage booked as a whole one, then quietly capped at whatever turned up.
+  ['damage on a fractional line', OPEN_FRAC + `APP.cmd('recvDmgOpen','22');`, [
+    ['a typed tenth stays a tenth',
+      `(APP.cmd('recvDmgSet','22|0.1'), state.recvVals[22].dmg === 0.1)`],
+    ['the mark shows the fraction, not a rounded whole',
+      `[...document.querySelectorAll('.dmgbtn')].some(b=>b.innerText.trim()==='0.1')`],
+    ['the stepper moves it by a tenth too',
+      `(APP.cmd('recvDmg','22|0.1'), state.recvVals[22].dmg === 0.2)`],
+    ['and damage still cannot exceed what arrived',
+      `(APP.cmd('recvDmgSet','22|5'), state.recvVals[22].dmg === 0.5)`],
+  ]],
+
+  // The other half of the round trip. A fractional delivery that saved
+  // correctly still read back through Math.round, so 0.2 of 0.5 kg reappeared
+  // in the record as "0 / 1 kg" — the receipt disagreeing with itself.
+  ['a fractional delivery read back', SEEN + `state.rcvOpen=91;
+     state.rcvDetail=Object.assign(${DETAIL},{lines:[{line_id:22,name_en:'Dill',name_cn:'莳萝',
+       unit:'kg',ordered:0.5,qty_received:0.2,damaged_qty:0.05,returned_qty:0,
+       receipt_reason:'short_delivery',corrections:[]}]}); render();`, [
+    ['arrived-of-ordered keeps both fractions', `txt('content').includes('0.2 / 0.5 kg')`],
+    ['and is not rounded to a whole delivery',  `!txt('content').includes('0 / 1 kg')`],
+    ['the shortfall matches the figures above it', `txt('content').includes('0.3 kg short')`],
+    ['damage below a whole unit is still shown',   `txt('content').includes('0.05 kg damaged')`],
   ]],
 
   ['a line comes up short', OPEN + `APP.cmd('recvQtySet','11|4');`, [

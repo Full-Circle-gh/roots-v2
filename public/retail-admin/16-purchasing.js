@@ -901,7 +901,7 @@
         <td>
           <span class="pu2-qty">
             <button type="button" class="pm" onclick="puQty(${i},-1)">−</button>
-            <input type="number" min="0" step="1" class="pu2-num" value="${esc(it.qty ?? 1)}" onchange="puLine(${i},'qty',this.value)">
+            <input type="number" min="0" step="any" class="pu2-num" value="${esc(it.qty ?? 1)}" onchange="puLine(${i},'qty',this.value)">
             <button type="button" class="pm" onclick="puQty(${i},1)">+</button>
           </span>
         </td>
@@ -1721,7 +1721,7 @@
     // `错货` is the pair the mobile receive screen already ships for
     // wrong_item (RCV_REASONS, public/m.html) and is reused here rather than
     // re-minted. The other four are locked in docs/tacet-delivery-vocabulary.md.
-    return `<span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rr pu2-num"
+    return `<span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rr pu2-num"
               value="${qty}" ${dis} oninput="puReturnToggle(this)"></span>
       <select class="pu2-input pu2-rrn" style="margin-top:4px;width:118px" ${dis} ${qty ? '' : 'hidden'}>
         <option value="">${esc(T('Why?', '原因？'))}</option>
@@ -1765,8 +1765,8 @@
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}${itemNote ? `<div class="sub pu2-linenoteview">${esc(T('Note', '备注'))}: ${esc(itemNote)}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
-      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
-      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td>${returnCell(it, canReceive)}</td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
