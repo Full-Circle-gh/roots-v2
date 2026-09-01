@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.105
+# Tacet shared-core consolidation — decisions record, v4.106
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.106 — **§36's PO-derived expenses subsection gains two rules the Transactions mockup surfaced.** First, the category hint **vanishes at exactly one category rather than reading "1 category"** — at N=1 nothing was collapsed, so the note would assert a breakdown that does not exist; a placeholder that looks like information is worse than silence. The rest of the row is unchanged at one category, because tint, posted-by mark and link out report provenance and editability, which do not depend on the split. Second, **the object is a purchase order**, matched to Purchasing's own shipped strings (bilingual, 采购单) rather than invented; "buying order" is the kitchen app's term and retires with it, and the row action says *Open purchase order* because a bare "order" on a Finance screen reads as a customer order. Both are recorded because the mockup now depends on them and neither was written down anywhere.
 
 2026-09-01 · v4.105 — **§36 settles how PO-derived expenses are DISPLAYED: one row per purchase order in Transactions, read-only, linking through to Purchasing.** Roots' PO-0050 draws as one line at ¥1,257.68 rather than two at ¥602.68 and ¥655.00, because the purchase order is the thing that happened and the category split is an internal detail. **This is display only — the posters keep writing one row per category, so two rows exist in storage and one is drawn.** Both alternatives fail on the same axis, silence: hiding them puts ¥17,000 on Transactions against ¥18,257.68 on Summary with nothing accounting for the gap, which is the fault §36 exists to correct; showing them as ordinary rows makes them uneditable for no visible reason and lets them vanish when somebody flips a PO status, so money leaves a ledger with no explanation on the screen it left. **The row is built to explain its own constraint rather than only enforce it** — not editable here because not edited here, and the place it is edited is one click away. **The open item is NARROWED, not closed:** a projection and a persisted record both render this way. Three open items remain on §36, one now narrower.
 
@@ -4629,6 +4631,10 @@ Roots' PO-0050 is the concrete case: ¥1,257.68 across two rows, ¥602.68 of ing
 **Why not show them as ordinary rows.** They would be uneditable for no visible reason, and they would vanish when somebody in Purchasing flipped a status — money disappearing from a ledger with no explanation on the screen where it disappeared.
 
 **The grouping and the link are what make the behaviour legible.** One row per purchase order rather than one per category, because the purchase order is the thing that happened and the category split is an internal detail. It is not editable here because it is not edited here, and the place it IS edited is one click away on the row itself. **The row explains its own constraint instead of merely enforcing it.**
+
+**The category hint, and what it does at one.** A PO row carries a quiet note that its figure is a sum of N category subtotals — PO-0050's ¥1,257.68 is two, ¥602.68 of ingredients and ¥655.00 of packaging. **At exactly one category the note disappears entirely. It does not read "1 category".** When N is 1 nothing was collapsed, so a note would assert a breakdown that does not exist and send the operator looking for one; a placeholder that looks like information is worse than silence. Everything else on the row is unchanged at one category — the tint, the posted-by mark and the link out all report provenance and editability, which hold regardless of how the PO split.
+
+**The object is called a purchase order.** Matched to what Tacet Purchasing already ships on screen (`16-purchasing.js`, bilingual with 采购单). "Buying order" is the kitchen app's term and dies with it. The row action reads *Open purchase order* rather than *Open order*, because a bare "order" on a Finance screen can be read as a customer order.
 
 ### Explicitly NOT decided here
 
