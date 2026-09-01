@@ -10698,11 +10698,32 @@
     font: 400 14px var(--f-sans); color: var(--td-text); padding: 6px 0; -moz-appearance: textfield; }
   #prod-view-purchasing .pu2-qty input::-webkit-outer-spin-button,
   #prod-view-purchasing .pu2-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  /* A HINT MUST NOT LOOK LIKE A COUNT. The Arrived box carries the ordered
+     quantity as its placeholder, and with no ::placeholder rule the browser drew
+     it in the field's own colour at its own weight, merely dimmed — same digit,
+     same font, same position as a number somebody typed. Read down a column of
+     eight and a hint is indistinguishable from a record: RPO-0001 was reported
+     as "the system filled these in", and it was reported off this rendering.
+     Tone alone cannot carry the difference — it fails on a poor screen, at an
+     angle, and for anyone who does not see the two greys apart — so the SHAPE
+     changes too. A typed number is never italic. */
+  #prod-view-purchasing .pu2-qty input::placeholder { color: var(--td-text2); opacity: .45;
+    font-style: italic; font-weight: 400; }
+  /* And the other half of the pair: a real count reads as deliberate. Scoped to
+     inputs that have a placeholder to show, so an empty box is never bolded. */
+  #prod-view-purchasing .pu2-qty input:not(:placeholder-shown) { font-weight: 600; }
   #prod-view-purchasing .pu2-qty.warn { border-color: var(--td-amber); }
   #prod-view-purchasing .pu2-costwrap { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--td-border);
     border-radius: 8px; padding: 5px 10px; background: var(--td-surface, #fff); color: var(--td-text2); }
   #prod-view-purchasing .pu2-cost { width: 68px; border: none; outline: none; background: none; text-align: right;
     font: 400 14px var(--f-sans); color: var(--td-text); }
+  /* The same hint-is-not-a-value rule the Arrived box carries above. Freight,
+     Tax and Handling all placeholder "0", and an unstyled placeholder drew a
+     grey 0 that reads as a zero somebody entered — the difference between "no
+     freight on this order" and "nobody has said". */
+  #prod-view-purchasing .pu2-cost::placeholder { color: var(--td-text2); opacity: .45;
+    font-style: italic; font-weight: 400; }
+  #prod-view-purchasing .pu2-cost:not(:placeholder-shown) { font-weight: 600; }
   #prod-view-purchasing .pu2-costunit { font-size: 11.5px; white-space: nowrap; }
   #prod-view-purchasing .pu2-costwrap:focus-within { border-color: var(--td-dusk); }
   #prod-view-purchasing .pu2-lasthint { font-size: 11.5px; color: var(--td-text2); margin-top: 3px; }
@@ -10722,7 +10743,11 @@
   /* receive extras */
   #prod-view-purchasing .pu2-rcvsub { font-size: 13.5px; color: var(--td-text2); margin-bottom: 18px; }
   #prod-view-purchasing .pu2-notes { font-size: 13.5px; color: var(--td-text2); margin: -8px 0 18px; }
-  #prod-view-purchasing .pu2-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+  /* margin-bottom matches the top: the row used to have breathing room above it
+     and none below, so the buttons sat against the top edge of the landed-cost
+     card — the primary action on the screen, wedged into the card under it. */
+  #prod-view-purchasing .pu2-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-top: 18px; margin-bottom: 18px; }
   #prod-view-purchasing .pu2-fin { margin-top: 22px; border: 1px solid var(--td-border); border-radius: 10px;
     padding: 12px 16px; max-width: 560px; font-size: 13.5px; }
   #prod-view-purchasing .pu2-fin b { font-size: 13px; }

@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.104
+# Tacet shared-core consolidation — decisions record, v4.105
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.105 — **§36 settles how PO-derived expenses are DISPLAYED: one row per purchase order in Transactions, read-only, linking through to Purchasing.** Roots' PO-0050 draws as one line at ¥1,257.68 rather than two at ¥602.68 and ¥655.00, because the purchase order is the thing that happened and the category split is an internal detail. **This is display only — the posters keep writing one row per category, so two rows exist in storage and one is drawn.** Both alternatives fail on the same axis, silence: hiding them puts ¥17,000 on Transactions against ¥18,257.68 on Summary with nothing accounting for the gap, which is the fault §36 exists to correct; showing them as ordinary rows makes them uneditable for no visible reason and lets them vanish when somebody flips a PO status, so money leaves a ledger with no explanation on the screen it left. **The row is built to explain its own constraint rather than only enforce it** — not editable here because not edited here, and the place it is edited is one click away. **The open item is NARROWED, not closed:** a projection and a persisted record both render this way. Three open items remain on §36, one now narrower.
 
 2026-09-01 · v4.104 — **§36 gains the location dimension: an expense MAY carry a location, blank means the whole business, and the per-location figure is called CONTRIBUTION rather than profit.** Revenue and cost of goods already carry a location because they come from orders; operating expenses carry none today. **The rejected options are recorded with the arithmetic that rejected them**, because each fails in a way that looks like success: no location at all reports Tianhe losing ¥3,000 on a month it made ¥18,000, with nothing on screen admitting the filter did not work; a required location forces an accountant's ¥2,000 onto one shop and makes both figures wrong; and apportioning shared costs by a rule produces a complete-looking per-shop profit from an opinion that cannot be checked, which would mean shipping a settings screen for a judgement call and rendering its output as a measurement. **CONTRIBUTION is a guard, not a preference** — the word exists so that a later session cannot make the label honest by building the apportionment option. Single-location tenants see no filter, no excluded-costs line and the word Net; the dimension is invisible until a second location exists. Column shape is explicitly still open. Three open items remain on §36.
 
@@ -4612,11 +4614,27 @@ The three views reconcile. That is the test the rejected options fail.
 
 **Where the column goes, and its shape, are NOT decided here.** This decides that the dimension exists, what blank means, and what the figure is called.
 
+### PO-derived expenses appear in Transactions as one row per purchase order — DECIDED 2026-09-01
+
+Receiving a purchase order writes expense rows automatically, one per expense category on the PO. They are a projection rather than a record: both posters delete every row for a PO and re-insert them on each status change, so flipping a PO back to Requested makes its expense rows cease to exist, and flipping it forward recomputes them.
+
+Roots' PO-0050 is the concrete case: ¥1,257.68 across two rows, ¥602.68 of ingredients and ¥655.00 of packaging.
+
+**The decision: PO-derived expenses DO appear in the Transactions list, collapsed to ONE row per purchase order, not editable there, and linking through to the purchase order in Purchasing.** PO-0050 is one line reading its number and its ¥1,257.68 total, which opens the purchase order rather than an edit form.
+
+**This is a DISPLAY decision and nothing else.** `postPOExpenses()` and its retail twin continue to write one row per category exactly as they do today. Two rows exist in storage; one row is drawn. Nothing about how these rows are computed, written or deleted changes here.
+
+**Why not hide them.** Transactions would then hold only what people typed. On a month with ¥17,000 of typed expenses and this PO, Transactions would show ¥17,000 while Summary showed ¥18,257.68, with nothing on either screen accounting for the difference. Two screens in one module disagreeing about the same month, silently, is the exact fault §36 was written to correct.
+
+**Why not show them as ordinary rows.** They would be uneditable for no visible reason, and they would vanish when somebody in Purchasing flipped a status — money disappearing from a ledger with no explanation on the screen where it disappeared.
+
+**The grouping and the link are what make the behaviour legible.** One row per purchase order rather than one per category, because the purchase order is the thing that happened and the category split is an internal detail. It is not editable here because it is not edited here, and the place it IS edited is one click away on the row itself. **The row explains its own constraint instead of merely enforcing it.**
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
 
-- Whether PO-derived expense rows remain projections that are deleted and recomputed on every PO status change.
+- Whether PO-derived expense rows remain delete-and-reinsert projections in storage. Their display is settled above — one row per purchase order, read-only, linking to Purchasing — but a projection and a persisted record both render that way, so storage is untouched by that decision.
 - Expense and income category normalisation. `routes/finance.js` never calls `storeCategory`, so manual entries write raw client text with no normalisation at all.
 - What happens to the existing `income_entries` and `sales_entries` rows.
 
