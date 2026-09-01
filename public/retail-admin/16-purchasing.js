@@ -2257,11 +2257,55 @@
     return [...seen].sort().reverse();
   }
 
+  // ── 发票 money the five figures above cannot account for ──────────────────
+  // A recorded 发票 only reaches those figures through the PO LINE it was
+  // allocated to. When that line leaves the chase — nearly always because a
+  // placed RPO copy stood its kitchen original down — the allocation leaves
+  // with it, and the headline reads "Fully invoiced ¥0.00" over a ledger full
+  // of real, fully matched invoices. That is what a buyer reported, and the
+  // four states adding up to the total is exactly why nothing looked wrong.
+  //
+  // So it is said out loud, directly under the figures it is missing from,
+  // with the orders named and the way out spelled out. The server neither
+  // moves the allocation nor guesses a new home for it (routes/
+  // retail-purchasing.js recordedOffChase, lib/po-supersede.js) — re-matching
+  // it is the buyer's call, and this strip is where they learn there is one to
+  // make.
+  const OFF_CHASE_WHY = {
+    superseded:   () => T('the orders they were recorded against have been replaced by copies — open the 发票 under Recorded and tick the copy’s lines instead',
+                          '对应采购单已被副本替代 —— 请在“已登记”中打开该发票，改为勾选副本的明细'),
+    not_placed:   () => T('recorded against an order that is no longer placed — a draft, or cancelled since',
+                          '对应采购单已不是已下单状态 —— 草稿或已取消'),
+    other_tenant: () => T('recorded against an order belonging to another business',
+                          '对应采购单属于其他商户'),
+  };
+  function offChaseStrip(off) {
+    if (!off || !(off.amount > 0.005)) return '';
+    const orders = off.orders || [];
+    // The reasons actually present, biggest money first — usually exactly one.
+    const why = Object.entries(off.by_reason || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => (OFF_CHASE_WHY[k] || OFF_CHASE_WHY.not_placed)())
+      .join(T('; also: ', '；另有：'));
+    const shown = orders.slice(0, 4).map(o => `<span class="pu2-mut pu2-num">${esc(o.po_number)}${
+      o.copy_po_number ? ' → ' + esc(o.copy_po_number) : ''} ${money(o.amount)}</span>`).join('<span class="pu2-mut"> · </span>');
+    const more = orders.length > 4
+      ? `<span class="pu2-mut">+${orders.length - 4} ${esc(T('more', '个采购单'))}</span>` : '';
+    return `
+      <div class="pu2-agingstrip">
+        <span class="pu2-mut">${esc(T('Recorded, not counted above', '已登记发票，未计入上方'))}:</span>
+        <span class="pu2-pill amber"><span class="dot"></span>${money(off.amount)}</span>
+        <span class="pu2-mut">${esc(why)}</span>
+      </div>
+      <div class="pu2-agingstrip">${shown}${more ? '<span class="pu2-mut"> · </span>' + more : ''}</div>`;
+  }
+
   function renderInvBody() {
     const host = document.getElementById('pu2-inv-body');
     if (!host) return;
     const tot = (_invOut && _invOut.totals) || { total: 0, fully_invoiced: 0, partially_invoiced: 0, awaiting: 0, no_invoice_expected: 0, credit_due: 0, line_count: 0 };
     const aging = (_invOut && _invOut.aging) || { notDue: 0, dueSoon: 0, overdue: 0, overdueCount: 0 };
+    const offChase = (_invOut && _invOut.recorded_elsewhere) || { amount: 0, orders: [], by_reason: {} };
     const groups = (_invOut && _invOut.groups) || [];
     const filtered = !!(_invMonth || _invSearch);
 
@@ -2304,6 +2348,7 @@
         ${kpi('awaiting', tot.awaiting, T('chase these', '需跟进'))}
         ${kpi('no_invoice_expected', tot.no_invoice_expected)}
       </div>
+      ${offChaseStrip(offChase)}
       ${tot.credit_due > 0.005 ? `
       <div class="pu2-agingstrip">
         <span class="pu2-mut">${esc(T('Returned after invoicing', '开票后退货'))}:</span>

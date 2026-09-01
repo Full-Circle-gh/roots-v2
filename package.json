@@ -26,6 +26,7 @@
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
     "test:purchasing-line-order": "node scripts/test_purchasing_line_order.js",
     "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
+    "test:invoice-off-chase": "node scripts/test_invoice_recorded_off_chase.js",
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
