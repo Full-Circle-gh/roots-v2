@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.8 · 2026-08-27
+# Tacet desktop patterns — v4.9 · 2026-09-01
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -663,6 +663,18 @@ So the real risk is narrow: **Latin-left + Chinese-right** external text — an 
   **An error the operator can miss is not an error state.** A failed refund that only toasts, then vanishes, leaves the drawer looking exactly as it did before — the operator has no way to know the money didn't move. **A failed write renders where the operator is looking**, next to the control they pressed, and stays until acknowledged. Toasts are for confirmations, never for failures.
 
   **A section with bad data shows that it failed. It does not disappear.** Live Orders guards every drawer section with optional chaining, so a section with missing data renders nothing — indistinguishable from a section that legitimately has nothing to show. Absence must mean *empty*, never *broken*.
+
+**Not recorded — a seventh state, added 2026-09-01.**
+
+The six states above all describe *now*: nothing here yet, nothing matched, nothing loaded, something failed. **Not recorded is a fact about *then*.** The information was never captured, cannot be recovered, and nothing is coming.
+
+It arose on Meituan orders. Commission and payout figures began arriving on 24 August 2026; every order mirrored before that kept only its total, permanently. Those orders are not empty — empty is a compliment that names what will arrive, and nothing will. They are not an error, nothing failed. They are not loading. Rendering them as any of the six would be false in a different way each time.
+
+**The treatment: show what IS known, and one past-tense sentence saying why the rest is not.** No dashed rows — a column of blanks sends the eye hunting for something that was never there, and each blank invites the same question again. No alarm colour, no icon, no retry control. The note sits at the same weight as any other true remark about the number above it.
+
+**The verb carries the whole state.** *Was never recorded* — past, closed, agentless. Not *unavailable*, which implies a retry. Not *missing*, which implies it should be there. Not *unknown*, which implies it could be found. And it names when the boundary falls, so the operator learns it once instead of rediscovering it on every old record.
+
+**Expect this to recur.** Any channel, feature or column switched on partway through a business's life leaves records behind the line. Per the consolidation record §36, that describes most of Tacet's channels. The date is data and must be derived, never hardcoded into the sentence.
 
 **Empty and no-results are the two most commonly conflated states in this product — and the live Orders page conflates them.** Search a customer who does not exist, on an account with 214 orders, and it says *"No orders yet."* Both halves are wrong: the fact, and the compliment. **Any page that filters ships both states.**
 
@@ -1721,6 +1733,22 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.9 · 2026-09-01.*
+
+**v4.9 changes — §1.12 gains a SEVENTH state, Not recorded. One state added; the six already there are untouched, and no other page rule is added, removed or altered.**
+
+### §1.12 — Not recorded
+
+**The six states all answer "what is true now". This one answers "what was true then", and nothing on the page could say it.** It came out of the Meituan money-panel mockup (`reference/meituan-money-panel-mockup.html`), where an order from before 24 August 2026 carries a total and nothing else: commission and payout figures began arriving on that date, and every order mirrored before it kept only what was captured at the time. Permanently — there is no re-read that recovers them.
+
+**Each of the six would have been false in its own way.** Empty is a compliment that names what will arrive, and nothing will arrive. No-results claims a filter that is not there. Error says something broke, and nothing did. Loading promises the data is coming. In flight and silent refresh do not apply at all. The panel needed a state that says *this was never written down*, which is not a failure and not a blank.
+
+**The treatment is known figures plus one past-tense sentence — never a column of dashes.** Five dashed rows draw five blanks and make the operator ask the same question five times; one sentence answers it once and names when the boundary falls. The verb is doing the work: *was never recorded* is closed and agentless, where *unavailable* implies a retry, *missing* implies it should be there, and *unknown* implies it could be found.
+
+**It will recur, and that is why it is a rule rather than a note on one panel.** Any channel, feature or column switched on partway through a business's life leaves records behind the line; `docs/tacet-consolidation-decisions.md` §36 records that this describes most of Tacet's channels. The boundary date is data and must be derived from the records, never hardcoded into the sentence.
 
 ---
 
