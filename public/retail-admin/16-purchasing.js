@@ -1816,16 +1816,16 @@
     if (!_po) return;
     if (!(await askConfirm({
       title: T('Undo receiving?', '撤销收货？'),
-      // The first sentence is the LOCKED pair, unchanged. The second is new and
-      // runs CN PENDING — English on both halves — because the arrived counts
-      // are now cleared by an undo and the operator must be told BEFORE they
-      // confirm, while composing its Chinese is forbidden (§30 rule 3 /
-      // docs/tacet-delivery-vocabulary.md Rule 4: copy from the source, never
-      // compose). The amendment is open in that document, awaiting a minted
-      // pair; swap it in here and delete this note.
+      // Two LOCKED pairs. The second (`undoClearsCounts`) says what the undo
+      // destroys and what it does not, and it is said BEFORE the operator
+      // confirms — losing counts you expected to keep is the whole complaint
+      // this change answers. Its CN reuses the screen's own words rather than
+      // new ones: 实收 and 破损 are the two column headers directly above this
+      // dialog, and 已收货 is the segment the delivery stays in.
+      // docs/tacet-delivery-vocabulary.md carries both pairs.
       body: T('Pulls back any stock this delivery added and returns the order to Sent.', '撤回该次收货已入库的数量，订单退回"已下单"状态。')
             + ' ' + T('The arrived and damaged counts are cleared — the delivery stays in Receiving.',
-                      'The arrived and damaged counts are cleared — the delivery stays in Receiving.'),
+                      '实收与破损数量将被清空 —— 该次收货记录仍保留在「已收货」中。'),
       confirmLabel: T('Undo receiving', '撤销收货'),
       danger: true,
     }))) return;
