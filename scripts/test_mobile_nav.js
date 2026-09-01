@@ -16,9 +16,11 @@
  *   • A NARROWED ROLE MUST NOT LAND ON HOME. Home is a board of revenue, and
  *     the app opens on it. An operator without dashboard:view was shown the one
  *     screen their role exists to exclude.
- *   • A BAR OF ONE FOLDER IS NOT NAVIGATION. A role holding none of the four
- *     destinations would get a tab bar containing only "More" — one button over
- *     a list of the two things they do all day.
+ *   • A ROLE IS NOT A FIXED NUMBER OF SLOTS. A role holding none of the four
+ *     destinations gets NO BAR: its tools are the home screen, a list, under
+ *     the role's own name. A bar was tried and rejected — two tools fit in one,
+ *     eight do not, and a bar that becomes "four plus More" has put back the
+ *     lid this whole change removes.
  *   • THE GATE MUST HOLD ON EVERY ROUTE IN. Hiding a row is not the same as
  *     refusing it: push(), the tab command and the ?to= launcher shortcut can
  *     each name a screen the operator cannot reach.
@@ -60,31 +62,41 @@ run('mobile nav', [
   ]],
 
   // ── the kitchen role: two tools, and only two ─────────────────────────
-  ['a kitchen role gets its two tools and nothing else', KITCHEN + "render();", [
-    ['two buttons', `${bars}===2`],
-    ['Add stock', `${bar}.indexOf('Add stock')>-1`],
-    ['Receiving', `${bar}.indexOf('Receiving')>-1`],
-    ['no Home', `${bar}.indexOf('Home')===-1`],
-    ['no Orders', `${bar}.indexOf('Orders')===-1`],
-    ['no Customers', `${bar}.indexOf('Customers')===-1`],
-    ['no Products', `${bar}.indexOf('Products')===-1`],
-    ['and no More to hide them behind', `${bar}.indexOf('More')===-1`],
+  ['a kitchen role gets its two tools as its home, and no bar',
+    KITCHEN + "landOnSomethingReachable();render();", [
+      ['no tab bar at all', "!document.querySelector('.tabbar')"],
+      ['Receiving is on the home list', `${body}.indexOf('Receiving')>-1`],
+      ['so is Add stock', `${body}.indexOf('Add stock')>-1`],
+      ['no Home board', `${body}.indexOf('Revenue')===-1`],
+      ['no Orders', `${body}.indexOf('Orders')===-1`],
+      ['no Customers', `${body}.indexOf('Customers')===-1`],
+      ['it is not titled after a bar that is not there', "txt('content').indexOf('More')===-1"],
+    ]],
+  ['the home is named for the role, not for the app',
+    KITCHEN + "state.me={name:'R',role:'kitchen',roleName:{en:'Kitchen',cn:'后厨'}};landOnSomethingReachable();render();", [
+      ['English', `${body}.indexOf('Kitchen')>-1`],
+    ]],
+  ['in Chinese', KITCHEN + "LANG='cn';state.me={name:'R',role:'kitchen',roleName:{en:'Kitchen',cn:'后厨'}};landOnSomethingReachable();render();", [
+    ['the role names the home', `${body}.indexOf('后厨')>-1`],
+    ['加库存', `${body}.indexOf('加库存')>-1`],
+    ['收货', `${body}.indexOf('收货')>-1`],
   ]],
-  ['in Chinese', KITCHEN + "LANG='cn';render();", [
-    ['加库存', `${bar}.indexOf('加库存')>-1`],
-    ['收货', `${bar}.indexOf('收货')>-1`],
-    ['two', `${bars}===2`],
-  ]],
-  ['it opens on Receiving, never on the revenue board',
+  ['it lands on the list, not inside one of the tools',
     KITCHEN + "state.tab='home';landOnSomethingReachable();render();", [
-      ['the stack is on Receiving', "state.stack.length===1 && state.stack[0].route==='receiving'"],
-      ['and Home is not what is painted', `${body}.indexOf('Revenue')===-1`],
+      ['nothing is pushed', "state.stack.length===0"],
+      ['both tools are in reach', `${body}.indexOf('Receiving')>-1 && ${body}.indexOf('Add stock')>-1`],
+      ['and the revenue board is not painted', `${body}.indexOf('Revenue')===-1`],
+    ]],
+  ['a tool comes back to the home by name, never to "More"',
+    KITCHEN + "state.me={name:'R',role:'kitchen',roleName:{en:'Kitchen',cn:'后厨'}};push('receiving');render();", [
+      ['the back link names the home', `${body}.indexOf('Kitchen')>-1`],
+      ['not More', `${body}.indexOf('More')===-1`],
     ]],
   ['a store stocker, whose only tool leaves this app',
-    "state.caps=['quickstock:recount'];render();", [
-      ['one button', `${bars}===1`],
-      ['named for the mode they land in', `${bar}.indexOf('Quick stock')>-1`],
-      ['not the kitchen wording', `${bar}.indexOf('Add stock')===-1`],
+    "state.caps=['quickstock:recount'];landOnSomethingReachable();render();", [
+      ['no bar', "!document.querySelector('.tabbar')"],
+      ['named for the mode they land in', `${body}.indexOf('Quick stock')>-1`],
+      ['not the kitchen wording', `${body}.indexOf('Add stock')===-1`],
     ]],
 
   // ── the gate holds on every route in ──────────────────────────────────
@@ -102,7 +114,7 @@ run('mobile nav', [
   ['nor by a launcher shortcut kept from a wider role',
     KITCHEN + "state.stack=[{route:'coupons',title:SUBS.coupons.title}];landOnSomethingReachable();render();", [
       ['the deep link is dropped', "state.stack.every(function(f){return f.route!=='coupons'})"],
-      ['and they land on their own tool', "state.stack.length===1 && state.stack[0].route==='receiving'"],
+      ['and they land on their own home', "state.stack.length===0 && state.tab==='more'"],
     ]],
 
   // ── the More list and the search index read the same filter ───────────
@@ -131,6 +143,6 @@ run('mobile nav', [
     "state.caps=['billing:view'];state.tab='more';state.stack=[];render();", [
       ['it says so', `${body}.indexOf('Nothing here for you yet')>-1`],
       ['and names who can widen it', `${body}.indexOf('manages your team')>-1`],
-      ['with no tab bar to imply otherwise', "!document.querySelector('.tabbar')"],
+      ['with nothing else on the screen to imply otherwise', "!document.querySelector('.tabbar')"],
     ]],
 ]);

@@ -200,23 +200,26 @@ const CASES = {
   'store-sheet': { rows: ROWS, ctxPatch: TWO_STORES, expect: ['Choose store', 'Panyu'], opens: 'storeSheet',
     js: "document.getElementById('storeBtn').click();" },
   'account-sheet': { rows: ROWS, expect: ['Signed in as Asher', 'Language', 'Appearance', 'Sign out'],
-    // 'Cancel' — the confirm is asked for, not standing open. 'Receiving' — the
-    // way out is offered to the operators who have somewhere to go and nobody
-    // else, and this context says can_receive is not one of them.
-    absent: ['Cancel', 'Receiving'],
+    absent: ['Cancel'],                            // the confirm is asked for, not standing open
     opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
-  // THE WAY OUT of a single-purpose app. Kitchen staff who also book deliveries
-  // in had this app on their phone and no route from it to Receiving. The row
-  // is the server's decision, not the client's: can_receive means the operator
-  // holds purchasing:receive AND is not locked to this app, so a door that
-  // opened onto a redirect back here can never be drawn.
-  'account-sheet-receiving': { rows: ROWS, ctxPatch: { can_receive: true },
-    expect: ['Signed in as Asher', 'Receiving', 'Sign out'],
-    opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
-  'account-sheet-receiving-cn': { rows: ROWS, ctxPatch: { can_receive: true },
+  // THE WAY BACK out of a single-purpose app, and it lives in the HEAD — the
+  // place every pushed screen on a phone keeps it. An operator whose whole job
+  // is this screen has no home to return to and is given no control at all; the
+  // server decides which they are (`home`), because only it knows whether the
+  // role is locked to this app and would be redirected straight back.
+  'no-way-back-for-a-locked-role': { rows: ROWS, expect: ['Quick stock'],
+    absent: ['Back', 'Kitchen'] },
+  'back-to-the-home-it-came-from': { rows: ROWS,
+    ctxPatch: { home: '/m', home_label: { en: 'Kitchen', cn: '后厨' } },
+    expect: ['Kitchen', 'Quick stock'] },          // named for where it goes, not "Back"
+  'back-in-chinese': { rows: ROWS,
+    ctxPatch: { home: '/m', home_label: { en: 'Kitchen', cn: '后厨' } },
     pre: "localStorage.setItem('roots-admin-lang','cn');",
-    expect: ['收货'], absent: ['Receiving'],
-    opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
+    expect: ['后厨'], absent: ['Kitchen'] },
+  // A home whose name did not travel still gets a way back, with the honest
+  // generic rather than a guess at what the screen is called.
+  'back-with-no-name-for-its-destination': { rows: ROWS, ctxPatch: { home: '/m' },
+    expect: ['Back', 'Quick stock'] },
   'sign-out-confirm': { rows: ROWS, expect: ['Sign out', 'Cancel'], opens: 'acctSheet',
     js: "document.getElementById('acctBtn').click();document.getElementById('signOutBtn').click();" },
   'write-in-flight': { rows: ROWS, expect: ['Saving'],

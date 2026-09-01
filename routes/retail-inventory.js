@@ -623,23 +623,38 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     name_en: s.name_en, name_cn: s.name_cn,
   }));
 
-  // THE WAY OUT. Quick Stock is a single-purpose app with no navigation, which
-  // is right for a role that only stocks — and a dead end for one that also
-  // takes deliveries. Kitchen staff who receive POs had the /stock icon on their
-  // phone and no route from it to Receiving, so the answer to "where do I book
-  // this delivery in" was "you can't, from here".
+  // THE WAY BACK. Quick Stock is a single-purpose app with no navigation, which
+  // is right for a role whose whole job is this screen — and a dead end for one
+  // that arrived here from somewhere. Kitchen staff who also book deliveries in
+  // had the /stock icon on their phone and no route out of it at all.
   //
-  // Two conditions, and BOTH are the operator's real situation rather than a
-  // preference: they must hold purchasing:receive, and their role must not be
-  // stock-app-locked — server.js blocks /m outright for a locked role, so
-  // offering the door would open onto a redirect straight back here. Anyone
-  // else (a plain store clerk, a kitchen-realm staffer) gets no extra row.
-  let canReceive = false;
-  if (req.backendUser && req.caps && req.caps.has('purchasing:receive')) {
+  // FIRST CUT OF THIS ASKED THE WRONG QUESTION. It asked whether the operator
+  // could RECEIVE, and offered a row to Receiving — so the way back existed
+  // only for one destination, and read as a sideways link rather than an exit.
+  // The real question is whether they have a home to return to: an operator
+  // whose role is not stock-app-locked has Tacet Mobile, whatever else they
+  // hold. server.js refuses /m outright for a locked role, so a door offered to
+  // one of those would open onto a redirect straight back here.
+  //
+  // A kitchen-realm staffer (users, not tenant_users) has no backend home and
+  // gets nothing, which is correct: for them this app is the whole product.
+  //
+  // The label travels with it. A back link that says where it GOES is the rule
+  // every pushed screen on the phone already follows, and the screen it returns
+  // to is titled with the role's name — so the same name is sent here rather
+  // than a generic "Back" that names nothing.
+  let home = null;
+  let homeLabel = null;
+  if (req.backendUser) {
     try {
       const rec = require('../lib/roles').recordFor(req.backendUser.tenant_id, req.backendUser.role);
-      canReceive = rec ? !rec.stockAppOnly : true;
-    } catch (e) { canReceive = false; }
+      if (!rec || !rec.stockAppOnly) {
+        home = '/m';
+        if (rec && (rec.nameEn || rec.nameCn)) {
+          homeLabel = { en: rec.nameEn || rec.nameCn, cn: rec.nameCn || rec.nameEn };
+        }
+      }
+    } catch (e) { home = null; homeLabel = null; }
   }
 
   res.json({
@@ -647,7 +662,8 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     data: {
       enabled,
       mode,                       // 'add' (kitchen) | 'recount' (warehouse)
-      can_receive: canReceive,    // offer the Receiving door in the account sheet
+      home,                       // '/m' when there is somewhere to go back to
+      home_label: homeLabel,      // that screen's own name, so Back can say it
       user: {
         name: req.user?.display_name || req.user?.username || null,
         full_access: fullAccess,
