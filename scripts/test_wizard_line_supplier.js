@@ -83,10 +83,15 @@ const document = {
 };
 
 // ── the server, faked ─────────────────────────────────────────────────────
+// Supplier 4 is the live shape section 12 is about: the stored name is ENGLISH
+// ONLY — a 1688 shop entered under its translated title — and the 中文 name
+// lives in the master's own name_cn column. There is no 中文 inside the stored
+// string for a split to find, so nothing but name_cn can make it searchable.
 const SUPPLIERS = [
   { id: 1, name: 'Nut House 坚果屋', name_cn: '坚果屋', is_active: 1 },
   { id: 2, name: 'Precious Soe', is_active: 1 },
   { id: 3, name: 'Retired Ltd', is_active: 0 },
+  { id: 4, name: 'Abaxiang Whole Grains Store', name_cn: '阿巴香杂粮店', is_active: 1 },
 ];
 const STOCK = [
   { product_id: 340, name_en: 'Almonds (Raw)', name_cn: '杏仁（生）', sku: '2-340', physical_qty: 82, safety_buffer: 0 },
@@ -312,6 +317,57 @@ async function main() {
   sandbox.puWizNext(2);
   ok(!toasts.length, 'an empty box is not an error');
   ok(node('pu2-wizbody').innerHTML.includes('<b>none</b>'), 'the recap says the order has no supplier');
+
+  // ── searching the book in 中文 ───────────────────────────────────────────
+  // THE DEFECT. Both boxes searched the stored name and the two halves a SPLIT
+  // of it yields — and a split can only ever find 中文 that is already inside
+  // the string. A book kept under translated shop titles has none in it at
+  // all: its 中文 names sit in suppliers.name_cn, which the Invoices fields,
+  // the Materials picker and the supplier list all read and these two did not.
+  // So on that book the order's supplier and every line's supplier could be
+  // searched in English and in nothing else, however the operator reads.
+  console.log('\n12. the book searches in 中文, off the master’s own name_cn');
+  sandbox.puNewOrder();
+  sandbox.puWizNext(2);
+  await sandbox.puPick(340);
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = '杂粮';
+  sandbox.puSuggestOpen('pu2-w-supplier', 'posuppliers');
+  ok(menu().includes('Abaxiang Whole Grains Store'), '中文 finds a supplier stored under an English-only name');
+  ok(!menu().includes('Precious Soe'), 'and narrows to them');
+  ok(menu().includes('阿巴香杂粮店'), 'the row shows the 中文 name beside the stored one');
+  const cnOpt = menu().match(/data-v="([^"]*)"[^>]*data-label="([^"]*)"/);
+  ok(!!cnOpt && cnOpt[1] === 'Abaxiang Whole Grains Store' && cnOpt[2] === 'Abaxiang Whole Grains Store',
+     'and still carries the WHOLE stored name as value and label — that is what the order groups on');
+  sandbox.puSuggestPick(cnOpt[1], cnOpt[2]);
+  ok(node('pu2-w-supplier').value === 'Abaxiang Whole Grains Store', 'picking fills the box with the stored name');
+  toasts.length = 0;
+  sandbox.puWizNext(2);
+  ok(!toasts.length && node('pu2-wizbody').innerHTML.includes('<b>Abaxiang Whole Grains Store</b>'),
+     'and the order goes on under them');
+  // Typed out in full rather than picked — in 中文, which names nobody the
+  // order can be grouped with unless it resolves back to the stored name.
+  sandbox.puWizStep(1);
+  node('pu2-w-supplier').value = '阿巴香杂粮店';
+  toasts.length = 0;
+  sandbox.puWizNext(2);
+  ok(!toasts.length, 'the 中文 name typed out in full is not "a supplier nobody has"');
+  ok(node('pu2-wizbody').innerHTML.includes('<b>Abaxiang Whole Grains Store</b>'),
+     'and resolves to the stored name rather than being written as itself');
+
+  console.log('\n13. the line box too — search, and save what was typed in 中文');
+  await sandbox.puLineSup(0);
+  type('杂粮');
+  sandbox.puSuggestOpen('pu2-supname', 'linesuppliers');
+  ok(menu().includes('Abaxiang Whole Grains Store'), '中文 narrows the line’s book the same way');
+  type('阿巴香杂粮店');
+  sandbox.puLineSupSave();
+  ok(lines().includes('>Abaxiang Whole Grains Store <'),
+     'and saving a 中文 name files the line under the stored one — the only name the server knows');
+  await sandbox.puLineSup(0);
+  type('Some One-Off Guy');
+  sandbox.puLineSupSave();
+  ok(lines().includes('Some One-Off Guy'), 'a name that is nobody is still kept as typed on a line');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

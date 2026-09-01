@@ -11875,6 +11875,12 @@
       #tab-team .rl-lockline { display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--td-border);
         background: var(--td-raised); border-radius: 11px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--td-text2); }
       #tab-team .rl-lockline b { color: var(--td-text); font-weight: 500; display: block; margin-bottom: 2px; }
+      /* The Quick Stock lockdown tick. Borrows .rl-p's checkbox metrics so it
+         lines up with the permission rows it governs, and takes a frame so it
+         reads as a setting about the role rather than one more permission. */
+      #tab-team .rl-p.rl-lock { border: 1px solid var(--td-border); background: var(--td-raised);
+        border-radius: 10px; padding: 11px 13px; }
+      #tab-team .rl-p.rl-lock:hover { background: var(--td-raised); }
 
       /* Blast radius. Stated ABOVE the ticks, before anything is editable —
          you are told who you are about to affect before you decide, not after. */

@@ -200,7 +200,22 @@ const CASES = {
   'store-sheet': { rows: ROWS, ctxPatch: TWO_STORES, expect: ['Choose store', 'Panyu'], opens: 'storeSheet',
     js: "document.getElementById('storeBtn').click();" },
   'account-sheet': { rows: ROWS, expect: ['Signed in as Asher', 'Language', 'Appearance', 'Sign out'],
-    absent: ['Cancel'],                            // the confirm is asked for, not standing open
+    // 'Cancel' — the confirm is asked for, not standing open. 'Receiving' — the
+    // way out is offered to the operators who have somewhere to go and nobody
+    // else, and this context says can_receive is not one of them.
+    absent: ['Cancel', 'Receiving'],
+    opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
+  // THE WAY OUT of a single-purpose app. Kitchen staff who also book deliveries
+  // in had this app on their phone and no route from it to Receiving. The row
+  // is the server's decision, not the client's: can_receive means the operator
+  // holds purchasing:receive AND is not locked to this app, so a door that
+  // opened onto a redirect back here can never be drawn.
+  'account-sheet-receiving': { rows: ROWS, ctxPatch: { can_receive: true },
+    expect: ['Signed in as Asher', 'Receiving', 'Sign out'],
+    opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
+  'account-sheet-receiving-cn': { rows: ROWS, ctxPatch: { can_receive: true },
+    pre: "localStorage.setItem('roots-admin-lang','cn');",
+    expect: ['收货'], absent: ['Receiving'],
     opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
   'sign-out-confirm': { rows: ROWS, expect: ['Sign out', 'Cancel'], opens: 'acctSheet',
     js: "document.getElementById('acctBtn').click();document.getElementById('signOutBtn').click();" },

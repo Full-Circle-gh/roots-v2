@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.107
+# Tacet shared-core consolidation — decisions record, v4.108
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.108 — **§36 sets a cutover: Tacet's Finance counts from 1 August 2026, the kitchen app's ledger is exported to a file, and nothing is deleted.** Established by reading live data rather than by preference. The ledger holds ¥239,841 across June and July against ¥113,767 of orders, and the gap is not error on either side: order coverage was still being switched on — gzgrocery 22 orders in June against 111 in July, Meituan Yuexiu 11 against 129, Eleme zero in both — with August the first complete month at 587 orders and ¥123,454. **The finding that settled it was Mini App's ¥152,309 against ¥82,738 of orders:** the three rows are ¥76,105.69 described `6月` and ¥75,790.00 described `7月`, both into the company bank account, plus one real ¥413.30 sale. **The two large rows are month-end settlement receipts, not sales**, filed under Mini App because the category list offered nothing meaning platform payout. **So the records were never reconcilable and this is not a data quality problem — one is a sales log and the other is closer to a bank statement.** Export rather than filter-in-place, because once the kitchen app is dark nothing else reads those rows and "still in the database" would mean openable by nobody. Expense rows need nothing beyond the date filter: verified clean by live dry run, 27 belong to Purchasing's received-PO display, 65 are the only copy of that money. **Two findings recorded as open rather than solved:** settlement has no home in the model, and `wechat_chat`/`pickup` appear as August channels in no mapping anywhere. Four open items on §36.
 
 2026-09-01 · v4.107 — **§36 settles category normalisation: Finance calls `storeCategory` on every write, and the existing rows are corrected once.** Purchasing normalises earlier in the chain — `storeCategory` runs when a PO line's expense category is saved, so `postPOExpenses()` copies an already-normalised value — while Finance has no such upstream step and no `category-text` import at all, so three rent payments typed by three people can land as three categories differing by an invisible Kangxi radical or by ASCII spacing. **The failure mode is the dangerous kind:** Summary's breakdown then draws ¥8,000, ¥12,000 and ¥6,000 as three identical-looking lines instead of one ¥26,000 line, so the total is right, every line beneath it is wrong, and nothing on screen looks broken. **Normalise-on-read was rejected** because it leaves storage dirty, making correctness depend on every future reader remembering — one that forgets reintroduces the fault silently — and because Transactions lists rows rather than grouping them, so the operator would still face rows they cannot tell apart. **The one-time pass is treated as what it is, a script that edits live financial data:** category text only, never an amount or a date, with a backup immediately before and a dry run read by a person first. `scripts/normalise_finance_categories.js` already exists and is the starting point. **The open item is REPLACED, not closed** — income categories live in browser localStorage and have never been synced to the server, so normalising them yields consistent values and still no shared list; where they should live is a Settings question. Three open items remain on §36.
 
@@ -4656,13 +4658,34 @@ The consequence is a wrong screen, not untidy data. Three rent payments typed by
 
 **Income categories are a separate and unsolved problem.** Expense categories at least share the `categories` table with Purchasing and the ingredient picker. Income categories are held in each browser's localStorage and have never been synced to the server at all — `saveFinCats()` pushes only the expense list. Normalising income text therefore makes the stored values consistent but does not produce a shared list, because no shared list exists. **Where income categories live is a Settings question and is NOT decided here.**
 
+### Tacet's Finance begins on 1 August 2026, and the kitchen app's ledger is exported rather than migrated — DECIDED 2026-09-01
+
+**Nothing is deleted. Tacet's Finance counts money from 1 August 2026 forward.** Everything already in `income_entries` and `expense_entries` stays exactly where it is.
+
+**Why a cutover rather than a migration, established by reading the live data.**
+
+`income_entries` holds 26 rows covering June and July 2026, ¥239,841 in total. `retail_orders` holds ¥113,767 for the same two months. The two do not reconcile, and the reason is not error on either side.
+
+Order coverage was still being switched on across those months — gzgrocery runs 22 orders in June against 111 in July, Meituan's Yuexiu store 11 against 129 — so the order record is partial in June and close to complete by late July. Eleme has zero orders in both months, consistent with never having synced then. By August every channel is present: 587 orders, ¥123,454, the first complete month.
+
+**The largest discrepancy turned out not to be a discrepancy at all, and it is the finding that settles this.** Mini App showed ¥152,309 in the ledger against ¥82,738 of wechat orders. Inspecting the three rows: ¥76,105.69 described `6月` and ¥75,790.00 described `7月`, both recorded as arriving in the company bank account, plus one genuine ¥413.30 Alipay transaction. **The two large rows are month-end settlement receipts, not sales.** They were filed under Mini App because the category list offered nothing meaning "platform payout".
+
+**So the two records were never reconcilable, and this is not a data quality problem. They measure different events.** `retail_orders` records sales. The ledger records cash arriving. A migration would have been reconciling a sales log against a bank statement and calling the difference an error.
+
+**The kitchen app's history is exported to a file, because after the kitchen app is retired nothing else reads those rows.** Leaving them in the database and filtering them out of Tacet would make them unreachable — present, but openable by nobody. A spreadsheet of both tables in full, handed to the operator and their accountant, is what makes "still readable" true rather than nominal.
+
+**Expense rows need no cutover treatment of their own** beyond the date filter. They are already in the table Tacet reads, their category values were verified clean by a live dry run on 2026-09-01, 27 of them belong to Purchasing and drive the received-PO cost display, and the remaining 65 are the only record of that money anywhere.
+
+**Two things were seen in the data and are deliberately NOT resolved here.** `wechat_chat` and `pickup` appear as order channels in August, ¥4,043 between them, and are named in no mapping anywhere in the repository. And settlement — money arriving from a platform after the sale it belongs to — has no home in Tacet's model; recording it in Transactions would double-count revenue the order record has already counted. Both are recorded so a later session finds them rather than rediscovering them.
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
 
 - Whether PO-derived expense rows remain delete-and-reinsert projections in storage. Their display is settled above — one row per purchase order, read-only, linking to Purchasing — but a projection and a persisted record both render that way, so storage is untouched by that decision.
 - Where income categories live. Normalisation is settled above, but income categories have no server-side master list at all — they sit in browser localStorage and are never synced — so normalising them makes the values consistent without producing a shared list. This is a Settings question, not a Finance one.
-- What happens to the existing `income_entries` and `sales_entries` rows.
+- Where settlement receipts belong. Money arriving from a platform weeks after the sale is not revenue — the order already counted it — but Roots records it today and every channel business has it. Recording it in Transactions would double-count. Nothing in Tacet's model holds it.
+- What `wechat_chat` and `pickup` are. Both appear as order channels from August 2026, ¥4,043 across 3 orders, and are named in no channel mapping in the repository.
 
 ## 37. Related documents
 
