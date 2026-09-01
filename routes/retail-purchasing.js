@@ -45,8 +45,12 @@ const { firePriceAlertsForPO, allocateLandedExtras, planReceiptReasons,
 // The ONE rule for "this kitchen order has been replaced by the copy somebody
 // made of it here" — read lib/po-supersede.js before changing either ledger it
 // governs. Consumed by the expense poster below and by the 发票 chase.
-const { notSupersededByCopySql, supersededByCopySql, invoicedOnSuperseded,
+const { notSupersededByCopySql, supersededByCopySql, invoicedOnSuperseded, supersedingCopy,
         PLACED_COPY_STATUSES } = require('../lib/po-supersede');
+// Moving a stranded 发票 onto the copy that replaced the order it was filed
+// against — the screen lib/po-supersede.js says that decision needs, rather
+// than the silent remap it refuses. Read lib/po-rematch.js before touching it.
+const { planRematch, applyRematch } = require('../lib/po-rematch');
 // Goods that arrived, were accepted, and went BACK. lib/po-returns.js is the
 // one definition site for what a return does to stock, to the books and to the
 // 发票 chase — this file reads all three of those numbers and must not invent a
@@ -1507,7 +1511,7 @@ function awaitingForSupplier(tid, name) {
 //   other_tenant  the allocation sits on another tenant's order
 function recordedOffChase(tid) {
   const rows = db.prepare(`
-    SELECT il.allocated_amount AS amount, po.po_number, po.status,
+    SELECT il.allocated_amount AS amount, po.id AS po_id, po.po_number, po.status,
            COALESCE(po.tenant_id,1) AS po_tenant,
            ${supersededByCopySql('po')} AS superseded,
            (SELECT c.po_number FROM purchase_orders c
@@ -1535,8 +1539,12 @@ function recordedOffChase(tid) {
                  : (r.po_tenant !== tid) ? 'other_tenant'
                  : 'not_placed';
     if (!byPo.has(r.po_number)) {
+      // po_id, because the re-match acts on the ORDER and the screen needs
+      // something to call it with. Only a superseded order has anywhere to move
+      // to, so that is the only reason that carries one.
       byPo.set(r.po_number, { po_number: r.po_number, reason, amount: 0,
-                              status: r.status, copy_po_number: r.copy_po_number || null });
+                              status: r.status, copy_po_number: r.copy_po_number || null,
+                              po_id: reason === 'superseded' ? r.po_id : null });
     }
     byPo.get(r.po_number).amount += r.amount || 0;
   }
@@ -1547,6 +1555,53 @@ function recordedOffChase(tid) {
   for (const o of orders) by_reason[o.reason] = round2((by_reason[o.reason] || 0) + o.amount);
   return { amount: round2(amount), order_count: orders.length, by_reason, orders };
 }
+
+
+// ── RE-MATCH: move a stranded 发票 onto the order that replaced its own ──────
+// The screen lib/po-supersede.js says the decision needs. recordedOffChase()
+// above names the money and the orders; these two put it back, and they are
+// split READ / WRITE on purpose — nothing moves until somebody has been shown
+// the pairing that would move it. lib/po-rematch.js holds the rule and the
+// reasons; read that header before changing either of these.
+//
+// :id is the KITCHEN ORIGINAL — the order the 发票 is stranded on, which is the
+// po_number the strip shows. Tenant-scoped on the order, as every read here is.
+function rematchTarget(req, res) {
+  const tid = Number(currentTenantId()) || 1;
+  const po = db.prepare(
+    'SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  if (!po) { res.status(404).json({ success: false, error: 'not_found' }); return null; }
+  return po;
+}
+
+router.get('/api/retail-admin/purchasing/invoices/rematch/:id', requireRetailAdmin, (req, res) => {
+  const po = rematchTarget(req, res);
+  if (!po) return;
+  const plan = planRematch(db, po.id, { supersedingCopy });
+  if (!plan) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!plan.copy) return res.status(409).json({ success: false, error: 'not_superseded' });
+  res.json({ success: true, data: plan });
+});
+
+router.post('/api/retail-admin/purchasing/invoices/rematch/:id', requireRetailAdmin, express.json(), (req, res) => {
+  const po = rematchTarget(req, res);
+  if (!po) return;
+  try {
+    // applyRematch recomputes the plan itself rather than trusting one posted
+    // from a page that may have been drawn minutes ago: the ledger is the
+    // authority on what is actually there to move.
+    const r = applyRematch(db, po.id, { supersedingCopy });
+    if (!r.plan || !r.plan.copy) return res.status(409).json({ success: false, error: 'not_superseded' });
+    logActivity(req.user.id, req.user.username, 'invoice_rematch', 'purchase_order', po.id,
+                { from_po: r.plan.source.po_number, to_po: r.plan.copy.po_number,
+                  moved: r.moved, amount: r.amount, unmatched: r.unmatched }, req.ip);
+    res.json({ success: true, data: { moved: r.moved, amount: r.amount, unmatched: r.unmatched,
+                                      to_po_number: r.plan.copy.po_number } });
+  } catch (e) {
+    console.error('[invoice rematch]', e);
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
 
 // GET .../invoices/outstanding?month=&q=&supplier=
 // Every line on a placed PO for this tenant, with its computed state, grouped
