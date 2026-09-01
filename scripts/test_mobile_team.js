@@ -23,14 +23,25 @@ const { run } = require('./lib/m-probe');
 
 // An owner (who is also the signed-in operator), a store-pinned manager, an
 // invite that never landed, and somebody already switched off.
+//
+// state.roles is part of the roster payload now: roles are per-tenant records,
+// so this screen names a role the way the shop does instead of carrying its own
+// map of the nine that used to ship. A fixture without it is a shop whose role
+// records are missing, which the screen handles by showing the raw key.
 const TEAM = `state.stores=[{id:1,name_en:'Tianhe store',name_cn:'天河店'},{id:2,name_en:'Panyu store',name_cn:'番禺店'}];
+  state.roles=[{key:'owner',nameEn:'Owner',nameCn:'负责人',storePinned:false},
+    {key:'store_manager',nameEn:'Store manager',nameCn:'店长',storePinned:true},
+    {key:'warehouse',nameEn:'Warehouse',nameCn:'仓库',storePinned:false},
+    {key:'staff',nameEn:'Shop floor',nameCn:'门店',storePinned:false}];
   state.teamTried=true; state.teamEnforce=false; state.team=[
   {id:1,username:'mei',displayName:'Mei Chen',role:'owner',retailStoreId:null,isActive:true,isSelf:true,lastLogin:'2026-08-23 08:10:00'},
   {id:2,username:'lin',displayName:'Lin Hao',role:'store_manager',retailStoreId:1,isActive:true,isSelf:false,lastLogin:'2026-08-22 19:40:00'},
   {id:3,username:'wu',displayName:'Wu Jia',role:'warehouse',retailStoreId:2,isActive:true,isSelf:false,lastLogin:null},
   {id:4,username:'old',displayName:'Zhao Qing',role:'staff',retailStoreId:null,isActive:false,isSelf:false,lastLogin:'2026-06-02 11:00:00'}];`;
-const AS_OWNER = `state.me={name:'Mei Chen',role:'owner'};`;
-const AS_STAFF = `state.me={name:'Lin Hao',role:'store_manager'};`;
+// Who may switch somebody off is the CAPABILITY the server checks, not two role
+// names — a tenant can rename or delete the roles that used to be hardcoded here.
+const AS_OWNER = `state.me={name:'Mei Chen',role:'owner'}; state.caps=['team:view','team:manage'];`;
+const AS_STAFF = `state.me={name:'Lin Hao',role:'store_manager'}; state.caps=['orders:view','team:view'];`;
 
 const STUB = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
@@ -52,7 +63,8 @@ const CASES = [
     // Roles that shape the view but stop nothing at the server is a fact with a
     // consequence, and the desktop is where that switch lives.
     ['unenforced roles are called out',     `txt('content').includes('not enforcing them yet')`],
-    ['inviting is named as desktop work',   `txt('content').includes('set on desktop')`],
+    ['inviting is named as desktop work, and says where roles are shaped',
+      `txt('content').includes('set on desktop') && txt('content').includes('Settings → Team → Roles')`],
   ]],
 
   // ── The two rules, stated rather than discovered ────────────────────────
@@ -99,9 +111,9 @@ const CASES = [
   // requireCap('team:manage') is what the server checks. Drawing an action a
   // store manager cannot use is the kind of promise this app has spent a long
   // time removing.
-  ['a store manager sees the roster and no switch', STUB + AS_STAFF + TEAM + `APP.cmd('push','team'); APP.cmd('teamToggle',2);`, [
+  ['an operator without team:manage sees the roster and no switch', STUB + AS_STAFF + TEAM + `APP.cmd('push','team'); APP.cmd('teamToggle',2);`, [
     ['the roster is still readable', `txt('content').includes('Lin Hao') && txt('content').includes('Wu Jia')`],
-    ['it says who can',              `txt('content').includes('Only an owner or an admin')`],
+    ['it says what is missing',      `txt('content').includes('needs permission to manage the team')`],
     ['and the tap does nothing',     `!${sent('/team/')}`],
   ]],
 

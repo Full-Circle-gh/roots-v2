@@ -1643,15 +1643,26 @@ let ENTITLEMENTS = {};
     // DARK in Phase 0/1: owner/admin/staff resolve to the full set and an older
     // session sends caps:null (treated as all-allowed), so nothing hides yet.
     setCaps(u.caps);
-    // Dashboards by position — the role picks a fixed dashboard view (see
-    // 03-dashboard.js dashPos*). body.pos-* drives the CSS that removes the
-    // money blocks for warehouse / customer_service / dispatch; RA_STORE_LOCK
-    // pins a store-scoped operator (store_manager) to their own store on every
-    // dashboard pull. Full-access roles land on pos-default (unchanged view).
-    const POSITIONS = ['store_manager', 'warehouse', 'customer_service', 'dispatch'];
-    window.RA_POS = POSITIONS.includes(u.role) ? u.role : 'default';
+    // HOME BOARD — the dashboard this role lands on (see 03-dashboard.js
+    // dashPos*). body.pos-* drives the CSS that removes the money blocks.
+    //
+    // This used to test the role STRING against a hardcoded list of four, which
+    // meant renaming a role took its board away: "Warehouse" renamed is no
+    // longer in the list, so the operator fell through to 'default' and was
+    // handed the owner's glance page instead of their work board — silently,
+    // with the rest of their permissions unchanged. The board is a field on the
+    // role record now (u.roleLayout), so a rename cannot reach it. The values
+    // are unchanged, so the ~20 body.pos-* rules and the seven dashPos()
+    // branches are untouched.
+    const BOARDS = ['default', 'store_manager', 'warehouse', 'customer_service', 'dispatch'];
+    window.RA_POS = BOARDS.includes(u.roleLayout) ? u.roleLayout : 'default';
     document.body.classList.add('pos-' + window.RA_POS.replace(/_/g, '-'));
-    if (window.RA_POS !== 'default' && Array.isArray(u.scopeStores) && u.scopeStores.length) {
+    // STORE LOCK — pins a store-scoped operator to their own store on every
+    // dashboard pull. Keyed on the operator's actual SCOPE, which is the fact
+    // it is about; it used to be gated on RA_POS !== 'default', so a
+    // store-scoped operator whose role happened to use the default board had no
+    // lock applied and quietly saw every store's data.
+    if (Array.isArray(u.scopeStores) && u.scopeStores.length) {
       window.RA_STORE_LOCK = u.scopeStores[0];
     }
     // Google-style profile circle + dropdown (avatar · account · team · sign out).
@@ -1958,8 +1969,10 @@ function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
 
 // ══════════════════════════════════════════════════════════════════
 // Team — native tab (2026-07-16), ported from the old standalone
-// backend-team.html (route still exists as a fallback, no longer linked to
-// from the rail). Lists/invites/edits operators via /api/backend/team* using
+// backend-team.html, which is now GONE: the page and its route were retired
+// once roles became per-tenant data, because every role name and description it
+// carried was a second copy free to disagree with the record. /backend/team
+// redirects here. Lists/invites/edits operators via /api/backend/team* using
 // the app's own api()/toast()/can()/cuT() helpers instead of the standalone
 // page's raw fetch + local L()/setMsg(). Namespaced tm* to match the scoped
 // CSS in #tab-team's <style> block (retail-admin.html).
@@ -1979,37 +1992,40 @@ let TM_PERM_STORE_SEL = {};
 let TM_PERM_LOCKED = false;
 let TM_INIT_DONE = false;
 
-function tmNeedsStore(role) { return role === 'kitchen' || role === 'store_manager'; }
+// ── Role identity comes from the tenant's own records ────────────────────
+// These three used to be hardcoded maps of nine roles — one of FIVE such maps
+// across the codebase, each free to drift from the others, and all of them
+// wrong the moment a tenant renamed anything. TM_ROLES is filled from
+// /api/backend/team (which ships the tenant's roles alongside the roster), so
+// the label, the description and "does this role want a store?" all come from
+// the same row the Roles tab edits.
+let TM_ROLES = [];
+function tmRole(role) { return TM_ROLES.find(r => r.key === role) || null; }
+function tmNeedsStore(role) { const r = tmRole(role); return r ? !!r.storePinned : false; }
 function tmRoleLabel(role) {
-  return cuT(
-    { owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager', warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch', kitchen: 'Kitchen', store_stock: 'Store stock' }[role] || role,
-    { owner: '负责人', admin: '管理员', staff: '员工', store_manager: '店长', warehouse: '仓库', customer_service: '客服', dispatch: '配送调度', kitchen: '后厨', store_stock: '门店库存' }[role] || role
-  );
+  const r = tmRole(role);
+  // An unrecognised role string is shown raw rather than guessed at. It means
+  // the record is gone — which the product can no longer produce, but a
+  // hand-edited database still can, and inventing a friendly name for it would
+  // hide exactly the thing somebody needs to fix.
+  return r ? cuT(r.nameEn || r.nameCn, r.nameCn || r.nameEn) : role;
 }
-// owner/admin read as elevated (amber), operator presets as sage, staff neutral.
-function tmRoleClass(role) { return (role === 'owner' || role === 'admin') ? 'owner' : (role === 'staff') ? 'staff' : 'op'; }
+// Owner reads as elevated (amber). Everything else is an ordinary role now —
+// there is no shipped hierarchy left to encode, so the old admin/staff split
+// would be inventing one about roles the tenant named itself.
+function tmRoleClass(role) { return role === 'owner' ? 'owner' : 'op'; }
 function tmRoleDesc(role) {
-  const en = {
-    staff: 'Day-to-day shop floor — orders, stock, customers. No money reports or setup.',
-    store_manager: 'Runs one store — its orders, stock and customers. Their home opens on that store.',
-    warehouse: 'Stock and shipments only. No revenue shown, anywhere.',
-    customer_service: 'Refunds, invoices, order fixes and customer feedback.',
-    dispatch: 'Keeps deliveries moving — orders waiting to go out and orders on the road.',
-    kitchen: 'Only the Add Stock app, for one store.',
-    admin: 'Runs everything and manages the team. Can’t change billing, edit others’ permissions, or delete a store.',
-    owner: 'Full access, always. Cannot be narrowed.',
-  }[role] || '';
-  const cn = {
-    staff: '门店日常——订单、库存、顾客。不含营收报表与设置。',
-    store_manager: '负责一家门店——该店的订单、库存与顾客，首页只看本店。',
-    warehouse: '只看库存与发货，任何地方都不显示营收。',
-    customer_service: '处理退款、发票、订单问题与顾客反馈。',
-    dispatch: '盯配送——待派单与在途订单。',
-    kitchen: '仅限一家门店的“加库存”应用。',
-    admin: '负责全部运营并管理团队。不能更改账单、编辑他人权限或删除门店。',
-    owner: '始终拥有完整权限，不可缩减。',
-  }[role] || '';
-  return cuT(en, cn);
+  const r = tmRole(role);
+  return r ? cuT(r.descEn || r.descCn || '', r.descCn || r.descEn || '') : '';
+}
+// Fill a role <select> from the tenant's roles. Replaces the two sets of eight
+// hardcoded <option> elements this file's markup used to carry.
+function tmFillRoleSelect(sel, current) {
+  if (!sel) return;
+  const keep = current || sel.value;
+  sel.innerHTML = TM_ROLES.map(r =>
+    `<option value="${escapeAttr(r.key)}">${escapeHtml(tmRoleLabel(r.key))}</option>`).join('');
+  if (keep && TM_ROLES.some(r => r.key === keep)) sel.value = keep;
 }
 function tmInitials(u) {
   const src = String((u.displayName || u.username) || '').trim();
@@ -2041,13 +2057,17 @@ async function tmLoadStores() {
 }
 function tmSyncStoreField(roleSel, fieldId, descId, helpId) {
   const role = roleSel ? roleSel.value : '';
+  const rec = tmRole(role);
   const f = $('#' + fieldId);
   if (f) f.style.display = tmNeedsStore(role) ? '' : 'none';
   const d = descId ? $('#' + descId) : null;
   if (d) d.textContent = tmRoleDesc(role);
   const h = helpId ? $('#' + helpId) : null;
-  if (h) h.textContent = role === 'kitchen'
-    ? cuT('Kitchen members only get the Add Stock app, for this store.', '后厨成员仅可使用此门店的“加库存”应用。')
+  // Two different facts, and which one is true is on the record rather than in
+  // a role name: a role limited to the Quick Stock app says so, and any other
+  // pinned role is being given the store it runs.
+  if (h) h.textContent = (rec && rec.stockAppOnly)
+    ? cuT('This role only reaches the Add Stock app, for this store.', '此角色仅可使用该门店的“加库存”应用。')
     : cuT('This is the store they run — their home and data stay on it.', '这是其负责的门店——首页与数据仅限本店。');
 }
 function tmPaintStats() {
@@ -2093,17 +2113,24 @@ async function tmLoad() {
   try {
     const j = await api('/api/backend/team');
     TM_TEAM = j.team || [];
+    // The tenant's roles arrive with the roster, so every role name, hint and
+    // <select> on this page reads the same row the Roles tab edits.
+    TM_ROLES = j.roles || [];
     const me = TM_TEAM.find(u => u.isSelf);
     if (me) TM_SELF_OWNER = me.role === 'owner';
     TM_RBAC_ENFORCE = !!j.rbacEnforce;
+    tmFillRoleSelect($('#tmIRole'));
     tmPaintEnforce();
     tmRender();
-    // Team devices — owner/admin only (matches the server-side gate on
-    // /api/backend/sessions/team). Hidden entirely for everyone else.
-    const canDevices = !!(me && (me.role === 'owner' || me.role === 'admin'));
+    // Team devices — gated on team:manage, which is what the server now checks
+    // too. HIDDEN, never disabled: an operator without it never learns the card
+    // exists (applyCapGates sets display and never disabled — same rule here).
+    const canDevices = can('team:manage');
     const devCard = $('#tmDevCard');
     if (devCard) devCard.style.display = canDevices ? 'block' : 'none';
     if (canDevices) tmdLoad();
+    const n = $('#tmTabPeopleN');
+    if (n) n.textContent = TM_TEAM.length ? String(TM_TEAM.length) : '';
   } catch (e) { /* api() already redirects to login on 401 */ }
 }
 function tmPaintEnforce() {
@@ -2172,7 +2199,10 @@ function tmOpenEdit(id) {
   if (!TM_EDITING) return;
   $('#tmEditTitle').innerHTML = tmCircleHtml(TM_EDITING, '') + `<span id="tmEditName">${escapeHtml(TM_EDITING.displayName || TM_EDITING.username)}</span>`;
   $('#tmEName').value = TM_EDITING.displayName || '';
-  $('#tmERole').value = TM_EDITING.role;
+  // Built from the tenant's live roles, and seeded with the one they hold —
+  // including a role that has since been deleted, which would otherwise
+  // silently select the first option and re-save them onto it.
+  tmFillRoleSelect($('#tmERole'), TM_EDITING.role);
   const eStore = $('#tmEStore');
   if (eStore && TM_EDITING.retailStoreId) eStore.value = TM_EDITING.retailStoreId;
   tmSyncStoreField($('#tmERole'), 'tmEStoreField', 'tmERoleDesc');
@@ -2218,9 +2248,30 @@ async function tmSaveEdit() {
     saveBtn.disabled = false; saveBtn.classList.remove('loading');
   }
 }
+// Group and section names come from the catalog now (lib/capabilities.js
+// GROUPS / SECTIONS), so the role editor and the per-person matrix cannot
+// disagree about what an area is called.
 function tmGroupLabel(g) {
-  return cuT({ run: 'Run', sell: 'Sell', content: 'Content', setup: 'Set up' }[g] || g,
-             { run: '运营', sell: '销售', content: '内容', setup: '设置' }[g] || g);
+  const n = TM_CATALOG && TM_CATALOG.groupNames && TM_CATALOG.groupNames[g];
+  return n ? cuT(n[0], n[1]) : g;
+}
+function tmSectionLabel(sec) {
+  const n = TM_CATALOG && TM_CATALOG.sections && TM_CATALOG.sections[sec];
+  return n ? cuT(n[0], n[1]) : sec;
+}
+// The money marker. ONE mark for both cases — the word behind it is what
+// differs — with the registry's own sentence underneath where the label
+// doesn't already earn it. A coin nobody can justify stops being read.
+function tmCoin(c) {
+  if (!c || !c.money) return '';
+  const w = c.money === 'moves' ? cuT('moves money', '涉及资金') : cuT('shows money', '显示金额');
+  return `<span class="rl-coin ${c.money}" title="${escapeAttr(w)}">`
+    + '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.6"/><path d="M6 3.4v5.2M4.5 5h3M4.5 7h3"/></svg>'
+    + escapeHtml(w) + '</span>';
+}
+function tmMoneyWhy(key) {
+  const n = TM_CATALOG && TM_CATALOG.moneyNotes && TM_CATALOG.moneyNotes[key];
+  return n ? `<div class="rl-why">${escapeHtml(cuT(n[0], n[1]))}</div>` : '';
 }
 async function tmLoadCatalog() {
   if (TM_CATALOG) return TM_CATALOG;
@@ -2243,6 +2294,22 @@ function tmRenderScopeStores() {
     cb.addEventListener('change', () => { TM_PERM_STORE_SEL[Number(cb.getAttribute('data-store'))] = cb.checked; });
   });
 }
+// A row's relationship to the role it sits under. Three states, and the two
+// that are NOT 'same' are different facts about a person: 'on' means they were
+// given something the role doesn't include; 'off' means something the role
+// includes was taken away. The matrix used to paint one tint for both, so a
+// forced-on row and a forced-off row looked identical — it showed that an
+// exception existed and refused to say which way it went.
+function tmDevState(key, on) {
+  const inRole = TM_PERM_PRESET.has(key);
+  if (on === inRole) return '';
+  return on ? 'on' : 'off';
+}
+function tmDevMark(state) {
+  if (!state) return '';
+  return `<span class="tm-dev-mark">${escapeHtml(state === 'on'
+    ? cuT('Added', '额外') : cuT('Removed', '移除'))}</span>`;
+}
 function tmRenderMatrix() {
   const el = $('#tmPermMatrix');
   if (!TM_CATALOG) { el.innerHTML = ''; return; }
@@ -2254,10 +2321,12 @@ function tmRenderMatrix() {
     html += `<div class="tm-perm-group"><div class="tm-pg-h">${escapeHtml(tmGroupLabel(g))}</div>`;
     caps.forEach(c => {
       const on = !!TM_PERM_STATE[c.key];
-      const dev = on !== TM_PERM_PRESET.has(c.key);
-      html += `<div class="tm-perm-row${dev ? ' dev' : ''}${TM_PERM_LOCKED ? ' locked' : ''}" data-key="${escapeAttr(c.key)}">`
+      const dev = tmDevState(c.key, on);
+      html += `<div class="tm-perm-row${dev ? ' dev-' + dev : ''}${TM_PERM_LOCKED ? ' locked' : ''}" data-key="${escapeAttr(c.key)}">`
         + `<input type="checkbox"${on ? ' checked' : ''}${TM_PERM_LOCKED ? ' disabled' : ''}>`
         + `<label>${escapeHtml(cuT(c.labelEn, c.labelCn))}</label>`
+        + tmCoin(c)
+        + `<span class="tm-dev-slot">${tmDevMark(dev)}</span>`
         + `</div>`;
     });
     html += '</div>';
@@ -2265,11 +2334,18 @@ function tmRenderMatrix() {
   el.innerHTML = html;
   el.querySelectorAll('.tm-perm-row').forEach(row => {
     const key = row.getAttribute('data-key');
+    const slot = row.querySelector('.tm-dev-slot');
     row.querySelector('input').addEventListener('change', function () {
       TM_PERM_STATE[key] = this.checked;
-      row.classList.toggle('dev', this.checked !== TM_PERM_PRESET.has(key));
+      const dev = tmDevState(key, this.checked);
+      row.classList.remove('dev-on', 'dev-off');
+      if (dev) row.classList.add('dev-' + dev);
+      if (slot) slot.innerHTML = tmDevMark(dev);
     });
   });
+  // The legend only earns its space once something on screen is tinted.
+  const legend = $('#tmPermLegend');
+  if (legend) legend.style.display = el.querySelector('.dev-on, .dev-off') ? 'flex' : 'none';
 }
 async function tmOpenPerms(id) {
   const m = TM_TEAM.find(u => u.id === id);
@@ -2289,9 +2365,21 @@ async function tmOpenPerms(id) {
     let ctx;
     if (j.isOwner) ctx = cuT('Owner always has full access — nothing to change here.', '负责人始终拥有完整权限 — 此处无需更改。');
     else {
-      ctx = cuT('Position', '职位') + ': ' + tmRoleLabel(m.role) + '. ';
-      ctx += j.isSelf ? cuT('You can’t edit your own permissions.', '不能编辑自己的权限。')
-                      : cuT('Tinted rows differ from the position default.', '带底色的行表示与职位默认不同。');
+      ctx = cuT('Role', '角色') + ': ' + tmRoleLabel(m.role) + '. ';
+      if (j.isSelf) {
+        ctx += cuT('You can’t edit your own permissions.', '不能编辑自己的权限。');
+      } else {
+        // Say what an exception IS before showing a screenful of them: these
+        // are differences from the role, so editing the role moves this person
+        // too and their exceptions ride along on top.
+        const n = (j.grants || []).length + (j.revokes || []).length;
+        ctx += n
+          ? cuT(n === 1 ? '1 exception to that role, kept if the role changes.'
+                        : n + ' exceptions to that role, kept if the role changes.',
+                '与该角色有 ' + n + ' 处不同，角色变更后仍保留。')
+          : cuT('No exceptions — this person gets exactly what the role gives.',
+                '无例外 — 该成员的权限与角色完全一致。');
+      }
     }
     $('#tmPermsCtx').textContent = ctx;
     $('#tmPermsSave').style.display = (j.isOwner || j.isSelf) ? 'none' : '';
@@ -2328,6 +2416,463 @@ async function tmSavePerms() {
   } finally {
     btn.disabled = false; btn.classList.remove('loading');
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ROLES — Settings → Team → Roles
+//
+// The role is the subject here, not a property of a person: roles down the
+// left, the selected one filling the pane, renamed in its own heading. Edited
+// IN PLACE — there is one set per tenant, no copy-from-template, no read-only
+// originals and no reset-to-default, so the thing on screen is the thing that
+// is in force.
+//
+// Three rules the pane keeps:
+//   • THE BLAST RADIUS IS STATED FIRST, above the ticks, before anything is
+//     editable. You are told who you are about to affect before you decide.
+//   • A COLLAPSED GROUP SAYS ITS NAME and what is on inside it — "Run the shop
+//     · 18 of 30 on". How many AREAS a group contains is not a fact anyone
+//     came for.
+//   • MISSING MEANS ABSENT. An operator without team:permissions doesn't get a
+//     disabled editor, they get the read-only list. Same rule as applyCapGates,
+//     which sets display and never disabled.
+// ══════════════════════════════════════════════════════════════════════════
+let RL_ROLES = [];
+let RL_SEL = null;            // selected role key
+let RL_DRAFT = null;          // { nameEn, nameCn, descEn, descCn, caps:Set, layout }
+let RL_OPEN = {};             // group key → expanded
+let RL_CAN_EDIT = false;
+let RL_LAYOUTS = ['default'];
+let RL_BUSY = false;
+
+function rlRole(key) { return RL_ROLES.find(r => r.key === key) || null; }
+
+// "3 people" / "1 person" — and "Nobody yet", which is a different sentence
+// rather than "0 people", because a role nobody holds is a normal state.
+function rlPeopleWord(n) {
+  if (!n) return cuT('Nobody holds this role yet', '暂无成员使用此角色');
+  return cuT(n === 1 ? '1 person holds this role' : n + ' people hold this role',
+             n + ' 人使用此角色');
+}
+
+// Capabilities the tenant can actually see, grouped. Entitlement-hidden keys
+// never reach the client, so this is already the real list.
+function rlCatalogGroups() {
+  const out = [];
+  if (!TM_CATALOG) return out;
+  const byGroup = {};
+  TM_CATALOG.capabilities.forEach(c => { (byGroup[c.group] = byGroup[c.group] || []).push(c); });
+  (TM_CATALOG.groups || []).forEach(g => {
+    const caps = byGroup[g];
+    // A group with nothing visible in it is ABSENT — no header, no empty
+    // shell. Same rule railSyncGroups applies to the rail's own folders.
+    if (!caps || !caps.length) return;
+    const bySec = [];
+    const seen = {};
+    caps.forEach(c => {
+      if (!seen[c.section]) { seen[c.section] = { key: c.section, caps: [] }; bySec.push(seen[c.section]); }
+      seen[c.section].caps.push(c);
+    });
+    out.push({ key: g, sections: bySec, caps });
+  });
+  return out;
+}
+
+function rlMoneyTally(keys) {
+  let moves = 0, shows = 0;
+  const cat = (TM_CATALOG && TM_CATALOG.capabilities) || [];
+  cat.forEach(c => {
+    if (!c.money || !keys.has(c.key)) return;
+    if (c.money === 'moves') moves++; else shows++;
+  });
+  return { moves, shows };
+}
+// "5 move money · 10 show it" — the role-level summary. An owner should not
+// have to open four groups to find out that a role can refund.
+function rlMoneyLine(keys) {
+  const t = rlMoneyTally(keys);
+  if (!t.moves && !t.shows) return cuT('Touches no money', '不涉及资金');
+  const bits = [];
+  if (t.moves) bits.push(cuT(t.moves + ' move money', t.moves + ' 项涉及资金'));
+  if (t.shows) bits.push(cuT(t.shows + (t.moves ? ' show it' : ' show money'), t.shows + ' 项显示金额'));
+  return bits.join(' · ');
+}
+
+// ── The list ─────────────────────────────────────────────────────────────
+function rlRenderList() {
+  const el = $('#rlList');
+  if (!el) return;
+  el.innerHTML = RL_ROLES.map(r => {
+    const t = r.isFixed
+      ? cuT('Everything, always', '始终拥有全部权限')
+      : cuT(r.capCount + ' of ' + r.capTotal + ' permissions', r.capTotal + ' 项中已开启 ' + r.capCount + ' 项');
+    const people = r.people
+      ? cuT(r.people === 1 ? '1 person' : r.people + ' people', r.people + ' 人')
+      : cuT('nobody', '无成员');
+    const money = (r.moneyMoves || r.moneyShows)
+      ? `<span class="rl-coin ${r.moneyMoves ? 'moves' : 'shows'}">${escapeHtml(
+          r.moneyMoves ? cuT(r.moneyMoves + ' money', r.moneyMoves + ' 资金') : cuT(r.moneyShows + ' money', r.moneyShows + ' 金额'))}</span>`
+      : '';
+    return `<button type="button" class="rl-row${r.key === RL_SEL ? ' on' : ''}" data-role="${escapeAttr(r.key)}">`
+      + `<span class="rl-rname">${escapeHtml(cuT(r.nameEn, r.nameCn))}${money}</span>`
+      + `<span class="rl-rsub">${escapeHtml(t + ' · ' + people)}</span>`
+      + `</button>`;
+  }).join('')
+  // ADD A ROLE — absent, not disabled, for an operator who can't edit.
+  + (RL_CAN_EDIT ? `<button type="button" class="rl-add" id="rlAdd">`
+      + `<svg width="14" height="14" viewBox="0 0 15 15"><path d="M7.5 3v9M3 7.5h9" stroke-width="1.3" stroke-linecap="round"/></svg>`
+      + escapeHtml(cuT('Add a role', '新建角色')) + `</button>` : '');
+  el.querySelectorAll('.rl-row').forEach(b => {
+    b.addEventListener('click', () => rlSelect(b.getAttribute('data-role')));
+  });
+  const add = $('#rlAdd');
+  if (add) add.addEventListener('click', rlAddRole);
+  const n = $('#tmTabRolesN');
+  if (n) n.textContent = RL_ROLES.length ? String(RL_ROLES.length) : '';
+}
+
+// ── The pane ─────────────────────────────────────────────────────────────
+function rlRenderPane() {
+  const el = $('#rlPane');
+  if (!el) return;
+  const r = rlRole(RL_SEL);
+  if (!r) { el.innerHTML = `<div class="tm-empty">${escapeHtml(cuT('Pick a role.', '请选择角色。'))}</div>`; return; }
+
+  // OWNER — locked, WITH THE REASON. A lock nobody can explain reads as a bug.
+  if (r.isFixed) {
+    el.innerHTML = `<h3>${escapeHtml(cuT(r.nameEn, r.nameCn))}</h3>`
+      + `<div class="rl-blast">${escapeHtml(rlPeopleWord(r.people))}.</div>`
+      + `<div style="margin-top:14px"></div>`
+      + `<div class="rl-lockline"><div><b>${escapeHtml(cuT('Fixed — this one can’t be changed', '固定角色 — 不可更改'))}</b>`
+      + escapeHtml(cuT(
+          'Owner always has every permission, so a shop can never lock itself out of its own account. It can’t be renamed, narrowed or deleted.',
+          '负责人始终拥有全部权限，以确保店铺不会把自己锁在账户之外。不可重命名、缩减或删除。'))
+      + `</div></div>`;
+    return;
+  }
+
+  const keys = RL_DRAFT ? RL_DRAFT.caps : new Set(r.caps || []);
+  const total = r.capTotal || (TM_CATALOG ? TM_CATALOG.capabilities.length : 0);
+  const dirty = rlDirty();
+  const ro = !RL_CAN_EDIT;
+
+  let html = '';
+  // Name — edited in the heading, which is what "edit in place" means taken
+  // literally. Two fields, because a role that ships with an English-only name
+  // is a role half the tenant can't read.
+  if (ro) {
+    html += `<h3>${escapeHtml(cuT(r.nameEn, r.nameCn))}</h3>`
+      + (r.descEn || r.descCn ? `<p class="tm-lead">${escapeHtml(cuT(r.descEn, r.descCn))}</p>` : '');
+  } else {
+    html += `<div class="rl-names">`
+      + `<div class="tm-field"><label class="tm-flabel" for="rlNameEn">${escapeHtml(cuT('Name (English)', '名称（英文）'))}</label>`
+      + `<input class="tm-input" id="rlNameEn" type="text" maxlength="40" value="${escapeAttr(RL_DRAFT.nameEn)}"></div>`
+      + `<div class="tm-field"><label class="tm-flabel" for="rlNameCn">${escapeHtml(cuT('Name (Chinese)', '名称（中文）'))}</label>`
+      + `<input class="tm-input" id="rlNameCn" type="text" maxlength="40" value="${escapeAttr(RL_DRAFT.nameCn)}"></div>`
+      + `</div>`
+      + `<div class="tm-field"><label class="tm-flabel" for="rlDescEn">${escapeHtml(cuT('What this role is for', '该角色的职责'))}</label>`
+      + `<input class="tm-input" id="rlDescEn" type="text" maxlength="200" value="${escapeAttr(RL_DRAFT.descEn)}" `
+      + `data-ph-en="One line, in the words your team uses" placeholder="${escapeAttr(cuT('One line, in the words your team uses', '一句话，用团队自己的说法'))}"></div>`
+      + `<div class="tm-field"><label class="tm-flabel" for="rlDescCn">${escapeHtml(cuT('Description (Chinese)', '说明（中文）'))}</label>`
+      + `<input class="tm-input" id="rlDescCn" type="text" maxlength="200" value="${escapeAttr(RL_DRAFT.descCn)}"></div>`
+      // HOME BOARD — the dashboard this role lands on. A field, not the name,
+      // which is what makes renaming safe.
+      + `<div class="tm-field"><label class="tm-flabel" for="rlLayout">${escapeHtml(cuT('Home board', '首页看板'))}</label>`
+      + `<select class="tm-input" id="rlLayout">`
+      + RL_LAYOUTS.map(L => `<option value="${escapeAttr(L)}"${L === RL_DRAFT.layout ? ' selected' : ''}>${escapeHtml(rlLayoutLabel(L))}</option>`).join('')
+      + `</select><div class="tm-fhint">${escapeHtml(cuT('What this role sees first. Renaming the role never changes it.', '该角色登录后首先看到的页面。重命名角色不会影响它。'))}</div></div>`;
+  }
+
+  // BLAST RADIUS, before the ticks.
+  html += `<div class="rl-blast"><b>${escapeHtml(rlPeopleWord(r.people))}.</b> `
+    + escapeHtml(r.people
+        ? cuT('Every change here reaches them on their next screen.', '此处的每项更改都会在他们下次打开页面时生效。')
+        : cuT('Nothing you change here affects anyone yet.', '此处的更改目前不影响任何人。'))
+    + (r.exceptions
+        ? `<span class="rl-exc">${escapeHtml(cuT(
+            (r.exceptions === 1 ? '1 of them has an exception' : r.exceptions + ' of them have exceptions')
+              + ' — their own permissions on top of this role. Those survive this edit.',
+            '其中 ' + r.exceptions + ' 人设有例外权限，编辑角色后仍会保留。'))}</span>`
+        : '')
+    + `</div>`;
+
+  html += `<div class="rl-tally">`
+    + `<span class="rl-count"><b>${keys.size}</b> ${escapeHtml(cuT('of ' + total + ' on', '/ ' + total + ' 已开启'))}</span>`
+    + `<span class="rl-count">${escapeHtml(rlMoneyLine(keys))}</span></div>`;
+
+  html += `<div class="rl-groups">`;
+  rlCatalogGroups().forEach(g => {
+    const on = g.caps.filter(c => keys.has(c.key)).length;
+    const open = !!RL_OPEN[g.key];
+    // The collapsed row states the group's NAME and how much of it is on.
+    html += `<div class="rl-g${open ? ' open' : ''}" data-g="${escapeAttr(g.key)}">`
+      + `<button type="button" class="rl-gh" aria-expanded="${open}">`
+      + `<svg class="rl-chev" viewBox="0 0 12 12"><path d="M4 2.5 8 6l-4 3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      + `<span class="rl-gname">${escapeHtml(tmGroupLabel(g.key))}</span>`
+      + `<span class="rl-gcount">${escapeHtml(on
+          ? cuT(on + ' of ' + g.caps.length + ' on', g.caps.length + ' 项中开启 ' + on + ' 项')
+          : cuT('nothing on', '未开启'))}</span>`
+      + `</button><div class="rl-gbody">`;
+    g.sections.forEach(sec => {
+      // A section holding ONE permission flattens: no header, just the row.
+      // Twelve of the forty sections hold a single key, and a folder around one
+      // thing is noise — the same call railSyncGroups makes for rail folders.
+      if (sec.caps.length > 1) html += `<div class="rl-sec"><div class="rl-sech">${escapeHtml(tmSectionLabel(sec.key))}</div>`;
+      else html += `<div class="rl-sec">`;
+      sec.caps.forEach(c => {
+        const isOn = keys.has(c.key);
+        html += `<div class="rl-p${ro ? ' locked' : ''}" data-key="${escapeAttr(c.key)}">`
+          + `<input type="checkbox"${isOn ? ' checked' : ''}${ro ? ' disabled' : ''}>`
+          + `<label>${escapeHtml(cuT(c.labelEn, c.labelCn))}</label>`
+          + tmCoin(c) + `</div>`
+          + (c.money ? tmMoneyWhy(c.key) : '');
+      });
+      html += `</div>`;
+    });
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+
+  if (RL_CAN_EDIT) {
+    const affected = r.people
+      ? cuT(r.people === 1 ? 'Save · affects 1 person' : 'Save · affects ' + r.people + ' people',
+            '保存 · 影响 ' + r.people + ' 人')
+      : cuT('Save', '保存');
+    html += `<div class="rl-foot">`
+      + `<span class="rl-dirty${dirty ? ' on' : ''}">${escapeHtml(dirty
+          ? cuT('Unsaved changes', '有未保存的更改')
+          : cuT('No unsaved changes', '没有未保存的更改'))}</span>`
+      + `<span class="rl-spacer"></span>`
+      + `<button type="button" class="tm-btn-line" id="rlDelete">${escapeHtml(cuT('Delete role', '删除角色'))}</button>`
+      + `<button type="button" class="tm-btn-line" id="rlRevert"${dirty ? '' : ' style="display:none"'}>${escapeHtml(cuT('Revert', '撤销'))}</button>`
+      + `<button type="button" class="tm-btn-primary" id="rlSave"${dirty ? '' : ' disabled'}>${escapeHtml(affected)}</button>`
+      + `</div>`;
+  }
+  el.innerHTML = html;
+  rlBindPane();
+}
+
+function rlLayoutLabel(key) {
+  return cuT({
+    default: 'The full view',
+    store_manager: 'One store’s day',
+    warehouse: 'Stock and deliveries',
+    customer_service: 'Customers and orders',
+    dispatch: 'Deliveries in motion',
+  }[key] || key, {
+    default: '完整视图',
+    store_manager: '单店日常',
+    warehouse: '库存与收货',
+    customer_service: '顾客与订单',
+    dispatch: '配送进行中',
+  }[key] || key);
+}
+
+function rlDirty() {
+  const r = rlRole(RL_SEL);
+  if (!r || !RL_DRAFT) return false;
+  if (RL_DRAFT.nameEn !== r.nameEn || RL_DRAFT.nameCn !== r.nameCn) return true;
+  if (RL_DRAFT.descEn !== (r.descEn || '') || RL_DRAFT.descCn !== (r.descCn || '')) return true;
+  if (RL_DRAFT.layout !== r.layout) return true;
+  const was = new Set(r.caps || []);
+  if (was.size !== RL_DRAFT.caps.size) return true;
+  for (const k of RL_DRAFT.caps) if (!was.has(k)) return true;
+  return false;
+}
+
+// Repaint only the parts a tick changes — the tallies, the group counts and the
+// footer — so a checkbox never costs the operator their scroll position or the
+// text cursor in a name field.
+function rlSyncCounts() {
+  const r = rlRole(RL_SEL);
+  if (!r || !RL_DRAFT) return;
+  const keys = RL_DRAFT.caps;
+  const total = r.capTotal || (TM_CATALOG ? TM_CATALOG.capabilities.length : 0);
+  const tally = $('#rlPane .rl-tally');
+  if (tally) {
+    tally.innerHTML = `<span class="rl-count"><b>${keys.size}</b> ${escapeHtml(cuT('of ' + total + ' on', '/ ' + total + ' 已开启'))}</span>`
+      + `<span class="rl-count">${escapeHtml(rlMoneyLine(keys))}</span>`;
+  }
+  rlCatalogGroups().forEach(g => {
+    const box = $('#rlPane .rl-g[data-g="' + g.key + '"] .rl-gcount');
+    if (!box) return;
+    const on = g.caps.filter(c => keys.has(c.key)).length;
+    box.textContent = on
+      ? cuT(on + ' of ' + g.caps.length + ' on', g.caps.length + ' 项中开启 ' + on + ' 项')
+      : cuT('nothing on', '未开启');
+  });
+  const dirty = rlDirty();
+  const d = $('#rlPane .rl-dirty');
+  if (d) {
+    d.classList.toggle('on', dirty);
+    d.textContent = dirty ? cuT('Unsaved changes', '有未保存的更改') : cuT('No unsaved changes', '没有未保存的更改');
+  }
+  const save = $('#rlSave'); if (save) save.disabled = !dirty || RL_BUSY;
+  const rev = $('#rlRevert'); if (rev) rev.style.display = dirty ? '' : 'none';
+}
+
+function rlBindPane() {
+  $$('#rlPane .rl-gh').forEach(b => {
+    b.addEventListener('click', () => {
+      const box = b.closest('.rl-g');
+      const g = box.getAttribute('data-g');
+      RL_OPEN[g] = !RL_OPEN[g];
+      box.classList.toggle('open', RL_OPEN[g]);
+      b.setAttribute('aria-expanded', String(!!RL_OPEN[g]));
+    });
+  });
+  if (!RL_CAN_EDIT || !RL_DRAFT) return;
+  $$('#rlPane .rl-p input').forEach(cb => {
+    cb.addEventListener('change', function () {
+      const key = this.closest('.rl-p').getAttribute('data-key');
+      if (this.checked) RL_DRAFT.caps.add(key); else RL_DRAFT.caps.delete(key);
+      rlSyncCounts();
+    });
+  });
+  const bindText = (id, field) => {
+    const el = $('#' + id);
+    if (el) el.addEventListener('input', () => { RL_DRAFT[field] = el.value; rlSyncCounts(); });
+  };
+  bindText('rlNameEn', 'nameEn'); bindText('rlNameCn', 'nameCn');
+  bindText('rlDescEn', 'descEn'); bindText('rlDescCn', 'descCn');
+  const lay = $('#rlLayout');
+  if (lay) lay.addEventListener('change', () => { RL_DRAFT.layout = lay.value; rlSyncCounts(); });
+  const save = $('#rlSave'); if (save) save.addEventListener('click', rlSave);
+  const rev = $('#rlRevert'); if (rev) rev.addEventListener('click', () => rlSelect(RL_SEL, true));
+  const del = $('#rlDelete'); if (del) del.addEventListener('click', rlDeleteRole);
+}
+
+function rlSelect(key, force) {
+  if (!force && RL_SEL === key && RL_DRAFT) { rlRenderPane(); return; }
+  if (!force && rlDirty() && !window.confirm(cuT(
+    'Leave this role without saving? Your changes will be lost.',
+    '未保存就离开该角色？更改将丢失。'))) return;
+  RL_SEL = key;
+  const r = rlRole(key);
+  RL_DRAFT = r && !r.isFixed
+    ? { nameEn: r.nameEn || '', nameCn: r.nameCn || '', descEn: r.descEn || '', descCn: r.descCn || '',
+        caps: new Set(r.caps || []), layout: r.layout || 'default' }
+    : null;
+  rlRenderList();
+  rlRenderPane();
+}
+
+async function rlLoad(keepSel) {
+  try {
+    await tmLoadCatalog();
+    const j = await api('/api/backend/roles');
+    RL_ROLES = j.roles || [];
+    RL_CAN_EDIT = !!j.canEdit;
+    RL_LAYOUTS = j.layouts || ['default'];
+    const want = keepSel && RL_ROLES.some(r => r.key === keepSel) ? keepSel
+      : (RL_SEL && RL_ROLES.some(r => r.key === RL_SEL) ? RL_SEL
+        : (RL_ROLES.find(r => !r.isFixed) || RL_ROLES[0] || {}).key);
+    rlSelect(want, true);
+  } catch (e) {
+    const el = $('#rlPane');
+    if (el) el.innerHTML = `<div class="tm-empty">${escapeHtml(e.message || cuT('Couldn’t load roles', '无法加载角色'))}</div>`;
+  }
+}
+
+async function rlSave() {
+  const r = rlRole(RL_SEL);
+  if (!r || !RL_DRAFT || RL_BUSY) return;
+  if (!RL_DRAFT.nameEn.trim() && !RL_DRAFT.nameCn.trim()) {
+    toast(cuT('Give the role a name', '请为角色命名'), 'err'); return;
+  }
+  const btn = $('#rlSave');
+  RL_BUSY = true; if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+  try {
+    await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'PUT', body: {
+      name_en: RL_DRAFT.nameEn.trim(), name_cn: RL_DRAFT.nameCn.trim(),
+      desc_en: RL_DRAFT.descEn.trim(), desc_cn: RL_DRAFT.descCn.trim(),
+      layout: RL_DRAFT.layout, caps: [...RL_DRAFT.caps],
+    } });
+    toast(r.people
+      ? cuT(r.people === 1 ? 'Saved · 1 person moves with it' : 'Saved · ' + r.people + ' people move with it',
+            '已保存 · ' + r.people + ' 人随之变更')
+      : cuT('Saved', '已保存'), 'ok');
+    await rlLoad(r.key);
+    // The roster's role chips and both pickers read the same records.
+    tmLoad();
+  } catch (e) {
+    toast(e.message || cuT('Couldn’t save', '保存失败'), 'err');
+  } finally {
+    RL_BUSY = false; if (btn) btn.classList.remove('loading');
+    rlSyncCounts();
+  }
+}
+
+async function rlAddRole() {
+  const name = window.prompt(cuT('Name the new role', '新角色的名称'), '');
+  if (name === null) return;
+  if (!String(name).trim()) { toast(cuT('Give the role a name', '请为角色命名'), 'err'); return; }
+  try {
+    // A new role starts EMPTY, not as a copy of anything. Picking what it
+    // reaches is the job the pane exists for, and a role that arrives
+    // pre-filled invites nobody to check what is in it.
+    const j = await api('/api/backend/roles', { method: 'POST', body: { name_en: String(name).trim(), name_cn: String(name).trim(), caps: [] } });
+    await rlLoad(j.role && j.role.key);
+    tmLoad();
+    toast(cuT('Role added — now choose what it reaches', '角色已创建 — 请设置其权限'), 'ok');
+  } catch (e) { toast(e.message || cuT('Couldn’t add the role', '无法新建角色'), 'err'); }
+}
+
+// Delete WITH A DESTINATION. A role nobody holds goes on a plain confirm; a
+// role somebody holds asks where its people go and says what that means, in
+// the same sentence. There is no pre-selected default — picking is the point.
+async function rlDeleteRole() {
+  const r = rlRole(RL_SEL);
+  if (!r || r.isFixed) return;
+  if (!r.people) {
+    if (!window.confirm(cuT('Delete “' + cuT(r.nameEn, r.nameCn) + '”? Nobody holds it.',
+                           '删除“' + cuT(r.nameEn, r.nameCn) + '”？当前无人使用。'))) return;
+    try {
+      await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: {} });
+      RL_SEL = null; await rlLoad(); tmLoad();
+      toast(cuT('Role deleted', '角色已删除'), 'ok');
+    } catch (e) { toast(e.message || cuT('Couldn’t delete', '删除失败'), 'err'); }
+    return;
+  }
+  const others = RL_ROLES.filter(x => x.key !== r.key);
+  if (!others.length) { toast(cuT('There is nowhere to move them', '没有可迁移的角色'), 'err'); return; }
+  const menu = others.map((x, i) => (i + 1) + ') ' + cuT(x.nameEn, x.nameCn)).join('\n');
+  const who = r.people === 1 ? cuT('1 person holds this role', '1 人使用此角色')
+                             : cuT(r.people + ' people hold this role', r.people + ' 人使用此角色');
+  const exc = r.exceptions
+    ? '\n' + cuT(r.exceptions + (r.exceptions === 1 ? ' of them has an exception; it stays, on top of the new role.'
+                                                   : ' of them have exceptions; they stay, on top of the new role.'),
+                 '其中 ' + r.exceptions + ' 人设有例外权限，迁移后仍保留。')
+    : '';
+  const pick = window.prompt(who + '. ' + cuT('Where do they go? Type a number:', '他们迁移到哪个角色？请输入编号：')
+    + '\n\n' + menu + exc, '');
+  if (pick === null) return;
+  const dest = others[parseInt(pick, 10) - 1];
+  if (!dest) { toast(cuT('Pick one of the numbers listed', '请输入列表中的编号'), 'err'); return; }
+  if (!window.confirm(cuT(
+    'Delete “' + cuT(r.nameEn, r.nameCn) + '” and move ' + r.people + ' to “' + cuT(dest.nameEn, dest.nameCn) + '”? They get its permissions on their next screen.',
+    '删除“' + cuT(r.nameEn, r.nameCn) + '”并将 ' + r.people + ' 人迁移到“' + cuT(dest.nameEn, dest.nameCn) + '”？他们下次打开页面即按新角色权限生效。'))) return;
+  try {
+    await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: { move_to: dest.key } });
+    RL_SEL = dest.key; await rlLoad(dest.key); tmLoad();
+    toast(cuT(r.people === 1 ? 'Role deleted · 1 person moved' : 'Role deleted · ' + r.people + ' people moved',
+              '角色已删除 · ' + r.people + ' 人已迁移'), 'ok');
+  } catch (e) { toast(e.message || cuT('Couldn’t delete', '删除失败'), 'err'); }
+}
+
+// ── The two tabs ─────────────────────────────────────────────────────────
+function tmShowTab(which) {
+  const roles = which === 'roles';
+  const people = $('#tmPanePeople'), rolesPane = $('#tmPaneRoles');
+  if (people) people.style.display = roles ? 'none' : '';
+  if (rolesPane) rolesPane.style.display = roles ? '' : 'none';
+  const tp = $('#tmTabPeople'), tr = $('#tmTabRoles');
+  if (tp) { tp.classList.toggle('on', !roles); tp.setAttribute('aria-selected', String(!roles)); }
+  if (tr) { tr.classList.toggle('on', roles); tr.setAttribute('aria-selected', String(roles)); }
+  // The Roles pane holds a role list beside 101 checkboxes; it gets the width.
+  const frame = $('#tmFrame');
+  if (frame) frame.classList.toggle('wide', roles);
+  if (roles && !RL_ROLES.length) rlLoad();
 }
 
 // ── Team devices ───────────────────────────────────────────────────────────
@@ -2475,6 +3020,12 @@ function tmInit() {
 
   $('#tmEnforceBtn').addEventListener('click', tmToggleEnforce);
 
+  // People / Roles. The Roles pane loads on first open rather than at boot —
+  // it pulls the catalog and every role's capability list, which an operator
+  // who only came to switch somebody off never needs.
+  $('#tmTabPeople').addEventListener('click', () => tmShowTab('people'));
+  $('#tmTabRoles').addEventListener('click', () => tmShowTab('roles'));
+
   $('#tmPermScopeAll').addEventListener('click', () => { if (TM_PERM_LOCKED) return; TM_PERM_SCOPE_ALL = !TM_PERM_SCOPE_ALL; tmPaintScopeBtn(); });
   $('#tmPermResetPreset').addEventListener('click', () => {
     if (TM_PERM_LOCKED) return;
@@ -2498,8 +3049,15 @@ function tmInit() {
   if (window.onLangChange) onLangChange(() => {
     tmFillStoreSelect($('#tmIStore'));
     tmFillStoreSelect($('#tmEStore'));
+    // Role names are bilingual data, so both pickers are rebuilt rather than
+    // relabelled — and the selected role is carried across the rebuild.
+    tmFillRoleSelect($('#tmIRole'));
+    if (TM_EDITING) tmFillRoleSelect($('#tmERole'), TM_EDITING.role);
     tmSyncStoreField($('#tmIRole'), 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp');
     tmRender();
+    // The Roles pane is all cuT-driven. Repainting it keeps any unsaved draft,
+    // which lives in RL_DRAFT rather than in the DOM.
+    if (RL_ROLES.length) { rlRenderList(); rlRenderPane(); }
     tmPaintEnforce();
     if ($('#tmDevCard') && $('#tmDevCard').style.display !== 'none') { tmdRenderChips(); tmdRenderRows(); }
     if (TM_EDITING) { tmPaintActiveBtn(); tmSyncStoreField($('#tmERole'), 'tmEStoreField', 'tmERoleDesc'); }

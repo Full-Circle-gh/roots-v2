@@ -309,20 +309,39 @@ app.use('/api', (req, res, next) => {
 
 // Stock-only lockdown. A backend operator with a RESTRICTED role may use ONLY
 // the Quick Stock app — the /stock PWA, its assets, and the stock endpoints it
-// calls. Two roles are restricted this way:
-//   • 'kitchen'      — kitchen staff, created from the Team page (add-only)
-//   • 'store_stock'  — store stock clerks, created under Settings → Operations →
-//                      Stores, pinned to one store (recount their own store)
-// Everything else in the backend (the retail-admin shell, /backend/* pages,
-// every other API) is blocked here in ONE place, so it can't be reached by a
-// stray requireBackend copy that doesn't check the role. Full-access sessions
-// (owner/admin/staff) skip instantly.
+// calls. Everything else in the backend (the retail-admin shell, /backend/*
+// pages, every other API) is blocked here in ONE place, so it can't be reached
+// by a stray requireBackend copy that doesn't check the role. Full-access
+// sessions skip instantly.
+//
+// WHICH ROLES ARE RESTRICTED IS DATA, NOT A LITERAL. This used to test
+// `role !== 'kitchen' && role !== 'store_stock'`, which is the same rename
+// hazard as the dashboard boards and the store pins, and the most dangerous of
+// the three: rename "Kitchen" and a stock clerk silently gains the whole
+// backend, on every request, with nothing on screen to say so. The answer now
+// comes off the role record's stock_app_only flag, through the same
+// version-keyed cache as everything else — so this middleware still costs
+// exactly ONE query, the tenant_users read below.
+//
+// That read stays deliberately: role is not in the session (see loadCaller), so
+// re-reading it per request is what makes a demotion or a deactivation take
+// effect immediately instead of when the cookie expires.
 app.use((req, res, next) => {
   if (!req.session?.backendUserId) return next();
-  let role;
-  try { role = require('./database').prepare('SELECT role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId)?.role; }
+  let u;
+  try { u = require('./database').prepare('SELECT role, tenant_id FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId); }
   catch (e) { return next(); }   // tables not ready — fail open to existing gates
-  if (role !== 'kitchen' && role !== 'store_stock') return next();
+  if (!u) return next();
+  const role = u.role;
+  // Fail OPEN on an unreadable record, as every other read in this layer does:
+  // an operator who should be locked down and isn't is a bug, but an operator
+  // locked out of the app they use all day by a resolution hiccup is an outage.
+  let restricted = false;
+  try {
+    const rec = require('./lib/roles').recordFor(u.tenant_id, role);
+    restricted = rec ? rec.stockAppOnly : (role === 'kitchen' || role === 'store_stock');
+  } catch (e) { restricted = (role === 'kitchen' || role === 'store_stock'); }
+  if (!restricted) return next();
   const p = req.path;
   if (p.startsWith('/api/')) {
     const ok = p === '/api/retail-admin/quick-stock/context'
@@ -479,12 +498,21 @@ app.get('/backend/account', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
 });
 
-// Mini App Backend team — manage operators within the tenant (invite / role /
-// deactivate / reset password). Reached from the topbar profile menu.
+// Mini App Backend team — RETIRED as a page. public/backend-team.html was a
+// standalone duplicate of the Team screen, written before the permission matrix
+// existed: it carried its own role-name map, its own descriptions, its own
+// sixteen hardcoded role <option> elements and its own owner-count logic, and
+// it could not edit permissions at all. The rail stopped linking to it in
+// 2026-07-14 when Team became a native tab; roles becoming per-tenant data is
+// what settled it, because every role statement the page made would have been
+// untrue for any tenant that renamed or deleted one.
+//
+// The URL survives as a redirect rather than a 404: it was reached from the
+// topbar profile menu for months, so bookmarks exist, and ?tab= is the shell's
+// own deep-link convention (see 10-extras.js).
 app.get('/backend/team', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'backend-team.html'));
+  res.redirect('/retail-admin?tab=team');
 });
 
 // Co-brand identity editor (logo + brand name). Moved out of the profile page

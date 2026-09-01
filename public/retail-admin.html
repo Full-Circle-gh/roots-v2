@@ -11835,14 +11835,131 @@
          on the viewport regardless of DOM nesting, so it doesn't matter either
          way, but they read as overlays, not part of the content column. */
       #tab-team .tm-frame { max-width: 780px; margin: 0 auto; }
+      /* The Roles pane is a working surface, not a reading column — it holds a
+         role list beside 101 checkboxes. It gets the width it needs. */
+      #tab-team .tm-frame.wide { max-width: 1080px; }
+
+      /* ── Two tabs: People and Roles ──────────────────────────────────────
+         Settings → Team, not a new rail row. Roles are a second view of the
+         same subject — who can do what — so they live beside the roster
+         rather than somewhere else in the nav. */
+      #tab-team .tm-tabs { display: flex; gap: 2px; margin: 0 0 20px; border-bottom: 1px solid var(--td-border); }
+      #tab-team .tm-tab { appearance: none; background: none; border: 0; padding: 9px 2px 11px; margin-right: 22px;
+        font-family: inherit; font-size: 14px; color: var(--td-text2); cursor: pointer; position: relative; }
+      #tab-team .tm-tab:hover { color: var(--td-text); }
+      #tab-team .tm-tab.on { color: var(--td-text); font-weight: 500; }
+      #tab-team .tm-tab.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--td-text); }
+      #tab-team .tm-tab .tm-tab-n { font-variant-numeric: tabular-nums; color: var(--text-3); margin-left: 6px; font-weight: 400; }
+
+      /* ── Roles: list on the left, the selected role fills the pane ──────── */
+      #tab-team .rl-wrap { display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: 16px; align-items: start; }
+      @media (max-width: 900px) { #tab-team .rl-wrap { grid-template-columns: minmax(0, 1fr); } }
+
+      #tab-team .rl-list { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 8px; }
+      #tab-team .rl-row { display: block; width: 100%; text-align: left; appearance: none; background: none; border: 0;
+        border-radius: 10px; padding: 11px 12px; cursor: pointer; font-family: inherit; }
+      #tab-team .rl-row:hover { background: var(--td-raised); }
+      #tab-team .rl-row.on { background: var(--td-raised); }
+      #tab-team .rl-row.on .rl-rname { font-weight: 500; }
+      #tab-team .rl-rname { font-size: 14px; color: var(--td-text); display: flex; align-items: center; gap: 7px; }
+      #tab-team .rl-rsub { font-size: 12px; color: var(--td-text2); margin-top: 3px; font-variant-numeric: tabular-nums; }
+      #tab-team .rl-add { display: flex; align-items: center; gap: 8px; width: 100%; appearance: none; background: none;
+        border: 1px dashed var(--td-border); border-radius: 10px; padding: 11px 12px; margin-top: 6px; cursor: pointer;
+        font-family: inherit; font-size: 13.5px; color: var(--td-text2); }
+      #tab-team .rl-add:hover { color: var(--td-text); border-color: var(--td-text2); }
+      #tab-team .rl-add svg { stroke: currentColor; fill: none; }
+
+      #tab-team .rl-pane { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 22px; }
+      #tab-team .rl-names { display: flex; gap: 10px; flex-wrap: wrap; }
+      #tab-team .rl-names .tm-field { flex: 1 1 200px; margin: 0; }
+      #tab-team .rl-lockline { display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--td-border);
+        background: var(--td-raised); border-radius: 11px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--td-text2); }
+      #tab-team .rl-lockline b { color: var(--td-text); font-weight: 500; display: block; margin-bottom: 2px; }
+
+      /* Blast radius. Stated ABOVE the ticks, before anything is editable —
+         you are told who you are about to affect before you decide, not after. */
+      #tab-team .rl-blast { margin: 16px 0 0; padding: 13px 15px; border-radius: 11px;
+        background: var(--td-dusk-tint); font-size: 13.5px; line-height: 1.55; color: var(--td-text); }
+      #tab-team .rl-blast b { font-weight: 500; }
+      #tab-team .rl-blast .rl-exc { display: block; margin-top: 5px; color: var(--td-text2); font-size: 12.5px; }
+
+      #tab-team .rl-tally { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        margin: 16px 0 4px; padding-top: 15px; border-top: 1px solid var(--td-border); }
+      #tab-team .rl-tally .rl-count { font-size: 13.5px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+      #tab-team .rl-tally .rl-count b { font-weight: 500; }
+
+      /* ── The money marker ────────────────────────────────────────────────
+         One mark for both cases; the word behind it differs. 'moves' is brick
+         because it changes what the business owes or holds; 'shows' is amber
+         because it only puts the figure on screen. Colour is status here, not
+         decoration — these are the two facts an owner is scanning for. */
+      #tab-team .rl-coin { display: inline-flex; align-items: center; gap: 4px; flex: none;
+        font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
+      #tab-team .rl-coin.moves { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+      #tab-team .rl-coin.shows { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+      #tab-team .rl-coin svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+      #tab-team .rl-why { font-size: 12px; color: var(--td-text2); line-height: 1.5; margin: 2px 0 0 29px; max-width: 60ch; }
+
+      /* ── Permission groups, collapsed by default ─────────────────────────
+         A collapsed group SAYS ITS NAME and what is on inside it. "10 areas"
+         is not a fact anyone needs; "18 of 30 on" is the one they came for. */
+      #tab-team .rl-groups { margin-top: 10px; }
+      #tab-team .rl-g { border: 1px solid var(--td-border); border-radius: 12px; margin-top: 8px; overflow: hidden; }
+      #tab-team .rl-gh { display: flex; align-items: center; gap: 11px; width: 100%; appearance: none; background: none;
+        border: 0; padding: 13px 15px; cursor: pointer; font-family: inherit; text-align: left; }
+      #tab-team .rl-gh:hover { background: var(--td-raised); }
+      #tab-team .rl-gh .rl-chev { flex: none; width: 13px; height: 13px; stroke: var(--td-text2); fill: none; stroke-width: 1.7;
+        transition: transform .18s var(--ease-settle, ease); }
+      #tab-team .rl-g.open .rl-gh .rl-chev { transform: rotate(90deg); }
+      #tab-team .rl-gname { flex: 1; font-size: 14px; color: var(--td-text); font-weight: 500; }
+      #tab-team .rl-gcount { font-size: 12.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      #tab-team .rl-gbody { display: none; padding: 2px 15px 14px; border-top: 1px solid var(--td-border); }
+      #tab-team .rl-g.open .rl-gbody { display: block; }
+
+      #tab-team .rl-sec { margin-top: 12px; }
+      #tab-team .rl-sech { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3);
+        font-weight: 500; margin: 0 0 2px; }
+      #tab-team .rl-p { display: flex; align-items: center; gap: 11px; padding: 8px; border-radius: 8px; }
+      #tab-team .rl-p:hover { background: var(--td-raised); }
+      #tab-team .rl-p input[type=checkbox] { width: 17px; height: 17px; flex: none; accent-color: var(--td-dusk); cursor: pointer; }
+      #tab-team .rl-p label { flex: 1; font-size: 13.5px; color: var(--td-text); cursor: pointer; }
+      #tab-team .rl-p.locked input, #tab-team .rl-p.locked label { cursor: not-allowed; }
+      #tab-team .rl-p.locked { opacity: .55; }
+
+      #tab-team .rl-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+      #tab-team .rl-foot .rl-spacer { flex: 1; }
+      #tab-team .rl-dirty { font-size: 12.5px; color: var(--td-text2); }
+      #tab-team .rl-dirty.on { color: var(--td-amber-ink); }
+
+      /* ── Per-person matrix: forced ON and forced OFF are different facts ──
+         This used to paint ONE tint for both, so "this person was given
+         something their role doesn't have" and "this person had something
+         taken away" looked identical — the screen showed that an exception
+         existed and refused to say which way it went. */
+      #tab-team .tm-perm-row.dev-on { background: var(--td-sage-tint); }
+      #tab-team .tm-perm-row.dev-off { background: var(--td-brick-tint); }
+      #tab-team .tm-perm-row .tm-dev-mark { flex: none; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
+        border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
+      #tab-team .tm-perm-row.dev-on .tm-dev-mark { background: var(--td-sage); color: var(--td-paper); }
+      #tab-team .tm-perm-row.dev-off .tm-dev-mark { background: var(--td-brick); color: var(--td-paper); }
+      #tab-team .tm-perm-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--td-text2);
+        margin: 10px 0 0; align-items: center; }
+      #tab-team .tm-perm-legend .tm-dev-mark { margin-right: 5px; }
     </style>
 
-    <div class="tm-frame">
+    <div class="tm-frame" id="tmFrame">
     <div class="tm-head"><h2>Team · 团队</h2></div>
 
+    <div class="tm-tabs" role="tablist">
+      <button type="button" class="tm-tab on" id="tmTabPeople" role="tab" aria-selected="true" aria-controls="tmPanePeople">People · 成员<span class="tm-tab-n" id="tmTabPeopleN"></span></button>
+      <button type="button" class="tm-tab" id="tmTabRoles" role="tab" aria-selected="false" aria-controls="tmPaneRoles">Roles · 角色<span class="tm-tab-n" id="tmTabRolesN"></span></button>
+    </div>
+
+    <div id="tmPanePeople" role="tabpanel" aria-labelledby="tmTabPeople">
     <div class="tm-card">
       <h3>Team · 团队</h3>
-      <p class="tm-lead">A <b>position</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to fine-tune, or limit someone to certain stores. The owner always keeps full access. · <b>职位</b>决定每个人可见、可做的内容，也决定其首页。打开<b>权限</b>可精细调整，或将成员限定到指定门店。负责人始终拥有完整权限。</p>
+      <p class="tm-lead">A <b>role</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to give one person an exception, or limit them to certain stores. What each role reaches is set under <b>Roles</b>. The owner always keeps full access. · <b>角色</b>决定每个人可见、可做的内容，也决定其首页。打开<b>权限</b>可为个人设置例外，或将成员限定到指定门店。各角色的权限在<b>角色</b>中设置。负责人始终拥有完整权限。</p>
 
       <div class="tm-stats">
         <div class="tm-stat"><div class="tm-n" id="tmStatPeople">—</div><div class="tm-k">People · 成员</div></div>
@@ -11877,17 +11994,12 @@
             <input class="tm-input" id="tmIName" type="text" autocomplete="off" spellcheck="false" placeholder="Jane Lee" />
           </div>
           <div class="tm-field">
-            <label class="tm-flabel" for="tmIRole">Position · 职位</label>
-            <select class="tm-input" id="tmIRole">
-              <option value="staff">Staff · 员工</option>
-              <option value="store_manager">Store manager · 店长</option>
-              <option value="warehouse">Warehouse · 仓库</option>
-              <option value="customer_service">Customer service · 客服</option>
-              <option value="dispatch">Dispatch · 配送调度</option>
-              <option value="kitchen">Kitchen · 后厨</option>
-              <option value="admin">Admin · 管理员</option>
-              <option value="owner">Owner · 负责人</option>
-            </select>
+            <label class="tm-flabel" for="tmIRole">Role · 角色</label>
+            <!-- Filled from the tenant's own roles (tmFillRoleSelect). It used
+                 to carry eight hardcoded <option> elements — one of five
+                 independent role-name maps, each free to disagree with the
+                 others and all of them wrong for any tenant that renames one. -->
+            <select class="tm-input" id="tmIRole"></select>
             <div class="tm-fhint" id="tmIRoleDesc"></div>
           </div>
         </div>
@@ -11929,6 +12041,19 @@
       <div class="tm-dev-list" id="tmDevList"><div class="tm-dev-empty">Loading… · 加载中…</div></div>
       <div class="tm-dev-foot" id="tmDevFoot" hidden></div>
     </div>
+    </div><!-- /tmPanePeople -->
+
+    <!-- ── ROLES ──────────────────────────────────────────────────────────
+         The role is the subject here, not a property of a person: roles down
+         the left, the selected one filling the pane, renamed in its own
+         heading. Everything is rendered by rlRender() in 02-settings-ops.js
+         — the markup below is only the frame it paints into. -->
+    <div id="tmPaneRoles" role="tabpanel" aria-labelledby="tmTabRoles" style="display:none">
+      <div class="rl-wrap">
+        <div class="rl-list" id="rlList"></div>
+        <div class="rl-pane" id="rlPane"></div>
+      </div>
+    </div>
     </div>
 
     <!-- Edit member modal -->
@@ -11942,17 +12067,8 @@
         <input class="tm-input" id="tmEName" type="text" autocomplete="off" spellcheck="false" />
       </div>
       <div class="tm-field">
-        <label class="tm-flabel" for="tmERole">Position · 职位</label>
-        <select class="tm-input" id="tmERole">
-          <option value="staff">Staff · 员工</option>
-          <option value="store_manager">Store manager · 店长</option>
-          <option value="warehouse">Warehouse · 仓库</option>
-          <option value="customer_service">Customer service · 客服</option>
-          <option value="dispatch">Dispatch · 配送调度</option>
-          <option value="kitchen">Kitchen · 后厨</option>
-          <option value="admin">Admin · 管理员</option>
-          <option value="owner">Owner · 负责人</option>
-        </select>
+        <label class="tm-flabel" for="tmERole">Role · 角色</label>
+        <select class="tm-input" id="tmERole"></select>
         <div class="tm-fhint" id="tmERoleDesc"></div>
       </div>
       <div class="tm-field" id="tmEStoreField" style="display:none">
@@ -12002,7 +12118,11 @@
         </div>
 
         <div class="tm-perm-tools">
-          <button type="button" class="tm-linkbtn" id="tmPermResetPreset">Reset to position default · 重置为职位默认</button>
+          <button type="button" class="tm-linkbtn" id="tmPermResetPreset">Clear exceptions · 清除例外</button>
+        </div>
+        <div class="tm-perm-legend" id="tmPermLegend" style="display:none">
+          <span><span class="tm-dev-mark">Added · 额外</span>this person only, on top of the role · 仅此成员，在角色之外</span>
+          <span><span class="tm-dev-mark">Removed · 移除</span>taken away from what the role gives · 从角色权限中移除</span>
         </div>
         <div id="tmPermMatrix"></div>
       </div>

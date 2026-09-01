@@ -275,6 +275,31 @@ function seedBackend() {
 }
 seedBackend();
 
+// ── Roles as tenant data ──────────────────────────────────────────────────
+// The tenant_roles schema lives with the module that reads it (lib/roles.js);
+// it is created HERE, immediately after the tenants/tenant_users DDL above, so
+// the roles_version ALTER can never run before the tenants table exists.
+//
+// Then seed. Every tenant gets four roles — Owner, Manager, Shop floor,
+// Stockroom — stamped out of the shipped presets and keeping the presets' KEYS,
+// so no live account's tenant_users.role has to change for the new names to
+// appear. That is what makes this deploy a no-op: the seed and the key-rename
+// migration are separate events, and the migration waits for its counts.
+//
+// The other five presets are carried per tenant only where somebody is actually
+// on them. Idempotent, and cheap for an already-seeded tenant: one indexed read
+// each and no writes.
+try {
+  const roles = require('../lib/roles');
+  roles.ensureSchema();
+  const made = roles.seedAllTenants();
+  if (made) console.log('[backend-auth] seeded ' + made + ' tenant role record(s)');
+} catch (e) {
+  // Seeding is best-effort by design. An unseeded tenant resolves from
+  // presetCapsFor exactly as it did before roles became data.
+  console.warn('[backend-auth] role seed skipped:', e && e.message);
+}
+
 // One-time: Roots (the integrated tenant, #1) is upstream-sourced — its product
 // catalog and stock live in the kitchen app, not in the mini-app backend. Run
 // once via the shared _migrations guard so a later manual change to Roots'
@@ -553,9 +578,27 @@ router.get('/api/backend/me', (req, res) => {
     const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
     caps = r.caps; scopeStores = r.scopeStores;
   } catch (e) { caps = null; scopeStores = null; }
+  // The operator's ROLE RECORD — its name, and the home board it lands on.
+  //
+  // roleLayout is why renaming a role is now safe. window.RA_POS used to be the
+  // role STRING tested against a hardcoded list, so renaming "Warehouse" took
+  // the warehouse board away and silently handed that operator the owner's
+  // glance page instead. The board is a field on the record now; the ~20
+  // body.pos-* rules and the seven dashPos() branches keep their values and
+  // never had to change.
+  //
+  // roleName travels too, so the phone and the topbar stop carrying their own
+  // copies of a nine-role name map.
+  let roleLayout = 'default', roleName = null;
+  try {
+    const rec = require('../lib/roles').recordFor(u.tenant_id, u.role, tenant ? tenant.roles_version : undefined);
+    if (rec) { roleLayout = rec.layout || 'default'; roleName = { en: rec.nameEn, cn: rec.nameCn }; }
+  } catch (e) { /* unseeded tenant — 'default' is the pre-roles board */ }
   const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
-    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
+    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
+            roleLayout, roleName,
+            lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
             // Co-brand identity — logo/mark served as bytes (kept out of this payload);
@@ -661,6 +704,24 @@ function serveBrandImage(col) {
     res.send(m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8'));
   };
 }
+// ── Role-name gates become capability gates ───────────────────────────────
+// Three endpoints here tested `role === 'owner' || role === 'admin'` directly.
+// That was survivable while 'admin' was a code literal every tenant had. Roles
+// are tenant data now and 'admin' is a row a tenant may rename to anything or
+// delete outright — at which point brand editing and the team-devices list
+// would quietly stop working for whoever replaced it, with nothing on screen
+// to say why. So each gate moves to the capability it was always reaching for.
+//
+// The shipped presets make this a no-op: `admin` holds settings:shop and
+// team:manage, `staff` holds neither, and owner resolves to ALL capabilities,
+// so exactly the same people pass today as passed yesterday.
+function callerHas(req, cap) {
+  try {
+    const caller = require('../lib/require-cap').loadCaller(req);
+    return !!(caller && caller.caps.has(cap));
+  } catch (e) { return false; }
+}
+
 router.get('/api/backend/brand/:tenantId/logo', serveBrandImage('brand_logo_data'));
 router.get('/api/backend/brand/:tenantId/mark', serveBrandImage('brand_mark_data'));
 
@@ -685,8 +746,8 @@ router.put('/api/backend/brand', express.json({ limit: '4mb' }), async (req, res
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
   const u = db.prepare('SELECT tenant_id, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  if (u.role !== 'owner' && u.role !== 'admin') {
-    return res.status(403).json({ error: 'Only an owner or admin can change the brand · 仅负责人或管理员可修改品牌' });
+  if (!callerHas(req, 'settings:shop')) {
+    return res.status(403).json({ error: 'You don’t have permission to change the brand · 你没有修改品牌的权限' });
   }
   const b = req.body || {};
 
@@ -787,8 +848,8 @@ router.get('/api/backend/sessions/team', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
   const me = db.prepare('SELECT tenant_id, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!me) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  if (me.role !== 'owner' && me.role !== 'admin') {
-    return res.status(403).json({ error: 'Only an owner or admin can view team devices · 仅负责人或管理员可查看团队设备' });
+  if (!callerHas(req, 'team:manage')) {
+    return res.status(403).json({ error: 'You don’t have permission to view team devices · 你没有查看团队设备的权限' });
   }
   try {
     db.prepare("DELETE FROM tenant_user_sessions WHERE last_seen < datetime('now', '-31 days')").run();
@@ -832,7 +893,10 @@ router.post('/api/backend/sessions/revoke', express.json(), (req, res) => {
   const sid = String((req.body && req.body.sid) || '').trim();
   if (!sid) return res.status(400).json({ error: 'Missing session · 缺少会话' });
   let row = db.prepare('SELECT sid, tenant_user_id FROM tenant_user_sessions WHERE sid = ? AND tenant_user_id = ?').get(sid, req.session.backendUserId);
-  if (!row && (me.role === 'owner' || me.role === 'admin')) {
+  // Signing OUT somebody else's device is a team action, so it takes the team
+  // capability; signing out your own needs nothing beyond being you (the first
+  // lookup above is already scoped to req.session.backendUserId).
+  if (!row && callerHas(req, 'team:manage')) {
     row = db.prepare('SELECT sid, tenant_user_id FROM tenant_user_sessions WHERE sid = ? AND tenant_id = ?').get(sid, me.tenant_id);
   }
   if (!row) return res.status(404).json({ error: 'Session not found · 未找到会话' });
@@ -886,19 +950,28 @@ router.get('/api/backend/access', (req, res) => {
     const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
     caps = r.caps || []; scopeStores = r.scopeStores;
   } catch (e) { caps = []; }
-  const roleLabel = ({ owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager',
-    warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch', manager: 'Manager',
-    marketing: 'Marketing', fulfillment: 'Fulfilment', channel: 'Channel operator' })[u.role] || (u.role || 'Operator');
+  // The role's own name, from the tenant's record. This was an eleven-entry
+  // English-only map — one of five independent role-name maps across the
+  // codebase — and four of its entries (manager, marketing, fulfillment,
+  // channel) named PRESETS that were never in the assignable list, so no
+  // operator could ever hold them. It also had no Chinese, so a tenant reading
+  // the app in Chinese got an English role name here and a translated one two
+  // screens away. Both problems go away by reading the row.
+  let roleLabel = u.role || 'Operator', roleLabelCn = roleLabel;
+  try {
+    const rec = require('../lib/roles').recordFor(u.tenant_id, u.role, tenant ? tenant.roles_version : undefined);
+    if (rec) { roleLabel = rec.nameEn || rec.nameCn; roleLabelCn = rec.nameCn || rec.nameEn; }
+  } catch (e) { /* unseeded tenant — the raw role string is the honest fallback */ }
 
   if (u.role === 'owner') {
-    return res.json({ owner: true, role: u.role, roleLabel, groups: [], scopeStores: null });
+    return res.json({ owner: true, role: u.role, roleLabel, roleLabelCn, groups: [], scopeStores: null });
   }
   const have = new Set(caps);
   const groups = ACCESS_GROUPS.map(([g, title]) => {
     const items = _caps.CAPABILITIES.filter(c => c.group === g && have.has(c.key)).map(c => c.labelEn);
     return items.length ? { title, items } : null;
   }).filter(Boolean);
-  res.json({ owner: false, role: u.role, roleLabel, groups, scopeStores: scopeStores || null });
+  res.json({ owner: false, role: u.role, roleLabel, roleLabelCn, groups, scopeStores: scopeStores || null });
 });
 
 // ── Recovery email + forgotten-password reset ─────────────────────────────
