@@ -27,6 +27,21 @@ const router = express.Router();
 // them broken. A reason only ever explains the shortfall.
 const RECEIPT_REASONS = new Set(['short_delivery', 'wrong_item', 'not_sent']);
 
+// A PO line with no real quantity is not a line — it's a template left
+// blank. Ten rows across several POs (Burrito Carton, Yogurt Cup, Meat
+// Grinder Accessories, Dill, 450ml Glass Jars…) trace back to exactly this:
+// a recurring line resaved without anyone typing a quantity into it. Both
+// item-accepting save paths (create + update) take `items` straight off the
+// request body, so both are checked here before any row is written.
+// Returns the index of the first line with no positive quantity, or -1.
+function findMissingQtyLine(items) {
+  for (let i = 0; i < items.length; i++) {
+    const qty = parseFloat(items[i] && items[i].qty);
+    if (!(qty > 0)) return i;
+  }
+  return -1;
+}
+
 // What one receipt payload should do to a line's receipt_reason.
 //   ordered  — the line's qty
 //   nextQty  — qty_received AFTER this save (null = nothing received yet)
@@ -576,6 +591,13 @@ router.get('/api/purchases/:id/history', requireAuth, requirePermission('purchas
 // POST create PO
 router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req, res) => {
   const { date, delivery_date, supplier, warehouse, notes, items, source } = req.body;
+  if (items?.length) {
+    const badIdx = findMissingQtyLine(items);
+    if (badIdx !== -1) {
+      const label = items[badIdx].name_en || items[badIdx].sku || `#${badIdx + 1}`;
+      return res.status(400).json({ error: `Line "${label}" needs a quantity greater than zero · 该行数量必须大于零` });
+    }
+  }
   const po_number = nextKitchenPONumber(db);
   try {
     const result = db.prepare('INSERT INTO purchase_orders (po_number,date,delivery_date,status,supplier,warehouse,notes,source,created_by) VALUES (?,?,?,?,?,?,?,?,?)')
@@ -629,6 +651,13 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), bl
   'material cost'
 ), (req, res) => {
   const { date, delivery_date, status, supplier, warehouse, notes, items } = req.body;
+  if (items?.length) {
+    const badIdx = findMissingQtyLine(items);
+    if (badIdx !== -1) {
+      const label = items[badIdx].name_en || items[badIdx].sku || `#${badIdx + 1}`;
+      return res.status(400).json({ error: `Line "${label}" needs a quantity greater than zero · 该行数量必须大于零` });
+    }
+  }
   db.prepare('UPDATE purchase_orders SET date=?,delivery_date=?,status=?,supplier=?,warehouse=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(date, delivery_date||null, status||'Requested', supplier||null, warehouse||null, notes||null, req.params.id);
   if (items) {
