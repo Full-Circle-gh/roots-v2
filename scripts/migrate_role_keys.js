@@ -4,9 +4,20 @@
 // tidy-up, and it is the only part of the roles work that touches live people,
 // so it does not run until its counts have been read and approved.
 //
-//   node scripts/migrate_role_keys.js            # DRY RUN — prints the counts
+//   node scripts/migrate_role_keys.js --survey   # READ-ONLY. Who holds what,
+//                                                # who carries exceptions, and
+//                                                # any role nothing recognises.
+//   node scripts/migrate_role_keys.js            # DRY RUN — prints the plan
 //   node scripts/migrate_role_keys.js --apply    # writes, one transaction per tenant
 //   node scripts/migrate_role_keys.js --tenant 3 # limit to one tenant
+//
+// --survey writes nothing and reads nothing but tenant_users, tenant_roles and
+// tenant_user_caps. It exists because the DRY RUN answers a narrower question
+// than the one that has to be answered first: the plan only lists roles it
+// intends to rename, so an account sitting on a role string nothing recognises
+// — the case most worth knowing about before any of this runs — is invisible
+// to it. The survey names that case explicitly, and reads as empty when there
+// is nothing to say.
 //
 // ── What this is, and what it is not ──────────────────────────────────────
 // The seed deliberately kept the shipped presets' keys: a tenant's four roles
@@ -68,6 +79,7 @@ const db = require('../database');
 const roles = require('../lib/roles');
 
 const APPLY = process.argv.includes('--apply');
+const SURVEY = process.argv.includes('--survey');
 const tArg = process.argv.indexOf('--tenant');
 const ONLY = tArg !== -1 ? Number(process.argv[tArg + 1]) : null;
 
@@ -77,6 +89,78 @@ const RENAMES = [
   ['staff', 'shop_floor', 'Shop floor'],
   ['warehouse', 'stockroom', 'Stockroom'],
 ];
+
+// The nine role strings that existed before roles became data. Anything outside
+// this list AND without a tenant_roles row is an account pointing at nothing.
+const SHIPPED = ['owner', 'admin', 'staff', 'store_manager', 'warehouse',
+  'customer_service', 'dispatch', 'kitchen', 'store_stock'];
+
+// READ-ONLY. Three questions, in the order they matter: who holds what, whose
+// permissions are not simply their role's, and whether anyone is stranded.
+function survey(tenants) {
+  console.log('── SURVEY — read-only, nothing is written ──');
+
+  const known = new Set(SHIPPED);
+  try { for (const r of db.prepare('SELECT DISTINCT role_key FROM tenant_roles').all()) known.add(r.role_key); }
+  catch (e) { /* no roles table yet — the shipped nine are the whole list */ }
+
+  let people = 0, stranded = [];
+  for (const t of tenants) {
+    const rows = db.prepare(
+      `SELECT role,
+              COUNT(*)                          AS people,
+              SUM(COALESCE(is_active,0))        AS active,
+              SUM(retail_store_id IS NOT NULL)  AS pinned,
+              SUM(COALESCE(scope_all,1) = 0)    AS scoped
+         FROM tenant_users WHERE tenant_id = ?
+        GROUP BY role ORDER BY COUNT(*) DESC`).all(t.id);
+    if (!rows.length) continue;
+
+    console.log('');
+    console.log('tenant ' + t.id + ' · ' + t.name);
+    console.log('   role              people  active  pinned  scoped  exceptions');
+    for (const r of rows) {
+      let exc = 0;
+      try {
+        exc = db.prepare(
+          `SELECT COUNT(DISTINCT c.tenant_user_id) n
+             FROM tenant_user_caps c JOIN tenant_users u ON u.id = c.tenant_user_id
+            WHERE u.tenant_id = ? AND u.role = ?`).get(t.id, r.role).n;
+      } catch (e) { exc = 0; }
+      const hasRecord = !!roleRecord(t.id, r.role);
+      console.log('   ' + String(r.role).padEnd(17)
+        + String(r.people).padStart(6) + String(r.active).padStart(8)
+        + String(r.pinned).padStart(8) + String(r.scoped).padStart(8)
+        + String(exc).padStart(12)
+        + (hasRecord ? '' : '   ← NO ROLE RECORD'));
+      people += r.people;
+      if (!hasRecord) stranded.push({ tenant: t.id, role: r.role, people: r.people });
+    }
+  }
+
+  console.log('');
+  console.log('── ' + people + ' account(s) across ' + tenants.length + ' tenant(s) ──');
+  if (stranded.length) {
+    // These resolve to NO capabilities today: presetCapsFor returns [] for a
+    // role it doesn't know, and there is no record to read instead. The client
+    // hides everything; the server does not reject, so nobody has necessarily
+    // noticed. Worth fixing before the rename, not after.
+    console.log('');
+    console.log('STRANDED — a role string with no record and no shipped preset:');
+    for (const x of stranded) {
+      console.log('   tenant ' + x.tenant + ' · ' + x.role + ' · ' + x.people
+        + (x.people === 1 ? ' account' : ' accounts'));
+    }
+    console.log('These resolve to no capabilities at all. Give them a role before renaming anything.');
+  } else {
+    console.log('No stranded accounts — every role string in use has a record or a shipped preset.');
+  }
+}
+
+function roleRecord(tenantId, key) {
+  try { return db.prepare('SELECT 1 FROM tenant_roles WHERE tenant_id = ? AND role_key = ?').get(tenantId, key) || null; }
+  catch (e) { return null; }
+}
 
 function main() {
   roles.ensureSchema();
@@ -91,6 +175,8 @@ function main() {
     process.exit(1);
   }
   if (!tenants.length) { console.log('No tenants matched.'); return; }
+
+  if (SURVEY) { survey(tenants); return; }
 
   console.log(APPLY ? '── APPLYING ──' : '── DRY RUN — nothing is written ──');
   console.log('');
