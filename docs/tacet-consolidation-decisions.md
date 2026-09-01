@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.110
+# Tacet shared-core consolidation — decisions record, v4.111
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.111 — **§36 closes three of its four open items and flags one new cutover concern.** **`wechat_chat` and `pickup` were never unmapped and the open item asking what they are rested on a wrong premise:** they are staff-keyed order ORIGINS written by the New order form's "Order came from · 订单来源" dropdown alongside `wholesale` and `other`, not platform channels, and **the Sales-summary partition defines `direct` as a residual rather than an inclusion list**, so every channel value including ones not yet invented lands in exactly one bucket and no revenue can fall out — what they lack is a card of their own, not a mapping. **The collision that follows is a trap for any Finance query and is recorded as a rule: `pickup` is the same string in two columns with two unrelated meanings** — as `retail_orders.channel` it means the customer came to the shop to order, as `fulfillment_type` it means the customer collects later, a row can legitimately be both `channel='pickup'` and `fulfillment_type='delivery'`, and **a bare reference to "pickup" is ambiguous and must not appear in a spec.** **`wechat_chat` is not `wechat`** — the mini app writes its own orders, `wechat_chat` is a customer who messaged the shop and had the order hand-keyed, and `wechat` and `web` were deliberately removed from the manual list because staff-keyed rows claiming them were inflating self-serve revenue. **PO-derived expense rows STAY delete-and-reinsert projections, and the safety is enforced rather than incidental:** `routes/finance.js` refuses both edit and delete on any row carrying a `po_id`, so no human-authored value can accumulate on them, and no foreign key anywhere points at `expense_entries.id`, so regenerating ids breaks no stable reference. **The consequence is that `created_at` on a PO-derived row is not an audit timestamp** — it records the last re-post, not when the purchase happened, and must never be shown as a purchase date or used as evidence of when anything occurred; the purchase order's own date is the date to display, and Tacet's projection carries it. **A new cutover concern is FLAGGED, not resolved: `backfillOrderedExpenses()` is an uncontrolled writer to the money ledger** — it runs on every server start, finds any postable purchase order with zero expense rows and posts it, without anyone touching a purchase order, and it is the mechanism behind the expense table continuing to grow after export; **the kitchen expense table is not a closed archive while this runs**, and whether Tacet carries an equivalent is recorded as open. **How much of the 92 → 168 growth was the backfill is not merely unmeasured but UNDERIVABLE from `expense_entries`** — both posting paths call `postPOExpenses()`, no row records its caller, and `created_at` is rewritten on re-post — and the two sources that could answer are not established as retained: PO `status_change` rows sit in `activity_log`, purged past 90 days on every startup, and the backfill writes no `activity_log` row at all. **Income categories move server-side to the same `categories` table as expense, shared and hydrated from the server, and THE LIST SHIPS EMPTY.** Today they live in browser localStorage only and cannot be synced at all — `routes/lookups.js` does not accept `'income'` as a kind, so the endpoint would refuse — so every browser holds its own list and an edit on one machine is invisible on every other. **No defaults, and the reasoning is recorded so a later session is not tempted to seed it:** the current four are dine-in, takeaway, delivery and events, all fulfilment or channel facts the order record already carries, so an income category that restates the channel is a dropdown with one correct answer — **and a dropdown with a wrong option available is what produced the ¥152,309 Mini App mis-filing.** An empty list cannot offer a wrong option; channel breakdown comes from the order's own channel, never from a typed category. **The income category field is OPTIONAL and hides entirely when the list is empty** — manual income entry then shows amount, date and note and no category field — while **"add income" stays visible regardless**, never gated behind creating a category first, which would leave a tenant with non-sale money, no route to record it and no sign explaining why. **Also recorded as a standing fact rather than a decision: `routes/finance.js` calls `storeCategory` zero times** and stores category values raw in both directions, with no trim and no normalisation, on a free-text column with no foreign key; Purchasing normalises at PO-line save so PO-derived rows arrive clean, and Finance is the exception. **The three superseded open items are LEFT STANDING** in *Explicitly NOT decided here* rather than struck, on the usual convention; the new subsections supersede them in place, and one new open item is added. Docs only; no code, no schema, no routes.
 
 2026-09-01 · v4.110 — **§36 settles where settlement receipts belong by ruling that they belong nowhere in Finance: revenue comes from the order record, and a platform payout is that same money arriving in the bank.** A sale is counted at the moment the order exists, so recording the payout as income counts the same yuan twice — settlement receipts therefore have no representation in the Finance staircase, no row in Transactions, and no income category. **Transactions keeps exactly two directions; no third "payout" type is added.** **The absence of a category meaning "platform payout" was the original cause of the Mini App mis-filing, and the fix is explicitly NOT to add one** — adding it would turn a one-off mistake into a repeatable, correctly-labelled double-count. **The ¥152,309 filed under Mini App is confirmed as two hand-totalled summaries of daily platform arrivals**, described `6月` and `7月`, plus one real ¥413.30 sale: not monthly transfers, not sales, and only the ¥413.30 is revenue. Settlement receipts belong to settlement reconciliation, attached to the channel connection, not to the Finance staircase. **A second decision corrects a working assumption carried through the Finance design sessions: Meituan settles DAILY, not monthly**, which reshapes the reconciliation already queued on §36 — per channel per day, summing `channel_settle_amount` across that day's orders against the amount that arrived in the bank, so a mismatch localises to one day's orders rather than a month's, which is the practical argument for the daily cadence. **`channel_settle_amount` is 预计 — a forecast, revised on refund, not a bank confirmation** — so the daily check compares a forecast against an actual arrival, and small divergences are expected and are the signal the check exists to surface rather than errors in themselves. **Eleme is explicitly not covered**: its settlement semantics remain unresolved, and the two channels do not even store the field alike — Meituan keeps the latest poll, Eleme the first seen. Reconciliation is not scheduled, designed or built here. **The superseded open item is LEFT STANDING** in *Explicitly NOT decided here* rather than struck, on the same convention that leaves superseded text unedited; the new subsections supersede it in place. Docs only; no code, no schema, no routes.
 
@@ -4717,6 +4719,72 @@ This does not change what Finance counts — the decision above already excludes
 
 **Nothing is scheduled, designed or built here.** Settlement reconciliation remains unbuilt work. This records its cadence and the comparison it makes, not its delivery.
 
+### `wechat_chat` and `pickup` are mapped, and the open item asking what they are rested on a wrong premise — DECIDED 2026-09-01
+
+**Closes "What `wechat_chat` and `pickup` are", the open item §36 has carried since v4.108.** That bullet is left standing in *Explicitly NOT decided here* below rather than struck out, on the convention that superseded text is not edited. This subsection supersedes it: a reader who meets the bullet first should read it as answered here.
+
+**They are not platform channels and they were never unmapped.** They are staff-keyed order ORIGINS — how the customer reached the shop — written by the New order form's "Order came from · 订单来源" dropdown, alongside `wholesale` and `other`. All four are `MANUAL_ORDER_ORIGINS` in `routes/retail.js`, and `source` already records that a person keyed the row.
+
+**The Sales-summary partition defines `direct` as a residual rather than an inclusion list.** Its bucket predicate is `NOT (claimed by wechat, web, meituan, gzgrocery or counter)`, so every channel value that exists — and every one invented later — lands in exactly one bucket. No revenue can fall out. `scripts/test_sales_summary_partition.js` asserts exactly this property and already carries `pickup`, `wechat_chat`, `wholesale` and `other` as fixtures expecting `direct`. **What these values lack is a card of their own, not a mapping.**
+
+**The collision this uncovers is recorded here because it is a trap for any Finance query.**
+
+**`pickup` is the same string in two columns with two unrelated meanings.** As `retail_orders.channel` it means the customer came to the shop to order. As `fulfillment_type` it means the customer collects later. The two are independent: a row can legitimately be `channel='pickup'` with `fulfillment_type='delivery'` — someone who walked in to order a thing that is then shipped to them. **Any Finance filter, query or screen touching either value must name its column explicitly. A bare reference to "pickup" is ambiguous and must not appear in a spec.**
+
+**`wechat_chat` is not `wechat`.** `wechat` is the mini-app storefront, which writes its own orders. `wechat_chat` is a customer who messaged the shop and had the order hand-keyed. **`wechat` and `web` were deliberately removed from the manual origin list** because staff-keyed rows claiming them were being summed into the Mini app and Web shop cards, inflating self-serve revenue with hand-entered sales.
+
+**Both carry line items and `unit_cost_at_sale`, like any other order.** The operator can override the selling price and cannot override the cost.
+
+### PO-derived expense rows stay delete-and-reinsert projections — DECIDED 2026-09-01
+
+**Closes "Whether PO-derived expense rows remain delete-and-reinsert projections in storage", the third open item on §36.** That bullet is left standing in *Explicitly NOT decided here* below rather than struck out, on the same convention. This subsection supersedes it.
+
+**The rows stay projections. Both posters continue to delete every row for a purchase order and re-insert them on each status change.**
+
+**They are safe to churn, and the safety is enforced rather than incidental.** `routes/finance.js` refuses both edit and delete on any row carrying a `po_id` — *PO-linked expenses cannot be edited directly · 关联采购单的支出不能直接编辑*, and the same for delete — so no human-authored value can ever accumulate on one of these rows and be lost when it is regenerated. And no foreign key anywhere points at `expense_entries.id`; no table joins to it. The reference runs the other way, `expense_entries.po_id` at `purchase_orders`. **So regenerating the ids breaks no stable reference, because nothing holds one.**
+
+**The consequence, recorded because it is the one thing that can go wrong with this.**
+
+**`created_at` on a PO-derived row is not an audit timestamp.** It records the last re-post, not when the purchase happened. A purchase order flipped back and forward in April carries April rows stamped with today. **It must never be presented as a purchase date, and never used as evidence of when anything occurred.** The purchase order's own date is the date to display.
+
+**Tacet's projection carries the purchase order's date, not the re-post moment.**
+
+### The boot-time expense backfill is an uncontrolled ledger writer — FLAGGED FOR CUTOVER 2026-09-01
+
+`backfillOrderedExpenses()` in `routes/purchases.js` runs on every server start, two seconds after boot. It finds any purchase order in a postable status — Ordered, Delivered or Confirmed — that has zero rows in `expense_entries`, and posts it.
+
+**It is a writer to the money ledger that fires without anyone touching a purchase order.** It is also the mechanism behind the expense table continuing to grow after the export: the cutover subsection above records 168 rows on 2026-09-01 against the 92 a survey found on 4 August, and this is one of the paths that number came in by.
+
+**No split of that growth is derivable from `expense_entries` at all.** Both this backfill and the ordinary receive path call `postPOExpenses()`, nothing on a row records which caller posted it, and `created_at` is rewritten on re-post — so the table cannot say how many of the 76 were this. The answer would have to come from purchase-order status history or from the boot logs, and neither is established as retained: PO `status_change` entries live in `activity_log`, which every startup purges beyond 90 days (`ACTIVITY_LOG_RETENTION_DAYS`, default 90), and the backfill writes no `activity_log` row at all — it only `console.log`s a one-line summary, whose destination and retention are not established here. **Do not carry 76 forward as a backfill count.**
+
+**This is recorded as a cutover concern, not resolved here.** The kitchen expense table is not a closed archive while this runs. **Any statement that the exported ledger is final must account for it.**
+
+**No decision is taken on whether Tacet carries an equivalent.** The question is recorded as open below rather than answered.
+
+### Income categories move server-side, and the list ships empty — DECIDED 2026-09-01
+
+**Closes "Where income categories live", the second open item on §36.** That bullet is left standing in *Explicitly NOT decided here* below rather than struck out, on the same convention. This subsection supersedes it.
+
+**Today income categories cannot be shared, and not merely by omission.** They live in each browser's localStorage under `roots_v2:incomeCats`, and `saveFinCats()` pushes only the expense list to the server. `routes/lookups.js` would refuse the income list anyway: its `VALID_KINDS` is `recipe`, `product`, `accounting`, `role`, `item_kind` and `payment_method`, with no `income`, so the endpoint returns *Invalid kind · 类型无效*. Expense categories are shared properly under `kind='accounting'`. **Income never could be.** Every browser therefore holds its own list, and a list edited on one machine is invisible on every other.
+
+**The decision: income categories move to the same `categories` table as expense — shared across users and browsers, hydrated from the server on load, on the same mechanism.**
+
+**The list ships empty. No defaults.**
+
+**The reasoning is recorded because a later session will otherwise be tempted to seed it.** The current four defaults are 堂食 Dine-in, 外卖 Takeaway, 外送 Delivery and 活动 Events — every one of them a fulfilment or channel fact the order record already carries. Since revenue comes from the order record, an income category that restates the channel is a dropdown with exactly one correct answer, and **a dropdown with a wrong option available is what produced the ¥152,309 Mini App mis-filing**. **An empty list cannot offer a wrong option.** Channel breakdown on the Summary screen comes from the order's own channel, never from a typed category.
+
+**A tenant whose income is entirely sales never opens this list.** A tenant with genuine non-sale income — sublet space, sold equipment, grants, supplier rebates — creates their own.
+
+### The income category field is optional and hides when the list is empty — DECIDED 2026-09-01
+
+**With an empty list, manual income entry shows amount, date and note, and no category field at all.** Not a disabled field, not an empty dropdown: absent.
+
+**The "add income" action stays visible regardless.** It is never hidden behind having created a category first. Gating it that way would leave a tenant with non-sale money in hand, no route to record it, and no sign on the screen explaining why.
+
+**The category field appears once the tenant has created at least one income category in Settings.** Nobody is asked to categorise before they have anything to categorise with.
+
+**A standing fact from the same survey, not a decision.** `routes/finance.js` calls `storeCategory` zero times. It stores category values raw, with no trim and no normalisation, in both directions. The category column is free text with no foreign key. Purchasing normalises earlier in the chain, at PO-line save, so PO-derived rows arrive already clean; **Finance is the exception.** This is context for *Categories are normalised on write* above, which already stands, and is not a new decision.
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
@@ -4725,6 +4793,7 @@ Do not treat any of the following as settled:
 - Where income categories live. Normalisation is settled above, but income categories have no server-side master list at all — they sit in browser localStorage and are never synced — so normalising them makes the values consistent without producing a shared list. This is a Settings question, not a Finance one.
 - Where settlement receipts belong. Money arriving from a platform weeks after the sale is not revenue — the order already counted it — but Roots records it today and every channel business has it. Recording it in Transactions would double-count. Nothing in Tacet's model holds it.
 - What `wechat_chat` and `pickup` are. Both appear as order channels from August 2026, ¥4,043 across 3 orders, and are named in no channel mapping in the repository.
+- Whether Tacet carries an equivalent of `backfillOrderedExpenses()`. The kitchen app's boot-time backfill is flagged above as an uncontrolled ledger writer; whether Tacet should post missing expense rows automatically at all, and if so on what trigger, is not answered here.
 
 ## 37. Related documents
 
