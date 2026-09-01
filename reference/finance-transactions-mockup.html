@@ -188,20 +188,23 @@ table.tx tbody tr:last-child td { border-bottom: 0; }
    Measured in Chromium at a 1000px table (1% = 10px), widest content
    per column against the box minus 24px of cell padding:
      Date 45 · Description 316 · Location 99 · Direction 52
-     · Amount 59 · action 81
-   Amount, Direction and Date are nowrap and must never take slack. */
+     · Amount 59 · action 146 ("Open purchase order ↗")
+   Amount, Direction, Date and the action are nowrap and must never take
+   slack. Re-measured when the action label became "Open purchase order":
+   at 12% it wrapped to two lines and made the PO rows taller than their
+   neighbours, so the width came out of Description, which has it. */
 col.c-date  { width:  8%; }   /* 80px  · slack 11 */
-col.c-desc  { width: 46%; }   /* 460px · slack 144 — the wrap column */
+col.c-desc  { width: 41%; }   /* 410px · slack 94 — the wrap column */
 col.c-loc   { width: 14%; }   /* 140px · slack 17 */
 col.c-dir   { width:  9%; }   /*  90px · slack 14 */
 col.c-amt   { width: 11%; }   /* 110px · slack 27 */
-col.c-act   { width: 12%; }   /* 120px · slack 15 */
+col.c-act   { width: 17%; }   /* 170px · slack 0  — one line, exactly */
 /* Single-location tenant — location column does not exist. Sums to 100. */
 col.s-date  { width:  9%; }
-col.s-desc  { width: 55%; }
+col.s-desc  { width: 52%; }
 col.s-dir   { width: 10%; }
 col.s-amt   { width: 12%; }
-col.s-act   { width: 14%; }
+col.s-act   { width: 17%; }
 
 .t-date { color: var(--graphite); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .t-subj { display: block; }
@@ -232,6 +235,7 @@ tr.posted td { background: var(--dusk-tint); }
 .rowact {
   font-size: 13px; color: var(--ink); text-decoration: none;
   border-bottom: 1px solid rgba(17,26,43,.35); cursor: pointer;
+  white-space: nowrap;
 }
 .rowact:hover { border-bottom-color: var(--ink); }
 .rowact.away::after { content: " ↗"; border: 0; }
@@ -265,7 +269,7 @@ tr.posted td { background: var(--dusk-tint); }
       </nav>
 
       <div class="tiles">
-        <div class="tile"><div class="t-k">Money out</div><div class="t-v">¥17,643</div></div>
+        <div class="tile"><div class="t-k">Money out</div><div class="t-v">¥40,643</div></div>
         <div class="tile"><div class="t-k">Money in</div><div class="t-v">¥3,000</div></div>
       </div>
 
@@ -298,7 +302,7 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Sep 4</td>
               <td><span class="t-subj">Rent</span></td>
               <td>Tianhe</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥8,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -306,7 +310,7 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Sep 4</td>
               <td><span class="t-subj">Rent</span></td>
               <td>Yuexiu</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥12,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -314,18 +318,18 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Sep 3</td>
               <td>
                 <span class="t-subj">PO-0051</span>
-                <span class="t-meta"><span class="mark">Posted by Purchasing</span></span>
+                <span class="t-meta"><span class="mark">Posted by Purchasing</span> · 2 categories</span>
               </td>
               <td>Tianhe</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥385</td>
-              <td><a class="rowact away">Open order</a></td>
+              <td><a class="rowact away">Open purchase order</a></td>
             </tr>
             <tr>
               <td class="t-date">Sep 2</td>
               <td><span class="t-subj">Accountant</span></td>
               <td class="loc-all">Whole business</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥2,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -336,15 +340,15 @@ tr.posted td { background: var(--dusk-tint); }
                 <span class="t-meta"><span class="mark">Posted by Purchasing</span> · 2 categories</span>
               </td>
               <td>Tianhe</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥1,258</td>
-              <td><a class="rowact away">Open order</a></td>
+              <td><a class="rowact away">Open purchase order</a></td>
             </tr>
             <tr>
               <td class="t-date">Aug 28</td>
               <td><span class="t-subj">Wages</span></td>
               <td>Tianhe</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥10,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -352,7 +356,7 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Aug 28</td>
               <td><span class="t-subj">Wages</span></td>
               <td>Yuexiu</td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥7,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -360,7 +364,7 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Aug 25</td>
               <td><span class="t-subj">Equipment sold</span></td>
               <td class="loc-all">Whole business</td>
-              <td class="dir"><span class="g">↓</span> In</td>
+              <td class="dir"><span class="g">↑</span> In</td>
               <td class="num amt">+¥3,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -370,7 +374,7 @@ tr.posted td { background: var(--dusk-tint); }
     </div>
 
     <p class="mk-note">Two rows are tinted and carry <em>Posted by Purchasing</em>: they were written by the
-      PO poster, not typed, and they open the order in Purchasing rather than an edit form here. The tint,
+      PO poster, not typed, and they open the purchase order in Purchasing rather than an edit form here. The tint,
       the mark and the ↗ all say so before the pointer moves.</p>
   </div>
 
@@ -421,7 +425,7 @@ tr.posted td { background: var(--dusk-tint); }
             <tr>
               <td class="t-date">Sep 4</td>
               <td><span class="t-subj">Rent</span></td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥8,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -429,16 +433,16 @@ tr.posted td { background: var(--dusk-tint); }
               <td class="t-date">Sep 3</td>
               <td>
                 <span class="t-subj">PO-0051</span>
-                <span class="t-meta"><span class="mark">Posted by Purchasing</span></span>
+                <span class="t-meta"><span class="mark">Posted by Purchasing</span> · 2 categories</span>
               </td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥385</td>
-              <td><a class="rowact away">Open order</a></td>
+              <td><a class="rowact away">Open purchase order</a></td>
             </tr>
             <tr>
               <td class="t-date">Sep 2</td>
               <td><span class="t-subj">Accountant</span></td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥2,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -448,21 +452,21 @@ tr.posted td { background: var(--dusk-tint); }
                 <span class="t-subj">PO-0050</span>
                 <span class="t-meta"><span class="mark">Posted by Purchasing</span> · 2 categories</span>
               </td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥1,258</td>
-              <td><a class="rowact away">Open order</a></td>
+              <td><a class="rowact away">Open purchase order</a></td>
             </tr>
             <tr>
               <td class="t-date">Aug 28</td>
               <td><span class="t-subj">Wages</span></td>
-              <td class="dir"><span class="g">↑</span> Out</td>
+              <td class="dir"><span class="g">↓</span> Out</td>
               <td class="num amt">−¥10,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
             <tr>
               <td class="t-date">Aug 25</td>
               <td><span class="t-subj">Equipment sold</span></td>
-              <td class="dir"><span class="g">↓</span> In</td>
+              <td class="dir"><span class="g">↑</span> In</td>
               <td class="num amt">+¥3,000</td>
               <td><a class="rowact">Edit</a></td>
             </tr>
@@ -495,7 +499,7 @@ tr.posted td { background: var(--dusk-tint); }
           <div class="wave"></div>
           <h3>Nothing recorded yet</h3>
           <p>Rent, wages and one-off costs you record will appear here — alongside
-             anything Purchasing posts from a buying order.</p>
+             anything Purchasing posts from a purchase order.</p>
           <!-- Secondary, not Dusk. The header CTA has first claim on the
                page's one Dusk element (§1.8 rule 1); a second Dusk button
                on the same page is a bug even when the page is empty. -->
