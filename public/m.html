@@ -554,6 +554,18 @@ const state = {
      clobbering each other. Everything the app touches is on this list now, and
      scripts/test_mobile_screens.js fails the build on a key that is not. */
   storeName:null, focus:null,
+  /* THE BOOT FLASH. caps null means "all allowed" — the right answer for a
+     resolution hiccup, and the wrong one before anyone has asked. The app used
+     to paint at once, so a narrowed operator got the whole of Tacet for as long
+     as /api/backend/me took to answer, and then watched it collapse to their
+     two tools. Same flash on every Back from Quick Stock, which is a full page
+     load. So there are three states, not two: not asked (paint nothing but the
+     mark), asked and answered (paint their app), asked and failed (fail open,
+     exactly as before). */
+  /* Starts TRUE on file://, which is the static preview: there is no server to
+     ask, so there is nothing to wait for and the sample app paints at once,
+     exactly as it always did. Only a real deployment holds. */
+  capsLoaded:(typeof location!=='undefined' && location.protocol==='file:'),
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
@@ -2154,6 +2166,12 @@ function moreGroups(){
   return MORE_GROUPS.map(g=>({h:g.h, rows:g.rows.filter(r=>canRoute(r[0])).map(moreRow)}))
                     .filter(g=>g.rows.length);
 }
+/* ONE CHEVRON FOR EVERY ROW. Quick Stock briefly wore the leaves-the-app mark,
+   because it does leave — but the only thing that mark was warning about was a
+   door with no way back, and it has a back link now. What is left is a
+   distinction with no consequence for the person reading it: both rows open a
+   tool, both come back. The mark said "this one is different" about a
+   difference that had stopped existing. */
 function moreRow(r){
   const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
   return {key:r[0], icon:r[1], en:label[0], zh:label[1], href:r[4]||null,
@@ -2738,7 +2756,7 @@ function screenMore(){
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic(r.href?'arrow-up-right':'chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
   </div>`;
 }
@@ -7033,7 +7051,19 @@ function bodyHtml(){
     case 'more': return pageHead({title:flatNav()?escAttr(homeTitle()):T('More','更多'), controls:true}) + screenMore();
   }
 }
+/* Held while the app does not yet know who is looking at it. The mark and
+   nothing else — no nav to correct a moment later, no numbers, nothing that
+   could be wrong. It is the same answer stock.html gives on its own boot, and
+   it lasts exactly as long as one /api/backend/me. */
+function bootHold(){
+  return `<div class="content" style="display:flex;align-items:center;justify-content:center">
+    <span style="opacity:.5">${WAVE(150)}</span></div>`;
+}
 function render(){
+  if(!state.capsLoaded){
+    app.innerHTML = bootHold();
+    return;
+  }
   /* Order matters: the pull ring is painted first so the content sits on top of
      it, the install strip is a sibling BETWEEN the scroller and the tab bar so
      it takes its own room instead of covering the last row of a list. */
@@ -8527,7 +8557,7 @@ reg('openCustOrder', i=>{
 async function loadMe(){
   try{
     const r=await fetch('/api/backend/me',{credentials:'same-origin',headers:{accept:'application/json'}});
-    if(!r.ok) return;
+    if(!r.ok) return;                    // finally still runs — see below
     const j=await r.json();
     const u=(j&&(j.user||j.data||j))||{};
     /* HOME BOARD. This used to test the role STRING against a hardcoded list of
@@ -8549,6 +8579,14 @@ async function loadMe(){
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null};
     landOnSomethingReachable();
   }catch(e){}
+  finally{
+    /* HOWEVER the read ended. A 401, a network error, or file:// with no server
+       at all — each leaves caps null and each must still let the app paint,
+       which is what keeps the static preview working. The flag says the
+       question has been asked, not that it was answered. */
+    state.capsLoaded=true;
+    render();
+  }
 }
 /* THE APP OPENS ON HOME, and Home is a board of revenue. An operator without
    dashboard:view was therefore shown, for the length of one render, the one
@@ -8725,6 +8763,11 @@ if(!(window.lucide && window.lucide.icons)){
 /* Hydrate with live data when served from the store backend. On file:// / static
    preview the fetches fail and the app stays on its sample data — by design. */
 loadLive();
+/* Last resort. loadMe's finally covers every way that read can END, but not a
+   request that never ends at all — a captive portal, a proxy holding the socket
+   open. Six seconds of the mark is a slow app; a permanent hold is a broken
+   one, so this releases into the fail-open path rather than waiting forever. */
+setTimeout(function(){ if(!state.capsLoaded){ state.capsLoaded=true; render(); } }, 6000);
 </script>
 </body>
 </html>
