@@ -243,13 +243,50 @@ amendment; this records where, so the search is not repeated.
 | The recipe save | `public/retail-admin/19-recipes.js` `rcpSave()` | The moment the line is stored. The save is never blocked and the unit is never converted — it simply stops being silent. |
 | The Products list margin cell, and the product editor's cost pill | `public/retail-admin/09-products.js` `_paMarginWarn()` / `pdRecipeHealthPaint()` | That the cost the percentage is drawn from is short an ingredient — the flattering direction. |
 
-In all four places the LABEL is this pair, copied. The sentence around it is
-English on both halves and marked CN PENDING in the source, exactly as the build
-list's own strings are: rule 4 forbids composing the Chinese, and none is
-sourced. Each of those sentences keeps the three distinctions above — UNKNOWN
-rather than missing, the LINE at fault rather than the material, the total
-INCOMPLETE rather than wrong — and `scripts/test_recipe_unit_mismatch_warnings.js`
-asserts that (it fails the copy if it says "missing").
+In all four places the LABEL is this pair, copied.
+
+**THE EXPLANATIONS — minted by Ash, 2026-09-01, locked.** The five sentences that
+sit around the label shipped English on both halves and marked CN PENDING, and
+that is what an operator reading Chinese actually met: a triangle, a label he
+could read, and a paragraph he could not. Ash, on the live screen: "make sure
+that the mouse over in chinese version its in chinese language." Drafted against
+the constraints below, put in front of him string by string, and minted.
+
+| Key | Where | EN | CN |
+|---|---|---|---|
+| `unitMismatchLine` | the ingredient row's tooltip (`19-recipes.js` `lineMismatchTitle()`) | This line is counted in {a} but the material is stocked in {b}. Those measure different kinds of thing and nothing is converted, so this ingredient's cost is NOT included in the recipe total. The material's own cost is fine — change the line's unit to fix it. | 本条按 {a} 计量,而该物料按 {b} 库存。两者计量的不是同一类量,系统不作换算,因此本条原料不计入配方成本。该物料本身的成本没有问题 —— 修改本条的单位即可。 |
+| `unitMismatchSave` | the save toast (`19-recipes.js` `rcpSave()`) | Saved — but N ingredients are NOT included in this recipe's cost: … UNIT MISMATCH — the line's unit and the material's stocking unit measure different kinds of thing, so nothing was converted. The cost shown is incomplete. | 已保存 —— 但有 N 项原料不计入本配方成本:… 单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,系统不作换算。显示成本不完整。 |
+| `unitMismatchPill` | the product editor's cost pill (`09-products.js` `pdRecipeHealthPaint()`) | — N ingredients in this recipe are counted in a unit the material is not stocked in, so their cost is left out. The cost shown is incomplete. | —— 本配方中有 N 项原料所用单位与物料的库存单位计量的不是同一类量,其成本不计入。显示成本不完整。 |
+| `unitMismatchMargin` | the Products list mark (`09-products.js` `_paMarginWarn()`) | UNIT MISMATCH — this product's recipe has an ingredient counted in a unit the material is not stocked in, so that ingredient's cost is left out. The cost shown is incomplete and the real margin is lower. | 单位不符 —— 本产品的配方中有原料所用单位与物料的库存单位计量的不是同一类量,该原料的成本不计入。显示成本不完整,实际毛利更低。 |
+| `costIncompleteMargin` | the same tooltip's other half (`09-products.js` `_paMarginWarn()`) | Marked "cost is not complete" — this percentage is drawn from a cost that is missing something, so the real margin is lower. | 已标记"成本不完整" —— 此百分比所依据的成本缺少内容,实际毛利更低。 |
+
+`costIncompleteMargin` is NOT part of the unit-mismatch work and is minted here
+anyway. It shipped English-only with the `cost_incomplete` tag on 2026-08-31 and
+shares one tooltip with `unitMismatchMargin`; half a tooltip in Chinese is worse
+than none, so the pair is closed at the same time rather than left to be
+rediscovered.
+
+**THE CHINESE SAYS 不作换算, AND THAT IS THE CAREFUL PART.** The nearest existing
+string in the codebase is Materials' `That recipe unit can't be divided into. ·
+该配方单位无法折算。`, and it is NOT reusable here: 无法换算 was considered and
+REJECTED when the label above was minted, because it says IMPOSSIBLE and a
+recorded density will one day settle the volume↔mass cases. 待换算 was rejected for
+the mirror reason. 不作换算 — the system DOES NOT convert — is the §7 addendum's
+own position rather than a claim about what can ever be known, so it survives the
+day the density field lands. `scripts/test_recipe_unit_mismatch_warnings.js`
+fails if either rejected phrasing reappears.
+
+Each sentence keeps the three distinctions above in BOTH halves — UNKNOWN rather
+than missing (不计入, never 缺少成本, which names the wrong record), the LINE at
+fault rather than the material (该物料本身的成本没有问题), the total INCOMPLETE
+rather than wrong (显示成本不完整). The test asserts all three on the Chinese, not
+only on the English.
+
+**HOW FOUR ENGLISH STRINGS SHIPPED UNNOTICED, so the next pair does not.** The
+suite stubbed the translator to return the ENGLISH half, so every assertion
+passed whether or not a Chinese half existed. Section 6 of that file now flips
+the language and asserts the output CHANGED, and scans both files for the shape
+the bug wore — `T(x, x)` / `cuT(x, x)`, the same variable passed as both halves.
 
 **DO NOT CONFUSE WITH UNCONVERTED**, which is the §6 addendum's state for a recipe
 with a blank serving size. Different state, different screen region, different

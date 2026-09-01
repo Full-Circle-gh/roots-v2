@@ -609,15 +609,31 @@
   // the cost is UNKNOWN rather than missing, the LINE is at fault rather than
   // the material, and the total is INCOMPLETE rather than wrong.
   //
-  // CN PENDING on the explanation. No sourced Chinese exists for this sentence
-  // and composing one is forbidden (§30 rule 3), so it is English on both
-  // halves — the label above it is not, because that pair IS sourced.
+  // BOTH HALVES, minted by Ash 2026-09-01 and locked in
+  // docs/tacet-delivery-vocabulary.md — a tooltip that stayed English in the
+  // Chinese UI was telling the half of the room that reads Chinese nothing at
+  // all, on the one screen where the fix is made.
+  //
+  // THE CHINESE AVOIDS 无法换算 DELIBERATELY. That phrasing was considered and
+  // REJECTED when the label pair was minted (see the same document): it says
+  // IMPOSSIBLE, and a recorded density will one day settle the volume↔mass
+  // cases. 不作换算 — the system DOES NOT convert — is what is actually true,
+  // and it is the §7 addendum's own position: no conversion without a stated
+  // factor. 待换算 was rejected for the mirror reason and is not used either.
+  //
+  // The three distinctions the locked entry requires are all carried:
+  // 不计入 (left out, not missing), 该物料本身的成本没有问题 (the LINE is at
+  // fault, not the material), and the closing sentence names the remedy on the
+  // line rather than on the material.
   function lineMismatchTitle(l) {
-    const t = `This line is counted in ${l.unit || '—'} but the material is stocked in `
-            + `${l.master_unit || '—'}. Those measure different kinds of thing and nothing is `
-            + `converted, so this ingredient's cost is NOT included in the recipe total. `
-            + `The material's own cost is fine — change the line's unit to fix it.`;
-    return T(t, t);
+    const en = `This line is counted in ${l.unit || '—'} but the material is stocked in `
+             + `${l.master_unit || '—'}. Those measure different kinds of thing and nothing is `
+             + `converted, so this ingredient's cost is NOT included in the recipe total. `
+             + `The material's own cost is fine — change the line's unit to fix it.`;
+    const cn = `本条按 ${l.unit || '—'} 计量,而该物料按 ${l.master_unit || '—'} 库存。`
+             + `两者计量的不是同一类量,系统不作换算,因此本条原料不计入配方成本。`
+             + `该物料本身的成本没有问题 —— 修改本条的单位即可。`;
+    return T(en, cn);
   }
 
   // ── Ingredients ──────────────────────────────────────────────────────────
@@ -1261,10 +1277,17 @@
         const more = bad.length > 3 ? ` +${bad.length - 3} more` : '';
         const en = `Saved — but ${bad.length} ingredient${bad.length === 1 ? '' : 's'} `
                  + `${bad.length === 1 ? 'is' : 'are'} NOT included in this recipe's cost: `
-                 + `${names}${more}. ${T('UNIT MISMATCH', '单位不符')} — the line's unit and the `
+                 + `${names}${more}. UNIT MISMATCH — the line's unit and the `
                  + `material's stocking unit measure different kinds of thing, so nothing was `
                  + `converted. The cost shown is incomplete.`;
-        toast(T(en, en), 'err');
+        // The count and the names are the same in both halves — they are data,
+        // not copy. 已保存 is the toast's own existing pair, reused rather than
+        // restated, so the Chinese confirms the save in the same words every
+        // other save on this screen uses.
+        const cn = `${T('Saved', '已保存')} —— 但有 ${bad.length} 项原料不计入本配方成本:`
+                 + `${names}${more}。单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,`
+                 + `系统不作换算。显示成本不完整。`;
+        toast(T(en, cn), 'err');
       } else {
         toast(T('Saved', '已保存'));
       }
