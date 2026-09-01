@@ -12879,6 +12879,33 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-line-name .n { font-weight: 500; color: var(--td-text); font-size: 13.5px; }
   #tab-recipes-record .rcp-line-name .s { font-size: 12px; color: var(--td-text2); }
   #tab-recipes-record .rcp-line-name .s.warn { color: var(--td-amber-ink); }
+  /* ── UNIT MISMATCH, on the line it is about ──────────────────────────────
+     The record card's .rcp-warn pill names the CONDITION once per recipe; this
+     names the ROW. Same amber, same triangle (I.warn) as the pill above it and
+     as the Products list mark — one warning shape wherever this fact is shown.
+     A tint rather than a pill: a full pill on a 24-row list turns the column
+     into a wall of amber, and this sits UNDER a name that is already carrying
+     its own sub-line.
+
+     Empty by default and filled by paintLineWarns(), so an unmarked row has an
+     empty div: `:empty` keeps it off the layout entirely, which is what stops a
+     marked row and an unmarked one being different heights. */
+  #tab-recipes-record .rcp-line-warn {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 3px;
+    font-size: 11.5px; font-weight: 500; letter-spacing: .02em;
+    color: var(--td-amber-ink); background: var(--td-amber-tint);
+    border-radius: 999px; padding: 1px 9px 1px 7px;
+  }
+  #tab-recipes-record .rcp-line-warn:empty { display: none; }
+  #tab-recipes-record .rcp-line-warnic { display: inline-flex; line-height: 0; }
+  #tab-recipes-record .rcp-line-warnic svg { width: 12px; height: 12px; display: block; }
+  /* The line's own ¥ figure, struck through because the batch total below does
+     not contain it. Same idiom as the breakdown's retired packaging row. The
+     number stays readable — it is what the multiplication WOULD have said, and
+     it is how an operator judges whether the line or the material is wrong. */
+  #tab-recipes-record .rcp-line.is-unit-mismatch .rcp-line-cost {
+    text-decoration: line-through; opacity: .65;
+  }
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
   #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }
   #tab-recipes-record .rcp-line-unit { width: 70px; flex: none; }

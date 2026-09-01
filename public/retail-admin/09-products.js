@@ -1032,6 +1032,26 @@ function pdRecipeHealthPaint(id) {
         pills.push(pdCostPill(cuT(n + ' ingredient' + (n === 1 ? '' : 's') + ' missing cost — costs shown are too low',
                                   n + ' 项原料缺少成本 — 显示成本偏低')));
       }
+      // UNIT MISMATCH — a line counted in a unit its material is not stocked
+      // in, left out of the cost entirely (lib/recipe-cost.js, the §7
+      // addendum: no conversion without a stated factor). Its OWN pill and
+      // never folded into the count above, exactly as the recipe record keeps
+      // them apart: those materials are not missing a cost, they have a good
+      // one this line's quantity cannot be multiplied by, and an operator sent
+      // to look for a price that is already there has been misdirected.
+      //
+      // UNIT MISMATCH · 单位不符 is the LOCKED pair
+      // (docs/tacet-delivery-vocabulary.md, minted by Ash 2026-08-27) and is
+      // copied, not retyped. The sentence after it has no sourced Chinese and
+      // composing one is forbidden (§30 rule 3), so it is English on both
+      // halves — CN PENDING.
+      const um = Number(d.unreconciled) || 0;
+      if (um > 0) {
+        const tail = ` — ${um} ingredient${um === 1 ? '' : 's'} in this recipe `
+                   + `${um === 1 ? 'is' : 'are'} counted in a unit the material is not stocked in, `
+                   + `so ${um === 1 ? 'its' : 'their'} cost is left out. The cost shown is incomplete.`;
+        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符') + cuT(tail, tail)));
+      }
       // NO COST AT ALL — the cascade writes nothing, so whatever sits in the
       // field is stale or blank. The same sentence the link modal shows at link
       // time, which until now was the only moment it was ever said.
@@ -1333,17 +1353,50 @@ function _paPriceCell(u) {
 function _paCostIncomplete(u) {
   return (u.group ? u.members : [u.p]).some(m => m && m.cost_incomplete === 1);
 }
-function _paMarginWarn() {
-  const t = 'Marked “cost is not complete” — this percentage is drawn from a cost '
-          + 'that is missing something, so the real margin is lower.';
+// ── The SECOND thing that can make this figure short, and it is derived ──────
+//
+// A recipe line counted in a unit its material is not stocked in — 160 ml of an
+// oil stocked in grams — is left out of the recipe's cost entirely
+// (lib/recipe-cost.js, the §7 addendum: no conversion without a stated
+// factor). The recipe record has said so on its own card since that shipped;
+// this list printed the resulting margin with nothing beside it, and it is
+// always the flattering number of the two.
+//
+// UNLIKE cost_incomplete THIS ONE IS NOT THE OPERATOR'S TO SET. It is a fact
+// about the recipe, computed by the server for the rows on this page
+// (markRecipeUnitMismatch, routes/retail.js) and only for products whose cost
+// the recipe actually owns — never a bundle, never a build list, never with
+// Production off. So the row carries it or it does not; there is no checkbox.
+function _paRecipeUnitMismatch(u) {
+  return (u.group ? u.members : [u.p]).some(m => m && m.recipe_unit_mismatch === 1);
+}
+// ONE MARK, WHICHEVER REASONS HOLD. Two triangles side by side in a table cell
+// read as a severity, not as two facts, and the cell is qualifying one figure
+// either way. Both sentences go in the one tooltip when both are true.
+//
+// CN PENDING on both — no sourced Chinese for either sentence, and composing
+// one is forbidden (§30 rule 3). English on both halves, as the build list's
+// own strings do.
+function _paMarginWarn(u) {
+  const reasons = [];
+  if (_paCostIncomplete(u)) {
+    reasons.push('Marked “cost is not complete” — this percentage is drawn from a cost '
+               + 'that is missing something, so the real margin is lower.');
+  }
+  if (_paRecipeUnitMismatch(u)) {
+    reasons.push('UNIT MISMATCH — this product’s recipe has an ingredient counted in a unit '
+               + 'the material is not stocked in, so that ingredient’s cost is left out. '
+               + 'The cost shown is incomplete and the real margin is lower.');
+  }
+  const t = reasons.join(' ');
   return `<span class="pa-mgn-warn" title="${escapeHtml(cuT(t, t))}" aria-label="${escapeHtml(cuT(t, t))}">${PD_ICON_WARN}</span>`;
 }
-// Wraps a finished cell body in the flag row when the tag is set. Returns the
-// body untouched when it is not, so an unflagged row keeps the exact markup
-// (and the exact height) it has always had.
+// Wraps a finished cell body in the flag row when either reason holds. Returns
+// the body untouched when neither does, so an unflagged row keeps the exact
+// markup (and the exact height) it has always had.
 function _paMarginFlagged(u, body) {
-  return _paCostIncomplete(u)
-    ? `<span class="pa-mgn-flag">${_paMarginWarn()}${body}</span>`
+  return (_paCostIncomplete(u) || _paRecipeUnitMismatch(u))
+    ? `<span class="pa-mgn-flag">${_paMarginWarn(u)}${body}</span>`
     : body;
 }
 // Margin column: PERCENTAGE only. The money difference lives in the editor,
