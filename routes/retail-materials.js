@@ -123,7 +123,7 @@ function costFor(row, existingCpu) {
 
 // ═══ List ══════════════════════════════════════════════════════════════════
 router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
-  const { search, kind, category, supplier, archived, for_recipe } = req.query;
+  const { search, kind, category, supplier, archived, for_recipe, source } = req.query;
   // Everything EXCEPT the kind filter. The chip row is the kind filter, so its
   // counts have to be taken with every other filter applied and this one not —
   // otherwise a chip reads "Packaging 146" next to a searched table showing two
@@ -150,21 +150,48 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
     where += ` AND (COALESCE(item_kind,'food') IN ('food','other') OR source_recipe_id IS NOT NULL)`;
   }
 
-  let q = `SELECT ${LIST_COLS} FROM ingredients${where}`;
-  const p = base.slice();
-  if (kind) { q += ' AND COALESCE(item_kind,\'food\') = ?'; p.push(kind); }
-  q += ' ORDER BY name_en COLLATE NOCASE';
-  const rows = db.prepare(q).all(...p);
+  // source=bought|made — the two jobs this one table does, told apart by the
+  // only fact that distinguishes them: whether a recipe produces the row.
+  // 'bought' is what Ash purchases and re-orders; 'made' is what
+  // ensureMaterialized() files under Kitchen Recipes because a build line has
+  // to be able to point at a cooked thing's cost. Mixing them is why two rows
+  // for the same dates read as a bug rather than as one bought item and one
+  // kitchen output. Absent (or any other value) means both, which is what
+  // every existing caller sends and therefore still gets.
+  //
+  // NOT applied to the pickers below. The build-list and recipe-line pickers
+  // must keep seeing every row whatever this list is showing — a filter on a
+  // screen must never be able to make a material uncostable.
+  const sourceClause = source === 'made' ? ' AND source_recipe_id IS NOT NULL'
+    : source === 'bought' ? ' AND source_recipe_id IS NULL'
+    : '';
+  const kindClause = kind ? ' AND COALESCE(item_kind,\'food\') = ?' : '';
+
+  const rows = db.prepare(
+    `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause} ORDER BY name_en COLLATE NOCASE`
+  ).all(...base, ...(kind ? [kind] : []));
   for (const r of rows) {
     r.has_image = !!r.has_image;
     r.has_supplier_qr = !!r.has_supplier_qr;
   }
+  // Each count set is taken with every other filter applied and its own not —
+  // the rule the kind chips already followed, now that there are two of them.
+  // A chip reading "Packaging 146" beside a two-row table is describing a set
+  // the operator cannot see, and a source tab reading "Made 122" while the
+  // Packaging chip is on would be doing the same thing.
   const counts = db.prepare(
-    `SELECT COALESCE(item_kind,'food') AS k, COUNT(*) AS n FROM ingredients${where} GROUP BY 1`
+    `SELECT COALESCE(item_kind,'food') AS k, COUNT(*) AS n FROM ingredients${where}${sourceClause} GROUP BY 1`
   ).all(...base);
   const byKind = {};
   for (const c of counts) byKind[c.k] = c.n;
-  res.json({ success: true, data: rows, counts: byKind });
+  const srcRow = db.prepare(
+    `SELECT SUM(source_recipe_id IS NULL) AS bought, SUM(source_recipe_id IS NOT NULL) AS made
+       FROM ingredients${where}${kindClause}`
+  ).get(...base, ...(kind ? [kind] : []));
+  res.json({
+    success: true, data: rows, counts: byKind,
+    sourceCounts: { bought: (srcRow && srcRow.bought) || 0, made: (srcRow && srcRow.made) || 0 },
+  });
 });
 
 // ═══ Pickers ═══════════════════════════════════════════════════════════════

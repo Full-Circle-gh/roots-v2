@@ -91,6 +91,10 @@ function seedIngredient(db, { name_en, name_cn, sku, source_recipe_id }) {
   return db.prepare('INSERT INTO ingredients (name_en,name_cn,sku,source_recipe_id) VALUES (?,?,?,?)')
     .run(name_en, name_cn || null, sku || null, source_recipe_id == null ? null : source_recipe_id).lastInsertRowid;
 }
+function seedLine(db, { recipe_id, ingredient_id, qty }) {
+  db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,qty) VALUES (?,?,?,?)')
+    .run(recipe_id, ingredient_id, 'line', qty == null ? 100 : qty);
+}
 const ingRow = (db, id) => db.prepare('SELECT * FROM ingredients WHERE id = ?').get(id);
 const linkedFor = (db, recipeId) => db.prepare('SELECT * FROM ingredients WHERE source_recipe_id = ?').get(recipeId);
 const openCollisions = (db, recipeId) =>
@@ -284,6 +288,103 @@ function check(label, actual, expected, detail) {
   const linkRes = materializeLink(db, { recipeId: 1, materialId: existingId });
   check('materializeLink: the human\'s own resolution succeeds', linkRes.ok, true, JSON.stringify(linkRes));
   check('materializeLink: resolves the open collision immediately', openCollisions(db, 1).length, 0);
+  db.close();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  'repack' — a one-line recipe gets no material of its own
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A · the case Ash reported. A recipe that repacks a material Roots already
+// buys must not put a second row for the same physical thing in the Materials
+// list. The names deliberately do NOT match here — that is the whole point,
+// since it is the exact pair ("Dates（Nour）" / "Nour Dates (retail)") an
+// exact-name collision check let through.
+{
+  const db = makeDb();
+  const bulk = seedIngredient(db, { name_en: 'Nour Dates (retail)', name_cn: '诺意椰枣（打包）', sku: 'B-6' });
+  seedRecipe(db, { id: 1, name_en: 'Dates（Nour）', name_cn: '诺意椰枣', sku: '2-280' });
+  seedLine(db, { recipe_id: 1, ingredient_id: bulk, qty: 120 });
+  const res = ensureMaterialized(db, 1);
+  check('repack: a one-line recipe is skipped, not materialized', res.action, 'skipped', JSON.stringify(res));
+  check('repack: the reason names it as a repack', res.reason, 'repack');
+  check('repack: it names the material being repacked', res.repack_ingredient_id, bulk);
+  check('repack: no second row was created', db.prepare('SELECT COUNT(*) AS n FROM ingredients').get().n, 1);
+  check('repack: nothing was linked to the recipe', linkedFor(db, 1), undefined);
+  check('repack: no collision is queued — there is no question to answer', openCollisions(db, 1).length, 0);
+  db.close();
+}
+
+// B · two lines is not a repack. The rule is the line COUNT, so the moment a
+// recipe combines anything it is a made thing and gets its row as before.
+{
+  const db = makeDb();
+  const a = seedIngredient(db, { name_en: 'Dates' });
+  const b = seedIngredient(db, { name_en: 'Tahini' });
+  seedRecipe(db, { id: 1, name_en: 'Date Tahini Ball' });
+  seedLine(db, { recipe_id: 1, ingredient_id: a });
+  seedLine(db, { recipe_id: 1, ingredient_id: b });
+  const res = ensureMaterialized(db, 1);
+  check('repack: a two-line recipe still materializes', res.action, 'created', JSON.stringify(res));
+  db.close();
+}
+
+// C · a recipe with no lines at all is not a repack either — it has nothing to
+// point at, so it needs its own row exactly as it always did. This is the
+// shape every other case in this file uses, and it must not have changed.
+{
+  const db = makeDb();
+  seedRecipe(db, { id: 1, name_en: 'Zhoug' });
+  const res = ensureMaterialized(db, 1);
+  check('repack: a recipe with no lines still materializes', res.action, 'created', JSON.stringify(res));
+  db.close();
+}
+
+// D · the sole line points at an ARCHIVED material. routes/retail-product-
+// build.js will not offer an archived row as a product's contents, so that
+// recipe has no other route to a cost and must still get its own material —
+// skipping it here would leave it with neither.
+{
+  const db = makeDb();
+  const gone = seedIngredient(db, { name_en: 'Old Dates' });
+  db.prepare('UPDATE ingredients SET is_active = 0 WHERE id = ?').run(gone);
+  seedRecipe(db, { id: 1, name_en: 'Dates（Nour）' });
+  seedLine(db, { recipe_id: 1, ingredient_id: gone });
+  const res = ensureMaterialized(db, 1);
+  check('repack: a sole line on an archived material still materializes', res.action, 'created', JSON.stringify(res));
+  db.close();
+}
+
+// E · an ALREADY-LINKED one-line recipe keeps its material and keeps syncing.
+// §29 step 5's "Make available as material" is still how a real one-line
+// transformation (a dry-down with a yield loss) gets its own row by hand, and
+// this rule must never take that back.
+{
+  const db = makeDb();
+  const bulk = seedIngredient(db, { name_en: 'Fresh Banana' });
+  seedRecipe(db, { id: 1, name_en: 'Dried Baby Banana' });
+  seedLine(db, { recipe_id: 1, ingredient_id: bulk });
+  const mine = seedIngredient(db, { name_en: 'Dried Baby Banana', source_recipe_id: 1 });
+  const res = ensureMaterialized(db, 1);
+  check('repack: an already-linked one-liner is updated, never unlinked', res.action, 'updated', JSON.stringify(res));
+  check('repack: its material is still the same row', res.material_id, mine);
+  db.close();
+}
+
+// F · a repack whose name DOES collide clears the stale collision. Before this
+// rule the same recipe would have queued a question; now it is not asking for
+// a material at all, so leaving one open would queue a question nobody can
+// answer.
+{
+  const db = makeDb();
+  const bulk = seedIngredient(db, { name_en: 'Sumac' });
+  seedRecipe(db, { id: 1, name_en: 'Sumac' });
+  ensureMaterialized(db, 1);
+  check('repack: the pre-existing collision is open', openCollisions(db, 1).length, 1);
+  seedLine(db, { recipe_id: 1, ingredient_id: bulk });
+  const res = ensureMaterialized(db, 1);
+  check('repack: adding the line turns it into a repack', res.reason, 'repack', JSON.stringify(res));
+  check('repack: the stale collision is resolved, not left open', openCollisions(db, 1).length, 0);
   db.close();
 }
 

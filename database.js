@@ -69,10 +69,29 @@ addColumn('recipes',       'image_data',      'TEXT');
 addColumn('recipe_ingredients', 'substitutes', 'TEXT');
 addColumn('ingredients', 'pack_contents_qty',  'REAL');
 addColumn('ingredients', 'pack_contents_unit', 'TEXT');
-// One-time: free SKUs still held by already soft-deleted ingredients so the
-// codes can be reused (the DELETE handler now nulls SKU on delete going
-// forward). A deleted item never needs a unique SKU; PO lines snapshot it.
-try { db.prepare('UPDATE ingredients SET sku = NULL WHERE is_active = 0 AND sku IS NOT NULL').run(); } catch {}
+// REMOVED 2026-08-31 — this ran on EVERY boot, not once, and by the end it was
+// the only thing left in the codebase nulling an ingredient's SKU. Both doors
+// that archive one now deliberately keep it, and this line quietly undid both:
+//
+//   routes/retail-materials.js's archive handler — "THE SKU IS KEPT (§18) — a
+//     reused code makes historical orders and reports point at the wrong
+//     thing. The kitchen half stopped nulling it; this door was never allowed
+//     to."
+//   routes/ingredients.js:364's soft-delete — changed to `SET is_active = 0`
+//     alone, its comment recording the 148 rows that lost their SKU before
+//     that change and are mostly unrecoverable.
+//
+// So its own comment ("the DELETE handler now nulls SKU on delete going
+// forward") had become false, and the "one-time" backfill it described had in
+// fact already run on every restart for months: nothing legacy was left for it
+// to free, and every is_active = 0 row still holding a SKU was one those two
+// handlers had deliberately preserved. Found when 46 materials archived by
+// scripts/audit_made_materials.js were due to silently lose their SKUs at the
+// next pm2 restart — a deploy included — despite archive being a reversible
+// action a human can undo from the Materials screen.
+//
+// Nothing replaces it. Freeing a code for reuse is a data decision with an
+// owner, not a side effect of booting.
 addColumn('packaging_types', 'image_data',     'TEXT');
 // How much of a MADE material's cost_per_unit is overhead its own recipe added
 // (§29's second addendum, settled 2026-08-27: OVERHEAD DOES NOT COMPOUND).
@@ -5797,6 +5816,54 @@ try {
     console.log(`[store_products] cost_incomplete seed: ${info.changes} product(s) tagged — a build list with contents and no packaging line`);
   }
 } catch (e) { console.error('[store_products] cost_incomplete seed failed:', e); }
+
+// ── One-off: remove the two placeholder ingredient rows named 'test' / 'test2' ──
+//
+// ids 557/558, surfaced by the null/zero-cost materials audit — literal test
+// data left in the live catalogue (0 recipes referenced either, per that
+// audit). Deleted only after checking every table that can hold a hard FK to
+// ingredients.id; a match on ANY of them keeps that row and reports why,
+// rather than assuming clean and deleting.
+//
+// Guarded by _migrations — runs once. Matches on id AND exact name_en
+// together, never id alone, so this can never delete a row some later
+// insert happens to reuse the id for.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('remove_test_placeholder_ingredients_v1');
+  if (!done) {
+    const TARGETS = [{ id: 557, name: 'test' }, { id: 558, name: 'test2' }];
+    const REF_TABLES = [
+      ['recipe_ingredients', 'ingredient_id'],
+      ['po_line_items', 'ingredient_id'],
+      ['product_build_lines', 'ingredient_id'],
+      ['ingredient_price_history', 'ingredient_id'],
+      ['price_alerts', 'ingredient_id'],
+      ['ingredient_cost_skips', 'ingredient_id'],
+      ['kitchen_order_items', 'ingredient_id'],
+      ['recipe_materialize_collisions', 'candidate_ingredient_id'],
+    ];
+    const report = [];
+    for (const t of TARGETS) {
+      const row = db.prepare('SELECT id FROM ingredients WHERE id = ? AND name_en = ?').get(t.id, t.name);
+      if (!row) { report.push(`${t.name} (id ${t.id}): not found, already gone — skipped`); continue; }
+      const refs = [];
+      for (const [table, col] of REF_TABLES) {
+        const haveTable = db.pragma('table_info(' + table + ')').length > 0;
+        if (!haveTable) continue;
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = ?`).get(t.id).n;
+        if (n > 0) refs.push(`${table}.${col} (${n})`);
+      }
+      if (refs.length) {
+        report.push(`${t.name} (id ${t.id}): KEPT — referenced by ${refs.join(', ')}`);
+      } else {
+        db.prepare('DELETE FROM ingredients WHERE id = ? AND name_en = ?').run(t.id, t.name);
+        report.push(`${t.name} (id ${t.id}): deleted — no references found`);
+      }
+    }
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('remove_test_placeholder_ingredients_v1');
+    console.log(`[ingredients] test-placeholder cleanup:\n  ${report.join('\n  ')}`);
+  }
+} catch (e) { console.error('[ingredients] test-placeholder cleanup failed:', e); }
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
