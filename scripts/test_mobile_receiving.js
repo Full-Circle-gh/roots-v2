@@ -235,6 +235,34 @@ const CASES = [
     `state.recvOpenLine='11'; loadReceive(3); render();`, [
       ['the flag is cleared by opening an order', `state.recvOpenLine === null`],
     ]],
+  // THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
+  // one innerHTML, so the scroller and its position went with it: twelve lines,
+  // one tap each, and after every tap the operator scrolled back down to where
+  // they were. Reported from a kitchen phone as "everytime need to scroll again
+  // to reach the same item".
+  ['answering a line keeps the operator where they were',
+    OPEN + `document.getElementById('content').scrollTop = 260;
+      APP.cmd('recvArrived','13');`, [
+      ['the line is answered', `state.recvVals[13].on === true`],
+      ['and the list did not jump', `document.getElementById('content').scrollTop === 260`],
+    ]],
+  ['a sheet or a toast does not move it either',
+    OPEN + `document.getElementById('content').scrollTop = 200;
+      showToast('anything'); `, [
+      ['still where it was', `document.getElementById('content').scrollTop === 200`],
+    ]],
+  // A different screen is a different place. Inheriting the last one's offset
+  // would open a pushed screen halfway down itself.
+  // The destination has to be TALL or this passes for the wrong reason: a short
+  // screen clamps to 0 on its own and proves nothing about the guard.
+  ['but a screen you have just opened starts at the top',
+    OPEN + `document.getElementById('content').scrollTop = 260;
+      APP.cmd('push','settings'); render();`, [
+      ['it really did move', `state.stack[state.stack.length-1].route === 'settings'`],
+      ['and it is tall enough for this to mean something',
+       `document.getElementById('content').scrollHeight > document.getElementById('content').clientHeight + 260`],
+      ['the new screen is at the top', `document.getElementById('content').scrollTop === 0`],
+    ]],
   ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
     ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
     ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],

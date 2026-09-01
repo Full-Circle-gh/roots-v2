@@ -7584,7 +7584,26 @@ function bootHold(){
   return `<div class="content" style="display:flex;align-items:center;justify-content:center">
     <span style="opacity:.5">${WAVE(150)}</span></div>`;
 }
+/* WHICH SCREEN THIS IS, for the scroll below. The tab plus the pushed stack:
+   answering a line, opening a sheet or a toast landing is the SAME screen and
+   must keep its place; a push, a pop or a change of tab is a different one and
+   starts at the top. */
+function screenKey(){ return state.tab+'|'+state.stack.map(f=>f.route).join('>'); }
+let _scrollKey='';
 function render(){
+  /* THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
+     one innerHTML, which destroys the scroller and takes its position with it.
+     Every screen paid for that, but Receiving is where it became unusable:
+     twelve lines, one tap each, and after every tap the operator scrolled back
+     down to where they were. The file already knew the cost — the orders poll
+     deliberately does not repaint for exactly this reason — but nothing put the
+     position back.
+     Read BEFORE the paint, restored after it, and only when the screen is the
+     same one: a pushed screen that inherited the last screen's scroll would
+     open halfway down itself. */
+  const _sc=document.getElementById('content');
+  const _keep=(_sc&&screenKey()===_scrollKey)?_sc.scrollTop:0;
+  _scrollKey=screenKey();
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
     return;
@@ -7608,6 +7627,7 @@ function render(){
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
+  if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
   wireDrag();
   wirePull();
   syncHistory();
