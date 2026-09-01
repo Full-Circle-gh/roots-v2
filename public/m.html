@@ -554,6 +554,17 @@ const state = {
      clobbering each other. Everything the app touches is on this list now, and
      scripts/test_mobile_screens.js fails the build on a key that is not. */
   storeName:null, focus:null,
+  /* ADD STOCK, the screen — not the other app. It was /stock, a separate PWA
+     reached by leaving this one, so a kitchen operator whose two tools sit next
+     to each other on their home crossed an app boundary to use one of them: a
+     full page load, its own head, its own account button, and a browser Back
+     instead of this app's. The endpoints were always shared; only the shell was
+     not. `mode` still comes from the server — this screen is the ADD flow (log
+     what you made, never see the shelf total); the absolute recount stays on
+     /stock, which is also still the whole product for a role locked to it. */
+  qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
+      items:null,itemsTried:false,itemsErr:null,q:'',
+      add:{},inflight:{},rowErr:{},timers:{}},
   /* THE BOOT FLASH. caps null means "all allowed" — the right answer for a
      resolution hiccup, and the wrong one before anyone has asked. The app used
      to paint at once, so a narrowed operator got the whole of Tacet for as long
@@ -611,6 +622,12 @@ const CMD={}; function reg(n,f){CMD[n]=f;}
 window.APP={cmd:(n,...a)=>{ if(CMD[n]) CMD[n](...a); }};
 
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
+reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
+  // The caret rides the re-render, as it does on every other search field here.
+  state.qs.q=String(v||''); state.focus={id:'mQsQ',pos:el?el.selectionStart:null}; render(); });
+reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
+reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
+reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
@@ -2174,8 +2191,15 @@ function moreGroups(){
    difference that had stopped existing. */
 function moreRow(r){
   const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
-  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href:r[4]||null,
-          cmd: r[4] ? `APP.cmd('leave','${r[4]}')` : `APP.cmd('push','${r[0]}')`};
+  /* The stock row is the one that can go either way, by the same rule the
+     server picks the mode with (retail-inventory quick-stock/context): an
+     operator who only ADDS gets the screen this app now carries; anyone holding
+     the absolute recount still leaves for /stock, where that flow lives. */
+  const inApp = r[0]==='stockapp' && stockAppInApp();
+  const href = inApp ? null : (r[4]||null);
+  const route = inApp ? 'stockadd' : r[0];
+  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href,
+          cmd: href ? `APP.cmd('leave','${href}')` : `APP.cmd('push','${route}')`};
 }
 function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]); }
 
@@ -4217,6 +4241,145 @@ const SUBS={
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
+/* ══════════════════════════════════════════════════════════════════════════
+   ADD STOCK — the kitchen's other tool, in this app rather than beside it
+   --------------------------------------------------------------------------
+   The rules this screen keeps are the ones /stock learned, and each of them is
+   a decision, not a detail:
+
+     • The shelf total is NEVER shown. A kitchen logs what it MADE; the running
+       count is somebody else's number and putting it on this screen invites the
+       operator to reconcile against it.
+     • The stepper builds a "+N" and commits it as ONE delta after a pause, then
+       resets to +0. Every tap writing on its own would put six rows of the
+       ledger where one belongs.
+     • A failed write HANDS THE AMOUNT BACK and says so IN THE ROW. Losing a
+       count at the door is the one failure nobody forgives, and a toast that
+       fades has told the operator nothing they can act on.
+   ────────────────────────────────────────────────────────────────────────── */
+function qsStore(){ const c=state.qs.ctx; if(!c) return null;
+  return (c.stores||[]).find(s=>s.id===state.qs.storeId) || (c.stores||[])[0] || null; }
+function qsStoreName(){ const s=qsStore(); return s ? (LANG==='en'?(s.name_en||s.name_cn||''):(s.name_cn||s.name_en||'')) : ''; }
+function qsName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
+
+function loadQsCtx(){
+  if(state.qs.ctxTried) return; state.qs.ctxTried=true;
+  api('/quick-stock/context').then(d=>{
+    state.qs.ctx=d||{}; state.qs.ctxErr=null;
+    const st=(d&&d.stores)||[];
+    state.qs.storeId=st.length?st[0].id:null;
+    render();
+    if(state.qs.storeId!=null) loadQsItems();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.qs.ctxErr=E('Could not open Add stock.','无法打开“加库存”。'); render(); });
+}
+function loadQsItems(force){
+  if(state.qs.storeId==null) return;
+  if(state.qs.itemsTried&&!force) return;
+  state.qs.itemsTried=true;
+  api('/stores/'+state.qs.storeId+'/stock').then(rows=>{
+    state.qs.items=Array.isArray(rows)?rows:((rows&&rows.rows)||[]);
+    state.qs.itemsErr=null; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
+}
+function qsRows(){
+  const all=state.qs.items||[];
+  const q=state.qs.q.trim().toLowerCase();
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+/* A tap moves the pending amount and restarts the pause. The write is the
+   FLUSH, not the tap. */
+function qsBump(id,d){
+  const cur=state.qs.add[id]||0;
+  state.qs.add[id]=Math.max(0,cur+d);
+  delete state.qs.rowErr[id];
+  clearTimeout(state.qs.timers[id]);
+  state.qs.timers[id]=setTimeout(()=>qsFlush(id),700);
+  render();
+}
+function qsFlush(id){
+  clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
+  const n=state.qs.add[id]||0;
+  if(n<=0) return;
+  const p=(state.qs.items||[]).find(x=>x.product_id===id||x.id===id);
+  state.qs.add[id]=0;
+  state.qs.inflight[id]=n;
+  render();
+  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id,{delta:n,reason:'kitchen_add',note:'add-stock'},'PATCH')
+    .then(()=>qsWriteLanded(id,n,p))
+    .catch(e=>{ if(String(e.message)==='auth') return; qsWriteFailed(id,n,e.message); });
+}
+/* The two ways a write ends, named. They are the whole point of the screen —
+   what the operator is left holding — so they are functions rather than two
+   anonymous tails of a promise chain, and can be exercised on their own. */
+function qsWriteLanded(id,n,p){
+  delete state.qs.inflight[id];
+  render();
+  showToast(T('Added '+n,'已加 '+n+' 件')+(p?' · '+qsName(p):''));
+}
+function qsWriteFailed(id,n,msg){
+  // The amount comes BACK, so the next tap continues the count rather than
+  // starting it again from a number the operator has to remember. And it is
+  // said IN THE ROW: a toast that fades has told them nothing they can act on.
+  state.qs.add[id]=(state.qs.add[id]||0)+n;
+  delete state.qs.inflight[id];
+  state.qs.rowErr[id]=msg||E('Didn’t save','未保存');
+  render();
+}
+function screenStockAdd(){
+  loadQsCtx();
+  const qs=state.qs;
+  if(qs.ctxErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${qs.ctxErr}</span></div></div>`;
+  if(!qs.ctx) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(qs.ctx.enabled===false) return nothingYet(T('Add stock is off','“加库存”已关闭'),
+    T('This tool is switched off for the shop. Whoever manages your team can turn it back on.','该功能已为本店关闭，可请团队管理员重新开启。'));
+  if(!(qs.ctx.stores||[]).length) return nothingYet(T('No store assigned','未分配门店'),
+    T('You need a store before you can add stock to one. Whoever manages your team can set it.','需要先分配门店才能加库存，可请团队管理员设置。'));
+
+  const search=`<div style="padding:12px 16px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)"></div>`;
+
+  if(qs.itemsErr) return search+`<div style="padding:0 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${qs.itemsErr}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('qsRetry')">${T('Try again','重试')}</button></div>`;
+  if(!qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+
+  const rows=qsRows();
+  if(!rows.length) return search+(qs.q.trim()
+    ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
+    : nothingYet(T('Nothing to count here yet','这里还没有商品'),
+        T('Products published to this store appear here.','已上架到本店的商品会出现在这里。')));
+
+  const card=p=>{
+    const id=p.product_id!=null?p.product_id:p.id;
+    const pend=qs.add[id]||0, flying=qs.inflight[id], err=qs.rowErr[id];
+    return `<div style="background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:18px;font-weight:500;line-height:1.3;letter-spacing:-.01em;min-width:0">${escAttr(qsName(p))}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.sku||'')}</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${pend<=0?' disabled':''}
+          aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
+        <span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${flying?'var(--text-secondary)':'var(--text-primary)'}">+${pend}</span>
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
+          aria-label="${T('More','增加')}">${ic('plus',24)}</button>
+      </div>
+      ${flying?`<div style="font-size:13px;color:var(--text-secondary)">${T('Adding '+flying+'…','正在加 '+flying+' 件…')}</div>`:''}
+      ${err?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--brick-ink)">${escAttr(err)}</span>
+        <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('qsFlush',${id})">${T('Retry','重试')}</button></div>`:''}
+    </div>`;
+  };
+  return search+`<div style="padding:0 16px 32px;display:flex;flex-direction:column;gap:8px">${rows.map(card).join('')}</div>`;
+}
+SUBS.stockadd={title:['Add stock','加库存'],status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
 /* The one screen pushed from something other than More, so it names its own
    title (the order being received) and its own way back. */
@@ -6676,6 +6839,7 @@ const ROUTE_CAP={
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
      of purchasing:view alone would be a screen whose only action 403s. */
   receiving:'purchasing:receive', receive:'purchasing:receive',
+  stockadd:'quickstock:add',
   stockapp:['quickstock:add','quickstock:recount'],
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
@@ -6702,8 +6866,9 @@ function canRoute(k){ return mCan(ROUTE_CAP[k]); }
    screen. Its label is the mode the operator will actually land in: /stock picks
    add-vs-recount by role, and recount is what anyone holding both resolves to
    (routes/retail-inventory.js quick-stock/context), so recount wins here too. */
+function stockAppInApp(){ return !mCan('quickstock:recount') && mCan('quickstock:add'); }
 function stockAppLabel(){
-  return mCan('quickstock:recount') ? ['Quick stock','快速库存'] : ['Add stock','加库存'];
+  return stockAppInApp() ? ['Add stock','加库存'] : ['Quick stock','快速库存'];
 }
 
 const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package'},
