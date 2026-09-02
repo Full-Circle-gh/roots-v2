@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.8 · 2026-09-01 · adds a SEVENTH amendment section, Confirming arrival per product — receiving, locking ten pairs. It is the first section in this document to separate WHAT THE GOODS DID from WHAT THE RECORD SAYS: `未到货` is the supplier not sending, `待确认` is nobody having answered yet, and the phone's receive screen had one word for both because it opened with every line pre-filled at the quantity ordered and one button that booked all of them. Two of its pairs are reused rather than minted — the receive screen's own `未到货` and the PO sheet's `全部到货` — and the whole-order button's body no longer sends the operator to a desktop for per-product work, which stopped being true when Receive became a screen on the phone. v1.7 · 2026-09-01 · adds a SIXTH amendment section, A cost that cannot be put back — purchasing, locking three pairs. It is the first refusal in this document that names a remedy the operator can carry out: the two before it state a condition and stop, while this one ends in an instruction, because the system cannot know the old price and a person can decide it. Shipped without it, the condition reached the operator as a bare error code on a screen that had already told them to do the thing it was refusing. v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.9 · 2026-09-02 · adds an EIGHTH amendment section, Finance — the money staircase, locking eight pairs and two sentences. It is the first section in this document that is not about goods or their movement: every table before it covers a parcel, an order, a delivery or a shelf, and these cover MONEY — the five lines of the Finance Summary staircase, the words beneath them, and the two sentences the screen says when a figure is not there. The document's scope widens by it; Rules 1 to 6 are unchanged. It is also the first section whose pairs are Ash's own words rather than minted under the fourth amendment's delegation, so it carries no "Ash should correct these" caveat and is the source everything else copies from. THREE COLLISIONS made it an amendment rather than a copy, each a word already live and close enough to reach for: `毛利` is Margin (`09-products.js:1312`) and gross profit is therefore `毛利润`, one character apart and deliberately so; `总营收` is gross REVENUE (`app.html:21252`), a third meaning again; and Revenue itself ships as FOUR different Chinese strings today — `营收`, `收入`, `本月营收`, `总收入` — so there was no pair to copy because there were four. `营收` is the ruling, and `收入` is explicitly not a synonym: Finance keeps Income for a different thing. **Contribution must never collapse onto Net's pair** — §36 makes Contribution the guard word for a per-location figure that has NOT had business-wide costs taken off, so merging the two would keep the distinction in English and lose it in the Chinese view. The not-recorded sentence NAMES NO DATE, against §1.12's usual instruction to name the boundary, because §36 v4.113 records that the cost cutoff must come from a production query that has not been run; a dated form would be a new string and a new pair, never an edit to this one. **Nothing live is retrofitted here** — the four Revenue variants stay as they are, so that a vocabulary lock and a sweep of shipped screens are never the same commit. v1.8 · 2026-09-01 · adds a SEVENTH amendment section, Confirming arrival per product — receiving, locking ten pairs. It is the first section in this document to separate WHAT THE GOODS DID from WHAT THE RECORD SAYS: `未到货` is the supplier not sending, `待确认` is nobody having answered yet, and the phone's receive screen had one word for both because it opened with every line pre-filled at the quantity ordered and one button that booked all of them. Two of its pairs are reused rather than minted — the receive screen's own `未到货` and the PO sheet's `全部到货` — and the whole-order button's body no longer sends the operator to a desktop for per-product work, which stopped being true when Receive became a screen on the phone. v1.7 · 2026-09-01 · adds a SIXTH amendment section, A cost that cannot be put back — purchasing, locking three pairs. It is the first refusal in this document that names a remedy the operator can carry out: the two before it state a condition and stop, while this one ends in an instruction, because the system cannot know the old price and a person can decide it. Shipped without it, the condition reached the operator as a bare error code on a screen that had already told them to do the thing it was refusing. v1.6 · 2026-09-01 · adds a FIFTH amendment section, Purchase returns — purchasing, locking fifteen pairs on the day it opens. It is the first section about goods leaving the building in the direction they came from, and it exists because the receiving vocabulary could say SHORT and DAMAGED but had no word for SENT BACK — so a return had to be entered as a delivery that never happened. One of its reason codes reuses the mobile screen's existing `错货` rather than re-minting it, and its refusal headline deliberately does NOT reuse `undoBlocked`: same shelf test, different subject. This bump also covers the FOURTH amendment (Undo receiving clears the counts, LOCKED 2026-09-01), which landed without one — the sections below are the record, and the count in this banner is now caught up with them rather than rewritten to pretend it never slipped. v1.5 · 2026-08-27 · adds a THIRD amendment section, Receipt reversal refused — purchasing, and locks its one pair, `undoBlocked`, on the day it opens — the first entry in this document about goods ARRIVING rather than an order leaving, and the first about stock at all, which is why it needed a section of its own rather than a row in a table above. It serves three entry points that must not diverge, it must always carry both of its halves, and the per-product lines beneath it reuse a pair already live on the purchasing screen rather than minting a second copy here. Also of record: the recipe-line-unit pair WAS minted and locked 2026-08-27, as that section’s own heading says; the v1.4 note that follows still describes it as waiting on Ash and is left as written, being a dated record of that day rather than a claim about today. v1.4 (2026-08-26) adds a SECOND request section, for recipe line units, which like the first holds NO locked strings — one English string is waiting on Ash for its Chinese, bringing the pending total to seven across two sections, all unlocked until he supplies them. The concept is a recipe line counted in a unit that measures a different kind of thing than its material's stocking unit, so that line's cost cannot be worked out; two existing pairs were considered and rejected, and the section records which and why so the search is not repeated. The channel-mapping request section is unchanged (v1.3, 2026-08-26, adds it — six English strings waiting on Ash). The tables above are unchanged and remain locked by Ash as of v1.2 (2026-08-20, adds the admin form-caption table). Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -585,6 +585,107 @@ when Receive became a screen on the phone.
 
 Sentence case, no exclamation marks. `%d` marks a number the screen fills in; the
 EN halves take a plural `s` on their nouns and the CN halves do not.
+
+## Finance — the money staircase (LOCKED 2026-09-02)
+
+Rule 4 says never compose new Chinese and that additions require an amendment to
+this document. This is the eighth such amendment, opened and closed 2026-09-02.
+
+**It is the first section here that is not about goods or their movement.** Every
+table above covers a parcel, an order, a delivery or a shelf. These pairs cover
+MONEY — the five lines of the Finance Summary staircase
+(`docs/tacet-consolidation-decisions.md` §36), the words beneath them, and the
+two sentences the screen says when a figure is not there. The document's scope
+widens by this section; Rules 1 to 6 are unchanged and still bind.
+
+WHY THE STRINGS ARE NEEDED. The Finance Summary screen was specified in §36 and
+mocked up in `reference/finance-summary-mockup.html`, and the build stopped on
+this document: **not one of the staircase's own words had a pair.** `Cost of
+goods`, `Gross profit` and `Contribution` existed nowhere in the repository in
+either register, and the words that looked closest already meant other things.
+An English-only Finance screen was not an option — it is the screen that says
+whether the business made money — and composing the Chinese is what Rule 4
+forbids. So the build stopped and these were put to Ash.
+
+THE THREE COLLISIONS THAT MADE THIS AN AMENDMENT RATHER THAN A COPY. Each is a
+word already live in the product, close enough to reach for and wrong to reuse.
+
+- **`毛利` is Margin, not gross profit.** It is live as the Margin label in
+  `public/retail-admin/09-products.js:1312` and must stay free. Gross profit is
+  a total for a period; margin is a rate on a product. One character of
+  difference in the pair (`毛利润`) keeps two figures apart that an operator
+  would otherwise read as the same claim about the same money.
+- **`总营收` is gross REVENUE, a third meaning again.** It is live at
+  `public/app.html:21252` under the English `Gross`. A staircase whose second
+  line borrowed it would have `Gross` naming revenue at the top and profit in
+  the middle.
+- **Revenue already ships as four different Chinese strings** — `营收`, `收入`,
+  `本月营收` and `总收入`. There was no pair to copy because there were four, and
+  a build would have picked whichever it read first.
+
+**THE RULINGS.**
+
+1. **Revenue is `营收`.** `收入` is NOT a synonym here: Finance uses **Income** for
+   a different thing, and the two must not share a Chinese half.
+2. **Gross profit is `毛利润`, never `毛利`.** See the collision above. `毛利`
+   stays Margin's and is not to be taken.
+3. **Contribution must never collapse onto Net's pair.** The distinction between
+   the two is the whole reason the line exists — §36 makes Contribution the
+   guard word for a per-location figure that has NOT had business-wide costs
+   taken off, and Net the word for one that has. Merge the pairs and the
+   distinction survives in English and dies in the Chinese view, which is the
+   half of the product most of its operators read.
+4. **The not-recorded sentence names no date, deliberately.** §1.12 of
+   `docs/tacet-desktop-patterns.md` says the seventh state names when its
+   boundary falls; §36 v4.113 records that the cost cutoff must come from a
+   production query that HAS NOT BEEN RUN, and that the commit date must not be
+   quoted as one. Until that query is run there is no date to name, and a
+   sentence that guessed would be a false boundary in a locked string. **If a
+   dated form is wanted later it is a NEW string and a NEW pair, not an edit to
+   this one.**
+
+**THE PAIRS — confirmed 2026-09-02 by Ash, locked.** Unlike the fourth through
+seventh amendments, these were not minted under delegation and carry no "Ash
+should correct these" caveat: they are his own words and are the source
+everything else copies from.
+
+| Key | EN | CN | What it says |
+|---|---|---|---|
+| `revenue` | Revenue | 营收 | Staircase line 1. What the business took. NOT `收入`, which Finance keeps for Income. |
+| `costOfGoods` | Cost of goods | 销货成本 | Staircase line 2. What the goods sold in the period cost to buy or make. |
+| `grossProfit` | Gross profit | 毛利润 | Staircase line 3, the first conclusion. `毛利润`, not `毛利` — see ruling 2. |
+| `operatingExpenses` | Operating expenses | 营业费用 | Staircase line 4. The hand-entered half of the staircase; everything above it is calculated. |
+| `net` | Net | 净额 | Staircase line 5, unfiltered. Business-wide costs HAVE been taken off. |
+| `contribution` | Contribution | 贡献毛利 | Staircase line 5, filtered to one location. Business-wide costs have NOT been taken off, which is why it is not `净额` — see ruling 3. |
+| `notLocationSpecific` | Not location-specific | 非门店专属 | The remainder row in the unfiltered expense breakdown: cost that belongs to the business rather than to any one place (§36, blank location). |
+| `transactions` | Transactions | 交易记录 | The second Finance sub-view. NOT the top-up screen's `近期充值记录`, which is one channel's history, not the ledger. |
+| `noCostRecorded` | This period has no recorded cost data. | 此期间未记录成本数据。 | The §1.12 seventh state, on the cost-of-goods and gross-profit lines. Past tense, agentless, no date — see ruling 4. |
+| `excludedCosts` | Business-wide costs of {amount} are not included in this figure. | 不含全店成本 {amount}。 | Under a filtered Contribution figure, naming what it leaves out. |
+
+**`excludedCosts` IS INTERPOLATED AND MUST NOT BE GLUED.** `{amount}` is filled
+in at render. Per §1.11's interpolation rule it needs a `data-lang-block` pair or
+a label-isolation span — a string built by concatenating a translated head to a
+number is the failure that rule exists to prevent. Note that `{amount}` is not
+the `%d` used by the receiving pairs above: `%d` marks an integer the screen
+counts, `{amount}` a formatted money figure with its own currency symbol, which
+is per business (§0) and never part of the string.
+
+**`noCostRecorded` IS A SENTENCE, NOT A VALUE.** It does not replace a figure in
+a cell. §1.12's treatment is show what IS known plus one past-tense sentence
+saying why the rest is not — no dashed rows, no alarm colour, no icon, no retry.
+The existing `not recorded` / `未记录` pair in
+`public/retail-admin/08-customers.js` is a VALUE for one absent field and is a
+different string doing a different job; neither replaces the other.
+
+**NOTHING LIVE IS RETROFITTED BY THIS AMENDMENT.** The existing `营收` and `收入`
+instances stay exactly as they are. Ruling 1 binds new work and settles what
+Finance ships; bringing the four live variants onto one pair is a separate pass
+against a separate diff, so that a vocabulary lock and a sweep of shipped
+screens are never the same commit.
+
+Sentence case, no exclamation marks. Both sentence strings keep their full stops
+— `。` in CN, `.` in EN — because each is a whole remark about the figure above
+it rather than a label on it.
 
 ## Deferred — recorded, not in scope of this lock
 
