@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Awaiting restock — which product · 待补货商品界面稿</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+</head>
+<body>
+<style>
+  /* ── Full Circle / Tacet tokens (mirrors public/retail-admin.css) ─────────
+     Light is the base set; dark redefines the same tokens so the sheet reads
+     on either ground the same way the admin does. Components only ever read
+     tokens — never a literal — so both themes resolve as a set. */
+  :root{
+    --bg-app:#E8E5DC; --bg-pane:#FFFFFF; --bg-elev-1:#F1EEE7; --bg-elev-2:#E3DFD5;
+    --bg-sheet:#DDD9CE;
+    --line-soft:rgba(18,22,26,.07); --line:rgba(18,22,26,.12); --line-strong:rgba(18,22,26,.20);
+    --text-1:#12161A; --text-2:#43413a; --text-3:#6a675c; --text-4:#9a978c;
+    --amber:#C9954A; --amber-ink:#8A6425; --amber-tint:#F7EEDE;
+    --sage-ink:#4A6249; --sage-tint:#EDF1EC;
+    --brick-ink:#B4533E; --brick-tint:#F6E7E3;
+    --thumb:#EFE9DC;
+    --sh-1:0 1px 3px rgba(40,30,5,.10); --sh-2:0 6px 18px rgba(40,30,5,.12);
+    --r-lg:12px; --r-md:8px; --r-xl:14px;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg-app:#12161A; --bg-pane:#1A1F24; --bg-elev-1:#20262C; --bg-elev-2:#272E35;
+      --bg-sheet:#0E1216;
+      --line-soft:rgba(232,229,220,.06); --line:rgba(232,229,220,.11); --line-strong:rgba(232,229,220,.20);
+      --text-1:#F3F0E8; --text-2:#C6C2B8; --text-3:#8f8b81; --text-4:#6d6a62;
+      --amber:#C9954A; --amber-ink:#DBA75E; --amber-tint:#33290F;
+      --sage-ink:#A3B49F; --sage-tint:#1E2C26;
+      --brick-ink:#D07A66; --brick-tint:#351B14;
+      --thumb:#2A3037;
+      --sh-1:0 1px 3px rgba(0,0,0,.34); --sh-2:0 6px 18px rgba(0,0,0,.42);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg-app:#12161A; --bg-pane:#1A1F24; --bg-elev-1:#20262C; --bg-elev-2:#272E35;
+    --bg-sheet:#0E1216;
+    --line-soft:rgba(232,229,220,.06); --line:rgba(232,229,220,.11); --line-strong:rgba(232,229,220,.20);
+    --text-1:#F3F0E8; --text-2:#C6C2B8; --text-3:#8f8b81; --text-4:#6d6a62;
+    --amber:#C9954A; --amber-ink:#DBA75E; --amber-tint:#33290F;
+    --sage-ink:#A3B49F; --sage-tint:#1E2C26;
+    --brick-ink:#D07A66; --brick-tint:#351B14;
+    --thumb:#2A3037;
+    --sh-1:0 1px 3px rgba(0,0,0,.34); --sh-2:0 6px 18px rgba(0,0,0,.42);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg-sheet);color:var(--text-1);font-family:var(--f-sans);
+       font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:80px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* ── Sheet chrome (not part of the admin UI) ───────────────────────────── */
+  .mock-head{padding:34px 0 18px}
+  .mock-head .eyebrow{font-family:var(--f-mono);font-size:10.5px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--amber-ink)}
+  .mock-head h1{font-size:23px;font-weight:600;letter-spacing:-.015em;margin-top:8px;text-wrap:balance}
+  .mock-head p{color:var(--text-3);font-size:13.5px;margin-top:9px;max-width:70ch}
+  .mock-head p + p{margin-top:8px}
+  .mock-head code{font-family:var(--f-mono);font-size:12px;color:var(--text-2);
+    background:var(--bg-elev-1);border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px}
+
+  .mock-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 22px}
+  .mock-tab{font-family:var(--f-mono);font-size:11px;letter-spacing:.05em;color:var(--text-3);
+    background:var(--bg-pane);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+  .mock-tab:hover{color:var(--text-1);border-color:var(--line-strong)}
+  .mock-tab.on{color:var(--bg-pane);background:var(--text-1);border-color:var(--text-1);font-weight:600}
+  .mock-tab.rec::after{content:'★';margin-left:7px;color:var(--amber)}
+  .mock-tab.on.rec::after{color:var(--amber)}
+  .mock-tab:focus-visible,.btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+  .screen[hidden]{display:none}
+  .screen h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .screen .lede{color:var(--text-3);font-size:13px;margin-top:6px;max-width:72ch}
+
+  /* ── Drawer frame ──────────────────────────────────────────────────────── */
+  .drawer{background:var(--bg-app);border:1px solid var(--line-strong);border-radius:var(--r-xl);
+    box-shadow:var(--sh-2);overflow:hidden;margin-top:18px}
+  .drawer-top{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:14px 20px;background:var(--bg-pane);border-bottom:1px solid var(--line)}
+  .drawer-top .ono{font-family:var(--f-mono);font-size:15px;font-weight:600;letter-spacing:.02em}
+  .drawer-top .meta{font-size:12px;color:var(--text-3)}
+  .drawer-body{padding:18px 20px 22px;display:flex;flex-direction:column;gap:16px}
+
+  .kicker{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--text-3)}
+  .kicker.brass{color:var(--amber-ink)}
+
+  /* Facts card — the four one-line facts in the live drawer */
+  .facts{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px 22px}
+  .facts .val{font-size:13.5px;font-weight:600;margin-top:4px}
+  .facts .sub{font-size:12px;color:var(--text-3);margin-top:2px}
+
+  /* Status pill */
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    border-radius:999px;padding:4px 11px;white-space:nowrap;
+    background:var(--bg-elev-1);border:1px solid var(--line);color:var(--text-2)}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+  .pill.amber{background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
+  .pill.sage{background:var(--sage-tint);border-color:transparent;color:var(--sage-ink)}
+
+  /* ── The waiting strip (options A / C / D live here) ───────────────────── */
+  .strip{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);
+    box-shadow:inset 3px 0 0 var(--amber);padding:12px 16px 13px 17px}
+  .strip-h{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--amber-ink)}
+  .strip-h .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:none}
+  .strip-h .cn{font-weight:500;opacity:.8}
+  .strip-list{display:flex;flex-direction:column;gap:9px;margin-top:11px}
+  .strip-note{font-size:12px;color:var(--text-3);margin-top:11px;padding-top:10px;
+    border-top:1px solid var(--line-soft)}
+  .strip-note > span{display:block;max-width:64ch}
+  .strip-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+
+  .wline{display:flex;align-items:center;gap:10px;min-width:0}
+  .wline .nm{font-size:13px;font-weight:600;color:var(--text-1);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .wline .qty{font-family:var(--f-mono);font-size:11.5px;color:var(--text-2);
+    background:var(--bg-elev-1);border-radius:4px;padding:1px 6px;flex:none}
+  .sku{font-family:var(--f-mono);font-size:11px;color:var(--text-3);letter-spacing:.02em;flex:none}
+
+  .thumb{width:30px;height:30px;border-radius:7px;background:var(--thumb);flex:none;
+    display:grid;place-items:center;font-family:var(--f-mono);font-size:11px;font-weight:600;
+    color:var(--text-3);border:1px solid var(--line-soft)}
+  .thumb.lg{width:34px;height:34px;border-radius:8px}
+
+  /* ── Items & shipments ─────────────────────────────────────────────────── */
+  .ship-card{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+  .ship-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 15px;
+    border-bottom:1px solid var(--line-soft)}
+  .mode-pill{font-size:11.5px;font-weight:600;color:var(--text-2);background:var(--bg-elev-1);
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+  .ship-head .count{font-size:12px;color:var(--text-3);margin-left:auto}
+  .manifest{display:flex;flex-direction:column}
+  .mrow{display:grid;grid-template-columns:26px 34px 1fr auto;align-items:center;gap:11px;
+    padding:11px 15px;border-bottom:1px solid var(--line-soft)}
+  .mrow:last-child{border-bottom:0}
+  .mrow .num{font-family:var(--f-mono);font-size:11px;color:var(--text-4)}
+  .mrow .nm{font-size:13.5px;font-weight:600;letter-spacing:-.005em}
+  .mrow .mline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:3px}
+  .mrow .total{font-family:var(--f-mono);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+  .mrow.waiting{background:var(--amber-tint);box-shadow:inset 3px 0 0 var(--amber)}
+  .chip-wait{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;
+    letter-spacing:.02em;color:var(--amber-ink);background:var(--bg-pane);
+    border:1px solid color-mix(in srgb,var(--amber) 45%,transparent);border-radius:999px;padding:2px 8px}
+  .chip-wait .dot{width:5px;height:5px;border-radius:50%;background:var(--amber)}
+  .ship-foot{padding:11px 15px;border-top:1px solid var(--line-soft)}
+
+  /* ── Option D: stock maths ─────────────────────────────────────────────── */
+  .dwrap{display:flex;flex-direction:column;gap:12px;margin-top:11px}
+  .drow{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:11px}
+  .dnums{font-family:var(--f-mono);font-size:11.5px;color:var(--text-3);margin-top:4px;
+    font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .dnums b{color:var(--amber-ink);font-weight:600}
+  .dnums .ok{color:var(--sage-ink);font-weight:600}
+  .bar{width:110px;height:5px;border-radius:3px;background:var(--bg-elev-2);overflow:hidden;flex:none}
+  .bar i{display:block;height:100%;background:var(--amber);border-radius:3px}
+  .waited{font-family:var(--f-mono);font-size:11.5px;color:var(--text-3);
+    font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-sans);font-size:12.5px;
+    font-weight:600;color:var(--text-1);background:var(--bg-elev-1);border:1px solid var(--line-strong);
+    border-radius:var(--r-md);padding:7px 13px;cursor:pointer;white-space:nowrap}
+  .btn:hover{background:var(--bg-elev-2)}
+
+  /* ── Orders-list row (the add-on) ──────────────────────────────────────── */
+  .list{background:var(--bg-pane);border:1px solid var(--line-strong);border-radius:var(--r-lg);
+    box-shadow:var(--sh-1);overflow:hidden;margin-top:18px}
+  .lhead,.lrow{display:grid;grid-template-columns:104px 108px 96px 1fr 76px 96px 210px;
+    align-items:center;gap:12px;padding:11px 16px}
+  .lhead{background:var(--bg-elev-2);font-family:var(--f-mono);font-size:10px;font-weight:600;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--text-3)}
+  .lrow{border-top:1px solid var(--line-soft);font-size:13px}
+  .lrow .ono{font-family:var(--f-mono);font-weight:600}
+  .lrow .money{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:600}
+  .wait-badge{font-size:11px;font-weight:600;color:var(--amber-ink);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .table-scroll{overflow-x:auto}
+  .table-scroll > .list{min-width:820px;margin-top:0}
+
+  /* ── Decision notes ────────────────────────────────────────────────────── */
+  .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:0;margin-top:18px;
+    background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+  .note{padding:14px 16px;border-right:1px solid var(--line-soft)}
+  .note:last-child{border-right:0}
+  .note h3{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--text-3);margin-bottom:7px}
+  .note p{font-size:12.5px;color:var(--text-2);line-height:1.55}
+  .note p + p{margin-top:6px}
+  .note code{font-family:var(--f-mono);font-size:11.5px;color:var(--text-2)}
+  .cost{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    border-radius:999px;padding:3px 10px}
+  .cost.low{background:var(--sage-tint);color:var(--sage-ink)}
+  .cost.mid{background:var(--amber-tint);color:var(--amber-ink)}
+  .cost.high{background:var(--brick-tint);color:var(--brick-ink)}
+
+  /* ── Closing summary ───────────────────────────────────────────────────── */
+  .close{margin-top:34px;padding-top:26px;border-top:1px solid var(--line)}
+  .close h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .close .lede{color:var(--text-3);font-size:13px;margin-top:6px;max-width:72ch}
+  .facts-table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+  .facts-table th{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--text-3);text-align:left;padding:0 12px 8px 0;
+    border-bottom:1px solid var(--line)}
+  .facts-table td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line-soft);
+    color:var(--text-2);vertical-align:top}
+  .facts-table td:first-child{font-weight:600;color:var(--text-1);white-space:nowrap}
+  .facts-table code{font-family:var(--f-mono);font-size:11.5px}
+  .facts-table tr:last-child td{border-bottom:0}
+
+  @media (max-width:720px){
+    .lhead,.lrow{grid-template-columns:100px 1fr 90px 200px}
+    .lhead span:nth-child(2),.lhead span:nth-child(3),.lhead span:nth-child(5),
+    .lrow > *:nth-child(2),.lrow > *:nth-child(3),.lrow > *:nth-child(5){display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap mock-head">
+  <div class="eyebrow">Orders · order drawer · 订单详情</div>
+  <h1>Naming the item an awaiting-restock order is parked on</h1>
+  <p>Order <b>TC000518</b> sits in <b>Awaiting restock</b> and the drawer never says which of its seven
+     products is holding it. Staff open the order, read every line, and still have to guess — or go to
+     Products and check stock one SKU at a time.</p>
+  <p>The answer is already in the payload: <code>awaiting_restock_pids</code> is written at checkout
+     (<code>fallback_choice = 'wait_for_restock'</code>) and reaches the drawer through
+     <code>GET /api/retail-admin/orders/:id</code>, which selects <code>o.*</code>. Four ways to spend it,
+     built on the patterns the drawer already uses for the shipping-store shortage strip.</p>
+</div>
+
+<div class="wrap">
+  <div class="mock-tabs" role="tablist" aria-label="Mockup options">
+    <button class="mock-tab on" role="tab" aria-selected="true" aria-controls="s-a" id="t-a">A · Waiting strip</button>
+    <button class="mock-tab" role="tab" aria-selected="false" aria-controls="s-b" id="t-b">B · Marked in manifest</button>
+    <button class="mock-tab rec" role="tab" aria-selected="false" aria-controls="s-c" id="t-c">C · Both</button>
+    <button class="mock-tab" role="tab" aria-selected="false" aria-controls="s-d" id="t-d">D · Restock panel</button>
+    <button class="mock-tab" role="tab" aria-selected="false" aria-controls="s-e" id="t-e">Add-on · List row</button>
+  </div>
+
+  <!-- ═══ OPTION A ═══════════════════════════════════════════════════════ -->
+  <section class="screen" id="s-a" role="tabpanel" aria-labelledby="t-a">
+    <h2>A · A waiting strip above the items</h2>
+    <p class="lede">One amber-railed strip in the details grid, in the slot the shipping-store shortage
+       strip already occupies. Says what the order is waiting for before the operator scrolls anywhere.</p>
+
+    <div class="drawer">
+      <div class="drawer-top">
+        <span class="ono">TC000518</span>
+        <span class="pill amber"><span class="dot"></span>Awaiting restock · 等待补货</span>
+        <span class="meta" style="margin-left:auto">WeChat · 玛丽娜 · Sep 2, 3:52 PM</span>
+      </div>
+      <div class="drawer-body">
+        <div class="facts">
+          <div><div class="kicker">Ship to · 收货人</div><div class="val">玛丽娜</div><div class="sub">Shenzhen · Nanshan</div></div>
+          <div><div class="kicker">Payment · 付款</div><div class="val">WeChat Pay</div><div class="sub">Paid ¥309.20</div></div>
+          <div><div class="kicker">Fulfilled by · 出货门店</div><div class="val">Tianhe</div><div class="sub">天河店</div></div>
+          <div><div class="kicker">Delivery · 配送</div><div class="val">Courier</div><div class="sub">Ship when ready</div></div>
+        </div>
+
+        <div class="strip">
+          <div class="strip-h"><span class="dot"></span>Waiting on stock <span class="cn">· 等待补货</span></div>
+          <div class="strip-list">
+            <div class="wline"><span class="thumb">CH</span><span class="nm">Choco Hemp Protein Bites</span>
+              <span class="sku">3-20</span><span class="qty">×2</span></div>
+          </div>
+          <div class="strip-note"><span>Releases to <b>Paid</b> on its own once Tianhe can cover every line —
+             no one has to move it by hand.</span></div>
+        </div>
+
+        <div>
+          <div class="kicker brass" style="margin-bottom:10px">Items &amp; shipments · 商品与发货</div>
+          <div class="ship-card">
+            <div class="ship-head"><span class="mode-pill">Land · 陆运</span>
+              <span class="pill"><span class="dot"></span>Not shipped · 未发货</span>
+              <span class="count">7 products · 9 units</span></div>
+            <div class="manifest">
+              <div class="mrow"><span class="num">01</span><span class="thumb lg">JU</span>
+                <span><span class="nm">Crunchy Jujube Crisps</span><span class="mline"><span class="sku">2-210</span><span class="sku">×1 · @ ¥17.00</span></span></span>
+                <span class="total">¥17.00</span></div>
+              <div class="mrow"><span class="num">02</span><span class="thumb lg">DB</span>
+                <span><span class="nm">Dried Sweet Banana</span><span class="mline"><span class="sku">2-260</span><span class="sku">×2 · @ ¥22.00</span></span></span>
+                <span class="total">¥44.00</span></div>
+              <div class="mrow"><span class="num">03</span><span class="thumb lg">CH</span>
+                <span><span class="nm">Choco Hemp Protein Bites</span><span class="mline"><span class="sku">3-20</span><span class="sku">×2 · @ ¥38.00</span></span></span>
+                <span class="total">¥76.00</span></div>
+              <div class="mrow"><span class="num">04</span><span class="thumb lg">QP</span>
+                <span><span class="nm">Savory Quinoa Patties</span><span class="mline"><span class="sku">3-50</span><span class="sku">×1 · @ ¥43.00</span></span></span>
+                <span class="total">¥43.00</span></div>
+            </div>
+            <div class="ship-foot"><span class="sku">…3 more lines</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h3>Answers</h3><p>“What is this order stuck on?” — before any scrolling, and it
+        stays answered when the drawer is only half-read.</p></div>
+      <div class="note"><h3>Doesn’t answer</h3><p>Nothing marks line 03 in the manifest, so an operator
+        working down the picking list has no signal where they are actually looking.</p></div>
+      <div class="note"><h3>Build</h3><p><span class="cost low">Front-end only</span></p>
+        <p>A near-copy of <code>fulfillmentShortStrip()</code> reading
+        <code>awaiting_restock_pids</code>, rendered in the same slot in <code>04-orders.js</code>.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ OPTION B ═══════════════════════════════════════════════════════ -->
+  <section class="screen" id="s-b" role="tabpanel" aria-labelledby="t-b" hidden>
+    <h2>B · Marked on the line itself</h2>
+    <p class="lede">No new block. The waiting line gets an amber rail and a chip, and the parcel’s state
+       pill stops saying “Not shipped” — it says what is actually holding the parcel.</p>
+
+    <div class="drawer">
+      <div class="drawer-top">
+        <span class="ono">TC000518</span>
+        <span class="pill amber"><span class="dot"></span>Awaiting restock · 等待补货</span>
+        <span class="meta" style="margin-left:auto">WeChat · 玛丽娜 · Sep 2, 3:52 PM</span>
+      </div>
+      <div class="drawer-body">
+        <div class="facts">
+          <div><div class="kicker">Ship to · 收货人</div><div class="val">玛丽娜</div><div class="sub">Shenzhen · Nanshan</div></div>
+          <div><div class="kicker">Payment · 付款</div><div class="val">WeChat Pay</div><div class="sub">Paid ¥309.20</div></div>
+          <div><div class="kicker">Fulfilled by · 出货门店</div><div class="val">Tianhe</div><div class="sub">天河店</div></div>
+          <div><div class="kicker">Delivery · 配送</div><div class="val">Courier</div><div class="sub">Ship when ready</div></div>
+        </div>
+
+        <div>
+          <div class="kicker brass" style="margin-bottom:10px">Items &amp; shipments · 商品与发货</div>
+          <div class="ship-card">
+            <div class="ship-head"><span class="mode-pill">Land · 陆运</span>
+              <span class="pill amber"><span class="dot"></span>Held — 1 line waiting · 待补货</span>
+              <span class="count">7 products · 9 units</span></div>
+            <div class="manifest">
+              <div class="mrow"><span class="num">01</span><span class="thumb lg">JU</span>
+                <span><span class="nm">Crunchy Jujube Crisps</span><span class="mline"><span class="sku">2-210</span><span class="sku">×1 · @ ¥17.00</span></span></span>
+                <span class="total">¥17.00</span></div>
+              <div class="mrow"><span class="num">02</span><span class="thumb lg">DB</span>
+                <span><span class="nm">Dried Sweet Banana</span><span class="mline"><span class="sku">2-260</span><span class="sku">×2 · @ ¥22.00</span></span></span>
+                <span class="total">¥44.00</span></div>
+              <div class="mrow waiting"><span class="num">03</span><span class="thumb lg">CH</span>
+                <span><span class="nm">Choco Hemp Protein Bites</span><span class="mline"><span class="sku">3-20</span><span class="sku">×2 · @ ¥38.00</span>
+                  <span class="chip-wait"><span class="dot"></span>Waiting on stock · 待补货</span></span></span>
+                <span class="total">¥76.00</span></div>
+              <div class="mrow"><span class="num">04</span><span class="thumb lg">QP</span>
+                <span><span class="nm">Savory Quinoa Patties</span><span class="mline"><span class="sku">3-50</span><span class="sku">×1 · @ ¥43.00</span></span></span>
+                <span class="total">¥43.00</span></div>
+            </div>
+            <div class="ship-foot"><span class="sku">…3 more lines</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h3>Answers</h3><p>“Which line?” — exactly where the picking happens, and the
+        parcel pill stops implying the parcel is merely un-dispatched.</p></div>
+      <div class="note"><h3>Doesn’t answer</h3><p>Buried. The item block sits below the facts grid and
+        the shortage is invisible until someone scrolls to it — the same failure as today, one screen lower.</p></div>
+      <div class="note"><h3>Build</h3><p><span class="cost low">Front-end only</span></p>
+        <p>A flag through <code>renderItemRow()</code>, plus a branch in
+        <code>shipmentStatePill()</code> when the order status is <code>awaiting_restock</code>.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ OPTION C ═══════════════════════════════════════════════════════ -->
+  <section class="screen" id="s-c" role="tabpanel" aria-labelledby="t-c" hidden>
+    <h2>C · Strip at the top, mark on the line</h2>
+    <p class="lede">A and B together, which is how the drawer already treats a shipping-store shortage:
+       <code>fulfillmentShortStrip</code> for the glance, <code>fulfillmentShortBadge</code> for the row.
+       Shown here with two waiting products, since orders park on more than one.</p>
+
+    <div class="drawer">
+      <div class="drawer-top">
+        <span class="ono">TC000518</span>
+        <span class="pill amber"><span class="dot"></span>Awaiting restock · 等待补货</span>
+        <span class="meta" style="margin-left:auto">WeChat · 玛丽娜 · Sep 2, 3:52 PM</span>
+      </div>
+      <div class="drawer-body">
+        <div class="facts">
+          <div><div class="kicker">Ship to · 收货人</div><div class="val">玛丽娜</div><div class="sub">Shenzhen · Nanshan</div></div>
+          <div><div class="kicker">Payment · 付款</div><div class="val">WeChat Pay</div><div class="sub">Paid ¥309.20</div></div>
+          <div><div class="kicker">Fulfilled by · 出货门店</div><div class="val">Tianhe</div><div class="sub">天河店</div></div>
+          <div><div class="kicker">Delivery · 配送</div><div class="val">Courier</div><div class="sub">Ship when ready</div></div>
+        </div>
+
+        <div class="strip">
+          <div class="strip-h"><span class="dot"></span>Waiting on stock at Tianhe <span class="cn">· 天河店等待补货</span></div>
+          <div class="strip-list">
+            <div class="wline"><span class="thumb">CH</span><span class="nm">Choco Hemp Protein Bites</span>
+              <span class="sku">3-20</span><span class="qty">×2</span></div>
+            <div class="wline"><span class="thumb">CB</span><span class="nm">Calm Buckwheat Granola (No Sugar)</span>
+              <span class="sku">S(4-360)</span><span class="qty">×1</span></div>
+          </div>
+          <div class="strip-note"><span>Customer chose to wait at checkout. Releases to <b>Paid</b> on its own
+             once Tianhe can cover every line.</span></div>
+        </div>
+
+        <div>
+          <div class="kicker brass" style="margin-bottom:10px">Items &amp; shipments · 商品与发货</div>
+          <div class="ship-card">
+            <div class="ship-head"><span class="mode-pill">Land · 陆运</span>
+              <span class="pill amber"><span class="dot"></span>Held — 2 lines waiting · 待补货</span>
+              <span class="count">7 products · 9 units</span></div>
+            <div class="manifest">
+              <div class="mrow"><span class="num">01</span><span class="thumb lg">JU</span>
+                <span><span class="nm">Crunchy Jujube Crisps</span><span class="mline"><span class="sku">2-210</span><span class="sku">×1 · @ ¥17.00</span></span></span>
+                <span class="total">¥17.00</span></div>
+              <div class="mrow"><span class="num">02</span><span class="thumb lg">DB</span>
+                <span><span class="nm">Dried Sweet Banana</span><span class="mline"><span class="sku">2-260</span><span class="sku">×2 · @ ¥22.00</span></span></span>
+                <span class="total">¥44.00</span></div>
+              <div class="mrow waiting"><span class="num">03</span><span class="thumb lg">CH</span>
+                <span><span class="nm">Choco Hemp Protein Bites</span><span class="mline"><span class="sku">3-20</span><span class="sku">×2 · @ ¥38.00</span>
+                  <span class="chip-wait"><span class="dot"></span>Waiting on stock · 待补货</span></span></span>
+                <span class="total">¥76.00</span></div>
+              <div class="mrow"><span class="num">04</span><span class="thumb lg">QP</span>
+                <span><span class="nm">Savory Quinoa Patties</span><span class="mline"><span class="sku">3-50</span><span class="sku">×1 · @ ¥43.00</span></span></span>
+                <span class="total">¥43.00</span></div>
+              <div class="mrow waiting"><span class="num">07</span><span class="thumb lg">CB</span>
+                <span><span class="nm">Calm Buckwheat Granola (No Sugar)</span><span class="mline"><span class="sku">S(4-360)</span><span class="sku">×1 · @ ¥8.00</span>
+                  <span class="chip-wait"><span class="dot"></span>Waiting on stock · 待补货</span></span></span>
+                <span class="total">¥8.00</span></div>
+            </div>
+            <div class="ship-foot"><span class="sku">…rows 05–06 unchanged</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h3>Answers</h3><p>Both readings: the glance at the top of the drawer, and the
+        line under the operator’s finger in the manifest.</p></div>
+      <div class="note"><h3>Watch for</h3><p>Two amber marks for one fact. Keep the strip’s wording and
+        the chip’s wording identical so they read as one statement, not two problems.</p></div>
+      <div class="note"><h3>Build</h3><p><span class="cost low">Front-end only</span></p>
+        <p>A + B, sharing one <code>awaitingRestockPids(o)</code> parse. Still no schema or endpoint change.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ OPTION D ═══════════════════════════════════════════════════════ -->
+  <section class="screen" id="s-d" role="tabpanel" aria-labelledby="t-d" hidden>
+    <h2>D · The strip grows into a restock panel</h2>
+    <p class="lede">Everything in C, plus the number the office actually acts on: how many units short
+       Tianhe is, and how long the customer has been waiting. This is the only option that needs a
+       backend change.</p>
+
+    <div class="drawer">
+      <div class="drawer-top">
+        <span class="ono">TC000518</span>
+        <span class="pill amber"><span class="dot"></span>Awaiting restock · 等待补货</span>
+        <span class="meta" style="margin-left:auto">WeChat · 玛丽娜 · Sep 2, 3:52 PM</span>
+      </div>
+      <div class="drawer-body">
+        <div class="facts">
+          <div><div class="kicker">Ship to · 收货人</div><div class="val">玛丽娜</div><div class="sub">Shenzhen · Nanshan</div></div>
+          <div><div class="kicker">Payment · 付款</div><div class="val">WeChat Pay</div><div class="sub">Paid ¥309.20</div></div>
+          <div><div class="kicker">Fulfilled by · 出货门店</div><div class="val">Tianhe</div><div class="sub">天河店</div></div>
+          <div><div class="kicker">Delivery · 配送</div><div class="val">Courier</div><div class="sub">Ship when ready</div></div>
+        </div>
+
+        <div class="strip">
+          <div class="strip-h"><span class="dot"></span>Waiting on stock at Tianhe <span class="cn">· 天河店等待补货</span></div>
+          <div class="dwrap">
+            <div class="drow">
+              <span class="thumb lg">CH</span>
+              <span><span class="nm" style="font-size:13px;font-weight:600">Choco Hemp Protein Bites</span>
+                <span class="dnums"><span class="sku">3-20</span>needs 2 · 0 free · <b>short 2</b>
+                  <span class="bar"><i style="width:0%"></i></span></span></span>
+              <span class="waited">waiting 4h</span>
+            </div>
+            <div class="drow">
+              <span class="thumb lg">CB</span>
+              <span><span class="nm" style="font-size:13px;font-weight:600">Calm Buckwheat Granola (No Sugar)</span>
+                <span class="dnums"><span class="sku">S(4-360)</span>needs 1 · <span class="ok">3 free</span> · covered
+                  <span class="bar"><i style="width:100%"></i></span></span></span>
+              <span class="waited">restocked</span>
+            </div>
+          </div>
+          <div class="strip-note"><span>Both must be coverable before the order moves — the release check tests
+             <b>every line on the order</b>, not only the two it parked on. Restocking Choco Hemp alone
+             will not release it if another line has sold out since.</span></div>
+          <div class="strip-actions">
+            <button class="btn">Open stock · 查看库存</button>
+            <button class="btn">Cancel + refund · 取消并退款</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="kicker brass" style="margin-bottom:10px">Items &amp; shipments · 商品与发货</div>
+          <div class="ship-card">
+            <div class="ship-head"><span class="mode-pill">Land · 陆运</span>
+              <span class="pill amber"><span class="dot"></span>Held — short 2 units · 待补货</span>
+              <span class="count">7 products · 9 units</span></div>
+            <div class="manifest">
+              <div class="mrow waiting"><span class="num">03</span><span class="thumb lg">CH</span>
+                <span><span class="nm">Choco Hemp Protein Bites</span><span class="mline"><span class="sku">3-20</span><span class="sku">×2 · @ ¥38.00</span>
+                  <span class="chip-wait"><span class="dot"></span>Short 2 · 缺 2 件</span></span></span>
+                <span class="total">¥76.00</span></div>
+              <div class="mrow"><span class="num">04</span><span class="thumb lg">QP</span>
+                <span><span class="nm">Savory Quinoa Patties</span><span class="mline"><span class="sku">3-50</span><span class="sku">×1 · @ ¥43.00</span></span></span>
+                <span class="total">¥43.00</span></div>
+            </div>
+            <div class="ship-foot"><span class="sku">…other rows unchanged</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h3>Answers</h3><p>“How much do I bring in, and is this order about to move?”
+        A line already restocked reads as covered instead of looking still-broken.</p></div>
+      <div class="note"><h3>Watch for</h3><p>Free stock is live and the drawer is not — the numbers are
+        true at open and stale a minute later. Best read as a prompt to check stock, not as the record.</p></div>
+      <div class="note"><h3>Build</h3><p><span class="cost mid">Needs a backend change</span></p>
+        <p>Join <code>getAvailable(store_id, pid)</code> per waiting product into
+        <code>GET /api/retail-admin/orders/:id</code>. “Waiting 4h” needs a parked-at stamp —
+        <code>paid_at</code> is the closest existing column.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ ADD-ON ═════════════════════════════════════════════════════════ -->
+  <section class="screen" id="s-e" role="tabpanel" aria-labelledby="t-e" hidden>
+    <h2>Add-on · Name it in the orders list too</h2>
+    <p class="lede">Independent of A–D, and the same shape as <code>fulfillmentShortBadge</code>: one amber
+       line under the status pill, so the office can triage the restock queue without opening seven drawers.
+       The list endpoint does not select the column yet — one field to add.</p>
+
+    <div class="table-scroll">
+      <div class="list">
+        <div class="lhead"><span>Order #</span><span>Channel</span><span>Customer</span><span>Ship to</span>
+          <span>Total</span><span>Status</span><span>Delivery</span></div>
+        <div class="lrow">
+          <span class="ono">TC000518</span><span>WeChat</span><span>玛丽娜</span>
+          <span>Shenzhen <span class="sku">Nanshan</span></span>
+          <span class="money">¥309.20</span>
+          <span><span class="pill amber"><span class="dot"></span>Awaiting restock</span>
+            <span class="wait-badge">Choco Hemp Protein Bites +1</span></span>
+          <span>Courier — ship when ready<div class="sub" style="font-size:12px;color:var(--text-3)">placed Sep 2</div></span>
+        </div>
+        <div class="lrow">
+          <span class="ono">TC000522</span><span>WeChat</span><span>陈伟</span>
+          <span>Guangzhou <span class="sku">Tianhe</span></span>
+          <span class="money">¥88.00</span>
+          <span><span class="pill amber"><span class="dot"></span>Awaiting restock</span>
+            <span class="wait-badge">Organic Garlic Powder</span></span>
+          <span>Pickup — Tianhe<div class="sub" style="font-size:12px;color:var(--text-3)">placed Sep 2</div></span>
+        </div>
+        <div class="lrow">
+          <span class="ono">TC000524</span><span>WeChat</span><span>Li Na</span>
+          <span>Guangzhou <span class="sku">Haizhu</span></span>
+          <span class="money">¥152.00</span>
+          <span><span class="pill sage"><span class="dot"></span>Paid</span></span>
+          <span>Courier — ship when ready<div class="sub" style="font-size:12px;color:var(--text-3)">placed Sep 2</div></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h3>Answers</h3><p>Two orders both parked on Choco Hemp is a single purchase
+        decision — that only shows when the list names the product.</p></div>
+      <div class="note"><h3>Watch for</h3><p>One name plus a count, never a full list: the cell is
+        already carrying a pill and a delivery line. The drawer holds the detail.</p></div>
+      <div class="note"><h3>Build</h3><p><span class="cost low">One field + a badge</span></p>
+        <p>Add <code>o.awaiting_restock_pids</code> to the orders-list SELECT, then mirror
+        <code>fulfillmentShortBadge()</code>. Names resolve from the row’s own items.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ CLOSING ════════════════════════════════════════════════════════ -->
+  <div class="close">
+    <h2>What ships without touching the backend</h2>
+    <p class="lede">A, B and C are pure front-end work in <code>public/retail-admin/04-orders.js</code>.
+       Only D’s stock maths and the list add-on need a field added to a query.</p>
+    <table class="facts-table">
+      <thead><tr><th>Fact</th><th>Where it comes from</th><th>Already in the drawer?</th></tr></thead>
+      <tbody>
+        <tr><td>Which products parked the order</td>
+            <td><code>awaiting_restock_pids</code> — JSON array of product ids, written at checkout when
+                the customer answers “wait for restock”, and kept after release for audit</td>
+            <td>Yes — <code>SELECT o.*</code></td></tr>
+        <tr><td>Product name, SKU, thumbnail, qty</td>
+            <td>The order’s own <code>items</code>, matched on <code>product_id</code> — the same lookup
+                <code>fulfillmentShortStrip</code> does</td>
+            <td>Yes</td></tr>
+        <tr><td>Why it parked</td>
+            <td><code>fallback_choice = 'wait_for_restock'</code>; a pre-order line parks with no
+                fallback_choice at all, so treat an empty value as “pre-order”, not as an error</td>
+            <td>Yes</td></tr>
+        <tr><td>Free stock and units short</td>
+            <td><code>inventory.getAvailable(store_id, product_id)</code> — not currently joined into
+                the order detail response</td>
+            <td>No — option D only</td></tr>
+        <tr><td>How long it has been parked</td>
+            <td>No parked-at column exists; <code>paid_at</code> is the closest stand-in</td>
+            <td>No — option D only</td></tr>
+      </tbody>
+    </table>
+    <p class="lede" style="margin-top:18px">One behaviour worth stating in whichever option ships: the
+       release check in <code>checkAwaitingRestockForRestock()</code> requires <b>every</b> line on the
+       order to be coverable, not just the parked ones. An order can stay held after its named product
+       lands, and staff should not read that as a bug.</p>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.mock-tab'));
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.classList.toggle('on', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () { select(t); });
+    });
+    select(document.getElementById('t-a'));
+  })();
+</script>
+
+</body>
+</html>
