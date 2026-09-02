@@ -152,6 +152,7 @@ for (const [k, v] of Object.entries(R)) {
   console.log(`\n── ${k}`);
   if (!v) { console.log('   (no notice)'); continue; }
   console.log(`   make_date  ${v.make_date}`);
+  console.log(`   delivery   ${v.delivery_date}`);
   console.log(`   title_en   ${v.title_en}`);
   console.log(`   message_en ${v.message_en}`);
   console.log(`   items      ${v.items.map(i => i.name_en).join(', ')}`);
@@ -196,8 +197,12 @@ check('the promised date is carried in the customer-facing copy',
   () => R.gzZeroOnBatchDay.message_en.includes('2026-08-19')
      && R.gzZeroOnBatchDay.message_cn.includes('2026-08-19'));
 
-check('no delivery date is promised — the local run has no courier day to add',
-  () => R.gzZeroOnBatchDay.delivery_date === undefined);
+check('the arrival is the make day itself — the local run spends no transit day',
+  () => R.gzZeroOnBatchDay.delivery_date === R.gzZeroOnBatchDay.make_date);
+
+check('the promised day is always a FUTURE batch day, so no run has already left',
+  () => R.gzZeroOnBatchDay.delivery_date > '2026-08-17'
+     && R.gzZeroOnOffDay.delivery_date  > '2026-08-18');
 
 // ── The endpoint, mounted and called over HTTP ─────────────────────────────
 // The unit scenarios above call computeLocalFreshNotice directly, so they
@@ -298,6 +303,9 @@ let PORT = 0;
 
   check('the quote names the sold-out fresh item',
     () => !!n && n.items.length === 1 && n.items[0].id === P_FRESH);
+
+  check('the quote carries the same-day arrival too',
+    () => !!n && n.delivery_date === n.make_date);
 
   check('an in-stock Guangzhou cart gets no notice from the endpoint either',
     () => !n2);

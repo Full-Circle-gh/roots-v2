@@ -10935,12 +10935,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
   } catch (e) { console.warn('[batch notice]', e.message); }
 
-  // The same stamp for a Guangzhou order parked on the next batch. It writes
-  // promised_ship_date ONLY: the production day is the whole promise the local
-  // run can make (see computeLocalFreshNotice), and stamping a delivery date we
-  // cannot derive is the over-promise that column exists to prevent. The order
-  // drawer already renders promised_ship_date, so the kitchen and the packers
-  // read the customer's date from the same field either notice wrote it.
+  // The same stamp for a Guangzhou order parked on the next batch. BOTH dates
+  // are written, and they are the same day: the local run delivers the batch it
+  // carries (see computeLocalFreshNotice), so the arrival is not a second date
+  // to derive. The order drawer and the receipt's "Arrives 预计送达" line then
+  // read a Guangzhou order exactly as they read a courier one, off the same two
+  // columns, rather than falling back to the ship date for want of an arrival.
   //
   // The two blocks cannot both stamp one order: computeBatchNotice needs a
   // shipping zone and this needs the local run. Best-effort, like the block
@@ -10961,8 +10961,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         ignoreOrderIds: [...(ownPendingOrderIds || []), orderId] },
     );
     if (localFresh) {
-      tdb().prepare('UPDATE retail_orders SET promised_ship_date = ? WHERE id = ?')
-        .run(localFresh.make_date, orderId);
+      tdb().prepare(
+        'UPDATE retail_orders SET promised_ship_date = ?, promised_delivery_date = ? WHERE id = ?'
+      ).run(localFresh.make_date, localFresh.delivery_date, orderId);
       notifyCustomer(req.customer.id, {
         category: 'order', type: 'batch_delay',
         title_en: localFresh.title_en, title_cn: localFresh.title_cn,
@@ -30261,13 +30262,18 @@ function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
 // 'rolled_store_unknown' means we could not check — which is a reason to stay
 // quiet, not to announce a wait we have not established.
 //
-// NO DELIVERY DATE, deliberately. The courier notice can say "made X, arrives
-// X+1" because the transit leg is a known day. The local run's leg is a slot on
-// the make day itself, and the schedule stores an ORDER cutoff (cutoff_hour),
-// never the hour the kitchen finishes — so whether a batch made on X reaches
-// the shopper on X or X+1 is not a fact this system holds. We name the batch,
-// which is true, and leave the handoff to the run rather than invent an
-// arrival. Give the schedule a kitchen-ready hour and this can promise both.
+// DELIVERY IS THE MAKE DAY. The courier notice adds a transit day because the
+// parcel spends one; the local run spends none — the operator confirmed the
+// batch is finished and goes out on the same day's run, so delivery_date IS
+// make_date rather than a second date derived from it. That is why this does
+// not reuse computeBatchNotice: same cadence, same shared date function, but a
+// zero-day leg instead of a one-day one.
+//
+// The make day is always a FUTURE batch day, never today, so no order can be
+// promised a run that has already left: this fires only on 'rolled_stock', and
+// a zero-stock day is one earliestBatchMakeDate has already rolled past. The
+// day's cutoff_hour rolls it again for a late order. Between them, the day we
+// name is a day the run has yet to make.
 //
 // `opts.storeId` is the store the order would be served from. Without one there
 // is no shelf to check, so we say nothing at all rather than guess a shortage.
@@ -30302,16 +30308,19 @@ function computeLocalFreshNotice(address, productIds, now, slotKind, opts = {}) 
   const fill = (tpl) => tpl.replace(/\{make_date\}/g, makeDate);
   return {
     make_date: makeDate,
+    // Equal to make_date by the zero-day rule above, and carried as its own
+    // field so a caller reads the arrival it needs instead of re-deriving one.
+    delivery_date: makeDate,
     kicker_en: cfg.local_kicker_en || 'Next fresh batch',
     kicker_cn: cfg.local_kicker_cn || '下一批现做',
     title_en:  cfg.local_title_en  || 'Made fresh on ' + makeDate,
     title_cn:  cfg.local_title_cn  || makeDate + ' 新鲜现做',
     message_en: cfg.local_message_en
       ? fill(cfg.local_message_en)
-      : `Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on ${makeDate} — we'll deliver your order as soon as it's ready.`,
+      : `Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on ${makeDate} and we deliver it to you the same day.`,
     message_cn: cfg.local_message_cn
       ? fill(cfg.local_message_cn)
-      : `您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 ${makeDate} 制作下一批 — 制作完成后会尽快为您配送。`,
+      : `您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 ${makeDate} 制作下一批，并于当天为您配送。`,
     // The same freshness reminder the shipping notice carries; the advice does
     // not change because the parcel skipped the courier.
     tip_en: cfg.tip_en || 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.',
