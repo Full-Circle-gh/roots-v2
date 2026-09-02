@@ -378,6 +378,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 function ic(name, size, stroke){
   size = size||20; stroke = stroke||1.75;
   const L = window.lucide;
+  /* kebab → Pascal, and it only strips a hyphen that is followed by a LETTER.
+     A lucide name ending in a digit therefore does NOT resolve: 'trash-2'
+     becomes 'Trash-2', not 'Trash2', and lucide has no such key — so the tile
+     renders EMPTY, with no error anywhere. That cost the Waste row its icon.
+     Every name in this file is digit-free for that reason; if you need one
+     that is not, fix the regex here rather than passing the Pascal name in. */
   const P = String(name).replace(/(^|-)([a-z])/g,(_,__,c)=>c.toUpperCase());
   const node = L && L.icons && L.icons[P];
   const kids = node && Array.isArray(node[2]) ? node[2] : [];
@@ -586,7 +592,14 @@ const state = {
      never reopens carrying the last entry's product. */
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
-       open:false,busy:false,formErr:null,
+       /* `mounted` is the house guard against a sheet that re-enters on every
+          tap. render() rebuilds the whole app with innerHTML, so the .sheet
+          node is DESTROYED AND RECREATED on each keystroke and each chip —
+          and .sheet carries `animation:tSheetUp .4s`, which therefore replays
+          every time and slides the form up from the bottom of the screen
+          again. Same flag, same name, same two lines as poMounted /
+          detailMounted / prodMounted / custMounted. */
+       open:false,mounted:false,busy:false,formErr:null,
        storeId:null,pick:null,qty:1,code:'',note:'',q:'',
        /* TWO sequence counters, not one. The picker and the cost preview are
           two independent races — a keystroke supersedes a keystroke, a
@@ -1119,9 +1132,12 @@ reg('wasteNew', ()=>{
      Panyu and then pressed Record means Panyu. */
   w.storeId = w.store ? Number(w.store) : (stores.length===1 ? stores[0].id : (w.storeId||null));
   if(w.storeId) loadWastePicks();
-  render();
+  /* Paint ONCE with the entrance animation, then arm the guard so every later
+     paint is still. Set after the render, not before it — the same two lines,
+     in the same order, as openPO and openCustomer. */
+  w.mounted=false; render(); w.mounted=true;
 });
-reg('wstClose', ()=>{ state.wst.open=false; state.wst.formErr=null; render(); });
+reg('wstClose', ()=>{ state.wst.open=false; state.wst.mounted=false; state.wst.formErr=null; render(); });
 reg('wstPickStore', id=>{ const w=state.wst;
   if(String(w.storeId)===String(id)) return;
   /* A different shelf holds different stock, so the chosen product and its
@@ -1160,9 +1176,14 @@ reg('wstSave', ()=>{
     /* Say what was recorded INCLUDING the cost that was snapshotted, at the
        moment it happened (§32 rule 10 again). Then refetch: this write moved
        stock, so the pulse and every row's on-hand behind it are now stale. */
-    showToast(saved.is_uncosted
-      ? T('Recorded '+qty+' × '+what+' — no cost on file','已登记 '+what+' × '+qty+' — 暂无成本')
-      : T('Recorded '+qty+' × '+what+' · '+wstMoney(saved.cost_total_cents),'已登记 '+what+' × '+qty+' · '+wstMoney(saved.cost_total_cents)));
+    /* THE TOAST IS A MONEY SURFACE TOO, and it is the one that gets forgotten:
+       the screen behind it can be gated perfectly and this still announces the
+       figure. Same gate, said once more. */
+    showToast(!wstShowMoney()
+      ? T('Recorded '+qty+' × '+what,'已登记 '+what+' × '+qty)
+      : saved.is_uncosted
+        ? T('Recorded '+qty+' × '+what+' — no cost on file','已登记 '+what+' × '+qty+' — 暂无成本')
+        : T('Recorded '+qty+' × '+what+' · '+wstMoney(saved.cost_total_cents),'已登记 '+what+' × '+qty+' · '+wstMoney(saved.cost_total_cents)));
     loadWaste(true); render();
   })
   .catch(e=>{
@@ -2372,7 +2393,7 @@ const MORE_GROUPS=[
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash-2','Waste','损耗'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -3537,6 +3558,23 @@ function screenActivity(){
    ========================================================================== */
 /* Cents in, the tenant's currency out. The ONLY division in this file. */
 const wstMoney=c=>money(CUR,Number(c||0)/100);
+/* WHO MAY SEE WHAT A LOSS COST. The same gate the Recap and Trend already use
+   — a warehouse, dispatch or customer-service account sees no money anywhere
+   in this app — applied to the one screen that had been exempt from it.
+   Ash, 2026-09-02: a warehouse operator records what spoiled; what it cost the
+   business is not their line to read.
+
+   ONE PLACE DECIDES, and every figure asks it: the pulse total, the uncosted
+   count that travels with it, each row's cost, the sheet's preview and the
+   toast after a save. A gate applied to four of those five is not a gate — the
+   fifth is where the number leaks, and the toast is the one everybody forgets.
+
+   NOT A NEW CONCEPT, deliberately. lib/capabilities.js marks `waste:view`
+   itself `money: 'shows'` ("Waste is totalled in money"), which is why this
+   screen showed cost to everyone who could open it. That metadata is now
+   wrong for the roles below and wants separating into its own capability —
+   recorded in docs/tacet-waste-mobile-options.md §7, not invented here. */
+const wstShowMoney=()=>!recapNoMoney();
 /* The same three windows Stock activity offers, ending today in Guangzhou —
    the boundary the server counts its business days on, so "today" here and
    `business_date` there mean the same day. */
@@ -3608,8 +3646,18 @@ function wstProductName(row){
    corrections exist AND that they are not in the number. */
 function wstPulse(){
   const t=state.wst.totals; if(!t) return '';
-  const bits=[`<span class="num" style="color:var(--text-primary);font-weight:500">${wstMoney(t.cost_total_cents)}</span> ${T('written off','已核销')}`];
-  if(Number(t.uncosted_entries||0)) bits.push(`<span class="num" style="color:var(--amber-ink)">${t.uncosted_entries} ${T('with no cost','暂无成本')}</span>`);
+  const bits=[];
+  if(wstShowMoney()){
+    bits.push(`<span class="num" style="color:var(--text-primary);font-weight:500">${wstMoney(t.cost_total_cents)}</span> ${T('written off','已核销')}`);
+    // The uncosted count is a fact ABOUT the money, so it goes with it.
+    if(Number(t.uncosted_entries||0)) bits.push(`<span class="num" style="color:var(--amber-ink)">${t.uncosted_entries} ${T('with no cost','暂无成本')}</span>`);
+  } else {
+    // Without money there is still something worth saying, and it is the one
+    // number this operator put there: how many losses are in the range. An
+    // empty pulse would read as a screen that failed to load its own summary.
+    bits.push(`<span class="num" style="color:var(--text-primary);font-weight:500">${Number(t.entries||0)}</span> ${T(Number(t.entries)===1?'entry':'entries','条记录')}`);
+  }
+  // A void is a correction, not an amount — it is stated to both audiences.
   if(Number(t.voided_entries||0)) bits.push(`<span class="num">${t.voided_entries} ${T('voided','已作废')}</span>`);
   return `<div style="padding:0 16px;font-size:13px;color:var(--text-secondary)">${bits.join(' · ')}</div>`;
 }
@@ -3620,9 +3668,13 @@ function wstPulse(){
 function wstRow(r){
   const voided=r.voided_by_waste_id!=null, reversal=r.reverses_waste_id!=null, mute=voided||reversal;
   const mark = voided ? T('Voided','已作废') : reversal ? T('Reversal','冲销') : '';
-  const cost = r.is_uncosted
-    ? `<span style="color:var(--text-secondary)">${T('No cost','暂无成本')}</span>`
-    : `<span class="num"${mute?' style="color:var(--text-secondary)"':''}>${wstMoney(r.cost_total_cents)}</span>`;
+  /* No cost column at all for a money-blind role — not a blank, not a dash.
+     "No cost" is withheld with the figures: it is a statement about this
+     product's costing, which is the same ledger they may not read. */
+  const cost = !wstShowMoney() ? ''
+    : r.is_uncosted
+      ? `<span style="color:var(--text-secondary)">${T('No cost','暂无成本')}</span>`
+      : `<span class="num"${mute?' style="color:var(--text-secondary)"':''}>${wstMoney(r.cost_total_cents)}</span>`;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0;gap:2px">
       <span style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -3632,7 +3684,7 @@ function wstRow(r){
       ${r.note?`<span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.note)}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none">
-      <span style="font-size:15px;font-weight:500">${cost}</span>
+      ${cost?`<span style="font-size:15px;font-weight:500">${cost}</span>`:''}
       ${/* business_date is the STORE's day (the server's Guangzhou boundary,
            businessDateForLocation); fmtDateOnly says Today/Yesterday against
            the PHONE's. They agree for a phone in the shop's timezone, which is
@@ -3809,21 +3861,40 @@ function sheetWaste(){
   /* The foot says the cost BEFORE the commit, and says "no cost on file" in
      the same slot rather than a zero — so a loss that saves without one is
      heard now and not next week when a total looks wrong. */
+  /* The consequence line. A money-blind operator still gets the half that is
+     theirs — what the shelf will read afterwards — and never the cost. The
+     shelf figure is not money and is the more useful of the two to somebody
+     standing in front of it. */
+  const shelfAfter = w.pick ? `${T('Stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>` : '';
   const costLine = blocked
     ? `<span style="color:var(--amber-ink)">${blocked}</span>`
-    : w.preview
-      ? (w.preview.is_uncosted
-          ? T('No cost on file — it records without one','该产品暂无成本，将不计成本登记')
-          : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`)
-      : '&nbsp;';
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('wstClose')"></div>
-   <div class="sheet" style="top:64px;z-index:46;overflow:hidden">
+    : !wstShowMoney()
+      ? (shelfAfter || '&nbsp;')
+      : w.preview
+        ? (w.preview.is_uncosted
+            ? T('No cost on file — it records without one','该产品暂无成本，将不计成本登记')
+            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`)
+        : '&nbsp;';
+  /* Animate on the way IN and never again. Every tap in this sheet — a store
+     chip, a stepper, a reason, a keystroke in the note — goes through
+     render(), which rebuilds the app with innerHTML and so hands .sheet and
+     .scrim brand-new nodes that replay their entrance. The form slid up from
+     the bottom of the screen on every press. Same guard the other four sheets
+     use. */
+  const noAnim=state.wst.mounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('wstClose')"></div>
+   <div class="sheet" style="top:64px;z-index:46;overflow:hidden;${noAnim}">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('wstClose')">${ic('x',22,2)}</button>
          <span style="flex:1;font-size:17px;font-weight:500">${T('Record waste','记录损耗')}</span>
          <span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
+     ${/* Named so render() can put its scroll position back. This form is
+          taller than the sheet once a product is picked, so the reason chips
+          and the note are BELOW the fold — and without this, reaching them
+          and tapping one threw the sheet back to the top, which is the same
+          "it jumps" the entrance animation was causing one layer up. */''}
+     <div id="mWstBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
        ${storeRow}${product}${w.pick?qty:''}${w.pick?reasons:''}${w.pick?note:''}
        ${/* §1.12 error — a failed write renders where the operator is looking
             and STAYS. Never a toast that flies away: a loss the operator
@@ -7962,7 +8033,16 @@ function pageHead({title, status, cta, back, controls}){
      44px target underneath them that needed the room. */
   return `<div style="border-bottom:1px solid var(--border-default);padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 10px 14px 16px">
     ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
-    <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${right?'0':'10px'}">
+    ${/* A FILLED BUTTON NEEDS MORE ROOM THAN AN ICON DOES, and it is the same
+         10px either way that makes one look right and the other look jammed.
+         The note above is about ICON controls: their glyph is centred in a
+         44px target, so it reads ~11px inside its own box and the band's 10px
+         lands it optically flush. A Dusk slab has no such inset — its painted
+         edge IS the box edge — so at 10px it sits closer to the screen edge
+         than the title does to the other one (16px), which is what "too stuck
+         to the right" is. 6px here + the band's 10px = a 16px gutter that
+         matches the title's. Controls keep 0, and a bare header keeps 10. */''}
+    <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${controls?'0':(cta?'6px':'10px')}">
       <h1 style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
       ${right}
     </div>
@@ -8083,6 +8163,15 @@ function render(){
   const _sc=document.getElementById('content');
   const _keep=(_sc&&screenKey()===_scrollKey)?_sc.scrollTop:0;
   _scrollKey=screenKey();
+  /* A SHEET has its own scroller, and #content's position says nothing about
+     it. The waste form is the first sheet here tall enough to scroll and busy
+     enough to repaint on every tap, so it is the first to need this. Both
+     halves are unconditional and still correct: a sheet that just opened reads
+     0 and restores nothing, and one that just closed has no element to restore
+     into. Only this sheet is named — the others repaint far less and are left
+     exactly as they are. */
+  const _wb=document.getElementById('mWstBody');
+  const _wkeep=_wb?_wb.scrollTop:0;
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
     return;
@@ -8108,6 +8197,7 @@ function render(){
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
+  if(_wkeep){ const b=document.getElementById('mWstBody'); if(b) b.scrollTop=_wkeep; }
   wireDrag();
   wirePull();
   syncHistory();

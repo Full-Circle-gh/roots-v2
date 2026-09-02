@@ -194,9 +194,51 @@ activity in the file — waste is the other stock ledger and reads next to it.
    Guangzhou day boundary Stock activity uses, instead of two native date pickers. The range
    a preset cannot express stays on the desktop.
 
-**Proof:** `scripts/test_mobile_waste.js` — 49 assertions across 18 cases, wired into
+**Proof:** `scripts/test_mobile_waste.js` — 75 assertions across 26 cases, wired into
 `npm run test:mobile`. It holds the API's rules on the surface most likely to forget them:
 cents divided exactly once, `No cost` never rendering as `¥0.00`, the uncosted count
 travelling with the total, empty/no-results/failed as three separate states, every refusal
 named before it is sent, and `waste:record` gating the button while `waste:view` gates the
 screen.
+
+## 7 — Cost is not for every role (2026-09-02, after first contact)
+
+**Ash, on seeing it live: a warehouse or store operator recording waste must not see what
+it cost.** They record what spoiled; what the business lost by it is not their line to read.
+
+The screen now runs every money figure through `wstShowMoney()`, which is the app's
+existing gate — `recapNoMoney()`, i.e. `RECAP_NO_MONEY = ['warehouse','dispatch',
+'customer_service']` — and not a new concept. **Five surfaces carry a figure and all five
+are gated**, because a gate applied to four is not a gate:
+
+1. the pulse total, 2. the uncosted count that travels with it, 3. each row's cost cell,
+4. the record sheet's cost preview, and 5. **the toast after a save** — the one that gets
+forgotten, because the screen behind it can be perfect and the toast still announces the
+number.
+
+A money-blind operator is not left with a blanked-out screen. The pulse counts entries
+instead of yuan, the rows keep what and why and when, and the sheet still says
+*"Stock drops to 14"* — the half of the consequence that is theirs, and the more useful
+half to somebody standing in front of the shelf. `No cost` is withheld **with** the
+figures: it is a statement about that product's costing, which is the same ledger.
+
+### The open question this exposes
+
+`lib/capabilities.js:122` marks **`waste:view` itself `money: 'shows'`** — *"Waste is
+totalled in money."* That is why the cost reached a warehouse phone in the first place, and
+it is now wrong for three roles. The gate above fixes the symptom on the phone; it does not
+fix the model, and two things follow from that:
+
+- **The desktop still shows cost to anyone holding `waste:view`** (`20-waste.js` has no
+  money gate at all). Same defect, other surface, not fixed here.
+- **`store_manager` is unresolved.** It holds `waste:view` and is *not* in
+  `RECAP_NO_MONEY` — `capabilities.js:352` says it "Sees revenue (dashboard pulse +
+  Reports) — their own store is their business." So under this change a store manager
+  still sees waste cost. If it should not, that is a deliberate reversal of a written
+  decision and needs saying, not assuming.
+
+The clean answer to both is to split the money out of `waste:view` into its own capability
+(`waste:costs`, say), have both surfaces read it, and drop `money: 'shows'` from
+`waste:view`. That touches the capability list, the role editor, every tenant's stored
+permissions and the desktop screen — a change worth doing deliberately rather than folded
+into a phone fix.

@@ -165,6 +165,59 @@ const CASES = [
     ['not in More',      `txt('content').indexOf('Waste')===-1`],
     ['nor reachable by naming it', `(APP.cmd('push','waste'), !state.stack.length)`],
   ]],
+  // ── The money gate ─────────────────────────────────────────────────────
+  // A warehouse, dispatch or customer-service account sees no money anywhere
+  // in this app (RECAP_NO_MONEY). Waste was exempt from that until it wasn't:
+  // lib/capabilities.js marks waste:view itself `money: 'shows'`, which is how
+  // the cost column reached a warehouse operator's phone. Five surfaces carry
+  // a figure and all five are checked — a gate applied to four is not a gate.
+  ['a warehouse account sees the losses and none of the money', `state.pos='warehouse';${OPEN}`, [
+    ['the rows are still there',   `txt('content').includes('Oat milk 1L')`],
+    ['and still say what and why', `txt('content').includes('4 × · Spoiled · Tianhe')`],
+    ['no cost on any row',         `!txt('content').includes('¥96')`],
+    ['no total',                   `!txt('content').includes('written off')`],
+    ['not even the currency mark', `txt('content').indexOf('¥')===-1`],
+    // "No cost" is a statement about this product's costing — the same ledger
+    // they may not read — so it is withheld with the figures, not left behind.
+    ['nor the uncosted flag',      `!txt('content').includes('No cost')`],
+    // An empty pulse would read as a summary that failed to load.
+    ['the pulse still counts the work', `txt('content').includes('entries')`],
+    ['and still names corrections',     `txt('content').includes('voided')`],
+  ]],
+  ['dispatch and customer service are gated the same way', `state.pos='dispatch';${OPEN}`, [
+    ['no money', `txt('content').indexOf('¥')===-1`],
+  ]],
+  ['the record sheet shows a warehouse the shelf, not the cost', `state.pos='warehouse';${FORM}`, [
+    ['no cost preview',        `!sheetText().includes('Cost')`],
+    ['no figure at all',       `sheetText().indexOf('¥')===-1`],
+    // The half that IS theirs: what the shelf reads afterwards.
+    ['what the shelf will say', `sheetText().includes('Stock drops to')`],
+    ['and it can still be recorded', `!/disabled/.test(document.querySelector('.sheet .cta').outerHTML)`],
+  ]],
+  ['an owner still sees every figure', `state.pos='default';${OPEN}`, [
+    ['the total',    `txt('content').includes('¥256 written off')`],
+    ['the rows',     `txt('content').includes('¥96')`],
+    ['the uncosted flag', `txt('content').includes('No cost')`],
+  ]],
+  // render() rebuilds the app with innerHTML, so .sheet is a NEW node on every
+  // tap and replays `animation:tSheetUp .4s` — the form slid up from the
+  // bottom of the screen on every chip press. The guard is the flag; the
+  // assertion is that a repaint after the open carries animation:none.
+  ['the sheet enters once and then holds still', FORM, [
+    ['armed after the first paint', `state.wst.mounted===true`],
+    ['the sheet does not re-enter',  `/animation:\\s*none/.test(document.querySelector('.sheet').outerHTML)`],
+    ['nor does the scrim',           `/animation:\\s*none/.test(document.querySelector('.scrim').outerHTML)`],
+  ]],
+  ['opening it fresh does animate', `${OPEN}APP.cmd('wasteNew');state.wst.mounted=false;render();`, [
+    ['no suppression on the way in', `!/animation:\\s*none/.test(document.querySelector('.sheet').outerHTML)`],
+  ]],
+  // The form is taller than the sheet once a product is picked, so the reason
+  // chips and the note sit below the fold. Without a named scroller, reaching
+  // them and tapping one threw the sheet back to the top.
+  ['the sheet body is named so its scroll survives a repaint', FORM, [
+    ['it has an id',        `!!document.getElementById('mWstBody')`],
+    ['and it is a scroller', `getComputedStyle(document.getElementById('mWstBody')).overflowY==='auto'`],
+  ]],
   ['in Chinese', `LANG='zh';${OPEN}`, [
     ['the ledger',   `txt('content').includes('损耗')||txt('content').includes('燕麦奶')`],
     ['the reason',   `txt('content').includes('变质')`],
