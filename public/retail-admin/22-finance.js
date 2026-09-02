@@ -454,8 +454,15 @@ function finTxRow(r) {
     // refusal, unchanged by the write half. A typed row gets Edit, and only when
     // the operator holds the pen: `can` is the client half of the same gate
     // cap-routes.js applies to the request.
+    // A PO the opener cannot serve gets NO LINK rather than one that fails.
+    // Both realms post to this ledger and share `purchase_orders`; Purchasing's
+    // opener serves retail scope only. The row keeps its figure and its
+    // Posted-by-Purchasing mark either way — §36 hides no money — and no new
+    // string is minted to explain the absence, there being no locked pair for
+    // one and Rule 4 forbidding composing it.
     + '<td>' + (po
-      ? `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`
+      ? (r.po_open === false ? ''
+        : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
@@ -475,10 +482,27 @@ function finTxDay(d) {
 
 /* The row action. Purchasing owns the record; Finance links to it. §36: "It is
    not editable here because it is not edited here, and the place it IS edited
-   is one click away on the row itself." */
+   is one click away on the row itself."
+
+   THE TAB SWITCH COMES FIRST, AND IS NOT CONDITIONAL ON THE OPENER. This read
+   `if (window.puOpenPO) return puOpenPO(poId);` before the switch — and
+   `window.puOpenPO` is ALWAYS defined, 16-purchasing.js being loaded on every
+   page of this admin, so the `goTab` line beneath it was unreachable. The order
+   was fetched and painted into a section that was not on screen, and the
+   operator, still looking at Finance, saw the click do nothing at all.
+
+   Both calls, in this order: the section the paint lands in has to be the
+   section being looked at. `goTab` is the house shape for a cross-tab open
+   (`paOpenRecipe` on Products does the same two lines). */
 window.finTxOpenPO = function finTxOpenPO(poId) {
-  if (window.puOpenPO) return puOpenPO(poId);
-  if (window.goTab) goTab('purchasing');
+  const id = Number(poId);
+  if (!id) return;
+  try {
+    if (typeof goTab === 'function') goTab('purchasing');
+    if (typeof window.puOpenPO === 'function') puOpenPO(id);
+  } catch (e) {
+    console.error('[finance] could not open purchase order', id, e);
+  }
 };
 
 function finTxRender() {

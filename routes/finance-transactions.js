@@ -272,17 +272,30 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
     // category'", because at one nothing was collapsed and a note would assert a
     // breakdown that does not exist. The client applies that rule; the count is
     // reported honestly either way.
+    //
+    // `scope` IS SELECTED BECAUSE NOT EVERY PO ON THIS ROW CAN BE OPENED. The
+    // kitchen and retail realms SHARE the `purchase_orders` table and are told
+    // apart only by this column — `COALESCE(scope,'kitchen')`, the same
+    // expression `getRetailPO` filters on. Both realms' posters write
+    // `expense_entries.po_id`, so a kitchen order (PO-0050) lands in this ledger
+    // exactly as a retail one (RPO-0003) does, and it belongs here: it is real
+    // money out. But Purchasing's own opener serves retail scope only and
+    // answers `not_found` for the rest, so the row must not offer an action that
+    // cannot complete — §36: "the row explains its own constraint instead of
+    // merely enforcing it", and a link that fails is the fault that rule names.
+    // The row still renders, still counts, and still says Posted by Purchasing.
     const posted = db.prepare(`
       SELECT e.po_id                       AS po_id,
              po.po_number                  AS po_number,
              po.date                       AS date,
              COALESCE(SUM(e.amount), 0)    AS amount,
              COUNT(DISTINCT e.category)    AS categories,
-             COUNT(*)                      AS rows_collapsed
+             COUNT(*)                      AS rows_collapsed,
+             COALESCE(po.scope, 'kitchen') AS po_scope
         FROM expense_entries e
         JOIN purchase_orders po ON po.id = e.po_id
        WHERE e.po_id IS NOT NULL AND po.date BETWEEN ? AND ?
-       GROUP BY e.po_id, po.po_number, po.date
+       GROUP BY e.po_id, po.po_number, po.date, COALESCE(po.scope, 'kitchen')
        ORDER BY po.date DESC, e.po_id DESC`).all(from, to);
 
     // ── The income category list ──
@@ -329,6 +342,8 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
         amount: fen(r.amount),
         source: 'po', po_id: r.po_id, po_number: r.po_number,
         categories: r.categories || 0,
+        // Whether THIS screen's link can reach it, not a fact about the order.
+        po_open: r.po_scope === 'retail',
       })),
     ].sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0)
                   || String(b.id).localeCompare(String(a.id)));

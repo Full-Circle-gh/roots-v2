@@ -231,7 +231,7 @@ new vm.Script(
 ).runInContext(ctx);
 
 const poRow = { kind: 'out', id: 'po-50', date: '2026-08-30', subject: 'PO-0050',
-  amount: 1257.68, source: 'po', po_id: 50, categories: 2 };
+  amount: 1257.68, source: 'po', po_id: 50, categories: 2, po_open: true };
 const poOne = { ...poRow, id: 'po-51', subject: 'PO-0051', amount: 385, po_id: 51, categories: 1 };
 const manualRow = { kind: 'out', id: 5, date: '2026-08-05', subject: 'Rent', amount: 8000, source: 'manual' };
 
@@ -590,6 +590,69 @@ it('a typed NOTE is never split — only a category is', () => {
   // character, so the test is identity with the row's own category.
   assert.ok(/subj !== r\.category\) return subj/.test(CLIENT_CODE),
     'a subject that is not the category must render verbatim');
+});
+
+it('the PO link switches the tab BEFORE it paints the order', () => {
+  // The reported break. This read `if (window.puOpenPO) return puOpenPO(poId);`
+  // ahead of the switch, and window.puOpenPO is ALWAYS defined — 16-purchasing
+  // loads on every page of this admin — so the goTab line beneath it could
+  // never run. The order was fetched and painted into a section that was not on
+  // screen, and the click looked like it did nothing.
+  const order = [];
+  const cctx = vm.createContext({
+    document: { getElementById: () => null, querySelectorAll: () => [] },
+    escapeHtml: (x) => String(x),
+    console,
+    goTab: (t) => order.push('goTab:' + t),
+    // Both as bare globals AND on `window`: the browser's `window.puOpenPO = …`
+    // makes one identifier, and the call site uses the bare form.
+    puOpenPO: (id) => order.push('open:' + id),
+    window: {},
+  });
+  cctx.window.goTab = cctx.goTab;
+  cctx.window.puOpenPO = cctx.puOpenPO;
+  vm.runInContext(CLIENT.slice(CLIENT.indexOf('window.finTxOpenPO'),
+    CLIENT.indexOf('function finTxRender')), cctx);
+  cctx.window.finTxOpenPO(50);
+  assert.deepStrictEqual(order, ['goTab:purchasing', 'open:50'],
+    'the tab must be switched first, and the order opened second');
+
+  // Neither call may be skipped because the other is missing.
+  assert.ok(!/if \(window\.puOpenPO\) return/.test(CLIENT_CODE),
+    'an early return on the opener is what made the tab switch dead code');
+});
+
+it('the cold-start open is sequential, not a race with puInit', () => {
+  // puInit ends by setting _screen='orders' and painting THE LIST after its
+  // three loads. Opened cold from Finance, that paint would land on top of the
+  // order — decided by which fetch happened to resolve last.
+  const PU = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '16-purchasing.js'), 'utf8');
+  const open = PU.slice(PU.indexOf('window.puOpenPO = async function'),
+    PU.indexOf('function paintWizard'));
+  assert.ok(/if \(!_init && typeof window\.puInit === 'function'\)[\s\S]*await window\.puInit\(\)/.test(open),
+    'a cold open must await the module load before it paints the order');
+  // Only cold: once _init is true, refresh() repaints solely while _screen is a
+  // list screen, so it cannot overwrite this one whichever way the two resolve.
+  assert.ok(/if \(_screen === 'orders' \|\| _screen === 'suppliers'\) paint\(\)/.test(PU),
+    'refresh must stay screen-conditional — the warm path depends on it');
+});
+
+it('a PO the opener cannot serve offers no link at all', () => {
+  // Both realms post to this ledger and SHARE `purchase_orders`; getRetailPO
+  // serves scope='retail' only and answers not_found for the rest. §36: "the
+  // row explains its own constraint instead of merely enforcing it" — a link
+  // that fails is the fault that rule names.
+  const kitchen = { ...poRow, po_open: false };
+  const html = ctx.finTxRow(kitchen);
+  assert.ok(!/Open purchase order/.test(html), 'no link on a PO this screen cannot open');
+  assert.ok(!/finTxOpenPO/.test(html), 'and no handler either');
+  // The money and the mark stay: §36 hides no money from the ledger.
+  assert.ok(/Posted by Purchasing/.test(html), 'the row still says who wrote it');
+  assert.ok(html.includes(ctx.finTxAmount(kitchen)), 'and still carries its figure');
+  // The route must actually say which is which, on the shared column.
+  assert.ok(/COALESCE\(po\.scope, 'kitchen'\) AS po_scope/.test(ROUTE_CODE),
+    'the scope must be read, not assumed');
+  assert.ok(/po_open: r\.po_scope === 'retail'/.test(ROUTE_CODE), 'and reported');
 });
 
 it('nothing in the form touches localStorage', () => {
