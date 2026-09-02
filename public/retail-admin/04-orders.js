@@ -5139,7 +5139,13 @@ function ordItemsTotal(o) {
 }
 // Does the order total agree with the items listed under it? Mirrors
 // totalDisagreement() on the server, tolerance included: ¥5 or 30% of the basket,
-// which absorbs packing, delivery and an ordinary promotion.
+// which absorbs packing, delivery and an ordinary promotion — plus, unlike the
+// server version (which only ever sees a channel's own total vs its own lines),
+// points/voucher/wallet redemption, since this drawer also renders the store's
+// own orders where a customer can legitimately pay most of the basket with
+// points. Order 1557 (¥546 of items, ¥522 redeemed in points, ¥10 packing) has
+// no disagreement at all — 546 + 10 − 522 = 34, exactly o.total — but comparing
+// raw items to o.total ignored the redemption and flagged it as one anyway.
 //
 // This exists because the drawer had no way to be wrong OUT LOUD. On
 // EL20260901417897 it printed "¥17.50 · subtotal ¥17.50 · shipping ¥0.00" as a hero
@@ -5152,7 +5158,10 @@ function ordMoneyGap(o) {
   const items = ordItemsTotal(o);
   const total = Number(o && o.total);
   if (items == null || !Number.isFinite(total)) return null;
-  const gap = Math.round((items - total) * 100) / 100;
+  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0);
+  const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
+  const expected = Math.round((items + surcharges - deductions) * 100) / 100;
+  const gap = Math.round((expected - total) * 100) / 100;
   if (Math.abs(gap) <= Math.max(5, items * 0.3)) return null;
   return { items, total, gap };
 }
@@ -5218,11 +5227,19 @@ function renderOrderTotalBanner(o) {
 // incomplete and says so — it never prints a derived commission/income figure
 // that would silently disagree with the channel.
 //
-// channel_discount is written by Meituan's ingest but never by Eleme's (the
-// discount is baked into Eleme's own total with no column of its own) — on an
-// Eleme order carrying a real merchant discount this reconciliation is honestly
-// incomplete, which is a known ingest gap and not something this read-only
-// panel invents a number to paper over.
+// channel_discount is written by BOTH ingests now — Meituan's always has, and
+// Eleme's does since PR #209, out of settlementInfo.merchantActivityInfo.total.
+// (This paragraph said the opposite while that was still true; #209 is the
+// change that stopped it being true, so it is corrected here rather than left
+// to mislead the next reader of a panel it describes.)
+//
+// The incomplete state it described has NOT gone away, and the arithmetic above
+// is still what decides it. An Eleme order mirrored before #209 has no discount
+// recorded and cannot reconcile until the backfill runs
+// (scripts/repair_eleme_ingest_backfill.js), and either channel leaves the
+// column NULL when the platform never named a promotion. Neither is a number
+// this read-only panel may invent — it shows the rows it has and says the
+// breakdown is incomplete.
 function channelMoneyBreakdown(o) {
   const items      = Number(o.subtotal) || 0;
   const packaging  = Number(o.packing_fee) || 0;
@@ -8532,7 +8549,18 @@ function ordNewFulChange() {
   }
   ONW.ful = ft;
   // Delivery, collection and counter are three different fee answers — re-quote
-  // rather than carrying the previous choice's numbers into this one.
+  // rather than carrying the previous choice's numbers into this one. Shipping
+  // specifically cannot survive the switch: nothing ships on a pickup or a
+  // counter sale, and ordNewFees() only refills a field the operator has NOT
+  // typed into — a shipping number keyed in while this was 'delivery' would
+  // otherwise sit in the box, unrelated to the new fulfilment, until the
+  // server refuses it. Un-typing it here lets the re-quote below give the
+  // honest answer (0, same as the fee engine) instead of the leftover.
+  if (ft !== 'delivery') {
+    const ship = document.getElementById('onw-ship');
+    if (ship) ship.value = '0';
+    if (ONW.feeTouched) ONW.feeTouched.ship = false;
+  }
   ordNewFees();
 }
 
@@ -8960,6 +8988,7 @@ const ONW_ERR_WHERE = {
   pos_closed_for_store: 'route',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
+  shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
 };
 function ordNewClearErrors() {
   ONW_ERR_SLOTS.forEach(k => {
@@ -9034,6 +9063,11 @@ function ordNewErrText(code, detail) {
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),
+    // Nothing ships on a pickup or a counter sale, so a leftover shipping number
+    // (typed while this was a delivery, then carried across the fulfilment
+    // switch) is refused rather than stored (retail.js, beside the address rule).
+    shipping_fee_not_allowed_for_pickup: cuT('A pickup order cannot carry a shipping fee. Clear it or set it to 0.', '自提订单不能收取运费,请清空或设为 0。'),
+    shipping_fee_not_allowed_for_counter: cuT('A counter sale cannot carry a shipping fee. Clear it or set it to 0.', '前台销售不能收取运费,请清空或设为 0。'),
     // Client-only — the server has no such rule. A Guangzhou order's district is
     // what decides rider vs courier, so "city-wide" is not an answer here.
     district_required_for_gz: cuT('Pick the Guangzhou district — it decides whether this goes by rider or by courier.',

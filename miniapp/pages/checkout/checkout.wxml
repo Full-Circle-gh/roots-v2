@@ -1163,7 +1163,7 @@
       <view class="bn-timeline">
         <view class="bn-tl-step">
           <view class="bn-tl-dot bn-tl-dot--arrive"></view>
-          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '现做当天送达' : 'MADE &amp; DELIVERED' }}</view>
+          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '现做当天送达' : 'MADE & DELIVERED' }}</view>
           <view class="bn-tl-date f-bear">{{localFreshNotice.delivery_date}}</view>
         </view>
       </view>

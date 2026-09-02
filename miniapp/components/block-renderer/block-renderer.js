@@ -50,16 +50,6 @@ function loopZigzag(teeth = 14, depth = 3.4) {
   return `polygon(${pts.join(', ')})`;
 }
 
-// Cream cap with a sawtooth BOTTOM edge for the flash-sale design directions
-// (classic/editorial/urgency). Flat across the top; teeth point down into the
-// coral band. Applied as an inline clip-path on the .fsd-zig cap element.
-function fsdZigClip(teeth = 24) {
-  const s = 100 / teeth;
-  const pts = ['0% 0%', '100% 0%'];
-  for (let i = teeth; i >= 0; i--) pts.push(`${(i * s).toFixed(2)}% ${i % 2 ? '42%' : '100%'}`);
-  return `polygon(${pts.join(', ')})`;
-}
-
 const COLOR_MAP = {
   'lime-leaf':   '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
   'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
@@ -954,7 +944,6 @@ Component({
               styleVars: sv,
               corner: b.corner_radius || 'subtle',
               pulse: b.urgency === 'frantic',
-              zigClip: fsdZigClip(),
               kicker: lang.pick(b.kicker_en, b.kicker_cn, L),
               title: lang.pick(b.title_en, b.title_cn, L),
               shop: lang.pick(b.cta_label_en, b.cta_label_cn, L),

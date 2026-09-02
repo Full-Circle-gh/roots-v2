@@ -14,6 +14,7 @@
     "test:eleme-orders": "node scripts/test_eleme_order_parse.js",
     "test:eleme-order-fees": "node scripts/test_eleme_order_fees.js",
     "test:eleme-fee-backfill": "node scripts/test_eleme_fee_backfill.js",
+    "test:eleme-ingest-backfill": "node scripts/test_eleme_ingest_backfill.js",
     "test:channel-money-panel": "node scripts/test_channel_money_panel.js",
     "test:manual-order-fees": "node scripts/test_manual_order_fees.js",
     "test:mobile-screens": "node scripts/test_mobile_screens.js",
