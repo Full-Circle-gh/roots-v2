@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.9 · 2026-09-01
+# Tacet desktop patterns — v4.10 · 2026-09-01
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -641,7 +641,7 @@ So the real risk is narrow: **Latin-left + Chinese-right** external text — an 
 
 *(Surfaced only when the survey was asked "what did you leave out because it seemed obvious?" — it had been treated as ambient knowledge. It is the highest-consequence invisible rule in the product.)*
 
-### 1.12 States — every page ships all six
+### 1.12 States — every page ships all seven
 
 - **Loading** — the region's skeleton at `--td-raised`, settling. **No spinners.** The waveform is for app launch and page-level loads only. **Only on a real load** — a poller refresh never shows it, never flashes, never puts a placeholder over data that is already on screen.
 - **Silent refresh** — pollers repaint in place. Changed rows fade; nothing turns red on arrival.
@@ -1733,6 +1733,16 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.10 · 2026-09-01.*
+
+**v4.10 changes — §1.12's heading is corrected to say SEVEN. No rule is added, removed or altered; the seventh state was added in v4.9 and the heading was not updated with it.**
+
+### §1.12 — the heading never counted the state below it
+
+**v4.9 added *Not recorded* as a seventh state and left the heading reading *every page ships all six*.** A rule whose own heading undercounts it is a rule a reader can satisfy and still miss a state, which is the failure §1.12 exists to prevent. The heading now reads **all seven**. Nothing beneath it changes. **The other occurrences of "all six" in this document are untouched and correct** — §2 and §3 count Worklist pages and archetype header diagrams, not states.
 
 ---
 
