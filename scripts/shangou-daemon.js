@@ -49,7 +49,7 @@ const { latchStore } = require('../lib/alert-latch');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
-const { storeHours, within } = require('../lib/store-hours');
+const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hours');
 
 const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -70,6 +70,11 @@ const MAP_REFRESH_MS = 60 * 60_000; // re-map by 货号 hourly so new products s
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 const OPEN_GRACE_MIN = 15;
+// Sync starts this far before opening when the store carries no explicit
+// "Sync starts · 同步开始" time — same reasoning as the 外卖 daemon: 闪购 pre-orders
+// are placed before the shop opens, so the stock they see has to be live by then.
+// Unset → the shared default in lib/store-hours.
+const PREOPEN_LEAD_MIN = envLeadMin(process.env.SHANGOU_PREOPEN_LEAD_MIN);
 
 // Per-store opening hours (Asia/Shanghai); outside these we don't poll/push.
 // The real hours live on the store's own row — retail_stores.open_time /
@@ -94,12 +99,16 @@ const LEGACY_STORE_HOURS = {
 const FORCE_OPEN_UNTIL = Number(process.env.SHANGOU_FORCE_OPEN_MINUTES) > 0
   ? Date.now() + Number(process.env.SHANGOU_FORCE_OPEN_MINUTES) * 60_000 : 0;
 
+// Inside the store's SYNC window — opening hours widened at the front by its
+// "Sync starts · 同步开始" time (or the default pre-open lead). openGraceMin: 0
+// because syncWindow already folded the front grace into its start.
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
   // Re-read every call: storeHours() serves its own cache, so this is cheap and
   // picks up an admin edit within CACHE_MS without a restart.
   const hours = storeHours(storeCode) || LEGACY_STORE_HOURS[storeCode] || null;
-  return within(hours, { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+  const win = syncWindow(hours, { leadMin: PREOPEN_LEAD_MIN, graceMin: OPEN_GRACE_MIN });
+  return within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 function jitter(baseMs, frac = 0.3) {
   const spread = baseMs * frac;

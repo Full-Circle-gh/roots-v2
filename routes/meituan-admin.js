@@ -151,7 +151,13 @@ router.get('/api/retail-admin/meituan/stores', requireRetailAdmin, (req, res) =>
     const stores = db.prepare(`
       SELECT id, code,
              COALESCE(name_cn, name_en, code) AS name,
-             COALESCE(name_en, name_cn, code) AS nameEn
+             COALESCE(name_en, name_cn, code) AS nameEn,
+             -- The sync window the daemon works this store in, so the tab can
+             -- both show it and let an operator move its start (pre-orders come
+             -- in before the doors open — see lib/store-hours.js).
+             open_time  AS openTime,
+             close_time AS closeTime,
+             sync_start_time AS syncStartTime
         FROM retail_stores
        ORDER BY sort_order, id
     `).all();

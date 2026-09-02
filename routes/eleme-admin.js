@@ -129,6 +129,11 @@ router.get('/api/retail-admin/eleme/stores', requireRetailAdmin, (req, res) => {
     const stores = db.prepare(`
       SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
              COALESCE(s.name_en, s.name_cn, s.code) AS nameEn,
+             -- The sync window the daemon works this store in, so the tab can
+             -- show it and let an operator move its start (pre-orders arrive
+             -- before the doors open — see lib/store-hours.js).
+             s.open_time AS openTime, s.close_time AS closeTime,
+             s.sync_start_time AS syncStartTime,
              e.shop_id, e.shop_name,
              (e.shop_id IS NOT NULL AND e.shop_id <> '') AS connected
         FROM retail_stores s

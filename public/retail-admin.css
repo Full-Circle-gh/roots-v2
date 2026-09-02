@@ -5839,6 +5839,15 @@
   .mt-storeline .nm, .el-storeline .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
   .mt-storeline .st, .el-storeline .st { font: 400 15px var(--f-sans); color: var(--td-text2); flex: 1 1 240px; min-width: 0; }
   .mt-storeline.att .st, .el-storeline.att .st { color: var(--td-amber-ink); }
+  /* When the daemon starts syncing this store. It sits ON the store's own line
+     because that is the row the operator reads its sync state off - and because
+     the answer to "why was stock stale for the 9am pre-orders" is set here. The
+     hint carries the time blank resolves to, so an empty field is never a guess. */
+  .mt-syncstart, .el-syncstart { display: flex; align-items: center; gap: 8px; flex: none; }
+  .mt-syncstart .lb, .el-syncstart .lb { font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
+  .mt-syncstart input[type="time"], .el-syncstart input[type="time"] { font: 400 14px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 10px; }
+  .mt-syncstart .hint, .el-syncstart .hint { font: 400 12px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
+
   /* A blocked Eleme store is unblocked by naming its shop, so that line carries
      a field and a button rather than only a state. */
   .el-storeline .shopinp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; max-width: 176px; }

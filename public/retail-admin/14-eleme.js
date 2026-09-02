@@ -185,7 +185,13 @@
     // unblocks it. Replaces the single notice — a notice could only ever show
     // the FIRST unwell store, and it said nothing at all about a healthy one.
     const lines = document.getElementById('el-storelines');
-    if (lines) {
+    // These lines carry editable fields (the shop-id box, and now Sync from) and
+    // the block is repainted on a poll. Repainting the field an operator is
+    // typing into would drop the half-typed value, so a focused field inside it
+    // holds the repaint until they leave.
+    const editing = !!lines && !!document.activeElement
+      && lines.contains(document.activeElement);
+    if (lines && !editing) {
       lines.innerHTML = rows.map(st => {
         const what = EL_BLOCK_TXT[st.blockedBy] || ['is not syncing', '同步已停'];
         // The name and size pickers read the cached catalogue, so how fresh it
@@ -216,11 +222,80 @@
             : '<code class="el-cmd">node scripts/eleme-login.js ' + esc(st.code) + ' ' + esc(st.shopId || '') + '</code>';
         return '<div class="el-storeline' + cls + '">' +
             '<span class="dot"></span><span class="nm">' + esc(elStoreName(st)) + '</span>' +
-            '<span class="st">' + esc(state) + '</span>' + act +
+            '<span class="st">' + esc(state) + '</span>' + elSyncStartCtl(st.code) + act +
           '</div>';
       }).join('');
     }
   }
+
+  // ── When this store starts syncing each day ───────────────────────────────
+  // Same field, same reasoning as the Meituan tab (public/retail-admin/11-meituan.js):
+  // stock only moves while the daemon considers the store inside its sync window,
+  // and customers place PRE-ORDERS hours before a shop opens. A store whose stock
+  // woke minutes before opening was quoting yesterday's numbers to all of them,
+  // and the oversell shows up as a refund rather than as anything visible here.
+  //
+  // It writes retail_stores.sync_start_time — the store's own row — so 饿了么,
+  // 外卖 and 闪购 all read one setting. Blank keeps the default lead before
+  // opening, and the hint says what blank resolves to for this store.
+  const EL_SYNC_LEAD_MIN = 120; // mirrors DEFAULT_PREOPEN_LEAD_MIN in lib/store-hours.js
+
+  function elHm(mins) {
+    const m = ((mins % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  }
+  function elParseHm(v) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? '' : v).trim());
+    if (!m) return null;
+    const mins = (+m[1]) * 60 + (+m[2]);
+    return mins >= 0 && mins < 1440 ? mins : null;
+  }
+  // Mirrors syncWindow() in lib/store-hours.js, clamp included: a start later
+  // than opening reads as opening, so a mistyped time can't mute the morning.
+  // null = no opening hours on file, which the daemon treats as always-on.
+  function elEffectiveSyncStart(store) {
+    const explicit = elParseHm(store && store.syncStartTime);
+    const open = elParseHm(store && store.openTime);
+    if (explicit != null) return elHm(open != null ? Math.min(explicit, open) : explicit);
+    if (open == null) return null;
+    return elHm(Math.max(0, open - EL_SYNC_LEAD_MIN));
+  }
+
+  function elSyncStartCtl(code) {
+    const st = _stores.find(s => s.code === code);
+    if (!st || !st.id) return '';   // stores not loaded yet — the next paint has it
+    const eff = elEffectiveSyncStart(st);
+    const hint = eff
+      ? cuT('from ' + eff, eff + ' 起')
+      : cuT('no opening hours set — syncs all day', '未设营业时间 — 全天同步');
+    const tip = cuT(
+      'When this store starts syncing each day. Customers pre-order before you open, so set it earlier than opening. Blank = 2 h before opening.',
+      '每天从几点开始同步该门店。顾客会在开门前下预订单,建议设置在开门之前。留空 = 开门前 2 小时。');
+    return '<label class="el-syncstart" title="' + esc(tip) + '">' +
+      '<span class="lb">' + esc(cuT('Sync from', '同步开始')) + '</span>' +
+      '<input type="time" value="' + esc(st.syncStartTime || '') + '"' +
+      ' onchange="elSetSyncStart(\'' + esc(code) + '\', this.value)">' +
+      '<span class="hint">' + esc(hint) + '</span>' +
+      '</label>';
+  }
+
+  window.elSetSyncStart = async function (code, value) {
+    const st = _stores.find(s => s.code === code);
+    if (!st || !st.id) return;
+    const prev = st.syncStartTime || null;
+    st.syncStartTime = value || null;   // optimistic: the hint moves with it
+    try {
+      await api('/api/retail-admin/stores/' + st.id, {
+        method: 'PATCH', body: { sync_start_time: value || null },
+      });
+      const eff = elEffectiveSyncStart(st);
+      toast(cuT('Syncing this store from ' + (eff || '—'), '该门店 ' + (eff || '—') + ' 起同步'), 'success');
+    } catch (e) {
+      st.syncStartTime = prev;
+      toast(cuT('Could not save the sync start: ', '同步开始时间保存失败:') + e.message, 'error');
+    }
+    elLoadStatus();
+  };
 
   // ── Which group a product is in ────────────────────────────────────────────
   // The axis is CAN THIS MAPPING REACH THE RIGHT LISTING — not whether the sync
