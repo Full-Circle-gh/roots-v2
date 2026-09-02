@@ -1,6 +1,6 @@
 // Finance — the Transactions ledger.
 //
-// docs/tacet-consolidation-decisions.md §36 (v4.118) governs what this reads.
+// docs/tacet-consolidation-decisions.md §36 (v4.121) governs what this reads.
 // The screen is public/retail-admin/22-finance.js; the layout comes from
 // reference/finance-transactions-mockup.html, with two approved departures
 // recorded there and repeated below.
@@ -22,12 +22,23 @@
 // "the only surface where a person types", and it argues PO rows must not be
 // hidden because "Transactions would then hold only what people typed".
 //
+// THERE IS NO DATE FLOOR, AND THE WINDOW IS THE ONLY BOUND. §36, *Finance is
+// not floored at the cutover date* (DECIDED 2026-09-02): both ledgers are read
+// for whatever periods they cover. `resolveWindow` is the whole of the date
+// logic below — there is no `>= '2026-08-01'`, no cutover constant, and none is
+// to be added. Production holds 111 expense rows across May, June and July
+// totalling ¥180,332.28, and a screen that hid them to keep the cost line
+// uniform would be less true than one that shows the spending and marks the
+// missing line as missing.
+//
 // A CONSEQUENCE, RECORDED SO IT IS NOT READ AS A BUG: `income_entries` holds 26
-// rows covering June and July 2026, and Tacet's Finance counts from 1 August.
-// **So the money-in list is empty until somebody types a row.** That is the
-// ordinary §1.12 empty state — something will arrive as soon as non-sale income
-// is recorded — and NOT the seventh state, which is for information that was
-// never captured and is not coming.
+// rows covering 13 June to 31 July 2026 and NOTHING after it. **So the money-in
+// list is empty in any window that starts in August or later** — the default
+// trailing 30 days among them — **until somebody types a row**, while a window
+// widened back over June or July shows those 26. That is the ordinary §1.12
+// empty state — something will arrive as soon as non-sale income is recorded —
+// and NOT the seventh state, which is for information that was never captured
+// and is not coming.
 //
 // ── TWO DIRECTIONS, AND THERE IS NO THIRD ──────────────────────────────────
 // §36, *Settlement receipts are excluded from Finance entirely*: a platform
@@ -91,6 +102,11 @@ function readBody(body, db) {
   // produce — and minting a bilingual pair for a state the UI cannot reach would
   // be composing Chinese under Rule 4 for nobody to read.
   if (!TABLE[kind]) return { error: ERR.notFound };
+  // SHAPE ONLY, AND DELIBERATELY NO RANGE. §36, *Finance is not floored at the
+  // cutover date*: a person may legitimately correct an old row, so neither this
+  // path nor the PUT above it refuses a date for being early. There is no floor
+  // here and none on the form's `<input type="date">`, which carries no `min`
+  // for the same reason.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.date || ''))) return { error: ERR.date };
   // fen() BEFORE the row is stored, not after it is read. #194's suite caught a
   // raw REAL sum returning 1257.6799999999998; that residue must never be what

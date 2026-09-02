@@ -131,6 +131,45 @@ it('no store filter reaches the endpoint or the screen', () => {
   assert.ok(!/store_id|All locations|fin-tx-loc/.test(CLIENT_CODE), 'no location on the screen');
 });
 
+it('NO 1 AUGUST FLOOR — not in the route, the screen, the window lib or the markup', () => {
+  // §36, *Finance is not floored at the cutover date* (DECIDED 2026-09-02).
+  // The survey behind that decision found the floor existed only in prose, so
+  // this asserts the absence rather than trusting it: an untested absence is one
+  // confident reader away from being filled back in.
+  //
+  // CODE and comment-stripped markup only. All four files now carry sentences
+  // saying there is no floor, and every one of them names the date.
+  [['the route', ROUTE_CODE], ['the screen', CLIENT_CODE],
+   ['the window lib', codeOnly(WINDOW_LIB)], ['the markup', financeSection()]]
+    .forEach(([what, src]) => assert.ok(!/2026-08-01/.test(src), `a cutover date is live in ${what}`));
+  // resolveWindow is the whole of the date logic, and it clamps nothing.
+  assert.ok(!/Math\.max/.test(codeOnly(WINDOW_LIB)), 'resolveWindow must not clamp a bound');
+});
+
+it('the form’s date field carries no `min`, on the add path and the edit path', () => {
+  // §36: "a person may legitimately correct an old row". One form serves both
+  // paths — finTxForm sets its value and nothing else — so the markup is the
+  // whole of it, and the server's own check is on shape and not on range.
+  const field = HTML.match(/<input type="date" id="fin-tx-date"[^>]*>/);
+  assert.ok(field, '#fin-tx-date is missing');
+  assert.ok(!/\bmin=/.test(field[0]), `a floor is back on the form: ${field[0]}`);
+  assert.ok(!/setAttribute\(['"]min['"]|\.min\s*=/.test(CLIENT_CODE),
+    'no floor may be set on a date field from script either');
+  // Shape, not range. A date check that grew a lower bound would refuse the
+  // correction the decision exists to allow.
+  assert.ok(/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/.test(ROUTE_CODE),
+    'the server validates the date’s SHAPE');
+  assert.ok(!/date\s*[<>]=?\s*['"]20/.test(ROUTE_CODE), 'the server must not bound the date');
+});
+
+it('the range bar’s date fields carry no `min` either', () => {
+  ['fin-from', 'fin-to'].forEach(id => {
+    const f = HTML.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`));
+    assert.ok(f, `#${id} is missing`);
+    assert.ok(!/\bmin=/.test(f[0]), `a floor is back on #${id}: ${f[0]}`);
+  });
+});
+
 // ── The queries, against a real database ───────────────────────────────────
 console.log('\n2 · the rows — §36’s rulings, on data that exercises them');
 
@@ -213,6 +252,31 @@ it('hand-entered and PO-derived rows are both shown, and told apart', () => {
 it('money in reads typed income only, inside the window', () => {
   assert.strictEqual(income.length, 1);
   assert.strictEqual(income[0].amount, 3000);
+});
+
+it('a JULY window returns July rows — there is no floor at 1 August', () => {
+  // §36, *Finance is not floored at the cutover date*. The same three queries,
+  // run over a window entirely before the cutover: every row seeded above as
+  // "out of window" for August is IN this one, in all three populations.
+  //
+  // This is the test the decision turns on. Add a `>= '2026-08-01'` anywhere in
+  // the route and all three of these go to zero.
+  const [JF, JT] = ['2026-07-01', '2026-07-31'];
+  const jIncome = db.prepare(`SELECT id, amount FROM income_entries
+     WHERE ${LEDGER_DATE} BETWEEN ? AND ?`).all(JF, JT);
+  const jManual = db.prepare(`SELECT id, amount FROM expense_entries
+     WHERE po_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?`).all(JF, JT);
+  const jPosted = db.prepare(`SELECT e.po_id AS po_id, COALESCE(SUM(e.amount),0) AS amount
+      FROM expense_entries e JOIN purchase_orders po ON po.id = e.po_id
+     WHERE e.po_id IS NOT NULL AND po.date BETWEEN ? AND ? GROUP BY e.po_id`).all(JF, JT);
+
+  assert.strictEqual(jIncome.length, 1, 'the 20 July income row must be reachable');
+  assert.strictEqual(jIncome[0].amount, 500);
+  assert.strictEqual(jManual.length, 1, 'the 31 July rent must be reachable');
+  assert.strictEqual(jManual[0].amount, 9999);
+  assert.strictEqual(jPosted.length, 1, 'the 10 July purchase order must be reachable');
+  assert.strictEqual(jPosted[0].po_id, 52);
+  assert.strictEqual(jPosted[0].amount, 900);
 });
 
 // ── The screen ─────────────────────────────────────────────────────────────
@@ -683,7 +747,13 @@ it('the write half is gated apart from the read half', () => {
 });
 
 it('the three new pairs are locked at v1.11, and the rest are reused', () => {
-  assert.ok(/\*\*v1\.11 ·/.test(VOCAB), 'the amendment must be recorded');
+  // NOT anchored on `**v1.11`. The vocabulary's banner is ONE running paragraph
+  // with the newest amendment first, so the `**` belongs to whichever version is
+  // currently newest — v1.12 took it on 2026-09-02 and this assertion went red on
+  // main for a docs commit that changed nothing about these three pairs. What
+  // must stay true is that the amendment is still RECORDED, not that it is still
+  // the most recent one, which it is guaranteed to stop being.
+  assert.ok(/\bv1\.11 ·/.test(VOCAB), 'the v1.11 amendment must still be recorded');
   [['New transaction', '新建交易'],
    ['Delete this transaction?', '删除这条交易记录？'],
    ['This removes the row from the ledger.', '此操作将从账本中移除该记录。']]

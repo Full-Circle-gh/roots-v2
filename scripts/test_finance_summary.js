@@ -186,6 +186,39 @@ it('expenses sum over an arbitrary range, not a calendar month', () => {
   assert.strictEqual(crossing.t, 10999, 'a window crossing a month boundary must still sum');
 });
 
+it('a window ENTIRELY BEFORE the cutover still sums — no 1 August floor', () => {
+  // §36, *Finance is not floored at the cutover date* (DECIDED 2026-09-02).
+  // The ¥9,999 dated 31 July is the row the cutover would have hidden.
+  // Production's real figure is 111 rows across May, June and July totalling
+  // ¥180,332.28; this is that case in miniature.
+  const july = db.prepare(
+    `SELECT COALESCE(SUM(amount),0) AS t, COUNT(*) AS n FROM expense_entries
+      WHERE ${EDATE} BETWEEN '2026-07-01' AND '2026-07-31'`).get();
+  assert.strictEqual(july.n, 1, 'the 31 July expense must be reachable');
+  assert.strictEqual(july.t, 9999);
+  // And the breakdown behind the disclosure reaches it too, not just the total.
+  const bd = db.prepare(
+    `SELECT category, COALESCE(SUM(amount),0) AS amount FROM expense_entries
+      WHERE ${EDATE} BETWEEN '2026-07-01' AND '2026-07-31' GROUP BY category`).all();
+  assert.deepStrictEqual(bd, [{ category: 'Rent', amount: 9999 }]);
+});
+
+it('NO cutover date is live in the route, the screen, the window lib or the markup', () => {
+  // The survey behind the decision found the floor existed only in prose. All
+  // four files now carry sentences saying there is no floor and every one of
+  // them names the date, so this reads CODE and comment-stripped markup only.
+  const markup = HTML.slice(HTML.indexOf('id="tab-finance"'), HTML.indexOf('id="tab-sales"'))
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+  [['the route', ROUTE_CODE], ['the screen', CLIENT_CODE],
+   ['the window lib', codeOnly(WINDOW_LIB)], ['the markup', markup]]
+    .forEach(([what, src]) => assert.ok(!/2026-08-01/.test(src), `a cutover date is live in ${what}`));
+  // The range bar's own fields, which serve both sub-views.
+  ['fin-from', 'fin-to'].forEach(id => {
+    const f = HTML.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`));
+    assert.ok(f && !/\bmin=/.test(f[0]), `a floor is back on #${id}`);
+  });
+});
+
 it('an uncategorised expense keeps its own line rather than a minted bucket', () => {
   const nulls = breakdown.filter(r => r.category == null);
   assert.strictEqual(nulls.length, 1);
@@ -239,6 +272,19 @@ it('the not-recorded note is ONE sentence, past tense, and names no date', () =>
     '§36 v4.113 forbids naming a boundary date — the cutoff query has not been run');
   assert.ok(!/unavailable|missing|unknown/i.test(html),
     'each of those implies a retry, an oversight, or a search');
+});
+
+it('the cost rows are UNCONDITIONAL — lifting the floor added no date test', () => {
+  // §36, *Finance is not floored at the cutover date*: "Both cost rows keep
+  // reading Not recorded unconditionally and take no date condition." The
+  // decision that lifted the expense floor deliberately did NOT qualify
+  // v4.113's seventh state — the cost reader is not built, so there is nothing
+  // for such a condition to switch between.
+  const card = CLIENT.slice(CLIENT.indexOf('function finRender'), CLIENT.indexOf('async function finLoad'));
+  assert.ok(!/\bif\b[^\n]*(date|from|to|2026|window)/i.test(card),
+    'the staircase must not branch on the period');
+  assert.ok(!/2026-08-31|cutoff|capture/i.test(CLIENT_CODE),
+    'no capture-date constant may reach the screen');
 });
 
 it('both cost rows are covered, and the sentence is rendered once per card', () => {

@@ -16,18 +16,29 @@
  * ── WHY THIS EXISTS ───────────────────────────────────────────────────────
  * decisions §36, "Tacet's Finance begins on 1 August 2026, and the kitchen
  * app's ledger is exported rather than migrated". Nothing is deleted and
- * nothing is migrated; Tacet's Finance simply counts from 1 August 2026
- * forward. That leaves the rows before the cutover reachable by nothing once
- * the kitchen app is retired — present in the database, openable by nobody.
- * This file is what makes "still readable" true rather than nominal: a
- * spreadsheet of both ledger tables in full, handed to the operator and their
- * accountant, readable with no access to this system.
+ * nothing is migrated. This file is a spreadsheet of both ledger tables in
+ * full, handed to the operator and their accountant, readable with no access
+ * to this system at all.
+ *
+ * ONE SENTENCE OF THAT REASONING NO LONGER HOLDS, AND IS CORRECTED HERE RATHER
+ * THAN LEFT TO MISLEAD. This header used to say the export existed because the
+ * pre-cutover rows would otherwise be "reachable by nothing once the kitchen
+ * app is retired". They are not: §36, *Finance is not floored at the cutover
+ * date* (DECIDED 2026-09-02), removes the 1 August 2026 floor, so Tacet's
+ * Finance now reads `income_entries` and `expense_entries` for whatever periods
+ * they cover and every row here is reachable on the Transactions screen.
+ *
+ * THE EXPORT IS NOT WITHDRAWN BY THAT, because unreachability was never its
+ * only reason. A CSV in the accountant's hands needs no login, no tenant, no
+ * running server and no Tacet at all, and it is a snapshot of the tables as
+ * they stood when it ran — which a live screen, by construction, is not.
  *
  * ── WHAT IT DOES NOT DO ───────────────────────────────────────────────────
  * No filtering, no summarising, no rounding, no cleaning. Every row of
  * `income_entries` and every row of `expense_entries`, every column of each.
  * The cutover date does NOT appear in any query in this file: the export is
- * the whole table, because a partial archive of money is not an archive.
+ * the whole table, because a partial archive of money is not an archive. That
+ * was true when the floor existed and is true now that it does not.
  *
  * AMOUNTS ARE WRITTEN EXACTLY AS STORED. Seven expense rows carry sub-cent
  * values written by the PO poster (a PO's line costs divided across expense
