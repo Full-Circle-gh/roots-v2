@@ -27,6 +27,10 @@ Published canvas: https://claude.ai/code/artifact/59dd60e2-cf68-457a-b329-5e96da
 | `Inbox.dc.html` · `Reply.dc.html` · `InboxEmpty.dc.html` | Inbox — two Worklists behind one strip, and its one write flow |
 | `Delivery.dc.html` | Delivery — A4 Console |
 | `Sales.dc.html` · `ChannelDetail.dc.html` | Sales — A5 Board, and the marketplace pattern |
+| `WasteMore.dc.html` | Where Waste lands in More — the A-vs-C argument, one row apart |
+| `WasteList.dc.html` · `WasteRecord.dc.html` · `WasteEmpty.dc.html` | Waste option A — its own Worklist, its record sheet, its empty state |
+| `WasteSubview.dc.html` | Waste option B — a fourth sub-view under Products |
+| `WasteCapture.dc.html` | Waste option C — capture-first, the form is the screen |
 | `canvas.json` | Layout, notes, launch view |
 
 ## Rebuilding
@@ -35,7 +39,8 @@ Artboards are generated, not hand-edited — edit `src/` and run:
 
 ```
 node src/pages-1.mjs && node src/pages-2.mjs && node src/pages-3.mjs \
-  && node src/pages-4.mjs && node src/pages-5.mjs && node src/pages-6.mjs
+  && node src/pages-4.mjs && node src/pages-5.mjs && node src/pages-6.mjs \
+  && node src/pages-7.mjs
 ```
 
 `src/_shared.css` holds the tokens (lifted verbatim from the live `--td-*`
@@ -121,7 +126,31 @@ setup meter (a progress bar is not an automation), the drawer's Dusk primary
 - **Invoices is not a page.** §4 absorbs fapiao into Orders as a filter; the
   phone's current Invoices screen is a leftover to fold in, not a page to design.
 
-## Known gaps (batch four)
+## Batch four asks a question rather than settling one
+
+Waste, and it is the first batch drawn as **options to choose between** rather than as one
+answer. The full argument, the evidence and a recommendation are in
+`docs/tacet-waste-mobile-options.md`.
+
+The finding behind it: **Waste is not on the phone at all.** `waste` appears zero times in
+`public/m.html` — no More row, no `ROUTE_CAP` entry, no screen — while the `warehouse` and
+`store_manager` presets both grant `waste:view` and `waste:record` by default. Granting the
+permission today changes nothing a phone can see. A missing screen, not a permissions bug.
+
+- **A** — its own More row and its own Worklist. Desktop parity, and the only option that
+  answers "what did we lose this month" on a phone.
+- **B** — a fourth sub-view under Products. Conceptually right (waste *is* a stock
+  movement), but the strip overflows at 390px — measured 409px of content, Categories
+  clipped — and it reaches waste through `products:view`, which is the coupling
+  `routes/retail-waste.js` was written to break (survey hazard H13).
+- **C** — capture-first: the form is the screen, today's entries under it, the ledger left
+  on the desktop. Smallest build; gives up range, reason, history and void.
+
+Everything all three inherit from the API — whole units, refuse-don't-clamp, the cost
+snapshot, "No cost" never rendering as ¥0.00, void-by-reversal — is listed in the doc so the
+build does not re-open it.
+
+## Known gaps (batch five)
 
 The customer record's action row waits on the phone write flows; dark theme is
 specified as a token swap but not drawn; Chinese is not rendered
