@@ -172,6 +172,7 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
 {
   const inventory = require(path.join(ROOT, 'lib/inventory.js'));
   const { localPreorderLine } = require(path.join(ROOT, 'routes/retail.js'));
+  const { tdb } = require(path.join(ROOT, 'lib/tenant-db.js'));
   const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
 
   // Core Guangzhou: always on the local run, whatever day is picked.
@@ -253,7 +254,7 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
       'Guangzhou AND an opt-in district AND they did not buy same-day');
     assert.ok(/const pickedSameDay = body\.delivery_slot_kind === 'today';/.test(retailSrc),
       'the same-day extra is the explicit "today" slot kind the client sends');
-    assert.ok(/localPreorderLine\(mutatedItems, address, \{ scheduledShipDistrict \}\)/.test(retailSrc),
+    assert.ok(/localPreorderLine\(mutatedItems, address, \{\s*\n\s*scheduledShipDistrict, freshPreorderOk: true,\s*\n\s*\}\)/.test(retailSrc),
       'and the gate is handed that one verdict');
     // The out-of-city store pin was the second consumer of that local flag. It
     // moved into fulfillingStoreFor() so the checkout quote and the reschedule
@@ -292,10 +293,55 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     assert.strictEqual(localPreorderLine([line({ oos_policy: 'always' })], GZ), null);
     assert.strictEqual(localPreorderLine([line({ oos_policy: null, ship_from_supplier: 1 })], GZ), null);
   });
-  it('a legacy batch meal with no explicit policy is still caught', () => {
-    // Blank policy + is_batch_made=1 resolves to backorder_gz (effectiveOosPolicy).
-    assert.ok(localPreorderLine([line({ oos_policy: null, is_batch_made: 1 })], GZ));
-    // …and a blank policy without the flag resolves to strict, so not here.
+  // A FRESH meal is the gate's one exemption, and it is conditional on the
+  // kitchen schedule existing — that date is the whole reason the run stopped
+  // being a reason to refuse. So the same line is refused or admitted depending
+  // on nothing but batch.schedule, and both directions are asserted here
+  // against a config this test sets and restores itself. (These two cases used
+  // to be one assertion, "a legacy batch meal is still caught", which was true
+  // when nothing could name the next batch.)
+  const cfgKey = 'batch.schedule';
+  const readCfg = () => {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(cfgKey);
+    return row ? row.value_json : null;
+  };
+  const writeCfg = (json) => {
+    if (json == null) { tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(cfgKey); return; }
+    tdb().prepare(
+      `INSERT INTO storefront_config (key, value_json) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`
+    ).run(cfgKey, json);
+  };
+  const withSchedule = (enabled, fn) => {
+    const saved = readCfg();
+    writeCfg(enabled
+      ? JSON.stringify({ enabled: true, anchor_date: '2026-06-16', interval_days: 2, skip_dates: [], cutoff_hour: 20 })
+      : null);
+    try { fn(); } finally { writeCfg(saved); }
+  };
+
+  it('a fresh meal is ADMITTED on the run once a batch schedule names its day', () => {
+    withSchedule(true, () => {
+      // Blank policy + is_batch_made=1 resolves to backorder_gz (effectiveOosPolicy),
+      // so this is the same line the gate used to refuse — the kitchen date is
+      // what changed, not the policy.
+      const fresh = [line({ oos_policy: null, is_batch_made: 1 })];
+      assert.strictEqual(localPreorderLine(fresh, GZ, { freshPreorderOk: true }), null);
+      // …but ONLY for a caller that opted in. The default is the old refusal,
+      // so the add-on path — which cannot move an order's fixed day onto the
+      // batch — keeps turning the same line away.
+      assert.ok(localPreorderLine(fresh, GZ), 'refused unless the caller opts in');
+      // A GROCERY line keeps the refusal even when the caller opts in: nothing
+      // names its restock.
+      assert.ok(localPreorderLine([line({ oos_policy: 'backorder_gz' })], GZ, { freshPreorderOk: true }));
+    });
+  });
+  it('…and is refused again with no schedule configured, as every tenant had it', () => {
+    withSchedule(false, () => {
+      assert.ok(localPreorderLine([line({ oos_policy: null, is_batch_made: 1 })], GZ, { freshPreorderOk: true }));
+    });
+  });
+  it('a blank policy without the batch flag resolves to strict, so not here', () => {
     assert.strictEqual(localPreorderLine([line({ oos_policy: null })], GZ), null);
   });
   it('one bad line in a full basket is enough, and it names that line', () => {
@@ -309,8 +355,14 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   });
 
   it('the gate is wired into the order path, on the final line set', () => {
-    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address, \{ scheduledShipDistrict \}\);/.test(retailSrc),
+    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address, \{\s*\n\s*scheduledShipDistrict, freshPreorderOk: true,\s*\n\s*\}\);/.test(retailSrc),
       'runs on mutatedItems, so cancel_missing / replace_missing still work');
+    // Checkout is the ONLY caller that may claim the fresh-meal exemption,
+    // because it is the only one that floors the delivery day onto the batch.
+    // The add-on path attaches to an order whose day is already fixed.
+    const addonCall = retailSrc.slice(retailSrc.indexOf('// 2. Local pre-order gate'));
+    assert.ok(!/freshPreorderOk/.test(addonCall.slice(0, 900)),
+      'the add-on path does not opt in');
     assert.ok(/if \(!isPickup && fallbackChoice !== 'wait_for_restock'\) \{/.test(retailSrc),
       'pickup and the explicit wait-for-restock choice stay exempt');
     // The error must be one the checkout UI already handles — the same code a
@@ -319,7 +371,7 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     assert.ok(/error: 'insufficient_stock'/.test(block.slice(0, 400)), 'reuses insufficient_stock');
   });
   it('the gate reuses the one matcher, and adds no second one', () => {
-    assert.ok(/function localPreorderLine\(lines, address, \{ scheduledShipDistrict = false \} = \{\}\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;\s*\n\s*if \(scheduledShipDistrict\) return null;/.test(retailSrc),
+    assert.ok(/function localPreorderLine\(lines, address, \{ scheduledShipDistrict = false, freshPreorderOk = false \} = \{\}\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;\s*\n\s*if \(scheduledShipDistrict\) return null;/.test(retailSrc),
       'Guangzhou comes from lib/inventory, like stampSameCity, then the run narrows it');
     // Every same-city verdict in this file defers to lib/inventory — no local
     // copy of the 广州 matcher anywhere, including inside the new gate.

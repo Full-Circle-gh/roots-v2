@@ -45,10 +45,20 @@ function _effPrice(p) {
 // serves — where the checkout gates stock hard — a reservable row is simply
 // sold out. Nothing pre-orderable is ever offered to a shopper on that run,
 // so the pill can't promise what the checkout will refuse.
+//
+// ONE exception, and it exists because the promise became keepable: a FRESH
+// meal the server dated (`local_fresh_date` — the day the kitchen makes the
+// next batch). For that row the run is no longer a reason to say no, so the
+// pill offers it and the checkout accepts it, parking the order on that batch.
+// The condition stays "never promise what checkout refuses": the same date
+// drives the calendar floor and the checkout gate, so the three agree by
+// construction. A row without the field — every grocery row, and every row
+// when no schedule is configured — is dead on the run exactly as before.
 function _stockState(p, onLocalRun) {
   const stock = p.stock == null ? null : Number(p.stock);
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
-  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !onLocalRun;
+  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
+        && (!onLocalRun || !!p.local_fresh_date);
   return { out, preorder, soldOut: out && !preorder, stock };
 }
 

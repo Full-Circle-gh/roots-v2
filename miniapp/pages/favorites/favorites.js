@@ -138,7 +138,8 @@ Page({
       // including the same-city rule: nothing is reservable for an address
       // inside Guangzhou, where the checkout gates today's run on real stock.
       const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
-      const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !this._onLocalRun;
+      const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
+        && (!this._onLocalRun || !!p.local_fresh_date);
       const soldOut = out && !preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
@@ -220,7 +221,8 @@ Page({
     const p = (this.data.all || []).find(x => x.id === id);
     if (!p) return;
     const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
-    const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !this._onLocalRun;
+    const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
+        && (!this._onLocalRun || !!p.local_fresh_date);
     if (out && !preorder) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;

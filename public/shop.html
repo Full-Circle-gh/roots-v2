@@ -4709,7 +4709,7 @@ function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effe
 function slStock(m){
   const stock=m.stock==null?null:Number(m.stock);
   const out=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
-  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&!shopperOnLocalRun();
+  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&(!shopperOnLocalRun()||!!m.local_fresh_date);
   return {out,pre,soldOut:out&&!pre,stock};
 }
 // Card image. The slim list puts the streamed-image URL in image_data (not
