@@ -166,7 +166,16 @@ App({
       const nl = s.indexOf('\n');
       const message = nl === -1 ? s : s.slice(0, nl);
       const stack   = nl === -1 ? null : s.slice(nl + 1);
-      diag.reportError(message, stack);
+      // WeChat throws this MiniProgramError itself while it resolves the
+      // missing pages/index/index launch/relaunch (see onPageNotFound below)
+      // — it's the same benign, self-recovering event, just surfaced through
+      // onError instead of onPageNotFound. Treat it the same way (a notice,
+      // not an error) so it doesn't double up a healthy customer's error count.
+      if (message.indexOf('Component is not found in path "wx://not-found"') !== -1) {
+        diag.reportNotice(message, { stack });
+      } else {
+        diag.reportError(message, stack);
+      }
     } catch (e) { /* never let the error reporter throw */ }
   },
 
