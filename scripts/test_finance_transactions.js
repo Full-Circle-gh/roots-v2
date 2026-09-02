@@ -51,6 +51,36 @@ function codeOnly(src) {
 const ROUTE_CODE = codeOnly(ROUTE);
 const CLIENT_CODE = codeOnly(CLIENT);
 
+/* Two slices of the screen, evaluated together by the vm tests below. The form
+   calls the category-label helpers, which are declared far above it, so a slice
+   of the form alone no longer stands up. They are cut apart rather than running
+   the whole file because the halves between them declare `let FIN_TX`, and a
+   `let` at the top of a vm script SHADOWS the context property these tests set
+   — the payload would then always read null. */
+const CLIENT_HELPERS = CLIENT.slice(
+  CLIENT.indexOf('// ── Category labels'),
+  CLIENT.indexOf('/** One money row of the staircase'));
+const CLIENT_TXFORM = CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT'));
+
+/** A context with both slices loaded, and stubs for the form's four elements. */
+function formCtx(els, lang) {
+  let LANG = lang || 'en';
+  const ctx = vm.createContext({
+    document: {
+      getElementById: (id) => els[id] || null,
+      querySelectorAll: () => [{ classList: { toggle() {} }, dataset: {} }],
+    },
+    escapeHtml: (x) => String(x),
+    window: { cuLang: () => LANG },
+    cuLang: () => LANG,
+    cuT: (en, cn) => (LANG === 'cn' ? cn : en),
+    setLang: (l) => { LANG = l; },
+  });
+  vm.runInContext(CLIENT_HELPERS, ctx);
+  vm.runInContext(CLIENT_TXFORM, ctx);
+  return ctx;
+}
+
 const LEDGER_DATE = WINDOW_LIB.match(/const LEDGER_DATE = '([^']+)'/)[1];
 const { fen } = require('../lib/finance-window');
 
@@ -429,16 +459,7 @@ it('the income category field follows the real list, not an assumption', () => {
   // Evaluated, not merely matched: empty hides, one entry shows.
   const row = { hidden: false };
   const dl = { innerHTML: '' };
-  const box = { classList: { toggle() {} }, dataset: {} };
-  const cctx = vm.createContext({
-    document: {
-      getElementById: (id) => (id === 'fin-tx-cat-row' ? row : id === 'fin-tx-cats' ? dl : null),
-      querySelectorAll: () => [box],
-    },
-    escapeHtml: (x) => String(x),
-    window: {},
-  });
-  vm.runInContext(CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT')), cctx);
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cats': dl, 'fin-tx-cat': { value: '' } });
   cctx.FIN_TX = { rows: [], income_categories: [] };
   cctx.window.finTxKind('in');
   assert.strictEqual(row.hidden, true, 'an empty list hides the field');
@@ -446,10 +467,14 @@ it('the income category field follows the real list, not an assumption', () => {
   cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
   cctx.window.finTxKind('in');
   assert.strictEqual(row.hidden, false, 'one income category brings it back');
-  assert.ok(/Sublet 转租/.test(dl.innerHTML), 'and the list is the income list');
+  // The list is the income list, rendered in ONE language: the stored value is
+  // `Sublet 转租` and the English screen offers `Sublet`.
+  assert.ok(/>?Sublet</.test(dl.innerHTML.replace(/"/g, '')) || /Sublet"/.test(dl.innerHTML),
+    'the income list must reach the box');
+  assert.ok(!/转租/.test(dl.innerHTML), 'and the English screen shows no Chinese');
   cctx.window.finTxKind('out');
   assert.strictEqual(row.hidden, false, 'money out always has the field');
-  assert.ok(!/Sublet 转租/.test(dl.innerHTML),
+  assert.ok(!/Sublet/.test(dl.innerHTML),
     'and the two lists are never pooled — an income value must not be suggested '
     + 'for an expense, which storeCategory would then snap onto the wrong list');
 });
@@ -463,17 +488,7 @@ it('switching direction empties the category box', () => {
   const row = { hidden: false };
   const box = { value: 'Rent 房租' };
   const dl = { innerHTML: '' };
-  const seg = { classList: { toggle() {} }, dataset: {} };
-  const cctx = vm.createContext({
-    document: {
-      getElementById: (id) => (id === 'fin-tx-cat-row' ? row
-        : id === 'fin-tx-cat' ? box : id === 'fin-tx-cats' ? dl : null),
-      querySelectorAll: () => [seg],
-    },
-    escapeHtml: (x) => String(x),
-    window: {},
-  });
-  vm.runInContext(CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT')), cctx);
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cat': box, 'fin-tx-cats': dl });
   cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
   cctx.window.finTxKind('in');
   assert.strictEqual(box.value, '', 'the expense value must not survive the switch');
@@ -498,8 +513,83 @@ it('the add control stays visible regardless', () => {
 
 it('the form sends a category exactly when it shows the field', () => {
   // Read off the field rather than restated: a rule stated twice drifts once.
-  assert.ok(/getElementById\('fin-tx-cat-row'\) \|\| \{\}\)\.hidden \? null : val\('fin-tx-cat'\)/
+  assert.ok(/getElementById\('fin-tx-cat-row'\) \|\| \{\}\)\.hidden\s*\?\s*null/
     .test(CLIENT_CODE), 'the send must follow the field, not the direction');
+});
+
+it('a category renders in ONE language, from a value that carries both', () => {
+  // The category is DATA, not a locked pair, and the column holds both halves
+  // glued: `Salaries&Wages 员工工资`. cuT cannot reach it, so the English screen
+  // was showing Chinese and the Chinese screen English.
+  const cctx = formCtx({});
+  const LANG = { set: (l) => cctx.setLang(l) };
+
+  // Both orders occur in the live data and both must split.
+  assert.strictEqual(cctx.finCatLabel('Salaries&Wages 员工工资'), 'Salaries&Wages');
+  assert.strictEqual(cctx.finCatLabel('门店进货 Retail stock'), 'Retail stock');
+  // The CN half keeps its fullwidth punctuation instead of leaking ）into EN.
+  assert.strictEqual(cctx.finCatLabel('Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）'),
+    'Ingredients(Kitchen+Retail Use)');
+  LANG.set('cn');
+  assert.strictEqual(cctx.finCatLabel('Salaries&Wages 员工工资'), '员工工资');
+  assert.strictEqual(cctx.finCatLabel('门店进货 Retail stock'), '门店进货');
+  assert.strictEqual(cctx.finCatLabel('Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）'),
+    '原材料（厨房及零售通用）');
+
+  // ONE language only: rendered whole in both, never halved to nothing.
+  for (const lang of ['en', 'cn']) {
+    LANG.set(lang);
+    assert.strictEqual(cctx.finCatLabel('销货成本'), '销货成本');
+    assert.strictEqual(cctx.finCatLabel('Rent'), 'Rent');
+  }
+  assert.strictEqual(cctx.finCatSplit('销货成本'), null, 'nothing to split');
+  assert.strictEqual(cctx.finCatSplit('原材料 Ingredients 采购'), null,
+    'interleaved must refuse to guess rather than cut at the first boundary');
+
+  // §36's three-rent-payments defect must not arrive through the display: two
+  // categories that read alike in this language both render whole.
+  LANG.set('en');
+  const m = cctx.finCatLabels(['Rent 房租', 'Rent 租金', 'Packaging Materials 包装材料']);
+  assert.strictEqual(m.get('Rent 房租'), 'Rent 房租');
+  assert.strictEqual(m.get('Rent 租金'), 'Rent 租金');
+  assert.strictEqual(m.get('Packaging Materials 包装材料'), 'Packaging Materials');
+});
+
+it('a shown half stores as the whole value it came from', () => {
+  // The trap in translating a free-text field. The box offers `Salaries&Wages`
+  // and the column holds `Salaries&Wages 员工工资` — saving what the box says
+  // would write a SECOND category, two lines that read alike on the breakdown.
+  // storeCategory cannot catch it: it snaps on spacing and case, and these
+  // differ by a whole language.
+  const cctx = formCtx({
+    'fin-tx-cat-row': { hidden: false }, 'fin-tx-cat': { value: '' }, 'fin-tx-cats': { innerHTML: '' },
+  });
+  cctx.FIN_TX = { rows: [{ kind: 'out', category: 'Salaries&Wages 员工工资' }], income_categories: [] };
+  cctx.window.finTxKind('out');
+
+  assert.strictEqual(cctx.finTxCatStored('Salaries&Wages'), 'Salaries&Wages 员工工资',
+    'the English half must resolve back to the stored spelling');
+  assert.strictEqual(cctx.finTxCatStored('员工工资'), 'Salaries&Wages 员工工资',
+    'and so must the Chinese half, whichever screen it was pasted into');
+  assert.strictEqual(cctx.finTxCatStored('Salaries&Wages 员工工资'), 'Salaries&Wages 员工工资',
+    'the whole value is already stored form');
+  assert.strictEqual(cctx.finTxCatStored('Cleaning'), 'Cleaning',
+    'a genuinely new category stores as typed — the field is free text');
+  assert.strictEqual(cctx.finTxCatStored('   '), '', 'blank stays blank');
+
+  // The form must actually route the save through it.
+  assert.ok(/finTxCatStored\(val\('fin-tx-cat'\)\)/.test(CLIENT_CODE),
+    'the save must map the label back before sending');
+  assert.ok(/set\('fin-tx-cat', row && row\.category \? finCatLabel/.test(CLIENT_CODE),
+    'and the edit path must fill the box with the label');
+});
+
+it('a typed NOTE is never split — only a category is', () => {
+  // A manual row's subject is its category when it has one and its typed note
+  // when it has not. Splitting a note would cut a sentence at its first Chinese
+  // character, so the test is identity with the row's own category.
+  assert.ok(/subj !== r\.category\) return subj/.test(CLIENT_CODE),
+    'a subject that is not the category must render verbatim');
 });
 
 it('nothing in the form touches localStorage', () => {

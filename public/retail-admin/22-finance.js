@@ -98,6 +98,76 @@ function finRangeLabel() {
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 
+// ── Category labels — one language, from a value that carries both ─────────
+//
+// THE CATEGORY IS DATA, NOT A LOCKED PAIR. Every other bilingual thing on this
+// surface goes through cuT with a pair from the vocabulary; a category is a
+// value the tenant typed, held as ONE free-text column. And what is in that
+// column is both languages glued into one string — `Salaries&Wages 员工工资`,
+// `Packaging Materials 包装材料`, `Ingredients(Kitchen+Retail Use) 原材料（厨房
+// 及零售通用）` — so the English screen was showing Chinese and the Chinese
+// screen English, in the one place on Finance that cuT cannot reach.
+//
+// The house pattern for bilingual DATA is two columns picked with a fallback
+// across — `tmStoreLabel` on stores, `name_en`/`name_cn` on roles. `categories`
+// has one `name` column and the ledger's `category` is free text with no
+// foreign key (§36), so there is nothing to pick between. **This splits at
+// RENDER and stores nothing new.** A second column is the eventual fix and is a
+// schema change plus a migration of four columns of live values; it is not this.
+//
+// IT REFUSES TO GUESS. A value splits only when its Latin letters and its CJK
+// sit in two contiguous runs, in either order — which is every real value
+// measured, in both orders. Anything interleaved, or carrying only one language
+// (`销货成本`, `Rent`), renders whole in both languages: showing half of a name
+// that has no other half is worse than showing a word the reader does not need.
+const FIN_CJK = /[\u2e80-\u9fff\u3000-\u303f\uf900-\ufaff\uff00-\uffef]/;
+const FIN_LAT = /[A-Za-z]/;
+
+/** `{ en, cn }` when the value carries both halves cleanly, else null. */
+function finCatSplit(value) {
+  const s = String(value == null ? '' : value);
+  const chars = Array.from(s);
+  let firstCjk = -1, lastCjk = -1, firstLat = -1, lastLat = -1;
+  chars.forEach((ch, i) => {
+    if (FIN_CJK.test(ch)) { if (firstCjk < 0) firstCjk = i; lastCjk = i; }
+    else if (FIN_LAT.test(ch)) { if (firstLat < 0) firstLat = i; lastLat = i; }
+  });
+  if (firstCjk < 0 || firstLat < 0) return null;          // only one language
+  let en, cn;
+  if (lastLat < firstCjk) { en = chars.slice(0, firstCjk).join(''); cn = chars.slice(firstCjk).join(''); }
+  else if (lastCjk < firstLat) { cn = chars.slice(0, firstLat).join(''); en = chars.slice(firstLat).join(''); }
+  else return null;                                        // interleaved — do not guess
+  en = en.trim(); cn = cn.trim();
+  return (en && cn) ? { en, cn } : null;
+}
+
+/** The half for the live language. Falls back to the whole value, never to ''. */
+function finCatLabel(value) {
+  const p = finCatSplit(value);
+  if (!p) return String(value == null ? '' : value);
+  return (window.cuLang && cuLang() === 'cn') ? p.cn : p.en;
+}
+
+/* The labels for a SET of categories, with the collision rule applied.
+   Two stored values whose halves read the same in this language — `Rent 房租`
+   and `Rent 租金` — would draw two lines the operator cannot tell apart, which
+   is §36's three-rent-payments defect arriving through the display instead of
+   through the data. **Both then render whole**, so the screen stays honest about
+   a distinction it cannot express in one language. */
+function finCatLabels(list) {
+  const map = new Map();
+  const claims = new Map();
+  for (const v of list) {
+    if (v == null || map.has(v)) continue;
+    const label = finCatLabel(v);
+    map.set(v, label);
+    claims.set(label, (claims.get(label) || 0) + 1);
+  }
+  for (const [v, label] of map) if (claims.get(label) > 1) map.set(v, String(v));
+  return map;
+}
+
+
 /** One money row of the staircase. `sign` is '−' or ''; it owns its own column. */
 function finRow(label, figure, opts) {
   const o = opts || {};
@@ -156,13 +226,17 @@ function finNotRecorded() {
 /** The operating-expense disclosure. Closed by default. */
 function finBreakdown(rows) {
   if (!rows || !rows.length) return '';
+  // The set is passed whole so the collision rule can see it: two categories
+  // that read alike in this language both render in full rather than drawing
+  // two lines nobody can tell apart.
+  const labels = finCatLabels(rows.map(r => r.category));
   return '<div class="fin-breakdown">' + rows.map(r => {
     // A row whose category was never typed keeps its own line and gets the
     // §1.12 seventh-state word rather than an invented bucket name: §36 records
     // that Finance stores category text raw and un-normalised, so a label
     // minted here would be a second wrong name on a known-dirty column.
     const label = r.category
-      ? String(r.category)
+      ? (labels.get(r.category) || finCatLabel(r.category))
       : cuT('Not recorded', '未记录');
     return '<div class="fin-row">'
       + `<span class="fin-lbl">${escapeHtml(label)}</span>`
@@ -299,6 +373,10 @@ window.finInit = function finInit() {
 let FIN_TX = null;          // the last payload
 let FIN_TX_SEEN = false;    // has this sub-view ever been pulled
 let FIN_TX_DIR = 'all';     // 'all' | 'in' | 'out' — the chip filter
+// The category labels for the rows on screen, built ONCE per render rather than
+// per row — the collision rule needs the whole set, and asking for it inside the
+// row would rebuild it for every line.
+let FIN_TX_CATLABEL = null;
 
 /* Sub-view switching. Both panes live in the page; one is `hidden` at a time.
    The range bar is SHARED — one window governs both sub-views, so switching
@@ -338,6 +416,18 @@ function finTxAmount(r) {
    enforcing it." `routes/finance.js` already refuses edit and delete on any row
    carrying a `po_id`; a screen that offered Edit and then failed would be the
    fault that rule names. */
+/* The subject, in one language WHEN IT IS A CATEGORY and verbatim otherwise.
+   A manual row's subject is its category when it has one and its typed note
+   when it has not — and a note is the operator's own sentence, never a glued
+   pair, so splitting one would cut a sentence in half at its first Chinese
+   character. The test is identity with the row's own category, not a guess
+   about the text. */
+function finTxSubject(r) {
+  const subj = r.subject || '';
+  if (!r.category || subj !== r.category) return subj;
+  return (FIN_TX_CATLABEL && FIN_TX_CATLABEL.get(r.category)) || finCatLabel(r.category);
+}
+
 function finTxRow(r) {
   const po = r.source === 'po';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
@@ -355,7 +445,7 @@ function finTxRow(r) {
   // created_at, so there is nothing here that could drift onto a row.
   return `<tr class="${po ? 'fin-tx-posted' : ''}">`
     + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
-    + `<td><span class="fin-tx-subj">${escapeHtml(r.subject || '')}</span>`
+    + `<td><span class="fin-tx-subj">${escapeHtml(finTxSubject(r))}</span>`
     + (mark || hint ? `<span class="fin-tx-meta">${mark}${mark && hint ? ' · ' : ''}${hint}</span>` : '')
     + '</td>'
     + `<td>${escapeHtml(r.kind === 'out' ? cuT('Out', '出') : cuT('In', '进'))}</td>`
@@ -415,6 +505,8 @@ function finTxRender() {
       + chip('in',  cuT('Money in', '进账'),  d.counts.in)
       + chip('out', cuT('Money out', '支出'), d.counts.out);
   }
+
+  FIN_TX_CATLABEL = finCatLabels(d.rows.map(r => r.category));
 
   const s = document.getElementById('fin-tx-search');
   if (s) s.placeholder = cuT('Filter these transactions', '筛选交易记录');
@@ -574,14 +666,45 @@ function finTxKeepsCat() {
    money-out half is what keeps them apart now that an income row can carry a
    category — without it the expense box would suggest income categories, and
    `storeCategory` would then snap the typed value onto the wrong master list. */
-function finTxCatList() {
-  const dl = document.getElementById('fin-tx-cats');
-  if (!dl) return;
-  const names = FIN_TX_KIND === 'in'
+function finTxCatOptions() {
+  return FIN_TX_KIND === 'in'
     ? finIncomeCats()
     : [...new Set(((FIN_TX && FIN_TX.rows) || [])
         .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
-  dl.innerHTML = names.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+}
+
+function finTxCatList() {
+  const dl = document.getElementById('fin-tx-cats');
+  if (!dl) return;
+  const labels = finCatLabels(finTxCatOptions());
+  dl.innerHTML = [...labels.values()]
+    .map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+}
+
+/* THE HALF THAT IS SHOWN MUST STORE AS THE WHOLE THAT IS HELD, and this is the
+   trap in translating a free-text field rather than a label. The box offers
+   `Salaries&Wages`; the column holds `Salaries&Wages 员工工资`. Saving what the
+   box says would write a SECOND category one character-class away from the
+   first — two lines on the Summary breakdown that read alike, the total right
+   and every line beneath it wrong, which is the exact defect `storeCategory`
+   was written to fix. `storeCategory` cannot catch it either: it snaps on
+   spacing and case, and these differ by a whole language.
+
+   So a typed value that matches a known category's label resolves back to the
+   stored spelling before it is sent. EITHER half matches, not just the live
+   language's — an operator who pastes the Chinese half into the English screen
+   lands on the same row rather than minting a twin. Anything matching nothing
+   is a genuinely new category and stores exactly as typed, which is what the
+   free-text field is for. */
+function finTxCatStored(typed) {
+  const t = String(typed == null ? '' : typed).trim();
+  if (!t) return t;
+  for (const stored of finTxCatOptions()) {
+    if (stored === t) return stored;
+    const p = finCatSplit(stored);
+    if (p && (p.en === t || p.cn === t)) return stored;
+  }
+  return t;
 }
 
 /* Open the form. `row` present = edit; absent = add.
@@ -597,7 +720,9 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   finTxKind(row ? row.kind : (typeof kindOrRow === 'string' ? kindOrRow : 'out'));
   set('fin-tx-date', row ? row.date : new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10));
   set('fin-tx-amount', row ? row.amount : '');
-  set('fin-tx-cat', row && row.category ? row.category : '');
+  // The label, not the stored value — and finTxSave maps it back, so the
+  // round trip does not rewrite the category of a row merely opened and saved.
+  set('fin-tx-cat', row && row.category ? finCatLabel(row.category) : '');
   set('fin-tx-note', row && row.source === 'manual' && row.subject && row.subject !== row.category ? row.subject : '');
   const t = document.getElementById('fin-tx-modal-t');
   if (t) t.textContent = row ? cuT('Edit', '编辑') : cuT('New transaction', '新建交易');
@@ -672,7 +797,8 @@ window.finTxSave = function finTxSave() {
     // and an absent field has nothing to send — sending the box's last value
     // anyway would file an income row under whichever EXPENSE category was typed
     // before the direction was switched.
-    category: (document.getElementById('fin-tx-cat-row') || {}).hidden ? null : val('fin-tx-cat'),
+    category: (document.getElementById('fin-tx-cat-row') || {}).hidden
+      ? null : finTxCatStored(val('fin-tx-cat')),
     note: val('fin-tx-note'),
   };
   const row = FIN_TX_EDIT;
