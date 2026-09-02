@@ -1660,6 +1660,13 @@ let ENTITLEMENTS = {};
     const BOARDS = ['default', 'store_manager', 'warehouse', 'customer_service', 'dispatch'];
     window.RA_POS = BOARDS.includes(u.roleLayout) ? u.roleLayout : 'default';
     document.body.classList.add('pos-' + window.RA_POS.replace(/_/g, '-'));
+    // DASHBOARD CARDS, PICKED PER ROLE — an owner's explicit override from the
+    // Roles editor (Settings → Team → Roles → "Dashboard cards"), an array of
+    // the cards this role should see. null (every role until an owner opens
+    // that field) means no override: the body.pos-* rules above keep deciding,
+    // exactly as before this existed. dashCardGate() (03-dashboard.js) reads
+    // this directly — set before dashInit() runs, a few lines down.
+    window.RA_DASH_CARDS = Array.isArray(u.dashboardCards) ? u.dashboardCards : null;
     // STORE LOCK — pins a store-scoped operator to their own store on every
     // dashboard pull. Keyed on the operator's actual SCOPE, which is the fact
     // it is about; it used to be gated on RA_POS !== 'default', so a
@@ -2449,10 +2456,11 @@ async function tmSavePerms() {
 // ══════════════════════════════════════════════════════════════════════════
 let RL_ROLES = [];
 let RL_SEL = null;            // selected role key
-let RL_DRAFT = null;          // { nameEn, nameCn, descEn, descCn, caps:Set, layout, stockAppOnly }
+let RL_DRAFT = null;          // { nameEn, nameCn, descEn, descCn, caps:Set, layout, stockAppOnly, dashboardCards:Array|null }
 let RL_OPEN = {};             // group key → expanded
 let RL_CAN_EDIT = false;
 let RL_LAYOUTS = ['default'];
+let RL_DASH_CATALOG = [];    // dashboard-card keys, in display order (from the server — lib/roles.DASH_CARDS)
 // Whether capabilities are actually enforced for this tenant. Read here as well
 // as on the Team tab, because the Quick Stock lockdown's one precondition has to
 // be answerable whichever of the two the operator opened first.
@@ -2594,7 +2602,8 @@ function rlRenderPane() {
       + `<div class="tm-field"><label class="tm-flabel" for="rlLayout">${escapeHtml(cuT('Home board', '首页看板'))}</label>`
       + `<select class="tm-input" id="rlLayout">`
       + RL_LAYOUTS.map(L => `<option value="${escapeAttr(L)}"${L === RL_DRAFT.layout ? ' selected' : ''}>${escapeHtml(rlLayoutLabel(L))}</option>`).join('')
-      + `</select><div class="tm-fhint">${escapeHtml(cuT('What this role sees first. Renaming the role never changes it.', '该角色登录后首先看到的页面。重命名角色不会影响它。'))}</div></div>`;
+      + `</select><div class="tm-fhint">${escapeHtml(cuT('What this role sees first. Renaming the role never changes it.', '该角色登录后首先看到的页面。重命名角色不会影响它。'))}</div></div>`
+      + rlDashCardsField();
   }
 
   // BLAST RADIUS, before the ticks.
@@ -2672,6 +2681,52 @@ function rlRenderPane() {
   rlBindPane();
 }
 
+// ── Dashboard cards — per-role, admin-picked ────────────────────────────────
+// Labels for the catalog the server sends as j.dashCards (lib/roles
+// DASH_CARDS — the single source of truth for the key list; this only adds
+// display text). 'needs' is Needs-you, the rest are #td-blocks' own
+// data-block values, in the order they actually sit on the dashboard.
+const RL_DASH_CARD_LABELS = {
+  needs:      ['Needs you', '需要您处理'],
+  recap:      ['While you were away', '您不在的这段时间'],
+  orders:     ['Today', '今日'],
+  customers:  ['Customers', '客户'],
+  unhandled:  ['Unhandled orders', '待处理订单'],
+  inventory:  ['Inventory', '库存'],
+  incoming:   ['On the way / Drafts', '在途 / 待发送'],
+  onroad:     ['On the road', '配送在途'],
+  ready:      ['Ready to hand off', '待交接'],
+  delivery:   ['Delivery', '配送'],
+};
+function rlDashCardLabel(key) {
+  const p = RL_DASH_CARD_LABELS[key] || [key, key];
+  return cuT(p[0], p[1]);
+}
+// What each Home board shows TODAY, absent any override — i.e. exactly what
+// the body.pos-<layout> rules in retail-admin.css draw. This is only ever read
+// to seed the checkboxes when a role has no override yet (RL_DRAFT.
+// dashboardCards === null), so an owner opening the field for the first time
+// sees the role's real, current dashboard — not an arbitrary starting point —
+// and can tell at a glance whether anything needs to change. Keep this in
+// sync with that CSS block by hand; there is no way to read computed CSS
+// rules back out of the stylesheet from here.
+const RL_DASH_LAYOUT_DEFAULT = {
+  default:          ['needs', 'recap', 'orders', 'customers'],
+  store_manager:    ['needs', 'recap', 'orders', 'customers', 'inventory', 'delivery'],
+  warehouse:        ['needs', 'recap', 'unhandled', 'inventory', 'incoming'],
+  customer_service: ['needs', 'recap', 'unhandled', 'onroad', 'ready'],
+  dispatch:         ['needs', 'recap', 'unhandled', 'onroad', 'ready'],
+};
+function rlDashCardDefaults(layout) {
+  return RL_DASH_LAYOUT_DEFAULT[layout] || RL_DASH_LAYOUT_DEFAULT.default;
+}
+function rlDashCardsEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  const sa = new Set(a);
+  return b.every(k => sa.has(k));
+}
+
 function rlLayoutLabel(key) {
   return cuT({
     default: 'The full view',
@@ -2717,6 +2772,31 @@ function rlLockHint(on) {
   return cuT('On: this role opens the Add Stock app and nothing else. The permissions below have no effect while it is on.',
              '开启后:该角色仅可打开“加库存”应用,下方权限在此期间不生效。');
 }
+// DASHBOARD CARDS — which cards this role's Home board shows. Unset
+// (RL_DRAFT.dashboardCards === null) means no override yet: the checkboxes are
+// seeded from rlDashCardDefaults(layout), i.e. what the role actually shows
+// today, so opening this field for the first time never looks like a blank
+// slate. The moment any box is toggled the draft becomes an explicit array
+// (wired in rlBindPane) — from then on it is what gets saved, independent of
+// `layout`. "Use this board's default" clears it back to null.
+function rlDashCardsField() {
+  const effective = RL_DRAFT.dashboardCards || rlDashCardDefaults(RL_DRAFT.layout);
+  const overridden = RL_DRAFT.dashboardCards !== null;
+  return `<div class="tm-field" style="margin-top:16px">`
+    + `<label class="tm-flabel">${escapeHtml(cuT('Dashboard cards', '仪表盘卡片'))}</label>`
+    + `<div class="tm-fhint">${escapeHtml(cuT(
+        'Which cards this role sees on the dashboard. Unticked cards are hidden entirely, even when they’d otherwise have something to say.',
+        '该角色在仪表盘上可见的卡片。未勾选的卡片将完全隐藏，即使原本有内容可显示。'))}</div>`
+    + `<div class="rl-dcards">`
+    + RL_DASH_CATALOG.map(key => `<div class="rl-p" data-dcard="${escapeAttr(key)}">`
+        + `<input type="checkbox"${effective.includes(key) ? ' checked' : ''}>`
+        + `<label>${escapeHtml(rlDashCardLabel(key))}</label></div>`).join('')
+    + `</div>`
+    + `<button type="button" class="tm-btn-line" id="rlDashReset" style="margin-top:8px"${overridden ? '' : ' hidden'}>`
+    + escapeHtml(cuT('Use this board’s default', '恢复为该看板的默认设置')) + `</button>`
+    + `</div>`;
+}
+
 function rlStockOnlyField() {
   const on = !!RL_DRAFT.stockAppOnly;
   const blocked = on && !RL_RBAC_ENFORCE;
@@ -2733,6 +2813,7 @@ function rlDirty() {
   if (RL_DRAFT.descEn !== (r.descEn || '') || RL_DRAFT.descCn !== (r.descCn || '')) return true;
   if (RL_DRAFT.layout !== r.layout) return true;
   if (RL_DRAFT.stockAppOnly !== !!r.stockAppOnly) return true;
+  if (!rlDashCardsEqual(RL_DRAFT.dashboardCards, r.dashboardCards || null)) return true;
   const was = new Set(r.caps || []);
   if (was.size !== RL_DRAFT.caps.size) return true;
   for (const k of RL_DRAFT.caps) if (!was.has(k)) return true;
@@ -2799,7 +2880,43 @@ function rlBindPane() {
   bindText('rlNameEn', 'nameEn'); bindText('rlNameCn', 'nameCn');
   bindText('rlDescEn', 'descEn'); bindText('rlDescCn', 'descCn');
   const lay = $('#rlLayout');
-  if (lay) lay.addEventListener('change', () => { RL_DRAFT.layout = lay.value; rlSyncCounts(); });
+  if (lay) lay.addEventListener('change', () => {
+    RL_DRAFT.layout = lay.value;
+    // Dashboard cards has no override yet — its checkboxes are showing the
+    // OLD board's default set, so move them to the new one. Once overridden
+    // the picks are the owner's own and stop following the board entirely.
+    if (RL_DRAFT.dashboardCards === null) {
+      const defaults = new Set(rlDashCardDefaults(RL_DRAFT.layout));
+      $$('#rlPane .rl-dcards [data-dcard]').forEach(row => {
+        row.querySelector('input').checked = defaults.has(row.getAttribute('data-dcard'));
+      });
+    }
+    rlSyncCounts();
+  });
+  $$('#rlPane .rl-dcards [data-dcard] input').forEach(cb => {
+    cb.addEventListener('change', function () {
+      const key = this.closest('[data-dcard]').getAttribute('data-dcard');
+      // First tick against an unset field materialises it — from the board's
+      // CURRENT default, with only the touched key flipped — never from an
+      // empty set, or unticking one box would look like it hid every other
+      // card too.
+      const set = new Set(RL_DRAFT.dashboardCards || rlDashCardDefaults(RL_DRAFT.layout));
+      if (this.checked) set.add(key); else set.delete(key);
+      RL_DRAFT.dashboardCards = [...set];
+      const reset = $('#rlDashReset'); if (reset) reset.hidden = false;
+      rlSyncCounts();
+    });
+  });
+  const dreset = $('#rlDashReset');
+  if (dreset) dreset.addEventListener('click', () => {
+    RL_DRAFT.dashboardCards = null;
+    const defaults = new Set(rlDashCardDefaults(RL_DRAFT.layout));
+    $$('#rlPane .rl-dcards [data-dcard]').forEach(row => {
+      row.querySelector('input').checked = defaults.has(row.getAttribute('data-dcard'));
+    });
+    dreset.hidden = true;
+    rlSyncCounts();
+  });
   const so = $('#rlStockOnly');
   if (so) so.addEventListener('change', () => {
     RL_DRAFT.stockAppOnly = so.checked;
@@ -2824,7 +2941,8 @@ function rlSelect(key, force) {
   const r = rlRole(key);
   RL_DRAFT = r && !r.isFixed
     ? { nameEn: r.nameEn || '', nameCn: r.nameCn || '', descEn: r.descEn || '', descCn: r.descCn || '',
-        caps: new Set(r.caps || []), layout: r.layout || 'default', stockAppOnly: !!r.stockAppOnly }
+        caps: new Set(r.caps || []), layout: r.layout || 'default', stockAppOnly: !!r.stockAppOnly,
+        dashboardCards: Array.isArray(r.dashboardCards) ? [...r.dashboardCards] : null }
     : null;
   rlRenderList();
   rlRenderPane();
@@ -2837,6 +2955,7 @@ async function rlLoad(keepSel) {
     RL_ROLES = j.roles || [];
     RL_CAN_EDIT = !!j.canEdit;
     RL_LAYOUTS = j.layouts || ['default'];
+    RL_DASH_CATALOG = j.dashCards || [];
     RL_RBAC_ENFORCE = !!j.rbacEnforce;
     const want = keepSel && RL_ROLES.some(r => r.key === keepSel) ? keepSel
       : (RL_SEL && RL_ROLES.some(r => r.key === RL_SEL) ? RL_SEL
@@ -2861,6 +2980,7 @@ async function rlSave() {
       name_en: RL_DRAFT.nameEn.trim(), name_cn: RL_DRAFT.nameCn.trim(),
       desc_en: RL_DRAFT.descEn.trim(), desc_cn: RL_DRAFT.descCn.trim(),
       layout: RL_DRAFT.layout, stock_app_only: RL_DRAFT.stockAppOnly, caps: [...RL_DRAFT.caps],
+      dashboard_cards: RL_DRAFT.dashboardCards,
     } });
     toast(r.people
       ? cuT(r.people === 1 ? 'Saved · 1 person moves with it' : 'Saved · ' + r.people + ' people move with it',

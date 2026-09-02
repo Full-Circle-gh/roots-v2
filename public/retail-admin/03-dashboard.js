@@ -1617,7 +1617,36 @@ function dashRender() {
 // way to bring a card back, so honouring an old hide would silently strip a
 // card off the dashboard for good. Both keys stay in localStorage untouched —
 // ship 2 rewrites the layout record once Arrange returns.
+
+// DASHBOARD CARDS, PICKED PER ROLE — window.RA_DASH_CARDS (02-settings-ops
+// bootstrap) is either null (no owner override — the body.pos-* rules in
+// DASHBOARDS BY POSITION, retail-admin.css, keep deciding by `layout` exactly
+// as before this existed) or an explicit array an owner chose in the Roles
+// editor. An array is authoritative regardless of `layout`: applied here as an
+// inline style, which beats those CSS rules on specificity alone.
+//
+// Only the fixed catalog below is touched — DASH_CARD_KEYS mirrors lib/roles
+// DASH_CARDS exactly, deliberately excluding `needspoint` (Orders waiting for
+// a delivery point): that block is absent-when-empty by its own design (§7,
+// the markup comment above #td-needspoint) and "not a matter of taste" — no
+// role override may hide it.
+//
+// An allowed card's inline display is CLEARED, not forced on: the override
+// only ever REMOVES cards, so a quiet card (.is-quiet) or one with nothing to
+// poll today still leaves the page the normal way.
+const DASH_CARD_KEYS = ['needs', ...DASH_BLOCK_DEFAULT];
+function dashCardGate() {
+  if (!Array.isArray(window.RA_DASH_CARDS)) return;
+  const allow = new Set(window.RA_DASH_CARDS);
+  DASH_CARD_KEYS.forEach(key => {
+    document.querySelectorAll('[data-block="' + key + '"]').forEach(el => {
+      el.style.display = allow.has(key) ? '' : 'none';
+    });
+  });
+}
+
 function dashArrangeApply() {
+  dashCardGate();
   const { order } = dashLayoutLoad();
   const known = DASH_BLOCK_DEFAULT;
   const seq = (order && order.length ? order : DASH_BLOCK_DEFAULT).filter(id => known.includes(id));

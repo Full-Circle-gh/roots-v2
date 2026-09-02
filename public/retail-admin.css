@@ -11069,7 +11069,12 @@
 
 /* ════════════════════════════════════════════════════════════════
    DASHBOARDS BY POSITION — body.pos-<position> is set at boot from
-   the operator's role (02-settings-ops bootstrap).
+   the operator's role (02-settings-ops bootstrap). This is the
+   DEFAULT: an owner who picks explicit cards for a role in the Roles
+   editor (Settings → Team → Roles → "Dashboard cards") gets an inline
+   style instead (dashCardGate, 03-dashboard.js), which beats every
+   rule below regardless of `layout` — these rules only ever run for a
+   role nobody has opened that field on.
    · owner (pos-default) is the 4-card glance: Recap · Needs you ·
      Today · Customers. The operational cards are hidden for it.
    · warehouse / customer-service / dispatch see NO revenue: the

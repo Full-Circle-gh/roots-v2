@@ -592,15 +592,20 @@ router.get('/api/backend/me', (req, res) => {
   //
   // roleName travels too, so the phone and the topbar stop carrying their own
   // copies of a nine-role name map.
-  let roleLayout = 'default', roleName = null;
+  let roleLayout = 'default', roleName = null, dashboardCards = null;
   try {
     const rec = require('../lib/roles').recordFor(u.tenant_id, u.role, tenant ? tenant.roles_version : undefined);
-    if (rec) { roleLayout = rec.layout || 'default'; roleName = { en: rec.nameEn, cn: rec.nameCn }; }
+    if (rec) {
+      roleLayout = rec.layout || 'default'; roleName = { en: rec.nameEn, cn: rec.nameCn };
+      // null = no override, the client keeps drawing the dashboard from the
+      // body.pos-<roleLayout> CSS rules exactly as before this field existed.
+      dashboardCards = rec.dashboardCards;
+    }
   } catch (e) { /* unseeded tenant — 'default' is the pre-roles board */ }
   const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
-            roleLayout, roleName,
+            roleLayout, roleName, dashboardCards,
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
