@@ -10961,7 +10961,14 @@
     <!-- Range bar (mockup `.rangebar`). Finance's own controls, not Reports'.
          NO STORE SELECT: neither ledger table carries a location, so a filter
          could only scope one half of the staircase — §36, "a filter that
-         silently returns a wrong answer is worse than no filter". -->
+         silently returns a wrong answer is worse than no filter".
+
+         NO `min` ON EITHER DATE FIELD, AND THAT IS THE DECISION RATHER THAN AN
+         OMISSION. §36, "Finance is not floored at the cutover date" (DECIDED
+         2026-09-02): this bar serves both sub-views and accepts any date the
+         data covers. `expense_entries` holds 111 rows across May, June and July
+         2026 totalling ¥180,332.28; a floor at 2026-08-01 would put them out of
+         reach. Do not add one back. -->
     <div class="fin-rangebar">
       <span class="fin-seg" id="fin-range-seg">
         <button type="button" data-range="today">Today · 今日</button>
@@ -10981,7 +10988,7 @@
 
     <div id="fin-stair"></div>
 
-    <!-- TRANSACTIONS — the ledger of typed rows (§36 v4.118). Two directions and
+    <!-- TRANSACTIONS — the ledger of typed rows (§36 v4.119). Two directions and
          no third. No location column and no location filter, for the reason
          above; five columns, not the mockup's six. -->
     <div id="fin-tx" hidden>
@@ -11013,6 +11020,12 @@
               <button type="button" data-kind="in" onclick="finTxKind('in')">Money in · 进账</button>
             </div>
           </div>
+          <!-- NO `min`, on the add path and the edit path alike. §36, "Finance
+               is not floored at the cutover date": a person may legitimately
+               correct an old row, so the form does not refuse a date for being
+               earlier than the cutover, and the server's own check is on shape
+               and not on range. NO `max` either — that is a separate question
+               this decision does not touch. -->
           <div class="fin-f-row">
             <label for="fin-tx-date">Date · 日期</label>
             <input type="date" id="fin-tx-date">

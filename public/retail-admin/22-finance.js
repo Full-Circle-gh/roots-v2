@@ -63,6 +63,14 @@ function finMoney(n) {
 // #db-from/#db-to by hard-coded id and reloads Reports, so calling it here
 // would move the other screen's window. Same arithmetic, same +8h shift, so a
 // "30 days" on one screen is the same 30 days on the other.
+//
+// THE BAR ACCEPTS ANY DATE THE DATA COVERS. §36, *Finance is not floored at the
+// cutover date* (DECIDED 2026-09-02): there is no 1 August 2026 floor on this
+// bar, on the Transactions bar it shares, or on the endpoints behind either. The
+// #fin-from / #fin-to fields carry no `min` and the presets are not clamped — a
+// 90-day window reaches back past the cutover and is meant to. Both cost rows go
+// on reading Not recorded UNCONDITIONALLY, in every period; that is the seventh
+// state doing its job, and it must NOT be turned into a date condition here.
 function finSetRange(key) {
   document.querySelectorAll('#fin-range-seg button')
     .forEach(b => b.classList.toggle('on', b.dataset.range === key));
@@ -426,9 +434,13 @@ function finTxRender() {
 
   // ── §1.12, both states, and they are different facts ──
   // EMPTY: there is nothing here yet. A compliment that names what will arrive.
-  // Money in reaches this on every tenant today — income_entries has no rows
-  // after the 1 August cutover — and that is correct, not a missing-data state:
-  // something arrives the moment anyone records non-sale income.
+  // Money in reaches this in the default window on every tenant today —
+  // income_entries' last row is 31 July 2026 and nothing has been typed since —
+  // and that is correct, not a missing-data state: something arrives the moment
+  // anyone records non-sale income. It is a fact about the DATA, not about a
+  // boundary: §36's *Finance is not floored at the cutover date* removes the
+  // 1 August floor, so a range widened back over June or July fills this list
+  // with the 26 rows that are there.
   //
   // NO RESULTS: there is plenty here; the filter matched none of it. Never a
   // compliment — the operator is looking for something and has not found it —
