@@ -1826,19 +1826,36 @@ function recapRows(){
   const paid=of('paid_order'), disp=of('order_dispatched'), deliv=of('order_delivered');
   const autoCanc=of('order_cancelled').filter(e=>e.payload&&e.payload.reason==='auto_cancelled_unpaid');
   const refunded=of('refund_paid'), newCust=of('new_customer'), topups=of('topup');
+  const comm=of('affiliate_commission');
   const pickups=of('gzgrocery_pickup').filter(e=>!(e.payload&&e.payload.is_return));
   const noMoney=recapNoMoney();
   const wh=state.pos==='warehouse';
   const delivery=state.pos==='dispatch'||state.pos==='customer_service';
   const rows=[];
   const n1=(a,one,many)=>a.length===1?one:many;
+  /* How many of the orders ALREADY COUNTED on the paid line came through a
+     referral. Deliberately a parenthetical on that line and not a line of its
+     own: these orders are a subset of `paid`, so a second row would read as
+     more orders than were placed. The flag is absent (not false) on shops with
+     the referral program switched off, so this is 0 there and nothing shows. */
+  const affPaid=paid.filter(e=>e.payload&&e.payload.affiliate).length;
   if(paid.length&&!delivery){
     rows.push(wh
       ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
-      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total')), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
+      /* The affiliate count rides the money branch only. It is commercial
+         context — what the referral program is driving — and the warehouse
+         branch is the money-free version of this sentence by design. */
+      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total'))+(affPaid?' ('+affPaid+' via affiliate)':''), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
   }
   if(disp.length) rows.push(T(disp.length+' '+n1(disp,'order','orders')+' dispatched', disp.length+' 个订单已发货'));
   if(deliv.length&&!wh) rows.push(T(deliv.length+' '+n1(deliv,'order','orders')+' delivered', deliv.length+' 个订单已送达'));
+  /* Commission the shop PAID OUT. Money, so it sits behind the same owner-only
+     gate as the revenue figures beside it — a warehouse or dispatch account
+     sees its queue without the cost of sale, exactly as the paid total, refunds
+     and top-ups already decide. Omitted at zero rather than shown as ¥0: a
+     shop not running referrals should not carry a permanent empty line, and
+     nor should one whose only movement today netted out. */
+  if(!noMoney&&comm.length&&sum(comm,'amount')>0) rows.push(T(m(sum(comm,'amount'))+' affiliate commission'));
   if(!noMoney&&autoCanc.length) rows.push(T(autoCanc.length+' unpaid '+n1(autoCanc,'order','orders')+' cancelled automatically', autoCanc.length+' 个未付款订单已自动取消'));
   if(!noMoney&&refunded.length) rows.push(T(refunded.length+' '+n1(refunded,'refund','refunds')+' settled — '+m(sum(refunded,'amount')), refunded.length+' 笔退款已完成，共 '+m(sum(refunded,'amount'))));
   if(!noMoney&&topups.length) rows.push(T(topups.length+' wallet '+n1(topups,'top-up','top-ups')+' — '+m(sum(topups,'amount')), topups.length+' 笔钱包充值，共 '+m(sum(topups,'amount'))));

@@ -14481,12 +14481,13 @@ router.get('/api/retail-admin/activity/export.csv', requireRetailAdmin, (req, re
 });
 
 // ── Dashboard: activity feed (real events the operator might act on) ──────
-// Unions 5 real-data event streams into one timeline: paid orders, refund
+// Unions the real-data event streams into one timeline: paid orders, refund
 // requests, low-stock items (currently <=5 and recently touched), new
-// customers, customer feedback. Each row has { type, ts, ref_type, ref_id,
-// payload } so the front-end can render and drill-through uniformly. Default
-// window: last 24h; ?since=<ms> + ?limit=N tune it. Polled every ~20s by the
-// dashboard; no cache (cheap query, freshness matters).
+// customers, customer feedback, wallet top-ups, and affiliate commission paid
+// out. Each row has { type, ts, ref_type, ref_id, payload } so the front-end
+// can render and drill-through uniformly. Default window: last 24h;
+// ?since=<ms> + ?limit=N tune it. Polled every ~20s by the dashboard; no cache
+// (cheap query, freshness matters).
 router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res) => {
   const limit   = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 500);
   // Default window = since the start of TODAY in Guangzhou (UTC+8), not a
@@ -14502,17 +14503,37 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
   const parseTs  = s => Date.parse(String(s || '').replace(' ', 'T') + 'Z') || null;
   const events = [];
 
+  // Is the referral program running for this tenant? Same single switch the
+  // program itself reads (storefront_config `features.affiliate`, via
+  // affiliateSettings) — so a shop with affiliates off sees no affiliate
+  // commission rows AND no affiliate flag on its paid orders, rather than a
+  // feed that quietly reports on a feature it doesn't run.
+  //
+  // Guarded because this runs BEFORE the try below that owns every other read
+  // here: affiliateSettings() hits storefront_config, and an unguarded throw
+  // would take out the whole feed — orders, refunds, stock and all — over an
+  // optional line. Unreadable config means "off", which costs one line and
+  // keeps the rest of the recap on the glass.
+  let affiliateOn = false;
+  try { affiliateOn = affiliateSettings().enabled; }
+  catch (e) { console.error('[dashboard/activity affiliateSettings]', e.message); }
+
   try {
     // Paid orders — fires once per order on first successful payment.
     // first_order flags a customer's very first paid order (milestone);
     // big_order flags an unusually large basket (VIP signal). Guests
     // (no customer_id) are never flagged "first" — can't dedupe them.
+    // affiliate flags an order placed by a customer who arrived through
+    // someone's referral code. It is a FLAG ON THE PAID ROW, deliberately not
+    // a stream of its own: the order is already counted here, and a second row
+    // for the same payment would double it in every total the feed feeds.
     const BIG_ORDER_YUAN = 200;
     const paid = tdb().prepare(`
       SELECT o.id, o.order_no, o.total, o.paid_at, o.customer_id, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
                WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus,
+             (c.referred_by_customer_id IS NOT NULL) AS affiliate,
              (o.customer_id IS NOT NULL AND NOT EXISTS (
                 SELECT 1 FROM retail_orders o2
                  WHERE o2.customer_id = o.customer_id
@@ -14536,6 +14557,9 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         channel: r.channel || '',
         first_order: !!r.first_order,
         big_order: Number(r.total || 0) >= BIG_ORDER_YUAN,
+        // Omitted entirely when the program is off — absent, not false, so a
+        // reader can tell "no affiliates here" from "not an affiliate order".
+        ...(affiliateOn ? { affiliate: !!r.affiliate } : {}),
       },
     });
 
@@ -14710,12 +14734,37 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     });
 
     // Wallet top-ups — real money in, settled (status='success', paid_at set).
+    //
+    // retail_topup_transactions is not a top-up table; it is the WALLET LEDGER,
+    // and `payment_method` is its event-type discriminator. The affiliate payout
+    // paths credit and claw back through it deliberately, so a referrer's reward
+    // shows in wallet history beside their real top-ups (see creditReferralReward
+    // / creditLifetimeCommission). Unfiltered, this stream read every one of those
+    // as money a customer had just put in — so a ¥20 referral bounty PAID OUT by
+    // the shop was reported to the operator as ¥20 of revenue IN, and the negative
+    // clawback rows quietly netted against the day's genuine top-ups.
+    //
+    // The six affiliate methods are excluded by name rather than the real tenders
+    // being listed by name, so a new payment provider keeps landing here by
+    // default and only a new AFFILIATE method needs adding to this list. Affiliate
+    // money now has its own stream below.
+    //
+    // NOT excluded, and deliberately left alone: 'admin_adjust', 'order_redeem',
+    // 'migration' and 'refund_reverse' are also not top-ups, and they have been
+    // counted here since this stream was written. That is a separate miscount with
+    // its own blast radius (the desktop dashboard reads the same rows) and is not
+    // this change's to make.
     const topups = tdb().prepare(`
       SELECT t.id, t.customer_id, t.amount, t.paid_at,
              COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
         FROM retail_topup_transactions t
         LEFT JOIN retail_customers c ON c.id = t.customer_id
        WHERE t.status = 'success' AND t.paid_at IS NOT NULL AND t.paid_at >= ?
+         AND COALESCE(t.payment_method, '') NOT IN (
+           'referral_reward', 'referral_welcome', 'lifetime_commission',
+           'referral_clawback', 'referral_welcome_clawback',
+           'lifetime_commission_clawback'
+         )
        ORDER BY t.paid_at DESC LIMIT ?
     `).all(sinceIso, limit);
     for (const r of topups) events.push({
@@ -14725,6 +14774,72 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ref_type: 'customer', ref_id: r.customer_id,
       payload: { amount: r.amount, buyer: r.buyer },
     });
+
+    // Affiliate commission — money the shop PAID OUT to referrers, which until
+    // now the feed reported (as top-ups) as money it had taken in.
+    //
+    // Two tables because the program pays two different things, and a referrer
+    // earns both: retail_referrals is the ONE-SHOT bounty on an invited friend's
+    // first paid order (and carries the friend's welcome cashback in the same
+    // row), retail_lifetime_commissions is the ONGOING % on every order after
+    // that. They are unioned into one event type because from the operator's
+    // side it is one number — what the referral program cost today.
+    //
+    // Each row is its own event, so `ts` is the moment that specific payment was
+    // credited, and the 30-minute-to-7-day recap window includes or excludes it
+    // on the same terms as every other stream. Both timestamps are stamped in
+    // the same transaction as the wallet credit, so the feed time is the money
+    // time — not an approximation of it.
+    //
+    // Excluded: status='void' referrals and reversed commissions. A bounty
+    // clawed back when its order was refunded is not commission the shop paid;
+    // it is a payment that was undone, and the clawback ledger row it wrote is
+    // already excluded from the top-up stream above. Reporting the credit while
+    // silently dropping the debit would overstate the cost of the programme.
+    if (affiliateOn) {
+      try {
+        // One-shot bounty. rewarded_at is set only on a real payout, so the
+        // NOT NULL check is what makes this "paid", not merely "matched".
+        // reward_amount is the referrer's cut and referee_reward_amount the
+        // friend's welcome cashback — both left the shop on this event, so the
+        // row's cost is the sum.
+        const bounties = tdb().prepare(`
+          SELECT r.id, r.referrer_id, r.rewarded_at,
+                 COALESCE(r.reward_amount, 0) + COALESCE(r.referee_reward_amount, 0) AS amount,
+                 COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
+            FROM retail_referrals r
+            LEFT JOIN retail_customers c ON c.id = r.referrer_id
+           WHERE r.rewarded_at IS NOT NULL AND r.rewarded_at >= ?
+             AND r.status != 'void'
+           ORDER BY r.rewarded_at DESC LIMIT ?
+        `).all(sinceIso, limit);
+        for (const r of bounties) events.push({
+          type: 'affiliate_commission',
+          ts: parseTs(r.rewarded_at),
+          // ref_id is the referrer, so the row jumps to the customer who was
+          // paid — the same convention the top-up stream uses.
+          ref_type: 'customer', ref_id: r.referrer_id,
+          payload: { amount: r.amount, buyer: r.buyer, kind: 'referral' },
+        });
+
+        // Ongoing revenue share. Dormant on any shop that has never set
+        // affiliate.lifetimeRatePercent above 0, so this is usually empty.
+        const lifetime = tdb().prepare(`
+          SELECT lc.id, lc.referrer_id, lc.created_at, lc.commission_amount AS amount,
+                 COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
+            FROM retail_lifetime_commissions lc
+            LEFT JOIN retail_customers c ON c.id = lc.referrer_id
+           WHERE lc.created_at >= ? AND lc.reversed_at IS NULL
+           ORDER BY lc.created_at DESC LIMIT ?
+        `).all(sinceIso, limit);
+        for (const r of lifetime) events.push({
+          type: 'affiliate_commission',
+          ts: parseTs(r.created_at),
+          ref_type: 'customer', ref_id: r.referrer_id,
+          payload: { amount: r.amount, buyer: r.buyer, kind: 'lifetime' },
+        });
+      } catch (e) { /* tenant without the affiliate tables → no rows */ }
+    }
 
     // (Out-of-stock is intentionally omitted here too — see the stock NOTE
     // above. It lives as live state in the "Low stock" tile + alerts page.)
