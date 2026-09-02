@@ -9,6 +9,10 @@ const { notSupersededByCopySql } = require('../lib/po-supersede');
 // counted. lib/po-returns.js is the one definition site; this screen is the
 // third reader, after the two receive paths.
 const { billableQty } = require('../lib/po-returns');
+// The one normalisation for finance category text (trim, glyph repair, snap to
+// the tenant's master list). Applied at every write of expense_entries.category
+// / income_entries.category below, same as routes/finance-transactions.js.
+const { storeCategory } = require('../lib/category-text');
 const router = express.Router();
 
 // Map a row from income_entries / expense_entries to the shape the
@@ -135,11 +139,12 @@ router.post('/api/finance/income', requireAuth, requirePermission('finance'), (r
   const amt = parseFloat(amount);
   if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
   if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
+  const storedCategory = storeCategory(db, category, 'income');
   try {
     const result = db.prepare(
       'INSERT INTO income_entries (date,amount,category,description,channel,payment_method,created_by) VALUES (?,?,?,?,?,?,?)'
-    ).run(date, amt, category || null, notes || null, channel || null, payment_method || null, req.user.id);
-    logActivity(req.user.id, req.user.username, 'create', 'income', result.lastInsertRowid, { amount: amt, category }, req.ip);
+    ).run(date, amt, storedCategory, notes || null, channel || null, payment_method || null, req.user.id);
+    logActivity(req.user.id, req.user.username, 'create', 'income', result.lastInsertRowid, { amount: amt, category: storedCategory }, req.ip);
     const row = db.prepare('SELECT * FROM income_entries WHERE id = ?').get(result.lastInsertRowid);
     res.json({ success: true, id: result.lastInsertRowid, data: mapIncome(row) });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -167,10 +172,14 @@ router.put('/api/finance/income/:id', requireAuth, requirePermission('finance'),
   if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
 
   // Amount stays positive in the table — the sign is a rendering decision.
+  // category is resolved like pickOptional (undefined leaves the stored value
+  // alone, untouched by normalisation) but a supplied value is run through
+  // storeCategory rather than the bare `|| null` pickOptional does for the
+  // other free-text fields.
   const next = {
     date,
     amount: amt,
-    category:       pickOptional(category, row.category),
+    category:       category === undefined ? row.category : storeCategory(db, category, 'income'),
     description:    pickOptional(notes, row.description),
     channel:        pickOptional(channel, row.channel),
     payment_method: pickOptional(payment_method, row.payment_method),
@@ -225,11 +234,12 @@ router.post('/api/finance/expenses', requireAuth, requirePermission('finance'), 
   const amt = parseFloat(amount);
   if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
   if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
+  const storedCategory = storeCategory(db, category, 'accounting');
   try {
     const result = db.prepare(
       'INSERT INTO expense_entries (date,amount,category,description,payment_method,created_by) VALUES (?,?,?,?,?,?)'
-    ).run(date, amt, category || null, notes || null, payment_method || null, req.user.id);
-    logActivity(req.user.id, req.user.username, 'create', 'expense', result.lastInsertRowid, { amount: amt, category }, req.ip);
+    ).run(date, amt, storedCategory, notes || null, payment_method || null, req.user.id);
+    logActivity(req.user.id, req.user.username, 'create', 'expense', result.lastInsertRowid, { amount: amt, category: storedCategory }, req.ip);
     const row = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(result.lastInsertRowid);
     res.json({ success: true, id: result.lastInsertRowid, data: mapExpense(row) });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -252,10 +262,14 @@ router.put('/api/finance/expenses/:id', requireAuth, requirePermission('finance'
   if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
 
   // Stored positive — the leading minus on the Expenses list is render-only.
+  // category is resolved like pickOptional (undefined leaves the stored value
+  // alone, untouched by normalisation) but a supplied value is run through
+  // storeCategory rather than the bare `|| null` pickOptional does for the
+  // other free-text fields.
   const next = {
     date,
     amount: amt,
-    category:       pickOptional(category, row.category),
+    category:       category === undefined ? row.category : storeCategory(db, category, 'accounting'),
     description:    pickOptional(notes, row.description),
     payment_method: pickOptional(payment_method, row.payment_method),
   };
