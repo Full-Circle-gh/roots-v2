@@ -1844,8 +1844,12 @@ function recapRows(){
       ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
       /* The affiliate count rides the money branch only. It is commercial
          context — what the referral program is driving — and the warehouse
-         branch is the money-free version of this sentence by design. */
-      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total'))+(affPaid?' ('+affPaid+' via affiliate)':''), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
+         branch is the money-free version of this sentence by design.
+         CN: 推荐订单 is the term already used for these orders (app.html's
+         Referrers table), 笔 the measure word this very line already uses,
+         and （） the full-width form every other parenthetical in this file
+         takes — so no leading space before it, unlike the English half. */
+      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total'))+(affPaid?' ('+affPaid+' via affiliate)':''), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))+(affPaid?'（推荐订单 '+affPaid+' 笔）':'')));
   }
   if(disp.length) rows.push(T(disp.length+' '+n1(disp,'order','orders')+' dispatched', disp.length+' 个订单已发货'));
   if(deliv.length&&!wh) rows.push(T(deliv.length+' '+n1(deliv,'order','orders')+' delivered', deliv.length+' 个订单已送达'));
@@ -1854,8 +1858,17 @@ function recapRows(){
      sees its queue without the cost of sale, exactly as the paid total, refunds
      and top-ups already decide. Omitted at zero rather than shown as ¥0: a
      shop not running referrals should not carry a permanent empty line, and
-     nor should one whose only movement today netted out. */
-  if(!noMoney&&comm.length&&sum(comm,'amount')>0) rows.push(T(m(sum(comm,'amount'))+' affiliate commission'));
+     nor should one whose only movement today netted out.
+
+     CN: 已发出奖励 — the Affiliate tab's own headline for this exact money
+     (retail-admin/10-extras.js, "You have paid out"). NOT 佣金, which every
+     other use in this codebase spends on the PLATFORM's cut — the channel
+     fee Meituan and Eleme take, and the commission the platform bills a
+     tenant. Reusing it here would name the shop's own referral spend after
+     somebody else's. The one number covers both halves of the programme,
+     the one-shot bounty and the repeat-order share alike, which is why the
+     server unions the two tables into a single event type. */
+  if(!noMoney&&comm.length&&sum(comm,'amount')>0) rows.push(T(m(sum(comm,'amount'))+' affiliate commission', '已发出奖励 '+m(sum(comm,'amount'))));
   if(!noMoney&&autoCanc.length) rows.push(T(autoCanc.length+' unpaid '+n1(autoCanc,'order','orders')+' cancelled automatically', autoCanc.length+' 个未付款订单已自动取消'));
   if(!noMoney&&refunded.length) rows.push(T(refunded.length+' '+n1(refunded,'refund','refunds')+' settled — '+m(sum(refunded,'amount')), refunded.length+' 笔退款已完成，共 '+m(sum(refunded,'amount'))));
   if(!noMoney&&topups.length) rows.push(T(topups.length+' wallet '+n1(topups,'top-up','top-ups')+' — '+m(sum(topups,'amount')), topups.length+' 笔钱包充值，共 '+m(sum(topups,'amount'))));
