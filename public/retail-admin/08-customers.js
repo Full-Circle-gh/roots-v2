@@ -1176,11 +1176,11 @@ function cuRenderDetail() {
     const row = d.orders_by_month.find(m => m.month === key);
     months.push({ key, n: row ? row.n : 0, revenue: row ? row.revenue : 0 });
   }
-  const maxN = Math.max(1, ...months.map(m => m.n));
+  const maxRevenue = Math.max(1, ...months.map(m => m.revenue));
   const barMax = 78;   // fixed quiet height — the summary line carries the headline
   const monthBars = months.map(m => `
     <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${escapeAttr(yuanBare(m.revenue))}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
-      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;"></div>
+      <div class="cu-bar ${m.revenue === 0 ? 'empty' : (m.revenue === maxRevenue ? 'peak' : '')}" style="height: ${m.revenue === 0 ? 3 : Math.max(8, (m.revenue / maxRevenue) * barMax)}px;"></div>
       <div class="cu-bar-label">${m.key.slice(5)}</div>
     </div>
   `).join('');
