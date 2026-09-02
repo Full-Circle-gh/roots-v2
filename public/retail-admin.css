@@ -13795,3 +13795,21 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   color: var(--td-brick-ink, var(--td-text)); }
 .fin-modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
 .fin-modal-del { color: var(--td-brick-ink, var(--td-text)); }
+
+/* ── Finance · two corrections to what shipped ────────────────────────────── */
+
+/* [hidden] DOES NOT WORK ON A .btn ON THIS SURFACE, and that is why the New
+   transaction CTA appeared on Summary. `.btn { display: inline-flex }` is an
+   author rule; the UA's `[hidden] { display: none }` loses to it, so setting
+   the attribute did nothing. The page already knows this trap — see
+   `#tab-delivery .dlv-view[hidden]` above, which carries the same !important
+   for the same reason. Scoped to this section rather than made global: a
+   surface-wide `[hidden]` rule is a bigger change than this fault warrants.
+   The CTA belongs to Transactions; Summary types nothing. */
+#tab-finance [hidden] { display: none !important; }
+
+/* The not-recorded VALUE in a figure cell. Graphite, body weight, no tint and
+   no colour — §1.10: colour encodes state, and nothing here is in a state. It
+   sits at the same weight as the figures around it because it is the same kind
+   of claim about the same kind of thing: what this line is. */
+.fin-row.fin-absent .fin-fig { color: var(--td-text2); font-weight: 400; font-size: 15px; }

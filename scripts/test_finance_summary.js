@@ -205,18 +205,29 @@ vm.createContext(ctx);
 new vm.Script(
   CLIENT.replace(/^\/\* eslint-env[\s\S]*?\*\/$/m, '')
     .replace(/^'use strict';$/m, '')
-  + '\nthis.finRow=finRow; this.finMoney=finMoney; this.finNotRecorded=finNotRecorded;'
+  + '\nthis.finRow=finRow; this.finMoney=finMoney; this.finNotRecorded=finNotRecorded;\n  this.finNotRecordedValue=finNotRecordedValue;'
   + '\nthis.finBreakdown=finBreakdown;'
 ).runInContext(ctx);
 
-it('cost of goods and gross profit render NO figure — not zero, not a dash', () => {
-  const cost = ctx.finRow('Cost of goods', null, { less: true });
-  const gross = ctx.finRow('Gross profit', null, { concl: true });
+it('cost of goods and gross profit READ Not recorded — not a blank, not a dash', () => {
+  // §36 v4.113: "Summary renders both the cost of goods line and the gross
+  // profit line READING NOT RECORDED." A blank figure cell reads as a gap, not
+  // as a statement — which is the failure the seventh state exists to avoid.
+  // The VALUE here is a different string from the sentence below the pair, and
+  // the vocabulary says so: "neither replaces the other."
+  const cost = ctx.finRow('Cost of goods', ctx.finNotRecordedValue(), { less: true, notrec: true });
+  const gross = ctx.finRow('Gross profit', ctx.finNotRecordedValue(), { concl: true, notrec: true });
   [cost, gross].forEach(html => {
-    assert.ok(/<span class="fin-fig"><\/span>/.test(html), 'the figure cell must be empty');
-    assert.ok(!/—|–|-{1,2}\s*<\/span>/.test(html.replace('−', '')), 'no dash may stand in for the figure');
+    assert.ok(/<span class="fin-fig">Not recorded<\/span>/.test(html), 'the row must read Not recorded');
     assert.ok(!/>0<|¥0/.test(html), 'zero claims the goods were free');
+    // The sign column is a deduction cue and belongs only beside an amount.
+    // A lone minus in the money column reads as the dash §36 bans as a value.
+    assert.ok(/<span class="fin-sign"><\/span>/.test(html),
+      'no sign may stand beside a figure that is not a quantity');
   });
+  // …while a real deduction still carries it.
+  assert.ok(/<span class="fin-sign">−<\/span>/.test(ctx.finRow('Operating expenses', '¥34,328', { less: true })),
+    'a genuine deduction keeps its minus');
 });
 
 it('the not-recorded note is ONE sentence, past tense, and names no date', () => {
@@ -232,8 +243,10 @@ it('the not-recorded note is ONE sentence, past tense, and names no date', () =>
 
 it('both cost rows are covered, and the sentence is rendered once per card', () => {
   const card = CLIENT.slice(CLIENT.indexOf('function finRender'));
-  assert.ok(/Cost of goods', '销货成本'\), null/.test(card), 'cost of goods must pass a null figure');
-  assert.ok(/Gross profit', '毛利润'\), null/.test(card), 'gross profit must pass a null figure');
+  assert.ok(/Cost of goods', '销货成本'\), finNotRecordedValue\(\)/.test(card),
+    'cost of goods must read the not-recorded value');
+  assert.ok(/Gross profit', '毛利润'\), finNotRecordedValue\(\)/.test(card),
+    'gross profit must read the not-recorded value');
   assert.strictEqual((card.match(/finNotRecorded\(\)/g) || []).length, 1);
 });
 
@@ -294,6 +307,27 @@ it('it carries no alarm colour, no icon and no retry control', () => {
   assert.ok(/margin:\s*[^;]*-24px/.test(body), 'negative side margins bleed to the block edge');
   assert.ok(!/brick|amber|--td-[a-z]*-(tint|ink)/.test(body), '§1.10 — nothing here is in a state');
   assert.ok(!/content:/.test(body), 'no icon');
+});
+
+it('the range echo carries the class its own CSS targets', () => {
+  // It shipped with `td-date` alone while the stylesheet targeted `.fin-echo`,
+  // so `margin-left: auto` never applied and the echo sat against the title
+  // instead of at the right edge the mockup puts it at (`.pg-echo`).
+  assert.ok(/id="fin-range"[^>]*class=|class="[^"]*fin-echo[^"]*"[^>]*id="fin-range"/.test(HTML)
+    || /<span class="[^"]*fin-echo[^"]*" id="fin-range"/.test(HTML),
+    'the echo must carry fin-echo');
+  assert.ok(/#tab-finance \.fin-echo\s*\{[^}]*margin-left:\s*auto/.test(CSS),
+    'and the rule that right-aligns it must exist');
+});
+
+it('the New transaction CTA can actually be hidden on Summary', () => {
+  // It shipped visible on Summary because `[hidden]` loses to `.btn { display:
+  // inline-flex }` — an author rule beats the UA default. The section carries
+  // the same !important override #tab-delivery already uses for this trap.
+  assert.ok(/#tab-finance \[hidden\]\s*\{\s*display:\s*none\s*!important/.test(CSS),
+    'hidden must be enforced against the .btn display rule');
+  assert.ok(/cta\.hidden = !isTx/.test(fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '22-finance.js'), 'utf8')),
+    'and the sub-view must drive it');
 });
 
 it('the Finance surface is wired end to end', () => {

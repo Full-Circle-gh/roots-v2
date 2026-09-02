@@ -101,12 +101,36 @@ function finRangeLabel() {
 /** One money row of the staircase. `sign` is '−' or ''; it owns its own column. */
 function finRow(label, figure, opts) {
   const o = opts || {};
-  const cls = ['fin-row', o.concl ? 'fin-concl' : 'fin-input', o.less ? 'fin-less' : ''].filter(Boolean).join(' ');
+  const cls = ['fin-row', o.concl ? 'fin-concl' : 'fin-input', o.less ? 'fin-less' : '',
+    o.notrec ? 'fin-absent' : ''].filter(Boolean).join(' ');
+  // THE SIGN ONLY RENDERS BESIDE A FIGURE IT APPLIES TO. A minus alone in the
+  // money column, with nothing after it, is read as a dash standing in for the
+  // number — and §36 rejects that in terms: "a dash is already banned as a
+  // value", and §1.12 refuses "a column of blanks [that] sends the eye hunting
+  // for something that was never there". The sign is a deduction cue, not a
+  // placeholder, so a row with no figure shows neither — and neither does one
+  // whose figure is the not-recorded VALUE, because "− Not recorded" asks the
+  // reader to subtract something that is not a quantity.
+  const sign = (o.less && figure != null && !o.notrec) ? '−' : '';
   return `<div class="${cls}">`
     + `<span class="fin-lbl">${escapeHtml(label)}</span>`
-    + `<span class="fin-sign">${o.less ? '−' : ''}</span>`
+    + `<span class="fin-sign">${sign}</span>`
     + `<span class="fin-fig">${figure == null ? '' : escapeHtml(figure)}</span>`
     + '</div>';
+}
+
+/* The §1.12 seventh state as a VALUE, which is a different string from the
+   sentence below it and does a different job. The vocabulary says so outright:
+   "`noCostRecorded` IS A SENTENCE, NOT A VALUE. It does not replace a figure in
+   a cell. The existing `not recorded` / `未记录` pair … is a VALUE for one
+   absent field … neither replaces the other."
+
+   §36 v4.113 requires the ROWS to carry it: "Summary renders both the cost of
+   goods line and the gross profit line READING NOT RECORDED." A blank figure
+   cell does not read as anything — it reads as a gap, which is the failure the
+   state exists to avoid. Reused from 08-customers.js:1366, not minted. */
+function finNotRecordedValue() {
+  return cuT('Not recorded', '未记录');
 }
 
 /* The §1.12 seventh state, covering the two cost lines.
@@ -162,8 +186,8 @@ function finRender() {
     + finRow(cuT('Revenue', '营收'), finMoney(d.revenue))
     // Lines 2 and 3 — the two the mockup could not have. Labels kept, figures
     // absent, no dash, and one sentence under the pair.
-    + finRow(cuT('Cost of goods', '销货成本'), null, { less: true })
-    + finRow(cuT('Gross profit', '毛利润'), null, { concl: true })
+    + finRow(cuT('Cost of goods', '销货成本'), finNotRecordedValue(), { less: true, notrec: true })
+    + finRow(cuT('Gross profit', '毛利润'), finNotRecordedValue(), { concl: true, notrec: true })
     + finNotRecorded()
     // The landing — what makes the card read as steps rather than five rows.
     + '<div class="fin-tread"></div>'
