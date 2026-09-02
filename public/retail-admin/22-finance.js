@@ -65,7 +65,7 @@ function finMoney(n) {
 // "30 days" on one screen is the same 30 days on the other.
 function finSetRange(key) {
   document.querySelectorAll('#fin-range-seg button')
-    .forEach(b => b.classList.toggle('active', b.dataset.range === key));
+    .forEach(b => b.classList.toggle('on', b.dataset.range === key));
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   let from = today;
   if (key === '7')  from = new Date(Date.now() + 8 * 3600 * 1000 - 6  * 86400000).toISOString().slice(0, 10);
@@ -306,7 +306,7 @@ let FIN_TX_DIR = 'all';     // 'all' | 'in' | 'out' — the chip filter
 window.finShow = function finShow(which) {
   const isTx = which === 'transactions';
   document.querySelectorAll('#fin-subviews button')
-    .forEach(b => b.classList.toggle('active', b.dataset.sub === which));
+    .forEach(b => b.classList.toggle('on', b.dataset.sub === which));
   const stair = document.getElementById('fin-stair');
   const tx = document.getElementById('fin-tx');
   if (stair) stair.hidden = isTx;
@@ -437,11 +437,17 @@ function finTxRender() {
     const filtering = !!q || FIN_TX_DIR !== 'all';
     host.innerHTML = filtering
       ? `<div class="fin-tx-state"><p>${escapeHtml(cuT('No matching records.', '没有符合条件的记录。'))}</p>`
-        + `<button type="button" class="db-btn" onclick="finTxClear()">${escapeHtml(cuT('Clear', '清除'))}</button></div>`
+        + `<button type="button" class="fin-btn-sec" onclick="finTxClear()">${escapeHtml(cuT('Clear', '清除'))}</button></div>`
       : `<div class="fin-tx-state"><h3>${escapeHtml(cuT('Nothing recorded yet', '暂无记录'))}</h3>`
         + `<p>${escapeHtml(cuT(
             'Rent, wages and one-off costs you record will appear here — alongside anything Purchasing posts from a purchase order.',
-            '您记录的租金、工资和一次性费用将显示在此处，以及采购单自动记入的支出。'))}</p></div>`;
+            '您记录的租金、工资和一次性费用将显示在此处，以及采购单自动记入的支出。'))}</p>`
+        // The mockup draws a button here, SECONDARY not Dusk: "The header CTA
+        // has first claim on the page's one Dusk element (§1.8 rule 1)."
+        + (typeof can !== 'function' || can('finance:record')
+          ? `<button type="button" class="fin-btn-sec" onclick="finTxForm('out')">${escapeHtml(cuT('New transaction', '新建交易'))}</button>`
+          : '')
+        + '</div>';
     return;
   }
 
@@ -505,7 +511,7 @@ let FIN_TX_KIND = 'out';  // the chosen direction — never inferred from the si
 window.finTxKind = function finTxKind(kind) {
   FIN_TX_KIND = kind === 'in' ? 'in' : 'out';
   document.querySelectorAll('#fin-tx-kind button')
-    .forEach(b => b.classList.toggle('active', b.dataset.kind === FIN_TX_KIND));
+    .forEach(b => b.classList.toggle('on', b.dataset.kind === FIN_TX_KIND));
   // Money in has no category field. §36 decides income categories move
   // server-side and ship EMPTY, and that has not landed — so there is no list to
   // choose from, and §36's own rule for the screen applies to the form: "the
@@ -549,12 +555,23 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   }
   finTxErr('');
   m.hidden = false;
+  // §1.8, one Dusk element per page. The modal's Save is the primary action of
+  // the bounded decision it opens, so the header CTA — which the scrim has
+  // already put out of reach — stands down while it is open. The empty state's
+  // own button is Secondary for the same reason, per the mockup's note: "a
+  // second Dusk button on the same page is a bug even when the page is empty."
+  const cta = document.getElementById('fin-tx-new');
+  if (cta) cta.hidden = true;
 };
 
 window.finTxFormClose = function finTxFormClose() {
   const m = document.getElementById('fin-tx-modal');
   if (m) m.hidden = true;
   FIN_TX_EDIT = null;
+  // The header CTA comes back only if Transactions is still the open sub-view.
+  const tx = document.getElementById('fin-tx');
+  const cta = document.getElementById('fin-tx-new');
+  if (cta) cta.hidden = !tx || tx.hidden;
 };
 
 /* §1.12's error state: it renders where the operator is looking, next to the
