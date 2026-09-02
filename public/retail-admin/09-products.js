@@ -1297,31 +1297,83 @@ function pdRenderMargin() {
   const g = id => { const n = document.getElementById(id); return n ? n.value : ''; };
   const cost = g('pd-cost').trim();
   const m = _paMargin(g('pd-price'), cost);
+  pdRenderCostSanity(m);
   // The row the list already holds — mt_revenue / mt_units come down with it.
   const p = (PA_PRODUCTS || []).find(x => x.id === Number(g('pd-id'))) || null;
   const ch = p ? _paChannelMargin(p.mt_revenue, p.mt_units, cost) : null;
-  const line = (label, v) => {
+  // `noteBelowCost` defaults to shown — the Meituan-actual line below keeps its
+  // own long-standing wording. The list-margin line passes false: that
+  // condition now has its own pill (pdRenderCostSanity) and would otherwise say
+  // the same thing twice.
+  const line = (label, v, noteBelowCost) => {
     const sign = v.money < 0 ? '−' : '';
     return label + ' ' + sign + paMoney(Math.abs(v.money)) + ' · ' + v.pct.toFixed(1) + '%'
-         + (v.money < 0 ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
+         + (v.money < 0 && noteBelowCost !== false ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
   };
   el.textContent = '';
   if (!m) { el.textContent = cuT('Margin — add a cost to see it', '毛利 — 填写成本后显示'); return; }
   // One figure keeps the word it has always had. Two figures need two words
   // (§1.17 rule 1) — they are the same expression on different revenue.
-  if (!ch) { el.textContent = line(cuT('Margin', '毛利'), m); return; }
+  if (!ch) { el.textContent = line(cuT('Margin', '毛利'), m, false); return; }
   const add = (text, cls) => {
     const d = document.createElement('div');
     d.textContent = text;
     if (cls) d.className = cls;
     el.appendChild(d);
   };
-  add(line(cuT('List margin', '标价毛利'), m));
+  add(line(cuT('List margin', '标价毛利'), m, false));
   // qty is REAL on the line item, so a count is rounded for display rather than
   // shown as "12.0 sold". It is context for the figure above it, not a stock number.
   const sold = Math.round(ch.units).toLocaleString();
   add(line(cuT('Meituan actual', '美团实收'), ch) + ' · '
       + cuT(`over ${sold} sold`, `已售 ${sold} 件`), 'pd-margin-ch');
+}
+// ── Unit cost exceeding sell price — a warning, not a refusal ──────────────
+//
+// §36, DECIDED 2026-09-02 by Ash, on the finding that store_products.unit_cost
+// held ¥990.00 against a ¥19.20 sell price for product 3 (Jackfruit Chips) with
+// nothing on any screen remarking on it: Tacet warns when a product's unit cost
+// exceeds its sell price, and does not refuse the save. A product genuinely
+// bought above its own sell price is possible; refusing would block real work.
+//
+// THIS IS NOT A NEW CHECK. `m.money < 0` — cost greater than price — already
+// rendered, as the trailing clause on the margin line pdRenderMargin() builds
+// (`'selling below cost' · '低于成本销售'`, live before this function existed).
+// That did not stop product 3: the words sat as a footnote at the end of a
+// small money-and-percentage line, easy to type past without reading. What
+// changes here is VISIBILITY, not detection — the same pair, the same
+// trigger, promoted into the `.pd-cost-warn` pill shape the recipe-cost
+// alerts above this field already use (pdCostPill, §7's pattern), so it reads
+// as a warning instead of trailing punctuation on a number nobody was
+// reading closely. A later reader must not take this build as the moment the
+// comparison was added — it is the moment it became legible.
+//
+// LIST MARGIN ONLY, deliberately. `m` compares the typed cost against the
+// product's own sell price — the condition §36 names. The Meituan-actual
+// line pdRenderMargin() renders separately compares cost against what a
+// channel actually settled, a different question the pill does not answer,
+// so that line keeps its own unpromoted wording untouched.
+//
+// NEVER FIRES ON ZERO OR NULL. `_paMargin` already returns null whenever
+// price is missing/≤0 or cost is null/empty/negative — a product with no
+// sell price yet is an incomplete product (`cost_incomplete`'s case), not
+// this one — so `m` reaching here already excludes it; nothing further is
+// checked.
+//
+// EDITOR ONLY. The Products list's margin cell is not touched — a
+// catalogue-wide sweep for existing bad rows is a different feature (passive
+// review, not "at the moment they set it") and is recorded as a possible
+// separate item in §36 rather than built here.
+function pdRenderCostSanity(m) {
+  const host = document.getElementById('pd-cost-sanity');
+  if (!host) return;
+  if (m && m.money < 0) {
+    host.innerHTML = pdCostPill(cuT('selling below cost', '低于成本销售'));
+    host.style.display = '';
+  } else {
+    host.innerHTML = '';
+    host.style.display = 'none';
+  }
 }
 function _paPriceCell(u) {
   const pr = _paUnitPrices(u);
