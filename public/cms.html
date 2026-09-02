@@ -3777,11 +3777,11 @@
 
   /* ═══════════════════════════════════════════════════════════════════
      FLASH SALE · design directions (Classic / Editorial / Urgency)
-     Coral band, cream zigzag top edge, live countdown, SHOP NOW pill and a
+     Coral band, cream cap top edge, live countdown, SHOP NOW pill and a
      product carousel — ported from the Claude-Design "Flash sale" section.
      Every coloured element rides on a CSS var set in JS so the inspector can
      recolour each piece independently:
-       --fs-ink (text + ink fills/borders)  --fs-panel (cream panel/zigzag)
+       --fs-ink (text + ink fills/borders)  --fs-panel (cream panel/cap)
        --fs-tile (Classic countdown tiles)  --fs-accent (badges/CTA/tiles)
        --fs-fill (sold-progress + labels)   --fs-price (sale price)
      The Energy tweak drives --fs-head (type scale), --fs-radius, --fs-border;
@@ -3800,7 +3800,6 @@
   .b-flash-classic .fsd-cap, .b-flash-editorial .fsd-cap, .b-flash-urgency .fsd-cap {
     height: 12px; background: var(--fs-panel);
   }
-  .fsd-zig { position: absolute; top: 0; left: 0; right: 0; display: block; z-index: 3; pointer-events: none; }
   .fsd-body { padding: 22px 0; color: var(--fs-ink); }
 
   /* live-pulse — only attached when the Urgency tweak is "Frantic" */
@@ -8293,7 +8292,7 @@ function makeBlock(type) {
         // 'hero'  — big centered D:H:M:S cells + CTA + product card(s) below
         // 'banner'— big clock + CTA, no products (anticipation / "starts soon")
         // 'classic' / 'editorial' / 'urgency' — the Claude-Design "Flash sale"
-        //   section directions: coral band + cream zigzag + countdown + carousel.
+        //   section directions: coral band + cream cap + countdown + carousel.
         view: 'strip',
         kicker_en: 'FLASH SALE', kicker_cn: '限时秒杀',
         title_en: 'Going fast', title_cn: '手慢无',
@@ -9674,7 +9673,7 @@ function renderBlockBody(b) {
       const ctaLabel = pickLang(b.cta_label_en, b.cta_label_cn);
 
       // ── Design directions: classic / editorial / urgency ──────────────
-      // Coral band + cream zigzag + live countdown + SHOP NOW + carousel.
+      // Coral band + cream cap + live countdown + SHOP NOW + carousel.
       // Bound to the same live flash data as the other views; every colour
       // rides on a --fs-* var so the inspector can recolour each element,
       // Energy drives the type scale, Urgency drives the live-pulse.
@@ -9695,13 +9694,7 @@ function renderBlockBody(b) {
         const pulse = b.urgency === 'frantic' ? ' fs-pulse' : '';
         const pulseDot = b.urgency === 'frantic' ? ' fs-pulse-dot' : '';
 
-        // cream zigzag teeth hanging into the band (fill tracks --fs-panel)
-        const teeth = 30, ZW = 120, zh = 6, zw = ZW / teeth;
-        let zd = 'M0 0 ';
-        for (let i = 0; i < teeth; i++) zd += `L${(i * zw + zw / 2).toFixed(2)} ${zh} L${((i + 1) * zw).toFixed(2)} 0 `;
-        zd += 'Z';
-        const zig = `<svg class="fsd-zig" viewBox="0 0 ${ZW} ${zh}" preserveAspectRatio="none" width="100%" height="${zh}"><path d="${zd}" fill="var(--fs-panel)"></path></svg>`;
-        const cap = `<div class="fsd-cap"></div>${zig}`;
+        const cap = `<div class="fsd-cap"></div>`;
 
         const vals = [split.d, split.h, split.m, split.s].map(v => String(v).padStart(2, '0'));
         const endsAttr = soonestEnd ? ` data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}"` : '';
