@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.10 · 2026-09-01
+# Tacet desktop patterns — v4.11 · 2026-09-02
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1207,6 +1207,67 @@ That break is at **~32 columns.** Doubled, the limit would be 16 and line one wo
 **A generic `wrapText()` helper: declined, deliberately.** *(Ash, 2026-08-08.)* It was surveyed, prototyped and costed at roughly two hours across six call sites. It is not being built, and this is **not an oversight or a deferral for capacity**: the hazard it was designed for — the inverted instruction — **is closed by the width change**, which is claim ① and costs one tag. What a wrapper would add is prettier breaks on the tails, and by ② those tails are the part no algorithm can guarantee anyway. **Do not re-propose it as unfinished work.** If it returns, it should return for a new reason, with new evidence.
 
 **The one wrapping that IS wanted is not generic.** Item names break at their existing ` / ` CN/EN separator (`itemName()`, `lib/feie.js:185-190`) — one language per line, the shape already shipped on the refund header and the PARTIAL/FULL block. That is a semantic split at an author-supplied boundary, not a column-counting wrapper, and it is the next thing queued.
+
+---
+
+### 1.22 A content block emitted as `<section>` inside retail-admin is invisible *(DID · CONFIRMED ×3)*
+
+*Added 2026-09-02, after the channel money panel shipped in PR #206 and never rendered once in production. Two prior instances had each been patched locally without anyone writing the rule down; this is the third.*
+
+**The rule, in one line: inside `retail-admin.html`, `<section>` means "a tab page". Never use it for a content block — use `<div>`.**
+
+**Scope: the whole of `retail-admin.html` and every renderer that injects into it.** Drawer bodies, cards, editor panes, form groups, table wrappers — anywhere in the document, at any depth. This is not about Orders.
+
+#### The mechanism
+
+`retail-admin.html` is one document holding all 34 tab pages as sibling `<section>`s. Two rules run the tab system:
+
+```css
+/* retail-admin.css:940 */  section { display: none; }
+/* retail-admin.css:966 */  section.active { display: block; animation: tab-fade-in …; }
+```
+
+**`section { display:none }` is unscoped, so it matches every `<section>` in the document at any depth** — including one nested twelve levels down inside an open drawer. There is no `main >` on it and it cannot be given one: `goTab()` shows and hides sections that are not all direct children of `main`.
+
+**Why a class on the block does not save it.** The specificity comparison is *per property*, not per rule. `.cmp` (0,1,0) outranks `section` (0,0,1), but `.cmp` declares padding, background, border, radius, margin and shadow — and no `display`. So `display` has exactly one candidate declaration in the entire cascade, and it is `none`. **A block can carry a fully styled class and still be invisible, because the class never mentions the property that kills it.**
+
+#### 🔴 Why this costs an afternoon every time
+
+The failure has no symptom that points at CSS. The renderer runs, returns correct HTML, and the node reaches the DOM — `document.querySelector` finds it, `outerHTML` is right, the data is right. Every ancestor computes visible. The inline style is `null`. **So it reads as a logic bug, and the search starts in the renderer, which is the one place the bug is not.**
+
+And the obvious diagnostic misses it. Scanning `document.styleSheets` for rules whose `cssText` names the block's class *and* `none` **returns an empty array** — the killing rule names neither `.cmp` nor anything else about the block. It is `section`. *(Ash, 2026-09-02, on order EL20260831339491: `getComputedStyle` → `display:none`, DOMRect all zeros, ancestor chain all visible, class-scan empty. Deploy drift ruled out by hashing the file against `origin/main` first — worth doing, and it is not the answer.)*
+
+#### The three bites
+
+| | What was hidden | How it was patched | Written down as a rule? |
+|---|---|---|---|
+| `.db-hero` — dashboard right-now hero | collapsed to 0×0 inside the active tab | `display: block` on the class — `css:1514` | no, a comment at `css:1510` |
+| `#pd-editor .pd-sec` — product-editor content groups | whole editor panes | `display: block` on the class — `css:3108` | no, a comment at `css:3106` |
+| `.cmp` — channel settlement panel (PR #206) | **every Meituan and Eleme order, from merge to 2026-09-02** | tag changed to `<div>` — `04-orders.js:5286` | **yes — this section** |
+
+The new-order form already states the convention correctly in a comment at `html:2716` — *"Blocks are DIVs, never nested sections — the global `section { display:none }` tab rule would hide a nested one."* **That comment is right and it is in the wrong place.** It sits inside one form, where only someone editing that form reads it, so it protected that form and nothing else. **A convention recorded at the site that obeys it does not travel.** That is the whole reason this section exists.
+
+#### The fix, and which one to use
+
+**Change the tag. Do not add a `display` override.**
+
+`<div class="cmp">` is two characters of diff, no CSS change, and it removes the block from the rule's reach permanently. `display:block` on the class also works and is what the first two bites did — but each one grows the exception list, leaves a live `<section>` in place for the next reader to trip over, and re-arms the same failure the moment someone forks the markup.
+
+**Never weaken `css:940` itself.** It is load-bearing: scope it, delete it, or lose to a more specific selector, and all 34 tab pages render at once, stacked. **The block is what moves, never the rule.**
+
+**Accessibility is not a reason to keep the tag.** A `<section>` with no accessible name — no `aria-label`, no `aria-labelledby` — maps to `generic` in the accessibility tree, which is exactly what a `<div>` maps to. None of the three had one. If a block genuinely needs to be a landmark region, that is `aria-labelledby` pointing at its heading, and it is a separate, deliberate decision — not a side effect of picking a tag.
+
+#### The test
+
+**Before adding `<section>` to anything in `retail-admin.html` or to any string a renderer injects into it, ask: is this a tab page that `goTab()` switches to?** If no — and for a card, a drawer block, a form group or a panel the answer is always no — it is a `<div>`.
+
+*And when a block renders in the DOM but has no box:* read the computed `display` before reading the renderer, and scan the stylesheet for **element** selectors, not for the block's own class. The rule that hides it will not have its name on it.
+
+#### How this rule is known
+
+**DID** — this session traced the live failure to `css:940`, changed the tag, and shipped it. **CONFIRMED ×3** — three independent occurrences in the codebase, two of them already patched in place before anyone connected them.
+
+**The finding is not the panel. It is that the rule had two documented exceptions and one correctly-stated convention, and still bit a third time** — because all three lived at the sites that had already been fixed, and none of them lived where someone about to write `<section>` would look. *A rule that exists only as a comment next to its own workaround is not recorded; it is survived.*
 
 ---
 

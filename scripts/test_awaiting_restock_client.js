@@ -29,6 +29,15 @@
  *      its own state pill.
  *   6. A PARCEL ALREADY MOVING KEEPS ITS STATE. "Held" describes a pending
  *      parcel; a dispatched one is what the operator is tracking.
+ *   7. 🔴 THE MARKED ROW LINES UP WITH THE ROWS AROUND IT. The first version
+ *      bled the tint out to the shipment card's edge with a negative margin,
+ *      and shipped misaligned — the marked row's content sat left of the
+ *      numbers above it and its total sat right of the other totals. The one
+ *      row the operator is meant to read carefully was the one that did not
+ *      line up. Its replacement, an inset edge marker, then painted over the
+ *      line number, because a manifest row has no horizontal padding for one
+ *      to sit in. Asserted against the stylesheet, because both were CSS bugs
+ *      that no amount of renderer testing would have caught.
  */
 
 'use strict';
@@ -161,6 +170,11 @@ section('5 · Only the parked lines are marked in the manifest');
   is((rows.match(/Waiting on stock/g) || []).length, 1, 'and exactly one pill');
   const marked = rows.slice(rows.indexOf('awaiting-row'));
   has(marked.slice(0, 400), 'Choco Hemp Protein Bites', 'it is the short line that is marked');
+  // .mf-packs carries `margin-left: auto` — right for a packing instruction on
+  // its own rail, wrong for a fact about this line. Wrapped, the badge shipped
+  // hard against the card's right edge under the line total, crowding both.
+  hasnt(rows, '<span class="mf-packs"><span class="pack-badge awaiting"',
+        'the badge is not on the right rail — it reads inline after the unit price');
   is(renderItemsTable(ITEMS, false, new Set()).indexOf('awaiting-row'), -1,
      'an order waiting on nothing marks no row at all');
 }
@@ -208,6 +222,26 @@ section('9 · Malformed data never throws');
   is(awaitingRestockPids(parked({ awaiting_restock_pids: '{"a":1}' })), [], 'a non-array reads as empty');
   is(awaitingRestockCard(parked({ awaiting_restock_pids: '[]' })), '', 'an empty array renders nothing');
   is(awaitingRestockPids(null), [], 'no order at all reads as empty');
+}
+
+section('10 · 🔴 The marked row keeps the same box as every other row');
+{
+  const CSS = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin.css'), 'utf8');
+  const start = CSS.indexOf('.manifest .mf-row.awaiting-row {');
+  const rule = start === -1 ? '' : CSS.slice(start, CSS.indexOf('}', start));
+  if (!rule) bad('the awaiting-row rule exists in the stylesheet');
+  else {
+    ok('the awaiting-row rule exists in the stylesheet');
+    // Strip comments — the rule's own comment NAMES the banned properties to
+    // explain why they are banned, and must not itself trip the assertion.
+    const decls = rule.replace(/\/\*[\s\S]*?\*\//g, '');
+    hasnt(decls, 'margin', 'it declares no margin — a bleed moves the row off the grid');
+    hasnt(decls, 'padding', 'and no padding — that is what moved the total');
+    // A .mf-row has zero horizontal padding, so an inset edge marker has no
+    // gutter to sit in and paints over the 01/02/03 line number.
+    hasnt(decls, 'inset', 'and no inset edge marker — it lands on the row number');
+    has(decls, 'background', 'the tint alone carries the mark');
+  }
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
