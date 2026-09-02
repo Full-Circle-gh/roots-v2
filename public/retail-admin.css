@@ -7349,6 +7349,75 @@
     text-decoration: line-through; text-decoration-color: rgba(176, 64, 56, .7);
   }
   .refunded-row .oi-thumb { filter: grayscale(1); }
+
+  /* ─── Awaiting restock — the parked line, and the card that names it ───
+     Two token families on purpose, because this drawer has not had its Tacet
+     pass yet and a component that ignores that ships a visibly foreign card.
+
+       NEUTRALS (surface, hairline, type) come from the PAGE — --bg-elev-1,
+       --line-soft, --text-N. In light both palettes are warm and agree; in
+       dark they do not (the page is Ink Charcoal #12161A, Tacet dark is navy
+       #18233A), so a --td-raised card floats as a blue slab in a grey drawer.
+       These convert with the page when Orders gets its pass (§1.16).
+
+       SEMANTICS (amber, dusk) come from --td-*, because those already ARE the
+       Tacet values on this page — --brass is defined as var(--td-amber) — and
+       a state colour must not drift while the neutrals wait their turn.
+
+     Amber says a person is needed; the Dusk dot says the system already has
+     it. Those are the only two colours here and each encodes one state
+     (§1.10). Do not add a third.
+
+     Do not write a token name followed by a slash in this comment — the
+     star-slash pair closes it early and silently eats the first rule below. */
+  .manifest .mf-row.awaiting-row {
+    background: var(--td-amber-tint);
+    /* Inset shadow, never a border — an edge marker that changes row height
+       makes the manifest jump between a parked order and a normal one. */
+    box-shadow: inset 4px 0 0 var(--td-amber);
+    /* Full-bleed inside the card's padding, so the tint reads as a band across
+       the line rather than a floating chip. */
+    margin: 0 calc(var(--s4) * -1);
+    padding-left: var(--s4);
+    padding-right: var(--s4);
+  }
+  .pack-badge.awaiting {
+    background: var(--bg-pane);
+    color: var(--td-amber-ink);
+    border-color: color-mix(in srgb, var(--td-amber) 45%, transparent);
+  }
+
+  .ar-card {
+    background: var(--bg-elev-1);
+    border-radius: 14px;
+    padding: var(--s6);
+  }
+  .ar-head {
+    font-size: 18px; font-weight: 500; color: var(--text-1);
+    margin-bottom: var(--s4);
+  }
+  .ar-list { display: flex; flex-direction: column; gap: var(--s4); }
+  .ar-row { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+  .ar-name {
+    font-size: 15px; color: var(--text-1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* The release line. Its dot is the one Dusk element in the drawer, and it is
+     exempt from the one-Dusk budget because it reports that the system acted —
+     it is not a control and there is nothing here to click (§1.8 rule 2). */
+  .ar-auto {
+    display: flex; align-items: flex-start; gap: var(--s2);
+    margin-top: var(--s4); padding-top: var(--s4);
+    border-top: 1px solid var(--line-soft);
+    font-size: 13px; line-height: 1.6; color: var(--text-3);
+  }
+  .ar-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex: none;
+    margin-top: 7px; background: var(--td-dusk);
+    animation: ar-breathe 2.4s cubic-bezier(.16, 1, .3, 1) infinite;
+  }
+  @keyframes ar-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .ar-dot { animation: none; } }
   .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
   /* SKU + quantity are the packer's two critical fields — shared mono chips
