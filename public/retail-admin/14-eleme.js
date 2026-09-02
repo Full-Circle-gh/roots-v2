@@ -265,9 +265,12 @@
     const st = _stores.find(s => s.code === code);
     if (!st || !st.id) return '';   // stores not loaded yet — the next paint has it
     const eff = elEffectiveSyncStart(st);
-    const hint = eff
-      ? cuT('from ' + eff, eff + ' 起')
-      : cuT('no opening hours set — syncs all day', '未设营业时间 — 全天同步');
+    // The hint says what a BLANK field resolves to. With a time in the box it
+    // would only repeat the box — the same fact twice, and the second copy is
+    // what pushed the row wide enough to clip the first.
+    const hint = st.syncStartTime ? ''
+      : eff ? cuT('defaults to ' + eff, '默认 ' + eff)
+            : cuT('no opening hours set — syncs all day', '未设营业时间 — 全天同步');
     const tip = cuT(
       'When this store starts syncing each day. Customers pre-order before you open, so set it earlier than opening. Blank = 2 h before opening.',
       '每天从几点开始同步该门店。顾客会在开门前下预订单,建议设置在开门之前。留空 = 开门前 2 小时。');
@@ -275,7 +278,7 @@
       '<span class="lb">' + esc(cuT('Sync from', '同步开始')) + '</span>' +
       '<input type="time" value="' + esc(st.syncStartTime || '') + '"' +
       ' onchange="elSetSyncStart(\'' + esc(code) + '\', this.value)">' +
-      '<span class="hint">' + esc(hint) + '</span>' +
+      (hint ? '<span class="hint">' + esc(hint) + '</span>' : '') +
       '</label>';
   }
 
