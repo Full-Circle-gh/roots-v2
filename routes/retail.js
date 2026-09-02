@@ -22874,6 +22874,19 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     return res.status(400).json({ success: false, error: 'address_not_allowed_for_' + fulfillmentType });
   }
 
+  // ── Same rule for shipping: nothing travels on a pickup or a counter sale ──
+  // shippingFee above is trusted from the operator (a hand-keyed order is where
+  // a waived fee or a negotiated rate on a REAL delivery legitimately happens),
+  // but that trust only makes sense when something is actually being shipped.
+  // A pickup or counter sale has no courier and no zone — a positive shipping
+  // fee on one is a stale number left over from switching the fulfilment
+  // picker after typing a delivery quote (ordNewFulChange re-quotes but never
+  // clears a field the operator has touched), not a negotiated rate. Refuse it
+  // here rather than store it quietly, same reasoning as the address rule above.
+  if (fulfillmentType !== 'delivery' && shippingFee > 0) {
+    return res.status(400).json({ success: false, error: 'shipping_fee_not_allowed_for_' + fulfillmentType });
+  }
+
   // ── A counter sale must name the till it was rung up at ───────────────────
   // Same shape as the address rule above, and the same reason for existing: a
   // walk-in with no location is not an under-specified order, it is an

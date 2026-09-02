@@ -8470,7 +8470,18 @@ function ordNewFulChange() {
   }
   ONW.ful = ft;
   // Delivery, collection and counter are three different fee answers — re-quote
-  // rather than carrying the previous choice's numbers into this one.
+  // rather than carrying the previous choice's numbers into this one. Shipping
+  // specifically cannot survive the switch: nothing ships on a pickup or a
+  // counter sale, and ordNewFees() only refills a field the operator has NOT
+  // typed into — a shipping number keyed in while this was 'delivery' would
+  // otherwise sit in the box, unrelated to the new fulfilment, until the
+  // server refuses it. Un-typing it here lets the re-quote below give the
+  // honest answer (0, same as the fee engine) instead of the leftover.
+  if (ft !== 'delivery') {
+    const ship = document.getElementById('onw-ship');
+    if (ship) ship.value = '0';
+    if (ONW.feeTouched) ONW.feeTouched.ship = false;
+  }
   ordNewFees();
 }
 
@@ -8898,6 +8909,7 @@ const ONW_ERR_WHERE = {
   pos_closed_for_store: 'route',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
+  shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
 };
 function ordNewClearErrors() {
   ONW_ERR_SLOTS.forEach(k => {
@@ -8972,6 +8984,11 @@ function ordNewErrText(code, detail) {
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),
+    // Nothing ships on a pickup or a counter sale, so a leftover shipping number
+    // (typed while this was a delivery, then carried across the fulfilment
+    // switch) is refused rather than stored (retail.js, beside the address rule).
+    shipping_fee_not_allowed_for_pickup: cuT('A pickup order cannot carry a shipping fee. Clear it or set it to 0.', '自提订单不能收取运费,请清空或设为 0。'),
+    shipping_fee_not_allowed_for_counter: cuT('A counter sale cannot carry a shipping fee. Clear it or set it to 0.', '前台销售不能收取运费,请清空或设为 0。'),
     // Client-only — the server has no such rule. A Guangzhou order's district is
     // what decides rider vs courier, so "city-wide" is not an answer here.
     district_required_for_gz: cuT('Pick the Guangzhou district — it decides whether this goes by rider or by courier.',

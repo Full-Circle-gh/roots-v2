@@ -1018,13 +1018,19 @@ check('failures render inline, and neither exit can toast',
 const errWhere = CLIENT_SRC.slice(CLIENT_SRC.indexOf('const ONW_ERR_WHERE = {'),
                                   CLIENT_SRC.indexOf('function ordNewClearErrors'));
 const errText = extractFn('ordNewErrText') || '';
-// One code is BUILT, not written: `'address_not_allowed_for_' + fulfillmentType`.
-// The scrape sees the prefix; expand it to the two codes that can actually
-// reach a client, or the check asks the page for a slot no server ever sends.
+// Two codes are BUILT, not written: `'address_not_allowed_for_' + fulfillmentType`
+// and `'shipping_fee_not_allowed_for_' + fulfillmentType`. The scrape sees only
+// the prefix; expand each to the two codes that can actually reach a client
+// (fulfillmentType is 'pickup' or 'counter' by the time either check runs — the
+// address rule already narrowed it to non-delivery, same as the fee rule below
+// it), or the check asks the page for a slot no server ever sends.
+const BUILT_PREFIXES = {
+  'address_not_allowed_for_':      ['address_not_allowed_for_pickup', 'address_not_allowed_for_counter'],
+  'shipping_fee_not_allowed_for_': ['shipping_fee_not_allowed_for_pickup', 'shipping_fee_not_allowed_for_counter'],
+};
 const SERVER_CODES = [...new Set(
   (ordersPost.match(/error: '([a-z_]+)'/g) || []).map(m => m.slice(8, -1))
-)].flatMap(c => (c === 'address_not_allowed_for_'
-  ? ['address_not_allowed_for_pickup', 'address_not_allowed_for_counter'] : [c]));
+)].flatMap(c => BUILT_PREFIXES[c] || [c]);
 check('the error-code scrape found the handler\'s codes (not vacuously empty)',
   SERVER_CODES.length >= 10, true);
 check('every error the order endpoint returns has a slot on the page',
