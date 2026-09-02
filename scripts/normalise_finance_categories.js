@@ -26,15 +26,43 @@
  * qty × cost_per_unit and ingredients has none, so those report rows alone
  * rather than a number nobody could reconcile against a Summary line.
  *
- * INCOME HAS NO MASTER VOCABULARY, AND THAT IS NOT A DEGRADED MODE. The
- * picker list is the expense vocabulary — income categories live in each
- * browser's localStorage and have never been synced (decisions §36). So an
- * income value matches no master entry, falls to the glyph/whitespace repair
- * branch, and is normalised IN PLACE. Two spellings of one category collapse
- * because normalising makes them the same string; two genuinely different
- * categories do not, because nothing snaps them together. Income is never
- * snapped onto an expense category: the only way onto a master value is a
- * spacingKey match, and that is the whole vocabulary's decision, not a guess.
+ * ── EACH TARGET SNAPS AGAINST ITS OWN LIST, NEVER THE OTHER ONE'S ──────────
+ * Three columns share one vocabulary — `categories` where kind='accounting',
+ * the picker the ingredient form and the PO line offer. `income_entries.category`
+ * does not: income categories moved server-side onto the same `categories`
+ * table under kind='income' (decisions §36, *Income categories move
+ * server-side*), a list of its own, doing a different job. Before this fix the
+ * script read ONE master (kind='accounting') and matched all four columns
+ * against it — so an income value one spacing/radical edit away from an
+ * expense category would snap onto the expense spelling, moving it onto the
+ * wrong list's vocabulary. That is the exact collision the server-side move
+ * exists to prevent, found building it (§36 v4.119) and never applied: the
+ * script is dry-run by default and had never been run with --apply. Each
+ * target now reads its OWN master by its OWN `kind`, and the two are never
+ * compared against each other.
+ *
+ * ── THE INCOME MASTER SHIPS EMPTY, AND EMPTY IS NOT A FAULT ────────────────
+ * §36 ships `kind='income'` empty by decision — no defaults seeded, so a
+ * dropdown never offers a wrong option (the ¥152,309 Mini App mis-filing was
+ * exactly that). An empty accounting master IS a fault: the script's whole
+ * purpose is to snap known variant families onto that list, so having none
+ * means it cannot do its job at all, and it refuses to run, exactly as
+ * before. An empty INCOME master is not the same failure — it is the shipped,
+ * intended state — so income_entries.category is SKIPPED rather than
+ * refused: printed as its own block, plainly, with the row count and the
+ * reason, and every other target still runs. Ash's ruling, 2026-09-02: not
+ * refuse, not proceed silently, not treat an empty master as an error. The
+ * moment a tenant creates their first income category, the master stops
+ * being empty and this same script starts evaluating it exactly like any
+ * other target — nothing here is a one-time carve-out.
+ *
+ * A COLLIDING income master — two entries differing only by spacing or case,
+ * so there is no single canonical value — is treated exactly like a colliding
+ * accounting master: a hard refusal, because that is a genuine fault (a
+ * decision about the vocabulary nobody made yet), not the shipped empty
+ * state. Ash's ruling was about EMPTY specifically; this extends the
+ * PRE-EXISTING collision refusal to the income list on the same terms it
+ * already applies to the accounting one, rather than inventing a second rule.
  *
  * Measured on production 2026-08-24:
  *
@@ -47,15 +75,17 @@
  * around `(` and `+`, and U+2F64 ⽤ KANGXI RADICAL USE in place of U+7528 用.
  *
  * ── HOW CANONICAL IS DECIDED — NOT BY THIS SCRIPT ─────────────────────────
- * The canonical value is whichever member of the family EXISTS IN THE TENANT'S
- * OWN PICKER LIST — `categories` where kind='accounting'. That list is the
- * vocabulary the ingredient form and the PO line offer, and it is clean: zero
- * of its 31 rows carry a radical. Every bad value in the data arrived from
- * somewhere that is not the picker.
+ * The canonical value is whichever member of the family EXISTS IN THE TARGET'S
+ * OWN PICKER LIST — `categories` where kind matches the column: kind='accounting'
+ * for the three expense-side columns, kind='income' for income_entries.category.
+ * The accounting list is the vocabulary the ingredient form and the PO line
+ * offer, and it is clean: zero of its 31 rows carry a radical. Every bad value
+ * in the data arrived from somewhere that is not the picker.
  *
  * So the script does not rank variants, guess at majorities, or prefer the
- * commoner spelling. It asks the picker. A family whose members are ALL absent
- * from the picker is reported and NOT changed — there is nothing to snap to.
+ * commoner spelling. It asks the picker — EACH COLUMN'S OWN PICKER. A family
+ * whose members are ALL absent from its target's picker is reported and NOT
+ * changed — there is nothing to snap to.
  *
  * ── WHAT IT DELIBERATELY DOES NOT TOUCH ───────────────────────────────────
  * Values that differ in their ENGLISH WORDS are not folded together, however
@@ -100,11 +130,17 @@ const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'root
 // row. po_line_items' value is qty × cost_per_unit and ingredients has no
 // amount at all, so those two report rows only — an invented money column on
 // them would be a number nobody could reconcile against a Summary line.
+//
+// `kind` is which `categories` list the column snaps against — the master-list
+// bug this file exists to fix. The three expense-side columns share the
+// tenant's accounting vocabulary; income_entries.category has its own, server
+// -side since decisions §36 *Income categories move server-side*, and the two
+// must never be compared against each other.
 const TARGETS = [
-  { table: 'ingredients',    column: 'accounting_category', label: 'ingredients.accounting_category' },
-  { table: 'po_line_items',  column: 'expense_category',    label: 'po_line_items.expense_category' },
-  { table: 'expense_entries',column: 'category',            label: 'expense_entries.category', money: true },
-  { table: 'income_entries', column: 'category',            label: 'income_entries.category',  money: true },
+  { table: 'ingredients',    column: 'accounting_category', label: 'ingredients.accounting_category', kind: 'accounting' },
+  { table: 'po_line_items',  column: 'expense_category',    label: 'po_line_items.expense_category',  kind: 'accounting' },
+  { table: 'expense_entries',column: 'category',            label: 'expense_entries.category', money: true, kind: 'accounting' },
+  { table: 'income_entries', column: 'category',            label: 'income_entries.category',  money: true, kind: 'income' },
 ];
 
 function main() {
@@ -116,50 +152,41 @@ function main() {
   const db = new Database(DB_PATH, APPLY ? {} : { readonly: true });
   db.pragma('foreign_keys = ON');
 
-  // ── The authority: the tenant's own picker list ──────────────────────────
-  let master = [];
-  try {
-    master = db.prepare("SELECT name FROM categories WHERE kind = 'accounting' ORDER BY name").all().map(r => r.name);
-  } catch (e) {
-    console.error('Could not read the categories master list:', e.message);
-    console.error('Refusing to run — canonical values come from that list and nowhere else.');
-    process.exit(1);
+  // ── The authority: EACH target's own picker list, never the other one's ──
+  // loadMaster reads `categories` for one `kind` and returns its rows plus a
+  // spacingKey → name map, keyed the same way normaliseCategory's caller reads
+  // it below. Called once per kind actually used by TARGETS — today that is
+  // 'accounting' and 'income' — so a future kind added to TARGETS is read
+  // automatically rather than needing a second copy of this block.
+  function loadMaster(kind) {
+    const list = db.prepare('SELECT name FROM categories WHERE kind = ? ORDER BY name').all(kind).map(r => r.name);
+    // Keyed on spacingKey, so two picker entries that differ only by spacing or
+    // case share a key — collected here rather than silently overwritten, so
+    // the caller can refuse rather than let the Map keep an arbitrary winner.
+    const grouped = new Map();
+    for (const name of list) {
+      const k = spacingKey(name);
+      if (k === null) continue;   // malformed, not a collision — see below
+      if (!grouped.has(k)) grouped.set(k, []);
+      grouped.get(k).push(name);
+    }
+    const collisions = [...grouped.entries()].filter(([, names]) => names.length > 1);
+    const byKey = new Map();
+    for (const name of list) byKey.set(spacingKey(name), name);
+    return { kind, list, byKey, collisions };
   }
-  if (!master.length) {
-    console.error('The categories master list (kind=accounting) is EMPTY.');
-    console.error('Refusing to run — there is nothing to snap onto, and guessing a canonical');
-    console.error('value from the data is exactly what this script exists not to do.');
-    process.exit(1);
-  }
-  // ── Refuse on a colliding master list ────────────────────────────────────
-  // masterByKey is keyed on spacingKey, so two picker entries that differ only
-  // by spacing or case share a key and the Map silently keeps the LAST one.
-  // Every row matching that key would then snap onto an arbitrary winner with
-  // nothing in the output saying which, or that a choice was made at all.
-  //
-  // This is a HARD REFUSAL and it fires on the DRY RUN too: a plan computed
-  // against a colliding list is wrong whether or not anyone applies it, and a
-  // warning buried in a long dry run is a warning nobody reads. The fix is to
-  // clean the picker list, which is a human decision about the vocabulary.
-  //
-  // Null keys are skipped rather than compared — a picker entry that
-  // normalises to nothing is malformed, but it is not a collision, and
-  // masterByKey below is left exactly as it was so nothing about what the
-  // script DECIDES changes here.
-  const byKey = new Map();
-  for (const name of master) {
-    const k = spacingKey(name);
-    if (k === null) continue;
-    if (!byKey.has(k)) byKey.set(k, []);
-    byKey.get(k).push(name);
-  }
-  const collisions = [...byKey.entries()].filter(([, names]) => names.length > 1);
-  if (collisions.length) {
+
+  // Prints the same "REFUSING TO RUN" block the accounting master has always
+  // produced on a collision, parameterised so the income master can be refused
+  // on identical terms — a colliding master is a genuine fault (a vocabulary
+  // decision nobody made yet) regardless of which kind it is, so this is the
+  // one existing rule applied twice, not a second rule invented for income.
+  function refuseOnCollision(m) {
     console.error('');
     console.error('  REFUSING TO RUN — the picker list has entries that differ only by');
     console.error('  spacing or case, so there is no single canonical value to snap onto.');
     console.error('');
-    for (const [k, names] of collisions) {
+    for (const [k, names] of m.collisions) {
       console.error(`  shared key ${JSON.stringify(k)}`);
       for (const n of names) {
         console.error(`      ${JSON.stringify(n)}`);
@@ -168,25 +195,66 @@ function main() {
       console.error('');
     }
     console.error('  No plan was produced. Resolve the duplicates in `categories`');
-    console.error("  (kind='accounting') — which of them is the real category is a");
+    console.error(`  (kind='${m.kind}') — which of them is the real category is a`);
     console.error('  decision about the vocabulary, not one this script can make.');
     console.error('');
     db.close();
     process.exit(1);
   }
 
-  const masterByKey = new Map();
-  for (const name of master) masterByKey.set(spacingKey(name), name);
+  let accounting, income;
+  try {
+    accounting = loadMaster('accounting');
+    income     = loadMaster('income');
+  } catch (e) {
+    console.error('Could not read the categories master list:', e.message);
+    console.error('Refusing to run — canonical values come from that list and nowhere else.');
+    process.exit(1);
+  }
+
+  // ── The accounting master: unchanged from before this fix ────────────────
+  // Empty or colliding blocks the whole run, exactly as it always has — this
+  // is the well-established list the script's own purpose depends on, and
+  // that behaviour is not what §36 v4.119 asked to change.
+  if (!accounting.list.length) {
+    console.error('The categories master list (kind=accounting) is EMPTY.');
+    console.error('Refusing to run — there is nothing to snap onto, and guessing a canonical');
+    console.error('value from the data is exactly what this script exists not to do.');
+    process.exit(1);
+  }
+  if (accounting.collisions.length) refuseOnCollision(accounting);
+
+  // ── The income master: empty is the SHIPPED state, not a fault ───────────
+  // §36 v4.119 / Ash, 2026-09-02: skip income_entries.category entirely while
+  // its master is empty — not a refusal, not silent, not an error. A colliding
+  // income master is a different thing (a real fault, not the intended empty
+  // state) and is refused on the same terms as the accounting list above.
+  let incomeSkipReason = null;
+  if (income.collisions.length) {
+    refuseOnCollision(income);
+  } else if (!income.list.length) {
+    incomeSkipReason = "the income master list (kind='income') is empty — §36 ships it "
+      + 'that way by decision, so this is the shipped state and not a fault. There is '
+      + 'nothing to snap income onto yet; this target is left entirely untouched until '
+      + 'a tenant creates its first income category, at which point it is evaluated like '
+      + 'any other target.';
+  }
+
+  const mastersByKind = { accounting: accounting.byKey, income: income.byKey };
 
   console.log('='.repeat(78));
   console.log(`  Finance category normalisation — ${APPLY ? 'APPLY' : 'DRY RUN (no writes)'}`);
   console.log(`  Database : ${DB_PATH}`);
-  console.log(`  Master   : ${master.length} categories in the picker list (kind='accounting')`);
+  console.log(`  Accounting master : ${accounting.list.length} categories (kind='accounting')`
+    + ' — ingredients, po_line_items, expense_entries');
+  console.log(`  Income master     : ${income.list.length} categories (kind='income') — income_entries`
+    + (incomeSkipReason ? '  [SKIPPED — see below]' : ''));
   console.log('='.repeat(78));
 
   // ── Build the plan ───────────────────────────────────────────────────────
-  const plan   = [];   // { label, table, column, from, to, rows, money, why }
-  const review = [];   // { label, value, rows, money, why }   money: null off-ledger
+  const plan    = [];   // { label, table, column, from, to, rows, money, why }
+  const review  = [];   // { label, value, rows, money, why }   money: null off-ledger
+  const skipped = [];   // { label, rows, why } — a whole target, not evaluated
   let totalRows = 0;
 
   // label → (value → { n, m }). Used to price the target line a collapse lands
@@ -194,6 +262,26 @@ function main() {
   const census = new Map();
 
   for (const t of TARGETS) {
+    // A target whose kind is skipped (today: income, while its master is
+    // empty) is not evaluated AT ALL — no snap attempt, no glyph/whitespace
+    // repair, nothing added to plan, review or census. Only its row count is
+    // read, so the SKIPPED block below can say plainly how much was left
+    // alone and why, per Ash's ruling: not silent, not an error.
+    if (t.kind === 'income' && incomeSkipReason) {
+      let n = 0;
+      try {
+        n = db.prepare(
+          `SELECT COUNT(*) AS n FROM ${t.table} WHERE ${t.column} IS NOT NULL AND TRIM(${t.column}) <> ''`
+        ).get().n;
+      } catch (e) {
+        // The count is informational only; a read failure here does not
+        // escalate to a refusal — the skip notice still explains why nothing
+        // ran, just without a row count.
+      }
+      skipped.push({ label: t.label, rows: n, why: incomeSkipReason });
+      continue;
+    }
+    const masterByKey = mastersByKind[t.kind];
     let rows;
     try {
       rows = db.prepare(
@@ -272,6 +360,19 @@ function main() {
         `   (${tally(already.n, hasMoney ? (already.m || 0) : null)} already on it)`);
       console.log('');
     }
+  }
+
+  // Printed BEFORE review: a skip is a statement about a whole target, made
+  // before this run even looked at its values, and reads differently from a
+  // per-value question the pass DID look at and could not resolve.
+  if (skipped.length) {
+    console.log('  ' + '-'.repeat(74));
+    console.log('  SKIPPED — not evaluated. Not a refusal, not an error:\n');
+    for (const s of skipped) {
+      console.log(`  ${s.label}  ${tally(s.rows, null)}`);
+      console.log(`      ${s.why}`);
+    }
+    console.log('');
   }
 
   if (review.length) {

@@ -39,6 +39,7 @@
     "test:finance-summary": "node scripts/test_finance_summary.js",
     "test:finance-transactions": "node scripts/test_finance_transactions.js",
     "test:unit-cost-sanity": "node scripts/test_unit_cost_sanity_warning.js",
+    "test:normalise-finance-categories": "node scripts/test_normalise_finance_categories.js",
     "test:finance-presentation": "node scripts/test_finance_presentation.js",
     "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
     "test:phone": "node scripts/test_recipient_phone.js",
