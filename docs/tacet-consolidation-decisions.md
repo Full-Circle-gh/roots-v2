@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.114
+# Tacet shared-core consolidation — decisions record, v4.115
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-01 · v4.115 — **§36 closes its last cost-of-goods open item: GZGROCERY COUNTS, ON BOTH HALVES.** Finance includes gzgrocery orders in revenue AND in cost of goods, read from the order record like every other channel, and **the existing dashboard exclusion is NOT inherited.** The exclusion exists to prevent double-booking against takings counted elsewhere; **Finance never reads `retail_stock_ledger`, so there is nothing to double-book against and the condition it protects against does not arise.** **The dashboard's own treatment is recorded so it is not mistaken for precedent:** its revenue SUM excludes gzgrocery via `COALESCE(channel,'') != 'gzgrocery'` and then **adds gzgrocery takings back from `retail_stock_ledger` through `guanyiPickupSales()`** — so **gzgrocery revenue is in the dashboard headline, arriving by a different road, and a reader that "follows the revenue side's exclusion" would exclude a channel the headline includes.** **Revenue and cost must stand on the same population: a channel in one half and not the other makes the staircase arithmetically wrong rather than merely incomplete.** **The decision does NOT repair the mirror backfill** — `backfillGzMirrors` stamping present-day cost onto historic orders stands as recorded at v4.113, and gzgrocery lines stamped at mirror time carry **a wrong number, not a missing one**, which this does not change. **A companion FINDING: Finance does not reuse the dashboard revenue aggregator, because that aggregator is a three-source cash-basis blend** — the order SUM, gzgrocery takings from `retail_stock_ledger`, and **wallet top-up cash from `retail_topup_transactions` on `date(paid_at, '+8 hours')`.** **A wallet top-up is money received before any sale**; §36 defines revenue as coming from the order record and separately rules settlement receipts out entirely, and **a top-up is a third thing that was not previously addressed — it is EXCLUDED from Finance revenue, because money becomes revenue when an order consumes it, not when it arrives.** Finance therefore writes its own revenue query against `retail_orders` and `retail_order_items`; **reusing the dashboard aggregator would silently import both folds.** **A count is corrected: the literal `date(COALESCE(paid_at, placed_at), '+8 hours')` appears ELEVEN times, not five** — v4.113's "five sites" was a count of aggregation handlers, and the raw occurrence count is higher. The eleven are **nine textual occurrences in `routes/`, all in `routes/retail.js`, spread across five route handlers (`/sales/summary`, `/dashboard`, `/products/highlights`, `/products/:id/sales`, `/products`) and two module-level helpers (`guanyiPickupSales()`, `storeCreditRedeemed()`), plus two more in `scripts/`** (`test_sales_summary_partition.js`, `funnel_report.js`); the v4.113 line is corrected in place to carry the same full breakdown, so **eleven is never read as the count within `routes/` alone.** **The closed bullet is REMOVED from *Explicitly NOT decided here* rather than left standing — a deliberate departure from the convention the three preceding closures followed — so §36's open list now carries five items rather than six.** **The superseded *gzgrocery must be ruled in or out of cost explicitly* subsection keeps its body unedited, but its heading moves from OPEN to CLOSED and it gains a closing line pointing at the decision**, on the phrasing the three earlier closures use: a reader who meets it first should read it as answered there. Docs only; no code, no schema, no routes.
 
 2026-09-01 · v4.114 — **Three corrections to §36 from the finance-summary survey, each verified against the code before it was written, and one to the patterns doc.** **The route count was wrong: `routes/finance.js` declares SEVENTEEN routes, not thirteen** — the `tdb()` half of that line was right and stands, but the number was not, and it is recorded with its consequence because the number is load-bearing: **blocking "the thirteen write routes" by count would miss four.** **The blocking decision was written in the present tense and reads as shipped; it has NOT shipped, and the passage is rewritten as planned work with an explicit status line.** `blockCostWrite` exists in `middleware/block-kitchen-cost-writes.js` and is imported by `routes/ingredients.js`, `routes/purchases.js`, `routes/recipes.js` and `routes/admin.js` — **`routes/finance.js` does not import it**, and its nine write handlers carry only `requireAuth`, `requirePermission('finance')` and `requireDelete`, so the leak the decision describes as closed is open. **The PO-derived-rows safety argument was incomplete rather than wrong** — the edit and delete refusals on a `po_id` are real and the conclusion holds, but the invariant rests on a second mechanism the argument never named: **`POST /api/finance/expenses` never sets `po_id`**, inserting only `date`, `amount`, `category`, `description`, `payment_method` and `created_by`, **so a hand-entered row cannot acquire a `po_id` at all** and the refusals never have to catch one. **In `docs/tacet-desktop-patterns.md`, §1.12's heading is corrected from six states to seven** — v4.9 added *Not recorded* beneath it and left the heading undercounting the rule, which is a rule a reader can satisfy and still miss a state; that doc goes to v4.10 and no page rule is added, removed or altered. **These are in-place corrections to standing text, not superseding entries**, because each replaces a claim that is false as written rather than one that has been overtaken — a wrong count and a shipped-tense description of unbuilt work are re-derived as fresh findings if they are left standing. Docs only; no code, no schema, no routes.
 
@@ -4923,7 +4925,7 @@ This does not change what Finance counts — the decision above already excludes
 
 **THE GZGROCERY MIRROR BACKFILL STAMPS TODAY'S COST ONTO HISTORIC ORDERS.** `backfillGzMirrors` runs at daemon startup in live mode and mirrors historical gzgrocery orders into `retail_orders` for the first time, stamping `gzUnitCost` — the catalogue cost read at mirror time — onto an order placed months earlier. **For any gzgrocery order first mirrored after capture started, `unit_cost_at_sale` is a present-day figure wearing a historic date.** This is precisely the failure the backfill refusal above exists to prevent, occurring on one path anyway. Orders already mirrored before the column existed insert no items and stay NULL.
 
-### gzgrocery must be ruled in or out of cost explicitly, and no existing query answers it — OPEN 2026-09-01
+### gzgrocery must be ruled in or out of cost explicitly, and no existing query answers it — CLOSED 2026-09-01
 
 gzgrocery mirror rows are real fulfilled orders. **Existing aggregators include them in order counts, trend and AOV, and exclude them from revenue sums**, to avoid double-booking takings counted elsewhere. **Nor is the exclusion itself consistent** — some sites include gzgrocery and some exclude it, with the companion predicate declared separately four times.
 
@@ -4931,13 +4933,15 @@ gzgrocery mirror rows are real fulfilled orders. **Existing aggregators include 
 
 **Recorded as an open item rather than decided here.** It is added to *Explicitly NOT decided here* below.
 
+**Closed 2026-09-01 by the gzgrocery decision below: gzgrocery counts, on both halves.** A reader who meets this subsection first should read it as answered there.
+
 ### The aggregation predicate and the order date are both inconsistent today — FINDING 2026-09-01
 
 **Thirteen sites read `retail_order_items` in aggregate and none of them reads cost.**
 
 **There is no shared predicate** — the string is copy-pasted with variations at every site. An allow-list is declared once and re-declared inline four more times; a deny-list is live at two sites and **is not equivalent**, since it admits any status added later while the allow-list excludes it. **Neither addresses partial refunds.**
 
-**Four date conventions are live simultaneously:** `COALESCE(paid_at, placed_at)` shifted `+8 hours`, at five sites and dominant; `paid_at` alone with no shift, which silently drops orders with a null `paid_at` and puts its day boundary in UTC; `placed_at` alone with no shift; and no date filter at all.
+**Four date conventions are live simultaneously:** `COALESCE(paid_at, placed_at)` shifted `+8 hours`, at five aggregation handlers and dominant — **"five sites" counts handlers, not occurrences: the measured occurrence count is NINE in `routes/`, all in `routes/retail.js`, plus TWO in `scripts/`, ELEVEN in total**, as broken down below under *Finance does not reuse the dashboard revenue aggregator*; `paid_at` alone with no shift, which silently drops orders with a null `paid_at` and puts its day boundary in UTC; `placed_at` alone with no shift; and no date filter at all.
 
 **The concrete consequence, recorded so it is not re-derived:** an order placed 31 July at 22:00 Guangzhou and paid 1 August lands in August on one screen and July on another.
 
@@ -4957,6 +4961,32 @@ gzgrocery mirror rows are real fulfilled orders. **Existing aggregators include 
 
 **This compounds the contribution dependency already standing above.**
 
+### gzgrocery counts, on both halves — DECIDED 2026-09-01
+
+**Closes "Whether gzgrocery counts toward cost of goods", the open item added to §36 at v4.113.** The bullet is removed from *Explicitly NOT decided here* below. The *gzgrocery must be ruled in or out of cost explicitly* subsection above is superseded by this one: **its body is left unedited, its heading now reads CLOSED, and it carries a closing line pointing here**, so a reader who meets it first is not left thinking the question is still open.
+
+Finance includes gzgrocery orders in revenue and in cost of goods, read from the order record like every other channel. The existing dashboard exclusion is not inherited.
+
+The exclusion exists to prevent double-booking against takings counted elsewhere. Finance never reads `retail_stock_ledger`, so there is nothing to double-book against. The condition the exclusion protects against does not arise here.
+
+The dashboard's own treatment is recorded so it is not mistaken for precedent: its revenue SUM excludes gzgrocery via `COALESCE(channel,'') != 'gzgrocery'`, and then adds gzgrocery takings back from `retail_stock_ledger` through `guanyiPickupSales()`. gzgrocery revenue is in the dashboard headline, arriving by a different road. A reader that "follows the revenue side's exclusion" would exclude a channel the headline includes.
+
+Revenue and cost must stand on the same population. A channel in one half and not the other makes the staircase arithmetically wrong rather than merely incomplete.
+
+This decision does not repair the mirror backfill. `backfillGzMirrors` stamps present-day cost onto historic orders, recorded above as a finding, and remains true. gzgrocery lines whose cost was stamped at mirror time carry a wrong number, not a missing one, and this decision does not change that.
+
+### Finance does not reuse the dashboard revenue aggregator — FINDING 2026-09-01
+
+The Reports/Dashboard handler's `kpi.revenue` is a cash-basis blend of three sources: the order SUM, gzgrocery takings from `retail_stock_ledger`, and wallet top-up cash from `retail_topup_transactions` on `date(paid_at, '+8 hours')`.
+
+A wallet top-up is money received before any sale. §36 defines revenue as coming from the order record, and separately rules settlement receipts out entirely; a top-up is a third thing and was not previously addressed. **It is excluded from Finance revenue. Money becomes revenue when an order consumes it, not when it arrives.**
+
+Finance therefore writes its own revenue query against `retail_orders` and `retail_order_items` rather than reusing the dashboard aggregator. Reusing it would silently import both folds.
+
+**The literal date expression `date(COALESCE(paid_at, placed_at), '+8 hours')` appears eleven times, not five.** §36's earlier "five sites" was a count of aggregation handlers; the raw occurrence count is higher. **The measured breakdown, stated in full so the two figures are never conflated again: NINE occurrences in `routes/`, every one of them in `routes/retail.js`, plus TWO in `scripts/` — ELEVEN in total.** Eleven is the total across both directories, **not the count within `routes/` alone.** The nine in `routes/retail.js` sit across five route handlers — `/sales/summary`, `/dashboard`, `/products/highlights`, `/products/:id/sales` and `/products` — and two module-level helpers, `guanyiPickupSales()` and `storeCreditRedeemed()`; **the five handlers are what "five sites" counted, and they check out exactly.** The two in `scripts/` are `test_sales_summary_partition.js` and `funnel_report.js`.
+
+Counted are both textual forms — the `'${TZ}'` template and the inline `'+8 hours'` literal — with or without an `o.` table alias. **Deliberately not counted, being different expressions rather than occurrences of this one:** `strftime('%H', COALESCE(…))`, `time(COALESCE(…))`, `MIN(COALESCE(…))`, the bare `COALESCE(o.paid_at, o.placed_at) AS waiting_since` at two sites, and one comment.
+
 ### Explicitly NOT decided here
 
 Do not treat any of the following as settled:
@@ -4966,7 +4996,6 @@ Do not treat any of the following as settled:
 - Where settlement receipts belong. Money arriving from a platform weeks after the sale is not revenue — the order already counted it — but Roots records it today and every channel business has it. Recording it in Transactions would double-count. Nothing in Tacet's model holds it.
 - What `wechat_chat` and `pickup` are. Both appear as order channels from August 2026, ¥4,043 across 3 orders, and are named in no channel mapping in the repository.
 - Whether Tacet carries an equivalent of `backfillOrderedExpenses()`. The kitchen app's boot-time backfill is flagged above as an uncontrolled ledger writer; whether Tacet should post missing expense rows automatically at all, and if so on what trigger, is not answered here.
-- Whether gzgrocery counts toward cost of goods. Its rows are included in order counts and excluded from revenue sums, and the exclusion is not applied consistently across sites. Which side cost follows is not answered here.
 
 ## 37. Related documents
 
