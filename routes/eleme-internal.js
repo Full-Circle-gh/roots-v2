@@ -404,6 +404,31 @@ router.post('/ingest-order', (req, res) => {
     const commission   = fmoney(order.commission);
     const settleAmount = fmoney(order.merchantIncome);
 
+    // 商家活动补贴 — the SHOP's own promotion, out of our margin, into the
+    // customer's price. settlementInfo.merchantActivityInfo.total, already read
+    // by lib/eleme-browser.js (SHOP_DISC_PATHS) and until now thrown away here:
+    // the ingest never looked at order.shopDiscount and no column held it.
+    //
+    // It is the missing term in the row's own arithmetic. Since 67fc00a subtotal
+    // has been the GOODS, with the two fees beside it rather than inside it, so
+    // what the customer paid reads
+    //   subtotal + packing + shipping - discount
+    // and on both live orders that identity only closes with the discount in it:
+    //   EL20260901417897  267 + 1.5 + 18 - 17.5 = 269 = customerPaidInfo.total
+    //   EL20260831339491  135 + 1.5 + 18 - 13.5 = 141 = customerPaidInfo.total
+    // Without this write the four columns add up to MORE than `total` and there
+    // is nothing on the row to say why — the discount is folded into Eleme's own
+    // total and was, until here, recorded nowhere at all.
+    //
+    // NULL, not COALESCE(?, 0), and deliberately unlike packing_fee/shipping_fee
+    // two lines up. A fee of 0 is a fact ("nothing was charged to pack it"); a
+    // discount of 0 would be the claim "this order carried no promotion", which
+    // a payload that simply didn't mention one does not support. Same discipline
+    // as channel_commission above, the same column and the same NULL rule Meituan
+    // already uses for all three (routes/meituan-internal.js writes commission,
+    // settle and discount as plain `?`). Readers treat NULL as absent, not zero.
+    const shopDiscount = fmoney(order.shopDiscount);
+
     const orderId = db.transaction(() => {
       const r = db.prepare(`
         INSERT INTO retail_orders (
@@ -412,17 +437,17 @@ router.post('/ingest-order', (req, res) => {
           channel_status, channel_status_at, channel_eta, channel_preorder_at,
           customer_note, needs_cutlery,
           shipping_fee, packing_fee,
-          channel_commission, channel_settle_amount
+          channel_commission, channel_settle_amount, channel_discount
         ) VALUES (?, ?, 'eleme', ?, ?, ?, 'eleme', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
                   ?, ?,
                   COALESCE(?, 0), COALESCE(?, 0),
-                  ?, ?)
+                  ?, ?, ?)
       `).run(orderNo, internalStatus, subtotal, total, storeId, placedAt, placedAt,
              channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
              shippingFee, packingFee,
-             commission, settleAmount);
+             commission, settleAmount, shopDiscount);
       const oid = r.lastInsertRowid;
       // channel_stock_restored means exactly "this order's stock is NOT currently
       // deducted from our count". A born-void order never had its stock taken, so
@@ -549,7 +574,7 @@ router.post('/ingest-order', (req, res) => {
 // never be dragged forward.
 router.post('/update-order-status', (req, res) => {
   const { elemeOrderId, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt,
-          merchantIncome, commission } = req.body || {};
+          merchantIncome, commission, shopDiscount } = req.body || {};
   const desc   = (statusDesc && String(statusDesc).trim()) || null;
   const etaVal = (eta && String(eta).trim()) || null;
   if (!elemeOrderId || !desc) return res.status(400).json({ error: 'elemeOrderId and statusDesc required' });
@@ -592,6 +617,14 @@ router.post('/update-order-status', (req, res) => {
     // differently-scaled figure.
     const commissionVal = fmoney(commission);
     const settleVal     = fmoney(merchantIncome);
+    // channel_discount joins the same blank-fill group, for the same reason and
+    // under the same rule: an order mirrored before the ingest wrote it heals on
+    // the next poll that still sees it, and one that already has a figure keeps
+    // it. Leaving the discount out while its two neighbours are in would mean a
+    // row could heal its commission and not the term that makes its own total
+    // add up. (It heals only orders the list still returns — a delivered order
+    // that has aged off it is what the backfill script is for.)
+    const discountVal   = fmoney(shopDiscount);
     db.prepare(`
       UPDATE retail_orders
          SET channel_preorder_at = COALESCE(?, channel_preorder_at),
@@ -599,11 +632,12 @@ router.post('/update-order-status', (req, res) => {
              needs_cutlery = COALESCE(?, needs_cutlery),
              channel_commission    = COALESCE(channel_commission, ?),
              channel_settle_amount = COALESCE(channel_settle_amount, ?),
+             channel_discount      = COALESCE(channel_discount, ?),
              placed_at = CASE WHEN ? IS NOT NULL AND ? < placed_at THEN ? ELSE placed_at END,
              paid_at   = CASE WHEN ? IS NOT NULL AND ? < paid_at   THEN ? ELSE paid_at   END
        WHERE id = ?
     `).run(preVal, noteVal, cutleryVal,
-           commissionVal, settleVal,
+           commissionVal, settleVal, discountVal,
            placedVal, placedVal, placedVal,
            placedVal, placedVal, placedVal,
            imp.retail_order_id);
