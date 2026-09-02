@@ -212,11 +212,16 @@ function ordShipsNothing(o) {
   return t === 'pickup' || t === 'counter';
 }
 // Which non-storefront channels are shown read-only in the combined list — the
-// storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
-// now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
+// storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime.
+// Meituan and Eleme are both marketplace orders mirrored in only to deduct
+// stock and show progress — the platform itself owns accept/prepare/dispatch,
+// so our own fulfilment/refund/print controls never apply to them (see
+// lib/inventory.js's QINGYUN_PUSH_CHANNELS, which excludes both for the same
+// reason: no recipient name/phone/address of our own to ship against).
+// gzgrocery joins in phase 2.
 function ordIsReadonlyChannel(o) {
   const c = String(o.channel || '').toLowerCase();
-  return c === 'meituan' || c === 'gzgrocery';
+  return c === 'meituan' || c === 'eleme' || c === 'gzgrocery';
 }
 // Short display for the list glance. Channel/legacy numbers look like
 // PREFIX + [sep] + yyyymmdd + sequence (e.g. MT20260706256422, GZ-138616).
