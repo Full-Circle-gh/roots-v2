@@ -37,6 +37,8 @@
 
 const { run } = require('./lib/m-probe');
 
+const CAPS_FULL = `state.caps=['waste:view','waste:costs','waste:record'];`;
+const CAPS_NOCOST = `state.caps=['waste:view','waste:record'];`;
 const STORES = `state.stores=[{id:1,name_en:'Tianhe store',name_cn:'天河店'},{id:2,name_en:'Panyu store',name_cn:'番禺店'}];`;
 const REASONS = `state.wst.reasons=[{code:'spoiled',en:'Spoiled',cn:'变质'},{code:'expired',en:'Expired',cn:'过期'},{code:'other',en:'Other',cn:'其他'}];`;
 
@@ -53,7 +55,7 @@ const LEDGER = `state.wst.tried=true; state.wst.loading=false;
     {id:2,qty:3,reason_code:'spoiled',business_date:'2026-08-31',cost_total_cents:4200,is_uncosted:0,voided_by_waste_id:7,product_name_en:'Organic carrots',product_name_cn:'有机胡萝卜',location_name_en:'Panyu',location_name_cn:'番禺店'},
     {id:7,qty:3,reason_code:'spoiled',business_date:'2026-08-31',cost_total_cents:4200,is_uncosted:0,reverses_waste_id:2,product_name_en:'Organic carrots',product_name_cn:'有机胡萝卜',location_name_en:'Panyu',location_name_cn:'番禺店'}];`;
 
-const OPEN = `${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`;
+const OPEN = `${CAPS_FULL}${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`;
 // The sheet, filled in far enough to commit: one store, one product with 18 on
 // the shelf, four of them going, a reason, and the cost the preview returned.
 const FORM = `${OPEN}APP.cmd('wasteNew');
@@ -154,11 +156,15 @@ const CASES = [
   // waste:view is a real grant on its own — an owner reading what the shop lost
   // holds it without waste:record — so the SCREEN is view and the BUTTON is
   // record. §1.7: the empty slot is the finished answer.
-  ['view-only sees the ledger and no button', `state.caps=['waste:view'];${OPEN}`, [
+  // Built from the parts rather than from OPEN, which seeds a full cap set of
+  // its own — layering `state.caps=` in front of it would just be overwritten.
+  ['view-only sees the ledger and no button',
+   `state.caps=['waste:view'];${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`, [
     ['the rows are there',   `txt('content').includes('Oat milk 1L')`],
     ['and no way to write',  `txt('content').indexOf('Record')===-1`],
   ]],
-  ['a recorder gets the button', `state.caps=['waste:view','waste:record'];${OPEN}`, [
+  ['a recorder gets the button',
+   `state.caps=['waste:view','waste:record'];${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`, [
     ['offered', `txt('content').includes('Record')`],
   ]],
   ['and an operator without waste never sees the row', `state.caps=['purchasing:view'];APP.cmd('tab','more');`, [
@@ -166,12 +172,16 @@ const CASES = [
     ['nor reachable by naming it', `(APP.cmd('push','waste'), !state.stack.length)`],
   ]],
   // ── The money gate ─────────────────────────────────────────────────────
-  // A warehouse, dispatch or customer-service account sees no money anywhere
-  // in this app (RECAP_NO_MONEY). Waste was exempt from that until it wasn't:
-  // lib/capabilities.js marks waste:view itself `money: 'shows'`, which is how
-  // the cost column reached a warehouse operator's phone. Five surfaces carry
-  // a figure and all five are checked — a gate applied to four is not a gate.
-  ['a warehouse account sees the losses and none of the money', `state.pos='warehouse';${OPEN}`, [
+  // `waste:view` opens the ledger; `waste:costs` reads the money in it. They
+  // were ONE capability marked money:'shows', which is how the cost of every
+  // loss in the business reached a warehouse phone. Five surfaces carry a
+  // figure and all five are checked — a gate applied to four is not a gate.
+  //
+  // Decided per person by whoever manages the team, so the fixture is a
+  // capability array and not a role name: a role list in the client was the
+  // shape this replaced.
+  ['a recorder without waste:costs sees the losses and none of the money',
+   `${CAPS_NOCOST}${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`, [
     ['the rows are still there',   `txt('content').includes('Oat milk 1L')`],
     ['and still say what and why', `txt('content').includes('4 × · Spoiled · Tianhe')`],
     ['no cost on any row',         `!txt('content').includes('¥96')`],
@@ -184,20 +194,38 @@ const CASES = [
     ['the pulse still counts the work', `txt('content').includes('entries')`],
     ['and still names corrections',     `txt('content').includes('voided')`],
   ]],
-  ['dispatch and customer service are gated the same way', `state.pos='dispatch';${OPEN}`, [
-    ['no money', `txt('content').indexOf('¥')===-1`],
+  // The gate fails CLOSED, which is the opposite of mCan() everywhere else in
+  // this file. A null cap set means "we could not resolve this operator", and
+  // for navigation that resolves to allow; for money it must not.
+  ['unresolved caps show no money at all',
+   `state.caps=null;${STORES}${REASONS}${LEDGER}APP.cmd('push','waste');`, [
+    ['the ledger still paints', `txt('content').includes('Oat milk 1L')`],
+    ['and no figure with it',   `txt('content').indexOf('¥')===-1`],
   ]],
-  ['the record sheet shows a warehouse the shelf, not the cost', `state.pos='warehouse';${FORM}`, [
+  ['the record sheet shows the shelf, not the cost',
+   `${FORM}state.caps=['waste:view','waste:record'];render();`, [
     ['no cost preview',        `!sheetText().includes('Cost')`],
     ['no figure at all',       `sheetText().indexOf('¥')===-1`],
     // The half that IS theirs: what the shelf reads afterwards.
     ['what the shelf will say', `sheetText().includes('Stock drops to')`],
     ['and it can still be recorded', `!/disabled/.test(document.querySelector('.sheet .cta').outerHTML)`],
   ]],
-  ['an owner still sees every figure', `state.pos='default';${OPEN}`, [
-    ['the total',    `txt('content').includes('¥256 written off')`],
-    ['the rows',     `txt('content').includes('¥96')`],
+  ['holding waste:costs, every figure is back', OPEN, [
+    ['the total',         `txt('content').includes('¥256 written off')`],
+    ['the rows',          `txt('content').includes('¥96')`],
     ['the uncosted flag', `txt('content').includes('No cost')`],
+  ]],
+  // The server strips the cost fields for a caller without the capability, so
+  // a client that believed it could show them would render money(undefined) —
+  // ¥0, which reads as "the jar was free" rather than "withheld".
+  ['a stripped payload never prints as zero',
+   `${CAPS_FULL}${STORES}${REASONS}state.wst.tried=true;
+    state.wst.totals={entries:2,voided_entries:0};
+    state.wst.rows=[{id:1,qty:1,reason_code:'spoiled',business_date:'2026-09-02',product_name_en:'Oat milk 1L',location_name_en:'Tianhe'}];
+    APP.cmd('push','waste');`, [
+    ['the row still reads',  `txt('content').includes('Oat milk 1L')`],
+    ['no phantom zero',      `!txt('content').includes('¥0')`],
+    ['and no phantom total', `!txt('content').includes('written off')`],
   ]],
   // render() rebuilds the app with innerHTML, so .sheet is a NEW node on every
   // tap and replays `animation:tSheetUp .4s` — the form slid up from the

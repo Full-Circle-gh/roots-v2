@@ -13346,6 +13346,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-waste col.wst-c-reason { width: 17%; }
 #tab-waste col.wst-c-cost   { width: 14%; }
 #tab-waste col.wst-c-act    { width: 8%; }
+/* Without `waste:costs` the Cost column is removed entirely (20-waste.js) —
+   col, header and cells — so the six that remain need widths of their own that
+   still sum to EXACTLY 100 (§1.19). The freed 14% goes to Product and Reason,
+   the two that were being clipped at the old widths; nothing else moves.
+   13 + 13 + 36 + 8 + 22 + 8 = 100. */
+#tab-waste table.nocost col.wst-c-prod   { width: 36%; }
+#tab-waste table.nocost col.wst-c-reason { width: 22%; }
 /* Cream header on white rows (§1.4). Single-line labels, no sub-labels — a
    header that needs a sentence to explain it is the wrong header. */
 #tab-waste .wst-table thead th {

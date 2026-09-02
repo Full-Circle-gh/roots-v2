@@ -88,6 +88,27 @@
     ? acMoney(Number(cents || 0) / 100)
     : '¥' + (Number(cents || 0) / 100).toFixed(2));
 
+  // ── Who may read what a loss COST (Ash, 2026-09-02) ──────────────────────
+  //
+  // `waste:view` opens this screen; `waste:costs` reads the money on it. They
+  // were one capability, so the warehouse and store_manager presets — whose
+  // job is recording what spoiled — read the cost of every loss in the
+  // business. This screen never had a money gate of any kind.
+  //
+  // FAILS CLOSED, unlike can(), which answers true on a null cap set so a
+  // resolution hiccup never locks an operator out of their own app. Money
+  // inverts that trade: a figure missing for one paint is recoverable and a
+  // figure shown to somebody who may not read one is not.
+  //
+  // The server does not SEND a cost to a caller without the capability
+  // (routes/retail-waste.js), so this decides layout — whether the column
+  // exists — and the payload decides what is knowable. When they disagree the
+  // payload wins, which is why every reader below also handles an absent
+  // figure rather than trusting this to have hidden it.
+  const showMoney = () => (typeof CAPS !== 'undefined' && CAPS !== null)
+    ? CAPS.has('waste:costs')
+    : false;
+
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
   let _rows = [];
@@ -208,14 +229,25 @@
   function pulse() {
     if (!_totals) return '';
     const t = _totals;
-    const figs = [
-      { label: T('Total', '合计'), value: money(t.cost_total_cents), tone: '' },
+    // The money pair is present or absent together. Without `waste:costs` the
+    // server sends neither figure (cost_total_cents is not in the payload at
+    // all), so the second condition is not belt-and-braces — it is what keeps
+    // an absent total from printing as ¥0.00, which reads as "nothing was
+    // lost" rather than "you are not being shown this".
+    const figs = [];
+    if (showMoney() && t.cost_total_cents != null) {
+      figs.push({ label: T('Total', '合计'), value: money(t.cost_total_cents), tone: '' });
       // §32 rule 10 — the uncosted count travels with the total, always. A
       // total shown alone reads as complete, and the entire point of the flag
       // is that sometimes it is not.
-      { label: T('No cost', '暂无成本'), value: String(t.uncosted_entries || 0), tone: t.uncosted_entries ? 'warn' : '' },
-      { label: T('Voided', '已作废'), value: String(t.voided_entries || 0), tone: '' },
-    ];
+      figs.push({ label: T('No cost', '暂无成本'), value: String(t.uncosted_entries || 0), tone: t.uncosted_entries ? 'warn' : '' });
+    } else {
+      // Not an empty line: the count of losses in range is the one figure this
+      // operator put there, and a pulse with nothing in it reads as a summary
+      // that failed to load.
+      figs.push({ label: T('Entries', '记录'), value: String(t.entries || 0), tone: '' });
+    }
+    figs.push({ label: T('Voided', '已作废'), value: String(t.voided_entries || 0), tone: '' });
     return `<div class="wst-pulse">${figs.map(f => `
       <span class="wst-fig ${f.tone}">
         <span class="wst-fig-l">${esc(f.label)}</span>
@@ -283,13 +315,20 @@
 
   // §1.19 — table-layout: fixed, a classed <col> per column, percentages that
   // sum to EXACTLY 100. The measurement table lives in the CSS beside the cols.
+  // Without `waste:costs` the Cost column is REMOVED — col, header and cells —
+  // rather than left blank. An empty column under the word "Cost" is worse
+  // than no column: it reads as data that failed to load, and it invites
+  // somebody to go looking for the bug. The `nocost` class carries a second
+  // set of widths that sum to 100 without it (§1.19), so the six that remain
+  // fill the table properly instead of leaving 14% of dead air.
   function table() {
+    const withCost = showMoney();
     return `
       <div class="wst-tablewrap">
-        <table class="wst-table">
+        <table class="wst-table${withCost ? '' : ' nocost'}">
           <colgroup>
             <col class="wst-c-date"><col class="wst-c-store"><col class="wst-c-prod">
-            <col class="wst-c-qty"><col class="wst-c-reason"><col class="wst-c-cost">
+            <col class="wst-c-qty"><col class="wst-c-reason">${withCost ? '<col class="wst-c-cost">' : ''}
             <col class="wst-c-act">
           </colgroup>
           <thead><tr>
@@ -298,7 +337,7 @@
             <th>${esc(T('Product', '产品'))}</th>
             <th class="num">${esc(T('Qty', '数量'))}</th>
             <th>${esc(T('Reason', '原因'))}</th>
-            <th class="num">${esc(T('Cost', '成本'))}</th>
+            ${withCost ? `<th class="num">${esc(T('Cost', '成本'))}</th>` : ''}
             <th></th>
           </tr></thead>
           <tbody>${_rows.map(row).join('')}</tbody>
@@ -320,9 +359,15 @@
     // §32 rule 10 — zero and unknown must never look alike, so an uncosted row
     // says so in words. Not a dash (which reads as "not applicable") and not
     // ¥0.00 (which reads as "this cost nothing").
-    const cost = r.is_uncosted
-      ? `<span class="wst-nocost">${esc(T('No cost', '暂无成本'))}</span>`
-      : money(r.cost_total_cents);
+    // The cell is only built when the column exists. The null check beside it
+    // guards the disagreement case: if this operator's caps say yes and the
+    // server stripped the field anyway, money(undefined) is ¥0.00 — which does
+    // not read as "withheld", it reads as "the jar was free".
+    const showCost = showMoney();
+    const cost = (r.cost_total_cents == null && !r.is_uncosted) ? ''
+      : r.is_uncosted
+        ? `<span class="wst-nocost">${esc(T('No cost', '暂无成本'))}</span>`
+        : money(r.cost_total_cents);
     // Void is offered on a live loss only: never on a reversal, never twice.
     // The capability gate is data-cap, so applyCapGates hides it for an
     // operator without waste:void.
@@ -339,7 +384,7 @@
         </td>
         <td class="num">${esc(String(r.qty))}</td>
         <td class="wst-ell">${esc(reasonLabel(r.reason_code))}</td>
-        <td class="num">${cost}</td>
+        ${showCost ? `<td class="num">${cost}</td>` : ''}
         <td class="act">${act}</td>
       </tr>`;
   }
@@ -495,6 +540,9 @@
     async function loadPreview() {
       const qty = Number(qtyIn.value);
       if (!picked || !(qty > 0)) { preview = null; return; }
+      // Nothing to preview for an operator who may not read a cost, and no
+      // reason to ask the server for one it would refuse to send.
+      if (!showMoney()) { preview = null; return; }
       const seq = ++previewSeq;
       try {
         const j = await api('/api/retail-admin/waste/preview?store_product_id=' + picked.id + '&qty=' + qty);
@@ -522,7 +570,9 @@
       }
       submit.disabled = !!reason;
       let text = reason || '';
-      if (!reason && preview) {
+      // `preview` is null for a cost-blind operator (loadPreview returns early),
+      // so the hint stays on the blocking reason or empty — never a figure.
+      if (!reason && preview && showMoney()) {
         text = preview.is_uncosted
           ? T('No cost on file for this product — it will be recorded without one.', '该产品暂无成本,此条将不计成本。')
           : T('Cost', '成本') + ' ' + money(preview.cost_total_cents);
@@ -563,9 +613,14 @@
         // without a cost the operator hears so now, not when a total looks
         // wrong next week.
         const what = productLabel({ product_name_en: picked.name_en, product_name_cn: picked.name_cn });
-        toast(saved.is_uncosted
-          ? T('Recorded ' + qtyIn.value + ' × ' + what + ' — no cost on file', T('Recorded', '已登记') + ' ' + qtyIn.value + ' × ' + what + ' — ' + T('No cost', '暂无成本'))
-          : T('Recorded', '已登记') + ' ' + qtyIn.value + ' × ' + what + ' · ' + money(saved.cost_total_cents));
+        // The toast is a money surface too, and it is the one that gets
+        // forgotten: the page behind it can be gated perfectly while this
+        // announces the figure on its way past.
+        toast(!showMoney()
+          ? T('Recorded', '已登记') + ' ' + qtyIn.value + ' × ' + what
+          : saved.is_uncosted
+            ? T('Recorded ' + qtyIn.value + ' × ' + what + ' — no cost on file', T('Recorded', '已登记') + ' ' + qtyIn.value + ' × ' + what + ' — ' + T('No cost', '暂无成本'))
+            : T('Recorded', '已登记') + ' ' + qtyIn.value + ' × ' + what + ' · ' + money(saved.cost_total_cents));
         load();
       } catch (e) {
         // §1.12 error — a failed write renders where the operator is looking,

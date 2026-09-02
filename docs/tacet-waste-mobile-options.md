@@ -222,23 +222,81 @@ instead of yuan, the rows keep what and why and when, and the sheet still says
 half to somebody standing in front of the shelf. `No cost` is withheld **with** the
 figures: it is a statement about that product's costing, which is the same ledger.
 
-### The open question this exposes
+### Answered the same day — `waste:costs` (2026-09-02)
 
-`lib/capabilities.js:122` marks **`waste:view` itself `money: 'shows'`** — *"Waste is
-totalled in money."* That is why the cost reached a warehouse phone in the first place, and
-it is now wrong for three roles. The gate above fixes the symptom on the phone; it does not
-fix the model, and two things follow from that:
+**Ash: who may see the cost is the admin's decision, per person — not a role list
+in a phone build.** The gate below shipped first as `recapNoMoney()`; it is now a
+capability, and the role list is gone.
 
-- **The desktop still shows cost to anyone holding `waste:view`** (`20-waste.js` has no
-  money gate at all). Same defect, other surface, not fixed here.
-- **`store_manager` is unresolved.** It holds `waste:view` and is *not* in
-  `RECAP_NO_MONEY` — `capabilities.js:352` says it "Sees revenue (dashboard pulse +
-  Reports) — their own store is their business." So under this change a store manager
-  still sees waste cost. If it should not, that is a deliberate reversal of a written
-  decision and needs saying, not assuming.
+| | |
+|---|---|
+| **`waste:view`** | Opens the ledger. **No money marker any more.** What was lost, how many, why, where, when. |
+| **`waste:costs`** | Reads the money in it. Carries `money: 'shows'` and the note that was on `waste:view`. |
 
-The clean answer to both is to split the money out of `waste:view` into its own capability
-(`waste:costs`, say), have both surfaces read it, and drop `money: 'shows'` from
-`waste:view`. That touches the capability list, the role editor, every tenant's stored
-permissions and the desktop screen — a change worth doing deliberately rather than folded
-into a phone fix.
+**Preset matrix after the split** (verified in `test_tenant_roles.js`):
+
+| Role | view | costs | record | void |
+|---|---|---|---|---|
+| owner · admin · manager | ✓ | ✓ | ✓ | ✓ |
+| store_manager · warehouse | ✓ | — | ✓ | — |
+| staff · customer_service · dispatch | — | — | — | — |
+
+**Existing tenants.** `resolveCaps` lets a stored role record win over the shipped
+preset, so a custom-edited role's list is frozen — a new key is simply absent from
+it and lands **off**. That is the safe direction and the one chosen: nothing is
+silently granted money. Owners are unaffected (`owner` always resolves to every
+capability). The cost is that an owner-defined custom role which *should* read waste
+cost needs it ticked once in the permission matrix, where it now appears
+automatically — `backend-team.js` serves the whole registry, so no UI work was
+needed.
+
+**Enforced on the wire, not just on the screens.** A screen that hides a number it
+was sent is a screen, not a permission — the figure is still in the JSON. So
+`routes/retail-waste.js` does not *send* a cost to a caller without the capability,
+across all six responses that can carry one: the ledger's rows, its totals, the
+picker's `unit_cost` (which neither client renders and both were sent anyway), the
+preview, the record response, and the void response. Keys are **deleted**, not
+zeroed — a null cost beside `is_uncosted` would render as "No cost", a claim we are
+not making — and `costs_hidden: true` on the envelope tells a client the difference
+between withheld and absent.
+
+**It fails closed**, alone among the cap checks in this product. Everywhere else a
+null cap set means "unknown, allow", because an operator locked out of their own app
+by a resolution hiccup is worse than one shown a control they cannot use. Money
+inverts the trade: a figure missing for one render is recoverable; a figure shown to
+someone who may not read one is not. `01-core.js` already said as much — *"do NOT
+gate anything that leaks money/PII on caps alone without a reliable fallback"* — and
+the server strip is that fallback.
+
+**Both clients gate their own layout too**, which is not redundancy: it is what keeps
+the desktop's Cost column from becoming an empty gap under a "Cost" header (the
+column, its `<col>` and its cells are removed, with a second set of widths that sum
+to 100), and the phone's row from leaving a hole. Where the two disagree, the payload
+wins — every reader handles an absent figure rather than trusting the gate to have
+hidden it.
+
+**Proof:** `scripts/test_waste_cost_visibility.js` — 36 assertions on the wire, one
+section per response shape plus the fail-closed rule. Client halves in
+`test_mobile_waste.js` (79 assertions), preset matrix in `test_tenant_roles.js`.
+
+### The open question this exposed
+
+`lib/capabilities.js` marked **`waste:view` itself `money: 'shows'`** — *"Waste is
+totalled in money."* That is why the cost reached a warehouse phone in the first
+place. The marker has moved to `waste:costs` and the note with it, so the registry
+now says what is true.
+
+**`store_manager` is settled by the same change.** It holds `waste:view` and
+`waste:record` and **not** `waste:costs`, which is what Ash asked for — "warehouse
+and store employee that dealing with waste shouldn't see cost there". This does not
+touch the separate, still-standing decision that a store manager sees *revenue*
+(dashboard pulse and Reports): that is their own store's takings, which is their
+business. What they lose is the cost of a loss, which is the company's margin.
+
+**Still open:** the same split has not been made for the other screens whose
+`money: 'shows'` marker bundles a ledger with its money — `materials:view`
+("Materials show cost per unit"), `recipes:view` ("A recipe is a cost") and
+`products:view` ("The product list shows unit cost and margin"). Each is the same
+shape of question and none is urgent; none should be changed by pattern-matching on
+this one, because who needs to read a material's cost is a different argument from
+who needs to read a loss's.

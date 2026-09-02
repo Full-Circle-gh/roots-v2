@@ -3558,23 +3558,30 @@ function screenActivity(){
    ========================================================================== */
 /* Cents in, the tenant's currency out. The ONLY division in this file. */
 const wstMoney=c=>money(CUR,Number(c||0)/100);
-/* WHO MAY SEE WHAT A LOSS COST. The same gate the Recap and Trend already use
-   — a warehouse, dispatch or customer-service account sees no money anywhere
-   in this app — applied to the one screen that had been exempt from it.
-   Ash, 2026-09-02: a warehouse operator records what spoiled; what it cost the
-   business is not their line to read.
+/* WHO MAY SEE WHAT A LOSS COST — `waste:costs`, decided per person by whoever
+   manages the team (Ash, 2026-09-02). It began as a role list here; it is a
+   capability now, because "who may see the money" is the admin's decision and
+   not a constant in a phone build. `waste:view` opens the ledger, `waste:costs`
+   reads the money in it, and the warehouse and store_manager presets ship with
+   the first and not the second.
 
    ONE PLACE DECIDES, and every figure asks it: the pulse total, the uncosted
    count that travels with it, each row's cost, the sheet's preview and the
    toast after a save. A gate applied to four of those five is not a gate — the
    fifth is where the number leaks, and the toast is the one everybody forgets.
 
-   NOT A NEW CONCEPT, deliberately. lib/capabilities.js marks `waste:view`
-   itself `money: 'shows'` ("Waste is totalled in money"), which is why this
-   screen showed cost to everyone who could open it. That metadata is now
-   wrong for the roles below and wants separating into its own capability —
-   recorded in docs/tacet-waste-mobile-options.md §7, not invented here. */
-const wstShowMoney=()=>!recapNoMoney();
+   FAILS CLOSED, which is the opposite of mCan() one screen over, and the
+   difference is deliberate. A null cap set means "we could not resolve this
+   operator", and everywhere else that resolves to ALLOW, because being locked
+   out of your own app by a hiccup is worse than being shown a row you cannot
+   use. Money inverts it: a missing figure for one render is recoverable, a
+   figure shown to somebody who may not read one is not.
+
+   AND IT IS NOT THE ENFORCEMENT. routes/retail-waste.js does not SEND a cost
+   to a caller without the capability, so this decides layout — whether a
+   column exists — rather than whether a number is secret. If the two ever
+   disagree the server wins, because there is nothing in the payload to draw. */
+const wstShowMoney=()=>Array.isArray(state.caps)&&state.caps.indexOf('waste:costs')!==-1;
 /* The same three windows Stock activity offers, ending today in Guangzhou —
    the boundary the server counts its business days on, so "today" here and
    `business_date` there mean the same day. */
@@ -3647,7 +3654,8 @@ function wstProductName(row){
 function wstPulse(){
   const t=state.wst.totals; if(!t) return '';
   const bits=[];
-  if(wstShowMoney()){
+  // Same disagreement guard as the rows: a stripped total is absent, not zero.
+  if(wstShowMoney() && t.cost_total_cents!=null){
     bits.push(`<span class="num" style="color:var(--text-primary);font-weight:500">${wstMoney(t.cost_total_cents)}</span> ${T('written off','已核销')}`);
     // The uncosted count is a fact ABOUT the money, so it goes with it.
     if(Number(t.uncosted_entries||0)) bits.push(`<span class="num" style="color:var(--amber-ink)">${t.uncosted_entries} ${T('with no cost','暂无成本')}</span>`);
@@ -3671,7 +3679,11 @@ function wstRow(r){
   /* No cost column at all for a money-blind role — not a blank, not a dash.
      "No cost" is withheld with the figures: it is a statement about this
      product's costing, which is the same ledger they may not read. */
-  const cost = !wstShowMoney() ? ''
+  /* The second clause is the disagreement guard. If this operator's caps say
+     yes and the server stripped the field anyway, wstMoney(undefined) is ¥0 —
+     which does not read as "withheld", it reads as "the jar was free". Absent
+     beats a zero that means something else. */
+  const cost = (!wstShowMoney() || (r.cost_total_cents==null && !r.is_uncosted)) ? ''
     : r.is_uncosted
       ? `<span style="color:var(--text-secondary)">${T('No cost','暂无成本')}</span>`
       : `<span class="num"${mute?' style="color:var(--text-secondary)"':''}>${wstMoney(r.cost_total_cents)}</span>`;
