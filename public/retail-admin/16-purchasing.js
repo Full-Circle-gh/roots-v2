@@ -640,6 +640,19 @@
   }
 
   window.puOpenPO = async function (id) {
+    // REACHABLE FROM OUTSIDE THIS TAB — Finance's ledger links a PO-derived
+    // expense row straight to its purchase order. On the first such open this
+    // module has never loaded, and `puInit` ends by setting _screen='orders'
+    // and painting THE LIST after its three loads resolve — which would land on
+    // top of the order opened here, the two racing on how long each fetch took.
+    // Awaiting it makes them sequential: the list paints, then this replaces it.
+    //
+    // Only on the cold path. Once _init is true `puInit` runs `refresh()`, which
+    // repaints only while _screen is a list screen, so it cannot overwrite this
+    // one whichever way round the two resolve.
+    if (!_init && typeof window.puInit === 'function') {
+      try { await window.puInit(); } catch (_) { /* open anyway; paint() follows */ }
+    }
     try {
       const r = await api('/api/retail-admin/purchases/' + id);
       const po = r.data;

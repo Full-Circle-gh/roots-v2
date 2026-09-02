@@ -43,7 +43,24 @@ const TENANT_SCOPE = 'COALESCE(s.tenant_id, 1) = ?';
 // tab bar (food / packaging / equipment / retail / other by default — admin
 // can add/rename/remove). Each ingredients row references one by name in
 // its item_kind column.
-const VALID_KINDS = ['recipe', 'product', 'accounting', 'role', 'item_kind', 'payment_method'];
+//
+// 'income' is the money-IN half of the Finance vocabulary, added 2026-09-02 for
+// docs/tacet-consolidation-decisions.md §36, *Income categories move server-side
+// and the list ships empty*. Until this line existed the endpoint answered
+// *Invalid kind · 类型无效* for it and income categories could only live in each
+// browser's localStorage, so a list edited on one machine was invisible on every
+// other. It is a SEPARATE kind from 'accounting' and must stay one: the two
+// lists do different jobs, and folding income onto the expense list would snap a
+// typed income value onto an expense category that reads as a match.
+//
+// **NOTHING SEEDS IT, AND NOTHING MAY.** §36: "The list ships empty. No
+// defaults." The four the kitchen app defaults to — 堂食 Dine-in, 外卖 Takeaway,
+// 外送 Delivery, 活动 Events — are channel facts the order record already
+// carries, and "a dropdown with a wrong option available is what produced the
+// ¥152,309 Mini App mis-filing". An empty list cannot offer a wrong option. The
+// boot seed in database.js (`lookups_seed_v1`) covers 'recipe' and 'product'
+// only, and this kind is deliberately absent from it.
+const VALID_KINDS = ['recipe', 'product', 'accounting', 'role', 'item_kind', 'payment_method', 'income'];
 
 router.get('/api/categories/:kind', requireAuth, (req, res) => {
   if (!VALID_KINDS.includes(req.params.kind)) return res.status(400).json({ error: 'Invalid kind · 类型无效' });
