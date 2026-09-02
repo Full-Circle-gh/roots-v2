@@ -105,13 +105,22 @@ function readBody(body, db) {
   // right and every line beneath it is wrong**, which is worse than a visibly
   // broken number because nothing on the screen looks wrong.
   //
-  // MONEY IN PASSES null AND NEVER REACHES IT. Income categories have no
-  // server-side list (§36 decides they move, and that has not landed), so the
-  // form shows no category field for money in and there is nothing to normalise.
-  // Calling storeCategory on an income value would also snap it onto the EXPENSE
-  // list, which shares the `accounting` kind — a collision worth naming rather
-  // than discovering.
-  const category = kind === 'out' ? storeCategory(db, b.category) : null;
+  // BOTH DIRECTIONS, SINCE 2026-09-02. §36's *Income categories move server-side
+  // and the list ships empty* gives money in a list of its own — `kind='income'`
+  // in the same `categories` table, added to `routes/lookups.js` — so income now
+  // has a category to store and the same rule reaches it. The sentence in §36 is
+  // about Finance, not about the expense half of Finance.
+  //
+  // **THE KIND IS PASSED, AND THE TWO LISTS ARE NEVER CROSSED.** Money in snaps
+  // against 'income' and money out against 'accounting'. Letting an income value
+  // reach the expense list would file it under a name the tenant keeps for what
+  // it spends, and it would read as a match on every screen afterwards.
+  //
+  // A value with no entry on its own list still stores NORMALISED, exactly as an
+  // unlisted expense category does. The empty list §36 ships is what keeps a
+  // wrong option off the screen; it is not a closed vocabulary the writer
+  // enforces, and Finance has never had one in either direction.
+  const category = storeCategory(db, b.category, kind === 'in' ? 'income' : 'accounting');
 
   const note = (b.note == null || b.note === '') ? null : String(b.note);
   return { kind, date: String(b.date), amount, category, note };
@@ -276,6 +285,25 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
        GROUP BY e.po_id, po.po_number, po.date
        ORDER BY po.date DESC, e.po_id DESC`).all(from, to);
 
+    // ── The income category list ──
+    // §36, *Income categories move server-side, and the list ships empty*: the
+    // tenant's own list, hydrated from the server on load, on the same mechanism
+    // as expense. It rides the ledger payload rather than a second endpoint
+    // because the screen needs it at exactly the moment it already has this —
+    // the form reads its suggestions off this same object.
+    //
+    // **IT IS EMPTY ON EVERY TENANT TODAY, AND THAT IS THE DECISION, NOT A GAP.**
+    // "The list ships empty. No defaults." Nothing seeds it: the boot seed in
+    // database.js covers 'recipe' and 'product' only. An empty list is what makes
+    // the form's category field ABSENT for money in — §36's own rule for the
+    // screen — and "an empty list cannot offer a wrong option".
+    //
+    // Same ORDER BY as `routes/lookups.js` reads it with, so the one list does not
+    // come back in two orders depending on which endpoint asked.
+    const incomeCategories = db.prepare(
+      "SELECT name FROM categories WHERE kind = 'income' ORDER BY sort_order, name"
+    ).all().map(r => r.name);
+
     // ── One list, both directions ──
     // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
     // tie so the order is stable across reloads rather than left to the engine.
@@ -311,6 +339,7 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
       success: true,
       data: {
         window: { from, to, span_days: win.span_days },
+        income_categories: incomeCategories,
         totals: { in: sum('in'), out: sum('out') },
         counts: {
           all: rows.length,

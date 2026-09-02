@@ -352,7 +352,7 @@ it('§36 is honoured: storeCategory runs on every write', () => {
   // exception." Without it the Summary's breakdown draws lines that read
   // identically — the total right and every line beneath it wrong.
   assert.ok(/require\('\.\.\/lib\/category-text'\)/.test(ROUTE_CODE), 'must import it');
-  assert.ok(/storeCategory\(db, b\.category\)/.test(ROUTE_CODE), 'must call it');
+  assert.ok(/storeCategory\(db, b\.category,/.test(ROUTE_CODE), 'must call it');
   // readBody is the ONE place a row is validated, and both POST and PUT go
   // through it — so neither can skip the normalisation.
   assert.strictEqual((ROUTE_CODE.match(/readBody\(/g) || []).length, 3,
@@ -368,29 +368,148 @@ it('storeCategory actually snaps a variant onto the stored spelling', () => {
   assert.strictEqual(storeCategory(c, 'Rent'), 'Rent');
 });
 
-it('money in passes no category — the expense list is not its list', () => {
-  // §36 decides income categories move server-side and ship empty, and that has
-  // not landed. Normalising an income value against kind='accounting' would snap
-  // it onto the EXPENSE list, which is a different list doing a different job.
-  assert.ok(/kind === 'out' \? storeCategory/.test(ROUTE_CODE), 'money in must pass null');
-  assert.ok(/FIN_TX_KIND === 'out' \? val\('fin-tx-cat'\) : null/.test(CLIENT_CODE),
-    'and the form must not send one');
+it('money in normalises against the INCOME list, never the expense one', () => {
+  // §36's *Income categories move server-side*: money in has a list of its own
+  // now, so `storeCategory` reaches it too — but against kind='income'. Snapping
+  // an income value onto the EXPENSE list would file it under a name the tenant
+  // keeps for what it spends, reading as a match on every screen afterwards.
+  assert.ok(/kind === 'in' \? 'income' : 'accounting'/.test(ROUTE_CODE),
+    'the kind must be chosen by direction');
+  assert.ok(!/kind === 'out' \? storeCategory/.test(ROUTE_CODE),
+    'money in no longer passes null — it has a list');
+
+  const c = new Database(':memory:');
+  c.exec("CREATE TABLE categories (kind TEXT, name TEXT)");
+  c.prepare("INSERT INTO categories VALUES ('accounting','Rent')").run();
+  c.prepare("INSERT INTO categories VALUES ('income','Sublet')").run();
+  // Each direction snaps onto its own list and is blind to the other's.
+  assert.strictEqual(storeCategory(c, ' sublet ', 'income'), 'Sublet');
+  assert.strictEqual(storeCategory(c, ' rent ', 'income'), 'rent');
+  assert.strictEqual(storeCategory(c, ' rent ', 'accounting'), 'Rent');
+  assert.strictEqual(storeCategory(c, ' sublet ', 'accounting'), 'sublet');
+  // The default is the expense list, so every caller written before this
+  // parameter existed is unchanged.
+  assert.strictEqual(storeCategory(c, ' rent '), 'Rent');
 });
 
-it('the income category field hides while the add control stays visible', () => {
+it('the income list is served from the ledger payload, on tdb()', () => {
+  // §36: "hydrated from the server on load, on the same mechanism" as expense.
+  // The screen cannot know whether the list is empty without being told.
+  assert.ok(/kind = 'income'/.test(ROUTE_CODE), "the route reads kind='income'");
+  assert.ok(/income_categories: incomeCategories/.test(ROUTE_CODE), 'and ships it');
+  assert.ok(!/require\('\.\.\/database'\)/.test(ROUTE_CODE),
+    'Tacet Finance is on tdb(), never the module-level global handle');
+  assert.ok(/const db = tdb\(\)/.test(ROUTE_CODE), 'every handle comes from tdb()');
+});
+
+it('the list ships EMPTY — nothing seeds an income category', () => {
+  // §36: "The list ships empty. No defaults." The four the kitchen app defaults
+  // to are channel facts the order record already carries, and "a dropdown with
+  // a wrong option available is what produced the ¥152,309 Mini App mis-filing".
+  const lookups = fs.readFileSync(path.join(ROOT, 'routes', 'lookups.js'), 'utf8');
+  assert.ok(/'payment_method', 'income'\]/.test(lookups), "'income' is a valid kind");
+  const boot = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
+  assert.ok(!/'income',/.test(boot.slice(boot.indexOf('lookups_seed_v1'))),
+    'the boot seed must not plant one');
+  [['堂食', 'Dine-in'], ['外卖', 'Takeaway'], ['外送', 'Delivery'], ['活动', 'Events']]
+    .forEach(([cn]) => {
+      assert.ok(!CLIENT.includes(cn), `the retired default reached the screen: ${cn}`);
+      assert.ok(!ROUTE.includes(cn), `the retired default reached the route: ${cn}`);
+    });
+});
+
+it('the income category field follows the real list, not an assumption', () => {
   // §36: "the category field appears once the tenant has created at least one
-  // income category" and "the add income action stays visible regardless" —
-  // gating it "would leave a tenant with non-sale money in hand, no route to
-  // record it, and no sign on the screen explaining why."
-  assert.ok(/row\.hidden = FIN_TX_KIND === 'in'/.test(CLIENT_CODE), 'the field hides');
+  // income category" — so the field asks the list rather than hard-coding that
+  // money in never has one.
+  assert.ok(/row\.hidden = FIN_TX_KIND === 'in' && !finIncomeCats\(\)\.length/.test(CLIENT_CODE),
+    'the field must consult the server list');
+  assert.ok(/FIN_TX\.income_categories/.test(CLIENT_CODE), 'read from the payload');
+
+  // Evaluated, not merely matched: empty hides, one entry shows.
+  const row = { hidden: false };
+  const dl = { innerHTML: '' };
+  const box = { classList: { toggle() {} }, dataset: {} };
+  const cctx = vm.createContext({
+    document: {
+      getElementById: (id) => (id === 'fin-tx-cat-row' ? row : id === 'fin-tx-cats' ? dl : null),
+      querySelectorAll: () => [box],
+    },
+    escapeHtml: (x) => String(x),
+    window: {},
+  });
+  vm.runInContext(CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT')), cctx);
+  cctx.FIN_TX = { rows: [], income_categories: [] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(row.hidden, true, 'an empty list hides the field');
+  assert.strictEqual(dl.innerHTML, '', 'and offers no options');
+  cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(row.hidden, false, 'one income category brings it back');
+  assert.ok(/Sublet 转租/.test(dl.innerHTML), 'and the list is the income list');
+  cctx.window.finTxKind('out');
+  assert.strictEqual(row.hidden, false, 'money out always has the field');
+  assert.ok(!/Sublet 转租/.test(dl.innerHTML),
+    'and the two lists are never pooled — an income value must not be suggested '
+    + 'for an expense, which storeCategory would then snap onto the wrong list');
+});
+
+it('switching direction empties the category box', () => {
+  // The two lists are different vocabularies. A value typed for one direction
+  // left sitting in the box would be SENT on the other — type an expense
+  // category, switch to money in on a tenant that HAS income categories, and the
+  // income row files under an expense name. Hiding covers the empty-list case
+  // only; this covers the other one.
+  const row = { hidden: false };
+  const box = { value: 'Rent 房租' };
+  const dl = { innerHTML: '' };
+  const seg = { classList: { toggle() {} }, dataset: {} };
+  const cctx = vm.createContext({
+    document: {
+      getElementById: (id) => (id === 'fin-tx-cat-row' ? row
+        : id === 'fin-tx-cat' ? box : id === 'fin-tx-cats' ? dl : null),
+      querySelectorAll: () => [seg],
+    },
+    escapeHtml: (x) => String(x),
+    window: {},
+  });
+  vm.runInContext(CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT')), cctx);
+  cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(box.value, '', 'the expense value must not survive the switch');
+});
+
+it('a money-in row that already has a category keeps its field', () => {
+  // Not about offering a category — about not silently blanking one. A category
+  // deleted in Settings must not make the next edit of that row wipe what it
+  // says, and the form sends null for a field it is not showing.
+  assert.ok(/finTxKeepsCat/.test(CLIENT_CODE), 'the guard must exist');
+  assert.ok(/FIN_TX_EDIT\.kind === 'in' && FIN_TX_EDIT\.category/.test(CLIENT_CODE),
+    'and it must key off the row being edited');
+});
+
+it('the add control stays visible regardless', () => {
+  // §36: gating it "would leave a tenant with non-sale money in hand, no route
+  // to record it, and no sign on the screen explaining why."
   const cta = financeSection().match(/id="fin-tx-new"[^>]*/);
   assert.ok(cta, 'the CTA is missing');
   assert.ok(!/disabled/.test(cta[0]), 'it is never disabled');
 });
 
+it('the form sends a category exactly when it shows the field', () => {
+  // Read off the field rather than restated: a rule stated twice drifts once.
+  assert.ok(/getElementById\('fin-tx-cat-row'\) \|\| \{\}\)\.hidden \? null : val\('fin-tx-cat'\)/
+    .test(CLIENT_CODE), 'the send must follow the field, not the direction');
+});
+
 it('nothing in the form touches localStorage', () => {
+  // The kitchen app still holds FIN_INCOME_CATS_KEY = 'roots_v2:incomeCats' and
+  // saveFinCats(); §36 moves the list to the server and Tacet reads that list
+  // and no other. Whether the kitchen store is deleted is a kitchen question.
   assert.ok(!/localStorage|roots_v2:incomeCats/.test(CLIENT_CODE),
-    'income categories live in localStorage today and this form must not read them');
+    'Tacet must neither read nor write the per-browser income list');
+  assert.ok(!/localStorage|roots_v2:incomeCats/.test(ROUTE_CODE),
+    'and neither may the route');
 });
 
 it('a delete is never unconfirmed, and the write control disables', () => {

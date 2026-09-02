@@ -512,19 +512,77 @@ window.finTxKind = function finTxKind(kind) {
   FIN_TX_KIND = kind === 'in' ? 'in' : 'out';
   document.querySelectorAll('#fin-tx-kind button')
     .forEach(b => b.classList.toggle('on', b.dataset.kind === FIN_TX_KIND));
-  // Money in has no category field. §36 decides income categories move
-  // server-side and ship EMPTY, and that has not landed — so there is no list to
-  // choose from, and §36's own rule for the screen applies to the form: "the
-  // category field appears once the tenant has created at least one income
-  // category… Nobody is asked to categorise before they have anything to
+  // §36: "the category field appears once the tenant has created at least one
+  // income category… Nobody is asked to categorise before they have anything to
   // categorise with." Hidden, not disabled, not an empty dropdown (§1.9).
+  //
+  // THE LIST IS THE SERVER'S, NOT AN ASSUMPTION ABOUT IT. Until 2026-09-02 this
+  // line read `row.hidden = FIN_TX_KIND === 'in'` — the field was hidden because
+  // no list could exist. Now one can, so the field asks it: absent while the list
+  // is empty, present the moment the tenant has an income category. §36 ships the
+  // list empty, so today the rendering is the same and the REASON is different.
   //
   // The ADD CONTROL STAYS VISIBLE REGARDLESS. §36: gating it "would leave a
   // tenant with non-sale money in hand, no route to record it, and no sign on
   // the screen explaining why."
   const row = document.getElementById('fin-tx-cat-row');
-  if (row) row.hidden = FIN_TX_KIND === 'in';
+  if (row) row.hidden = FIN_TX_KIND === 'in' && !finIncomeCats().length && !finTxKeepsCat();
+  // THE BOX EMPTIES WHEN THE DIRECTION CHANGES. The two lists are different
+  // vocabularies, so a value typed for one direction means nothing in the other
+  // — and left in place it would be SENT: type Rent, switch to money in on a
+  // tenant that has income categories, save, and an income row is filed under an
+  // expense category. Hiding the field covers only the empty-list case; this
+  // covers the other one. finTxForm re-fills the box straight after calling
+  // this, so opening the form on an existing row is unaffected.
+  const box = document.getElementById('fin-tx-cat');
+  if (box) box.value = '';
+  finTxCatList();
 };
+
+/* The tenant's income categories, as the server sent them with the ledger.
+
+   EMPTY IS THE ANSWER, NOT A FAILURE. §36 ships this list empty on every tenant
+   and records why: the four the kitchen app defaults to are channel facts the
+   order record already carries, "a dropdown with a wrong option available is
+   what produced the ¥152,309 Mini App mis-filing", and "an empty list cannot
+   offer a wrong option". A payload that never arrived reads empty here too,
+   which hides the field — the safe way round, since the alternative offers a
+   category box with nothing behind it. */
+function finIncomeCats() {
+  return (FIN_TX && FIN_TX.income_categories) || [];
+}
+
+/* One exception to the rule above, and it is about not LOSING a value rather
+   than about offering one. A money-in row that already carries a category keeps
+   its field even when the list is empty — a category deleted in Settings must
+   not make the next edit of that row silently blank what it says. §36's rule is
+   that nobody is asked to categorise before they have something to categorise
+   with; a row that already has one has something. */
+function finTxKeepsCat() {
+  return !!(FIN_TX_EDIT && FIN_TX_EDIT.kind === 'in' && FIN_TX_EDIT.category);
+}
+
+/* The suggestions behind the Category box, PER DIRECTION.
+
+   Money out: the expense categories already on the server — the ones §36 says
+   are shared properly under kind='accounting' — read off the rows on screen.
+   Suggestions only: the field is free text, and storeCategory snaps whatever is
+   typed onto an existing entry at write.
+
+   Money in: the tenant's own income list, which is a DIFFERENT LIST doing a
+   different job. The two are never pooled. The `kind === 'out'` filter on the
+   money-out half is what keeps them apart now that an income row can carry a
+   category — without it the expense box would suggest income categories, and
+   `storeCategory` would then snap the typed value onto the wrong master list. */
+function finTxCatList() {
+  const dl = document.getElementById('fin-tx-cats');
+  if (!dl) return;
+  const names = FIN_TX_KIND === 'in'
+    ? finIncomeCats()
+    : [...new Set(((FIN_TX && FIN_TX.rows) || [])
+        .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
+  dl.innerHTML = names.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+}
 
 /* Open the form. `row` present = edit; absent = add.
    A PO-derived row never reaches here — its row offers no Edit at all, which is
@@ -545,14 +603,9 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   if (t) t.textContent = row ? cuT('Edit', '编辑') : cuT('New transaction', '新建交易');
   const del = document.getElementById('fin-tx-del');
   if (del) del.hidden = !row;
-  // The expense categories already on the server — the ones §36 says are shared
-  // properly under kind='accounting'. Suggestions only: the field is free text,
-  // and storeCategory snaps whatever is typed onto an existing entry at write.
-  const dl = document.getElementById('fin-tx-cats');
-  if (dl && FIN_TX) {
-    const cats = [...new Set(FIN_TX.rows.filter(r => r.category).map(r => r.category))].sort();
-    dl.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
-  }
+  // The suggestions and the field's own presence are both finTxKind's, which
+  // this has already called — they depend on the direction, and the direction
+  // can change while the form is open.
   finTxErr('');
   m.hidden = false;
   // §1.8, one Dusk element per page. The modal's Save is the primary action of
@@ -614,10 +667,12 @@ window.finTxSave = function finTxSave() {
     kind: FIN_TX_KIND,
     date: val('fin-tx-date'),
     amount: val('fin-tx-amount'),
-    // Money in sends no category at all — the field is hidden and there is no
-    // income list to snap onto. The server passes null rather than normalising
-    // it against the EXPENSE list, which shares the 'accounting' kind.
-    category: FIN_TX_KIND === 'out' ? val('fin-tx-cat') : null,
+    // THE FIELD'S PRESENCE IS THE RULE, read from the field rather than restated
+    // here. It is absent for money in while the tenant has no income category,
+    // and an absent field has nothing to send — sending the box's last value
+    // anyway would file an income row under whichever EXPENSE category was typed
+    // before the direction was switched.
+    category: (document.getElementById('fin-tx-cat-row') || {}).hidden ? null : val('fin-tx-cat'),
     note: val('fin-tx-note'),
   };
   const row = FIN_TX_EDIT;

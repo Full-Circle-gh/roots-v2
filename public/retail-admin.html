@@ -10998,9 +10998,10 @@
          it never grows by the operator's own actions, so it is not a page).
 
          NO LOCATION FIELD — neither ledger table has a column for one.
-         NO CATEGORY FIELD FOR MONEY IN — §36 decides income categories move
-         server-side and ship empty, and that has not landed; the field hides
-         while the list is empty and the add control stays visible regardless.
+         THE CATEGORY FIELD IS CONDITIONAL FOR MONEY IN — §36 moves income
+         categories server-side (`categories` where kind='income') and ships the
+         list EMPTY, so the field is absent until the tenant has created one and
+         appears the moment they have. The add control stays visible regardless.
          Nothing here reads or writes localStorage. -->
     <div class="fin-modal" id="fin-tx-modal" hidden>
       <div class="fin-modal-card" role="dialog" aria-modal="true" aria-labelledby="fin-tx-modal-t">
@@ -11021,9 +11022,11 @@
             <label for="fin-tx-amount">Amount · 金额</label>
             <input type="number" id="fin-tx-amount" min="0" step="0.01" inputmode="decimal">
           </div>
-          <!-- Money out only. Hidden, not disabled and not an empty dropdown:
-               §1.9's data-precondition axis answers an absent dimension with
-               absence. -->
+          <!-- Money out always; money in once an income category exists. Hidden,
+               not disabled and not an empty dropdown: §1.9's data-precondition
+               axis answers an absent dimension with absence. The datalist holds
+               the expense list or the income list, never both — 22-finance.js
+               swaps it with the direction. -->
           <div class="fin-f-row" id="fin-tx-cat-row">
             <label for="fin-tx-cat">Category · 分类</label>
             <input type="text" id="fin-tx-cat" list="fin-tx-cats" autocomplete="off">
