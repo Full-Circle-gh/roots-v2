@@ -129,6 +129,15 @@ Page({
     preorderNoticeItems: [],      // [{ id, name, image }] matched to the cart for thumbnails
     preorderNoticePopup: false,   // true → the "Ships soon" modal is open
     preorderNoticeSeen: false,    // auto-shows once per visit; banner persists after
+    waitConfirmMakeDate: '',      // fresh-batch date shown in the wait-for-restock confirm, '' when unknown
+    // The Guangzhou counterpart of preorderNotice: a sold-out FRESH item on the
+    // local run, where the kitchen's schedule gives us a real production date.
+    // Carries { make_date, kicker/title/message_en/cn, items[] }. Never set at
+    // the same time as preorderNotice — the server's two gates are complements.
+    localFreshNotice: null,
+    localFreshNoticeItems: [],
+    localFreshNoticePopup: false,
+    localFreshNoticeSeen: false,
     // "Sent from another shop" notice — the location that would normally have
     // served this address is closed, so a different one is fulfilling and it may
     // take longer. Same popup+banner UX as the two above, but the answer depends
@@ -1479,6 +1488,8 @@ Page({
           batchNoticeItems: this.buildBatchNoticeItems(data.batch_notice),
           preorderNotice: data.preorder_notice || null,
           preorderNoticeItems: this.buildBatchNoticeItems(data.preorder_notice),
+          localFreshNotice: data.local_fresh_notice || null,
+          localFreshNoticeItems: this.buildBatchNoticeItems(data.local_fresh_notice),
           storeMoveNotice: data.store_move_notice || null,
           // Whether a same-city rider is going to carry this. Decided by the
           // server with the same predicate the courier push uses, so the notice
@@ -1521,6 +1532,15 @@ Page({
         if (data.preorder_notice && !this.data.preorderNoticeSeen && !this.data.localOnlyPopup && !batchAutoShowing) {
           this.setData({ preorderNoticePopup: true, preorderNoticeSeen: true });
         }
+        // The Guangzhou dated-batch notice, same one-time popup, and last in the
+        // same anti-stacking chain. A cart can't raise this AND the pre-order
+        // one (complementary gates), but it can raise this alongside the batch
+        // notice if the address changed mid-visit, so it still yields to it.
+        const preorderAutoShown = data.preorder_notice && this.data.preorderNoticePopup;
+        if (data.local_fresh_notice && !this.data.localFreshNoticeSeen
+            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShown) {
+          this.setData({ localFreshNoticePopup: true, localFreshNoticeSeen: true });
+        }
         // "Sent from another shop" — auto-opens once PER ADDRESS, not once per
         // visit: the answer is a property of where the order is going, so a
         // customer who switches to an address served by a different shop has to
@@ -1528,8 +1548,10 @@ Page({
         // banner stays put either way, so nothing is lost if we skip the pop.
         const moveSig = this._addressSignature();
         const preorderAutoShowing = data.preorder_notice && this.data.preorderNoticePopup;
+        const localFreshAutoShowing = data.local_fresh_notice && this.data.localFreshNoticePopup;
         if (data.store_move_notice && this._storeMoveSeenFor !== moveSig
-            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShowing) {
+            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShowing
+            && !localFreshAutoShowing) {
           this._storeMoveSeenFor = moveSig;
           this.setData({ storeMoveNoticePopup: true });
         }
@@ -2083,6 +2105,12 @@ Page({
   closePreorderNotice() {
     this.setData({ preorderNoticePopup: false });
   },
+  openLocalFreshNotice() {
+    if (this.data.localFreshNotice) this.setData({ localFreshNoticePopup: true });
+  },
+  closeLocalFreshNotice() {
+    this.setData({ localFreshNoticePopup: false });
+  },
 
   // Identifies the address a quote was for, so the store-move notice can pop
   // once per address instead of once per visit. A saved address is its id; an
@@ -2630,7 +2658,7 @@ Page({
     // Ships-soon / Guangzhou-only). They're modal so this is defensive, but if
     // one is still showing, skip the upsell this round and go straight to pay.
     if (this.data.batchNoticePopup || this.data.preorderNoticePopup || this.data.localOnlyPopup
-        || this.data.storeMoveNoticePopup) {
+        || this.data.localFreshNoticePopup || this.data.storeMoveNoticePopup) {
       this._offersDone = true;
       return this.submitOrder(this._pendingExtra);
     }
@@ -2796,6 +2824,7 @@ Page({
       // available via their banners.
       batchNoticePopup: false,
       preorderNoticePopup: false,
+      localFreshNoticePopup: false,
       storeMoveNoticePopup: false,
     });
   },
@@ -3329,6 +3358,11 @@ Page({
       showFallbackModal: false,
       showWaitConfirmModal: true,
       waitConfirmSlotLabel: this.data.deliverySlotLabel || '',
+      // When the shortage is a fresh meal the kitchen has a scheduled batch for,
+      // this modal stops being a vague "whenever it arrives" and can name the
+      // day. Empty for a generic grocery restock, where there is no such date
+      // and the modal keeps its original wording.
+      waitConfirmMakeDate: (this.data.localFreshNotice && this.data.localFreshNotice.make_date) || '',
     });
     return new Promise(resolve => { this._waitConfirmResolve = resolve; });
   },

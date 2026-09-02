@@ -7170,6 +7170,41 @@
             <label class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
             <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
           </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%;">
+            <label class="stacked" style="opacity: .75;">
+              Guangzhou copy — the same shortage inside the city · 广州文案 — 市内同款缺货提示
+            </label>
+            <div class="hint" style="margin-top: 2px;">
+              A Guangzhou order is delivered on our own run, so there is no shipping day to
+              name — only the day the kitchen makes the batch. Leave blank to use the built-in
+              wording. The one placeholder is <code>{make_date}</code>.
+              广州订单由我们自己配送,因此只说明制作日期。留空则使用默认文案。
+            </div>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">GZ popup eyebrow — English · 广州弹窗小标题(英文)</label>
+            <input id="batch-local-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Next fresh batch">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">广州弹窗小标题(中文)· GZ popup eyebrow — Chinese</label>
+            <input id="batch-local-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="下一批现做">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">GZ popup title — English · 广州弹窗标题(英文)</label>
+            <input id="batch-local-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh on {make_date}">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">广州弹窗标题(中文)· GZ popup title — Chinese</label>
+            <input id="batch-local-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="{make_date} 新鲜现做">
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">GZ checkout notice — English · 广州结账提示(英文)</label>
+            <textarea id="batch-local-msg-en" rows="2" style="width: 100%;" placeholder="Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready."></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">广州结账提示(中文)· GZ checkout notice — Chinese</label>
+            <textarea id="batch-local-msg-cn" rows="2" style="width: 100%;" placeholder="您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 {make_date} 制作下一批 — 制作完成后会尽快为您配送。"></textarea>
+          </div>
           <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
         </div>
       </div>
