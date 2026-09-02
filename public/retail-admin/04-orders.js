@@ -5406,14 +5406,18 @@ function renderChannelMoneyPanel(o) {
     : '';
   const note = g.complete ? '' : `<div class="cmp-note">${cuT('Breakdown incomplete', '明细不完整')}</div>`;
 
+  // A DIV, never a <section>: retail-admin.css:940's `section {display:none}`
+  // tab rule is unscoped and hides a nested one at any depth, which is exactly
+  // what happened to this panel between PR #206 and 2026-09-02. See
+  // docs/tacet-desktop-patterns.md §1.22.
   return `
-    <section class="cmp">
+    <div class="cmp">
       <h3 class="cmp-h">${cuT('Settlement', '结算明细')}</h3>
       ${rows.map(rowHtml).join('')}
       ${commissionRow}
       ${netRow}
       ${note}
-    </section>`;
+    </div>`;
 }
 
 // One line of the VIEW-ONLY manifest (Meituan / gzgrocery). Product name + its
