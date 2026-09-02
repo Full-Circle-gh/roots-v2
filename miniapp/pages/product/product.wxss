@@ -888,6 +888,7 @@
 .add-label {
   font-size: calc(32rpx * var(--font-scale));
   margin-left: 28rpx;
+  white-space: nowrap;
 }
 /* Compare-at + live price grouped on the right of the add button. Stacked
    (was over now) so the pair stays narrow — the label keeps to one line
