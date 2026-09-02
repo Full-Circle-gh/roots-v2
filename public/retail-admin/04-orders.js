@@ -5499,6 +5499,16 @@ function renderReadonlyOrder(o) {
           <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
         </div>` : ''}
         ${(() => {
+          // Eleme's own card is gone (Ash, 2026-09-02): channel_status has read
+          // "VALID" on 100% of live Eleme orders — an order-validity flag, never
+          // a lifecycle stage — so this cell showed "In progress" on every
+          // delivered Eleme order since it shipped. The drawer's own status pill
+          // above already carries Tacet's real status, and the lifecycle
+          // timestamps below are complete on every row, so nothing here was
+          // telling staff something they couldn't already see. Meituan and
+          // gzgrocery are untouched: Meituan reads one named field
+          // (statusDesc) exactly right, and is what staff actually watch.
+          if (String(o.channel || '').toLowerCase() === 'eleme') return '';
           const meta = channelStatusMeta(o.channel_status);
           if (!meta) return '';
           // The platform label can read "Delivered" (已送达/用户已收餐/妥投…) while the
