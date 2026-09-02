@@ -25150,12 +25150,23 @@ function _qingyunPushRow(retailOrderId) {
 // address is exactly what might place one. The parked guess is cleared with the
 // status — it belonged to the address that has just been replaced.
 function qingyunRequeueOnAddressChange(retailOrderId, why) {
+  let changes = 0;
   try {
     const r = tdb().prepare(qingyunQueue.REQUEUE_SQL)
       .run(`requeued after ${String(why || 'address change').slice(0, 60)}`, retailOrderId);
-    if (r.changes) console.log(`[qingyun] order ${retailOrderId}: push requeued after ${why}`);
-    return r.changes > 0;
+    changes = r.changes;
   } catch (_) { return false; }   // queue table is optional on older DBs
+  if (changes) {
+    console.log(`[qingyun] order ${retailOrderId}: push requeued after ${why}`);
+    return true;
+  }
+  // REQUEUE_SQL's guard (qingyun_order_id IS NULL) is exactly why nothing moved
+  // here when a copy already exists on the courier platform — that copy was
+  // built from the address as it stood before this edit, and Qingyun has no
+  // "edit address" API to bring it up to date. Re-create it instead, so the
+  // rider a dispatch calls later is sent to the ship-to as it now reads.
+  _qingyunResyncMaterializedAddress(retailOrderId, why);
+  return false;
 }
 
 // Is a courier already committed to the current copy? Returns the blocking stage, or
@@ -25195,6 +25206,91 @@ async function _qingyunDeleteCopy(storeCode, qyOrderId) {
       out.ok ? null : String(out.msg || 'delete failed').slice(0, 300));
   } catch (_) { /* logging must never sink the result */ }
   return out;
+}
+
+// The address just changed on an order that already has a Qingyun copy
+// (qingyun_order_id set). Qingyun has no address-edit API, so the only way to
+// get the corrected ship-to onto the platform is the same move the ship-from
+// override does to relocate a pickup point: delete the existing 待配送 order
+// and create a fresh one — this time from the order row as it reads right now.
+//
+// Skipped once a courier is already committed (_qingyunMoveBlockedBy), for the
+// same reason ship-from refuses to move then: the copy may already be assigned
+// to a rider heading for the old door, and pulling it out from under them is
+// worse than leaving staff to notice and call the rider. That case is only
+// logged, so someone can catch it in the sync log.
+//
+// Fire-and-forget: this is called from synchronous address-edit handlers that
+// must answer the request without waiting on a courier-platform round trip.
+function _qingyunResyncMaterializedAddress(retailOrderId, why) {
+  setImmediate(async () => {
+    let q;
+    try { q = _qingyunPushRow(retailOrderId); } catch (_) { return; }
+    if (!q || !q.qingyun_order_id) return;
+    const blocked = _qingyunMoveBlockedBy(q.qingyun_order_id);
+    if (blocked) {
+      console.warn(`[qingyun resync] order ${retailOrderId}: address changed after courier ${blocked} — leaving the existing Qingyun copy, staff must update or cancel it by hand`);
+      return;
+    }
+    try {
+      const order = tdb().prepare(
+        `SELECT id, order_no, status, recipient_name, recipient_phone, address_json,
+                scheduled_for, delivery_slot_label
+           FROM retail_orders WHERE id = ?`
+      ).get(retailOrderId);
+      // Order closed (or vanished) between the edit and this running — the
+      // close-out path (qingyunDropCopyForClosedOrder) owns tearing the copy
+      // down, not this one.
+      if (!order || qingyunQueue.isClosedOrderStatus(order.status)) return;
+      const { getQingyunBrowser } = require('../lib/qingyun-browser');
+      const { buildCreatePayload } = require('../lib/qingyun-payload');
+      const br = await getQingyunBrowser(q.store_code);
+      const shop = await br.getShop();
+      if (!shop || !shop.shopId) {
+        console.error(`[qingyun resync] order ${retailOrderId}: store unavailable — old Qingyun copy still carries the pre-edit address`);
+        return;
+      }
+      const payload = await buildCreatePayload(order, shop, br, {
+        geocode,
+        translateCn: addressCn.translateToChinese,
+        goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
+        onWarn: (m) => console.warn('[qingyun resync]', m),
+      });
+      const created = await br.createOrder(payload);
+      if (!created.ok || !created.orderId) {
+        console.error(`[qingyun resync] order ${retailOrderId}: re-create failed (${created.msg || 'unknown'}) — old copy still carries the pre-edit address`);
+        return;
+      }
+      const oldQyId = String(q.qingyun_order_id);
+      // Repoint the queue row at the new copy BEFORE deleting the old one, same
+      // ordering as the ship-from move: no poll landing in between can re-link
+      // the copy that's about to disappear.
+      tdb().prepare(
+        `UPDATE qingyun_push_queue
+            SET qingyun_order_id = ?, status = 'done', last_error = NULL,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE retail_order_id = ?`
+      ).run(created.orderId, retailOrderId);
+      tdb().prepare(
+        `INSERT INTO delivery_jobs (qingyun_order_id, store_code, retail_order_id, superseded)
+         VALUES (?, ?, NULL, 1)
+         ON CONFLICT(qingyun_order_id) DO UPDATE SET
+           superseded = 1, retail_order_id = NULL, updated_at = CURRENT_TIMESTAMP`
+      ).run(oldQyId, q.store_code);
+      const removed = await _qingyunDeleteCopy(q.store_code, oldQyId);
+      try {
+        tdb().prepare(
+          `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail, error_msg)
+           VALUES (?, 'resync_address', ?, ?, ?)`
+        ).run(q.store_code, removed.ok ? 'ok' : 'error', JSON.stringify({
+          order_no: order.order_no, old: oldQyId, new: created.orderId, why, old_removed: removed.ok,
+        }), removed.ok ? null : String(removed.msg || '').slice(0, 300));
+      } catch (_) { /* logging must never sink the resync */ }
+      console.log(`[qingyun] order ${retailOrderId}: re-created (${oldQyId} -> ${created.orderId}) after ${why}`);
+    } catch (e) {
+      console.error(`[qingyun resync] order ${retailOrderId}:`, e.message);
+    }
+  });
 }
 
 // An order just closed (cancelled / refunded) — take its same-city delivery out of
