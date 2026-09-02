@@ -1,0 +1,194 @@
+// Finance — the Summary staircase.
+//
+// docs/tacet-consolidation-decisions.md §36 (v4.115) governs every figure here.
+// The screen is public/retail-admin/22-finance.js; the layout it renders comes
+// from reference/finance-summary-mockup.html.
+//
+// THIS IS NOT `routes/finance.js`. That file is the KITCHEN app's Finance API:
+// seventeen routes on the module-level global database handle, none of them
+// calling `tdb()`, blocked-and-left-to-die under §36 rather than repaired. It
+// shares no route prefix and no code with this one. §36: "Tacet's Finance
+// routes are built on `tdb()` from the first commit. There is no migration step
+// here to forget, because there is nothing to migrate."
+//
+// WHAT THIS FILE IS RESPONSIBLE FOR, IN ONE LINE EACH
+//   • A revenue figure written FOR Finance, never inherited from the dashboard.
+//   • An operating-expense sum over an arbitrary date range, which the kitchen
+//     route cannot answer.
+//   • Saying nothing at all about cost of goods, because nothing reads it yet.
+//
+// ── WHY REVENUE IS NOT THE DASHBOARD'S ─────────────────────────────────────
+// §36, *Finance does not reuse the dashboard revenue aggregator*. The Reports
+// handler's `kpi.revenue` is a cash-basis blend of THREE sources: the order
+// SUM, gzgrocery takings read from `retail_stock_ledger` through
+// `guanyiPickupSales()`, and wallet top-up cash from
+// `retail_topup_transactions`. Calling it would silently import both folds.
+//
+//   • Wallet top-ups are EXCLUDED here. A top-up is money received before any
+//     sale. §36 defines revenue as coming from the order record and rules
+//     settlement receipts out entirely; a top-up is a third thing. Money
+//     becomes revenue when an order consumes it, not when it arrives — and
+//     `retail_orders.total` already excludes `balance_used`, so the yuan is
+//     counted exactly once, at the sale.
+//   • gzgrocery IS INCLUDED, on both halves, and the dashboard's exclusion is
+//     NOT inherited (§36, *gzgrocery counts, on both halves*). That exclusion
+//     exists to stop double-booking against takings this file never reads:
+//     Finance does not touch `retail_stock_ledger`, so the condition it
+//     protects against does not arise. A reader that "followed the revenue
+//     side's exclusion" would drop a channel the dashboard's own headline
+//     includes, by a different road.
+//
+// ── WHAT IS DELIBERATELY ABSENT ────────────────────────────────────────────
+// COST OF GOODS. There is no cost reader, and this file does not become one.
+// `unit_cost_at_sale` is written on all six sale paths and read by nothing;
+// §36 records six ways a reader will silently miscount and binds them on its
+// build. Until that is built, cost is reported as null and the screen renders
+// the §1.12 seventh state. Null, never zero: "zero claims the goods were free".
+//
+// LOCATION. `expense_entries` has NO location column — verified against
+// `schema.sql:229`, which carries id, date, amount, category, description,
+// po_id, created_at, created_by and nothing else. §36's *An expense may carry a
+// location* decides that the dimension exists and says in terms that "where the
+// column goes, and its shape, are NOT decided here". So this endpoint takes no
+// store filter, and that is a refusal rather than an omission: orders carry
+// `store_id` and expenses do not, so a store-scoped call could only scope the
+// top line and not the bottom one — reporting a shop's full revenue against the
+// whole business's expenses. §36 names that failure and rejects it: "A filter
+// that silently returns a wrong answer is worse than no filter." When the
+// column lands, this is where the filter goes, and CONTRIBUTION rather than NET
+// is what the last row must then be called.
+
+'use strict';
+
+const express = require('express');
+const { tdb } = require('../lib/tenant-db');
+const { requireRetailAdmin } = require('./retail');
+
+const router = express.Router();
+
+// ── The two predicates, declared ONCE ──────────────────────────────────────
+// §36's *The aggregation predicate and the order date are both inconsistent
+// today* is a finding about copy-paste: an allow-list declared once and
+// re-declared inline four more times, a non-equivalent deny-list live at two
+// sites, and four date conventions running simultaneously. It ends "Which
+// predicate and which date column the cost reader adopts is a decision to be
+// taken when it is built, deliberately. It must not be inherited by copying
+// whichever site is nearest."
+//
+// So both are constants, referenced everywhere below and re-declared nowhere.
+// Editing one of these is the only way to change what Finance counts.
+
+// The ALLOW-LIST, not the deny-list. A deny-list admits any status added later;
+// this excludes one until somebody decides it belongs.
+const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+
+// The dominant convention of the four, and the only one that is right here.
+// `paid_at` alone drops orders that have none and puts the day boundary in UTC;
+// `placed_at` alone books a sale on the day it was keyed rather than paid.
+// The `+8 hours` shift is what makes a "day" the operator's day: without it an
+// order placed 31 July at 22:00 Guangzhou lands in the wrong month.
+const TZ = '+8 hours';
+const ODATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
+
+// `expense_entries.date` is a DATE — a business day already, with no clock on
+// it — so it takes no shift. Naming that here stops a later reader "fixing" the
+// asymmetry by adding one, which would move every expense back a day.
+const EDATE = 'date';
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Round to the fen. Money is REAL yuan in this schema (docs/tacet-money-model-survey.md). */
+const fen = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
+router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
+  // Default window: the trailing 30 days in business-local time, matching the
+  // Reports range bar's own default so the two screens agree about "30 days".
+  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+  const toDefault = nowGz.toISOString().slice(0, 10);
+  const fromDefault = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  const from = DAY.test(req.query.from || '') ? req.query.from : fromDefault;
+  const to = DAY.test(req.query.to || '') ? req.query.to : toDefault;
+  if (from > to) {
+    return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
+  }
+
+  try {
+    const db = tdb();
+
+    // ── Line 1 · Revenue ──
+    // Every channel the order record carries, gzgrocery included. No ledger,
+    // no top-ups. `orders` rides along so the screen can tell an empty period
+    // from a zero-revenue one without a second call.
+    const rev = db.prepare(`
+      SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS orders
+        FROM retail_orders
+       WHERE ${PAID} AND ${ODATE} BETWEEN ? AND ?`).get(from, to);
+
+    // ── Line 4 · Operating expenses ──
+    // The kitchen route groups by `substr(date,1,7)`, a calendar-month string,
+    // which cannot answer an arbitrary range at all — a 30-day window crossing
+    // a month boundary has no month to ask for. It is left alone (§36 blocks
+    // and retires that file); this is the range sum Finance needs.
+    const exp = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS rows
+        FROM expense_entries
+       WHERE ${EDATE} BETWEEN ? AND ?`).get(from, to);
+
+    // The breakdown behind the disclosure on the expenses row. Ordered by
+    // weight, because the operator opening it is asking where the money went.
+    //
+    // An uncategorised row keeps its own line and is NOT folded into a bucket
+    // with a made-up name: §36 records that Finance stores category text raw
+    // and un-normalised, so inventing a label here would put a second wrong
+    // name on top of a known-dirty column. The client renders the null.
+    const breakdown = db.prepare(`
+      SELECT category, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
+        FROM expense_entries
+       WHERE ${EDATE} BETWEEN ? AND ?
+       GROUP BY category
+       ORDER BY amount DESC`).all(from, to);
+
+    const revenue = fen(rev.revenue);
+    const expenses = fen(exp.total);
+
+    // ── Lines 2, 3 and 5 ──
+    // cost_of_goods and gross_profit are null and always will be until a cost
+    // reader exists. NULL, not 0, and not omitted from the payload: the screen
+    // must render both rows in the seventh state, and a missing key is
+    // indistinguishable from a failed read.
+    //
+    // NET IS REVENUE MINUS OPERATING EXPENSES, WITH NO COST TAKEN OFF, and that
+    // is §36's decision rather than an oversight: "Revenue, operating expenses
+    // and net render normally from the data that exists." It follows that net
+    // is HIGHER than the business's real net for every period without cost —
+    // which is exactly what the two Not-recorded rows above it are on the
+    // screen to say. Do not silence them and leave this figure standing alone.
+    res.json({
+      success: true,
+      data: {
+        window: {
+          from, to,
+          span_days: Math.round((new Date(to) - new Date(from)) / 86400000) + 1,
+        },
+        revenue,
+        orders: rev.orders || 0,
+        cost_of_goods: null,
+        gross_profit: null,
+        operating_expenses: expenses,
+        net: fen(revenue - expenses),
+        expense_breakdown: breakdown.map(r => ({
+          category: r.category || null,
+          amount: fen(r.amount),
+          entries: r.n,
+        })),
+        expense_entries: exp.rows || 0,
+      },
+    });
+  } catch (e) {
+    console.error('[finance/summary]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = router;
