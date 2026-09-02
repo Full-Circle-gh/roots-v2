@@ -638,7 +638,7 @@
   .b-flash-hero .hero-cards { margin-top: 22px; }
 
   /* ── FLASH SALE · design directions (Classic / Editorial / Urgency) ──
-     Coral band, cream zigzag top edge, live countdown, SHOP NOW pill and a
+     Coral band, cream cap top edge, live countdown, SHOP NOW pill and a
      product carousel. Every coloured element rides on a --fs-* CSS var set in
      JS so each piece can be recoloured independently. Mirrors cms.html. */
   .b-flash-classic, .b-flash-editorial, .b-flash-urgency {
@@ -655,7 +655,6 @@
   .b-flash-classic .fsd-cap, .b-flash-editorial .fsd-cap, .b-flash-urgency .fsd-cap {
     height: 12px; background: var(--fs-panel);
   }
-  .fsd-zig { position: absolute; top: 0; left: 0; right: 0; display: block; z-index: 3; pointer-events: none; }
   .fsd-body { padding: 22px 0; color: var(--fs-ink); }
 
   @keyframes fsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
@@ -1787,7 +1786,7 @@ function renderBlock(b) {
       }).join('');
 
       // ── Design directions: classic / editorial / urgency ──────────────
-      // Coral band + cream zigzag + live countdown + SHOP NOW + carousel.
+      // Coral band + cream cap + live countdown + SHOP NOW + carousel.
       // Mirrors cms.html; every colour rides on a --fs-* var.
       if (view === 'classic' || view === 'editorial' || view === 'urgency') {
         const fsVar = (token, fallback) => brandColorVar(token) || fallback || '';
@@ -1808,13 +1807,7 @@ function renderBlock(b) {
         const pulse = b.urgency === 'frantic' ? ' fs-pulse' : '';
         const pulseDot = b.urgency === 'frantic' ? ' fs-pulse-dot' : '';
 
-        // cream zigzag teeth hanging into the band (fill tracks --fs-panel)
-        const teeth = 30, ZW = 120, zh = 6, zw = ZW / teeth;
-        let zd = 'M0 0 ';
-        for (let i = 0; i < teeth; i++) zd += `L${(i * zw + zw / 2).toFixed(2)} ${zh} L${((i + 1) * zw).toFixed(2)} 0 `;
-        zd += 'Z';
-        const zig = `<svg class="fsd-zig" viewBox="0 0 ${ZW} ${zh}" preserveAspectRatio="none" width="100%" height="${zh}"><path d="${zd}" fill="var(--fs-panel)"></path></svg>`;
-        const cap = `<div class="fsd-cap"></div>${zig}`;
+        const cap = `<div class="fsd-cap"></div>`;
 
         const vals = [split.d, split.h, split.m, split.s].map(v => String(v).padStart(2, '0'));
         const endsAttr = soonestEnd ? ` data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}"` : '';
