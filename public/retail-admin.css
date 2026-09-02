@@ -13746,8 +13746,28 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-btn-sec:hover, #tab-finance .fin-btn-icon:hover { border-color: var(--td-text2); }
 
 /* ── the staircase card ───────────────────────────────────────────────────── */
+/* THE CARD IS CAPPED AT A MEASURE, and that is what binds a label to its
+   figure. A statement row is read as one span — name, then amount — and the eye
+   only makes that span in a single sweep while the two ends stay inside one
+   fixation's reach. Left unbounded the card took the full 1440px column, which
+   put "Tools" at x=90 and ¥24 at x=1690: sixteen hundred pixels of empty rule
+   the reader has to track across, and the row stops reading as a row. Every
+   other cure for that distance treats the symptom — leader dots draw the eye a
+   rope, a hover tint lights one row at a time — and each asks the reader to do
+   something (follow, or point) before a static screenshot will read. Removing
+   the distance needs neither.
+
+   560px IS DERIVED, NOT PICKED. The widest label these rows carry, "Kitchen low
+   cost & non-durable equipment", measures 321px at the row's 15px; add the
+   breakdown's 20px indent, the body's 24px of padding on each side, the 14px
+   sign column and the 104px figure column and the row needs 507px. 560 clears
+   that with 53px in hand, so the longest label on the card still sits on one
+   line — and a longer one than any seen here simply wraps, which the grid takes
+   without moving the figure off its baseline.
+   The card is left-aligned rather than centred so its left edge keeps the
+   range bar's, and its own 24px padding still governs the rows inside. */
 #tab-finance .fin-card {
-  margin-top: 32px; background: var(--td-surface);
+  margin-top: 32px; max-width: 560px; background: var(--td-surface);
   border: 1px solid var(--td-border); border-radius: 14px;
 }
 #tab-finance .fin-body { padding: 24px 24px 0; }
@@ -13797,7 +13817,19 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance details.fin-exp { border: 0; }
 #tab-finance details.fin-exp > summary {
   list-style: none; cursor: pointer; display: grid;
-  grid-template-columns: 1fr 14px 104px; align-items: baseline; padding: 7px 0;
+  grid-template-columns: 1fr 14px 104px; align-items: baseline; padding: 7px 12px;
+  margin: 0 -12px; border-radius: 8px;
+  transition: background-color .12s cubic-bezier(.16,1,.3,1);
+}
+/* Hover lights THIS row only, and only this one, because this row is the one
+   control on the card. The static rows above and below get no tint: a row that
+   reacts to the pointer reads as a row that can be clicked, and lighting five
+   that do nothing would spend the cue that tells the reader which one opens.
+   The 12px inset with a matching negative margin lets the tint run past the
+   text on both sides without moving the grid the figures line up on. */
+#tab-finance details.fin-exp > summary:hover { background: var(--td-raised); }
+#tab-finance details.fin-exp > summary:focus-visible {
+  outline: 2px solid var(--td-text); outline-offset: 1px;
 }
 #tab-finance details.fin-exp > summary::-webkit-details-marker { display: none; }
 #tab-finance details.fin-exp > summary .fin-lbl {
