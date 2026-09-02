@@ -13782,7 +13782,17 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 }
 #tab-finance .fin-tx-table tbody tr:last-child td { border-bottom: 0; }
 #tab-finance .fin-tx-date { color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-#tab-finance .fin-tx-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* The money column is right-aligned, HEADER AND CELLS ALIKE — `th.` and `td.`
+   are both named here, which is the shape the mockup uses
+   (`table.tx th.num, table.tx td.num`) rather than a flourish. A bare
+   `.fin-tx-num` is specificity (1,1,0) and the `thead th` rule above is
+   (1,1,2), so the header LOST and kept `text-align: left`: the word Amount sat
+   134px to the left of the figures underneath it, measured in Chromium at
+   1400px. A column header that does not share its column's alignment reads as
+   a mis-drawn table, and the fault is invisible to any assertion that reads
+   emitted HTML — both cells carry the class either way. */
+#tab-finance .fin-tx-table th.fin-tx-num,
+#tab-finance .fin-tx-table td.fin-tx-num { text-align: right; font-variant-numeric: tabular-nums; }
 #tab-finance .fin-tx-subj { display: block; }
 #tab-finance .fin-tx-meta { display: block; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; }
 /* A PO row: tinted, marked, linking out instead of offering an edit — §36's
