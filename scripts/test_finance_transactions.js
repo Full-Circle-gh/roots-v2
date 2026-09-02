@@ -85,11 +85,14 @@ it('it declares no predicate of its own — they live in lib/finance-window.js',
   assert.ok(!/\+8 hours/.test(ROUTE_CODE), 'no re-declared date expression');
 });
 
-it('the route is multi-tenant and read-only', () => {
+it('the route is multi-tenant', () => {
   assert.ok(/require\('\.\.\/lib\/tenant-db'\)/.test(ROUTE_CODE) && /\btdb\(\)/.test(ROUTE_CODE), 'must use tdb()');
   assert.ok(!/require\('\.\.\/database'\)/.test(ROUTE_CODE),
     'routes/finance.js uses the global handle and is not a pattern to copy');
-  assert.ok(!/router\.(post|put|patch|delete)\b/.test(ROUTE_CODE), 'the write half is out of scope');
+  // Every db handle inside the write paths must be the tenant one. A single
+  // `db.` that resolved to the global would write a second tenant's ledger.
+  assert.strictEqual((ROUTE_CODE.match(/const db = tdb\(\)/g) || []).length, 4,
+    'each handler resolves its own tdb() handle');
 });
 
 it('no store filter reaches the endpoint or the screen', () => {
@@ -245,9 +248,16 @@ it('both §1.12 states ship, and they say different things', () => {
   assert.ok(/const filtering =/.test(body), 'the two states must be chosen apart');
 });
 
-it('there is no New transaction CTA — the write half is unbuilt', () => {
-  assert.ok(!/New transaction/.test(financeSection() + CLIENT_CODE),
-    'a CTA that does nothing is worse than none');
+it('the New transaction CTA ships now that it does something', () => {
+  // This assertion is the inverse of the one it replaces. #194 shipped no CTA
+  // because the write half did not exist and "a CTA that does nothing is worse
+  // than none". The write half exists, so the button is correct — the rule never
+  // changed, only whether pressing it leads anywhere.
+  const sec = financeSection();
+  assert.ok(/id="fin-tx-new"/.test(sec), 'the CTA is missing');
+  assert.ok(/onclick="finTxForm\('out'\)"/.test(sec), 'it must open the form');
+  assert.ok(/data-cap="finance:record"/.test(sec), 'and be gated on holding the pen');
+  assert.ok(/window\.finTxForm/.test(CLIENT_CODE), 'the handler must exist');
 });
 
 // ── The pairs ──────────────────────────────────────────────────────────────
@@ -290,6 +300,127 @@ it('the surface is wired end to end', () => {
   // One window governs both sub-views, so an Apply must reach the ledger too.
   assert.ok(/if \(FIN_TX_SEEN\) finTxLoad\(\)/.test(CLIENT),
     'the shared range bar must refresh Transactions when it has been opened');
+});
+
+
+// ── The write half ─────────────────────────────────────────────────────────
+console.log('\n5 · typing a row — §36’s write rules');
+
+const { storeCategory } = require('../lib/category-text');
+
+it('POST never writes po_id, so a typed row cannot become a projection', () => {
+  // The property routes/finance.js has today and that §36's display decision
+  // rests on: a typed row is editable precisely because it carries no po_id.
+  const post = ROUTE_CODE.slice(ROUTE_CODE.indexOf("router.post("), ROUTE_CODE.indexOf('router.put('));
+  assert.ok(/INSERT INTO income_entries/.test(post) && /INSERT INTO expense_entries/.test(post));
+  assert.ok(!/po_id/.test(post), 'po_id must be absent from both column lists');
+});
+
+it('the PO refusal is unchanged, on edit and on delete', () => {
+  // §36's refusal, enforced here as routes/finance.js enforces it, and reusing
+  // that file's own bilingual strings rather than composing a second pair.
+  assert.ok(/row\.po_id != null/.test(ROUTE_CODE), 'both write paths must check po_id');
+  assert.ok(ROUTE.includes('PO-linked expenses cannot be edited directly · 关联采购单的支出不能直接编辑'));
+  assert.ok(ROUTE.includes('PO-linked expenses cannot be deleted directly · 关联采购单的支出不能直接删除'));
+});
+
+it('a PO row offers no Edit on the screen either', () => {
+  // The refusal is visible before it is enforced — §36's "the row explains its
+  // own constraint instead of merely enforcing it".
+  const html = ctx.finTxRow(poRow);
+  assert.ok(!/finTxEdit/.test(html), 'a PO row must not offer Edit');
+  assert.ok(/finTxOpenPO/.test(html), 'it links out to Purchasing instead');
+});
+
+it('direction is chosen, never inferred from the amount’s sign', () => {
+  // A mistyped minus must not move a row between halves of the ledger.
+  assert.ok(/const kind = String\(b\.kind/.test(ROUTE_CODE), 'kind comes from the body');
+  assert.ok(!/amount\s*<\s*0/.test(ROUTE_CODE), 'the sign must not pick a table');
+  assert.ok(/finTxKind/.test(CLIENT_CODE), 'and the form makes it a choice');
+});
+
+it('amount is rounded through fen() BEFORE it is stored', () => {
+  // #194's suite caught a raw REAL sum returning 1257.6799999999998. Storing
+  // that residue would hand it to every later reader.
+  assert.ok(/const amount = fen\(b\.amount\)/.test(ROUTE_CODE), 'fen() on the way in');
+  assert.strictEqual(fen(602.68 + 655.00), 1257.68);
+  assert.ok(/amount > 0/.test(ROUTE_CODE), 'and zero or negative is refused');
+});
+
+it('§36 is honoured: storeCategory runs on every write', () => {
+  // "Finance calls storeCategory on every write… Finance stops being the
+  // exception." Without it the Summary's breakdown draws lines that read
+  // identically — the total right and every line beneath it wrong.
+  assert.ok(/require\('\.\.\/lib\/category-text'\)/.test(ROUTE_CODE), 'must import it');
+  assert.ok(/storeCategory\(db, b\.category\)/.test(ROUTE_CODE), 'must call it');
+  // readBody is the ONE place a row is validated, and both POST and PUT go
+  // through it — so neither can skip the normalisation.
+  assert.strictEqual((ROUTE_CODE.match(/readBody\(/g) || []).length, 3,
+    'declared once, called by both write paths');
+});
+
+it('storeCategory actually snaps a variant onto the stored spelling', () => {
+  const c = new Database(':memory:');
+  c.exec("CREATE TABLE categories (kind TEXT, name TEXT)");
+  c.prepare("INSERT INTO categories VALUES ('accounting','Rent')").run();
+  // Same category, typed with stray spacing — §36's three-rent-payments case.
+  assert.strictEqual(storeCategory(c, ' Rent '), 'Rent');
+  assert.strictEqual(storeCategory(c, 'Rent'), 'Rent');
+});
+
+it('money in passes no category — the expense list is not its list', () => {
+  // §36 decides income categories move server-side and ship empty, and that has
+  // not landed. Normalising an income value against kind='accounting' would snap
+  // it onto the EXPENSE list, which is a different list doing a different job.
+  assert.ok(/kind === 'out' \? storeCategory/.test(ROUTE_CODE), 'money in must pass null');
+  assert.ok(/FIN_TX_KIND === 'out' \? val\('fin-tx-cat'\) : null/.test(CLIENT_CODE),
+    'and the form must not send one');
+});
+
+it('the income category field hides while the add control stays visible', () => {
+  // §36: "the category field appears once the tenant has created at least one
+  // income category" and "the add income action stays visible regardless" —
+  // gating it "would leave a tenant with non-sale money in hand, no route to
+  // record it, and no sign on the screen explaining why."
+  assert.ok(/row\.hidden = FIN_TX_KIND === 'in'/.test(CLIENT_CODE), 'the field hides');
+  const cta = financeSection().match(/id="fin-tx-new"[^>]*/);
+  assert.ok(cta, 'the CTA is missing');
+  assert.ok(!/disabled/.test(cta[0]), 'it is never disabled');
+});
+
+it('nothing in the form touches localStorage', () => {
+  assert.ok(!/localStorage|roots_v2:incomeCats/.test(CLIENT_CODE),
+    'income categories live in localStorage today and this form must not read them');
+});
+
+it('a delete is never unconfirmed, and the write control disables', () => {
+  assert.ok(/typeof askConfirm !== 'function'\) return/.test(CLIENT_CODE),
+    'a missing dialog must refuse, not proceed');
+  assert.ok(/save\.disabled = true/.test(CLIENT_CODE),
+    '§1.12: every control that writes disables while it writes');
+});
+
+it('the write half is gated apart from the read half', () => {
+  const caps = fs.readFileSync(path.join(ROOT, 'lib', 'capabilities.js'), 'utf8');
+  assert.ok(/'finance:record'.*money: 'moves'/.test(caps), 'typing money is a moves capability');
+  const { requiredCapFor } = require('../lib/cap-routes');
+  assert.strictEqual(requiredCapFor('POST', '/api/retail-admin/finance/transactions'), 'finance:record');
+  assert.strictEqual(requiredCapFor('DELETE', '/api/retail-admin/finance/transactions/out/1'), 'finance:record');
+  assert.strictEqual(requiredCapFor('GET', '/api/retail-admin/finance/transactions'), null,
+    'reads stay open — the client hides the surface');
+});
+
+it('the three new pairs are locked at v1.11, and the rest are reused', () => {
+  assert.ok(/\*\*v1\.11 ·/.test(VOCAB), 'the amendment must be recorded');
+  [['New transaction', '新建交易'],
+   ['Delete this transaction?', '删除这条交易记录？'],
+   ['This removes the row from the ledger.', '此操作将从账本中移除该记录。']]
+    .forEach(([en, cn]) => {
+      assert.ok(FINANCE_TABLE.includes(cn), `not locked: ${en}`);
+      assert.ok(CLIENT.includes(cn) || HTML.includes(cn), `not rendered: ${en}`);
+    });
+  // The reused halves must NOT have been re-minted as new rows.
+  assert.ok(CLIENT.includes('此操作无法撤销。'), 'the undo warning is reused from the product editor');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
