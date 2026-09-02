@@ -10,10 +10,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
   <style>
     :root{
-      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
-      --amber:#C9954A; --amber-tint:#F7EEDE;
-      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
-      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;      
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
     }
     body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
          font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
@@ -33,7 +31,7 @@
 <div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
 
   <div style="padding:24px 16px 14px;flex:none;border-bottom:1px solid var(--line)">
-    <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;color:var(--graphite)">OPTION A</div>
+    <div style="font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite)">Option A</div>
     <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-top:2px">Ledger column</div>
     <div style="font-size:13px;color:var(--graphite);line-height:1.45;margin-top:4px">
       Totals lock to one x-position. Best for scanning "how many" down a long list — weakest for "for whom", which drops to a caption.
@@ -54,14 +52,15 @@
     </div>
     <div style="height:1px;background:var(--line)"></div>
 
-    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--raised);box-shadow:inset 4px 0 0 var(--amber)">
-      <div class="qty" style="color:var(--amber-ink)">14</div>
+    <!-- Short: same fill and edge as picked-in-full, but the quantity keeps Ink. -->
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--raised);box-shadow:inset 4px 0 0 var(--sage)">
+      <div class="qty">14</div>
       <div style="flex:1;min-width:0">
         <div class="nm" style="color:var(--graphite)">Chilli oil 250ml</div>
-        <div class="split" style="color:var(--amber-ink)">of 18 · Tianhe 10 · Yuexiu 4</div>
+        <div class="split"><span style="color:var(--graphite)">of 18 · Tianhe 10 · Yuexiu</span> <span style="color:var(--ink);font-weight:600">4</span></div>
       </div>
-      <div class="tick" style="background:var(--amber-tint)">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6425" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      <div class="tick" style="background:var(--ink)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
     </div>
     <div style="height:1px;background:var(--line)"></div>

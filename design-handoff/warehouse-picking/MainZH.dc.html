@@ -11,10 +11,7 @@
   <style>
     :root{
       --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
-      --amber:#C9954A; --brick:#B4533E;
-      --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
-      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
-      --amber-ink:#8A6425; --brick-ink:#B4533E; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
     }
     /* CJK runs need the air — 1.7 against Latin's 1.6, per the design system. */
     body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
@@ -22,6 +19,13 @@
     *{box-sizing:border-box;}
     a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
     .num{font-variant-numeric:tabular-nums;}
+    .shop{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;
+          border-radius:8px;padding:6px 12px;min-height:40px;}
+    .shop .nm{font-size:13px;color:var(--graphite);}
+    .shop .n{font-size:19px;font-weight:700;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;}
+    .big{font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .tickInk{width:64px;height:64px;border-radius:12px;background:var(--ink);flex:none;
+             display:flex;align-items:center;justify-content:center;}
     @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
     .dot{animation:breathe 2.4s ease-in-out infinite;}
     @media (prefers-reduced-motion:reduce){*{animation:none!important}}
@@ -33,7 +37,7 @@
   <div style="height:44px;flex:none"></div>
 
   <div style="padding:8px 16px 12px;flex:none">
-    <div style="font-size:22px;font-weight:600;letter-spacing:0;line-height:1.3">拣货单</div>
+    <div style="font-size:22px;font-weight:600;line-height:1.3">拣货单</div>
     <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · 共 14 项</div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
       <span class="dot" style="width:7px;height:7px;border-radius:999px;background:var(--dusk);flex:none"></span>
@@ -63,50 +67,59 @@
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em;color:var(--graphite)">65</span>
-          <span style="font-size:13px;color:var(--sage-ink);font-weight:500">已拣</span>
+          <span class="big" style="color:var(--graphite)">65</span>
+          <span style="font-size:13px;color:var(--graphite)">已拣</span>
         </div>
-        <div style="width:64px;height:64px;border-radius:12px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex:none">
+        <div class="tickInk">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
       </div>
       <div style="display:flex;gap:8px">
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">天河店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">40</span>
-        </div>
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">越秀店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">25</span>
-        </div>
+        <div class="shop" style="background:var(--surface)"><span class="nm">天河店</span><span class="n" style="color:var(--graphite)">40</span></div>
+        <div class="shop" style="background:var(--surface)"><span class="nm">越秀店</span><span class="n" style="color:var(--graphite)">25</span></div>
       </div>
     </div>
 
-    <!-- 短少 -->
-    <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--amber);display:flex;flex-direction:column;gap:10px">
+    <!-- 短少 — 同样的底色与边条，只有数字保持全墨色 -->
+    <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="font-size:17px;font-weight:600;line-height:1.4;color:var(--graphite)">辣椒油 250ml</div>
         <div class="num" style="font-size:13px;color:var(--graphite);flex:none">CO-250</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em;color:var(--amber-ink)">14</span>
+          <span class="big">14</span>
           <span class="num" style="font-size:13px;color:var(--graphite)">/ 18</span>
-          <span style="font-size:13px;color:var(--amber-ink);font-weight:500">· 短少 4</span>
+          <span style="font-size:13px;font-weight:600">· 短少 4</span>
         </div>
-        <div style="width:64px;height:64px;border-radius:12px;background:var(--amber-tint);display:flex;align-items:center;justify-content:center;flex:none">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8A6425" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>
+        <div class="tickInk">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
       </div>
       <div style="display:flex;gap:8px">
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">天河店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">10</span>
+        <div class="shop" style="background:var(--surface)"><span class="nm">天河店</span><span class="n" style="color:var(--graphite)">10</span></div>
+        <div class="shop" style="background:var(--surface)"><span class="nm">越秀店</span><span class="n">4</span></div>
+      </div>
+    </div>
+
+    <!-- 已拣 -->
+    <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="font-size:17px;font-weight:600;line-height:1.4;color:var(--graphite)">猪肉韭菜包 6个装</div>
+        <div class="num" style="font-size:13px;color:var(--graphite);flex:none">PB-006</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
+          <span class="big" style="color:var(--graphite)">24</span>
+          <span style="font-size:13px;color:var(--graphite)">已拣</span>
         </div>
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">越秀店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--amber-ink)">4</span>
+        <div class="tickInk">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="shop" style="background:var(--surface)"><span class="nm">天河店</span><span class="n" style="color:var(--graphite)">12</span></div>
+        <div class="shop" style="background:var(--surface)"><span class="nm">越秀店</span><span class="n" style="color:var(--graphite)">12</span></div>
       </div>
     </div>
 
@@ -118,7 +131,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em">30</span>
+          <span class="big">30</span>
           <span style="font-size:13px;color:var(--graphite)">需拣</span>
         </div>
         <div style="height:64px;padding:0 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500;color:var(--graphite)">短少</div>
@@ -127,37 +140,8 @@
         </div>
       </div>
       <div style="display:flex;gap:8px">
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--raised);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">天河店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">18</span>
-        </div>
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--raised);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">越秀店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">12</span>
-        </div>
-      </div>
-    </div>
-
-    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div style="font-size:17px;font-weight:600;line-height:1.4">冷冻包子 12个装</div>
-        <div class="num" style="font-size:13px;color:var(--graphite);flex:none">FB-012</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em">16</span>
-          <span style="font-size:13px;color:var(--graphite)">需拣</span>
-        </div>
-        <div style="height:64px;padding:0 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500;color:var(--graphite)">短少</div>
-        <div style="width:64px;height:64px;border-radius:12px;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <div style="width:50%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--raised);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">天河店</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">16</span>
-        </div>
+        <div class="shop" style="background:var(--raised)"><span class="nm">天河店</span><span class="n">18</span></div>
+        <div class="shop" style="background:var(--raised)"><span class="nm">越秀店</span><span class="n">12</span></div>
       </div>
     </div>
 

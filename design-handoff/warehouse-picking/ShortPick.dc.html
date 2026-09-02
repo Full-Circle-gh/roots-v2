@@ -11,9 +11,7 @@
   <style>
     :root{
       --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
-      --amber:#C9954A; --amber-tint:#F7EEDE; --sage-tint:#EDF1EC;
-      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
-      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
       --scrim:rgba(17,26,43,.38);
       --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
     }
@@ -60,22 +58,23 @@
     <div style="margin:18px 0 12px">
       <div style="font-size:13px;color:var(--graphite)">How many did you find?</div>
       <div style="display:flex;align-items:baseline;gap:10px;margin-top:2px">
-        <span class="num" style="font-size:56px;font-weight:700;line-height:1.05;letter-spacing:-0.02em;color:var(--amber-ink)">58</span>
-        <span style="font-size:15px;color:var(--amber-ink);font-weight:500">7 short</span>
+        <span class="num" style="font-size:56px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">58</span>
+        <span style="font-size:15px;font-weight:600">7 short</span>
       </div>
     </div>
 
     <!-- The split is PROPOSED, never asked for. Fill in request order, so the
-         numbers stay whole — proportional would hand him 35.7 packs. -->
-    <div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:8px;padding:10px 12px;min-height:56px">
+         numbers stay whole — proportional would hand him 35.7 packs.
+         Tianhe was filled and recedes; Yuexiu took the shortfall and holds Ink. -->
+    <div style="display:flex;align-items:center;gap:10px;background:var(--raised);border-radius:8px;padding:10px 12px;min-height:56px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:var(--amber-ink)">Split across the two shops</div>
+        <div style="font-size:13px;color:var(--graphite)">Split across the two shops</div>
         <div style="display:flex;align-items:baseline;gap:6px;margin-top:1px">
           <span style="font-size:13px;color:var(--graphite)">Tianhe</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">40</span>
+          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">40</span>
           <span style="color:var(--graphite);font-size:13px">·</span>
           <span style="font-size:13px;color:var(--graphite)">Yuexiu</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--amber-ink)">18</span>
+          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">18</span>
         </div>
       </div>
       <div style="height:44px;padding:0 14px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;font-size:15px;font-weight:500;flex:none">Adjust</div>

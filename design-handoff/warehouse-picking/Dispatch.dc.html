@@ -11,9 +11,7 @@
   <style>
     :root{
       --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
-      --amber:#C9954A; --amber-tint:#F7EEDE; --sage-tint:#EDF1EC;
-      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
-      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
     }
     body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
          font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
@@ -63,19 +61,23 @@
       </div>
     </div>
 
-    <!-- Short lines are stated, never blocked on. The shop sees them on arrival. -->
-    <div style="background:var(--amber-tint);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A6425" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/></svg>
-      <div style="min-width:0">
-        <div style="font-size:15px;font-weight:600;color:var(--amber-ink);line-height:1.35">2 lines are going out short</div>
-        <div class="num" style="font-size:13px;color:var(--amber-ink);margin-top:2px">Chilli oil 250ml −4 · Black vinegar 500ml −6</div>
-        <div style="font-size:13px;color:var(--amber-ink);opacity:.8;margin-top:6px">Both shops will see the shortfall when they receive.</div>
-      </div>
-    </div>
-
     <div style="background:var(--raised);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>
       <div style="font-size:13px;color:var(--graphite);line-height:1.45">Stock leaves the warehouse the moment you dispatch. The van run is 1–2 hours.</div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <!-- Short lines are stated, never blocked on. It stops the eye by SITTING IN
+         THE WAY — last thing before the button, on Paper against the cream and
+         white above it, with the count at full Ink. No tint does any work here. -->
+    <div style="background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/></svg>
+      <div style="min-width:0">
+        <div style="font-size:15px;font-weight:600;line-height:1.35">2 lines are going out short</div>
+        <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">Chilli oil 250ml −4 · Black vinegar 500ml −6</div>
+        <div style="font-size:13px;color:var(--graphite);margin-top:6px">Both shops will see the shortfall when they receive.</div>
+      </div>
     </div>
 
   </div>

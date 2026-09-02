@@ -18,8 +18,6 @@
     *{box-sizing:border-box;}
     a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
     .num{font-variant-numeric:tabular-nums;}
-    /* §8a — the stroke is set optically at small size, never scaled from the viewBox. */
-    .mark path{vector-effect:non-scaling-stroke;stroke-width:1.6;}
   </style>
 </helmet>
 
@@ -31,17 +29,10 @@
     <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
   </div>
 
+  <!-- No mark, and nothing put in its place. A compliment, not an apology, and
+       not a decorated one: the two lines and the card below carry the state. -->
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px 80px;text-align:center">
-    <!-- The mark, settled flat. A compliment, not an apology — and never a sad face. -->
-    <svg class="mark" width="150" height="49" viewBox="0 0 340 110" fill="none" aria-hidden="true">
-      <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
-               C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
-               C215 55, 260 55, 305 55"
-            stroke="#58606E" stroke-linecap="round"/>
-      <circle cx="305" cy="55" r="5" fill="#6E67AF"/>
-    </svg>
-
-    <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-top:28px;line-height:1.35">Nothing to pick</div>
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;line-height:1.35">Nothing to pick</div>
     <div style="font-size:15px;color:var(--graphite);margin-top:6px;line-height:1.5">Both shops have what they asked for.</div>
   </div>
 
