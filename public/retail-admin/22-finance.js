@@ -231,7 +231,7 @@ function finNotRecorded() {
   ))}</p>`;
 }
 
-/** The operating-expense disclosure. Closed by default. */
+/** The operating-expense disclosure. Open by default. */
 function finBreakdown(rows) {
   if (!rows || !rows.length) return '';
   // The set is passed whole so the collision rule can see it: two categories
@@ -277,7 +277,7 @@ function finRender() {
     // disclose, a plain row when there is not: a chevron that opens onto
     // nothing is a control that lies about having content behind it.
     + (breakdown
-      ? '<details class="fin-exp"><summary>'
+      ? '<details class="fin-exp" open><summary>'
         + `<span class="fin-lbl"><span class="fin-chev">&#9656;</span>${escapeHtml(expLabel)}</span>`
         + '<span class="fin-sign">−</span>'
         + `<span class="fin-fig">${escapeHtml(finMoney(d.operating_expenses))}</span>`
