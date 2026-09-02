@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --amber:#C9954A; --amber-tint:#F7EEDE; --sage-tint:#EDF1EC;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
+      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --scrim:rgba(17,26,43,.38);
+      --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    .num{font-variant-numeric:tabular-nums;}
+    .key{height:56px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+         display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;
+         font-variant-numeric:tabular-nums;color:var(--ink);}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden">
+
+  <!-- The list, still there behind the scrim — he has not left the screen. -->
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column">
+    <div style="height:44px;flex:none"></div>
+    <div style="padding:8px 16px 12px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
+      <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · 14 lines</div>
+    </div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:8px">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;height:132px"></div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;height:132px"></div>
+    </div>
+  </div>
+  <div style="position:absolute;inset:0;background:var(--scrim)"></div>
+
+  <!-- The sheet -->
+  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);padding:0 16px 20px">
+
+    <div style="display:flex;justify-content:center;padding:10px 0 6px">
+      <div style="width:36px;height:4px;border-radius:999px;background:var(--line)"></div>
+    </div>
+
+    <div style="padding:4px 0 0">
+      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Frozen dumplings 500g</div>
+      <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">FD-500 · asked for 65</div>
+    </div>
+
+    <!-- The number he is entering is the biggest thing in the sheet. -->
+    <div style="margin:18px 0 12px">
+      <div style="font-size:13px;color:var(--graphite)">How many did you find?</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:2px">
+        <span class="num" style="font-size:56px;font-weight:700;line-height:1.05;letter-spacing:-0.02em;color:var(--amber-ink)">58</span>
+        <span style="font-size:15px;color:var(--amber-ink);font-weight:500">7 short</span>
+      </div>
+    </div>
+
+    <!-- The split is PROPOSED, never asked for. Fill in request order, so the
+         numbers stay whole — proportional would hand him 35.7 packs. -->
+    <div style="display:flex;align-items:center;gap:10px;background:var(--amber-tint);border-radius:8px;padding:10px 12px;min-height:56px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;color:var(--amber-ink)">Split across the two shops</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-top:1px">
+          <span style="font-size:13px;color:var(--graphite)">Tianhe</span>
+          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">40</span>
+          <span style="color:var(--graphite);font-size:13px">·</span>
+          <span style="font-size:13px;color:var(--graphite)">Yuexiu</span>
+          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--amber-ink)">18</span>
+        </div>
+      </div>
+      <div style="height:44px;padding:0 14px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;font-size:15px;font-weight:500;flex:none">Adjust</div>
+    </div>
+
+    <!-- Keypad. Large keys, wide gutters, no system keyboard. -->
+    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin-top:14px">
+      <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+      <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+      <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+      <div class="key" style="font-size:15px;color:var(--graphite)">Clear</div>
+      <div class="key">0</div>
+      <div class="key">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg>
+      </div>
+    </div>
+
+    <!-- One tap out. No reason field, no confirmation step. -->
+    <div style="height:56px;border-radius:12px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;margin-top:14px">
+      Save 58 and continue
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

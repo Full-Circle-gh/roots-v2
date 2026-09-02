@@ -1,0 +1,56 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Pick flow" },
+    { "id": "page-2", "name": "Row directions" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",       "page": "page-1", "title": "1 · Pick list (EN)",      "x": 0,    "y": 0,   "w": 390, "h": 844 },
+    { "file": "MainZH.dc.html",     "page": "page-1", "title": "1 · Pick list (中文)",    "x": 470,  "y": 0,   "w": 390, "h": 844 },
+    { "file": "Filter.dc.html",     "page": "page-1", "title": "1b · Filtered to Tianhe", "x": 940,  "y": 0,   "w": 390, "h": 844 },
+    { "file": "Resume.dc.html",     "page": "page-1", "title": "4 · Back after a break",  "x": 1410, "y": 0,   "w": 390, "h": 844 },
+    { "file": "RowStates.dc.html",  "page": "page-1", "title": "2 · One line, 3 states",  "x": 1880, "y": 0,   "w": 390, "h": 800 },
+    { "file": "ShortPick.dc.html",  "page": "page-1", "title": "3 · Short pick",          "x": 0,    "y": 964, "w": 390, "h": 844 },
+    { "file": "Scan.dc.html",       "page": "page-1", "title": "Scan · matched",          "x": 470,  "y": 964, "w": 390, "h": 844 },
+    { "file": "Dispatch.dc.html",   "page": "page-1", "title": "5 · Ready to dispatch",   "x": 940,  "y": 964, "w": 390, "h": 844 },
+    { "file": "Empty.dc.html",      "page": "page-1", "title": "6 · Nothing to pick",     "x": 1410, "y": 964, "w": 390, "h": 844 },
+
+    { "file": "OptionA.dc.html",    "page": "page-2", "title": "Option A · Ledger column", "x": 0,   "y": 0, "w": 390, "h": 844 },
+    { "file": "OptionB.dc.html",    "page": "page-2", "title": "Option B · Split card",    "x": 470, "y": 0, "w": 390, "h": 844 },
+    { "file": "OptionC.dc.html",    "page": "page-2", "title": "Option C · Two boxes",     "x": 940, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    {
+      "id": "note-quantities",
+      "page": "page-1",
+      "x": 0,
+      "y": -210,
+      "w": 860,
+      "text": "QUANTITIES CARRY THE SCREEN\n\nTotal at 44px/700 tabular, each shop's number at 19px/700. Product name is 17px/600 — deliberately quieter than the number it labels.\n\nState is fill + edge, never an icon you have to find: white card = to pull · cream + Sage edge = picked · cream + Amber edge = short. Readable down the whole list without reading a word."
+    },
+    {
+      "id": "note-dusk",
+      "page": "page-1",
+      "x": 940,
+      "y": -210,
+      "w": 400,
+      "text": "DUSK BUDGET: ONE\n\nThe only Dusk on the whole flow is the breathing dot on \"Combined from 2 shop requests\" — merging two shops into one walk is the one thing Tacet does here.\n\nEvery action is the picker's own, so the dispatch CTA is Ink, not Dusk. Filtered to one shop, nothing is combined and the Dusk line goes with it."
+    },
+    {
+      "id": "note-dispatch",
+      "page": "page-1",
+      "x": 940,
+      "y": 1870,
+      "w": 400,
+      "text": "WHY PRESS-AND-HOLD\n\nStock leaves the building here. A tap is one cold-thumb brush away from an accident, and a slide-to-confirm needs precision a gloved hand does not have.\n\nA hold is deliberate, forgiving of a fat contact patch, and abortable by letting go."
+    },
+    {
+      "id": "note-directions",
+      "page": "page-2",
+      "x": 0,
+      "y": -170,
+      "w": 860,
+      "text": "THREE WAYS A ROW CAN READ\n\nSame six lines, same data, three answers to \"how many, for whom\". B is built out on the Pick flow page; A and C are here to argue against it.\n\nA buys list density and pays for it in the shop split. C makes both shop numbers huge by deleting the total, which is elegant until a third shop opens."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

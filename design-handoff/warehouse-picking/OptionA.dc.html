@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --amber:#C9954A; --amber-tint:#F7EEDE;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
+      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    .num{font-variant-numeric:tabular-nums;}
+    /* The whole idea: one fixed-width numeral column, so the totals form a
+       straight vertical line down the screen and read as a column, not as rows. */
+    .qty{width:76px;flex:none;text-align:right;font-size:40px;font-weight:700;line-height:1;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .nm{font-size:16px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;}
+    .split{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;margin-top:2px;}
+    .tick{width:56px;height:56px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
+
+  <div style="padding:24px 16px 14px;flex:none;border-bottom:1px solid var(--line)">
+    <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;color:var(--graphite)">OPTION A</div>
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-top:2px">Ledger column</div>
+    <div style="font-size:13px;color:var(--graphite);line-height:1.45;margin-top:4px">
+      Totals lock to one x-position. Best for scanning "how many" down a long list — weakest for "for whom", which drops to a caption.
+    </div>
+  </div>
+
+  <div style="flex:1;padding:8px 0;display:flex;flex-direction:column">
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--raised);box-shadow:inset 4px 0 0 var(--sage)">
+      <div class="qty" style="color:var(--graphite)">65</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm" style="color:var(--graphite)">Frozen dumplings 500g</div>
+        <div class="split">Tianhe 40 · Yuexiu 25</div>
+      </div>
+      <div class="tick" style="background:var(--ink)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--raised);box-shadow:inset 4px 0 0 var(--amber)">
+      <div class="qty" style="color:var(--amber-ink)">14</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm" style="color:var(--graphite)">Chilli oil 250ml</div>
+        <div class="split" style="color:var(--amber-ink)">of 18 · Tianhe 10 · Yuexiu 4</div>
+      </div>
+      <div class="tick" style="background:var(--amber-tint)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6425" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface)">
+      <div class="qty">30</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">Sesame paste 400g</div>
+        <div class="split">Tianhe 18 · Yuexiu 12</div>
+      </div>
+      <div class="tick" style="background:var(--raised);border:1px solid var(--line)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface)">
+      <div class="qty">16</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">Frozen bao 12pk</div>
+        <div class="split">Tianhe 16</div>
+      </div>
+      <div class="tick" style="background:var(--raised);border:1px solid var(--line)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface)">
+      <div class="qty">22</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">Black vinegar 500ml</div>
+        <div class="split">Tianhe 12 · Yuexiu 10</div>
+      </div>
+      <div class="tick" style="background:var(--raised);border:1px solid var(--line)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface)">
+      <div class="qty">9</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">Soy paste 300g</div>
+        <div class="split">Tianhe 5 · Yuexiu 4</div>
+      </div>
+      <div class="tick" style="background:var(--raised);border:1px solid var(--line)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+
+    <div style="padding:16px;color:var(--graphite);font-size:13px">Fits 8–9 lines a screen. No per-line Short button — it moves into a long-press.</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

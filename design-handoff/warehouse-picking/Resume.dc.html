@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --amber:#C9954A; --amber-tint:#F7EEDE; --sage-tint:#EDF1EC;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
+      --amber-ink:#8A6425; --sage-ink:#5F7357; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    .num{font-variant-numeric:tabular-nums;}
+    .shop{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;
+          background:var(--raised);border-radius:8px;padding:6px 12px;min-height:40px;}
+    .shop .nm{font-size:13px;color:var(--graphite);}
+    .shop .n{font-size:19px;font-weight:700;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden;display:flex;flex-direction:column">
+
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 12px;flex:none">
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · 14 lines</div>
+  </div>
+
+  <!-- Where he left off. Cream, not Dusk — this is his own progress, and Tacet
+       did not do it for him. Inline and in place, never a toast. -->
+  <div style="margin:0 16px 12px;background:var(--raised);border-radius:14px;padding:14px 16px;flex:none">
+    <div style="font-size:15px;font-weight:600;line-height:1.35">Picking up where you left off</div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">Paused 40 minutes ago · nothing was lost</div>
+  </div>
+
+  <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:8px">
+
+    <!-- The finished run collapses to one strip so the screen opens on the work.
+         The list itself never reorders — he is walking the freezer in aisle order. -->
+    <div style="background:var(--raised);border-radius:14px;padding:12px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;align-items:center;gap:12px;min-height:56px">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--sage-ink)">6</span>
+          <span style="font-size:15px;color:var(--graphite)">lines already picked</span>
+        </div>
+        <div style="font-size:13px;color:var(--graphite);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Dumplings, Pork buns, Chilli oil +3</div>
+      </div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 2px 0">
+      <span style="font-size:13px;font-weight:600;letter-spacing:0.02em;color:var(--graphite)">NEXT</span>
+      <span style="flex:1;height:1px;background:var(--line)"></span>
+    </div>
+
+    <!-- The next line wears an Ink hairline instead of the default rule. It is
+         the only card on the screen with one, so the eye lands on it. -->
+    <div style="background:var(--surface);border:1px solid var(--ink);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Sesame paste 400g</div>
+        <div class="num" style="font-size:13px;color:var(--graphite);flex:none">SP-400</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
+          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em">30</span>
+          <span style="font-size:13px;color:var(--graphite)">to pull</span>
+        </div>
+        <div style="height:64px;padding:0 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500;color:var(--graphite)">Short</div>
+        <div style="width:64px;height:64px;border-radius:12px;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="shop"><span class="nm">Tianhe</span><span class="n">18</span></div>
+        <div class="shop"><span class="nm">Yuexiu</span><span class="n">12</span></div>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Frozen bao 12pk</div>
+        <div class="num" style="font-size:13px;color:var(--graphite);flex:none">FB-012</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
+          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em">16</span>
+          <span style="font-size:13px;color:var(--graphite)">to pull</span>
+        </div>
+        <div style="height:64px;padding:0 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500;color:var(--graphite)">Short</div>
+        <div style="width:64px;height:64px;border-radius:12px;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="shop" style="flex:0 0 50%"><span class="nm">Tianhe</span><span class="n">16</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="flex:none;background:var(--surface);border-top:1px solid var(--line)">
+    <div style="height:3px;background:var(--line);display:flex">
+      <div style="width:42.8%;background:var(--sage)"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px 20px">
+      <div style="flex:1;min-width:0">
+        <div class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">6 <span style="font-weight:400;font-size:15px;color:var(--graphite)">of</span> 14</div>
+        <div style="font-size:13px;color:var(--graphite);margin-top:-2px">lines picked</div>
+      </div>
+      <div style="height:56px;padding:0 20px;border-radius:12px;background:var(--surface);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;flex:none;font-size:15px;font-weight:500">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
+        Scan
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
