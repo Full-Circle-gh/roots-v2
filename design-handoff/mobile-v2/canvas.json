@@ -160,6 +160,54 @@
       "w": 390,
       "h": 844,
       "title": "Meituan"
+    },
+    {
+      "file": "WasteMore.dc.html",
+      "x": 0,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · in More"
+    },
+    {
+      "file": "WasteList.dc.html",
+      "x": 470,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · option A"
+    },
+    {
+      "file": "WasteRecord.dc.html",
+      "x": 940,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · record"
+    },
+    {
+      "file": "WasteEmpty.dc.html",
+      "x": 1410,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · empty"
+    },
+    {
+      "file": "WasteSubview.dc.html",
+      "x": 1880,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · option B"
+    },
+    {
+      "file": "WasteCapture.dc.html",
+      "x": 2350,
+      "y": 5784,
+      "w": 390,
+      "h": 844,
+      "title": "Waste · option C"
     }
   ],
   "annotations": [
@@ -267,6 +315,55 @@
       "y": 4820,
       "w": 390,
       "text": "The Board is the status — five cards, one dot each, at most two metrics, one link out. No summary banner over them: it would be a fourth copy of what the dots already say.\n\nEleme keeps its slot while disconnected. An absent channel is information.\n\nThe channel detail beside it is the pattern for all three marketplaces: a Console for what you configure, a read-only list under it at full legibility and zero affordance — no chevrons, no actions, the state in italics. Mirrored, never driven."
+    },
+    {
+      "id": "batch-four",
+      "x": 0,
+      "y": 5664,
+      "w": 1330,
+      "text": "Batch four — Waste on a phone. THREE OPTIONS, drawn to be chosen between; one of them ships.\n\nWaste ships on the desktop and has a complete API. It does not exist in the phone build: `waste` appears zero times in public/m.html — no More row, no ROUTE_CAP entry, no screen. The warehouse and store_manager presets both grant waste:view and waste:record by default, so granting the permission today changes nothing a phone can see. This is a missing screen, not a permissions bug."
+    },
+    {
+      "id": "waste-more-note",
+      "x": 0,
+      "y": 6668,
+      "w": 390,
+      "text": "The entry point, and the whole argument between A and C is one word in one row. “Waste” opens a ledger you then act from; “Record waste” opens the act. Both sit in Operations after Receiving, beside Add stock — the group whose rows are things you do standing up.\n\nB has no row here at all. That is its case, drawn as an absence.\n\nWhichever ships, the row is hidden entirely without waste:view, the same rule every other row here follows."
+    },
+    {
+      "id": "waste-a-note",
+      "x": 470,
+      "y": 6668,
+      "w": 390,
+      "text": "OPTION A — its own More row, its own Worklist. Desktop parity, and the only option that can answer “what did we lose this month” on a phone.\n\nNo status line: nothing in a waste ledger is waiting on anyone, every row is finished business (§1.7, and the desktop screen already states this). The pulse takes its line render, and the uncosted count travels with the total — a total shown alone reads as complete.\n\nThe desktop’s two date inputs become three range chips. A native date picker twice over, to ask “this week”, is four taps and a keyboard for a question with three usual answers; the range a preset cannot express stays on the desktop.\n\nVoided and its reversal both stay in the list, greyed. A ledger that hides its own corrections is how one goes unnoticed."
+    },
+    {
+      "id": "waste-record-note",
+      "x": 940,
+      "y": 6668,
+      "w": 390,
+      "text": "The record sheet, shared by A and B. §1.13: every field visible on open, fixed height, one commit.\n\nField order is the order of the questions someone holding a dropped jar actually asks — what, how many, why. Store leads only because the picker cannot run without it, and it collapses to a line of text for a single-store account (§1.9).\n\nOn-hand sits under the PRODUCT, not under the stepper. The API refuses a quantity above it rather than clamping, and finding that out after pressing the button is the worse half of the same information.\n\nThe cost line is the preview endpoint, not arithmetic done here, so the figure shown and the figure stored cannot disagree. It reads “No cost on file” in the same slot for a product without one."
+    },
+    {
+      "id": "waste-empty-note",
+      "x": 1410,
+      "y": 6668,
+      "w": 390,
+      "text": "Empty, inherited by all three options — and it is the desktop’s own line. A compliment, not an apology (§5).\n\nThe Dusk CTA stays: nothing recorded yet is exactly the moment the first record gets made.\n\nNot drawn, deliberately: no-results. It is Orders’ — “Nothing matches those filters” with a clear — and it is inherited whole. Empty and no-results stay two states and two sentences."
+    },
+    {
+      "id": "waste-b-note",
+      "x": 1880,
+      "y": 6668,
+      "w": 390,
+      "text": "OPTION B — a fourth sub-view under Products. Waste IS a stock movement, so it sits beside Stock activity; costs nothing in More and nothing in the tab bar.\n\nTHE STRIP NO LONGER FITS, and the artboard shows it rather than saying it. Measured in Chromium at 390px: 76 + 102 + 46 + 81, three 24px gaps and 32px of gutter = 409px of content in a 390px screen. Categories is clipped 8px past the edge with nothing to say more is there.\n\nThe page’s Dusk CTA also changes with the sub-view — empty on Catalogue, Dusk on Waste.\n\nAnd it reaches waste through products:view. The API deliberately does not: the waste picker is gated on the waste capability alone, precisely because the kitchen screen’s picker sat behind `products` and handed a waste-only operator an empty list (H13). Nothing breaks today — every preset granting waste also grants products:view — but this makes true in the navigation the coupling the API was written to break."
+    },
+    {
+      "id": "waste-c-note",
+      "x": 2350,
+      "y": 6668,
+      "w": 390,
+      "text": "OPTION C — capture-first: the form IS the screen. The premise the other two do not test — on a phone the loss is in front of you and you are holding the jar. Reading a 30-day ledger is a desk job the desktop already does well.\n\nSo More carries “Record waste”, beside Add stock, and the row lands on the form. The ledger under it is TODAY AT THIS STORE and nothing else: enough to see your entry landed and that a colleague already logged the same tray. “All entries” is one line at the foot and opens the desktop screen.\n\nSteppers are 56px, matching Add stock — same thumb, same posture, same aisle. The search field collapses into the card once a product is picked; the card’s × puts it back.\n\nWhat it gives up, stated rather than discovered later: no range filter, no reason filter, no history past today, no void. If the phone must answer “what did we lose this month”, this is the wrong option and A is the right one."
     }
   ],
   "launch": {
