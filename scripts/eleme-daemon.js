@@ -445,7 +445,11 @@ async function refreshOrderStatus(storeCode, order) {
         // The economics, when the LIST row carries them (no Tier 1 read happens
         // on a refresh). Fills a blank only, so this heals an order imported
         // before those columns were written and never touches one that has them.
+        // shopDiscount rides along for the same reason: it is the term that makes
+        // subtotal + packing + shipping - discount equal the order's own total,
+        // and every order mirrored before this build has it recorded nowhere.
         merchantIncome: order.merchantIncome, commission: order.commission,
+        shopDiscount: order.shopDiscount,
       }),
     });
     if (res.ok) {

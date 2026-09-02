@@ -190,9 +190,15 @@ console.log('\nA · EL20260901417897 — the fees are additive to the goods');
   check('packing_fee = foodInfo.packageFee (1.5)', near(row.packing_fee, 1.5), `got ${row.packing_fee}`);
   check('shipping_fee = foodInfo.deliveryFee (18)', near(row.shipping_fee, 18), `got ${row.shipping_fee}`);
   check('total is the platform figure (269), untouched', near(row.total, 269), `got ${row.total}`);
-  check('goods + packaging + delivery - discount = total',
-    near(row.subtotal + row.packing_fee + row.shipping_fee - 17.5, row.total),
-    `${row.subtotal} + ${row.packing_fee} + ${row.shipping_fee} - 17.5 != ${row.total}`);
+  check('channel_discount = merchantActivityInfo.total (17.5)', near(row.channel_discount, 17.5), `got ${row.channel_discount}`);
+  // Off the ROW, not off the literal above. Until channel_discount existed the
+  // only way to state this identity was to hardcode 17.5 here — which asserted
+  // the arithmetic while quietly conceding that the term was stored nowhere.
+  // Reading the column is what makes this a test of the row rather than of the
+  // fixture, and it is the whole point of the write.
+  check('goods + packaging + delivery - discount = total, entirely from the row',
+    near(row.subtotal + row.packing_fee + row.shipping_fee - row.channel_discount, row.total),
+    `${row.subtotal} + ${row.packing_fee} + ${row.shipping_fee} - ${row.channel_discount} != ${row.total}`);
 }
 
 // ── B. EL20260831339491, the second live order ────────────────────────────────
@@ -208,8 +214,9 @@ console.log('\nB · EL20260831339491 — the same addition on a smaller basket')
   check('subtotal = 135 goods', near(row.subtotal, 135), `got ${row.subtotal}`);
   check('packing_fee = 1.5', near(row.packing_fee, 1.5), `got ${row.packing_fee}`);
   check('shipping_fee = 18', near(row.shipping_fee, 18), `got ${row.shipping_fee}`);
-  check('135 + 1.5 + 18 - 13.5 = 141 = total',
-    near(row.subtotal + row.packing_fee + row.shipping_fee - 13.5, row.total),
+  check('channel_discount = 13.5', near(row.channel_discount, 13.5), `got ${row.channel_discount}`);
+  check('135 + 1.5 + 18 - 13.5 = 141 = total, entirely from the row',
+    near(row.subtotal + row.packing_fee + row.shipping_fee - row.channel_discount, row.total),
     `got total ${row.total}`);
 }
 
@@ -229,6 +236,10 @@ console.log('\nC · no fees in the payload');
   check('packing_fee is 0, not null', row.packing_fee === 0, `got ${row.packing_fee}`);
   check('shipping_fee is 0, not null', row.shipping_fee === 0, `got ${row.shipping_fee}`);
   check('channel_commission stays NULL (0 would be a claim)', row.channel_commission == null, `got ${row.channel_commission}`);
+  // Same rule, and the reason it is NOT COALESCE(?, 0) like the two fees above:
+  // a 0 here would assert "this order carried no shop promotion", which a
+  // payload that never mentioned one does not support.
+  check('channel_discount stays NULL (0 would claim there was no promotion)', row.channel_discount == null, `got ${row.channel_discount}`);
   check('subtotal still the goods', near(row.subtotal, 48), `got ${row.subtotal}`);
 }
 
