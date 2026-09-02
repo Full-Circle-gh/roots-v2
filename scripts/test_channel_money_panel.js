@@ -32,6 +32,11 @@
  */
 'use strict';
 
+/* global document, getComputedStyle */
+/* The identifiers above are BROWSER globals, used only inside page.evaluate()
+   callbacks — code that is serialised and run in Chromium, never in Node. The
+   same situation, and the same header, as scripts/test_finance_presentation.js. */
+
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
