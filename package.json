@@ -17,6 +17,7 @@
     "test:eleme-fee-backfill": "node scripts/test_eleme_fee_backfill.js",
     "test:eleme-ingest-backfill": "node scripts/test_eleme_ingest_backfill.js",
     "test:channel-money-panel": "node scripts/test_channel_money_panel.js",
+    "test:drift-sweep": "node scripts/test_channel_drift_sweep.js",
     "test:manual-order-fees": "node scripts/test_manual_order_fees.js",
     "test:mobile-screens": "node scripts/test_mobile_screens.js",
     "test:mobile-receiving": "node scripts/test_mobile_receiving.js",
