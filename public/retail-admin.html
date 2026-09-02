@@ -1272,6 +1272,15 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 11h10L20 8H7"/><circle cx="9" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>
     Sales · 销售
   </button>
+  <!-- Finance (§36) — the money staircase. Sales' neighbour and not its
+       sub-view: Sales answers "what sold, through which channel", Finance
+       answers "did the business make money", and the second is the one an
+       accountant opens. Ships to every tenant, never Production-gated (§36):
+       a pure reseller with no production still buys stock and pays rent. -->
+  <button data-tab="finance" onclick="finInit()" style="order:8">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h5v-5H4z"/><path d="M9 14h5V9H9z"/><path d="M14 9h5V4h-5z"/></svg>
+    Finance · 财务
+  </button>
   <!-- Channels & Delivery is now merged into the Sales page (setup + operations
        in one screen); its standalone tab was removed. -->
 
@@ -10856,6 +10865,55 @@
        storefront (customers can't order), which needs the verified channel
        open/close API wired in first. The figures are placeholders until the
        sales-summary endpoint lands; see salesGo()/salesInit() in 01-core.js. -->
+  <!-- ─── FINANCE — the money staircase (§36 of
+       docs/tacet-consolidation-decisions.md, v4.115). Layout, spacing and copy
+       from reference/finance-summary-mockup.html; behaviour from §36.
+
+       ONE SUB-VIEW, NOT TWO. §36 specifies Summary and Transactions. Only
+       Summary is built, so no sub-view strip is rendered — a strip with one tab
+       is chrome that names a screen the operator cannot open. It goes in when
+       Transactions does.
+
+       NO STORE FILTER, AND THAT IS A REFUSAL RATHER THAN AN OMISSION.
+       `expense_entries` has no location column (schema.sql:229) and §36 leaves
+       its shape undecided, so a store-scoped view could only narrow revenue and
+       not expenses — reporting one shop's takings against the whole business's
+       costs. §36 rejects exactly that: "A filter that silently returns a wrong
+       answer is worse than no filter." Until the column lands this is the
+       mockup's state 4 in every tenant, and the last row is Net. When it lands,
+       the last row becomes CONTRIBUTION whenever the view is filtered — never
+       Net — and the vocabulary pairs for it are already locked
+       (docs/tacet-delivery-vocabulary.md, Finance). -->
+  <section id="tab-finance">
+    <div class="fin-head td-head">
+      <h2 style="margin:0">Finance · 财务</h2>
+      <!-- Range echo, built by finRangeLabel with cuT, so it opts out of the
+           " · " i18n walker exactly as the Reports echo does. -->
+      <span class="td-date" id="fin-range" data-no-i18n></span>
+    </div>
+
+    <!-- The Reports range bar, reused: same seg presets, same date inputs, same
+         GZ-local computation, same Apply/refresh pair. Its store select is
+         deliberately absent — see the section comment above. -->
+    <div class="db-rangebar td-rangebar" id="fin-rangebar">
+      <div class="db-range">
+        <div class="seg" id="fin-range-seg">
+          <button data-range="today">Today · 今日</button>
+          <button data-range="7">7d</button>
+          <button data-range="30" class="active">30d</button>
+          <button data-range="90">90d</button>
+        </div>
+        <input type="date" id="fin-from" aria-label="From date">
+        <span style="color:var(--td-text2)">–</span>
+        <input type="date" id="fin-to" aria-label="To date">
+        <button class="db-btn" onclick="finLoad()">Apply · 应用</button>
+        <button class="db-btn" onclick="finLoad({ refresh: true })" title="Refresh · 刷新">↻</button>
+      </div>
+    </div>
+
+    <div id="fin-stair"></div>
+  </section>
+
   <section id="tab-sales">
     <div class="td-head">
       <h2 style="margin:0">Sales · 销售</h2>
@@ -12556,6 +12614,7 @@
 <script src="/assets/retail-admin/19-recipes.js"></script>
 <script src="/assets/retail-admin/20-waste.js"></script>
 <script src="/assets/retail-admin/21-product-build.js"></script>
+<script src="/assets/retail-admin/22-finance.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

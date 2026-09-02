@@ -411,6 +411,7 @@ app.use(require('./routes/retail-materials')); // Materials (物料) — the sha
 app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend door onto the same recipes tables the kitchen app writes; not wired into any UI yet
 app.use(require('./routes/retail-waste')); // Waste (损耗) — §32: a stock movement with a reason; product subjects only for now. NOT routes/waste.js, which is the kitchen screen's API and stays live until cutover
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
+app.use(require('./routes/finance-summary')); // Finance Summary (§36) — Tacet's own staircase, on tdb() from the first commit. NOT routes/finance.js, which is the kitchen Finance API and is blocked-and-left-to-die under §36
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost

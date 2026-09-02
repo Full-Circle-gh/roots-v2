@@ -13523,3 +13523,136 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .bl-bridge.is-unbuilt { background: var(--td-amber-tint); }
   #pd-editor .bl-bridge-t { flex: 1 1 260px; font-size: 13px; line-height: 1.6; }
   #pd-editor .bl-bridge.is-unbuilt .bl-bridge-t { color: var(--td-amber-ink); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FINANCE — the money staircase (§36; layout from
+   reference/finance-summary-mockup.html, which this follows on everything
+   except the cost rows, per §36 v4.113).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── .td-notrec — the §1.12 SEVENTH state, as a house class ────────────────
+   "Not recorded" is a fact about THEN, not about now: the information was
+   never captured, cannot be recovered, and nothing is coming. Until this, the
+   state existed only in a mockup (reference/meituan-money-panel-mockup.html,
+   as `mp-foot mp-hist`) and nothing in shipped code rendered it. It is defined
+   here ONCE, on the td- prefix every other component on this surface uses, so
+   the next surface that needs it inherits the treatment rather than
+   re-deriving it.
+
+   Every rule below is a refusal §1.12 states in terms:
+     • cream ground, no border      — it is a remark, not a panel
+     • Graphite body text           — the same weight as any other true remark
+                                      about the number above it
+     • NO alarm colour              — §1.10: colour encodes state, and nothing
+                                      here is in a state. Nothing went wrong.
+     • NO icon, NO retry control    — a retry implies the data could arrive
+     • NO dash anywhere             — "a column of blanks sends the eye hunting
+                                      for something that was never there"
+
+   The radius is --r-lg. The spec named --r-control, which is till.html's own
+   token (public/till.html:91) and does not exist on this surface; --r-lg
+   (10px) is the nearest control-scale step in this file's own scale
+   (--r-sm 4 / --r-md 6 / --r-lg 10 / --r-xl 14). Do not add --r-control here
+   to match a sibling document — one radius scale per surface.
+
+   The negative side margins bleed the cream to the edges of whatever block
+   holds it, so the note reads as ground under the row rather than a card
+   floating inside a card. They assume a 24px-padded parent, which is what
+   .fin-body is. */
+.td-notrec {
+  margin: 2px -24px 6px; padding: 10px 24px;
+  background: var(--td-raised); border-radius: var(--r-lg);
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+
+/* ── page header (§1.7) — title, no status line, range echo on the title line */
+#tab-finance .fin-head { display: flex; align-items: baseline; gap: 24px; }
+#tab-finance .fin-echo {
+  margin-left: auto; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* ── the staircase card ──────────────────────────────────────────────────── */
+.fin-card {
+  margin-top: 32px; background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: var(--r-xl);
+}
+.fin-body { padding: 24px 24px 0; }
+
+/* Every money row shares one grid: label | sign | figure. The sign gets its own
+   14px column so every minus lands on the same x — the aligned COLUMN of minus
+   signs is the deduction cue, which the eye picks up pre-attentively in a way
+   it does not pick up a glyph. */
+.fin-row {
+  display: grid; grid-template-columns: 1fr 14px 108px; align-items: baseline;
+  column-gap: 0; padding: 7px 0;
+}
+.fin-row .fin-sign { font-variant-numeric: tabular-nums; text-align: left; color: var(--td-text2); }
+.fin-row .fin-fig  { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* An INPUT row: body weight, Ink when it adds… */
+.fin-row.fin-input .fin-lbl,
+.fin-row.fin-input .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+/* …and Graphite when it subtracts. Two cues, plus the sign column: three.
+   A deduction is not an error and gets no Brick, no Amber, no tint (§1.10). */
+.fin-row.fin-less .fin-fig,
+.fin-row.fin-less .fin-sign { color: var(--td-text2); }
+
+/* A CONCLUSION row: the two conclusions are the only 18px things on the card,
+   each preceded by a hairline. */
+.fin-row.fin-concl { padding: 16px 0 4px; margin-top: 8px; border-top: 1px solid var(--td-border); }
+.fin-row.fin-concl .fin-lbl,
+.fin-row.fin-concl .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
+
+/* The landing after gross profit — what makes the card read as steps rather
+   than as one list of five rows. */
+.fin-tread { height: 16px; }
+
+/* The breakdown, as a disclosure on the operating-expenses row. */
+#tab-finance details.fin-exp { border: 0; }
+#tab-finance details.fin-exp > summary {
+  list-style: none; cursor: pointer; display: grid;
+  grid-template-columns: 1fr 14px 108px; align-items: baseline; padding: 7px 0;
+}
+#tab-finance details.fin-exp > summary::-webkit-details-marker { display: none; }
+#tab-finance details.fin-exp > summary .fin-lbl {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
+  display: flex; align-items: baseline; gap: 8px;
+}
+#tab-finance details.fin-exp > summary .fin-fig,
+#tab-finance details.fin-exp > summary .fin-sign {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums;
+}
+#tab-finance details.fin-exp > summary .fin-fig { text-align: right; }
+.fin-chev {
+  color: var(--td-text2); font-size: 13px; line-height: 1.6;
+  display: inline-block; width: 9px; transition: transform .2s cubic-bezier(.16,1,.3,1);
+}
+#tab-finance details.fin-exp[open] > summary .fin-chev { transform: rotate(90deg); }
+.fin-breakdown { padding: 2px 0 6px; }
+.fin-breakdown .fin-row { padding: 5px 0; }
+.fin-breakdown .fin-lbl { padding-left: 20px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+.fin-breakdown .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+
+/* The terminus — the card's own bottom edge, so the final figure and anything
+   qualifying it cannot be separated from each other.
+   13px = the 14px card radius minus its 1px border (§1.13a's derivation). */
+.fin-terminus {
+  margin-top: 24px; padding: 18px 24px; background: var(--td-raised);
+  border-top: 1px solid var(--td-border); border-radius: 0 0 13px 13px;
+}
+.fin-terminus .fin-row { padding: 0; }
+.fin-terminus .fin-lbl,
+.fin-terminus .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
+
+/* States (§1.12). Loading is the region settling at --td-raised, never a
+   spinner; error renders where the operator is looking and stays. */
+#tab-finance .fin-skel {
+  height: 232px; margin-top: 32px; border-radius: var(--r-xl); background: var(--td-raised);
+}
+#tab-finance .fin-error {
+  margin-top: 32px; padding: 16px 24px; border-radius: var(--r-xl);
+  border: 1px solid var(--td-border); background: var(--td-brick-tint); color: var(--td-brick-ink);
+  font: 400 15px/1.6 var(--f-sans);
+}
+@media (prefers-reduced-motion: reduce) { .fin-chev { transition: none; } }
