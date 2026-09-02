@@ -313,6 +313,81 @@ let PORT = 0;
   check('the dateless pre-order notice never fires alongside it (complementary gates)',
     () => !(soldOut.body && soldOut.body.data && soldOut.body.data.preorder_notice));
 
+  // ── The journey, end to end ──────────────────────────────────────────────
+  // The notice tests above all begin with the wrap ALREADY in a cart. That is
+  // the rarer case — stock hit zero after the shopper added it. The ordinary
+  // one is a Guangzhou shopper opening the app to a wrap that is already out,
+  // and for that shopper the catalog decided the answer long before checkout:
+  // a sold-out row on the local run had no + button, so the cart, the quote and
+  // every notice above were unreachable. These assertions walk that path in
+  // order — catalog row → the grid's own verdict → the calendar — so a change
+  // that re-closes any one of them fails here rather than in the shop.
+  console.log('\n── The journey: catalog → cart → checkout');
+
+  setStock(STORE_GZ, P_FRESH, 0);
+  setStock(STORE_GZ, P_GROCERY, 0);
+  const listed = await fetch(`http://127.0.0.1:${PORT}/api/retail/products?limit=200`)
+    .then(r => r.json()).catch(() => null);
+  const rows = (listed && (listed.data || listed)) || [];
+  const freshRow   = (rows.rows || rows).find ? (rows.rows || rows).find(r => r.id === P_FRESH)   : null;
+  const groceryRow = (rows.rows || rows).find ? (rows.rows || rows).find(r => r.id === P_GROCERY) : null;
+  console.log(`   fresh row    local_fresh_date = ${freshRow ? freshRow.local_fresh_date : '(row not found)'}`);
+  console.log(`   grocery row  local_fresh_date = ${groceryRow ? groceryRow.local_fresh_date : '(row not found)'}`);
+
+  check('the catalog dates the sold-out FRESH row',
+    () => !!freshRow && /^\d{4}-\d{2}-\d{2}$/.test(String(freshRow.local_fresh_date)));
+
+  check('…and dates no grocery row, so that one stays dead on the run',
+    () => !!groceryRow && !groceryRow.local_fresh_date);
+
+  // The grid's REAL verdict function, lifted from the shipped page rather than
+  // restated here — the assertion is about what the shop actually renders.
+  const shopSrc = require('fs').readFileSync(
+    path.join(ROOT, 'miniapp', 'pages', 'shop', 'shop.js'), 'utf8');
+  const stateFn = shopSrc.slice(shopSrc.indexOf('function _stockState'));
+  const _stockState = new Function(
+    `${stateFn.slice(0, stateFn.indexOf('\n}') + 2)}; return _stockState;`)();
+
+  const onRun = true;
+  const freshVerdict   = _stockState({ ...freshRow,   stock: 0 }, onRun);
+  const groceryVerdict = _stockState({ ...groceryRow, stock: 0 }, onRun);
+  console.log(`   grid says fresh   → preorder=${freshVerdict.preorder} soldOut=${freshVerdict.soldOut}`);
+  console.log(`   grid says grocery → preorder=${groceryVerdict.preorder} soldOut=${groceryVerdict.soldOut}`);
+
+  check('THE BUG: a Guangzhou shopper can add the sold-out wrap (live + button)',
+    () => freshVerdict.preorder === true && freshVerdict.soldOut === false);
+
+  check('a sold-out grocery row stays a dead SOLD OUT pill on the run',
+    () => groceryVerdict.preorder === false && groceryVerdict.soldOut === true);
+
+  // Having let them add it, the calendar must not then offer them today.
+  const sched = soldOut.body && soldOut.body.data && soldOut.body.data.scheduling;
+  const batchDay = n.make_date;
+  console.log(`   right_away_available = ${sched && sched.right_away_available}`);
+  console.log(`   schedule min_date    = ${sched && sched.schedule && sched.schedule.min_date}`);
+  console.log(`   today chips          = ${sched ? (sched.slots || []).filter(x => x.is_same_day).length : '?'}`);
+
+  check('"right away" is withdrawn — the kitchen has not made it yet',
+    () => !!sched && sched.right_away_available === false);
+
+  check('no same-day chip survives either',
+    () => !!sched && (sched.slots || []).filter(x => x.is_same_day).length === 0);
+
+  check('the calendar cannot be booked before the batch day',
+    () => !!sched && !!sched.schedule && sched.schedule.min_date >= batchDay);
+
+  // The catch-all. Withdrawing today's chips is what empties `slots`, which is
+  // exactly the condition that triggers the roll-forward to TOMORROW — a day
+  // still earlier than the batch. Rather than name that one path, assert the
+  // property: nothing offered anywhere may precede the day it is made.
+  const earlyChip = (sched && sched.slots || []).find(x => x.date_iso && x.date_iso < batchDay);
+  console.log(`   earliest offered day = ${(sched && sched.slots || []).map(x => x.date_iso).sort()[0] || '(none)'}`);
+  check('NO slot on any day precedes the batch — tomorrow included',
+    () => !earlyChip);
+
+  check('the express date does not precede it either',
+    () => !sched || !sched.express_slot || sched.express_slot.date_iso >= batchDay);
+
   server.close();
   restoreOtherStores();
   console.log(failed ? `\n${failed} assertion(s) FAILED` : '\nAll assertions passed');

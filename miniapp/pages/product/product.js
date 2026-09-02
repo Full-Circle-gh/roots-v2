@@ -439,7 +439,10 @@ Page({
     // `reservable` folds in the shopper's own address: inside Guangzhou the
     // order rides today's local run, which the checkout gates on real stock —
     // so a sold-out row reads SOLD OUT there, never PRE-ORDER.
-    const reservable = m => !!(m && m.oos_preorder) && !this._onLocalRun;
+    // A dated fresh meal stays reservable on the local run — see _stockState
+    // in pages/shop/shop.js for why the run stopped being a reason to refuse.
+    const reservable = m => !!(m && m.oos_preorder)
+      && (!this._onLocalRun || !!(m && m.local_fresh_date));
     let soldOut = false, preorder = false, stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
@@ -996,7 +999,8 @@ Page({
       // Out but pre-orderable (out-of-city) → keep it tappable with a Pre-order
       // badge; only a hard-out size shows the dead SOLD OUT pill. A same-city
       // shopper is never offered the reservation (see recomputeDisplay).
-      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._onLocalRun;
+      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder
+        && (!this._onLocalRun || !!m.local_fresh_date);
       const soldOut = out && !preorder;
       return {
         id: m.id,
@@ -1050,7 +1054,8 @@ Page({
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one can't reserve it (the checkout blocks same-day
     // Guangzhou on stock), so the row is dead for them.
-    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._onLocalRun;
+    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder
+      && (!this._onLocalRun || !!m.local_fresh_date);
     if (out && !vPreorder) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
