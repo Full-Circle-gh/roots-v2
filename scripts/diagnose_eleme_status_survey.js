@@ -45,10 +45,12 @@ const dist = db.prepare(`
 for (const r of dist) console.log(`   ${String(r.n).padStart(4)}   channel_status = ${JSON.stringify(r.channel_status)}`);
 console.log(`   (${dist.reduce((a, r) => a + r.n, 0)} eleme row(s) total)\n`);
 
-console.log('── each, cross-referenced against status / delivered_at / placed_at ──');
+console.log('── each, cross-referenced against status / lifecycle timestamps ──');
+// retail_orders' own timestamp columns (database.js) — no refunded_at here,
+// that column lives on the unrelated meituan_orders import table.
 const rows = db.prepare(`
   SELECT id, order_no, status, channel_status, channel_status_at,
-         placed_at, delivered_at, cancelled_at, refunded_at
+         placed_at, paid_at, preparing_at, dispatched_at, delivered_at, cancelled_at
     FROM retail_orders
    WHERE channel = 'eleme'
    ORDER BY id
@@ -56,6 +58,7 @@ const rows = db.prepare(`
 for (const r of rows) {
   console.log(`   ${r.order_no}  (id ${r.id})`);
   console.log(`     status=${r.status}  channel_status=${JSON.stringify(r.channel_status)}  channel_status_at=${r.channel_status_at}`);
-  console.log(`     placed_at=${r.placed_at}  delivered_at=${r.delivered_at}  cancelled_at=${r.cancelled_at}  refunded_at=${r.refunded_at}`);
+  console.log(`     placed_at=${r.placed_at}  paid_at=${r.paid_at}  preparing_at=${r.preparing_at}`);
+  console.log(`     dispatched_at=${r.dispatched_at}  delivered_at=${r.delivered_at}  cancelled_at=${r.cancelled_at}`);
 }
 console.log('');
