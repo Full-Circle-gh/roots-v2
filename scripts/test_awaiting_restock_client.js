@@ -170,6 +170,11 @@ section('5 · Only the parked lines are marked in the manifest');
   is((rows.match(/Waiting on stock/g) || []).length, 1, 'and exactly one pill');
   const marked = rows.slice(rows.indexOf('awaiting-row'));
   has(marked.slice(0, 400), 'Choco Hemp Protein Bites', 'it is the short line that is marked');
+  // .mf-packs carries `margin-left: auto` — right for a packing instruction on
+  // its own rail, wrong for a fact about this line. Wrapped, the badge shipped
+  // hard against the card's right edge under the line total, crowding both.
+  hasnt(rows, '<span class="mf-packs"><span class="pack-badge awaiting"',
+        'the badge is not on the right rail — it reads inline after the unit price');
   is(renderItemsTable(ITEMS, false, new Set()).indexOf('awaiting-row'), -1,
      'an order waiting on nothing marks no row at all');
 }
