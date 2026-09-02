@@ -7371,15 +7371,26 @@
      Do not write a token name followed by a slash in this comment — the
      star-slash pair closes it early and silently eats the first rule below. */
   .manifest .mf-row.awaiting-row {
+    /* 🔴 THE TINT IS THE WHOLE MARK, AND IT TAKES THE ROW'S OWN BOX. Do not
+       add margin, padding, or a left edge marker to this rule. Two versions
+       shipped before this one and each broke the manifest's grid:
+
+         1. `margin: 0 -16px` + matching padding, to bleed the band out to the
+            shipment card's edge. It misaligned the row both ways — the marked
+            line's content sat left of the numbers above it and its total sat
+            right of the other totals, so the one row an operator is meant to
+            read carefully was the one that did not line up.
+         2. `box-shadow: inset 4px 0 0` for an edge marker, once the bleed was
+            removed. A .mf-row has `padding: var(--s3) 0` — ZERO horizontal
+            padding — so there is no gutter for a marker to sit in and it
+            painted straight over the 01/02/03 line number.
+
+       The unseen-row treatment in tacet-design-system.md pairs a surface with
+       an inset edge, and that pairing works THERE because those table cells
+       have 10px 12px padding for the edge to live in. This row has none. The
+       tint alone carries the mark, the badge on the line says why, and the
+       grid stays honest. */
     background: var(--td-amber-tint);
-    /* Inset shadow, never a border — an edge marker that changes row height
-       makes the manifest jump between a parked order and a normal one. */
-    box-shadow: inset 4px 0 0 var(--td-amber);
-    /* Full-bleed inside the card's padding, so the tint reads as a band across
-       the line rather than a floating chip. */
-    margin: 0 calc(var(--s4) * -1);
-    padding-left: var(--s4);
-    padding-right: var(--s4);
   }
   .pack-badge.awaiting {
     background: var(--bg-pane);
