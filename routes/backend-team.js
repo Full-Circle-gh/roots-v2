@@ -599,9 +599,32 @@ function roleDetail(tenantId, rec, counts, ent, withCaps) {
     people: c.people, activePeople: c.active, exceptions: c.exceptions,
     capCount: entVisible.length, capTotal: ent.size,
     moneyMoves: money.moves, moneyShows: money.shows,
+    // null = no override, the role's dashboard is whatever `layout` above draws
+    // via the body.pos-* CSS rules. An array is an explicit per-card pick the
+    // owner made in the editor, which the client applies instead of those rules.
+    dashboardCards: rec.dashboardCards,
   };
   if (withCaps) out.caps = entVisible;
   return out;
+}
+
+// Validate a `dashboard_cards` payload against the shared catalog (lib/roles
+// DASH_CARDS). `undefined` means the field wasn't sent — leave the stored
+// value alone. `null` clears the override back to "follow `layout`'s CSS
+// rules". Anything else must be an array of known keys, deduped; an unknown
+// key 400s rather than being silently dropped, the same rule vetRoleCaps
+// applies to capability keys the caller doesn't hold.
+function parseDashCards(body) {
+  if (body.dashboard_cards === undefined) return { present: false };
+  if (body.dashboard_cards === null) return { present: true, value: null };
+  if (!Array.isArray(body.dashboard_cards)) return { present: true, error: true };
+  const known = new Set(roles.DASH_CARDS);
+  const out = new Set();
+  for (const k of body.dashboard_cards) {
+    if (!known.has(k)) return { present: true, error: true };
+    out.add(k);
+  }
+  return { present: true, value: [...out] };
 }
 
 // Is capability enforcement live for this tenant? Only matters in one place
@@ -647,6 +670,7 @@ router.get('/api/backend/roles', requireBackend, (req, res) => {
     success: true,
     canEdit,
     layouts: roles.LAYOUTS,
+    dashCards: roles.DASH_CARDS,
     // Shipped so the role editor can explain the Quick Stock lockdown's one
     // precondition on the spot instead of only when a save comes back refused.
     // The Team tab reads the same field off /api/backend/team; the editor must
@@ -675,6 +699,8 @@ router.post('/api/backend/roles', requireCap('team:permissions'), express.json()
   if (refused.length) {
     return res.status(403).json({ error: 'You can’t give a role a permission you don’t have yourself · 不能授予自己没有的权限', refused });
   }
+  const dashCards = parseDashCards(body);
+  if (dashCards.error) return res.status(400).json({ error: 'Unknown dashboard card · 未知的仪表盘卡片' });
   const key = slugForRole(tid, nameEn || nameCn);
   let sort = 100;
   try { const l = roles.listRoles(tid); sort = l.length ? Math.max(...l.map(r => r.sortOrder)) + 10 : 100; } catch (e) {}
@@ -682,12 +708,13 @@ router.post('/api/backend/roles', requireCap('team:permissions'), express.json()
     const write = db.transaction(() => {
       db.prepare(`INSERT INTO tenant_roles
           (tenant_id, role_key, name_en, name_cn, desc_en, desc_cn, caps_json,
-           layout, store_pinned, store_scoped, stock_app_only, roster, is_fixed, sort_order, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,'team',0,?,CURRENT_TIMESTAMP)`)
+           layout, store_pinned, store_scoped, stock_app_only, roster, is_fixed, sort_order, dashboard_cards, updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,'team',0,?,?,CURRENT_TIMESTAMP)`)
         .run(tid, key, nameEn || nameCn, nameCn || nameEn,
           String(body.desc_en || '').slice(0, 200), String(body.desc_cn || '').slice(0, 200),
           JSON.stringify(capList), layout,
-          body.store_pinned ? 1 : 0, body.store_scoped ? 1 : 0, stockAppOnly, sort);
+          body.store_pinned ? 1 : 0, body.store_scoped ? 1 : 0, stockAppOnly, sort,
+          dashCards.present && dashCards.value ? JSON.stringify(dashCards.value) : null);
       roles.bumpVersion(tid);
     });
     write();
@@ -756,6 +783,9 @@ router.put('/api/backend/roles/:key', requireCap('team:permissions'), express.js
     if (!on && rec.stockAppOnly && !rbacEnforceOn(tid)) return res.status(400).json(RBAC_FIRST);
     sets.push('stock_app_only = ?'); args.push(on);
   }
+  const dashCards = parseDashCards(body);
+  if (dashCards.error) return res.status(400).json({ error: 'Unknown dashboard card · 未知的仪表盘卡片' });
+  if (dashCards.present) { sets.push('dashboard_cards = ?'); args.push(dashCards.value ? JSON.stringify(dashCards.value) : null); }
 
   let capList = null;
   if (Array.isArray(body.caps)) {
