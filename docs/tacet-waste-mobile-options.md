@@ -1,9 +1,17 @@
 # Waste on a phone — three options, drawn to be chosen between
 
-**2026-09-02 · A design pass, not an implementation.** Nothing in `public/m.html` changed.
-Six artboards were added to `design-handoff/mobile-v2/` and the canvas re-seeded. One option
-gets built; this document exists so that choice is made once, in the open, rather than
-inherited from whichever one somebody started.
+> **DECIDED 2026-09-02: OPTION A**, chosen by Ash from the three below. Built the same day
+> in `public/m.html` — More → Operations gains a Waste row gated `waste:view`, opening the
+> Worklist in §3's option A with the record sheet on its Dusk CTA. §6 records what shipped
+> and the two things it deliberately leaves out. §§0–5 are kept unchanged, as the argument
+> the decision was made on.
+
+**Written 2026-09-02 as a design pass**, before anything was built: six artboards added to
+`design-handoff/mobile-v2/` and the canvas re-seeded, so the choice could be made once, in
+the open, rather than inherited from whichever option somebody started. It was answered the
+same day — see the note above and §6 — and everything between here and §5 is left as it was
+written, because a decision record whose losing options have been tidied away afterwards
+cannot be re-checked.
 
 ---
 
@@ -161,3 +169,34 @@ appears for every operator — the phone's map fails open on an unmapped route b
   on either surface.
 - **Material waste.** Refused by the API today, with a message saying why. Nothing on a
   phone should offer it.
+
+## 6 — What shipped (2026-09-02)
+
+Option A, in `public/m.html`. Four seams, and nothing else in the file moved:
+
+| Seam | What was added |
+|---|---|
+| `ROUTE_CAP` | `waste:'waste:view'` — **not optional**: an unmapped route fails open by design, so without this the row shows to every operator |
+| `MORE_GROUPS` | `['waste','trash-2','Waste','损耗']` in Operations, after Receiving |
+| `SUBS.waste` | Title, no status line, and a `cta` that renders only for `mCan('waste:record')` |
+| `state.wst` | One namespaced object, `qs`-style — the ledger half persists, the form half is reset by `wasteNew` on every open |
+
+The screen is `screenWaste()` and the record flow is `sheetWaste()`, both beside Stock
+activity in the file — waste is the other stock ledger and reads next to it.
+
+**Two deliberate omissions**, both drawn that way in the artboards:
+
+1. **No void.** It is `waste:void`, which neither `warehouse` nor `store_manager` holds — a
+   control almost nobody standing in an aisle can press. Voided entries and their reversals
+   still **list**, greyed and labelled: a ledger that hides its own corrections is how one
+   goes unnoticed, and that is as true on a phone as on a desk. Voiding stays on the desktop.
+2. **No free date range.** Three range chips (Today · 7 days · 30 days) on the same
+   Guangzhou day boundary Stock activity uses, instead of two native date pickers. The range
+   a preset cannot express stays on the desktop.
+
+**Proof:** `scripts/test_mobile_waste.js` — 49 assertions across 18 cases, wired into
+`npm run test:mobile`. It holds the API's rules on the surface most likely to forget them:
+cents divided exactly once, `No cost` never rendering as `¥0.00`, the uncosted count
+travelling with the total, empty/no-results/failed as three separate states, every refusal
+named before it is sent, and `waste:record` gating the button while `waste:view` gates the
+screen.
