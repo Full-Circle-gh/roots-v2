@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.119
+# Tacet shared-core consolidation — decisions record, v4.120
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-02 · v4.120 — **§30 gains an amendment giving the Chinese-strings rule a route forward when NO LOCKED SOURCE EXISTS.** The rule itself is unchanged and restated: Chinese strings are copied from locked sources, never composed. What it lacked was an answer for the case where no locked source is available, and the consequence was that **work stalled rather than proceeding.** The amendment gives three preferences in order. **Lift from the channel** — where a string names something a platform already shows us, a fee, a status, a settlement line, the platform's own wording is used verbatim, **Meituan's and Eleme's merchant screens being locked sources for their own vocabulary**, with the platform and screen recorded. **Ask the operator** — for anything staff-facing with no channel equivalent, because the person running the store beats a correct translation. **Compose provisionally, and mark it** — only where the first two are unavailable or would block delivery, shipping marked PROVISIONAL in `docs/tacet-delivery-vocabulary.md` against review by a native operator before the feature leaves beta. **It is a last resort with a debt attached, not a shortcut**, and the closing line is the one that carries the weight: **never invent silently, and a composed string that is not marked provisional is a rule violation regardless of whether it turns out to be correct.** **`docs/tacet-delivery-vocabulary.md` goes to v1.12 in the same pass and is the first exercise of it**, opening a ninth amendment section for the channel money breakdown that uses two of the three preferences in one table: `顾客配送费`, `商家对顾客的活动补贴` and `预计收入` are lifted verbatim from the Meituan and Eleme merchant apps under preference 1, and `明细不完整` and `结算明细` are composed and marked PROVISIONAL under preference 3. Nothing live is retrofitted by either document. Docs only; no code, no schema, no routes.
 
 2026-09-02 · v4.119 — **§36 gains TWO open items, both found building *Income categories move server-side*: the list is now shareable and NOTHING CAN ADD TO IT, and the history-correction script snaps income onto the expense list.** **The first is an absent surface, not a missing decision.** §36 already says a tenant with genuine non-sale income creates their own categories in Settings; **no such Settings surface exists in either app** — Tacet's admin has no finance-category editor at all, and the kitchen app's income editor writes to browser localStorage and nowhere else. **The kind is valid server-side and the list ships empty, which is exactly the intended state, but the two facts together mean the empty list cannot stop being empty** and a tenant with sublet income or a sold fridge has the decision made for them by an absence rather than by §36. **The obvious shortcut is recorded as explicitly NOT the answer, because it looks like a one-line change: pointing the kitchen app's `saveFinCats()` at the new kind.** `syncCategoriesToServer` diffs the local list against the server's and **DELETES whatever is absent locally**, so the first browser to open the kitchen Finance page would push its four localStorage defaults — 堂食, 外卖, 外送, 活动 — into the shared list **and delete anything a Tacet operator had created**: the seed §36 bans, arriving by the back door, from the app being retired, with a delete attached. **The second is a cross-list snap in the history-correction script.** `scripts/normalise_finance_categories.js` reads its canonical values from `categories` where `kind='accounting'` and applies them to all four of its targets, **`income_entries.category` included** — so it would move an income value onto an expense name, **precisely the collision the server-side move exists to prevent**, and the one place that now has a name for it. **Nothing is corrupted and no repair is owed: the script is dry-run by default and has never been applied.** **The fix is a decision rather than a rename** — it needs a per-target master list, and a ruling on what the script's refuse-on-empty-master contract means for a list that **ships empty by decision**, since refusing to run on an empty master is the right instinct for the expense list and the ordinary state of the income one. **Neither item is answered here and no existing standing line is edited or deleted.** **Docs only — no code, no schema, no routes;** the server-side move these two were found building ships alongside on the same branch.
 
@@ -4413,6 +4415,33 @@ Seven rules governing any sync between Tacet and an external system a business s
 > **The basis is now stated in the text**, which is the third change and the one that stops this recurring: on one honest reading of the old word "exposure", Eleme still ranks first, and naming the basis settles which question is being answered instead of leaving two answers to compete.
 >
 > The identical rewrite and the identical mark are in `docs/eleme-findings.md` finding 9, which carries this ordering as its own, done in the same pass so the two cannot drift apart. Evidence: `docs/meituan-findings.md` findings 1, 4, 5 and 9.
+
+**Amendment (2 Sep 2026): when no locked source exists.**
+
+The rule stands: Chinese strings are copied from locked sources, never
+composed. But a locked source does not always exist, and the rule previously
+gave no route forward — work stalled rather than proceeding.
+
+When a new string has no locked source, in order of preference:
+
+1. **Lift from the channel.** If the string names something a platform
+   already displays to us — a fee, a status, a settlement line — use the
+   platform's own wording verbatim. Meituan's and Eleme's merchant screens
+   are locked sources for their own vocabulary. Record which platform and
+   which screen.
+
+2. **Ask the operator.** For anything staff-facing with no channel
+   equivalent, Ash asks whoever runs the store. Their wording beats a
+   correct translation.
+
+3. **Compose provisionally, and mark it.** Only when 1 and 2 are unavailable
+   or would block delivery. The string ships marked PROVISIONAL in
+   docs/tacet-delivery-vocabulary.md and is reviewed by a native operator
+   before the feature leaves beta. Composing is a last resort with a debt
+   attached, not a shortcut.
+
+Never invent silently. A composed string that is not marked provisional is
+a rule violation regardless of whether it turns out to be correct.
 
 ## 31. Product unit cost — contents plus packaging
 
