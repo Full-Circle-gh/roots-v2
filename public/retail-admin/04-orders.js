@@ -3077,6 +3077,13 @@ function renderItemRow(it, opts = {}) {
   const refundPill = itemRefundHtml(it);
   // A line the order is parked on. The card above names it too; this is the
   // mark under the operator's finger while they read the pick list.
+  //
+  // NOT wrapped in .mf-packs, which carries `margin-left: auto` — that is the
+  // right thing for a pack badge (a packing instruction, parked on the right
+  // rail away from the SKU) and the wrong thing here. This badge is a fact
+  // ABOUT this line, so it reads inline after the unit price, where the eye
+  // already is. Wrapped, it shipped hard against the card's right edge with
+  // the line total, crowding both.
   const waitPill = opts.waiting
     ? `<span class="pack-badge awaiting">${cuT('Waiting on stock', '待补货')}</span>`
     : '';
@@ -3096,7 +3103,7 @@ function renderItemRow(it, opts = {}) {
           ${itemQtyHtml(it)}
           <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
           ${refundPill ? `<span class="mf-packs">${refundPill}</span>` : ''}
-          ${waitPill ? `<span class="mf-packs">${waitPill}</span>` : ''}
+          ${waitPill}
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
         ${itemOptionsHtml(it)}

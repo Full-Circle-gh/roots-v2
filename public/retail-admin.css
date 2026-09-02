@@ -7392,10 +7392,15 @@
        grid stays honest. */
     background: var(--td-amber-tint);
   }
+  /* Sits inline in .mf-meta, not on the right rail — see renderItemRow. The
+     base .pack-badge's 4px margin-right is dropped so the meta row's own 10px
+     gap is the only spacing, and this badge sits at the same rhythm as the
+     SKU and quantity chips beside it. */
   .pack-badge.awaiting {
     background: var(--bg-pane);
     color: var(--td-amber-ink);
     border-color: color-mix(in srgb, var(--td-amber) 45%, transparent);
+    margin-right: 0;
   }
 
   .ar-card {
