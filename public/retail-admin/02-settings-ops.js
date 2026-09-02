@@ -1660,15 +1660,6 @@ let ENTITLEMENTS = {};
     const BOARDS = ['default', 'store_manager', 'warehouse', 'customer_service', 'dispatch'];
     window.RA_POS = BOARDS.includes(u.roleLayout) ? u.roleLayout : 'default';
     document.body.classList.add('pos-' + window.RA_POS.replace(/_/g, '-'));
-    // RA_POS didn't exist yet when setCaps() ran applyCapGates() above, so its
-    // warehouse-only dashboard hide missed its first pass — re-run now. The
-    // page still boots on #tab-dashboard (its default-active section in the
-    // markup), so a warehouse operator needs steering off it onto a tab their
-    // board actually has: Products, which their preset always grants.
-    if (window.RA_POS === 'warehouse') {
-      applyCapGates();
-      if (document.querySelector('.tabs [data-tab="dashboard"].active')) goTab('products');
-    }
     // STORE LOCK — pins a store-scoped operator to their own store on every
     // dashboard pull. Keyed on the operator's actual SCOPE, which is the fact
     // it is about; it used to be gated on RA_POS !== 'default', so a

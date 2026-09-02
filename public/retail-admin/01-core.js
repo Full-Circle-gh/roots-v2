@@ -270,15 +270,6 @@ function applyCapGates() {
     if (cap === undefined) return;
     btn.style.display = _capAllows(cap) ? '' : 'none';
   });
-  // Warehouse keeps dashboard:view — Tacet Mobile's Home board (m.html) is
-  // gated on that same cap, and warehouse operators are meant to see it
-  // there. This file only ever runs inside retail-admin.html though, which
-  // serveRetailAdmin (server.js) hands to a browser, not a phone — so hiding
-  // the tab here reaches the desktop admin only, never the mobile board.
-  if (window.RA_POS === 'warehouse') {
-    const dashBtn = document.querySelector('.tabs [data-tab="dashboard"]');
-    if (dashBtn) dashBtn.style.display = 'none';
-  }
   // Generic hook: tag any button/section with data-cap="x" (or "x y" for any-of)
   // and it disappears for operators without it. Used by section files in later phases.
   document.querySelectorAll('[data-cap]').forEach(el => {
