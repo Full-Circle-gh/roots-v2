@@ -9191,6 +9191,19 @@ function landOnSomethingReachable(){
   // arriving at it — never being pushed inside one of the tools, which would
   // hide the others behind a Back nobody has a reason to press.
   state.tab = primary.length ? primary[0] : 'more';
+  /* Landing here is not a tap — reg('tab',...) is what primes Orders/Customers
+     with their first page when a person taps that button, and this function
+     sets state.tab directly, bypassing that dispatcher entirely. So a role
+     whose primary reachable tab is Orders or Customers (no dashboard:view —
+     warehouse, dispatch, customer-service on a tenant that narrowed the role)
+     booted onto an empty "No orders yet" / "No customers yet" list until a
+     manual tap on a tab already selected (a no-op, same guard) or a
+     pull-to-refresh happened to run the same loader. Mirror reg('tab',...)'s
+     two guarded calls here so the landing tab arrives with its own data,
+     exactly as if the operator had tapped their way to it. */
+  if(state.tab==='orders') markOrdersSeen();
+  if(state.tab==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
+  if(state.tab==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage();
 }
 async function loadLive(){
   // Role first, and awaited: the Recap renders money rows or does not depending
