@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.117
+# Tacet shared-core consolidation — decisions record, v4.118
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-02 · v4.118 — **§36 settles what the Transactions screen reads, correcting a build brief that said the order record: TRANSACTIONS READS TYPED ROWS.** The screen lists **`income_entries` and `expense_entries`, and does NOT list orders.** **Reading money in from the order record would make Transactions a several-hundred-row-per-month restatement of the Orders screen** — Roots ran 587 orders in August alone — **and the Summary already carries order revenue as its top line**, so the two would disagree about nothing while one buried the other. **The two screens answer different questions: Summary is the totals, Transactions is the ledger of what was entered by hand**, which is the reading §36 already implies where it argues PO rows must not be hidden ("Transactions would then hold only what people typed") and where it calls Transactions "the only surface where a person types". **The consequence is recorded rather than treated as a defect: `income_entries` has no rows after 1 August**, the cutover date, **so the money-in list is empty until somebody types one — and that is the ORDINARY EMPTY STATE, not a missing-data state** and not the §1.12 seventh state either, because something will arrive as soon as anyone records non-sale income. Docs only; no code, no schema, no routes.
 
 2026-09-02 · v4.117 — **§36 records a SEVENTH cost trap, and it is a different kind from the six: A COST CAN BE WRONG AT THE SOURCE, AND NOTHING REFUSES IT.** The six recorded traps all concern a correct cost read wrongly; this is **a wrong number written to the catalogue, snapshotted faithfully, and read correctly** — no error anywhere on the path. **Measured on production 2026-09-02:** order 1494, line 5015, Jackfruit Chips, product 3, qty 1, `pack_units` 1, `unit_price` ¥19.20, `unit_cost_at_sale` **¥990.00** — **a cost-to-price ratio of 51.6**, against siblings on the same order at 0.092, 0.262 and 0.219 — and `store_products.unit_cost` for product 3 **is ¥990.00 today, so the catalogue still holds it.** **It did not enter through receiving:** no purchase order line has ever been received for product 3, so **it was typed in the product editor, which accepts any value greater than zero**, and **there is no guard anywhere against `unit_cost` exceeding sell price** — the figure draws a large negative margin on the Products screen with no refusal and no alarm. **The permitting mechanism is broader than the instance and is recorded with it:** `po_line_items` carries `qty`, a free-text `unit` and `cost_per_unit` and **no pack-size column**, so `cost_per_unit` means cost per whatever the buyer typed; `store_products` has **no unit, pack-size or sellable-unit column at all**; and `productUnitCostYuan` returns `store_products.unit_cost` **verbatim** for anything that is not a bundle — so **the chain from purchase to reader contains no conversion step and no assertion about what one unit is.** **The consequence for the cost reader is that a single bad catalogue cost does not error:** it renders one product as catastrophically unprofitable and drags the period's gross profit with it — on order 1494 **three products cost ¥14.15 together and the fourth claims ¥990.** **Product 3's true cost is unknown and is a manual correction in the product editor, not a code fix, and is recorded as OUTSTANDING.** **One open item is added to §36's *Explicitly NOT decided here*:** whether Tacet should refuse or warn on a `unit_cost` exceeding sell price, and whether such a guard belongs at the write, at the read, or on the Products screen. Docs only; no code, no schema, no routes.
 
@@ -5036,6 +5038,14 @@ The mechanism that permits it is recorded here, and is broader than this instanc
 **Consequence for the cost reader: a single bad catalogue cost does not error.** It renders one product as catastrophically unprofitable and pulls the period's gross profit down with it. On order 1494 three products cost ¥14.15 together and the fourth claims ¥990.
 
 **Product 3's true cost is unknown and is a manual correction in the product editor, not a code fix. Recorded as outstanding.**
+
+### Transactions reads typed rows, not the order record — DECIDED 2026-09-02
+
+**The Transactions screen lists `income_entries` and `expense_entries`. It does not list orders.**
+
+Reading money in from the order record would make Transactions a several-hundred-row-per-month restatement of the Orders screen, and the Summary already carries order revenue as its top line. **The two screens answer different questions: Summary is the totals, Transactions is the ledger of what was entered by hand.**
+
+`income_entries` has no rows after 1 August. **The money-in list is therefore empty until someone types one, and that is the ordinary empty state rather than a missing-data state.**
 
 ### Explicitly NOT decided here
 
