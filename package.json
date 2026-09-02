@@ -40,6 +40,7 @@
     "test:sync-start": "node scripts/test_sync_start_time.js",
     "test:unit-mismatch": "node scripts/test_recipe_unit_mismatch_warnings.js",
     "test:preorder": "node scripts/test_preorder_local.js",
+    "test:local-fresh": "node scripts/test_local_fresh_notice.js",
     "test:preorder-park": "node scripts/test_preorder_park.js",
     "test:kitchen-po-copy": "node scripts/test_kitchen_po_copy.js && node scripts/test_kitchen_po_picker.js",
     "test:po-supersede": "node scripts/test_po_supersede.js",
