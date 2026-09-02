@@ -13539,277 +13539,302 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .bl-bridge.is-unbuilt .bl-bridge-t { color: var(--td-amber-ink); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   FINANCE — the money staircase (§36; layout from
-   reference/finance-summary-mockup.html, which this follows on everything
-   except the cost rows, per §36 v4.113).
+   FINANCE — rebuilt from the mockups, 2026-09-02.
+
+   Sources: reference/finance-summary-mockup.html (staircase, header, range
+   bar, sub-view strip) and reference/finance-transactions-mockup.html (tiles,
+   chips, table). Every value below is the mockup's.
+
+   WHY THIS BLOCK IS SELF-CONTAINED. The first build reused the Reports range
+   bar's markup and inherited the LEGACY ADMIN's appearance with it — the green
+   `.db-range .seg button.active` at :1458, weight 600 — because the TACET look
+   for those components lives in `#tab-reports`-scoped overrides (120 rules)
+   that a second tab never receives. Reusing a house component here imports the
+   old admin, not the new design. So Finance styles its own classes, and no
+   rule on this screen depends on another tab's scope.
+
+   Tokens are the live --td-* set, which the mockup mirrors one-to-one in its
+   own :root — so a value here can be read straight off the mockup.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── .td-notrec — the §1.12 SEVENTH state, as a house class ────────────────
-   "Not recorded" is a fact about THEN, not about now: the information was
-   never captured, cannot be recovered, and nothing is coming. Until this, the
-   state existed only in a mockup (reference/meituan-money-panel-mockup.html,
-   as `mp-foot mp-hist`) and nothing in shipped code rendered it. It is defined
-   here ONCE, on the td- prefix every other component on this surface uses, so
-   the next surface that needs it inherits the treatment rather than
-   re-deriving it.
-
-   Every rule below is a refusal §1.12 states in terms:
-     • cream ground, no border      — it is a remark, not a panel
-     • Graphite body text           — the same weight as any other true remark
-                                      about the number above it
-     • NO alarm colour              — §1.10: colour encodes state, and nothing
-                                      here is in a state. Nothing went wrong.
-     • NO icon, NO retry control    — a retry implies the data could arrive
-     • NO dash anywhere             — "a column of blanks sends the eye hunting
-                                      for something that was never there"
-
-   The radius is --r-lg. The spec named --r-control, which is till.html's own
-   token (public/till.html:91) and does not exist on this surface; --r-lg
-   (10px) is the nearest control-scale step in this file's own scale
-   (--r-sm 4 / --r-md 6 / --r-lg 10 / --r-xl 14). Do not add --r-control here
-   to match a sibling document — one radius scale per surface.
-
-   The negative side margins bleed the cream to the edges of whatever block
-   holds it, so the note reads as ground under the row rather than a card
-   floating inside a card. They assume a 24px-padded parent, which is what
-   .fin-body is. */
-.td-notrec {
-  margin: 2px -24px 6px; padding: 10px 24px;
-  background: var(--td-raised); border-radius: var(--r-lg);
-  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+/* ── header (§1.7) — title · echo · the one Dusk CTA ──────────────────────── */
+#tab-finance .fin-head { display: flex; align-items: baseline; gap: 24px; margin-bottom: 0; }
+#tab-finance .fin-title {
+  margin: 0; font-family: var(--f-sans); font-size: 24px; font-weight: 500;
+  letter-spacing: -.01em; line-height: 1.3; color: var(--td-text); text-transform: none;
 }
-
-/* ── page header (§1.7) — title, no status line, range echo on the title line */
-#tab-finance .fin-head { display: flex; align-items: baseline; gap: 24px; }
 #tab-finance .fin-echo {
   margin-left: auto; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-
-/* ── the staircase card ──────────────────────────────────────────────────── */
-.fin-card {
-  margin-top: 32px; background: var(--td-surface);
-  border: 1px solid var(--td-border); border-radius: var(--r-xl);
+/* The CTA sits after the echo, so the echo keeps the right edge when it is
+   absent and the two never fight for it. */
+#tab-finance .fin-cta {
+  font: 500 15px/1.6 var(--f-sans); color: var(--td-paper); background: var(--td-dusk, #6E67AF);
+  border: 1px solid var(--td-dusk, #6E67AF); border-radius: 8px; padding: 7px 16px; cursor: pointer;
 }
-.fin-body { padding: 24px 24px 0; }
+#tab-finance .fin-cta:hover { background: var(--td-dusk-hi, #7E77BF); border-color: var(--td-dusk-hi, #7E77BF); }
 
-/* Every money row shares one grid: label | sign | figure. The sign gets its own
-   14px column so every minus lands on the same x — the aligned COLUMN of minus
-   signs is the deduction cue, which the eye picks up pre-attentively in a way
-   it does not pick up a glyph. */
-.fin-row {
-  display: grid; grid-template-columns: 1fr 14px 108px; align-items: baseline;
+/* [hidden] LOSES TO ANY AUTHOR display RULE, which is how the CTA first shipped
+   onto Summary. Enforced for the section, as #tab-delivery does for the same
+   reason. */
+#tab-finance [hidden] { display: none !important; }
+
+/* ── sub-view strip (§1.1a row 2) ─────────────────────────────────────────── */
+#tab-finance .fin-subviews {
+  display: flex; gap: 24px; margin-top: 24px; border-bottom: 1px solid var(--td-border);
+}
+#tab-finance .fin-subviews button {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); background: none; border: 0;
+  padding: 0 0 10px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+#tab-finance .fin-subviews button.on {
+  color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text);
+}
+
+/* ── range bar (A7) ──────────────────────────────────────────────────────────
+   The active segment inverts to INK on paper — `--td-text` / `--td-paper`,
+   weight 500. Not the legacy admin's `--accent` green at 600, which is what a
+   reused `.db-range .seg` would have given it. */
+#tab-finance .fin-rangebar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 24px;
+}
+#tab-finance .fin-seg {
+  display: inline-flex; border: 1px solid var(--td-border); border-radius: 8px;
+  background: var(--td-surface); overflow: hidden;
+}
+#tab-finance .fin-seg button {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); background: none; border: 0;
+  border-right: 1px solid var(--td-border); padding: 6px 14px; cursor: pointer;
+}
+#tab-finance .fin-seg button:last-child { border-right: 0; }
+#tab-finance .fin-seg button:hover { color: var(--td-text); }
+#tab-finance .fin-seg button.on { background: var(--td-text); color: var(--td-paper); font-weight: 500; }
+#tab-finance .fin-dates { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+#tab-finance .fin-field {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 12px;
+  font-variant-numeric: tabular-nums;
+}
+#tab-finance .fin-dash { color: var(--td-text2); }
+#tab-finance .fin-btn-sec {
+  font: 500 15px/1.6 var(--f-sans); color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 16px; cursor: pointer;
+}
+#tab-finance .fin-btn-icon {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 11px; cursor: pointer;
+}
+#tab-finance .fin-btn-sec:hover, #tab-finance .fin-btn-icon:hover { border-color: var(--td-text2); }
+
+/* ── the staircase card ───────────────────────────────────────────────────── */
+#tab-finance .fin-card {
+  margin-top: 32px; background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-finance .fin-body { padding: 24px 24px 0; }
+
+/* Every money row shares one grid: label | sign | figure. The sign owns a 14px
+   column so every minus lands on the same x — the aligned COLUMN is the
+   deduction cue, which the eye reads pre-attentively where a glyph does not.
+
+   THE FIGURE COLUMN IS 104px, NOT THE MOCKUP'S 78px, and it is the one measure
+   here that departs. The mockup sized it for `¥100,000`; §36 v4.113 then ruled
+   that the two cost rows must READ "Not recorded", which is wider. Each row is
+   its own grid, so a column narrower than its widest value would misalign the
+   figures it exists to line up. 104px fits both. */
+#tab-finance .fin-row {
+  display: grid; grid-template-columns: 1fr 14px 104px; align-items: baseline;
   column-gap: 0; padding: 7px 0;
 }
-.fin-row .fin-sign { font-variant-numeric: tabular-nums; text-align: left; color: var(--td-text2); }
-.fin-row .fin-fig  { font-variant-numeric: tabular-nums; text-align: right; }
+#tab-finance .fin-row .fin-sign { font-variant-numeric: tabular-nums; text-align: left; color: var(--td-text2); }
+#tab-finance .fin-row .fin-fig { font-variant-numeric: tabular-nums; text-align: right; }
 
 /* An INPUT row: body weight, Ink when it adds… */
-.fin-row.fin-input .fin-lbl,
-.fin-row.fin-input .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+#tab-finance .fin-row.fin-input .fin-lbl,
+#tab-finance .fin-row.fin-input .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
 /* …and Graphite when it subtracts. Two cues, plus the sign column: three.
    A deduction is not an error and gets no Brick, no Amber, no tint (§1.10). */
-.fin-row.fin-less .fin-fig,
-.fin-row.fin-less .fin-sign { color: var(--td-text2); }
+#tab-finance .fin-row.fin-less .fin-fig,
+#tab-finance .fin-row.fin-less .fin-sign { color: var(--td-text2); }
 
 /* A CONCLUSION row: the two conclusions are the only 18px things on the card,
    each preceded by a hairline. */
-.fin-row.fin-concl { padding: 16px 0 4px; margin-top: 8px; border-top: 1px solid var(--td-border); }
-.fin-row.fin-concl .fin-lbl,
-.fin-row.fin-concl .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
+#tab-finance .fin-row.fin-concl { padding: 16px 0 4px; margin-top: 8px; border-top: 1px solid var(--td-border); }
+#tab-finance .fin-row.fin-concl .fin-lbl,
+#tab-finance .fin-row.fin-concl .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
+
+/* The not-recorded VALUE, on either kind of row. Graphite at body weight —
+   18px bold is for a figure and this is not one — with no tint and no colour,
+   because nothing here is in a state (§1.10). */
+#tab-finance .fin-row.fin-absent .fin-fig {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
 
 /* The landing after gross profit — what makes the card read as steps rather
    than as one list of five rows. */
-.fin-tread { height: 16px; }
+#tab-finance .fin-tread { height: 16px; }
 
-/* The breakdown, as a disclosure on the operating-expenses row. */
+/* The expense breakdown, as a disclosure on the operating-expenses row. */
 #tab-finance details.fin-exp { border: 0; }
 #tab-finance details.fin-exp > summary {
   list-style: none; cursor: pointer; display: grid;
-  grid-template-columns: 1fr 14px 108px; align-items: baseline; padding: 7px 0;
+  grid-template-columns: 1fr 14px 104px; align-items: baseline; padding: 7px 0;
 }
 #tab-finance details.fin-exp > summary::-webkit-details-marker { display: none; }
 #tab-finance details.fin-exp > summary .fin-lbl {
-  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
-  display: flex; align-items: baseline; gap: 8px;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text); display: flex; align-items: baseline; gap: 8px;
 }
 #tab-finance details.fin-exp > summary .fin-fig,
 #tab-finance details.fin-exp > summary .fin-sign {
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums;
 }
 #tab-finance details.fin-exp > summary .fin-fig { text-align: right; }
-.fin-chev {
-  color: var(--td-text2); font-size: 13px; line-height: 1.6;
-  display: inline-block; width: 9px; transition: transform .2s cubic-bezier(.16,1,.3,1);
+#tab-finance .fin-chev {
+  color: var(--td-text2); font-size: 13px; line-height: 1.6; display: inline-block; width: 9px;
+  transition: transform .2s cubic-bezier(.16,1,.3,1);
 }
 #tab-finance details.fin-exp[open] > summary .fin-chev { transform: rotate(90deg); }
-.fin-breakdown { padding: 2px 0 6px; }
-.fin-breakdown .fin-row { padding: 5px 0; }
-.fin-breakdown .fin-lbl { padding-left: 20px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
-.fin-breakdown .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-breakdown { padding: 2px 0 6px; }
+#tab-finance .fin-breakdown .fin-row { padding: 5px 0; }
+#tab-finance .fin-breakdown .fin-lbl { padding-left: 20px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-breakdown .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
 
 /* The terminus — the card's own bottom edge, so the final figure and anything
-   qualifying it cannot be separated from each other.
-   13px = the 14px card radius minus its 1px border (§1.13a's derivation). */
-.fin-terminus {
+   qualifying it cannot be separated. 13px = the 14px radius minus its 1px
+   border (§1.13a's derivation). */
+#tab-finance .fin-terminus {
   margin-top: 24px; padding: 18px 24px; background: var(--td-raised);
   border-top: 1px solid var(--td-border); border-radius: 0 0 13px 13px;
 }
-.fin-terminus .fin-row { padding: 0; }
-.fin-terminus .fin-lbl,
-.fin-terminus .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
+#tab-finance .fin-terminus .fin-row { padding: 0; }
+#tab-finance .fin-terminus .fin-lbl,
+#tab-finance .fin-terminus .fin-fig { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); }
 
-/* States (§1.12). Loading is the region settling at --td-raised, never a
-   spinner; error renders where the operator is looking and stays. */
-#tab-finance .fin-skel {
-  height: 232px; margin-top: 32px; border-radius: var(--r-xl); background: var(--td-raised);
-}
-#tab-finance .fin-error {
-  margin-top: 32px; padding: 16px 24px; border-radius: var(--r-xl);
-  border: 1px solid var(--td-border); background: var(--td-brick-tint); color: var(--td-brick-ink);
-  font: 400 15px/1.6 var(--f-sans);
-}
-@media (prefers-reduced-motion: reduce) { .fin-chev { transition: none; } }
+/* ── .td-notrec — the §1.12 SEVENTH state, as a house class ──────────────────
+   Defined once, on the td- prefix every component on this surface uses, so the
+   next screen that needs it inherits the treatment rather than re-deriving it.
+   Until this, the state existed only in a mockup and nothing shipped rendered
+   it. Every rule is a refusal §1.12 states in terms: cream ground and no
+   border (it is a remark, not a panel); Graphite body text, the same weight as
+   any other true remark about the number above it; NO alarm colour (§1.10 —
+   nothing here is in a state); NO icon and NO retry control (a retry implies
+   the data could arrive); and no dash anywhere.
 
-/* ── Finance · Transactions (§36 v4.118) ──────────────────────────────────── */
-
-/* Sub-view strip (§1.1a row 2). It ships once there are two sub-views to name. */
-#tab-finance .fin-subviews {
-  display: flex; gap: 24px; margin-top: 24px;
-  border-bottom: 1px solid var(--td-border);
-}
-#tab-finance .fin-subviews button {
+   --r-lg, because --r-control is till.html's token and does not exist on this
+   surface, whose scale is --r-sm 4 / --r-md 6 / --r-lg 10 / --r-xl 14. The
+   negative side margins bleed the cream to the edges of a 24px-padded parent,
+   so it reads as ground under the rows rather than a card inside a card. */
+.td-notrec {
+  margin: 2px -24px 6px; padding: 10px 24px;
+  background: var(--td-raised); border-radius: var(--r-lg);
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
-  background: none; border: 0; padding: 0 0 10px; cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-#tab-finance .fin-subviews button.active {
-  color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text);
 }
 
-/* Direction tiles. Money out sits first, as the mockup draws it — on a ledger
-   of typed rows it is the larger and more frequent half. */
-.fin-tx-tiles { display: flex; gap: 16px; margin-top: 24px; }
-.fin-tx-tile {
+/* ── Transactions — tiles, chips, filter, table ───────────────────────────── */
+#tab-finance .fin-tx-tiles { display: flex; gap: 16px; margin-top: 24px; }
+#tab-finance .fin-tx-tile {
   flex: 1; background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: var(--r-xl); padding: 16px 20px;
+  border-radius: 14px; padding: 16px 20px;
 }
-.fin-tx-k { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
-.fin-tx-v {
+#tab-finance .fin-tx-k { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-tx-v {
   font: 500 24px/1.3 var(--f-sans); color: var(--td-text);
   font-variant-numeric: tabular-nums; letter-spacing: -.01em;
 }
-
-/* Direction chips. These filter the operator's own view and change no data. */
-.fin-tx-chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-.fin-tx-chip {
+#tab-finance .fin-tx-chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+#tab-finance .fin-tx-chip {
   font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
   background: var(--td-surface); border: 1px solid var(--td-border);
   border-radius: 999px; padding: 4px 12px; cursor: pointer;
 }
-.fin-tx-chip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
-.fin-tx-n { font-variant-numeric: tabular-nums; opacity: .7; }
-
-.fin-tx-filter { margin-top: 16px; }
-.fin-tx-search {
-  width: 100%; max-width: 420px;
-  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
+#tab-finance .fin-tx-chip.on {
+  background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500;
+}
+#tab-finance .fin-tx-n { font-variant-numeric: tabular-nums; opacity: .7; }
+#tab-finance .fin-tx-filter { margin-top: 16px; }
+#tab-finance .fin-tx-search {
+  width: 100%; max-width: 420px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
   background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: var(--r-lg); padding: 6px 12px;
+  border-radius: 8px; padding: 6px 12px;
 }
 
 /* The table (§1.19 — fixed layout, classed cols, percentages summing to 100).
    FIVE columns, not the mockup's six: its Location column is gone, because
    neither ledger table carries a location and every cell would be empty. */
-.fin-tx-card {
+#tab-finance .fin-tx-card {
   margin-top: 16px; background: var(--td-surface);
-  border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden;
+  border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
 }
-.fin-tx-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-.fin-c-date { width: 12%; } .fin-c-desc { width: 46%; }
-.fin-c-dir  { width: 12%; } .fin-c-amt  { width: 16%; } .fin-c-act { width: 14%; }
-/* §1.13a band values, product-wide. */
-.fin-tx-table thead th {
+#tab-finance .fin-tx-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+#tab-finance .fin-c-date { width: 12%; } #tab-finance .fin-c-desc { width: 46%; }
+#tab-finance .fin-c-dir { width: 12%; } #tab-finance .fin-c-amt { width: 16%; }
+#tab-finance .fin-c-act { width: 14%; }
+/* §1.13a band values, product-wide: --td-header fill, 13px/500 sentence case in
+   Ink, 10px 12px padding, a 1px rule under it. */
+#tab-finance .fin-tx-table thead th {
   font: 500 13px/1.6 var(--f-sans); color: var(--td-text); text-align: left;
-  background: var(--td-raised); padding: 10px 12px;
-  border-bottom: 1px solid var(--td-border);
+  background: var(--td-raised); padding: 10px 12px; border-bottom: 1px solid var(--td-border);
 }
-.fin-tx-table td {
+#tab-finance .fin-tx-table td {
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
   padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: top;
 }
-.fin-tx-table tbody tr:last-child td { border-bottom: 0; }
-.fin-tx-date { color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.fin-tx-num  { text-align: right; font-variant-numeric: tabular-nums; }
-.fin-tx-subj { display: block; }
-.fin-tx-meta { display: block; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; }
+#tab-finance .fin-tx-table tbody tr:last-child td { border-bottom: 0; }
+#tab-finance .fin-tx-date { color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#tab-finance .fin-tx-num { text-align: right; font-variant-numeric: tabular-nums; }
+#tab-finance .fin-tx-subj { display: block; }
+#tab-finance .fin-tx-meta { display: block; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; }
+/* A PO row: tinted, marked, linking out instead of offering an edit — §36's
+   "the row explains its own constraint instead of merely enforcing it". The
+   tint is Dusk, the automation voice, rule-2 exempt under §1.8 because it
+   reports that Tacet acted rather than asking for a click. */
+#tab-finance .fin-tx-posted td { background: var(--td-dusk-tint, var(--td-raised)); }
+#tab-finance .fin-tx-mark { color: var(--td-dusk-ink, var(--td-text2)); }
+#tab-finance .fin-tx-hint { color: var(--td-text2); }
+#tab-finance .fin-tx-act { color: var(--td-text); text-decoration: underline; cursor: pointer; }
 
-/* A PO-derived row. Tinted, marked, and carrying an outward link instead of an
-   edit — §36: "The row explains its own constraint instead of merely enforcing
-   it." The tint is Dusk, the automation voice, and is rule-2 exempt under §1.8
-   because it reports that Tacet acted rather than asking for a click. */
-.fin-tx-posted td { background: var(--td-dusk-tint, var(--td-raised)); }
-.fin-tx-mark { color: var(--td-dusk-ink, var(--td-text2)); }
-.fin-tx-hint { color: var(--td-text2); }
-.fin-tx-act { color: var(--td-text); text-decoration: underline; cursor: pointer; }
-
-/* §1.12 states. Empty names what will arrive; no-results offers to clear.
-   Both are plain — nothing here is in a state, so nothing here is coloured. */
-.fin-tx-state {
+/* ── states (§1.12) ──────────────────────────────────────────────────────────
+   Loading is the region settling at --td-raised, never a spinner. Empty names
+   what will arrive; no-results offers to clear. Both plain — nothing here is
+   in a state, so nothing here is coloured. Error renders where the operator is
+   looking and stays. */
+#tab-finance .fin-skel { height: 232px; margin-top: 32px; border-radius: 14px; background: var(--td-raised); }
+#tab-finance .fin-tx-state {
   margin-top: 16px; padding: 48px 24px; text-align: center;
-  background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: var(--r-xl);
+  background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
 }
-.fin-tx-state h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 8px; }
-.fin-tx-state p { margin: 0 auto; max-width: 52ch; }
-.fin-tx-state .db-btn { margin-top: 16px; }
+#tab-finance .fin-tx-state h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 8px; }
+#tab-finance .fin-tx-state p { margin: 0 auto; max-width: 52ch; }
+#tab-finance .fin-tx-state .fin-btn-sec { margin-top: 16px; }
+#tab-finance .fin-error {
+  margin-top: 32px; padding: 16px 24px; border-radius: 14px;
+  border: 1px solid var(--td-border); background: var(--td-brick-tint); color: var(--td-brick-ink);
+  font: 400 15px/1.6 var(--f-sans);
+}
 
-/* ── Finance · the typed-row form (§1.13 modal — bounded, one commit) ─────── */
-.fin-modal {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(17, 26, 43, .32);
+/* ── the typed-row form (§1.13 modal — bounded, fixed height, one commit) ─── */
+#tab-finance .fin-modal {
+  position: fixed; inset: 0; z-index: 60; background: rgba(17, 26, 43, .32);
   display: flex; align-items: center; justify-content: center; padding: 24px;
 }
-.fin-modal[hidden] { display: none; }
-.fin-modal-card {
-  width: 100%; max-width: 480px;
-  background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: var(--r-xl); padding: 24px;
+#tab-finance .fin-modal-card {
+  width: 100%; max-width: 480px; background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 14px; padding: 24px;
 }
-.fin-modal-card h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 16px; }
-.fin-modal-body { display: grid; gap: 12px; }
-.fin-f-row { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; }
-.fin-f-row > label { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
-.fin-f-row > input {
-  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
-  background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: var(--r-lg); padding: 6px 12px; width: 100%;
+#tab-finance .fin-modal-card h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 16px; }
+#tab-finance .fin-modal-body { display: grid; gap: 12px; }
+#tab-finance .fin-f-row { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; }
+#tab-finance .fin-f-row > label { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-f-row > input {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 12px; width: 100%;
 }
-.fin-f-row[hidden] { display: none; }
 /* The error sits with the control that produced it and stays until acknowledged
    (§1.12) — never a toast, which flies away and leaves the operator unable to
-   know the money did not move. No icon; the text is the whole message. */
-.fin-modal-err {
-  margin: 4px 0 0; font: 400 13px/1.6 var(--f-sans);
-  color: var(--td-brick-ink, var(--td-text)); }
-.fin-modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
-.fin-modal-del { color: var(--td-brick-ink, var(--td-text)); }
-
-/* ── Finance · two corrections to what shipped ────────────────────────────── */
-
-/* [hidden] DOES NOT WORK ON A .btn ON THIS SURFACE, and that is why the New
-   transaction CTA appeared on Summary. `.btn { display: inline-flex }` is an
-   author rule; the UA's `[hidden] { display: none }` loses to it, so setting
-   the attribute did nothing. The page already knows this trap — see
-   `#tab-delivery .dlv-view[hidden]` above, which carries the same !important
-   for the same reason. Scoped to this section rather than made global: a
-   surface-wide `[hidden]` rule is a bigger change than this fault warrants.
-   The CTA belongs to Transactions; Summary types nothing. */
-#tab-finance [hidden] { display: none !important; }
-
-/* The not-recorded VALUE in a figure cell. Graphite, body weight, no tint and
-   no colour — §1.10: colour encodes state, and nothing here is in a state. It
-   sits at the same weight as the figures around it because it is the same kind
-   of claim about the same kind of thing: what this line is. */
-.fin-row.fin-absent .fin-fig { color: var(--td-text2); font-weight: 400; font-size: 15px; }
+   know the money did not move. */
+#tab-finance .fin-modal-err { margin: 4px 0 0; font: 400 13px/1.6 var(--f-sans); color: var(--td-brick-ink, var(--td-text)); }
+#tab-finance .fin-modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+#tab-finance .fin-modal-del { color: var(--td-brick-ink, var(--td-text)); }
+@media (prefers-reduced-motion: reduce) { #tab-finance .fin-chev { transition: none; } }

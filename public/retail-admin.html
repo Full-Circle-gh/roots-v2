@@ -10920,60 +10920,70 @@
        Net — and the vocabulary pairs for it are already locked
        (docs/tacet-delivery-vocabulary.md, Finance). -->
   <section id="tab-finance">
-    <div class="fin-head td-head">
-      <h2 style="margin:0">Finance · 财务</h2>
-      <!-- Range echo, built by finRangeLabel with cuT, so it opts out of the
-           " · " i18n walker exactly as the Reports echo does. -->
-      <span class="td-date fin-echo" id="fin-range" data-no-i18n></span>
-      <!-- The page's ONE Dusk CTA (§1.8). #194 shipped no CTA because the write
-           half did not exist and a button that does nothing is worse than none;
-           it does something now. Gated on finance:record, so a read-only
-           accountant sees the ledger and not the pen. -->
-      <button class="btn btn-primary t-cta" id="fin-tx-new" data-cap="finance:record"
+    <!-- PRESENTATION REBUILT FROM reference/finance-summary-mockup.html AND
+         reference/finance-transactions-mockup.html, 2026-09-02.
+
+         SELF-CONTAINED BY CONSTRUCTION, and that is the whole point of the
+         rebuild. The first build reused the Reports range bar's markup
+         (.db-rangebar / .db-range / .seg) and inherited the LEGACY ADMIN's
+         appearance with it — green active pills at weight 600, `7d` labels,
+         its own paddings — because everything that makes those components look
+         like Tacet lives in `#tab-reports`-scoped overrides, 120 of them, which
+         a second tab never receives. Reusing house markup here imports the old
+         admin, not the new design.
+
+         So every class below is Finance's own, every value comes from the
+         mockup, and nothing on this screen depends on a rule scoped to another
+         tab. Do not swap one of these for a shared class without checking where
+         its Tacet styling actually lives.
+
+         The mockup is English-only by its own header note; this surface is
+         bilingual. Every label therefore takes a pair that is already live —
+         `Today · 今日` and `N days · N天` are both in dashRangeLabel — so the
+         wording matches the mockup and no Chinese is composed. -->
+    <div class="fin-head">
+      <h2 class="fin-title">Finance · 财务</h2>
+      <!-- Range echo, right-aligned on the title line (mockup `.pg-echo`).
+           Built by finRangeLabel with cuT, so it opts out of the " · " walker. -->
+      <span class="fin-echo" id="fin-range" data-no-i18n></span>
+      <!-- The page's one Dusk CTA (§1.8), and Transactions' alone: Summary
+           types nothing. Hidden by sub-view, gated by capability. -->
+      <button class="fin-cta" id="fin-tx-new" data-cap="finance:record"
               hidden onclick="finTxForm('out')">New transaction · 新建交易</button>
     </div>
 
-    <!-- Sub-view strip (§1.1a row 2). It ships NOW because there are two
-         sub-views; the Summary build deliberately shipped none, since a strip
-         with one tab names a screen the operator cannot open. Both labels are
-         locked pairs (`summary`, `transactions`). -->
+    <!-- Sub-view strip (§1.1a row 2, mockup `.subviews`). -->
     <nav class="fin-subviews" id="fin-subviews" role="tablist">
-      <button type="button" data-sub="summary" class="active" onclick="finShow('summary')">Summary · 汇总</button>
+      <button type="button" data-sub="summary" class="on" onclick="finShow('summary')">Summary · 汇总</button>
       <button type="button" data-sub="transactions" onclick="finShow('transactions')">Transactions · 交易记录</button>
     </nav>
 
-    <!-- The Reports range bar, reused: same seg presets, same date inputs, same
-         GZ-local computation, same Apply/refresh pair. Its store select is
-         deliberately absent — see the section comment above. -->
-    <div class="db-rangebar td-rangebar" id="fin-rangebar">
-      <div class="db-range">
-        <div class="seg" id="fin-range-seg">
-          <button data-range="today">Today · 今日</button>
-          <button data-range="7">7d</button>
-          <button data-range="30" class="active">30d</button>
-          <button data-range="90">90d</button>
-        </div>
-        <input type="date" id="fin-from" aria-label="From date">
-        <span style="color:var(--td-text2)">–</span>
-        <input type="date" id="fin-to" aria-label="To date">
-        <button class="db-btn" onclick="finLoad()">Apply · 应用</button>
-        <button class="db-btn" onclick="finLoad({ refresh: true })" title="Refresh · 刷新">↻</button>
-      </div>
+    <!-- Range bar (mockup `.rangebar`). Finance's own controls, not Reports'.
+         NO STORE SELECT: neither ledger table carries a location, so a filter
+         could only scope one half of the staircase — §36, "a filter that
+         silently returns a wrong answer is worse than no filter". -->
+    <div class="fin-rangebar">
+      <span class="fin-seg" id="fin-range-seg">
+        <button type="button" data-range="today">Today · 今日</button>
+        <button type="button" data-range="7">7 days · 7天</button>
+        <button type="button" data-range="30" class="on">30 days · 30天</button>
+        <button type="button" data-range="90">90 days · 90天</button>
+      </span>
+      <span class="fin-dates">
+        <input class="fin-field" type="date" id="fin-from" aria-label="From date">
+        <span class="fin-dash">–</span>
+        <input class="fin-field" type="date" id="fin-to" aria-label="To date">
+      </span>
+      <button class="fin-btn-sec" type="button" onclick="finLoad()">Apply · 应用</button>
+      <button class="fin-btn-icon" type="button" onclick="finLoad({ refresh: true })"
+              aria-label="Refresh" title="Refresh · 刷新">↻</button>
     </div>
 
     <div id="fin-stair"></div>
 
     <!-- TRANSACTIONS — the ledger of typed rows (§36 v4.118). Two directions and
-         no third: settlement receipts have no row here, because the order record
-         already counted that money (§36).
-
-         NO LOCATION COLUMN AND NO LOCATION FILTER, both of which the mockup
-         draws. Neither income_entries (schema.sql:217-227) nor expense_entries
-         (:229-240) carries a location, so every cell would be empty and the
-         filter would silently drop the whole list when set.
-
-         NO "New transaction" CTA. The write half is unbuilt; a Dusk CTA that
-         does nothing is worse than none. -->
+         no third. No location column and no location filter, for the reason
+         above; five columns, not the mockup's six. -->
     <div id="fin-tx" hidden>
       <div class="fin-tx-tiles" id="fin-tx-tiles"></div>
       <div class="fin-tx-chips" id="fin-tx-chips"></div>
@@ -10998,8 +11008,8 @@
         <div class="fin-modal-body">
           <div class="fin-f-row">
             <label>Direction · 方向</label>
-            <div class="seg" id="fin-tx-kind">
-              <button type="button" data-kind="out" class="active" onclick="finTxKind('out')">Money out · 支出</button>
+            <div class="fin-seg" id="fin-tx-kind">
+              <button type="button" data-kind="out" class="on" onclick="finTxKind('out')">Money out · 支出</button>
               <button type="button" data-kind="in" onclick="finTxKind('in')">Money in · 进账</button>
             </div>
           </div>
@@ -11026,11 +11036,11 @@
           <p class="fin-modal-err" id="fin-tx-err" data-no-i18n hidden></p>
         </div>
         <div class="fin-modal-foot">
-          <button type="button" class="db-btn fin-modal-del" id="fin-tx-del" hidden
+          <button type="button" class="fin-btn-sec fin-modal-del" id="fin-tx-del" hidden
                   onclick="finTxDelete()">Delete · 删除</button>
           <span style="flex:1"></span>
-          <button type="button" class="db-btn" onclick="finTxFormClose()">Cancel · 取消</button>
-          <button type="button" class="btn btn-primary" id="fin-tx-save"
+          <button type="button" class="fin-btn-sec" onclick="finTxFormClose()">Cancel · 取消</button>
+          <button type="button" class="fin-cta" id="fin-tx-save"
                   onclick="finTxSave()">Save · 保存</button>
         </div>
       </div>
