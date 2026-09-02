@@ -10925,6 +10925,12 @@
       <!-- Range echo, built by finRangeLabel with cuT, so it opts out of the
            " · " i18n walker exactly as the Reports echo does. -->
       <span class="td-date" id="fin-range" data-no-i18n></span>
+      <!-- The page's ONE Dusk CTA (§1.8). #194 shipped no CTA because the write
+           half did not exist and a button that does nothing is worse than none;
+           it does something now. Gated on finance:record, so a read-only
+           accountant sees the ledger and not the pen. -->
+      <button class="btn btn-primary t-cta" id="fin-tx-new" data-cap="finance:record"
+              hidden onclick="finTxForm('out')">New transaction · 新建交易</button>
     </div>
 
     <!-- Sub-view strip (§1.1a row 2). It ships NOW because there are two
@@ -10976,6 +10982,58 @@
                oninput="finTxRender()" aria-label="Filter these transactions">
       </div>
       <div id="fin-tx-list"></div>
+    </div>
+
+    <!-- The typed-row form (§1.13 modal: bounded, fixed height, one commit —
+         it never grows by the operator's own actions, so it is not a page).
+
+         NO LOCATION FIELD — neither ledger table has a column for one.
+         NO CATEGORY FIELD FOR MONEY IN — §36 decides income categories move
+         server-side and ship empty, and that has not landed; the field hides
+         while the list is empty and the add control stays visible regardless.
+         Nothing here reads or writes localStorage. -->
+    <div class="fin-modal" id="fin-tx-modal" hidden>
+      <div class="fin-modal-card" role="dialog" aria-modal="true" aria-labelledby="fin-tx-modal-t">
+        <h3 id="fin-tx-modal-t">New transaction · 新建交易</h3>
+        <div class="fin-modal-body">
+          <div class="fin-f-row">
+            <label>Direction · 方向</label>
+            <div class="seg" id="fin-tx-kind">
+              <button type="button" data-kind="out" class="active" onclick="finTxKind('out')">Money out · 支出</button>
+              <button type="button" data-kind="in" onclick="finTxKind('in')">Money in · 进账</button>
+            </div>
+          </div>
+          <div class="fin-f-row">
+            <label for="fin-tx-date">Date · 日期</label>
+            <input type="date" id="fin-tx-date">
+          </div>
+          <div class="fin-f-row">
+            <label for="fin-tx-amount">Amount · 金额</label>
+            <input type="number" id="fin-tx-amount" min="0" step="0.01" inputmode="decimal">
+          </div>
+          <!-- Money out only. Hidden, not disabled and not an empty dropdown:
+               §1.9's data-precondition axis answers an absent dimension with
+               absence. -->
+          <div class="fin-f-row" id="fin-tx-cat-row">
+            <label for="fin-tx-cat">Category · 分类</label>
+            <input type="text" id="fin-tx-cat" list="fin-tx-cats" autocomplete="off">
+            <datalist id="fin-tx-cats"></datalist>
+          </div>
+          <div class="fin-f-row">
+            <label for="fin-tx-note">Note · 备注</label>
+            <input type="text" id="fin-tx-note">
+          </div>
+          <p class="fin-modal-err" id="fin-tx-err" data-no-i18n hidden></p>
+        </div>
+        <div class="fin-modal-foot">
+          <button type="button" class="db-btn fin-modal-del" id="fin-tx-del" hidden
+                  onclick="finTxDelete()">Delete · 删除</button>
+          <span style="flex:1"></span>
+          <button type="button" class="db-btn" onclick="finTxFormClose()">Cancel · 取消</button>
+          <button type="button" class="btn btn-primary" id="fin-tx-save"
+                  onclick="finTxSave()">Save · 保存</button>
+        </div>
+      </div>
     </div>
   </section>
 

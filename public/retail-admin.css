@@ -13764,3 +13764,34 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 .fin-tx-state h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 8px; }
 .fin-tx-state p { margin: 0 auto; max-width: 52ch; }
 .fin-tx-state .db-btn { margin-top: 16px; }
+
+/* ── Finance · the typed-row form (§1.13 modal — bounded, one commit) ─────── */
+.fin-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(17, 26, 43, .32);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.fin-modal[hidden] { display: none; }
+.fin-modal-card {
+  width: 100%; max-width: 480px;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-xl); padding: 24px;
+}
+.fin-modal-card h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 16px; }
+.fin-modal-body { display: grid; gap: 12px; }
+.fin-f-row { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; }
+.fin-f-row > label { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+.fin-f-row > input {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-lg); padding: 6px 12px; width: 100%;
+}
+.fin-f-row[hidden] { display: none; }
+/* The error sits with the control that produced it and stays until acknowledged
+   (§1.12) — never a toast, which flies away and leaves the operator unable to
+   know the money did not move. No icon; the text is the whole message. */
+.fin-modal-err {
+  margin: 4px 0 0; font: 400 13px/1.6 var(--f-sans);
+  color: var(--td-brick-ink, var(--td-text)); }
+.fin-modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+.fin-modal-del { color: var(--td-brick-ink, var(--td-text)); }

@@ -23,7 +23,7 @@
 //   11. a role somebody holds needs a destination, and the move is atomic
 //   12. exceptions survive the move, as differences from the new role
 //   13. invite and edit BOTH 400 on an unknown role — no silent 'staff'
-//   14. money markers: every one of the 102 is classified, and the tallies hold
+//   14. money markers: every one of the 103 is classified, and the tallies hold
 //   15. the per-person read is gated, except on your own row
 //   16. forced-on and forced-off come back distinguishable
 //   17. the Quick Stock lockdown is writable at last — locking down is free,
@@ -275,9 +275,9 @@ function versionOf(tid) {
   section('14 · the money marker');
   const unclassified = caps.CAPABILITIES.filter(c => c.money && !['shows', 'moves'].includes(c.money));
   is(unclassified.length, 0, 'every money value is shows or moves');
-  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 19, '19 capabilities move money');
+  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 20, '20 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 102, 'across all 102');
+  is(caps.CAPABILITIES.length, 103, 'across all 103');
   const sm = caps.presetCapsFor('store_manager').filter(k => caps.MONEY_KEYS[k] === 'moves');
   is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit'],
     'the shipped store_manager preset moves money five ways — the marker is why this is now visible');

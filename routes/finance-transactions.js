@@ -45,17 +45,168 @@
 // than no filter." Same refusal, same reason, as the Summary's missing store
 // select.
 //
-// THE WRITE HALF. §36 calls Transactions the only surface where a person types,
-// and that is unbuilt. This endpoint is read-only and there is no POST here.
+// LOCATION, on the write side too. The form offers no location field, because
+// there is no column to put one in.
 
 'use strict';
 
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const { storeCategory } = require('../lib/category-text');
 const { requireRetailAdmin } = require('./retail');
+const { logActivity } = require('../middleware/auth');
 
 const router = express.Router();
+
+// ── The write half ─────────────────────────────────────────────────────────
+// §36 calls Transactions "the only surface where a person types". This is that.
+//
+// TWO TABLES, ONE FORM. `kind` picks which — 'in' writes `income_entries`, 'out'
+// writes `expense_entries`. **The direction is CHOSEN by the person and never
+// inferred**: a negative amount does not silently become money out, because a
+// typo in a minus sign would then rewrite which half of the ledger a row belongs
+// to without saying so.
+const TABLE = { in: 'income_entries', out: 'expense_entries' };
+
+// Every error string here is REUSED verbatim from routes/finance.js, which
+// already ships them bilingual in this exact domain. Rule 4 of the vocabulary
+// forbids composing Chinese; it does not ask for a second way to say a thing
+// that is already said.
+const ERR = {
+  date:     'date required · 日期必填',
+  amount:   'amount must be positive · 金额必须大于零',
+  notFound: 'Not found · 未找到',
+  poEdit:   'PO-linked expenses cannot be edited directly · 关联采购单的支出不能直接编辑',
+  poDelete: 'PO-linked expenses cannot be deleted directly · 关联采购单的支出不能直接删除',
+};
+
+/** Validate and normalise a submitted row. Returns { error } or the clean values. */
+function readBody(body, db) {
+  const b = body || {};
+  const kind = String(b.kind || '');
+  // An unknown direction names no ledger, so this is `Not found` rather than a
+  // validation message of its own. The form always sends one of the two, so an
+  // absent `kind` is a malformed request and not something an operator can
+  // produce — and minting a bilingual pair for a state the UI cannot reach would
+  // be composing Chinese under Rule 4 for nobody to read.
+  if (!TABLE[kind]) return { error: ERR.notFound };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.date || ''))) return { error: ERR.date };
+  // fen() BEFORE the row is stored, not after it is read. #194's suite caught a
+  // raw REAL sum returning 1257.6799999999998; that residue must never be what
+  // gets saved, because every later reader inherits it.
+  const amount = fen(b.amount);
+  if (!(amount > 0)) return { error: ERR.amount };
+
+  // §36, *Categories are normalised on write*: "Finance calls `storeCategory` on
+  // every write. The same function Purchasing already uses… Finance stops being
+  // the exception." Without it, three rent payments typed by three people become
+  // three lines that read identically on the Summary's breakdown — **the total is
+  // right and every line beneath it is wrong**, which is worse than a visibly
+  // broken number because nothing on the screen looks wrong.
+  //
+  // MONEY IN PASSES null AND NEVER REACHES IT. Income categories have no
+  // server-side list (§36 decides they move, and that has not landed), so the
+  // form shows no category field for money in and there is nothing to normalise.
+  // Calling storeCategory on an income value would also snap it onto the EXPENSE
+  // list, which shares the `accounting` kind — a collision worth naming rather
+  // than discovering.
+  const category = kind === 'out' ? storeCategory(db, b.category) : null;
+
+  const note = (b.note == null || b.note === '') ? null : String(b.note);
+  return { kind, date: String(b.date), amount, category, note };
+}
+
+/** The stored row behind a typed id, with the PO refusal applied. */
+function loadTyped(db, kind, id, refusal) {
+  if (!TABLE[kind] || !/^\d+$/.test(String(id))) return { error: ERR.notFound, status: 404 };
+  const row = db.prepare(`SELECT * FROM ${TABLE[kind]} WHERE id = ?`).get(id);
+  if (!row) return { error: ERR.notFound, status: 404 };
+  // §36: PO-derived rows are projections both posters delete and re-insert on
+  // every status change, so no human-authored value may accumulate on one. The
+  // refusal is unchanged from what `routes/finance.js` already enforces and what
+  // the screen already shows — this path does not weaken it, and a typed row can
+  // never acquire a `po_id` because nothing below ever writes one.
+  if (kind === 'out' && row.po_id != null) return { error: refusal, status: 400 };
+  return { row };
+}
+
+// ── POST /api/retail-admin/finance/transactions ────────────────────────────
+router.post('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, res) => {
+  try {
+    const db = tdb();
+    const v = readBody(req.body, db);
+    if (v.error) return res.status(400).json({ error: v.error });
+
+    // NOTE THE COLUMN LIST. `po_id` is absent by construction, so a typed row
+    // cannot acquire one and can never be mistaken for a Purchasing projection —
+    // the property `routes/finance.js` has today and that §36's display decision
+    // rests on. Adding it here would make a hand-typed row uneditable.
+    const info = v.kind === 'in'
+      ? db.prepare('INSERT INTO income_entries (date, amount, category, description, created_by) VALUES (?,?,?,?,?)')
+          .run(v.date, v.amount, v.category, v.note, req.user?.id || null)
+      : db.prepare('INSERT INTO expense_entries (date, amount, category, description, created_by) VALUES (?,?,?,?,?)')
+          .run(v.date, v.amount, v.category, v.note, req.user?.id || null);
+
+    logActivity(req.user?.id || null, req.user?.username || null, 'create',
+      v.kind === 'in' ? 'income' : 'expense', info.lastInsertRowid,
+      { amount: v.amount, category: v.category }, req.ip);
+    res.json({ success: true, id: info.lastInsertRowid });
+  } catch (e) {
+    console.error('[finance/transactions POST]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PUT /api/retail-admin/finance/transactions/:kind/:id ───────────────────
+// §36 states no constraint on editing a TYPED row, and its reasoning for the PO
+// refusal — "no human-authored value can ever accumulate on one of these rows
+// and be lost when it is regenerated" — does not apply to a row nothing
+// regenerates. DECIDED 2026-09-02: hand-typed rows are freely editable and
+// deletable. Roots enters rows by hand and mistakes are typos; forcing an
+// offsetting entry to correct one turns a two-row ledger into four rows nobody
+// can read.
+router.put('/api/retail-admin/finance/transactions/:kind/:id', requireRetailAdmin, (req, res) => {
+  try {
+    const db = tdb();
+    const { kind, id } = req.params;
+    const found = loadTyped(db, kind, id, ERR.poEdit);
+    if (found.error) return res.status(found.status).json({ error: found.error });
+    // The direction is fixed at creation: a row lives in one table, and moving it
+    // between them would be a delete and an insert wearing an edit's clothes.
+    const v = readBody({ ...req.body, kind }, db);
+    if (v.error) return res.status(400).json({ error: v.error });
+
+    db.prepare(`UPDATE ${TABLE[kind]} SET date = ?, amount = ?, category = ?, description = ? WHERE id = ?`)
+      .run(v.date, v.amount, v.category, v.note, id);
+    logActivity(req.user?.id || null, req.user?.username || null, 'update',
+      kind === 'in' ? 'income' : 'expense', Number(id),
+      { amount: v.amount, category: v.category }, req.ip);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[finance/transactions PUT]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── DELETE /api/retail-admin/finance/transactions/:kind/:id ────────────────
+router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailAdmin, (req, res) => {
+  try {
+    const db = tdb();
+    const { kind, id } = req.params;
+    const found = loadTyped(db, kind, id, ERR.poDelete);
+    if (found.error) return res.status(found.status).json({ error: found.error });
+
+    db.prepare(`DELETE FROM ${TABLE[kind]} WHERE id = ?`).run(id);
+    logActivity(req.user?.id || null, req.user?.username || null, 'delete',
+      kind === 'in' ? 'income' : 'expense', Number(id),
+      { amount: found.row.amount, category: found.row.category }, req.ip);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[finance/transactions DELETE]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── GET /api/retail-admin/finance/transactions?from=&to= ───────────────────
 router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, res) => {

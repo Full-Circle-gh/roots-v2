@@ -287,6 +287,12 @@ window.finShow = function finShow(which) {
   const tx = document.getElementById('fin-tx');
   if (stair) stair.hidden = isTx;
   if (tx) tx.hidden = !isTx;
+  // The CTA belongs to Transactions, not to the surface: Summary types nothing.
+  // Its capability gate is `data-cap`, applied by applyCapGates as a display
+  // rule, so the two compose — hidden here by sub-view, display:none there by
+  // permission, and an operator without finance:record never sees it either way.
+  const cta = document.getElementById('fin-tx-new');
+  if (cta) cta.hidden = !isTx;
   if (isTx && !FIN_TX_SEEN) { FIN_TX_SEEN = true; finTxLoad(); }
 };
 
@@ -330,9 +336,15 @@ function finTxRow(r) {
     + '</td>'
     + `<td>${escapeHtml(r.kind === 'out' ? cuT('Out', '出') : cuT('In', '进'))}</td>`
     + `<td class="fin-tx-num">${escapeHtml(finTxAmount(r))}</td>`
+    // A PO row links OUT to Purchasing and offers no Edit — §36's visible
+    // refusal, unchanged by the write half. A typed row gets Edit, and only when
+    // the operator holds the pen: `can` is the client half of the same gate
+    // cap-routes.js applies to the request.
     + '<td>' + (po
       ? `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`
-      : '') + '</td>'
+      : (typeof can === 'function' && !can('finance:record')) ? ''
+      : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
+    + '</td>'
     + '</tr>';
 }
 
@@ -449,3 +461,156 @@ async function finTxLoad() {
     else host.innerHTML = banner;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE WRITE HALF — §36 calls Transactions "the only surface where a person
+   types". This is that.
+
+   Every string is either a locked pair from the Finance table (v1.11) or one
+   REUSED verbatim from a live source. Nothing here is composed: the validation
+   messages and the PO refusals come back from the server, which reuses
+   routes/finance.js's own bilingual strings rather than restating them.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let FIN_TX_EDIT = null;   // the row being edited, or null for a new one
+let FIN_TX_KIND = 'out';  // the chosen direction — never inferred from the sign
+
+/* Direction is CHOSEN. A negative amount does not silently become money out:
+   a mistyped minus would then move a row between halves of the ledger without
+   saying so. §36 keeps exactly two directions and there is no third. */
+window.finTxKind = function finTxKind(kind) {
+  FIN_TX_KIND = kind === 'in' ? 'in' : 'out';
+  document.querySelectorAll('#fin-tx-kind button')
+    .forEach(b => b.classList.toggle('active', b.dataset.kind === FIN_TX_KIND));
+  // Money in has no category field. §36 decides income categories move
+  // server-side and ship EMPTY, and that has not landed — so there is no list to
+  // choose from, and §36's own rule for the screen applies to the form: "the
+  // category field appears once the tenant has created at least one income
+  // category… Nobody is asked to categorise before they have anything to
+  // categorise with." Hidden, not disabled, not an empty dropdown (§1.9).
+  //
+  // The ADD CONTROL STAYS VISIBLE REGARDLESS. §36: gating it "would leave a
+  // tenant with non-sale money in hand, no route to record it, and no sign on
+  // the screen explaining why."
+  const row = document.getElementById('fin-tx-cat-row');
+  if (row) row.hidden = FIN_TX_KIND === 'in';
+};
+
+/* Open the form. `row` present = edit; absent = add.
+   A PO-derived row never reaches here — its row offers no Edit at all, which is
+   §36's "the row explains its own constraint instead of merely enforcing it".
+   The guard below is the second line of that defence, not the first. */
+window.finTxForm = function finTxForm(kindOrRow, row) {
+  if (row && row.source === 'po') return;
+  FIN_TX_EDIT = row || null;
+  const m = document.getElementById('fin-tx-modal');
+  if (!m) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  finTxKind(row ? row.kind : (typeof kindOrRow === 'string' ? kindOrRow : 'out'));
+  set('fin-tx-date', row ? row.date : new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10));
+  set('fin-tx-amount', row ? row.amount : '');
+  set('fin-tx-cat', row && row.category ? row.category : '');
+  set('fin-tx-note', row && row.source === 'manual' && row.subject && row.subject !== row.category ? row.subject : '');
+  const t = document.getElementById('fin-tx-modal-t');
+  if (t) t.textContent = row ? cuT('Edit', '编辑') : cuT('New transaction', '新建交易');
+  const del = document.getElementById('fin-tx-del');
+  if (del) del.hidden = !row;
+  // The expense categories already on the server — the ones §36 says are shared
+  // properly under kind='accounting'. Suggestions only: the field is free text,
+  // and storeCategory snaps whatever is typed onto an existing entry at write.
+  const dl = document.getElementById('fin-tx-cats');
+  if (dl && FIN_TX) {
+    const cats = [...new Set(FIN_TX.rows.filter(r => r.category).map(r => r.category))].sort();
+    dl.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+  }
+  finTxErr('');
+  m.hidden = false;
+};
+
+window.finTxFormClose = function finTxFormClose() {
+  const m = document.getElementById('fin-tx-modal');
+  if (m) m.hidden = true;
+  FIN_TX_EDIT = null;
+};
+
+/* §1.12's error state: it renders where the operator is looking, next to the
+   control they pressed, and stays until acknowledged. Never a toast — a failed
+   write that flies away leaves them with no way to know the money did not move.
+   The text is the server's, which reuses routes/finance.js's bilingual strings. */
+function finTxErr(msg) {
+  const el = document.getElementById('fin-tx-err');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+/* §1.12's in-flight state: "every control that writes disables while it writes.
+   No exceptions for the important ones." Captured synchronously — shape C in
+   that section is a button read after an await, by which time it is null. */
+async function finTxWrite(run) {
+  const save = document.getElementById('fin-tx-save');
+  const del = document.getElementById('fin-tx-del');
+  const before = save && save.textContent;
+  if (save) { save.disabled = true; save.textContent = cuT('Saving…', '保存中…'); }
+  if (del) del.disabled = true;
+  try {
+    await run();
+    finTxFormClose();
+    FIN_TX = null;               // force a real reload rather than a repaint
+    await finTxLoad();
+    if (window.toast) toast(cuT('Saved', '已保存'));
+  } catch (e) {
+    finTxErr(e.message);
+  } finally {
+    if (save) { save.disabled = false; if (before) save.textContent = before; }
+    if (del) del.disabled = false;
+  }
+}
+
+window.finTxSave = function finTxSave() {
+  const val = (id) => (document.getElementById(id) || {}).value;
+  const body = {
+    kind: FIN_TX_KIND,
+    date: val('fin-tx-date'),
+    amount: val('fin-tx-amount'),
+    // Money in sends no category at all — the field is hidden and there is no
+    // income list to snap onto. The server passes null rather than normalising
+    // it against the EXPENSE list, which shares the 'accounting' kind.
+    category: FIN_TX_KIND === 'out' ? val('fin-tx-cat') : null,
+    note: val('fin-tx-note'),
+  };
+  const row = FIN_TX_EDIT;
+  return finTxWrite(() => row
+    ? api(`/api/retail-admin/finance/transactions/${row.kind}/${row.id}`, { method: 'PUT', body })
+    : api('/api/retail-admin/finance/transactions', { method: 'POST', body }));
+};
+
+/* DECIDED 2026-09-02: a hand-typed row is freely deletable. Roots enters rows by
+   hand and mistakes are typos; forcing an offsetting entry to correct one turns
+   a two-row ledger into four rows nobody can read. The confirm is the house
+   askConfirm, danger-styled, because this removes money from a ledger. */
+window.finTxDelete = async function finTxDelete() {
+  const row = FIN_TX_EDIT;
+  if (!row) return;
+  // REFUSE rather than proceed if the shared dialog is unavailable. Skipping the
+  // confirm on a money-deleting action because a script failed to load is the
+  // wrong way round: the guard is the point, not the decoration.
+  if (typeof askConfirm !== 'function') return;
+  if (!(await askConfirm({
+    title: cuT('Delete this transaction?', '删除这条交易记录？'),
+    body: cuT('This removes the row from the ledger. This cannot be undone.',
+              '此操作将从账本中移除该记录。此操作无法撤销。'),
+    confirmLabel: cuT('Delete', '删除'),
+    danger: true,
+  }))) return;
+  return finTxWrite(() =>
+    api(`/api/retail-admin/finance/transactions/${row.kind}/${row.id}`, { method: 'DELETE' }));
+};
+
+/* Edit a typed row, looked up in the payload already on screen rather than
+   re-fetched: the row the operator clicked is the row they are looking at. */
+window.finTxEdit = function finTxEdit(kind, id) {
+  if (!FIN_TX) return;
+  const row = FIN_TX.rows.find(r => r.kind === kind && String(r.id) === String(id));
+  if (row && row.source !== 'po') finTxForm(null, row);
+};
