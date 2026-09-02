@@ -5139,7 +5139,13 @@ function ordItemsTotal(o) {
 }
 // Does the order total agree with the items listed under it? Mirrors
 // totalDisagreement() on the server, tolerance included: ¥5 or 30% of the basket,
-// which absorbs packing, delivery and an ordinary promotion.
+// which absorbs packing, delivery and an ordinary promotion — plus, unlike the
+// server version (which only ever sees a channel's own total vs its own lines),
+// points/voucher/wallet redemption, since this drawer also renders the store's
+// own orders where a customer can legitimately pay most of the basket with
+// points. Order 1557 (¥546 of items, ¥522 redeemed in points, ¥10 packing) has
+// no disagreement at all — 546 + 10 − 522 = 34, exactly o.total — but comparing
+// raw items to o.total ignored the redemption and flagged it as one anyway.
 //
 // This exists because the drawer had no way to be wrong OUT LOUD. On
 // EL20260901417897 it printed "¥17.50 · subtotal ¥17.50 · shipping ¥0.00" as a hero
@@ -5152,7 +5158,10 @@ function ordMoneyGap(o) {
   const items = ordItemsTotal(o);
   const total = Number(o && o.total);
   if (items == null || !Number.isFinite(total)) return null;
-  const gap = Math.round((items - total) * 100) / 100;
+  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0);
+  const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
+  const expected = Math.round((items + surcharges - deductions) * 100) / 100;
+  const gap = Math.round((expected - total) * 100) / 100;
   if (Math.abs(gap) <= Math.max(5, items * 0.3)) return null;
   return { items, total, gap };
 }
