@@ -5031,7 +5031,7 @@ The six recorded miscount traps all concern a correct cost read wrongly. **This 
 
 **There is no guard anywhere against `unit_cost` exceeding sell price.** The value produces a large negative margin on the Products screen with no refusal and no alarm.
 
-The mechanism that permits it is recorded separately and is broader than this instance: `po_line_items` carries `qty`, a free-text `unit` and `cost_per_unit`, and **no pack-size column**, so `cost_per_unit` means cost per whatever the buyer typed. `store_products` has **no unit, pack-size or sellable-unit column at all.** `productUnitCostYuan` returns `store_products.unit_cost` **verbatim** for anything that is not a bundle — no division, no normalisation. **The chain from purchase to reader contains no conversion step and no assertion about what one unit is.**
+The mechanism that permits it is recorded here, and is broader than this instance: `po_line_items` carries `qty`, a free-text `unit` and `cost_per_unit`, and **no pack-size column**, so `cost_per_unit` means cost per whatever the buyer typed. `store_products` has **no unit, pack-size or sellable-unit column at all.** `productUnitCostYuan` returns `store_products.unit_cost` **verbatim** for anything that is not a bundle — no division, no normalisation. **The chain from purchase to reader contains no conversion step and no assertion about what one unit is.**
 
 **Consequence for the cost reader: a single bad catalogue cost does not error.** It renders one product as catastrophically unprofitable and pulls the period's gross profit down with it. On order 1494 three products cost ¥14.15 together and the fourth claims ¥990.
 
