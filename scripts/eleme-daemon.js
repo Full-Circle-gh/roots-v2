@@ -90,6 +90,8 @@ const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hou
 const { packQty } = require('../lib/pack-units');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
+// Level-triggered backstop for this edge-triggered queue. See below.
+const { sweepStockDrift, ELEME: DRIFT_ELEME } = require('../lib/channel-drift-sweep');
 
 const QUEUE_CHECK_MS = 10_000; // stock push cadence
 const ORDER_POLL_MS  = 300_000; // per-store order read, jittered ±40% (matches meituan-daemon)
@@ -106,6 +108,16 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // Order polling has been failing this long before it pages anyone — roughly six
 // missed polls, so a proxy blip or a single browser relaunch stays quiet.
 const ORDER_DOWN_AFTER_MS = 30 * 60_000;
+// Stock-drift backstop. This queue is edge-triggered — one row per change — so a
+// push that dies terminally (processStockQueue's status='error' branch below)
+// leaves that product frozen on Eleme with nothing left to retry it: the drain
+// reads only pending rows, the orphan sweep only 'processing', and the admin
+// merely counts the errors. This sweep re-reads actual stock against what Eleme
+// last accepted (eleme_product_map.last_pushed_qty) and re-enqueues the gap, no
+// matter why the earlier push failed. Cheap — a couple of indexed reads, NO
+// BROWSER — and self-limiting: see the cool-down and cap in
+// lib/channel-drift-sweep. 30 min is well inside a trading day.
+const DRIFT_SWEEP_MS = 1_800_000; // 30 min
 
 function internalSecret() {
   return process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
@@ -711,6 +723,12 @@ function recoverOrphanedProcessing() {
 const ORPHAN_SWEEP_MS = 5 * 60_000; // matches the "stale after 5 min" threshold above
 let lastOrphanSweep = 0;
 
+// 0, not Date.now(): the sweep runs on the FIRST tick after start. A daemon that
+// has just come up after a crash or a deploy is exactly when the queue is most
+// likely to hold terminally-failed rows nothing else will ever look at, so making
+// it wait half an hour to find out would be backwards.
+let lastDriftSweep = 0;
+
 // ── Catalogue cache (feeds the admin's Eleme-name autocomplete) ─────────────
 // Eleme's live catalogue only exists inside THIS process's browser session —
 // the admin server can't fetch it without driving a second, competing login.
@@ -783,6 +801,27 @@ async function main() {
         nextOrderPollAt[code] = Date.now() + jitter(ORDER_POLL_MS, 0.4);
         await pollOrders(cfg);
       }
+    }
+
+    // Level-triggered backstop for the edge-triggered queue: re-enqueue anything
+    // whose stock no longer matches what Eleme last accepted. Runs BEFORE the push
+    // so recovered rows go out in this same cycle.
+    //
+    // Deliberately NOT gated on opening hours or on the channel close switch. It
+    // touches no browser, so there is no bot-footprint reason to sleep it, and the
+    // rows it writes are just pending work: processStockQueue's own
+    // channelClosedStores('eleme') gate holds them until the store reopens rather
+    // than dropping them. Gating the sweep instead would mean a store that closed
+    // mid-incident came back with its drift still unrecorded and unqueued.
+    //
+    // configs is already this daemon's own stores — getStoreConfigs applies
+    // ELEME_SKIP_STORES and requires a linked eleme_shops.shop_id.
+    if (Date.now() - lastDriftSweep >= DRIFT_SWEEP_MS) {
+      lastDriftSweep = Date.now();
+      sweepStockDrift(db, DRIFT_ELEME, {
+        storeCodes: configs.map(c => c.store_code),
+        log, logSync, sendOpsAlert, alerts,
+      });
     }
 
     await processStockQueue(configs);
