@@ -1037,7 +1037,7 @@
       <view wx:if="{{waitConfirmMakeDate}}" class="fb-modal-body" style="margin-top: 8rpx;">
         <text>{{ lang === 'cn' ? '我们将于 ' : 'We make the next fresh batch on ' }}</text>
         <text class="fb-modal-body-em">{{waitConfirmMakeDate}}</text>
-        <text>{{ lang === 'cn' ? ' 制作下一批新鲜商品。' : '.' }}</text>
+        <text>{{ lang === 'cn' ? ' 制作下一批新鲜商品，并于当天送达。' : ' and deliver it the same day.' }}</text>
       </view>
       <view class="fb-modal-body" style="margin-top: 8rpx;">
         <text class="muted">{{ lang === 'cn'
@@ -1155,12 +1155,16 @@
 
       <view class="bn-body">{{ lang === 'cn' ? localFreshNotice.message_cn : localFreshNotice.message_en }}</view>
 
-      <!-- Single dated step: the production day. -->
+      <!-- ONE dated step, not the courier modal's two: on the local run the batch
+           is made and delivered on the same day, so make_date and delivery_date
+           are the same date. Printing it twice either side of a dashed line
+           would read as a wait that isn't there. The arrival dot, because the
+           day means "you get it" to the customer, not "we cook it". -->
       <view class="bn-timeline">
         <view class="bn-tl-step">
-          <view class="bn-tl-dot bn-tl-dot--make"></view>
-          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '新鲜现做' : 'MADE FRESH' }}</view>
-          <view class="bn-tl-date f-bear">{{localFreshNotice.make_date}}</view>
+          <view class="bn-tl-dot bn-tl-dot--arrive"></view>
+          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '现做当天送达' : 'MADE &amp; DELIVERED' }}</view>
+          <view class="bn-tl-date f-bear">{{localFreshNotice.delivery_date}}</view>
         </view>
       </view>
 
