@@ -1328,6 +1328,41 @@
   letter-spacing: 0.04em;
 }
 .bn-cta:active { opacity: 0.85; }
+/* Freshness reminder under the dates ("enjoy within 48 hours"). The markup for
+   this has shipped since the batch modal was built; the rules never did, so it
+   rendered as unstyled body text running edge to edge with an invisible dot.
+   Sized below .bn-body so it reads as an aside, and boxed like .bn-timeline so
+   the two stacked blocks belong to each other. */
+.bn-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin: 0 40rpx 30rpx;
+  padding: 18rpx 20rpx;
+  background: rgba(217, 230, 179, 0.22);
+  border-radius: 14rpx;
+}
+.bn-tip-icon {
+  flex: 0 0 24rpx;
+  height: 24rpx;
+  margin-top: 4rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bn-tip-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #6d9c2a;
+}
+.bn-tip-text {
+  flex: 1;
+  font-size: calc(23rpx * var(--font-scale, 1));
+  line-height: 1.5;
+  color: #4a5a3a;
+  text-align: left;
+}
 
 /* "Guangzhou delivery only" variant — warm amber/clay wash instead of lime. */
 .bn-hero--warn   { background: linear-gradient(135deg, #f6e6c8 0%, #f0d49b 100%); }

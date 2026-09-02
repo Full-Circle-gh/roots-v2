@@ -52,7 +52,7 @@ const { sendOpsAlert } = require('../lib/ops-alert');
 const { latchStore } = require('../lib/alert-latch');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
-const { storeHours, within } = require('../lib/store-hours');
+const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hours');
 const { packQty } = require('../lib/pack-units');
 
 // Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
@@ -97,6 +97,13 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // (OPEN_GRACE_MIN) widens the window so trailing/pre-orders still import and the
 // on/off edge doesn't land exactly on the hour (also more human-looking).
 const OPEN_GRACE_MIN = 15;
+// How early sync starts relative to opening, when the store has no explicit
+// "Sync starts · 同步开始" time on its row. Unset here → the shared default in
+// lib/store-hours (2 h, itself overridable deployment-wide with
+// SYNC_PREOPEN_LEAD_MIN). This is what stops the morning's PRE-ORDERS being
+// served stock that last moved yesterday: a shop opening at 10:00 has its
+// Meituan stock live from 08:00, hours before the first pre-order is picked.
+const PREOPEN_LEAD_MIN = envLeadMin(process.env.MEITUAN_PREOPEN_LEAD_MIN);
 // Per-store opening hours (minutes since midnight, Asia/Shanghai). The real
 // hours live on the store's own row — retail_stores.open_time / close_time, the
 // "Opens · 开门 / Closes · 关门" fields in the admin's store editor — and are read
@@ -131,15 +138,23 @@ const FORCE_OPEN_UNTIL = Number(process.env.MEITUAN_FORCE_OPEN_MINUTES) > 0
   ? Date.now() + Number(process.env.MEITUAN_FORCE_OPEN_MINUTES) * 60_000
   : 0;
 
-// True when the store is within its (grace-padded) Meituan opening window. Stores
-// with no configured hours default to always-open so a new store is never silently
-// muted.
+// True when the store is inside its Meituan SYNC window — its opening hours,
+// widened at the front by the store's own "Sync starts · 同步开始" time (or the
+// default pre-open lead) so stock is already current for the pre-orders placed
+// before the doors open. Stores with no configured hours default to always-open
+// so a new store is never silently muted.
+//
+// The name is kept because every call site asks the same question it always did
+// ("may this daemon work on this store now"); only the front edge moved.
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
   // Re-read every call: storeHours() serves its own cache, so this is cheap and
   // picks up an admin edit within CACHE_MS without a restart.
   const hours = storeHours(storeCode) || LEGACY_STORE_HOURS[storeCode] || null;
-  return within(hours, { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+  // openGraceMin: 0 — syncWindow has already folded the front grace into its
+  // start, so passing it again would begin sync earlier than asked.
+  const win = syncWindow(hours, { leadMin: PREOPEN_LEAD_MIN, graceMin: OPEN_GRACE_MIN });
+  return within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 
 // Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each

@@ -3225,6 +3225,13 @@ addColumn('retail_stores', 'close_time', 'TEXT');
 // checkout validates a pickup time against the store's LOCAL clock rather than
 // the UTC+8 host. NULL = fall back to host-local (unchanged for China stores).
 addColumn('retail_stores', 'timezone', 'TEXT');
+// When the channel daemons (Meituan 外卖/闪购, Eleme) should START syncing this
+// store each day ('HH:MM' local, NULL = a default lead before open_time — see
+// lib/store-hours.js). Deliberately separate from open_time: customers place
+// PRE-ORDERS hours before the doors open, and stock that only starts syncing
+// minutes before opening is stale for every one of them. Tenants keep different
+// hours, so this is per store rather than a hardcoded clock time.
+addColumn('retail_stores', 'sync_start_time', 'TEXT');
 // Per-store low-stock threshold (units). A product at this store is flagged
 // "low" when its shelf qty is >0 and at/under this number. NULL = fall back to
 // the tenant-wide default (storefront_config 'inventory.lowStockThreshold', 5).

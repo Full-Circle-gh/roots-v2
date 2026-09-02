@@ -86,7 +86,7 @@ const { channelClosedStores } = require('../lib/inventory');
 // itself a bot tell, so order polling sleeps when the shop is shut. Stores with no
 // hours on file come back null → treated as always-open, so a new store is never
 // silently muted.
-const { storeHours, within } = require('../lib/store-hours');
+const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hours');
 const { packQty } = require('../lib/pack-units');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
@@ -96,6 +96,11 @@ const ORDER_POLL_MS  = 300_000; // per-store order read, jittered ±40% (matches
 const ORDER_POLL_ON  = process.env.ELEME_ORDER_POLL !== '0';
 const TIER1_DETAIL   = process.env.ELEME_ORDER_TIER1 !== '0';
 const OPEN_GRACE_MIN = 30;      // poll a little either side of opening hours
+// Sync starts this far before opening when the store has no explicit
+// "Sync starts · 同步开始" time on its row. Unset → the shared default in
+// lib/store-hours (2 h). Eleme pre-orders are placed well before the doors open,
+// and stock they were quoted from yesterday's numbers is an oversell.
+const PREOPEN_LEAD_MIN = envLeadMin(process.env.ELEME_PREOPEN_LEAD_MIN);
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // Order polling has been failing this long before it pages anyone — roughly six
@@ -114,9 +119,14 @@ const FORCE_OPEN_UNTIL = Number(process.env.ELEME_FORCE_OPEN_MINUTES) > 0
   ? Date.now() + Number(process.env.ELEME_FORCE_OPEN_MINUTES) * 60_000
   : 0;
 
+// Inside the store's SYNC window — its opening hours widened at the front by the
+// store's own "Sync starts · 同步开始" time (or the default pre-open lead), so the
+// morning's pre-orders are quoted off live stock. openGraceMin: 0 because
+// syncWindow has already folded the front grace into its start.
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
-  return within(storeHours(storeCode), { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+  const win = syncWindow(storeHours(storeCode), { leadMin: PREOPEN_LEAD_MIN, graceMin: OPEN_GRACE_MIN });
+  return within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 
 // Bounded JSON for the columns we archive — a raw order payload is unbounded in

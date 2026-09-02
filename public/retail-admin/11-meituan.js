@@ -264,7 +264,13 @@
     // store's own switch. Replaces the separate notice — the blocked state and
     // the control that answers it belong on the same row.
     const lines = document.getElementById('mt-storelines');
-    if (lines) {
+    // The store lines now carry an editable field (Sync from), and this whole
+    // block is repainted by a 12s poll. Repainting the input the operator is
+    // typing into would drop the half-typed time and the caret with it, so a
+    // focused field inside the block holds the repaint until they leave it.
+    const editing = !!lines && !!document.activeElement
+      && lines.contains(document.activeElement);
+    if (lines && !editing) {
       lines.innerHTML = rows.map(st => {
         const who = mtStoreName(st.code, cn) || st.name;
         const off = st.enabled === false;
@@ -288,6 +294,7 @@
         return '<div class="mt-storeline' + cls + '">' +
             '<span class="dot"></span><span class="nm">' + esc(who) + '</span>' +
             '<span class="st">' + esc(state) + '</span>' +
+            mtSyncStartCtl(st.code) +
             (st.blocked && !off ? mtFixAction(st.code) : '') +
           '</div>';
       }).join('') +
@@ -303,6 +310,84 @@
         '<div class="s">' + esc(sub) + '</div>' + (extra || '') + '</div>';
     }
   }
+
+  // ── When this store starts syncing each day ───────────────────────────────
+  // Stock only moves while the daemon considers the store inside its sync
+  // window, and that window used to be the opening hours. Customers PRE-ORDER
+  // hours before a shop opens, so a 10:00 store whose stock woke at 09:45 quoted
+  // yesterday's numbers to every pre-order of the morning — and an oversell
+  // surfaces as a refund, never as an error anyone on this page would see.
+  //
+  // The time lives on the store's own row (retail_stores.sync_start_time), the
+  // same field the store editor writes, because no single clock time fits every
+  // tenant. Blank keeps the default lead before opening; the hint spells out
+  // what blank resolves to today so it is never a guess.
+  const MT_SYNC_LEAD_MIN = 120; // mirrors DEFAULT_PREOPEN_LEAD_MIN in lib/store-hours.js
+
+  function mtHm(mins) {
+    const m = ((mins % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  }
+  function mtParseHm(v) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? '' : v).trim());
+    if (!m) return null;
+    const mins = (+m[1]) * 60 + (+m[2]);
+    return mins >= 0 && mins < 1440 ? mins : null;
+  }
+  // What the daemon will actually use for this store. Mirrors syncWindow() in
+  // lib/store-hours.js, including its clamp: a sync start later than opening is
+  // read as opening, so a mistyped 14:00 can never mute the morning. null when
+  // the store has no hours on file — the daemon treats those as always-on, so
+  // there is no start time to promise.
+  function mtEffectiveSyncStart(store) {
+    const explicit = mtParseHm(store && store.syncStartTime);
+    const open = mtParseHm(store && store.openTime);
+    if (explicit != null) return mtHm(open != null ? Math.min(explicit, open) : explicit);
+    if (open == null) return null;
+    return mtHm(Math.max(0, open - MT_SYNC_LEAD_MIN));
+  }
+
+  function mtSyncStartCtl(code) {
+    const st = _stores.find(s => s.code === code);
+    if (!st || !st.id) return '';   // stores not loaded yet — the next paint has it
+    const eff = mtEffectiveSyncStart(st);
+    // The hint says what a BLANK field resolves to. With a time in the box it
+    // would only repeat the box — the same fact twice, and the second copy is
+    // what pushed the row wide enough to clip the first.
+    const hint = st.syncStartTime ? ''
+      : eff ? cuT('defaults to ' + eff, '默认 ' + eff)
+            : cuT('no opening hours set — syncs all day', '未设营业时间 — 全天同步');
+    const tip = cuT(
+      'When this store starts syncing each day. Customers pre-order before you open, so set it earlier than opening. Blank = 2 h before opening.',
+      '每天从几点开始同步该门店。顾客会在开门前下预订单,建议设置在开门之前。留空 = 开门前 2 小时。');
+    return '<label class="mt-syncstart" title="' + esc(tip) + '">' +
+      '<span class="lb">' + esc(cuT('Sync from', '同步开始')) + '</span>' +
+      '<input type="time" value="' + esc(st.syncStartTime || '') + '"' +
+      ' onchange="mtSetSyncStart(\'' + esc(code) + '\', this.value)">' +
+      (hint ? '<span class="hint">' + esc(hint) + '</span>' : '') +
+      '</label>';
+  }
+
+  // Writes the store row itself — so 外卖, 闪购 and 饿了么 all pick the new start up
+  // within their hours cache (10 min), with no restart and no per-channel copy
+  // of the setting to keep in step.
+  window.mtSetSyncStart = async function (code, value) {
+    const st = _stores.find(s => s.code === code);
+    if (!st || !st.id) return;
+    const prev = st.syncStartTime || null;
+    st.syncStartTime = value || null;   // optimistic: the hint updates with it
+    try {
+      await api('/api/retail-admin/stores/' + st.id, {
+        method: 'PATCH', body: { sync_start_time: value || null },
+      });
+      const eff = mtEffectiveSyncStart(st);
+      toast(cuT('Syncing this store from ' + (eff || '—'), '该门店 ' + (eff || '—') + ' 起同步'), 'success');
+    } catch (e) {
+      st.syncStartTime = prev;
+      toast(cuT('Could not save the sync start: ', '同步开始时间保存失败:') + e.message, 'error');
+    }
+    mtLoadStatus();
+  };
 
   // ── The catalogue: how old the names are, and how to read them again ──────
   // Until now the ONLY way to refresh meituan_listings was to run Match names,

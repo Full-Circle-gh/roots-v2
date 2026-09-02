@@ -20,6 +20,9 @@ const geocode = require('../lib/geocode');
 // Shared pin-write statement + provenance mapping, so a geocoded pin is never
 // stored without a record of where it came from (see lib/address-pin).
 const addressPin = require('../lib/address-pin');
+// The daemons' own 'HH:MM' parser — so a sync-start time this route accepts is,
+// by construction, one lib/store-hours can read back.
+const { parseHm } = require('../lib/store-hours');
 const { requireAuth, logActivity } = require('../middleware/auth');
 
 // Background geocode for a store row. Called after create + update when
@@ -76,6 +79,18 @@ function coerceLowStockThreshold(raw) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+// Normalise the store's daily sync start ("Sync starts · 同步开始") from a request
+// body: blank/absent/unparseable → null, meaning the channel daemons fall back to
+// the default lead before opening (lib/store-hours.js). Otherwise a zero-padded
+// 'HH:MM', so what the daemons parse is exactly what the admin saw. Validated
+// through the daemons' OWN parser, so a value this route accepts is one they read.
+function coerceSyncStartTime(raw) {
+  if (raw == null || raw === '') return null;
+  const mins = parseHm(raw);
+  if (mins == null) return null;
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
 // ─── Stores ─────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/stores', requireInventoryRead, (req, res) => {
   const stores = inventory.listStores({ activeOnly: false });
@@ -91,8 +106,8 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
   const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
                                meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time, timezone,
-                               low_stock_threshold)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               sync_start_time, low_stock_threshold)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.code.trim(),
     b.name_en || null, b.name_cn || null,
@@ -106,6 +121,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
     b.open_time || null, b.close_time || null,
     b.timezone || null,
+    coerceSyncStartTime(b.sync_start_time),
     coerceLowStockThreshold(b.low_stock_threshold),
   );
   // Background geocode the new store unless the admin provided coords.
@@ -127,7 +143,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   const id = parseInt(req.params.id, 10);
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone','low_stock_threshold'];
+  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone','sync_start_time','low_stock_threshold'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
@@ -137,6 +153,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
       if (k === 'is_active' || k === 'pickup_enabled') v = v ? 1 : 0;
       if (k === 'sort_order') v = Number.isFinite(v) ? v : 0;
       if (k === 'low_stock_threshold') v = coerceLowStockThreshold(v);
+      if (k === 'sync_start_time') v = coerceSyncStartTime(v);
       vals.push(v);
     }
   }

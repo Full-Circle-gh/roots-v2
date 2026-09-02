@@ -80,6 +80,8 @@ One row on 2026-08-27 09:55: no Meituan listing has the exact name '藜麦沙拉
 
 `poll_paused` 07:34 'outside opening hours', `poll_resumed` 09:46 'within opening hours', pushes flowing 09:45–09:57. A 'not synced' dashboard reading before opening is the daemon working.
 
+Superseded in part, 2026-09-02: the pause is still correct, but its edge was in the wrong place. Waimai customers PRE-ORDER before a shop opens, so stock that first moved at 09:45 was quoting the previous day's numbers to every pre-order taken that morning — an oversell that surfaces as a refund, not as anything on this dashboard. The daemons now gate on a SYNC window rather than the opening hours: `retail_stores.sync_start_time` ("Sync starts · 同步开始", set per store on the Meituan and Eleme tabs), defaulting to two hours before opening — 08:00 for a 10:00 shop. See `lib/store-hours.js` `syncWindow()`; the 04:00 half of this finding is unchanged, and no store syncs round the clock.
+
 ## Three operator-blocking errors in the week
 
 闪购 Chrome not logged in (3 occurrences, a human must log in on the box), and 验证中心 captcha challenges (6). Same class as the gzgrocery ERP session expiry that ran silently for a month.

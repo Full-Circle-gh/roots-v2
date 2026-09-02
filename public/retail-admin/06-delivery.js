@@ -260,6 +260,14 @@ async function loadDeliveryZones() {
     if ($('#batch-msg-cn'))   $('#batch-msg-cn').value   = batch.message_cn || '';
     if ($('#batch-tip-en'))   $('#batch-tip-en').value   = batch.tip_en || '';
     if ($('#batch-tip-cn'))   $('#batch-tip-cn').value   = batch.tip_cn || '';
+    // Guangzhou variant — the in-city shortage notice, which names the batch day
+    // only (there is no shipping leg to promise). Blank ⇒ built-in wording.
+    if ($('#batch-local-kicker-en')) $('#batch-local-kicker-en').value = batch.local_kicker_en || '';
+    if ($('#batch-local-kicker-cn')) $('#batch-local-kicker-cn').value = batch.local_kicker_cn || '';
+    if ($('#batch-local-title-en'))  $('#batch-local-title-en').value  = batch.local_title_en || '';
+    if ($('#batch-local-title-cn'))  $('#batch-local-title-cn').value  = batch.local_title_cn || '';
+    if ($('#batch-local-msg-en'))    $('#batch-local-msg-en').value    = batch.local_message_en || '';
+    if ($('#batch-local-msg-cn'))    $('#batch-local-msg-cn').value    = batch.local_message_cn || '';
     const bcb = $('#batch-enabled');
     if (bcb && !bcb._wired) {
       bcb._wired = true;
@@ -387,6 +395,14 @@ async function saveBatchSchedule() {
       message_cn: val('#batch-msg-cn'),
       tip_en: val('#batch-tip-en'),
       tip_cn: val('#batch-tip-cn'),
+      // Saved in the same object as the fields above — this PUT replaces
+      // batch.schedule wholesale, so anything omitted here is dropped.
+      local_kicker_en:  val('#batch-local-kicker-en'),
+      local_kicker_cn:  val('#batch-local-kicker-cn'),
+      local_title_en:   val('#batch-local-title-en'),
+      local_title_cn:   val('#batch-local-title-cn'),
+      local_message_en: val('#batch-local-msg-en'),
+      local_message_cn: val('#batch-local-msg-cn'),
     },
   };
   try {

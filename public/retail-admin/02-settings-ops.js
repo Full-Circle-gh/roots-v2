@@ -256,6 +256,7 @@ function _opsStoreForm(s) {
           <div style="flex:1"><label class="field-label">Opens · 开门</label><input type="time" id="osf_open" value="${val(s?.open_time)}"></div>
           <div style="flex:1"><label class="field-label">Closes · 关门</label><input type="time" id="osf_close" value="${val(s?.close_time)}"></div>
         </div>
+        <div><label class="field-label">Channel sync starts · 渠道同步开始 <span style="color:var(--text-3);font-weight:400">— when Meituan / Eleme stock starts syncing each day. Customers pre-order before you open, so set this earlier than opening. Blank = 2 h before. · 美团/饿了么每天从此时开始同步库存;顾客会提前下单,建议早于开门时间。留空 = 开门前 2 小时。</span></label><input type="time" id="osf_sync_start" value="${val(s?.sync_start_time)}"></div>
         <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
         <div><label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag this store's items low at this many units. Blank = store-wide default. · 门店商品降到此数量时提醒;留空用全店默认。</span></label><input type="number" min="0" id="osf_low_stock" value="${s?.low_stock_threshold ?? ''}" placeholder="Store default · 全店默认"></div>
         <div style="display:flex;align-items:flex-end;padding-bottom:6px">
@@ -289,6 +290,8 @@ async function _opsStoreSave(id) {
     sort_order: +document.getElementById('osf_sort').value || 0,
     pickup_enabled: document.getElementById('osf_pickup').checked,
     open_time: v('osf_open') || null, close_time: v('osf_close') || null,
+    // Blank clears it → the daemons fall back to their default pre-open lead.
+    sync_start_time: v('osf_sync_start') || null,
     // Blank clears the override → store falls back to the tenant-wide default.
     low_stock_threshold: v('osf_low_stock') === '' ? null : (parseInt(v('osf_low_stock'), 10) || 0),
   };
