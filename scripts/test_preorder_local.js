@@ -644,11 +644,22 @@ console.log('\nweb storefront — stockState / slStock');
     // The + renders only when neither flag is set (slRowHtml / slCardHtml).
     assert.strictEqual(!r.outOfStock && !r.nextBatch, false);
   });
-  it('same-city: a batch meal goes dead too, no NEXT BATCH', () => {
+  // An UNDATED batch meal still goes dead on the run: the flag alone was never
+  // the permission — the kitchen date is. A tenant with no batch.schedule ships
+  // no date on any row, so this is also the whole-catalog behaviour there.
+  it('same-city: an undated batch meal goes dead too, no NEXT BATCH', () => {
     signIn(true);
     const r = row({ ...BACKORDER, is_batch_made: 1 });
     assert.strictEqual(r.nextBatch, false);
     assert.strictEqual(r.outOfStock, true);
+  });
+  it('same-city: a DATED fresh meal is offered — the run stopped being a no', () => {
+    signIn(true);
+    const r = row({ ...BACKORDER, is_batch_made: 1, local_fresh_date: '2026-09-04' });
+    assert.strictEqual(r.nextBatch, true, 'NEXT BATCH, not a dead pill');
+    assert.strictEqual(r.outOfStock, false, 'and the + button lives');
+    // A grocery row is untouched by the date rule — it never carries one.
+    assert.strictEqual(row(BACKORDER).outOfStock, true);
   });
   it('a collapsed variant card follows its sizes', () => {
     const members = [{ ...BACKORDER, id: 71 }, { ...BACKORDER, id: 72 }];
@@ -658,6 +669,12 @@ console.log('\nweb storefront — stockState / slStock');
     signIn(true);
     assert.strictEqual(row(card).nextBatch, false);
     assert.strictEqual(row(card).outOfStock, true);
+    // …and one dated fresh size brings the whole group back, on the run.
+    const fresh = [{ ...BACKORDER, id: 71, is_batch_made: 1, local_fresh_date: '2026-09-04' },
+                   { ...BACKORDER, id: 72, is_batch_made: 1, local_fresh_date: '2026-09-04' }];
+    const freshCard = { ...fresh[0], _members: fresh };
+    assert.strictEqual(row(freshCard).nextBatch, true);
+    assert.strictEqual(row(freshCard).outOfStock, false);
   });
   it('in-stock and strict sold-out rows read the same in both cities', () => {
     for (const onLocalRun of [false, true]) {
