@@ -5212,9 +5212,18 @@ function renderOrderTotalBanner(o) {
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
     </div>
-    ${orderMoneyGapBand(o)}
-    ${renderChannelMoneyPanel(o)}`;
+    ${orderMoneyGapBand(o)}`;
 }
+// NO renderChannelMoneyPanel(o) here, deliberately. This banner is reached only
+// from renderOpenOrder's main body, and renderOpenOrder returns at its top —
+// `return renderReadonlyOrder(o)` — for every channel ordIsReadonlyChannel()
+// names: meituan, eleme, gzgrocery. The panel answers only for meituan and
+// eleme. Those two sets never overlap here, so a call on this line could not
+// emit anything for any order: the channels that reach it are exactly the
+// channels the panel refuses. It shipped as a second mount and was dead the
+// day it landed. The one live mount is in renderReadonlyOrder, beside the
+// Total block. Re-adding it here is not how a mirrored order gets a
+// settlement panel — that order never arrives in this function.
 
 // Channel money breakdown — Meituan and Eleme both take a commission on what
 // the customer paid, and both reduce to the same two steps:
