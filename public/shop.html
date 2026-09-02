@@ -4767,12 +4767,15 @@ function slToRows(products){
       pricePrefix=(minP>0&&!allSame)?(L==='cn'?'起':'from'):'';
       const allOut=members.every(m=>m.stock!=null&&Number(m.stock)<=0);
       const anyBack=members.some(m=>oosBackorder(m));
-      nextBatch=allOut&&anyBack&&!onLocalRun;outOfStock=allOut&&!nextBatch;
+      // A dated fresh size keeps the group orderable on the run — same rule the
+      // desktop card above applies, and the mini app's _stockState.
+      const anyFresh=members.some(m=>!!m.local_fresh_date);
+      nextBatch=allOut&&anyBack&&(!onLocalRun||anyFresh);outOfStock=allOut&&!nextBatch;
       soldUnits=members.reduce((s,m)=>s+(Number(m.units_sold)||0),0);
     }else{
       const sn=p.stock==null?null:Number(p.stock);
       const out=sn!=null&&sn<=0;
-      nextBatch=out&&oosBackorder(p)&&!onLocalRun;outOfStock=out&&!nextBatch;
+      nextBatch=out&&oosBackorder(p)&&(!onLocalRun||!!p.local_fresh_date);outOfStock=out&&!nextBatch;
       soldUnits=Number(p.units_sold||p.sold_count||0);
       price=eff>0?slMoney(eff):'—';
       const cmp=Number(p.compare_at_price)||0;
