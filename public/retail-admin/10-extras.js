@@ -795,6 +795,9 @@ function afxRow(r) {
   const first = !ordered ? `<span class="afx-dim">${afT('Not yet', '尚未下单')}</span>`
     : when ? `<span class="afx-num">${escapeHtml(when)}</span>`
     : `<span class="afx-dim">${afT('Date not recorded', '未记录日期')}</span>`;
+  const joined = tdWhen(r.joined_at, 'date') || '';
+  const date = joined ? `<span class="afx-num">${escapeHtml(joined)}</span>`
+    : `<span class="afx-dim">${afT('Date not recorded', '未记录日期')}</span>`;
   // reward_amount is what the row is HOLDING IN RESERVE, not what was paid —
   // it is set when the referral is created and survives whatever happens next.
   // Only an 'ordered' row ever moved money, so every other row earned ¥0.
@@ -809,6 +812,7 @@ function afxRow(r) {
       <td><a data-afx="cust:${r.invitee_id}">${friend}</a></td>
       <td style="vertical-align: top">${afxStatusCell(r)}</td>
       <td><span class="afx-dim">${escapeHtml(r.code_used || '')}</span></td>
+      <td>${date}</td>
       <td>${first}</td>
       <td class="num">${earned}</td>
       <td class="act">${afxActionCell(r)}</td>
@@ -842,7 +846,7 @@ function afxRowConfirm(r) {
          <button class="afx-btn ghost sm" data-afx="row-cancel" ${busy ? 'disabled' : ''}>${afT('Cancel', '取消')}</button>
        </div>`;
   const err = c.err ? `<p style="color:var(--td-brick-ink);margin-top:16px;margin-bottom:0">${escapeHtml(c.err)}</p>` : '';
-  return `<tr><td colspan="7" class="afx-rowconfirm"><div class="in">${body}${err}</div></td></tr>`;
+  return `<tr><td colspan="8" class="afx-rowconfirm"><div class="in">${body}${err}</div></td></tr>`;
 }
 
 function afxLedgerBody() {
@@ -889,6 +893,7 @@ function afxLedgerBody() {
         <th>${afT('Friend', '好友')}</th>
         <th>${afT('Status', '状态')}</th>
         <th>${afT('Code', '邀请码')}</th>
+        <th>${afT('Date', '日期')}</th>
         <th>${afT('First order', '首单')}</th>
         <th class="num">${afT('Earned', '已获奖励')}</th>
         <th class="act"></th>
