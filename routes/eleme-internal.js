@@ -365,12 +365,36 @@ router.post('/ingest-order', (req, res) => {
     // now would drift the count low permanently and then under-report that number to
     // every other channel on the next push. Record the order, skip the deduction.
     const bornVoid = internalStatus === 'cancelled' || internalStatus === 'refunded';
-    // Packaging and delivery fees are deliberately NOT written to
-    // packing_fee/shipping_fee: on our own orders those are ADDENDS to subtotal,
-    // and this subtotal is the goods value the lines agree on, so writing the
-    // fees beside it would re-add money the platform total already contains.
-    // They are kept intact in eleme_order_import.detail_json.
+    // 打包费 and 配送费, into the two columns Meituan already fills. They are
+    // ADDENDS to `subtotal`, and that is exactly why they belong here: since
+    // 67fc00a subtotal is itemsTotal — the GOODS the priced lines agree on, with
+    // no packaging and no delivery inside it — so writing the fees beside it adds
+    // money the row was missing rather than re-adding money it already had.
+    // Eleme's own payload does the same addition, to the cent, on both live
+    // orders we hold:
+    //   EL20260901417897  267 + 1.5 + 18 - 17.5 discount = 269 = customerPaidInfo.total
+    //   EL20260831339491  135 + 1.5 + 18 - 13.5 discount = 141 = customerPaidInfo.total
+    // (An earlier comment here declined the write on the opposite premise — that
+    // subtotal held the platform total. It was rewritten by 67fc00a, the very
+    // commit that stopped that being true, and kept a conclusion its own new
+    // premise contradicted.)
     //
+    // NOT the goods figure, and neither is a candidate for one:
+    //   • settlementInfo.subTotalFeeInfo.total is not a subtotal despite the
+    //     name — it equals customerPaidInfo.total.
+    //   • foodInfo.groups[].items[].total already carries PER-FOOD packaging
+    //     (Eleme prices 打包费 per item as well as per order, see
+    //     lib/eleme-browser.js), so the item totals are not packaging-free.
+    // Our stored line_total is the packaging-free figure, and it is what subtotal
+    // sums; the per-ORDER packageFee below is what is missing from it.
+    //
+    // COALESCE(?, 0) like Meituan: a platform that sent no figure leaves the
+    // column at the 0 the schema default gave it anyway. 0 is the honest reading
+    // for a fee — "no packaging was charged" — where it would not be for the
+    // commission below.
+    const packingFee  = fmoney(order.packagingFee);
+    const shippingFee = fmoney(order.deliveryFee);
+
     // The two that DO get columns: what Eleme keeps (服务费) and what actually
     // lands with us (商家实收). Same pair, same meaning, same columns Meituan
     // already fills — a reader asking "what did this channel cost us" now gets
@@ -387,14 +411,17 @@ router.post('/ingest-order', (req, res) => {
           store_id, channel, fulfillment_type, placed_at, paid_at,
           channel_status, channel_status_at, channel_eta, channel_preorder_at,
           customer_note, needs_cutlery,
+          shipping_fee, packing_fee,
           channel_commission, channel_settle_amount
         ) VALUES (?, ?, 'eleme', ?, ?, ?, 'eleme', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
                   ?, ?,
+                  COALESCE(?, 0), COALESCE(?, 0),
                   ?, ?)
       `).run(orderNo, internalStatus, subtotal, total, storeId, placedAt, placedAt,
              channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
+             shippingFee, packingFee,
              commission, settleAmount);
       const oid = r.lastInsertRowid;
       // channel_stock_restored means exactly "this order's stock is NOT currently
