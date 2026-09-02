@@ -5207,7 +5207,84 @@ function renderOrderTotalBanner(o) {
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
     </div>
-    ${orderMoneyGapBand(o)}`;
+    ${orderMoneyGapBand(o)}
+    ${renderChannelMoneyPanel(o)}`;
+}
+
+// Channel money breakdown — Meituan and Eleme both take a commission on what
+// the customer paid, and both reduce to the same two steps:
+//   items + packaging + delivery − merchant discount = customer paid (o.total)
+//   customer paid − commission                       = estimated income
+// gzgrocery is a wholesale ledger channel with no per-order commission, and a
+// non-channel order (wechat/manual/pickup) has none either — both fall through
+// to the empty string, so the panel adds nothing where there is nothing to add.
+//
+// RECONCILE, DON'T TRUST COLUMN PRESENCE. packing_fee/shipping_fee both default
+// to 0, so "the column has a value" is true whether a fee was genuinely zero or
+// was never captured (true of every Eleme row mirrored before PR #200 taught
+// ingest to write them). The arithmetic itself is the test: if the components
+// on the order don't add up to the order's own total, the breakdown is
+// incomplete and says so — it never prints a derived commission/income figure
+// that would silently disagree with the channel.
+//
+// channel_discount is written by BOTH ingests now — Meituan's always has, and
+// Eleme's does since PR #209, out of settlementInfo.merchantActivityInfo.total.
+// (This paragraph said the opposite while that was still true; #209 is the
+// change that stopped it being true, so it is corrected here rather than left
+// to mislead the next reader of a panel it describes.)
+//
+// The incomplete state it described has NOT gone away, and the arithmetic above
+// is still what decides it. An Eleme order mirrored before #209 has no discount
+// recorded and cannot reconcile until the backfill runs
+// (scripts/repair_eleme_ingest_backfill.js), and either channel leaves the
+// column NULL when the platform never named a promotion. Neither is a number
+// this read-only panel may invent — it shows the rows it has and says the
+// breakdown is incomplete.
+function channelMoneyBreakdown(o) {
+  const items      = Number(o.subtotal) || 0;
+  const packaging  = Number(o.packing_fee) || 0;
+  const delivery   = Number(o.shipping_fee) || 0;
+  const discount   = Number(o.channel_discount) || 0;
+  const total      = Number(o.total) || 0;
+  const hasCommission = o.channel_commission != null;
+  const hasSettle     = o.channel_settle_amount != null;
+  const reconciled = Math.abs((items + packaging + delivery - discount) - total) < 0.01;
+  return {
+    items, packaging, delivery, discount,
+    commission: hasCommission ? Number(o.channel_commission) : null,
+    settle:     hasSettle ? Number(o.channel_settle_amount) : null,
+    complete:   reconciled && hasCommission && hasSettle,
+  };
+}
+function renderChannelMoneyPanel(o) {
+  const c = String(o.channel || '').toLowerCase();
+  if (c !== 'meituan' && c !== 'eleme') return '';
+  const g = channelMoneyBreakdown(o);
+  const rows = [];
+  if (g.items > 0)     rows.push([cuT('subtotal', '小计'), g.items]);
+  if (g.packaging > 0) rows.push([cuT('packing', '打包费'), g.packaging]);
+  if (g.delivery > 0)  rows.push([cuT('Customer delivery fee', '顾客配送费'), g.delivery]);
+  if (g.discount > 0)  rows.push([cuT('Merchant discount', '商家对顾客的活动补贴'), -g.discount]);
+  if (!rows.length && g.commission == null && g.settle == null) return '';
+
+  const rowHtml = ([label, v]) => `
+      <div class="cmp-row"><span>${label}</span><span class="cmp-v">${v < 0 ? '−' : ''}${acMoney(Math.abs(v))}</span></div>`;
+  const commissionRow = (g.complete && g.commission)
+    ? `<div class="cmp-row cmp-deduct"><span>${cuT('Commission', '佣金')}</span><span class="cmp-v">−${acMoney(Math.abs(g.commission))}</span></div>`
+    : '';
+  const netRow = (g.complete && g.settle)
+    ? `<div class="cmp-row cmp-net"><span>${cuT('Estimated income', '预计收入')}</span><span class="cmp-v">${acMoney(g.settle)}</span></div>`
+    : '';
+  const note = g.complete ? '' : `<div class="cmp-note">${cuT('Breakdown incomplete', '明细不完整')}</div>`;
+
+  return `
+    <section class="cmp">
+      <h3 class="cmp-h">${cuT('Settlement', '结算明细')}</h3>
+      ${rows.map(rowHtml).join('')}
+      ${commissionRow}
+      ${netRow}
+      ${note}
+    </section>`;
 }
 
 // One line of the VIEW-ONLY manifest (Meituan / gzgrocery). Product name + its
@@ -5368,6 +5445,8 @@ function renderReadonlyOrder(o) {
           </div>`;
         })()}
       </div>
+
+      ${renderChannelMoneyPanel(o)}
 
       <div>
         <div class="kicker" style="margin: 14px 0 6px;">Items · 商品</div>
