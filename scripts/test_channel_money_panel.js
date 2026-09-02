@@ -225,5 +225,115 @@ it('never prints a commission rate or a second "estimated" marker', () => {
     'no second "estimated" caveat beyond the one word already in the locked label');
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// ── 8. MOUNTED GEOMETRY — every check above passed for the entire time this
+// panel was invisible in production. §1.22 (docs/tacet-desktop-patterns.md):
+// PR #206 shipped `<section class="cmp">`, retail-admin.css:940's unscoped
+// `section { display: none; }` ate it, and every one of the 13 checks above
+// still passed — they all assert on the HTML *string* renderChannelMoneyPanel
+// returns, and that string was always correct. None of them mount it. Run
+// 1596 recorded the identical failure shape in the Finance presentation
+// suite: geometric assertions measuring a display:none element, comparing
+// zero to zero, two checks passing on nothing.
+//
+// So this drops the real renderChannelMoneyPanel() output into the real
+// `.drawer-body > .order-card` chain (retail-admin.html:12354-12373) under
+// the real stylesheet in headless Chromium, and requires the panel to
+// occupy actual pixels. And it proves the assertion is not vacuous the same
+// way the bug was found: by re-tagging the identical fragment `<section>`
+// (what PR #206 shipped) and requiring THAT to compute a zero box — if this
+// check would not have caught the original bug, it is not this check.
+(async () => {
+  let browser;
+  try {
+    const { chromium } = require('playwright');
+    const PW_CHROME = '/opt/pw-browsers/chromium';
+    const launchOpts = () => {
+      try { if (fs.existsSync(PW_CHROME)) return { executablePath: fs.realpathSync(PW_CHROME) }; }
+      catch (e) { /* fall through to Playwright's own resolution */ }
+      return {};
+    };
+    browser = await chromium.launch(launchOpts());
+  } catch (e) {
+    console.log('\n  — skipped mounted-geometry check: no Chromium available in this environment.');
+    console.log(`\n${pass} passed, ${fail} failed`);
+    process.exit(fail ? 1 : 0);
+    return;
+  }
+
+  try {
+    const CSS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
+    const sb = makeSandbox('en');
+    const o = {
+      channel: 'meituan', subtotal: 228.50, packing_fee: 1.50, shipping_fee: 15.00,
+      channel_discount: 12.00, total: 233.00,
+      channel_commission: 22.36, channel_settle_amount: 210.64,
+    };
+    // Read straight from the shipped renderer — same PANEL_SRC every test
+    // above runs against. If the shipped tag ever regresses back to
+    // `<section>`, THIS is the assertion that says so, by name, before the
+    // geometry check below even runs.
+    const shippedHtml = sb.renderChannelMoneyPanel(o);
+    it('sanity: the shipped panel root is a <div>, not a <section>', () => {
+      assert.ok(shippedHtml.trim().startsWith('<div class="cmp">'),
+        `expected the fragment to open with <div class="cmp">, got: ${shippedHtml.trim().slice(0, 40)}…`);
+    });
+
+    // The exact fragment PR #206 shipped, reconstructed from the current one —
+    // same rows, same classes, only the root tag reverted. Built regardless of
+    // whether the sanity check above passed, so the proof below still runs.
+    const preFixHtml = shippedHtml
+      .replace('<div class="cmp">', '<section class="cmp">')
+      .replace(/<\/div>\s*$/, '</section>');
+
+    // The real mount chain the drawer builds (04-orders.js: `mount.innerHTML =
+    // '<div class="order-card">…'`, where `mount` is `#order-detail-mount`,
+    // `.drawer-body` inside `<aside id="order-drawer" class="side-drawer">`).
+    const shell = (fragment) => `<!doctype html><html><head><style>${CSS}</style></head>
+      <body>
+        <aside id="order-drawer" class="side-drawer open">
+          <div class="drawer-body" id="order-detail-mount">
+            <div class="order-card">${fragment}</div>
+          </div>
+        </aside>
+      </body></html>`;
+
+    async function cmpBox(fragment) {
+      const page = await browser.newPage();
+      await page.setContent(shell(fragment));
+      const box = await page.evaluate(() => {
+        const el = document.querySelector('.cmp');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height, display: getComputedStyle(el).display };
+      });
+      await page.close();
+      return box;
+    }
+
+    const shippedBox = await cmpBox(shippedHtml);
+    const preFixBox = await cmpBox(preFixHtml);
+    await browser.close();
+
+    it('mounted in the real .drawer-body > .order-card chain, the shipped panel (<div class="cmp">) occupies a real box', () => {
+      assert.ok(shippedBox, '.cmp did not render into the DOM at all');
+      assert.notStrictEqual(shippedBox.display, 'none', '.cmp must not compute display:none under the real stylesheet');
+      assert.ok(shippedBox.w > 0 && shippedBox.h > 0,
+        `.cmp must occupy real pixels — got ${shippedBox.w}x${shippedBox.h}`);
+    });
+
+    it('PROOF the check bites: the identical fragment tagged <section class="cmp"> (what PR #206 shipped) computes a zero box', () => {
+      assert.ok(preFixBox, '.cmp (section) did not render into the DOM at all');
+      assert.strictEqual(preFixBox.display, 'none',
+        'retail-admin.css:940 `section { display: none; }` must hide an unscoped <section> at any depth');
+      assert.strictEqual(preFixBox.w, 0, 'a display:none element must have zero width');
+      assert.strictEqual(preFixBox.h, 0, 'a display:none element must have zero height');
+    });
+  } catch (e) {
+    console.log(`  ✗ mounted-geometry check crashed: ${e.message}`);
+    fail++;
+    try { await browser.close(); } catch (e2) { /* already gone */ }
+  }
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})();
