@@ -1397,11 +1397,6 @@
 }
 .fsd-wrap.corner-subtle { border-radius: 28rpx; }
 .fsd-wrap.corner-bold   { border-radius: 44rpx; }
-.fsd-zig {
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 28rpx; background: var(--fs-panel);
-  z-index: 3; pointer-events: none;
-}
 .fsd-body { padding: 44rpx 0; color: var(--fs-ink); }
 
 /* live-pulse — only attached when the Urgency tweak is "Frantic" */
