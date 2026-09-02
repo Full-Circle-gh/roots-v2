@@ -295,6 +295,18 @@
         <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
       </view>
 
+      <!-- Next-fresh-batch notice — a Guangzhou (local run) cart holding a fresh
+           meal we're sold out of. Unlike the pre-order banner above this one has
+           a real date: the kitchen's next production day. Tap to re-open. -->
+      <view wx:if="{{localFreshNotice}}" class="holiday-banner" bindtap="openLocalFreshNotice">
+        <view class="hb-icon">🥬</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? localFreshNotice.title_cn : localFreshNotice.title_en}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? localFreshNotice.message_cn : localFreshNotice.message_en}}</view>
+        </view>
+        <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
+      </view>
+
       <!-- Sent-from-another-shop notice — the shop that would normally serve this
            address is closed, so a different one is fulfilling and delivery may be
            slower. Informational only: it never blocks placing the order. Tap to
@@ -1020,6 +1032,13 @@
           ? ' 时段可能无法准时送达。'
           : ' may not be met.' }}</text>
       </view>
+      <!-- When the shortage is a fresh meal, the kitchen schedule gives us the
+           day — so say it instead of leaving them with "whenever it arrives". -->
+      <view wx:if="{{waitConfirmMakeDate}}" class="fb-modal-body" style="margin-top: 8rpx;">
+        <text>{{ lang === 'cn' ? '我们将于 ' : 'We make the next fresh batch on ' }}</text>
+        <text class="fb-modal-body-em">{{waitConfirmMakeDate}}</text>
+        <text>{{ lang === 'cn' ? ' 制作下一批新鲜商品。' : '.' }}</text>
+      </view>
       <view class="fb-modal-body" style="margin-top: 8rpx;">
         <text class="muted">{{ lang === 'cn'
           ? '若选择继续，您所选时段的加急费用将被退还，订单会在到货后第一时间发出。'
@@ -1109,6 +1128,50 @@
       <view class="bn-body">{{ lang === 'cn' ? preorderNotice.message_cn : preorderNotice.message_en }}</view>
 
       <view class="bn-cta f-toni" bindtap="closePreorderNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
+    </view>
+  </view>
+
+  <!-- "Next fresh batch" popup — the Guangzhou dated variant. Same shell as the
+       two above. It shows ONE dated step, not the batch modal's make → arrive
+       pair: on the local run there is no courier day to add, and the schedule
+       stores an order cutoff rather than a kitchen-ready hour, so the arrival
+       day isn't ours to promise. See computeLocalFreshNotice in routes/retail.js. -->
+  <view wx:if="{{localFreshNoticePopup && localFreshNotice}}" class="bn-backdrop" bindtap="closeLocalFreshNotice" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero">
+        <view class="bn-badge">🥬</view>
+      </view>
+      <view class="bn-kicker f-toni">{{ lang === 'cn' ? localFreshNotice.kicker_cn : localFreshNotice.kicker_en }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? localFreshNotice.title_cn : localFreshNotice.title_en }}</view>
+
+      <!-- The sold-out fresh items this batch date refers to -->
+      <view wx:if="{{localFreshNoticeItems.length}}" class="bn-items">
+        <view wx:for="{{localFreshNoticeItems}}" wx:key="id" class="bn-item">
+          <image wx:if="{{item.image}}" class="bn-item-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="bn-item-img bn-item-img--ph">🥬</view>
+          <view class="bn-item-name">{{item.name}}</view>
+        </view>
+      </view>
+
+      <view class="bn-body">{{ lang === 'cn' ? localFreshNotice.message_cn : localFreshNotice.message_en }}</view>
+
+      <!-- Single dated step: the production day. -->
+      <view class="bn-timeline">
+        <view class="bn-tl-step">
+          <view class="bn-tl-dot bn-tl-dot--make"></view>
+          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '新鲜现做' : 'MADE FRESH' }}</view>
+          <view class="bn-tl-date f-bear">{{localFreshNotice.make_date}}</view>
+        </view>
+      </view>
+
+      <view class="bn-tip">
+        <view class="bn-tip-icon">
+          <view class="bn-tip-dot"></view>
+        </view>
+        <view class="bn-tip-text">{{ lang === 'cn' ? localFreshNotice.tip_cn : localFreshNotice.tip_en }}</view>
+      </view>
+
+      <view class="bn-cta f-toni" bindtap="closeLocalFreshNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
     </view>
   </view>
 

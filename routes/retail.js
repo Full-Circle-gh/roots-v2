@@ -10935,6 +10935,43 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
   } catch (e) { console.warn('[batch notice]', e.message); }
 
+  // The same stamp for a Guangzhou order parked on the next batch. It writes
+  // promised_ship_date ONLY: the production day is the whole promise the local
+  // run can make (see computeLocalFreshNotice), and stamping a delivery date we
+  // cannot derive is the over-promise that column exists to prevent. The order
+  // drawer already renders promised_ship_date, so the kitchen and the packers
+  // read the customer's date from the same field either notice wrote it.
+  //
+  // The two blocks cannot both stamp one order: computeBatchNotice needs a
+  // shipping zone and this needs the local run. Best-effort, like the block
+  // above — an order is never failed over a message.
+  try {
+    const localFresh = computeLocalFreshNotice(
+      // `mutatedItems`, not `resolved`: the 5-option modal can DROP the
+      // sold-out line (cancel_missing) or swap it for a substitute
+      // (replace_missing), and the pre-mutation cart still lists it — which
+      // would promise a batch for an item the customer just removed. This is
+      // the cart the order was actually written from.
+      address, mutatedItems.map((r) => r.product.id), orderNow, body.delivery_slot_kind,
+      // Ignore THIS order's own hold as well as the customer's other unpaid
+      // ones. It runs after the order committed, so without `orderId` here the
+      // shopper who just bought the last wrap would read as sold out and be
+      // told to wait for the next batch — the one they beat.
+      { storeId: fulfillingStore ? fulfillingStore.id : null, channel: 'wechat',
+        ignoreOrderIds: [...(ownPendingOrderIds || []), orderId] },
+    );
+    if (localFresh) {
+      tdb().prepare('UPDATE retail_orders SET promised_ship_date = ? WHERE id = ?')
+        .run(localFresh.make_date, orderId);
+      notifyCustomer(req.customer.id, {
+        category: 'order', type: 'batch_delay',
+        title_en: localFresh.title_en, title_cn: localFresh.title_cn,
+        body_en: localFresh.message_en, body_cn: localFresh.message_cn,
+        ref_type: 'order', ref_id: orderId,
+      });
+    }
+  } catch (e) { console.warn('[local fresh notice]', e.message); }
+
   // Record which SKUs the nearer store was short on, so a "改派(缺货)" reroute
   // names its cause in the order drawer. Best-effort — never fails the order.
   if (rerouteShortPids?.length) {
@@ -29775,9 +29812,24 @@ function fulfillingStoreFor({ address, channel = 'wechat', isPickup = false, slo
 // next-day, so shipping it any earlier would eat the shelf life. We compute the
 // next batch day, promise an exact ship + arrival date, and tell the customer.
 //
+// Inside Guangzhou the same cadence answers a narrower question. A fresh item
+// keeps for its shelf life and the local run delivers within it, so stock made
+// on Monday still serves the city on Tuesday and the cadence is invisible.
+// It surfaces only once that stock reaches ZERO — then the next production day
+// is the whole answer, and computeLocalFreshNotice reads this same config to
+// give it. That notice names the batch day alone: there is no courier leg
+// in the city, and the only clock stored here is an ORDER cutoff, never the
+// hour the kitchen finishes.
+//
 // Config (storefront_config['batch.schedule']):
 //   { enabled, anchor_date:'YYYY-MM-DD', interval_days:2, skip_dates:['YYYY-MM-DD'],
 //     cutoff_hour:20 }
+// plus two sets of optional operator copy, both blank-means-default: the
+// shipping one (kicker/title/message/tip_en|cn, placeholders {ship_date} and
+// {delivery_date}) and the Guangzhou one (local_kicker/local_title/
+// local_message_en|cn, placeholder {make_date}). Both are edited in Mini App
+// Backend → Delivery → Fresh batch schedule, which PUTs this object whole — a
+// field omitted by that form is dropped, so new copy needs a control there.
 // anchor_date is any reference batch day; the rhythm steps out from it both
 // ways in interval_days jumps. skip_dates are one-off closures (vacations) the
 // cadence rolls past.
@@ -29823,6 +29875,18 @@ function batchScheduleCfg() {
     // Optional freshness reminder line shown below the dates ("enjoy within …").
     tip_en:     str(c.tip_en),
     tip_cn:     str(c.tip_cn),
+    // Optional copy for the LOCAL-RUN variant of the notice (Guangzhou, where
+    // the only date we can name is the production day — there is no courier leg
+    // to add). Kept separate from the fields above because the two notices say
+    // different things: the shipping one promises make + arrive, this one
+    // promises the batch. Blank falls back to the bilingual default in
+    // computeLocalFreshNotice. `{make_date}` is the one placeholder.
+    local_title_en:   str(c.local_title_en),
+    local_title_cn:   str(c.local_title_cn),
+    local_kicker_en:  str(c.local_kicker_en),
+    local_kicker_cn:  str(c.local_kicker_cn),
+    local_message_en: str(c.local_message_en),
+    local_message_cn: str(c.local_message_cn),
   };
 }
 
@@ -29920,13 +29984,29 @@ function batchItemsInCart(productIds) {
 // the defect this function removes: an under-promise costs a day, an
 // over-promise is the bug. Checkout still completes; the date just rolls, and
 // the distinct reason keeps it separable from a genuine stock roll-forward.
-function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wechat', ignoreOrderIds = null }) {
+// `localRun` REPLACES the zone gate rather than widening it: the caller has
+// already established that this order rides the same-day Guangzhou run (an
+// address question, not a zone-shape one), so there is no zone to test. Every
+// other step — which lines are fresh, the zero-stock check, the cutoff, the
+// skip dates, the single roll-forward, the reason naming — is identical and is
+// deliberately NOT re-implemented for Guangzhou. computeDeliverySlots and
+// resolveDeliverySlot never pass it, so the delivery calendar is untouched.
+//
+// Why the local run may ask this at all, when it is not waiting for a courier:
+// a fresh item keeps for its shelf life, so stock made on Monday still serves a
+// Guangzhou shopper on Tuesday and the batch cadence is none of their business.
+// It becomes their business only when that stock reaches ZERO — then the next
+// batch is the whole answer. computeLocalFreshNotice therefore acts on the
+// 'rolled_stock' reason ALONE, which is exactly that condition and no other.
+function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wechat', ignoreOrderIds = null, localRun = false }) {
   const none = (reason) => ({ applies: false, reason, make_date: null, items: [], cfg: null });
-  if (!zone) return none('out_of_scope');
-  const isCity = zone.zone_type === 'city';
-  const isShipDistrict = zone.zone_type === 'gz_district' &&
-        (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
-  if (!isCity && !isShipDistrict) return none('out_of_scope');
+  if (!localRun) {
+    if (!zone) return none('out_of_scope');
+    const isCity = zone.zone_type === 'city';
+    const isShipDistrict = zone.zone_type === 'gz_district' &&
+          (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
+    if (!isCity && !isShipDistrict) return none('out_of_scope');
+  }
   const cfg = batchScheduleCfg();
   if (!cfg) return none('no_schedule');
   const items = batchItemsInCart(productIds);
@@ -30151,6 +30231,92 @@ function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
     message_en: 'Some items in your order are currently out of stock. Your order is a pre-order — we’ll ship everything together as soon as they’re back in stock.',
     message_cn: '您订单中的部分商品目前缺货。此为预订订单，我们将在补货后尽快为您一并发货。',
     items,
+  };
+}
+
+// ─── The Guangzhou fresh-batch notice (the local run) ─────────────────────
+// The dated answer for a shopper ON the same-day Guangzhou run whose cart holds
+// a fresh meal we are sold out of. It is the third notice, and the three divide
+// the ground cleanly by what we can honestly promise:
+//
+//   computeBatchNotice        ships by courier   → make date + arrival date
+//   computePreorderNotice     generic restock    → no date (we don't have one)
+//   computeLocalFreshNotice   local run, fresh   → the production date
+//
+// Before this, a Guangzhou shopper hitting a sold-out wrap fell to the third
+// case and was told "a few days" — dateless — even though the kitchen's own
+// schedule already knew the answer. computeBatchNotice couldn't supply it: its
+// zone gate excludes the inner districts, and its arithmetic adds a courier
+// transit day this order never spends. So this asks the SAME shared date
+// function (earliestBatchMakeDate, with localRun) and names the one date the
+// local run actually has.
+//
+// WHY ONLY 'rolled_stock'. A fresh item keeps for its shelf life, so a batch
+// made Monday still serves Guangzhou on Tuesday and Wednesday — the cadence is
+// irrelevant while there is stock on the shelf, and a notice then would be
+// noise about a wait that isn't happening. Zero sellable stock is the single
+// condition that makes the next batch the customer's business, and that is
+// precisely what 'rolled_stock' names. Every other reason is passed over:
+// 'next_cadence' and 'reachable_today' mean there IS stock, and
+// 'rolled_store_unknown' means we could not check — which is a reason to stay
+// quiet, not to announce a wait we have not established.
+//
+// NO DELIVERY DATE, deliberately. The courier notice can say "made X, arrives
+// X+1" because the transit leg is a known day. The local run's leg is a slot on
+// the make day itself, and the schedule stores an ORDER cutoff (cutoff_hour),
+// never the hour the kitchen finishes — so whether a batch made on X reaches
+// the shopper on X or X+1 is not a fact this system holds. We name the batch,
+// which is true, and leave the handoff to the run rather than invent an
+// arrival. Give the schedule a kitchen-ready hour and this can promise both.
+//
+// `opts.storeId` is the store the order would be served from. Without one there
+// is no shelf to check, so we say nothing at all rather than guess a shortage.
+function computeLocalFreshNotice(address, productIds, now, slotKind, opts = {}) {
+  // The exact complement of computePreorderNotice's gate, so the two can never
+  // both fire on one order: it takes everyone we ship to, this takes the run.
+  if (!inventory.isGuangzhouAddress(address)) return null;
+  if (inventory.isOptInSameDayDistrict(address) && slotKind !== 'today') return null;
+
+  const storeId = opts.storeId ?? null;
+  if (storeId == null) return null;
+  const channel = opts.channel || 'wechat';
+  const ignoreOrderIds = opts.ignoreOrderIds || null;
+
+  const decision = earliestBatchMakeDate({
+    zone: null, productIds, storeId, now, channel, ignoreOrderIds, localRun: true,
+  });
+  if (!decision.applies) return null;
+  if (decision.reason !== 'rolled_stock') return null;
+
+  // Name the items that are actually sold out, not every fresh line in the
+  // cart: earliestBatchMakeDate stops at the first zero (one date per order is
+  // all it needs), so the list is re-derived here against the same store.
+  const soldOut = decision.items.filter((it) => {
+    const av = inventory.getAvailable(storeId, it.id, channel, ignoreOrderIds);
+    return !(Number(av.available) > 0);
+  });
+  if (!soldOut.length) return null;
+
+  const cfg = decision.cfg;
+  const makeDate = decision.make_date;
+  const fill = (tpl) => tpl.replace(/\{make_date\}/g, makeDate);
+  return {
+    make_date: makeDate,
+    kicker_en: cfg.local_kicker_en || 'Next fresh batch',
+    kicker_cn: cfg.local_kicker_cn || '下一批现做',
+    title_en:  cfg.local_title_en  || 'Made fresh on ' + makeDate,
+    title_cn:  cfg.local_title_cn  || makeDate + ' 新鲜现做',
+    message_en: cfg.local_message_en
+      ? fill(cfg.local_message_en)
+      : `Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on ${makeDate} — we'll deliver your order as soon as it's ready.`,
+    message_cn: cfg.local_message_cn
+      ? fill(cfg.local_message_cn)
+      : `您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 ${makeDate} 制作下一批 — 制作完成后会尽快为您配送。`,
+    // The same freshness reminder the shipping notice carries; the advice does
+    // not change because the parcel skipped the courier.
+    tip_en: cfg.tip_en || 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.',
+    tip_cn: cfg.tip_cn || '我们建议在收到后 48 小时内享用这些新鲜现做的商品，以获得最佳口感与新鲜度。',
+    items: soldOut.map((it) => ({ id: it.id, name_en: it.name_en, name_cn: it.name_cn })),
   };
 }
 
@@ -31437,6 +31603,17 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // the store-move notice below is a counterfactual about. Null when routing
   // couldn't settle; earliestBatchMakeDate reads that as "today unproven" and rolls forward.
   let quoteStore = null;
+  // The shelves this order would actually be served off — set on EVERY branch
+  // below, unlike `quoteStore`, which only lands on the no-shortage path and
+  // carries the out-of-city pin. The Guangzhou fresh notice exists precisely
+  // for the shortage case (a sold-out fresh line raises a gate), so reading
+  // `quoteStore` would have left it permanently null and silent. The local run
+  // takes no pin, so nearest/resolved is the right shelf for it.
+  let quoteShelfStore = null;
+  // Hoisted alongside it for the same reason: the notice must discount this
+  // customer's own unpaid holds exactly as the shortage analysis does, or their
+  // own pending order reads back to them as "sold out, wait for the next batch".
+  let quoteShelfPendingIds = null;
   try {
     const rawItems = (items || [])
       .map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }))
@@ -31463,12 +31640,15 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     const quotePendingOrderIds = tdb().prepare(
       "SELECT id FROM retail_orders WHERE customer_id = ? AND status = 'pending_payment'"
     ).all(req.customer.id).map(r => r.id);
+    quoteShelfPendingIds = quotePendingOrderIds;
     const analysis = await inventory.analyzeShortage({
       address, items: cleanItems,
       deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
       ignoreOrderIds: quotePendingOrderIds,
     });
+    quoteShelfStore = (analysis.resolved && !analysis.resolved.error && analysis.resolved.store)
+      || (analysis.nearest && analysis.nearest.store) || null;
     // Bundle carts can't use the per-item 5-option modal (checkout refuses it).
     // Collapse any shortage to a plain no_stock so the mini-app just shows
     // "out of stock for same-day" and the customer adjusts the cart.
@@ -31613,6 +31793,13 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         { decision: quoteBatchDecision },
       ),
       preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id, body.slot_kind),
+      // The local-run counterpart of the two above, and mutually exclusive with
+      // preorder_notice by construction (their address gates are complements).
+      local_fresh_notice: computeLocalFreshNotice(
+        address, (items || []).map((i) => i.product_id), quoteNow, body.slot_kind,
+        { storeId: quoteShelfStore ? quoteShelfStore.id : null, channel: 'wechat',
+          ignoreOrderIds: quoteShelfPendingIds },
+      ),
       store_move_notice: storeMoveNotice,
       routing: routingPreview,
       // Is this order heading for a same-city rider (Qingyun)? The client uses
@@ -33863,6 +34050,7 @@ module.exports.stampSameCity = stampSameCity;
 // fresh order is made on — the property this whole seam exists to guarantee.
 module.exports.earliestBatchMakeDate = earliestBatchMakeDate;
 module.exports.computeBatchNotice    = computeBatchNotice;
+module.exports.computeLocalFreshNotice = computeLocalFreshNotice;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;
