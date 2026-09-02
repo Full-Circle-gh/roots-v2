@@ -207,6 +207,7 @@ it('an order with no proof at all is not', () => {
 it('a read-only channel mirror is not — it is not our operator’s worklist', () => {
   const db = freshDb();
   seed(db, { channel: 'meituan' });
+  seed(db, { channel: 'eleme' });
   seed(db, { channel: 'gzgrocery' });
   assert.deepStrictEqual(opsNos(db), []);
 });
@@ -220,6 +221,7 @@ it('the queue is exactly the rejected-and-still-pending rows, among all of them'
   seed(db, { verdict: 'error' });
   seed(db, { verdict: null, ocr: null });
   seed(db, { channel: 'meituan' });
+  seed(db, { channel: 'eleme' });
   seed(db, { status: 'paid' });
   seed(db, { status: 'cancelled' });
   assert.deepStrictEqual(opsNos(db), [wanted]);

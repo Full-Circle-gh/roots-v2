@@ -375,7 +375,6 @@
           <span class="pu2-ic">${I.search}</span>
           <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
         </span>
-        <button class="pu2-btn" data-cap="purchasing:edit" onclick="puKitchenOpen()" title="${esc(T('Bring an order bought through the kitchen app into Tacet', '把厨房端下的采购单导入 Tacet'))}"><span class="pu2-ic">${I.down}</span>${esc(T('Copy from kitchen', '从厨房复制'))}</button>
         <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
       </div>
 
