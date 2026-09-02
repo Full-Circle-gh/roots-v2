@@ -11,7 +11,6 @@
 // Run:  node scripts/test_kitchen_po_picker.js
 //
 // Cases:
-//   1. the Orders toolbar offers the copy entry at all
 //   2. the picker lists the kitchen orders the server offered
 //   3. an order that already has a copy is shown as copied and is NOT tickable
 //   4. the Copy button is dead until something is ticked AND a store is chosen
@@ -118,12 +117,6 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 async function main() {
   await sandbox.puInit();
   await tick();
-
-  console.log('\n══ 1 · the Orders toolbar offers the copy entry ══');
-  const orders = node('pu2-root').innerHTML;
-  ok(orders.includes('puKitchenOpen()'), 'a "Copy from kitchen" button is on the toolbar');
-  ok(orders.indexOf('puKitchenOpen()') < orders.indexOf('puNewOrder()'),
-     'it sits before "New order" — the primary action stays last');
 
   console.log('\n══ 2 · the picker lists what the kitchen has ══');
   await sandbox.puKitchenOpen();

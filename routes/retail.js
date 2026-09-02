@@ -15352,16 +15352,16 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // Unhandled orders — status='paid' and nothing else: money in, nobody has
     // started preparing (the moment anyone acts the order moves to 'preparing').
     // NOT order-status-counts.paid, which folds in dispatched-with-unshipped rows.
-    // Read-only channel mirrors (Meituan / gzgrocery) are excluded — those are
-    // fulfilled by the channel, not our operator's worklist (the same exclusion
-    // order-status-counts applies) — which also removes the main source of a null
-    // paid_at. Store-scoped when the dashboard passes a store (a store-locked
-    // operator only handles their own shelf), via the same `storeId` the stock
-    // cards use. Age threshold is deferred (spec), so nothing here computes age
-    // yet; when it does it must read `waiting_since` (never null), not raw
-    // `paid_at` — see below.
+    // Read-only channel mirrors (Meituan / Eleme / gzgrocery) are excluded —
+    // those are fulfilled by the channel, not our operator's worklist (the same
+    // exclusion order-status-counts applies) — which also removes the main
+    // source of a null paid_at. Store-scoped when the dashboard passes a store
+    // (a store-locked operator only handles their own shelf), via the same
+    // `storeId` the stock cards use. Age threshold is deferred (spec), so
+    // nothing here computes age yet; when it does it must read `waiting_since`
+    // (never null), not raw `paid_at` — see below.
     const unhWhere = "o.status = 'paid'"
-      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','eleme','gzgrocery')"
       + (storeId ? ' AND o.store_id = @store_id' : '');
     const unhCount = tdb().prepare(
       `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${unhWhere}`
@@ -15406,7 +15406,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // never-null COALESCE as `unhandled` above, for the same reason. Read-only
     // channel mirrors are excluded, matching every other order worklist here.
     const awWhere = "o.status = 'awaiting_restock'"
-      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','eleme','gzgrocery')"
       + (storeId ? ' AND o.store_id = @store_id' : '');
     const awCount = tdb().prepare(
       `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${awWhere}`
@@ -15456,7 +15456,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // they never carry an Alipay proof, but the exclusion keeps the definition
     // of "our operator's work" identical across the blocks.
     const pmWhere = "o.alipay_ocr_verdict = 'mismatch' AND o.status = 'pending_payment'"
-      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','eleme','gzgrocery')"
       + (storeId ? ' AND o.store_id = @store_id' : '');
     const pmCount = tdb().prepare(
       `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${pmWhere}`
@@ -15530,7 +15530,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // megabyte per row through a card that only needs to know it exists.
     const puWhere = "o.status = 'pending_payment' AND o.alipay_proof_image IS NOT NULL"
       + " AND COALESCE(o.alipay_ocr_verdict, '') <> 'mismatch'"
-      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','eleme','gzgrocery')"
       + (storeId ? ' AND o.store_id = @store_id' : '');
     const puCount = tdb().prepare(
       `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${puWhere}`
@@ -22479,7 +22479,7 @@ router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, re
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders
       WHERE status IN ('paid','awaiting_restock')
-        AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')
+        AND COALESCE(channel,'') NOT IN ('meituan','eleme','gzgrocery')
         AND datetime(placed_at) > datetime(?)`
   ).get(sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
@@ -23514,10 +23514,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
 router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, res) => {
   const { store_id } = req.query;
   const sid = store_id ? parseInt(store_id, 10) : null;
-  // Mirror the list filter: read-only channel orders (Meituan mirror + gzgrocery
-  // wholesale mirror) are a stock/ledger record, not operator worklist items, so
-  // they never feed the open-work count badges.
-  const where = " AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
+  // Mirror the list filter: read-only channel orders (Meituan mirror + Eleme
+  // mirror + gzgrocery wholesale mirror) are a stock/ledger record, not
+  // operator worklist items, so they never feed the open-work count badges.
+  const where = " AND COALESCE(channel,'') NOT IN ('meituan','eleme','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
   const args  = sid ? [sid] : [];
 
   const out = { pending_payment: 0, paid: 0, preparing: 0, rider_pickup: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
