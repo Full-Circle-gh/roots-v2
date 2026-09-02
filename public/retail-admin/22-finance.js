@@ -106,6 +106,76 @@ function finRangeLabel() {
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 
+// ── Category labels — one language, from a value that carries both ─────────
+//
+// THE CATEGORY IS DATA, NOT A LOCKED PAIR. Every other bilingual thing on this
+// surface goes through cuT with a pair from the vocabulary; a category is a
+// value the tenant typed, held as ONE free-text column. And what is in that
+// column is both languages glued into one string — `Salaries&Wages 员工工资`,
+// `Packaging Materials 包装材料`, `Ingredients(Kitchen+Retail Use) 原材料（厨房
+// 及零售通用）` — so the English screen was showing Chinese and the Chinese
+// screen English, in the one place on Finance that cuT cannot reach.
+//
+// The house pattern for bilingual DATA is two columns picked with a fallback
+// across — `tmStoreLabel` on stores, `name_en`/`name_cn` on roles. `categories`
+// has one `name` column and the ledger's `category` is free text with no
+// foreign key (§36), so there is nothing to pick between. **This splits at
+// RENDER and stores nothing new.** A second column is the eventual fix and is a
+// schema change plus a migration of four columns of live values; it is not this.
+//
+// IT REFUSES TO GUESS. A value splits only when its Latin letters and its CJK
+// sit in two contiguous runs, in either order — which is every real value
+// measured, in both orders. Anything interleaved, or carrying only one language
+// (`销货成本`, `Rent`), renders whole in both languages: showing half of a name
+// that has no other half is worse than showing a word the reader does not need.
+const FIN_CJK = /[\u2e80-\u9fff\u3000-\u303f\uf900-\ufaff\uff00-\uffef]/;
+const FIN_LAT = /[A-Za-z]/;
+
+/** `{ en, cn }` when the value carries both halves cleanly, else null. */
+function finCatSplit(value) {
+  const s = String(value == null ? '' : value);
+  const chars = Array.from(s);
+  let firstCjk = -1, lastCjk = -1, firstLat = -1, lastLat = -1;
+  chars.forEach((ch, i) => {
+    if (FIN_CJK.test(ch)) { if (firstCjk < 0) firstCjk = i; lastCjk = i; }
+    else if (FIN_LAT.test(ch)) { if (firstLat < 0) firstLat = i; lastLat = i; }
+  });
+  if (firstCjk < 0 || firstLat < 0) return null;          // only one language
+  let en, cn;
+  if (lastLat < firstCjk) { en = chars.slice(0, firstCjk).join(''); cn = chars.slice(firstCjk).join(''); }
+  else if (lastCjk < firstLat) { cn = chars.slice(0, firstLat).join(''); en = chars.slice(firstLat).join(''); }
+  else return null;                                        // interleaved — do not guess
+  en = en.trim(); cn = cn.trim();
+  return (en && cn) ? { en, cn } : null;
+}
+
+/** The half for the live language. Falls back to the whole value, never to ''. */
+function finCatLabel(value) {
+  const p = finCatSplit(value);
+  if (!p) return String(value == null ? '' : value);
+  return (window.cuLang && cuLang() === 'cn') ? p.cn : p.en;
+}
+
+/* The labels for a SET of categories, with the collision rule applied.
+   Two stored values whose halves read the same in this language — `Rent 房租`
+   and `Rent 租金` — would draw two lines the operator cannot tell apart, which
+   is §36's three-rent-payments defect arriving through the display instead of
+   through the data. **Both then render whole**, so the screen stays honest about
+   a distinction it cannot express in one language. */
+function finCatLabels(list) {
+  const map = new Map();
+  const claims = new Map();
+  for (const v of list) {
+    if (v == null || map.has(v)) continue;
+    const label = finCatLabel(v);
+    map.set(v, label);
+    claims.set(label, (claims.get(label) || 0) + 1);
+  }
+  for (const [v, label] of map) if (claims.get(label) > 1) map.set(v, String(v));
+  return map;
+}
+
+
 /** One money row of the staircase. `sign` is '−' or ''; it owns its own column. */
 function finRow(label, figure, opts) {
   const o = opts || {};
@@ -164,13 +234,17 @@ function finNotRecorded() {
 /** The operating-expense disclosure. Closed by default. */
 function finBreakdown(rows) {
   if (!rows || !rows.length) return '';
+  // The set is passed whole so the collision rule can see it: two categories
+  // that read alike in this language both render in full rather than drawing
+  // two lines nobody can tell apart.
+  const labels = finCatLabels(rows.map(r => r.category));
   return '<div class="fin-breakdown">' + rows.map(r => {
     // A row whose category was never typed keeps its own line and gets the
     // §1.12 seventh-state word rather than an invented bucket name: §36 records
     // that Finance stores category text raw and un-normalised, so a label
     // minted here would be a second wrong name on a known-dirty column.
     const label = r.category
-      ? String(r.category)
+      ? (labels.get(r.category) || finCatLabel(r.category))
       : cuT('Not recorded', '未记录');
     return '<div class="fin-row">'
       + `<span class="fin-lbl">${escapeHtml(label)}</span>`
@@ -307,6 +381,10 @@ window.finInit = function finInit() {
 let FIN_TX = null;          // the last payload
 let FIN_TX_SEEN = false;    // has this sub-view ever been pulled
 let FIN_TX_DIR = 'all';     // 'all' | 'in' | 'out' — the chip filter
+// The category labels for the rows on screen, built ONCE per render rather than
+// per row — the collision rule needs the whole set, and asking for it inside the
+// row would rebuild it for every line.
+let FIN_TX_CATLABEL = null;
 
 /* Sub-view switching. Both panes live in the page; one is `hidden` at a time.
    The range bar is SHARED — one window governs both sub-views, so switching
@@ -346,6 +424,18 @@ function finTxAmount(r) {
    enforcing it." `routes/finance.js` already refuses edit and delete on any row
    carrying a `po_id`; a screen that offered Edit and then failed would be the
    fault that rule names. */
+/* The subject, in one language WHEN IT IS A CATEGORY and verbatim otherwise.
+   A manual row's subject is its category when it has one and its typed note
+   when it has not — and a note is the operator's own sentence, never a glued
+   pair, so splitting one would cut a sentence in half at its first Chinese
+   character. The test is identity with the row's own category, not a guess
+   about the text. */
+function finTxSubject(r) {
+  const subj = r.subject || '';
+  if (!r.category || subj !== r.category) return subj;
+  return (FIN_TX_CATLABEL && FIN_TX_CATLABEL.get(r.category)) || finCatLabel(r.category);
+}
+
 function finTxRow(r) {
   const po = r.source === 'po';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
@@ -363,7 +453,7 @@ function finTxRow(r) {
   // created_at, so there is nothing here that could drift onto a row.
   return `<tr class="${po ? 'fin-tx-posted' : ''}">`
     + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
-    + `<td><span class="fin-tx-subj">${escapeHtml(r.subject || '')}</span>`
+    + `<td><span class="fin-tx-subj">${escapeHtml(finTxSubject(r))}</span>`
     + (mark || hint ? `<span class="fin-tx-meta">${mark}${mark && hint ? ' · ' : ''}${hint}</span>` : '')
     + '</td>'
     + `<td>${escapeHtml(r.kind === 'out' ? cuT('Out', '出') : cuT('In', '进'))}</td>`
@@ -372,8 +462,15 @@ function finTxRow(r) {
     // refusal, unchanged by the write half. A typed row gets Edit, and only when
     // the operator holds the pen: `can` is the client half of the same gate
     // cap-routes.js applies to the request.
+    // A PO the opener cannot serve gets NO LINK rather than one that fails.
+    // Both realms post to this ledger and share `purchase_orders`; Purchasing's
+    // opener serves retail scope only. The row keeps its figure and its
+    // Posted-by-Purchasing mark either way — §36 hides no money — and no new
+    // string is minted to explain the absence, there being no locked pair for
+    // one and Rule 4 forbidding composing it.
     + '<td>' + (po
-      ? `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`
+      ? (r.po_open === false ? ''
+        : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
@@ -393,10 +490,27 @@ function finTxDay(d) {
 
 /* The row action. Purchasing owns the record; Finance links to it. §36: "It is
    not editable here because it is not edited here, and the place it IS edited
-   is one click away on the row itself." */
+   is one click away on the row itself."
+
+   THE TAB SWITCH COMES FIRST, AND IS NOT CONDITIONAL ON THE OPENER. This read
+   `if (window.puOpenPO) return puOpenPO(poId);` before the switch — and
+   `window.puOpenPO` is ALWAYS defined, 16-purchasing.js being loaded on every
+   page of this admin, so the `goTab` line beneath it was unreachable. The order
+   was fetched and painted into a section that was not on screen, and the
+   operator, still looking at Finance, saw the click do nothing at all.
+
+   Both calls, in this order: the section the paint lands in has to be the
+   section being looked at. `goTab` is the house shape for a cross-tab open
+   (`paOpenRecipe` on Products does the same two lines). */
 window.finTxOpenPO = function finTxOpenPO(poId) {
-  if (window.puOpenPO) return puOpenPO(poId);
-  if (window.goTab) goTab('purchasing');
+  const id = Number(poId);
+  if (!id) return;
+  try {
+    if (typeof goTab === 'function') goTab('purchasing');
+    if (typeof window.puOpenPO === 'function') puOpenPO(id);
+  } catch (e) {
+    console.error('[finance] could not open purchase order', id, e);
+  }
 };
 
 function finTxRender() {
@@ -423,6 +537,8 @@ function finTxRender() {
       + chip('in',  cuT('Money in', '进账'),  d.counts.in)
       + chip('out', cuT('Money out', '支出'), d.counts.out);
   }
+
+  FIN_TX_CATLABEL = finCatLabels(d.rows.map(r => r.category));
 
   const s = document.getElementById('fin-tx-search');
   if (s) s.placeholder = cuT('Filter these transactions', '筛选交易记录');
@@ -524,19 +640,108 @@ window.finTxKind = function finTxKind(kind) {
   FIN_TX_KIND = kind === 'in' ? 'in' : 'out';
   document.querySelectorAll('#fin-tx-kind button')
     .forEach(b => b.classList.toggle('on', b.dataset.kind === FIN_TX_KIND));
-  // Money in has no category field. §36 decides income categories move
-  // server-side and ship EMPTY, and that has not landed — so there is no list to
-  // choose from, and §36's own rule for the screen applies to the form: "the
-  // category field appears once the tenant has created at least one income
-  // category… Nobody is asked to categorise before they have anything to
+  // §36: "the category field appears once the tenant has created at least one
+  // income category… Nobody is asked to categorise before they have anything to
   // categorise with." Hidden, not disabled, not an empty dropdown (§1.9).
+  //
+  // THE LIST IS THE SERVER'S, NOT AN ASSUMPTION ABOUT IT. Until 2026-09-02 this
+  // line read `row.hidden = FIN_TX_KIND === 'in'` — the field was hidden because
+  // no list could exist. Now one can, so the field asks it: absent while the list
+  // is empty, present the moment the tenant has an income category. §36 ships the
+  // list empty, so today the rendering is the same and the REASON is different.
   //
   // The ADD CONTROL STAYS VISIBLE REGARDLESS. §36: gating it "would leave a
   // tenant with non-sale money in hand, no route to record it, and no sign on
   // the screen explaining why."
   const row = document.getElementById('fin-tx-cat-row');
-  if (row) row.hidden = FIN_TX_KIND === 'in';
+  if (row) row.hidden = FIN_TX_KIND === 'in' && !finIncomeCats().length && !finTxKeepsCat();
+  // THE BOX EMPTIES WHEN THE DIRECTION CHANGES. The two lists are different
+  // vocabularies, so a value typed for one direction means nothing in the other
+  // — and left in place it would be SENT: type Rent, switch to money in on a
+  // tenant that has income categories, save, and an income row is filed under an
+  // expense category. Hiding the field covers only the empty-list case; this
+  // covers the other one. finTxForm re-fills the box straight after calling
+  // this, so opening the form on an existing row is unaffected.
+  const box = document.getElementById('fin-tx-cat');
+  if (box) box.value = '';
+  finTxCatList();
 };
+
+/* The tenant's income categories, as the server sent them with the ledger.
+
+   EMPTY IS THE ANSWER, NOT A FAILURE. §36 ships this list empty on every tenant
+   and records why: the four the kitchen app defaults to are channel facts the
+   order record already carries, "a dropdown with a wrong option available is
+   what produced the ¥152,309 Mini App mis-filing", and "an empty list cannot
+   offer a wrong option". A payload that never arrived reads empty here too,
+   which hides the field — the safe way round, since the alternative offers a
+   category box with nothing behind it. */
+function finIncomeCats() {
+  return (FIN_TX && FIN_TX.income_categories) || [];
+}
+
+/* One exception to the rule above, and it is about not LOSING a value rather
+   than about offering one. A money-in row that already carries a category keeps
+   its field even when the list is empty — a category deleted in Settings must
+   not make the next edit of that row silently blank what it says. §36's rule is
+   that nobody is asked to categorise before they have something to categorise
+   with; a row that already has one has something. */
+function finTxKeepsCat() {
+  return !!(FIN_TX_EDIT && FIN_TX_EDIT.kind === 'in' && FIN_TX_EDIT.category);
+}
+
+/* The suggestions behind the Category box, PER DIRECTION.
+
+   Money out: the expense categories already on the server — the ones §36 says
+   are shared properly under kind='accounting' — read off the rows on screen.
+   Suggestions only: the field is free text, and storeCategory snaps whatever is
+   typed onto an existing entry at write.
+
+   Money in: the tenant's own income list, which is a DIFFERENT LIST doing a
+   different job. The two are never pooled. The `kind === 'out'` filter on the
+   money-out half is what keeps them apart now that an income row can carry a
+   category — without it the expense box would suggest income categories, and
+   `storeCategory` would then snap the typed value onto the wrong master list. */
+function finTxCatOptions() {
+  return FIN_TX_KIND === 'in'
+    ? finIncomeCats()
+    : [...new Set(((FIN_TX && FIN_TX.rows) || [])
+        .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
+}
+
+function finTxCatList() {
+  const dl = document.getElementById('fin-tx-cats');
+  if (!dl) return;
+  const labels = finCatLabels(finTxCatOptions());
+  dl.innerHTML = [...labels.values()]
+    .map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+}
+
+/* THE HALF THAT IS SHOWN MUST STORE AS THE WHOLE THAT IS HELD, and this is the
+   trap in translating a free-text field rather than a label. The box offers
+   `Salaries&Wages`; the column holds `Salaries&Wages 员工工资`. Saving what the
+   box says would write a SECOND category one character-class away from the
+   first — two lines on the Summary breakdown that read alike, the total right
+   and every line beneath it wrong, which is the exact defect `storeCategory`
+   was written to fix. `storeCategory` cannot catch it either: it snaps on
+   spacing and case, and these differ by a whole language.
+
+   So a typed value that matches a known category's label resolves back to the
+   stored spelling before it is sent. EITHER half matches, not just the live
+   language's — an operator who pastes the Chinese half into the English screen
+   lands on the same row rather than minting a twin. Anything matching nothing
+   is a genuinely new category and stores exactly as typed, which is what the
+   free-text field is for. */
+function finTxCatStored(typed) {
+  const t = String(typed == null ? '' : typed).trim();
+  if (!t) return t;
+  for (const stored of finTxCatOptions()) {
+    if (stored === t) return stored;
+    const p = finCatSplit(stored);
+    if (p && (p.en === t || p.cn === t)) return stored;
+  }
+  return t;
+}
 
 /* Open the form. `row` present = edit; absent = add.
    A PO-derived row never reaches here — its row offers no Edit at all, which is
@@ -551,20 +756,17 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   finTxKind(row ? row.kind : (typeof kindOrRow === 'string' ? kindOrRow : 'out'));
   set('fin-tx-date', row ? row.date : new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10));
   set('fin-tx-amount', row ? row.amount : '');
-  set('fin-tx-cat', row && row.category ? row.category : '');
+  // The label, not the stored value — and finTxSave maps it back, so the
+  // round trip does not rewrite the category of a row merely opened and saved.
+  set('fin-tx-cat', row && row.category ? finCatLabel(row.category) : '');
   set('fin-tx-note', row && row.source === 'manual' && row.subject && row.subject !== row.category ? row.subject : '');
   const t = document.getElementById('fin-tx-modal-t');
   if (t) t.textContent = row ? cuT('Edit', '编辑') : cuT('New transaction', '新建交易');
   const del = document.getElementById('fin-tx-del');
   if (del) del.hidden = !row;
-  // The expense categories already on the server — the ones §36 says are shared
-  // properly under kind='accounting'. Suggestions only: the field is free text,
-  // and storeCategory snaps whatever is typed onto an existing entry at write.
-  const dl = document.getElementById('fin-tx-cats');
-  if (dl && FIN_TX) {
-    const cats = [...new Set(FIN_TX.rows.filter(r => r.category).map(r => r.category))].sort();
-    dl.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
-  }
+  // The suggestions and the field's own presence are both finTxKind's, which
+  // this has already called — they depend on the direction, and the direction
+  // can change while the form is open.
   finTxErr('');
   m.hidden = false;
   // §1.8, one Dusk element per page. The modal's Save is the primary action of
@@ -626,10 +828,13 @@ window.finTxSave = function finTxSave() {
     kind: FIN_TX_KIND,
     date: val('fin-tx-date'),
     amount: val('fin-tx-amount'),
-    // Money in sends no category at all — the field is hidden and there is no
-    // income list to snap onto. The server passes null rather than normalising
-    // it against the EXPENSE list, which shares the 'accounting' kind.
-    category: FIN_TX_KIND === 'out' ? val('fin-tx-cat') : null,
+    // THE FIELD'S PRESENCE IS THE RULE, read from the field rather than restated
+    // here. It is absent for money in while the tenant has no income category,
+    // and an absent field has nothing to send — sending the box's last value
+    // anyway would file an income row under whichever EXPENSE category was typed
+    // before the direction was switched.
+    category: (document.getElementById('fin-tx-cat-row') || {}).hidden
+      ? null : finTxCatStored(val('fin-tx-cat')),
     note: val('fin-tx-note'),
   };
   const row = FIN_TX_EDIT;

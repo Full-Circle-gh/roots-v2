@@ -51,6 +51,36 @@ function codeOnly(src) {
 const ROUTE_CODE = codeOnly(ROUTE);
 const CLIENT_CODE = codeOnly(CLIENT);
 
+/* Two slices of the screen, evaluated together by the vm tests below. The form
+   calls the category-label helpers, which are declared far above it, so a slice
+   of the form alone no longer stands up. They are cut apart rather than running
+   the whole file because the halves between them declare `let FIN_TX`, and a
+   `let` at the top of a vm script SHADOWS the context property these tests set
+   — the payload would then always read null. */
+const CLIENT_HELPERS = CLIENT.slice(
+  CLIENT.indexOf('// ── Category labels'),
+  CLIENT.indexOf('/** One money row of the staircase'));
+const CLIENT_TXFORM = CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT'));
+
+/** A context with both slices loaded, and stubs for the form's four elements. */
+function formCtx(els, lang) {
+  let LANG = lang || 'en';
+  const ctx = vm.createContext({
+    document: {
+      getElementById: (id) => els[id] || null,
+      querySelectorAll: () => [{ classList: { toggle() {} }, dataset: {} }],
+    },
+    escapeHtml: (x) => String(x),
+    window: { cuLang: () => LANG },
+    cuLang: () => LANG,
+    cuT: (en, cn) => (LANG === 'cn' ? cn : en),
+    setLang: (l) => { LANG = l; },
+  });
+  vm.runInContext(CLIENT_HELPERS, ctx);
+  vm.runInContext(CLIENT_TXFORM, ctx);
+  return ctx;
+}
+
 const LEDGER_DATE = WINDOW_LIB.match(/const LEDGER_DATE = '([^']+)'/)[1];
 const { fen } = require('../lib/finance-window');
 
@@ -265,7 +295,7 @@ new vm.Script(
 ).runInContext(ctx);
 
 const poRow = { kind: 'out', id: 'po-50', date: '2026-08-30', subject: 'PO-0050',
-  amount: 1257.68, source: 'po', po_id: 50, categories: 2 };
+  amount: 1257.68, source: 'po', po_id: 50, categories: 2, po_open: true };
 const poOne = { ...poRow, id: 'po-51', subject: 'PO-0051', amount: 385, po_id: 51, categories: 1 };
 const manualRow = { kind: 'out', id: 5, date: '2026-08-05', subject: 'Rent', amount: 8000, source: 'manual' };
 
@@ -416,7 +446,7 @@ it('§36 is honoured: storeCategory runs on every write', () => {
   // exception." Without it the Summary's breakdown draws lines that read
   // identically — the total right and every line beneath it wrong.
   assert.ok(/require\('\.\.\/lib\/category-text'\)/.test(ROUTE_CODE), 'must import it');
-  assert.ok(/storeCategory\(db, b\.category\)/.test(ROUTE_CODE), 'must call it');
+  assert.ok(/storeCategory\(db, b\.category,/.test(ROUTE_CODE), 'must call it');
   // readBody is the ONE place a row is validated, and both POST and PUT go
   // through it — so neither can skip the normalisation.
   assert.strictEqual((ROUTE_CODE.match(/readBody\(/g) || []).length, 3,
@@ -432,29 +462,271 @@ it('storeCategory actually snaps a variant onto the stored spelling', () => {
   assert.strictEqual(storeCategory(c, 'Rent'), 'Rent');
 });
 
-it('money in passes no category — the expense list is not its list', () => {
-  // §36 decides income categories move server-side and ship empty, and that has
-  // not landed. Normalising an income value against kind='accounting' would snap
-  // it onto the EXPENSE list, which is a different list doing a different job.
-  assert.ok(/kind === 'out' \? storeCategory/.test(ROUTE_CODE), 'money in must pass null');
-  assert.ok(/FIN_TX_KIND === 'out' \? val\('fin-tx-cat'\) : null/.test(CLIENT_CODE),
-    'and the form must not send one');
+it('money in normalises against the INCOME list, never the expense one', () => {
+  // §36's *Income categories move server-side*: money in has a list of its own
+  // now, so `storeCategory` reaches it too — but against kind='income'. Snapping
+  // an income value onto the EXPENSE list would file it under a name the tenant
+  // keeps for what it spends, reading as a match on every screen afterwards.
+  assert.ok(/kind === 'in' \? 'income' : 'accounting'/.test(ROUTE_CODE),
+    'the kind must be chosen by direction');
+  assert.ok(!/kind === 'out' \? storeCategory/.test(ROUTE_CODE),
+    'money in no longer passes null — it has a list');
+
+  const c = new Database(':memory:');
+  c.exec("CREATE TABLE categories (kind TEXT, name TEXT)");
+  c.prepare("INSERT INTO categories VALUES ('accounting','Rent')").run();
+  c.prepare("INSERT INTO categories VALUES ('income','Sublet')").run();
+  // Each direction snaps onto its own list and is blind to the other's.
+  assert.strictEqual(storeCategory(c, ' sublet ', 'income'), 'Sublet');
+  assert.strictEqual(storeCategory(c, ' rent ', 'income'), 'rent');
+  assert.strictEqual(storeCategory(c, ' rent ', 'accounting'), 'Rent');
+  assert.strictEqual(storeCategory(c, ' sublet ', 'accounting'), 'sublet');
+  // The default is the expense list, so every caller written before this
+  // parameter existed is unchanged.
+  assert.strictEqual(storeCategory(c, ' rent '), 'Rent');
 });
 
-it('the income category field hides while the add control stays visible', () => {
+it('the income list is served from the ledger payload, on tdb()', () => {
+  // §36: "hydrated from the server on load, on the same mechanism" as expense.
+  // The screen cannot know whether the list is empty without being told.
+  assert.ok(/kind = 'income'/.test(ROUTE_CODE), "the route reads kind='income'");
+  assert.ok(/income_categories: incomeCategories/.test(ROUTE_CODE), 'and ships it');
+  assert.ok(!/require\('\.\.\/database'\)/.test(ROUTE_CODE),
+    'Tacet Finance is on tdb(), never the module-level global handle');
+  assert.ok(/const db = tdb\(\)/.test(ROUTE_CODE), 'every handle comes from tdb()');
+});
+
+it('the list ships EMPTY — nothing seeds an income category', () => {
+  // §36: "The list ships empty. No defaults." The four the kitchen app defaults
+  // to are channel facts the order record already carries, and "a dropdown with
+  // a wrong option available is what produced the ¥152,309 Mini App mis-filing".
+  const lookups = fs.readFileSync(path.join(ROOT, 'routes', 'lookups.js'), 'utf8');
+  assert.ok(/'payment_method', 'income'\]/.test(lookups), "'income' is a valid kind");
+  const boot = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
+  assert.ok(!/'income',/.test(boot.slice(boot.indexOf('lookups_seed_v1'))),
+    'the boot seed must not plant one');
+  [['堂食', 'Dine-in'], ['外卖', 'Takeaway'], ['外送', 'Delivery'], ['活动', 'Events']]
+    .forEach(([cn]) => {
+      assert.ok(!CLIENT.includes(cn), `the retired default reached the screen: ${cn}`);
+      assert.ok(!ROUTE.includes(cn), `the retired default reached the route: ${cn}`);
+    });
+});
+
+it('the income category field follows the real list, not an assumption', () => {
   // §36: "the category field appears once the tenant has created at least one
-  // income category" and "the add income action stays visible regardless" —
-  // gating it "would leave a tenant with non-sale money in hand, no route to
-  // record it, and no sign on the screen explaining why."
-  assert.ok(/row\.hidden = FIN_TX_KIND === 'in'/.test(CLIENT_CODE), 'the field hides');
+  // income category" — so the field asks the list rather than hard-coding that
+  // money in never has one.
+  assert.ok(/row\.hidden = FIN_TX_KIND === 'in' && !finIncomeCats\(\)\.length/.test(CLIENT_CODE),
+    'the field must consult the server list');
+  assert.ok(/FIN_TX\.income_categories/.test(CLIENT_CODE), 'read from the payload');
+
+  // Evaluated, not merely matched: empty hides, one entry shows.
+  const row = { hidden: false };
+  const dl = { innerHTML: '' };
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cats': dl, 'fin-tx-cat': { value: '' } });
+  cctx.FIN_TX = { rows: [], income_categories: [] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(row.hidden, true, 'an empty list hides the field');
+  assert.strictEqual(dl.innerHTML, '', 'and offers no options');
+  cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(row.hidden, false, 'one income category brings it back');
+  // The list is the income list, rendered in ONE language: the stored value is
+  // `Sublet 转租` and the English screen offers `Sublet`.
+  assert.ok(/>?Sublet</.test(dl.innerHTML.replace(/"/g, '')) || /Sublet"/.test(dl.innerHTML),
+    'the income list must reach the box');
+  assert.ok(!/转租/.test(dl.innerHTML), 'and the English screen shows no Chinese');
+  cctx.window.finTxKind('out');
+  assert.strictEqual(row.hidden, false, 'money out always has the field');
+  assert.ok(!/Sublet/.test(dl.innerHTML),
+    'and the two lists are never pooled — an income value must not be suggested '
+    + 'for an expense, which storeCategory would then snap onto the wrong list');
+});
+
+it('switching direction empties the category box', () => {
+  // The two lists are different vocabularies. A value typed for one direction
+  // left sitting in the box would be SENT on the other — type an expense
+  // category, switch to money in on a tenant that HAS income categories, and the
+  // income row files under an expense name. Hiding covers the empty-list case
+  // only; this covers the other one.
+  const row = { hidden: false };
+  const box = { value: 'Rent 房租' };
+  const dl = { innerHTML: '' };
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cat': box, 'fin-tx-cats': dl });
+  cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
+  cctx.window.finTxKind('in');
+  assert.strictEqual(box.value, '', 'the expense value must not survive the switch');
+});
+
+it('a money-in row that already has a category keeps its field', () => {
+  // Not about offering a category — about not silently blanking one. A category
+  // deleted in Settings must not make the next edit of that row wipe what it
+  // says, and the form sends null for a field it is not showing.
+  assert.ok(/finTxKeepsCat/.test(CLIENT_CODE), 'the guard must exist');
+  assert.ok(/FIN_TX_EDIT\.kind === 'in' && FIN_TX_EDIT\.category/.test(CLIENT_CODE),
+    'and it must key off the row being edited');
+});
+
+it('the add control stays visible regardless', () => {
+  // §36: gating it "would leave a tenant with non-sale money in hand, no route
+  // to record it, and no sign on the screen explaining why."
   const cta = financeSection().match(/id="fin-tx-new"[^>]*/);
   assert.ok(cta, 'the CTA is missing');
   assert.ok(!/disabled/.test(cta[0]), 'it is never disabled');
 });
 
+it('the form sends a category exactly when it shows the field', () => {
+  // Read off the field rather than restated: a rule stated twice drifts once.
+  assert.ok(/getElementById\('fin-tx-cat-row'\) \|\| \{\}\)\.hidden\s*\?\s*null/
+    .test(CLIENT_CODE), 'the send must follow the field, not the direction');
+});
+
+it('a category renders in ONE language, from a value that carries both', () => {
+  // The category is DATA, not a locked pair, and the column holds both halves
+  // glued: `Salaries&Wages 员工工资`. cuT cannot reach it, so the English screen
+  // was showing Chinese and the Chinese screen English.
+  const cctx = formCtx({});
+  const LANG = { set: (l) => cctx.setLang(l) };
+
+  // Both orders occur in the live data and both must split.
+  assert.strictEqual(cctx.finCatLabel('Salaries&Wages 员工工资'), 'Salaries&Wages');
+  assert.strictEqual(cctx.finCatLabel('门店进货 Retail stock'), 'Retail stock');
+  // The CN half keeps its fullwidth punctuation instead of leaking ）into EN.
+  assert.strictEqual(cctx.finCatLabel('Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）'),
+    'Ingredients(Kitchen+Retail Use)');
+  LANG.set('cn');
+  assert.strictEqual(cctx.finCatLabel('Salaries&Wages 员工工资'), '员工工资');
+  assert.strictEqual(cctx.finCatLabel('门店进货 Retail stock'), '门店进货');
+  assert.strictEqual(cctx.finCatLabel('Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）'),
+    '原材料（厨房及零售通用）');
+
+  // ONE language only: rendered whole in both, never halved to nothing.
+  for (const lang of ['en', 'cn']) {
+    LANG.set(lang);
+    assert.strictEqual(cctx.finCatLabel('销货成本'), '销货成本');
+    assert.strictEqual(cctx.finCatLabel('Rent'), 'Rent');
+  }
+  assert.strictEqual(cctx.finCatSplit('销货成本'), null, 'nothing to split');
+  assert.strictEqual(cctx.finCatSplit('原材料 Ingredients 采购'), null,
+    'interleaved must refuse to guess rather than cut at the first boundary');
+
+  // §36's three-rent-payments defect must not arrive through the display: two
+  // categories that read alike in this language both render whole.
+  LANG.set('en');
+  const m = cctx.finCatLabels(['Rent 房租', 'Rent 租金', 'Packaging Materials 包装材料']);
+  assert.strictEqual(m.get('Rent 房租'), 'Rent 房租');
+  assert.strictEqual(m.get('Rent 租金'), 'Rent 租金');
+  assert.strictEqual(m.get('Packaging Materials 包装材料'), 'Packaging Materials');
+});
+
+it('a shown half stores as the whole value it came from', () => {
+  // The trap in translating a free-text field. The box offers `Salaries&Wages`
+  // and the column holds `Salaries&Wages 员工工资` — saving what the box says
+  // would write a SECOND category, two lines that read alike on the breakdown.
+  // storeCategory cannot catch it: it snaps on spacing and case, and these
+  // differ by a whole language.
+  const cctx = formCtx({
+    'fin-tx-cat-row': { hidden: false }, 'fin-tx-cat': { value: '' }, 'fin-tx-cats': { innerHTML: '' },
+  });
+  cctx.FIN_TX = { rows: [{ kind: 'out', category: 'Salaries&Wages 员工工资' }], income_categories: [] };
+  cctx.window.finTxKind('out');
+
+  assert.strictEqual(cctx.finTxCatStored('Salaries&Wages'), 'Salaries&Wages 员工工资',
+    'the English half must resolve back to the stored spelling');
+  assert.strictEqual(cctx.finTxCatStored('员工工资'), 'Salaries&Wages 员工工资',
+    'and so must the Chinese half, whichever screen it was pasted into');
+  assert.strictEqual(cctx.finTxCatStored('Salaries&Wages 员工工资'), 'Salaries&Wages 员工工资',
+    'the whole value is already stored form');
+  assert.strictEqual(cctx.finTxCatStored('Cleaning'), 'Cleaning',
+    'a genuinely new category stores as typed — the field is free text');
+  assert.strictEqual(cctx.finTxCatStored('   '), '', 'blank stays blank');
+
+  // The form must actually route the save through it.
+  assert.ok(/finTxCatStored\(val\('fin-tx-cat'\)\)/.test(CLIENT_CODE),
+    'the save must map the label back before sending');
+  assert.ok(/set\('fin-tx-cat', row && row\.category \? finCatLabel/.test(CLIENT_CODE),
+    'and the edit path must fill the box with the label');
+});
+
+it('a typed NOTE is never split — only a category is', () => {
+  // A manual row's subject is its category when it has one and its typed note
+  // when it has not. Splitting a note would cut a sentence at its first Chinese
+  // character, so the test is identity with the row's own category.
+  assert.ok(/subj !== r\.category\) return subj/.test(CLIENT_CODE),
+    'a subject that is not the category must render verbatim');
+});
+
+it('the PO link switches the tab BEFORE it paints the order', () => {
+  // The reported break. This read `if (window.puOpenPO) return puOpenPO(poId);`
+  // ahead of the switch, and window.puOpenPO is ALWAYS defined — 16-purchasing
+  // loads on every page of this admin — so the goTab line beneath it could
+  // never run. The order was fetched and painted into a section that was not on
+  // screen, and the click looked like it did nothing.
+  const order = [];
+  const cctx = vm.createContext({
+    document: { getElementById: () => null, querySelectorAll: () => [] },
+    escapeHtml: (x) => String(x),
+    console,
+    goTab: (t) => order.push('goTab:' + t),
+    // Both as bare globals AND on `window`: the browser's `window.puOpenPO = …`
+    // makes one identifier, and the call site uses the bare form.
+    puOpenPO: (id) => order.push('open:' + id),
+    window: {},
+  });
+  cctx.window.goTab = cctx.goTab;
+  cctx.window.puOpenPO = cctx.puOpenPO;
+  vm.runInContext(CLIENT.slice(CLIENT.indexOf('window.finTxOpenPO'),
+    CLIENT.indexOf('function finTxRender')), cctx);
+  cctx.window.finTxOpenPO(50);
+  assert.deepStrictEqual(order, ['goTab:purchasing', 'open:50'],
+    'the tab must be switched first, and the order opened second');
+
+  // Neither call may be skipped because the other is missing.
+  assert.ok(!/if \(window\.puOpenPO\) return/.test(CLIENT_CODE),
+    'an early return on the opener is what made the tab switch dead code');
+});
+
+it('the cold-start open is sequential, not a race with puInit', () => {
+  // puInit ends by setting _screen='orders' and painting THE LIST after its
+  // three loads. Opened cold from Finance, that paint would land on top of the
+  // order — decided by which fetch happened to resolve last.
+  const PU = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '16-purchasing.js'), 'utf8');
+  const open = PU.slice(PU.indexOf('window.puOpenPO = async function'),
+    PU.indexOf('function paintWizard'));
+  assert.ok(/if \(!_init && typeof window\.puInit === 'function'\)[\s\S]*await window\.puInit\(\)/.test(open),
+    'a cold open must await the module load before it paints the order');
+  // Only cold: once _init is true, refresh() repaints solely while _screen is a
+  // list screen, so it cannot overwrite this one whichever way the two resolve.
+  assert.ok(/if \(_screen === 'orders' \|\| _screen === 'suppliers'\) paint\(\)/.test(PU),
+    'refresh must stay screen-conditional — the warm path depends on it');
+});
+
+it('a PO the opener cannot serve offers no link at all', () => {
+  // Both realms post to this ledger and SHARE `purchase_orders`; getRetailPO
+  // serves scope='retail' only and answers not_found for the rest. §36: "the
+  // row explains its own constraint instead of merely enforcing it" — a link
+  // that fails is the fault that rule names.
+  const kitchen = { ...poRow, po_open: false };
+  const html = ctx.finTxRow(kitchen);
+  assert.ok(!/Open purchase order/.test(html), 'no link on a PO this screen cannot open');
+  assert.ok(!/finTxOpenPO/.test(html), 'and no handler either');
+  // The money and the mark stay: §36 hides no money from the ledger.
+  assert.ok(/Posted by Purchasing/.test(html), 'the row still says who wrote it');
+  assert.ok(html.includes(ctx.finTxAmount(kitchen)), 'and still carries its figure');
+  // The route must actually say which is which, on the shared column.
+  assert.ok(/COALESCE\(po\.scope, 'kitchen'\) AS po_scope/.test(ROUTE_CODE),
+    'the scope must be read, not assumed');
+  assert.ok(/po_open: r\.po_scope === 'retail'/.test(ROUTE_CODE), 'and reported');
+});
+
 it('nothing in the form touches localStorage', () => {
+  // The kitchen app still holds FIN_INCOME_CATS_KEY = 'roots_v2:incomeCats' and
+  // saveFinCats(); §36 moves the list to the server and Tacet reads that list
+  // and no other. Whether the kitchen store is deleted is a kitchen question.
   assert.ok(!/localStorage|roots_v2:incomeCats/.test(CLIENT_CODE),
-    'income categories live in localStorage today and this form must not read them');
+    'Tacet must neither read nor write the per-browser income list');
+  assert.ok(!/localStorage|roots_v2:incomeCats/.test(ROUTE_CODE),
+    'and neither may the route');
 });
 
 it('a delete is never unconfirmed, and the write control disables', () => {
@@ -475,7 +747,13 @@ it('the write half is gated apart from the read half', () => {
 });
 
 it('the three new pairs are locked at v1.11, and the rest are reused', () => {
-  assert.ok(/\*\*v1\.11 ·/.test(VOCAB), 'the amendment must be recorded');
+  // NOT anchored on `**v1.11`. The vocabulary's banner is ONE running paragraph
+  // with the newest amendment first, so the `**` belongs to whichever version is
+  // currently newest — v1.12 took it on 2026-09-02 and this assertion went red on
+  // main for a docs commit that changed nothing about these three pairs. What
+  // must stay true is that the amendment is still RECORDED, not that it is still
+  // the most recent one, which it is guaranteed to stop being.
+  assert.ok(/\bv1\.11 ·/.test(VOCAB), 'the v1.11 amendment must still be recorded');
   [['New transaction', '新建交易'],
    ['Delete this transaction?', '删除这条交易记录？'],
    ['This removes the row from the ledger.', '此操作将从账本中移除该记录。']]

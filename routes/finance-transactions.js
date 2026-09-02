@@ -1,6 +1,6 @@
 // Finance — the Transactions ledger.
 //
-// docs/tacet-consolidation-decisions.md §36 (v4.119) governs what this reads.
+// docs/tacet-consolidation-decisions.md §36 (v4.121) governs what this reads.
 // The screen is public/retail-admin/22-finance.js; the layout comes from
 // reference/finance-transactions-mockup.html, with two approved departures
 // recorded there and repeated below.
@@ -121,13 +121,22 @@ function readBody(body, db) {
   // right and every line beneath it is wrong**, which is worse than a visibly
   // broken number because nothing on the screen looks wrong.
   //
-  // MONEY IN PASSES null AND NEVER REACHES IT. Income categories have no
-  // server-side list (§36 decides they move, and that has not landed), so the
-  // form shows no category field for money in and there is nothing to normalise.
-  // Calling storeCategory on an income value would also snap it onto the EXPENSE
-  // list, which shares the `accounting` kind — a collision worth naming rather
-  // than discovering.
-  const category = kind === 'out' ? storeCategory(db, b.category) : null;
+  // BOTH DIRECTIONS, SINCE 2026-09-02. §36's *Income categories move server-side
+  // and the list ships empty* gives money in a list of its own — `kind='income'`
+  // in the same `categories` table, added to `routes/lookups.js` — so income now
+  // has a category to store and the same rule reaches it. The sentence in §36 is
+  // about Finance, not about the expense half of Finance.
+  //
+  // **THE KIND IS PASSED, AND THE TWO LISTS ARE NEVER CROSSED.** Money in snaps
+  // against 'income' and money out against 'accounting'. Letting an income value
+  // reach the expense list would file it under a name the tenant keeps for what
+  // it spends, and it would read as a match on every screen afterwards.
+  //
+  // A value with no entry on its own list still stores NORMALISED, exactly as an
+  // unlisted expense category does. The empty list §36 ships is what keeps a
+  // wrong option off the screen; it is not a closed vocabulary the writer
+  // enforces, and Finance has never had one in either direction.
+  const category = storeCategory(db, b.category, kind === 'in' ? 'income' : 'accounting');
 
   const note = (b.note == null || b.note === '') ? null : String(b.note);
   return { kind, date: String(b.date), amount, category, note };
@@ -279,18 +288,50 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
     // category'", because at one nothing was collapsed and a note would assert a
     // breakdown that does not exist. The client applies that rule; the count is
     // reported honestly either way.
+    //
+    // `scope` IS SELECTED BECAUSE NOT EVERY PO ON THIS ROW CAN BE OPENED. The
+    // kitchen and retail realms SHARE the `purchase_orders` table and are told
+    // apart only by this column — `COALESCE(scope,'kitchen')`, the same
+    // expression `getRetailPO` filters on. Both realms' posters write
+    // `expense_entries.po_id`, so a kitchen order (PO-0050) lands in this ledger
+    // exactly as a retail one (RPO-0003) does, and it belongs here: it is real
+    // money out. But Purchasing's own opener serves retail scope only and
+    // answers `not_found` for the rest, so the row must not offer an action that
+    // cannot complete — §36: "the row explains its own constraint instead of
+    // merely enforcing it", and a link that fails is the fault that rule names.
+    // The row still renders, still counts, and still says Posted by Purchasing.
     const posted = db.prepare(`
       SELECT e.po_id                       AS po_id,
              po.po_number                  AS po_number,
              po.date                       AS date,
              COALESCE(SUM(e.amount), 0)    AS amount,
              COUNT(DISTINCT e.category)    AS categories,
-             COUNT(*)                      AS rows_collapsed
+             COUNT(*)                      AS rows_collapsed,
+             COALESCE(po.scope, 'kitchen') AS po_scope
         FROM expense_entries e
         JOIN purchase_orders po ON po.id = e.po_id
        WHERE e.po_id IS NOT NULL AND po.date BETWEEN ? AND ?
-       GROUP BY e.po_id, po.po_number, po.date
+       GROUP BY e.po_id, po.po_number, po.date, COALESCE(po.scope, 'kitchen')
        ORDER BY po.date DESC, e.po_id DESC`).all(from, to);
+
+    // ── The income category list ──
+    // §36, *Income categories move server-side, and the list ships empty*: the
+    // tenant's own list, hydrated from the server on load, on the same mechanism
+    // as expense. It rides the ledger payload rather than a second endpoint
+    // because the screen needs it at exactly the moment it already has this —
+    // the form reads its suggestions off this same object.
+    //
+    // **IT IS EMPTY ON EVERY TENANT TODAY, AND THAT IS THE DECISION, NOT A GAP.**
+    // "The list ships empty. No defaults." Nothing seeds it: the boot seed in
+    // database.js covers 'recipe' and 'product' only. An empty list is what makes
+    // the form's category field ABSENT for money in — §36's own rule for the
+    // screen — and "an empty list cannot offer a wrong option".
+    //
+    // Same ORDER BY as `routes/lookups.js` reads it with, so the one list does not
+    // come back in two orders depending on which endpoint asked.
+    const incomeCategories = db.prepare(
+      "SELECT name FROM categories WHERE kind = 'income' ORDER BY sort_order, name"
+    ).all().map(r => r.name);
 
     // ── One list, both directions ──
     // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
@@ -317,6 +358,8 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
         amount: fen(r.amount),
         source: 'po', po_id: r.po_id, po_number: r.po_number,
         categories: r.categories || 0,
+        // Whether THIS screen's link can reach it, not a fact about the order.
+        po_open: r.po_scope === 'retail',
       })),
     ].sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0)
                   || String(b.id).localeCompare(String(a.id)));
@@ -327,6 +370,7 @@ router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, r
       success: true,
       data: {
         window: { from, to, span_days: win.span_days },
+        income_categories: incomeCategories,
         totals: { in: sum('in'), out: sum('out') },
         counts: {
           all: rows.length,
