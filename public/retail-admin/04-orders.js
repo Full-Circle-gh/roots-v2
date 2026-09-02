@@ -2314,6 +2314,92 @@ function fulfillmentShortStrip(o) {
     + `<div style="display:flex; flex-direction:column; gap:7px; min-width:0; flex:1;">${items}</div>`
     + `</div>`;
 }
+
+// ─── Awaiting restock — naming what the order is parked on ─────────────────
+// An order parks in 'awaiting_restock' two ways: the customer answers the
+// checkout shortage modal with "wait for restock" (fallback_choice =
+// 'wait_for_restock'), or a pre-order line is bought (no fallback_choice at
+// all — an empty value means pre-order, never an error). Either way
+// awaiting_restock_pids records WHICH products it is waiting on.
+//
+// Until this shipped the drawer showed the status pill and nothing else, so
+// staff read every line of a seven-product order and then went to Products to
+// check stock SKU by SKU to find the short one.
+//
+// 🔴 The column is deliberately KEPT after the order releases — it is the audit
+// trail, and checkAwaitingRestockForRestock() says so where it flips the status.
+// So every reader here gates on the LIVE STATUS too. Read the pids alone and a
+// long-shipped order still claims to be waiting on stock.
+function awaitingRestockPids(o) {
+  if (!o || o.status !== 'awaiting_restock') return [];
+  let pids = [];
+  try { pids = JSON.parse(o.awaiting_restock_pids || '[]') || []; } catch {}
+  return Array.isArray(pids) ? pids : [];
+}
+
+// The fulfilling store's name in the operator's language, for the card's title.
+// Falls back to the code, then to the plain word — the sentence has to stay
+// true for an order whose store row was deleted.
+function awaitingRestockStore(o) {
+  const en = o.store_name_en || o.store_code || '';
+  const cn = o.store_name_cn || o.store_code || '';
+  return cuT(en, cn);
+}
+
+// The card that answers "what is this order parked on?", rendered above the
+// items so it is read before any scrolling. Companion to fulfillmentShortStrip
+// (the shipping-store shortage) and built the same way — same slot, same pid →
+// item lookup — because they are the same question asked of two different
+// columns, and an operator should not have to learn two treatments for it.
+//
+// Amber names the shortage: a person is needed. The line below it carries the
+// Dusk dot instead, because the release is NOT the operator's job — stock
+// landing at the store flips the order back to Paid on its own. Without that
+// sentence the card reads as a task, and staff chase an order that is already
+// being watched.
+function awaitingRestockCard(o) {
+  const pids = awaitingRestockPids(o);
+  if (!pids.length) return '';
+  const byId = new Map((o.items || []).map(it => [it.product_id, it]));
+  const rows = pids.map(pid => {
+    const it = byId.get(pid);
+    // A pid with no matching line means the item was removed from the order
+    // after it parked. Show the id rather than dropping the row — a silent
+    // omission would make the card disagree with the status pill.
+    if (!it) {
+      return `<div class="ar-row"><span class="oi-thumb is-empty" aria-hidden="true"></span>`
+        + `<span class="ar-name">#${escapeHtml(String(pid))}</span></div>`;
+    }
+    const nm = orderItemNames(it);
+    return `<div class="ar-row">`
+      + itemThumb(it)
+      + `<span class="ar-name">${escapeHtml(nm.primary)}</span>`
+      + itemSkuHtml(it)
+      + itemQtyHtml(it)
+      + `</div>`;
+  }).join('');
+  const store = awaitingRestockStore(o);
+  const title = store
+    ? cuT(`Waiting on stock at ${store}`, `${store}等待补货`)
+    : cuT('Waiting on stock', '等待补货');
+  // The pre-order case has no fallback_choice, so it gets no "the customer
+  // chose to wait" clause — that sentence would be untrue there.
+  const chose = o.fallback_choice === 'wait_for_restock'
+    ? cuT('The customer chose to wait. ', '顾客选择了等待补货。')
+    : '';
+  const releases = store
+    ? cuT(`Releases to Paid on its own once ${store} can cover the order.`,
+          `${store}备齐订单全部商品后,订单会自动转为已支付。`)
+    : cuT('Releases to Paid on its own once the store can cover the order.',
+          '门店备齐订单全部商品后,订单会自动转为已支付。');
+  return `<div class="full ar-card">`
+    + `<div class="ar-head">${escapeHtml(title)}</div>`
+    + `<div class="ar-list">${rows}</div>`
+    + `<div class="ar-auto"><span class="ar-dot" aria-hidden="true"></span>`
+    +   `<span>${escapeHtml(chose + releases)}</span></div>`
+    + `</div>`;
+}
+
 // Full-size "Ship by" tile shown in the order-detail card grid. Same decision
 // (shipByPlan) and urgency scheme as the list cell, with more context: the
 // kicker, a verbose urgency badge, the made-fresh / no-slot sub-line, and the
@@ -2989,7 +3075,13 @@ function renderItemRow(it, opts = {}) {
   // Meta line is SKU · qty · unit cost only. Size/weight dropped — the SKU
   // already pins the exact variant, so the weight was redundant.
   const refundPill = itemRefundHtml(it);
-  const rowCls = `mf-row${itemFullyRefunded(it) ? ' refunded-row' : ''}`;
+  // A line the order is parked on. The card above names it too; this is the
+  // mark under the operator's finger while they read the pick list.
+  const waitPill = opts.waiting
+    ? `<span class="pack-badge awaiting">${cuT('Waiting on stock', '待补货')}</span>`
+    : '';
+  const rowCls = `mf-row${itemFullyRefunded(it) ? ' refunded-row' : ''}`
+    + `${opts.waiting ? ' awaiting-row' : ''}`;
   return `
     <div class="${rowCls}" data-fk="${it.id}">
       <span class="mf-num">${num}</span>
@@ -3004,6 +3096,7 @@ function renderItemRow(it, opts = {}) {
           ${itemQtyHtml(it)}
           <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
           ${refundPill ? `<span class="mf-packs">${refundPill}</span>` : ''}
+          ${waitPill ? `<span class="mf-packs">${waitPill}</span>` : ''}
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
         ${itemOptionsHtml(it)}
@@ -3055,14 +3148,17 @@ function renderSortableItems(o) {
   const inParcel = new Set();
   ships.forEach(s => (s.items || []).forEach(it => inParcel.add(it.id)));
   const loose = (o.items || []).filter(it => !inParcel.has(it.id));
+  // Loose lines carry the same mark as parcelled ones — a pickup order parks on
+  // a restock exactly like a courier order, and it has no shipment card at all.
+  const looseWaiting = new Set(awaitingRestockPids(o));
   let looseHtml = '';
   if (loose.length) {
     looseHtml = ships.length
       ? `<div class="shipment-card"><div class="shipment-head">
            <span class="mode-pill"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Not yet in a parcel · 待分配</span>
            <span class="count">${cuT(`${loose.length} item${loose.length === 1 ? '' : 's'}`, `${loose.length} 件商品`)}</span>
-         </div>${renderItemsTable(loose, packable)}</div>`
-      : renderItemsTable(loose, packable);   // pickup / no-parcel order: plain list
+         </div>${renderItemsTable(loose, packable, looseWaiting)}</div>`
+      : renderItemsTable(loose, packable, looseWaiting);   // pickup / no-parcel order: plain list
   }
   return renderSortChips()
     + ships.map(s => renderShipmentCard(o, s)).join('')
@@ -3116,10 +3212,15 @@ function flipReorder(host, swap) {
 // Items render as a numbered packing manifest, per shipment. Sort order is
 // preserved from sortOrderItems so the Packaging / SKU / Shipping chips still
 // re-order the list.
-function renderItemsTable(items, showPack = true) {
+// `waiting` is a Set of product_ids the order is parked on (empty for every
+// order not in 'awaiting_restock' — see awaitingRestockPids).
+function renderItemsTable(items, showPack = true, waiting = null) {
   const sorted = sortOrderItems(items, _ITEMS_SORT_MODE);
   return `<div class="manifest">
-    ${sorted.map((it, i) => renderItemRow(it, { showPack, index: i + 1 })).join('')}
+    ${sorted.map((it, i) => renderItemRow(it, {
+      showPack, index: i + 1,
+      waiting: !!(waiting && waiting.has(it.product_id)),
+    })).join('')}
   </div>`;
 }
 
@@ -3166,6 +3267,21 @@ function shipmentStatePill(s) {
   return `<span class="pill ${cls}"><span class="dot"></span>${label}</span>`;
 }
 
+// While an order is parked on a restock, "Not shipped" is TRUE but useless: it
+// reads as "nobody has got to it yet" when the real reason is that stock has not
+// landed. Name the hold instead — but only on the parcels that actually carry a
+// short line, and only while the parcel is still pending. A parcel already on
+// its way keeps its own state; that is what the operator is tracking.
+function shipHoldPill(o, s, waiting) {
+  const state = s.state || 'pending';
+  const held = (waiting && waiting.size && state === 'pending')
+    ? (s.items || []).filter(it => waiting.has(it.product_id)).length
+    : 0;
+  if (!held) return shipmentStatePill(s);
+  return `<span class="pill st-awaiting_restock"><span class="dot"></span>`
+    + `${cuT(`Held — ${held} line${held === 1 ? '' : 's'} waiting`, `待补货 — ${held} 项`)}</span>`;
+}
+
 // Render one shipment block: header pill + items table + tracking row.
 function renderShipmentCard(o, s) {
   const mode = s.mode || 'local';
@@ -3186,6 +3302,7 @@ function renderShipmentCard(o, s) {
     ? `<span data-lang-block="en">${lines} product${lines === 1 ? '' : 's'} · ${units} units</span><span data-lang-block="cn">${lines} 款 · ${units} 件</span>`
     : `<span data-lang-block="en">${lines} product${lines === 1 ? '' : 's'}</span><span data-lang-block="cn">${lines} 款</span>`;
   const state = s.state || 'pending';
+  const waiting = new Set(awaitingRestockPids(o));
   // Per-shipment dispatch is offered once the order is paid (or later) and this
   // parcel hasn't shipped. The order being 'dispatched' doesn't block it — a
   // partially-shipped order keeps un-shipped parcels actionable.
@@ -3214,9 +3331,9 @@ function renderShipmentCard(o, s) {
       <div class="shipment-head">
         <span class="mode-pill mode-${mode}">${labelMap[mode] || s.label}</span>
         <span class="count">${countLabel}</span>
-        ${shipmentStatePill(s)}
+        ${shipHoldPill(o, s, waiting)}
       </div>
-      ${renderItemsTable(s.items, false)}
+      ${renderItemsTable(s.items, false, waiting)}
       ${actions}
       ${mode === 'local'
         ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) && !courierCardHoisted(o, s) ? renderLocalEtaCard(o, s) : '')
@@ -5657,6 +5774,7 @@ function renderOpenOrder(o) {
             </div>` : ''}
           </div>
           ${fulfillmentShortStrip(o)}
+          ${awaitingRestockCard(o)}
           ${renderAlipayProof(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
