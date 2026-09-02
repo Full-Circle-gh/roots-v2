@@ -13670,3 +13670,97 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 400 15px/1.6 var(--f-sans);
 }
 @media (prefers-reduced-motion: reduce) { .fin-chev { transition: none; } }
+
+/* ── Finance · Transactions (§36 v4.118) ──────────────────────────────────── */
+
+/* Sub-view strip (§1.1a row 2). It ships once there are two sub-views to name. */
+#tab-finance .fin-subviews {
+  display: flex; gap: 24px; margin-top: 24px;
+  border-bottom: 1px solid var(--td-border);
+}
+#tab-finance .fin-subviews button {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+  background: none; border: 0; padding: 0 0 10px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+#tab-finance .fin-subviews button.active {
+  color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text);
+}
+
+/* Direction tiles. Money out sits first, as the mockup draws it — on a ledger
+   of typed rows it is the larger and more frequent half. */
+.fin-tx-tiles { display: flex; gap: 16px; margin-top: 24px; }
+.fin-tx-tile {
+  flex: 1; background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-xl); padding: 16px 20px;
+}
+.fin-tx-k { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+.fin-tx-v {
+  font: 500 24px/1.3 var(--f-sans); color: var(--td-text);
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+
+/* Direction chips. These filter the operator's own view and change no data. */
+.fin-tx-chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.fin-tx-chip {
+  font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer;
+}
+.fin-tx-chip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
+.fin-tx-n { font-variant-numeric: tabular-nums; opacity: .7; }
+
+.fin-tx-filter { margin-top: 16px; }
+.fin-tx-search {
+  width: 100%; max-width: 420px;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-lg); padding: 6px 12px;
+}
+
+/* The table (§1.19 — fixed layout, classed cols, percentages summing to 100).
+   FIVE columns, not the mockup's six: its Location column is gone, because
+   neither ledger table carries a location and every cell would be empty. */
+.fin-tx-card {
+  margin-top: 16px; background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden;
+}
+.fin-tx-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.fin-c-date { width: 12%; } .fin-c-desc { width: 46%; }
+.fin-c-dir  { width: 12%; } .fin-c-amt  { width: 16%; } .fin-c-act { width: 14%; }
+/* §1.13a band values, product-wide. */
+.fin-tx-table thead th {
+  font: 500 13px/1.6 var(--f-sans); color: var(--td-text); text-align: left;
+  background: var(--td-raised); padding: 10px 12px;
+  border-bottom: 1px solid var(--td-border);
+}
+.fin-tx-table td {
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
+  padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: top;
+}
+.fin-tx-table tbody tr:last-child td { border-bottom: 0; }
+.fin-tx-date { color: var(--td-text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-tx-num  { text-align: right; font-variant-numeric: tabular-nums; }
+.fin-tx-subj { display: block; }
+.fin-tx-meta { display: block; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; }
+
+/* A PO-derived row. Tinted, marked, and carrying an outward link instead of an
+   edit — §36: "The row explains its own constraint instead of merely enforcing
+   it." The tint is Dusk, the automation voice, and is rule-2 exempt under §1.8
+   because it reports that Tacet acted rather than asking for a click. */
+.fin-tx-posted td { background: var(--td-dusk-tint, var(--td-raised)); }
+.fin-tx-mark { color: var(--td-dusk-ink, var(--td-text2)); }
+.fin-tx-hint { color: var(--td-text2); }
+.fin-tx-act { color: var(--td-text); text-decoration: underline; cursor: pointer; }
+
+/* §1.12 states. Empty names what will arrive; no-results offers to clear.
+   Both are plain — nothing here is in a state, so nothing here is coloured. */
+.fin-tx-state {
+  margin-top: 16px; padding: 48px 24px; text-align: center;
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-xl);
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+.fin-tx-state h3 { font: 500 18px/1.4 var(--f-sans); color: var(--td-text); margin: 0 0 8px; }
+.fin-tx-state p { margin: 0 auto; max-width: 52ch; }
+.fin-tx-state .db-btn { margin-top: 16px; }

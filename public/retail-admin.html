@@ -10927,6 +10927,15 @@
       <span class="td-date" id="fin-range" data-no-i18n></span>
     </div>
 
+    <!-- Sub-view strip (§1.1a row 2). It ships NOW because there are two
+         sub-views; the Summary build deliberately shipped none, since a strip
+         with one tab names a screen the operator cannot open. Both labels are
+         locked pairs (`summary`, `transactions`). -->
+    <nav class="fin-subviews" id="fin-subviews" role="tablist">
+      <button type="button" data-sub="summary" class="active" onclick="finShow('summary')">Summary · 汇总</button>
+      <button type="button" data-sub="transactions" onclick="finShow('transactions')">Transactions · 交易记录</button>
+    </nav>
+
     <!-- The Reports range bar, reused: same seg presets, same date inputs, same
          GZ-local computation, same Apply/refresh pair. Its store select is
          deliberately absent — see the section comment above. -->
@@ -10947,6 +10956,27 @@
     </div>
 
     <div id="fin-stair"></div>
+
+    <!-- TRANSACTIONS — the ledger of typed rows (§36 v4.118). Two directions and
+         no third: settlement receipts have no row here, because the order record
+         already counted that money (§36).
+
+         NO LOCATION COLUMN AND NO LOCATION FILTER, both of which the mockup
+         draws. Neither income_entries (schema.sql:217-227) nor expense_entries
+         (:229-240) carries a location, so every cell would be empty and the
+         filter would silently drop the whole list when set.
+
+         NO "New transaction" CTA. The write half is unbuilt; a Dusk CTA that
+         does nothing is worse than none. -->
+    <div id="fin-tx" hidden>
+      <div class="fin-tx-tiles" id="fin-tx-tiles"></div>
+      <div class="fin-tx-chips" id="fin-tx-chips"></div>
+      <div class="fin-tx-filter">
+        <input class="fin-tx-search" id="fin-tx-search" type="text"
+               oninput="finTxRender()" aria-label="Filter these transactions">
+      </div>
+      <div id="fin-tx-list"></div>
+    </div>
   </section>
 
   <section id="tab-sales">

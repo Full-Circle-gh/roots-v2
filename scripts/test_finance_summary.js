@@ -39,6 +39,10 @@ const CLIENT = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '22-fin
 const CSS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
 const VOCAB = fs.readFileSync(path.join(ROOT, 'docs', 'tacet-delivery-vocabulary.md'), 'utf8');
+// The predicates moved to lib/finance-window.js so the Summary and Transactions
+// routes share ONE copy — §36's "must not be inherited by copying whichever
+// site is nearest" applied across the Finance module rather than within a file.
+const WINDOW_LIB = fs.readFileSync(path.join(ROOT, 'lib', 'finance-window.js'), 'utf8');
 
 /* Strip // and /* *\/ comments so a "must not read X" assertion tests the CODE
    and not the prose explaining why X is not read. Both of these files document
@@ -57,7 +61,7 @@ const CLIENT_CODE = codeOnly(CLIENT);
 
 /** Pull a single-quoted or backticked const out of the shipped route. */
 function constOf(name) {
-  const m = ROUTE.match(new RegExp(`const ${name} = ([\`'"])([\\s\\S]*?)\\1;`));
+  const m = WINDOW_LIB.match(new RegExp(`const ${name} = ([\`'"])([\\s\\S]*?)\\1;`));
   assert.ok(m, `not found in the shipped route: ${name}`);
   return m[2];
 }
@@ -65,8 +69,8 @@ function constOf(name) {
 // ── The predicates, read from the shipped file rather than restated ────────
 const PAID = constOf('PAID');
 const TZ = constOf('TZ');
-const ODATE = ROUTE.match(/const ODATE = `([\s\S]*?)`;/)[1].replace('${TZ}', TZ);
-const EDATE = constOf('EDATE');
+const ODATE = WINDOW_LIB.match(/const ODATE = `([\s\S]*?)`;/)[1].replace('${TZ}', TZ);
+const EDATE = constOf('LEDGER_DATE');
 
 console.log('\n1 · the predicates — declared once, and the right ones');
 
@@ -89,9 +93,13 @@ it('the expense date takes NO shift — it is already a business day', () => {
 it('each predicate is declared exactly once and referenced thereafter', () => {
   // §36: "an allow-list is declared once and re-declared inline four more
   // times". The whole point of this module is not to do that again.
-  const inline = ROUTE.match(/status IN \('paid'/g) || [];
+  // CODE only. Both files document at length what the predicates are, and a
+  // comment naming one is documentation rather than a second declaration —
+  // counting raw source would fail on the prose that exists to explain the rule.
+  const src = codeOnly(ROUTE) + codeOnly(WINDOW_LIB);
+  const inline = src.match(/status IN \('paid'/g) || [];
   assert.strictEqual(inline.length, 1, `the allow-list is spelled out ${inline.length} times`);
-  const dates = ROUTE.match(/date\(COALESCE\(paid_at, placed_at\)/g) || [];
+  const dates = src.match(/date\(COALESCE\(paid_at, placed_at\)/g) || [];
   assert.strictEqual(dates.length, 1, `the date expression is spelled out ${dates.length} times`);
 });
 
@@ -312,9 +320,15 @@ it('the route is multi-tenant — tdb(), never the global handle', () => {
     'routes/finance.js uses the global handle and is not a pattern to copy');
 });
 
-it('no sub-view strip ships with one sub-view', () => {
+it('the sub-view strip ships now that there are two sub-views', () => {
+  // This assertion is the inverse of the one it replaces. The Summary build
+  // shipped NO strip, deliberately: "a strip with one tab names a screen the
+  // operator cannot open". Transactions is now built, so the door opens and the
+  // strip is correct — the rule never changed, only how many sub-views exist.
   const sec = HTML.slice(HTML.indexOf('id="tab-finance"'), HTML.indexOf('id="tab-sales"'));
-  assert.ok(!/Transactions|交易记录/.test(sec), 'Transactions is unbuilt; naming it offers a door that does not open');
+  assert.ok(/id="fin-subviews"/.test(sec), 'the strip is missing');
+  assert.ok(/data-sub="summary"/.test(sec) && /data-sub="transactions"/.test(sec),
+    'both sub-views must be named on the strip');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

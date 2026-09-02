@@ -32,6 +32,7 @@
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:finance-summary": "node scripts/test_finance_summary.js",
+    "test:finance-transactions": "node scripts/test_finance_transactions.js",
     "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
     "test:phone": "node scripts/test_recipient_phone.js",
     "test:push-mute": "node scripts/test_push_mute_action.js",

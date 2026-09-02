@@ -207,6 +207,13 @@ async function finLoad(opts) {
     const j = await api(`/api/retail-admin/finance/summary?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`);
     FIN_DATA = j.data;
     finRender();
+    // ONE WINDOW GOVERNS BOTH SUB-VIEWS. The range bar is shared, so a new
+    // window has to reach the ledger too — otherwise switching to Transactions
+    // after an Apply would show rows from the previous window with the new one
+    // echoed on the title line, which is the quietest kind of wrong. Only when
+    // Transactions has actually been opened: an operator who never leaves
+    // Summary never pays for a second query.
+    if (FIN_TX_SEEN) finTxLoad();
   } catch (e) {
     // §1.12: a failed read renders where the operator is looking and stays
     // until it is resolved. It never becomes a toast, and a card that failed
@@ -252,3 +259,193 @@ window.finInit = function finInit() {
   }
   finSetRange('30');
 };
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TRANSACTIONS — the ledger of typed rows.
+
+   §36 v4.118: this lists `income_entries` and `expense_entries` and does NOT
+   list orders. Summary is the totals; Transactions is what was entered by
+   hand. Layout from reference/finance-transactions-mockup.html, with the two
+   approved departures noted at the markup and repeated where they bite.
+
+   Every string below is an EN/CN pair from the Finance table of
+   docs/tacet-delivery-vocabulary.md (v1.10). None is composed here.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let FIN_TX = null;          // the last payload
+let FIN_TX_SEEN = false;    // has this sub-view ever been pulled
+let FIN_TX_DIR = 'all';     // 'all' | 'in' | 'out' — the chip filter
+
+/* Sub-view switching. Both panes live in the page; one is `hidden` at a time.
+   The range bar is SHARED — one window governs both sub-views, so switching
+   never silently re-scopes what the operator was reading. */
+window.finShow = function finShow(which) {
+  const isTx = which === 'transactions';
+  document.querySelectorAll('#fin-subviews button')
+    .forEach(b => b.classList.toggle('active', b.dataset.sub === which));
+  const stair = document.getElementById('fin-stair');
+  const tx = document.getElementById('fin-tx');
+  if (stair) stair.hidden = isTx;
+  if (tx) tx.hidden = !isTx;
+  if (isTx && !FIN_TX_SEEN) { FIN_TX_SEEN = true; finTxLoad(); }
+};
+
+/* The money column. Out is rendered with a minus, in with a plus — the sign is
+   the direction restated, and neither is coloured: §1.10, colour encodes state
+   and money out is not an error. "A down delta renders in Graphite, never
+   Brick." */
+function finTxAmount(r) {
+  return (r.kind === 'out' ? '−' : '+') + finMoney(r.amount);
+}
+
+/* One row. A PO-derived row differs in four visible ways, and each is one of
+   §36's requirements rather than decoration: it is tinted, it carries the
+   Posted-by-Purchasing mark, its action opens the purchase order instead of an
+   edit form, and it has no edit affordance at all.
+
+   THE REFUSAL IS VISIBLE, NOT MERELY ENFORCED. §36: "They would be uneditable
+   for no visible reason… The row explains its own constraint instead of merely
+   enforcing it." `routes/finance.js` already refuses edit and delete on any row
+   carrying a `po_id`; a screen that offered Edit and then failed would be the
+   fault that rule names. */
+function finTxRow(r) {
+  const po = r.source === 'po';
+  // §36: the note vanishes ENTIRELY at one category. "It does not read '1
+  // category'" — at one nothing was collapsed, so a note would assert a
+  // breakdown that does not exist and send the operator looking for it.
+  const hint = po && Number(r.categories) > 1
+    ? `<span class="fin-tx-hint" data-lang-block>${escapeHtml(cuT(
+        `Sum of ${r.categories} category subtotals`,
+        `${r.categories} 个类别小计合计`))}</span>`
+    : '';
+  const mark = po
+    ? `<span class="fin-tx-mark">${escapeHtml(cuT('Posted by Purchasing', '采购单自动记入'))}</span>`
+    : '';
+  // The date is the PO's own, never `created_at` — the route never selects
+  // created_at, so there is nothing here that could drift onto a row.
+  return `<tr class="${po ? 'fin-tx-posted' : ''}">`
+    + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
+    + `<td><span class="fin-tx-subj">${escapeHtml(r.subject || '')}</span>`
+    + (mark || hint ? `<span class="fin-tx-meta">${mark}${mark && hint ? ' · ' : ''}${hint}</span>` : '')
+    + '</td>'
+    + `<td>${escapeHtml(r.kind === 'out' ? cuT('Out', '出') : cuT('In', '进'))}</td>`
+    + `<td class="fin-tx-num">${escapeHtml(finTxAmount(r))}</td>`
+    + '<td>' + (po
+      ? `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`
+      : '') + '</td>'
+    + '</tr>';
+}
+
+/* §1.18 — the English surface renders US dates, and the year is omitted because
+   every row is inside the selected window. */
+function finTxDay(d) {
+  if (!d) return '';
+  const dt = new Date(String(d) + 'T00:00:00');
+  if (isNaN(dt)) return String(d);
+  return (window.cuLang && cuLang() === 'cn')
+    ? `${dt.getMonth() + 1}月${dt.getDate()}日`
+    : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/* The row action. Purchasing owns the record; Finance links to it. §36: "It is
+   not editable here because it is not edited here, and the place it IS edited
+   is one click away on the row itself." */
+window.finTxOpenPO = function finTxOpenPO(poId) {
+  if (window.puOpenPO) return puOpenPO(poId);
+  if (window.goTab) goTab('purchasing');
+};
+
+function finTxRender() {
+  const host = document.getElementById('fin-tx-list');
+  if (!host || !FIN_TX) return;
+  const d = FIN_TX;
+
+  const t = document.getElementById('fin-tx-tiles');
+  if (t) {
+    t.innerHTML =
+        `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money out', '支出'))}</div>`
+      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.out))}</div></div>`
+      + `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money in', '进账'))}</div>`
+      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.in))}</div></div>`;
+  }
+
+  const c = document.getElementById('fin-tx-chips');
+  if (c) {
+    const chip = (key, label, n) =>
+      `<button type="button" class="fin-tx-chip${FIN_TX_DIR === key ? ' on' : ''}" `
+      + `onclick="FIN_TX_DIR='${key}';finTxRender()">${escapeHtml(label)} `
+      + `<span class="fin-tx-n">${n}</span></button>`;
+    c.innerHTML = chip('all', cuT('All', '全部'), d.counts.all)
+      + chip('in',  cuT('Money in', '进账'),  d.counts.in)
+      + chip('out', cuT('Money out', '支出'), d.counts.out);
+  }
+
+  const s = document.getElementById('fin-tx-search');
+  if (s) s.placeholder = cuT('Filter these transactions', '筛选交易记录');
+  const q = (s && s.value || '').trim().toLowerCase();
+
+  const shown = d.rows
+    .filter(r => FIN_TX_DIR === 'all' || r.kind === FIN_TX_DIR)
+    .filter(r => !q || String(r.subject || '').toLowerCase().includes(q));
+
+  // ── §1.12, both states, and they are different facts ──
+  // EMPTY: there is nothing here yet. A compliment that names what will arrive.
+  // Money in reaches this on every tenant today — income_entries has no rows
+  // after the 1 August cutover — and that is correct, not a missing-data state:
+  // something arrives the moment anyone records non-sale income.
+  //
+  // NO RESULTS: there is plenty here; the filter matched none of it. Never a
+  // compliment — the operator is looking for something and has not found it —
+  // and it offers to clear what is filtering.
+  if (!shown.length) {
+    const filtering = !!q || FIN_TX_DIR !== 'all';
+    host.innerHTML = filtering
+      ? `<div class="fin-tx-state"><p>${escapeHtml(cuT('No matching records.', '没有符合条件的记录。'))}</p>`
+        + `<button type="button" class="db-btn" onclick="finTxClear()">${escapeHtml(cuT('Clear', '清除'))}</button></div>`
+      : `<div class="fin-tx-state"><h3>${escapeHtml(cuT('Nothing recorded yet', '暂无记录'))}</h3>`
+        + `<p>${escapeHtml(cuT(
+            'Rent, wages and one-off costs you record will appear here — alongside anything Purchasing posts from a purchase order.',
+            '您记录的租金、工资和一次性费用将显示在此处，以及采购单自动记入的支出。'))}</p></div>`;
+    return;
+  }
+
+  host.innerHTML = '<div class="fin-tx-card"><table class="fin-tx-table">'
+    + '<colgroup><col class="fin-c-date"><col class="fin-c-desc"><col class="fin-c-dir">'
+    + '<col class="fin-c-amt"><col class="fin-c-act"></colgroup>'
+    + '<thead><tr>'
+    + `<th>${escapeHtml(cuT('Date', '日期'))}</th>`
+    + `<th>${escapeHtml(cuT('Description', '说明'))}</th>`
+    + `<th>${escapeHtml(cuT('Direction', '方向'))}</th>`
+    + `<th class="fin-tx-num">${escapeHtml(cuT('Amount', '金额'))}</th>`
+    + '<th>&nbsp;</th></tr></thead><tbody>'
+    + shown.map(finTxRow).join('')
+    + '</tbody></table></div>';
+}
+
+window.finTxClear = function finTxClear() {
+  FIN_TX_DIR = 'all';
+  const s = document.getElementById('fin-tx-search');
+  if (s) s.value = '';
+  finTxRender();
+};
+
+async function finTxLoad() {
+  const host = document.getElementById('fin-tx-list');
+  if (!host) return;
+  const from = (document.getElementById('fin-from') || {}).value;
+  const to = (document.getElementById('fin-to') || {}).value;
+  // §1.12: the skeleton is for a real load only; a refresh keeps the rows up.
+  if (!FIN_TX) host.innerHTML = '<div class="fin-skel"></div>';
+  try {
+    const j = await api(`/api/retail-admin/finance/transactions?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`);
+    FIN_TX = j.data;
+    finTxRender();
+  } catch (e) {
+    // A failed read renders where the operator is looking and stays. On a
+    // refresh failure the banner sits above the rows already on screen, so
+    // nobody reads stale figures unwarned.
+    const banner = `<div class="fin-error">${escapeHtml(cuT('Could not load Finance.', '财务数据加载失败。'))} <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
+    if (FIN_TX) host.insertAdjacentHTML('afterbegin', banner);
+    else host.innerHTML = banner;
+  }
+}

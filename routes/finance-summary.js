@@ -66,50 +66,24 @@ const { requireRetailAdmin } = require('./retail');
 
 const router = express.Router();
 
-// ── The two predicates, declared ONCE ──────────────────────────────────────
-// §36's *The aggregation predicate and the order date are both inconsistent
-// today* is a finding about copy-paste: an allow-list declared once and
-// re-declared inline four more times, a non-equivalent deny-list live at two
-// sites, and four date conventions running simultaneously. It ends "Which
-// predicate and which date column the cost reader adopts is a decision to be
-// taken when it is built, deliberately. It must not be inherited by copying
-// whichever site is nearest."
+// ── The predicates, referenced not re-declared ─────────────────────────────
+// They live in lib/finance-window.js, which carries the reasoning: §36 records
+// that the allow-list is declared once and re-declared inline four more times
+// across the existing aggregators, and that a reader must not inherit one by
+// copying whichever site is nearest. Finance has exactly one copy, shared with
+// routes/finance-transactions.js, and this file adds none of its own.
 //
-// So both are constants, referenced everywhere below and re-declared nowhere.
-// Editing one of these is the only way to change what Finance counts.
-
-// The ALLOW-LIST, not the deny-list. A deny-list admits any status added later;
-// this excludes one until somebody decides it belongs.
-const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
-
-// The dominant convention of the four, and the only one that is right here.
-// `paid_at` alone drops orders that have none and puts the day boundary in UTC;
-// `placed_at` alone books a sale on the day it was keyed rather than paid.
-// The `+8 hours` shift is what makes a "day" the operator's day: without it an
-// order placed 31 July at 22:00 Guangzhou lands in the wrong month.
-const TZ = '+8 hours';
-const ODATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
-
-// `expense_entries.date` is a DATE — a business day already, with no clock on
-// it — so it takes no shift. Naming that here stops a later reader "fixing" the
-// asymmetry by adding one, which would move every expense back a day.
-const EDATE = 'date';
-
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Round to the fen. Money is REAL yuan in this schema (docs/tacet-money-model-survey.md). */
-const fen = (n) => Math.round((Number(n) || 0) * 100) / 100;
+//   PAID        the order status ALLOW-list
+//   ODATE       date(COALESCE(paid_at, placed_at), '+8 hours')
+//   LEDGER_DATE the ledger's own DATE column, which takes no shift
+const { PAID, ODATE, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
 
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
-  // Default window: the trailing 30 days in business-local time, matching the
-  // Reports range bar's own default so the two screens agree about "30 days".
-  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-  const toDefault = nowGz.toISOString().slice(0, 10);
-  const fromDefault = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
-  const from = DAY.test(req.query.from || '') ? req.query.from : fromDefault;
-  const to = DAY.test(req.query.to || '') ? req.query.to : toDefault;
-  if (from > to) {
+  // The window, resolved the one way Finance resolves windows.
+  const win = resolveWindow(req.query);
+  const { from, to } = win;
+  if (win.inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
   }
 
@@ -133,7 +107,7 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     const exp = db.prepare(`
       SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS rows
         FROM expense_entries
-       WHERE ${EDATE} BETWEEN ? AND ?`).get(from, to);
+       WHERE ${LEDGER_DATE} BETWEEN ? AND ?`).get(from, to);
 
     // The breakdown behind the disclosure on the expenses row. Ordered by
     // weight, because the operator opening it is asking where the money went.
@@ -145,7 +119,7 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     const breakdown = db.prepare(`
       SELECT category, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
         FROM expense_entries
-       WHERE ${EDATE} BETWEEN ? AND ?
+       WHERE ${LEDGER_DATE} BETWEEN ? AND ?
        GROUP BY category
        ORDER BY amount DESC`).all(from, to);
 
@@ -167,10 +141,7 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     res.json({
       success: true,
       data: {
-        window: {
-          from, to,
-          span_days: Math.round((new Date(to) - new Date(from)) / 86400000) + 1,
-        },
+        window: { from, to, span_days: win.span_days },
         revenue,
         orders: rev.orders || 0,
         cost_of_goods: null,
