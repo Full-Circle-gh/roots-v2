@@ -477,11 +477,10 @@
 </view>
 
 <!-- Flash sale: design directions (classic / editorial / urgency) — coral band,
-     cream cap edge, live countdown, SHOP NOW pill and a product carousel. -->
+     straight top edge, live countdown, SHOP NOW pill and a product carousel. -->
 <view wx:elif="{{type === 'flash_sale_strip' && !flashHidden && flashDesign}}"
       class="fsd-wrap fsd-{{flashDesign.view}} corner-{{flashDesign.corner}}"
       style="background:{{bg}};color:{{fg}};{{flashDesign.styleVars}}">
-  <view class="fsd-zig"></view>
   <view class="fsd-body">
 
     <!-- A · Classic — centred, cream tiles with ":" separators -->

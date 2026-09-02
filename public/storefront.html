@@ -638,7 +638,7 @@
   .b-flash-hero .hero-cards { margin-top: 22px; }
 
   /* ── FLASH SALE · design directions (Classic / Editorial / Urgency) ──
-     Coral band, cream cap top edge, live countdown, SHOP NOW pill and a
+     Coral band, straight top edge, live countdown, SHOP NOW pill and a
      product carousel. Every coloured element rides on a --fs-* CSS var set in
      JS so each piece can be recoloured independently. Mirrors cms.html. */
   .b-flash-classic, .b-flash-editorial, .b-flash-urgency {
@@ -652,9 +652,6 @@
   }
   .b-flash-classic.corner-subtle, .b-flash-editorial.corner-subtle, .b-flash-urgency.corner-subtle { border-radius: 14px; }
   .b-flash-classic.corner-bold,   .b-flash-editorial.corner-bold,   .b-flash-urgency.corner-bold   { border-radius: 22px; }
-  .b-flash-classic .fsd-cap, .b-flash-editorial .fsd-cap, .b-flash-urgency .fsd-cap {
-    height: 12px; background: var(--fs-panel);
-  }
   .fsd-body { padding: 22px 0; color: var(--fs-ink); }
 
   @keyframes fsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
@@ -1786,7 +1783,7 @@ function renderBlock(b) {
       }).join('');
 
       // ── Design directions: classic / editorial / urgency ──────────────
-      // Coral band + cream cap + live countdown + SHOP NOW + carousel.
+      // Coral band + live countdown + SHOP NOW + carousel, straight edge.
       // Mirrors cms.html; every colour rides on a --fs-* var.
       if (view === 'classic' || view === 'editorial' || view === 'urgency') {
         const fsVar = (token, fallback) => brandColorVar(token) || fallback || '';
@@ -1806,8 +1803,6 @@ function renderBlock(b) {
         const cornerClass = b.corner_radius ? ' corner-' + b.corner_radius : ' corner-subtle';
         const pulse = b.urgency === 'frantic' ? ' fs-pulse' : '';
         const pulseDot = b.urgency === 'frantic' ? ' fs-pulse-dot' : '';
-
-        const cap = `<div class="fsd-cap"></div>`;
 
         const vals = [split.d, split.h, split.m, split.s].map(v => String(v).padStart(2, '0'));
         const endsAttr = soonestEnd ? ` data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}"` : '';
@@ -1850,7 +1845,7 @@ function renderBlock(b) {
         if (view === 'classic') {
           const tiles = vals.map((v, i) => `
             <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<span class="fsd-colon">:</span>' : ''}`).join('');
-          return `<div class="b-flash b-flash-classic${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+          return `<div class="b-flash b-flash-classic${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">
             <div class="fsd-body">
               <div class="fsd-head">
                 <div class="fsd-kicker">${kHtml}</div>
@@ -1876,7 +1871,7 @@ function renderBlock(b) {
             : `Up to ${off}% off<br><span class="cn">最高 ${off}%</span>`;
           const seg = vals.map((v, i) => `
             <div class="fsd-seg"><div class="fsd-seg-num js-fsd-num">${v}</div><div class="fsd-seg-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<div class="fsd-seg-div"></div>' : ''}`).join('');
-          return `<div class="b-flash b-flash-editorial${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+          return `<div class="b-flash b-flash-editorial${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">
             <div class="fsd-body">
               <div class="fsd-head">
                 <div class="fsd-kicker">${kHtml}</div>
@@ -1897,7 +1892,7 @@ function renderBlock(b) {
           <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>`).join('');
         const liveLbl = state.lang === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE';
         const subLine = state.lang === 'cn' ? '' : (t.cn ? `<div class="fsd-sub">${escapeHtml(t.cn)}</div>` : '');
-        return `<div class="b-flash b-flash-urgency${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+        return `<div class="b-flash b-flash-urgency${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">
           <div class="fsd-body">
             <div class="fsd-head">
               <div class="fsd-live"><span class="fsd-live-dot${pulseDot}"></span><span class="fsd-live-lbl">${liveLbl}</span></div>
