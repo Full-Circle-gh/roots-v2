@@ -93,13 +93,17 @@ function pickBadge(tags) {
   return '';
 }
 
-const LIST_LAYOUTS = ['list', 'list-compact'];
+// All four sit on the same sidebar body (rail + internal scroll) — grid-2col
+// and grid-3col just swap the row list for a card grid inside it — so they
+// all count as "list" layouts for scroll/measure/nav purposes. Only gallery
+// keeps the older top-chips + page-scroll shell.
+const LIST_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col'];
 const VALID_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col', 'gallery', 'grid'];
 
 const LAYOUT_OPTIONS = [
+  { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
   { key: 'list',         icon: '☰',  en: 'List with sidebar',  cn: '列表（侧栏）' },
   { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
-  { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
   { key: 'grid-3col',    icon: '⊟',  en: 'Grid 3-col',          cn: '网格 3 列' },
 ];
 
@@ -148,7 +152,7 @@ Page({
     loading: true,
     totalCount: 0,
 
-    layout: 'list',
+    layout: 'grid-2col',
     isListLayout: true,
     layoutLocked: false,
     layoutOptions: LAYOUT_OPTIONS.map(o => ({ ...o, label: o.en })),
@@ -292,7 +296,7 @@ Page({
     }
     const s = (cfg && cfg.shop) || {};
 
-    const adminLayout = (s.layout === 'grid' ? 'grid-2col' : s.layout) || 'list';
+    const adminLayout = (s.layout === 'grid' ? 'grid-2col' : s.layout) || 'grid-2col';
     const layoutLocked = !!s.lockLayout;
     let layout = adminLayout;
     if (!layoutLocked) {
@@ -301,7 +305,7 @@ Page({
         if (saved && VALID_LAYOUTS.includes(saved)) layout = saved;
       } catch {}
     }
-    if (!VALID_LAYOUTS.includes(layout)) layout = 'list';
+    if (!VALID_LAYOUTS.includes(layout)) layout = 'grid-2col';
     if (layout === 'grid') layout = 'grid-2col';
     const isListLayout = LIST_LAYOUTS.includes(layout);
 

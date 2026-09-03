@@ -2168,12 +2168,21 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_broadcasts (
   scheduled_for   DATETIME,                      -- NULL = send immediately
   sent_at         DATETIME,                      -- NULL until fanout completes
   recipient_count INTEGER DEFAULT 0,
-  status          TEXT NOT NULL DEFAULT 'scheduled', -- scheduled|sent|recalled|cancelled
+  status          TEXT NOT NULL DEFAULT 'scheduled', -- scheduled|sent|recalled|cancelled|expired
   created_by      INTEGER,                       -- users.id
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_broadcasts_status ON retail_broadcasts(status, scheduled_for)'); } catch {}
 addColumn('retail_notifications', 'broadcast_id', 'INTEGER');
+// The other end of a broadcast's window. scheduled_for says when it starts;
+// expires_at says when it stops showing. NULL = no end, which is what every
+// broadcast written before this column existed keeps. Bolted on rather than
+// declared above because the table ships on live tenants. The authoring row
+// carries it so the history can show the cap; each fanned-out copy carries it
+// too so the customer feed can filter without joining back. Stored in the same
+// bare-UTC form as scheduled_for, so CURRENT_TIMESTAMP compares directly.
+addColumn('retail_broadcasts', 'expires_at', 'DATETIME');
+addColumn('retail_notifications', 'expires_at', 'DATETIME');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_notif_broadcast ON retail_notifications(broadcast_id)'); } catch {}
 
 // Seed a default ONBOARDING layout — first-launch customers in the mini

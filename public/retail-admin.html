@@ -6290,6 +6290,7 @@
       .bx-pill.scheduled { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
       .bx-pill.recalled  { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
       .bx-pill.cancelled { background:var(--bg-elev-1);        color:var(--text-2); }
+      .bx-pill.expired   { background:var(--bg-elev-1);        color:var(--text-2); }
       .bx-pill.draft     { background:var(--bg-elev-1);        color:var(--text-2); }
 
       .bx-empty { padding:40px 20px; text-align:center; }
@@ -6381,6 +6382,13 @@
                 <option value="later">Schedule for later · 定时发送</option>
               </select>
               <input id="bc-schedule-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
+              <div class="bx-gap"></div>
+              <label class="bx-label">Stops showing · 停止显示 <span class="bx-opt">— when it should drop out of the inbox · 何时从收件箱消失</span></label>
+              <select id="bc-expire-mode" class="bx-sel" onchange="bcExpireMode()">
+                <option value="never">Never — stays until recalled · 一直保留,直到撤回</option>
+                <option value="at">On a date · 到期时间</option>
+              </select>
+              <input id="bc-expire-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
             </div>
           </div>
 
@@ -12139,6 +12147,19 @@
       #tab-team .rl-p.locked input, #tab-team .rl-p.locked label { cursor: not-allowed; }
       #tab-team .rl-p.locked { opacity: .55; }
 
+      /* The Dashboard block — the switch on top, the layout and the cards it
+         governs indented beneath it. Same box as a permission group (.rl-g) so
+         it reads as one thing; the body greys as a unit when the switch is off,
+         the same .55 the locked ticks use, so "no effect" looks the same
+         everywhere on the pane. */
+      #tab-team .rl-dash { border: 1px solid var(--td-border); border-radius: 12px; margin-top: 16px; overflow: hidden; }
+      #tab-team .rl-dash-head { padding: 8px 8px 12px; border-bottom: 1px solid var(--td-border); }
+      #tab-team .rl-dash-head .rl-p label b { font-weight: 500; }
+      #tab-team .rl-dash-cap { color: var(--td-text2); font-size: 12.5px; margin-left: 6px; }
+      #tab-team .rl-dash-head .tm-fhint { margin: 2px 0 0 36px; }
+      #tab-team .rl-dash-body { padding: 4px 15px 15px; }
+      #tab-team .rl-dash-body.off { opacity: .55; }
+      #tab-team .rl-dash-body .tm-field { margin-top: 12px; }
       /* Dashboard-card picks — the same .rl-p row as a capability tick, just in
          a two-column grid instead of the permission tree's single column: ten
          short labels read faster side by side than as one long list. */

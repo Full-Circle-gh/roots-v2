@@ -2145,6 +2145,62 @@ record of those two disagreeing. The first real cycle is what proves it.
 
 ---
 
+## 20. The drift sweep's expected-quantity arithmetic is not the daemon's, and on a negative shelf count they can never agree (found 2026-09-02, NOT fixed)
+
+Status: open. No Meituan code changed. Found while building the Eleme drift sweep
+(`lib/channel-drift-sweep.js`) on the same shape, not by looking for it here.
+
+**Two pieces of code compute "what should this stock box be holding" and they are
+not the same function.**
+
+- The daemon WRITES `meituan_product_map.last_pushed_qty` from `packQty()`
+  (`lib/pack-units.js:30-34`), by way of the push batch. `packQty` floors, and it
+  **clamps a non-positive shelf count to 0**: `if (!Number.isFinite(have) || have <= 0) return 0`.
+- The sweep RE-DERIVES the same figure with `Math.trunc(qty / units)`
+  (`lib/meituan-drift-sweep.js:146`) and, in SQL, with a bare truncating integer
+  division (`:122`). Neither clamps.
+
+For any shelf count of 0 or more the two agree exactly, which is why this has
+never been visible. They diverge only below zero:
+
+| shelf | `packQty` (what is stored) | `Math.trunc` (what the sweep expects) | verdict |
+|---|---|---|---|
+| 40, units 6 | 6 | 6 | agree |
+| 0 | 0 | 0 | agree |
+| −3, units 1 | **0** | **−3** | disagree, permanently |
+
+A product whose shelf count is negative therefore reads as drifted on every sweep,
+for ever. Each sweep re-queues it, the push writes 0 again, the map still holds 0,
+the sweep still expects −3. It costs a row of the 40-row budget every two hours
+(the cool-down), it never resolves, and at 24 hours it starts holding that store's
+chronic-drift latch closed — which is finding 10's failure mode reached by a
+different road: **while the latch is held, no new drift on that store can raise an
+alert either.**
+
+The comment at `lib/meituan-drift-sweep.js:139-140` is aware of half of this — it
+says `Math.trunc` rather than `Math.floor` was chosen because SQLite's `/`
+truncates toward zero and "they differ only on a negative shelf count, which the
+commit paths can produce". That is correct about `trunc` vs `floor` and it is the
+wrong comparison: the number it has to match is neither, it is `packQty`, and
+`packQty` clamps. So the file names the exact input that breaks it and then
+matches the wrong function on it.
+
+**Not fixed here, deliberately.** The Eleme build that found it was scoped to leave
+`lib/meituan-drift-sweep.js` untouched, and this is a live channel that currently
+works. The new module uses `packQty` in both halves from the start
+(`lib/channel-drift-sweep.js`, `expectedQtySql()` and the JS re-test), with a
+regression test for the negative case, so the defect is not carried forward.
+
+**What is not known**, and would decide whether this is urgent or theoretical: how
+many `retail_store_stock` rows currently hold a negative `physical_qty` on a
+Meituan-mapped product. That is one read against production and it was not run —
+this finding is from code, not from data. The fix, when someone takes it, is one
+import and one call site: replace `Math.trunc(qty / units)` with
+`packQty(qty, units)` at `:146` and `MAX(…, 0)` the SQL arm at `:122` so the
+pre-filter stays a superset of the JS test.
+
+---
+
 ## Context — what was and was not done on 2026-08-26
 
 > **Amended after findings 10 and 11.** The bullet below was written when this

@@ -118,6 +118,51 @@ function requireWasteEnabled(req, res, next) {
   next();
 }
 
+// ── Who may read what a loss COST (Ash, 2026-09-02) ──────────────────────────
+//
+// `waste:view` opens the ledger; `waste:costs` reads the money in it. The two
+// were one capability, so the warehouse and store_manager presets — whose job
+// is recording what spoiled — read the cost of every loss in the business.
+//
+// THIS IS ENFORCED HERE, ON THE WIRE, and not only in the two clients. A screen
+// that hides a number it was sent is a screen, not a permission: the figure is
+// still in the JSON, one devtools tab or one proxy away. So a caller without
+// the capability is never SENT a cost, and the clients then have nothing to
+// leak. Both clients still gate their own layout — that is what keeps the
+// column from rendering as an empty gap — but this is the half that is true
+// regardless of which client is asking.
+//
+// FAILS CLOSED, unlike every other cap check in this product. Elsewhere a null
+// cap set means "unknown, allow" — an operator locked out of their own app by
+// a resolution hiccup is worse than one shown a control they cannot use. Money
+// inverts that trade: the cost of failing closed is a figure missing for one
+// request, and the cost of failing open is money on a screen that must never
+// show it. req.caps is null only when resolveOperator threw, which is already
+// a degraded request.
+//
+// NOT gated through lib/cap-routes.js, deliberately: that map only runs when a
+// tenant has switched rbac_enforce on, and it gates MUTATIONS while leaving
+// reads open. This is a read, it must hold for every tenant today, and it
+// refuses a FIELD rather than a request — nobody is 403'd for lacking it.
+function canSeeCosts(req) {
+  return !!(req.caps && req.caps.has && req.caps.has('waste:costs'));
+}
+
+// Strip the money out of a row for a caller who may not read it.
+//
+// The keys are DELETED, not zeroed. A cost of null with is_uncosted still set
+// would render as "No cost" — a claim about this product's costing that we are
+// not making — and a zero would say the jar was free. Absent is the only honest
+// shape, and `costs_hidden` on the envelope is what tells a client the
+// difference between "we are not showing you this" and "there was none".
+function stripCost(row) {
+  if (!row) return row;
+  const out = { ...row };
+  delete out.cost_total_cents;
+  delete out.is_uncosted;
+  return out;
+}
+
 // Who did this. The id alone is ambiguous — a kitchen users(id) and a backend
 // operator's tenant_users(id) are two colliding sequences — so the label is
 // stored beside it and is the field to read. Same reasoning, and the same
@@ -168,6 +213,13 @@ router.get('/api/retail-admin/waste/products', requireRetailAdmin, requireWasteE
      ORDER BY p.name_en
      LIMIT 200
   `).all(...params);
+  // `unit_cost` is money and rides on every picker row. Neither client renders
+  // it — which is exactly why it survived a reading of both screens — but it is
+  // on the wire, and a per-unit cost is the figure the totals are built from.
+  if (!canSeeCosts(req)) {
+    return res.json({ success: true, costs_hidden: true,
+      data: rows.map(r => { const o = { ...r }; delete o.unit_cost; return o; }) });
+  }
   res.json({ success: true, data: rows });
 });
 
@@ -183,6 +235,13 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
   if (!productId) return res.status(400).json({ error: 'store_product_id_required' });
   if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'qty_positive_required' });
 
+  // This endpoint is nothing BUT the cost, so for a caller who may not read one
+  // there is no reduced answer to give — it returns the shape with the money
+  // absent and says why. The clients do not call it in that state; this is the
+  // backstop for the one that forgets, and for anyone calling the API directly.
+  if (!canSeeCosts(req)) {
+    return res.json({ success: true, costs_hidden: true, data: { store_product_id: productId, qty } });
+  }
   const unitYuan = productUnitCostYuan(db, productId);
   const cost = resolveCostCents(unitYuan, qty);
   res.json({
@@ -279,6 +338,14 @@ router.get('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, (
   ).get(...params);
   totals.voided_entries = voided.n;
 
+  // The money comes out of BOTH halves or neither. Leaving the total behind
+  // while stripping the rows would hand back the one figure that matters most,
+  // and the uncosted count is a statement about costing, so it goes with it.
+  if (!canSeeCosts(req)) {
+    delete totals.cost_total_cents;
+    delete totals.uncosted_entries;
+    return res.json({ success: true, data: rows.map(stripCost), totals, costs_hidden: true });
+  }
   res.json({ success: true, data: rows, totals });
 });
 
@@ -398,6 +465,12 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
 
     logActivity(actor.id, actor.label, 'create', 'waste_record', out.id,
       { product: product.name_en, qty, reason, cost_total_cents: out.cost_total_cents }, req.ip);
+    // The activity log above keeps the real figure — it is the audit trail and
+    // is read by people who may see money. What goes BACK to the recorder is
+    // stripped: this response is what a phone builds its "recorded ¥96" toast
+    // from, and that toast is the easiest place in the whole flow to leak a
+    // cost to somebody who may not read one.
+    if (!canSeeCosts(req)) return res.json({ success: true, costs_hidden: true, data: stripCost(out) });
     res.json({ success: true, data: out });
   } catch (e) {
     if (e.message === 'insufficient_stock') {
@@ -525,6 +598,14 @@ router.post('/api/retail-admin/waste/:id/void', requireRetailAdmin, requireWaste
 
     logActivity(actor.id, actor.label, 'void', 'waste_record', original.id,
       { reversal_id: out.reversal.id, qty: original.qty }, req.ip);
+    // Void carries the original's cost on both rows (§32 rule 9), so both are
+    // stripped. In practice waste:void is an owner capability and an owner
+    // resolves to every capability there is — but a tenant may hand void to a
+    // custom role without costs, and this must not be the hole it walks in by.
+    if (!canSeeCosts(req)) {
+      return res.json({ success: true, costs_hidden: true,
+        data: { reversal: stripCost(out.reversal), original: stripCost(out.original) } });
+    }
     res.json({ success: true, data: out });
   } catch (e) {
     console.error('[waste] void failed:', e);

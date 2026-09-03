@@ -51,6 +51,33 @@ const { materialConsumers } = require('../lib/recipe-materialize');
 
 const router = express.Router();
 
+// ── Who may read what a material COSTS (Ash, 2026-09-03) ─────────────────────
+//
+// `materials:view` opens the masterlist; `materials:costs` reads the two money
+// columns on it — Buy price and Cost per unit. They were one capability, so the
+// warehouse and store_manager presets read what every supplier charges and the
+// cost basis of every margin in the business.
+//
+// ENFORCED HERE, ON THE WIRE, for the same reason routes/retail-waste.js is: a
+// screen that hides a number it was sent is a screen, not a permission — the
+// figure is still in the JSON. Same three rules as waste, deliberately, so the
+// two read alike:
+//   • FAILS CLOSED. Everywhere else a null cap set means "unknown, allow";
+//     money inverts that trade.
+//   • Keys are DELETED, not zeroed — a 0 buy price reads as free.
+//   • It refuses a FIELD, never a request; nobody is 403'd for lacking it.
+function canSeeCosts(req) {
+  return !!(req.caps && req.caps.has && req.caps.has('materials:costs'));
+}
+// The two money columns on a material row, wherever a row is returned.
+function stripMaterialCost(row) {
+  if (!row) return row;
+  const out = { ...row };
+  delete out.cost_per_unit;
+  delete out.buy_price;
+  return out;
+}
+
 // Mirrors routes/ingredients.js's list projection: the two base64 columns
 // (image_data, supplier_qr_data) stay out of a list payload and are exposed as
 // boolean flags instead. The record GET below returns the whole row.
@@ -188,9 +215,11 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
     `SELECT SUM(source_recipe_id IS NULL) AS bought, SUM(source_recipe_id IS NOT NULL) AS made
        FROM ingredients${where}${kindClause}`
   ).get(...base, ...(kind ? [kind] : []));
+  const hideCost = !canSeeCosts(req);
   res.json({
-    success: true, data: rows, counts: byKind,
+    success: true, data: hideCost ? rows.map(stripMaterialCost) : rows, counts: byKind,
     sourceCounts: { bought: (srcRow && srcRow.bought) || 0, made: (srcRow && srcRow.made) || 0 },
+    ...(hideCost ? { costs_hidden: true } : {}),
   });
 });
 
@@ -276,6 +305,25 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
     }
   }
 
+  // FOUR money payloads on one response, and all four go. The row's own two
+  // columns are the obvious pair; the other two are the ones a reading of the
+  // screen alone would miss — `priceHistory` is a list of past buy prices and
+  // `purchases` is what was paid on each PO line. `derived` is the recomputed
+  // cost per unit, so its `cpu` goes — but `reason` and `gramsPerBuyUnit` stay.
+  // Those are pack arithmetic and data quality, not money: "no pack contents
+  // recorded" is exactly what an editor without prices still needs to fix, and
+  // hiding it would make the form unusable for the person most likely to be
+  // holding the sack.
+  if (!canSeeCosts(req)) {
+    return res.json({
+      success: true, costs_hidden: true,
+      data: stripMaterialCost(row),
+      priceHistory: [],
+      purchases: purchases.map(p => { const o = { ...p }; delete o.cost_per_unit; delete o.total_cost; return o; }),
+      derived: derived ? { gramsPerBuyUnit: derived.gramsPerBuyUnit, reason: derived.reason } : derived,
+      usedByRecipes, sourceRecipe, sourceRecipeBlock,
+    });
+  }
   res.json({ success: true, data: row, priceHistory, purchases, derived, usedByRecipes, sourceRecipe, sourceRecipeBlock });
 });
 
@@ -283,6 +331,12 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
 router.post('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   const b = readBody(req.body || {});
   if (!b.name_en) return res.status(400).json({ success: false, error: 'name_required' });
+  // Same rule as the update, and the same reason. There is no stored value to
+  // carry through on a create, so the new material simply starts without a
+  // price — which is the honest outcome: somebody who cannot be shown a price
+  // was never in a position to set one, and the row reads "no price" until
+  // somebody who can fills it in.
+  if (!canSeeCosts(req)) b.buy_price = 0;
   try {
     const r = tdb().prepare(`INSERT INTO ingredients
       (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,
@@ -316,6 +370,15 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
   const b = readBody(req.body || {});
   if (!b.name_en) b.name_en = existing.name_en;
   if (!b.item_kind) b.item_kind = existing.item_kind || 'food';
+  // YOU CANNOT CHANGE WHAT YOU CANNOT SEE — and this is data loss, not just a
+  // permission. The editor omits the Buy price field for an operator without
+  // materials:costs, readBody() turns an absent field into 0, and the UPDATE
+  // below writes it unconditionally: renaming a material would have wiped its
+  // price, written a price-history row saying so, and fired a >5% alert.
+  // Carrying the stored value through is what keeps an edit of the NAME an
+  // edit of the name. costFor() re-derives cost_per_unit from this, so the
+  // derived cost is preserved with it.
+  if (!canSeeCosts(req)) b.buy_price = existing.buy_price;
   try {
     // readBody() deliberately never reads source_recipe_id from the client —
     // a link is not something a material save gets to set — so the stored

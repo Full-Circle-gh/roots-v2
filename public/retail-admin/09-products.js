@@ -62,6 +62,22 @@ function paSyncLowStockUi() {
   const ls = document.getElementById('pd-low-stock');
   if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK;
 }
+// ── Who may read what a product costs (Ash, 2026-09-03) ───────────────────
+//
+// `products:view` opens the catalogue; `products:costs` reads the cost and the
+// margin on it. SELL PRICE IS NOT WHAT MOVES — what a customer is charged is on
+// the storefront and stays for anyone who may open this screen.
+//
+// FAILS CLOSED, unlike can(), which answers true on a null cap set so a
+// resolution hiccup never locks an operator out of their own app. 01-core.js
+// says the rule itself beside that helper: "do NOT gate anything that leaks
+// money/PII on caps alone without a reliable fallback." The fallback is the
+// server, which does not SEND a cost to a caller without the capability
+// (routes/retail.js stripProductCosts) — so this decides layout and the payload
+// decides what is knowable. Where they disagree the payload wins.
+function paShowMoney() {
+  return (typeof CAPS !== 'undefined' && CAPS !== null) ? CAPS.has('products:costs') : false;
+}
 // Persist the tenant-wide default from Settings → Operations → Stores. Per-store
 // overrides are saved separately in each store's settings form (osf_low_stock).
 async function paSaveLowStockDefault(val) {
@@ -2223,11 +2239,17 @@ function paRender() {
     // width-less, and a width-less column joins the equal division of whatever
     // the stated percentages leave — measured: a 0% grip column came out 6%
     // wide and took a third of the stock block with it.
+    // The Margin column is REMOVED without products:costs — col, header and
+    // cells — rather than emptied, for the reason stated immediately above
+    // about the grip: a column with no width still joins the division of the
+    // slack and takes room from its neighbours. The freed 13% is funded back
+    // into Product by the `[data-nocost]` rules in retail-admin.css.
+    const withCost = paShowMoney();
     const cols = '<colgroup>'
       + '<col class="pa-c-sel">' + (reorderActive ? '<col class="pa-c-grip">' : '') + '<col class="pa-c-name">'
       + '<col class="pa-c-cat"><col class="pa-c-sku">'
       + Array.from({ length: nStock }, () => '<col class="pa-c-stock">').join('')
-      + '<col class="pa-c-price"><col class="pa-c-margin"><col class="pa-c-status">'
+      + '<col class="pa-c-price">' + (withCost ? '<col class="pa-c-margin">' : '') + '<col class="pa-c-status">'
       + '</colgroup>';
     // Single-line labels, no sub-labels — a header that needs a sentence to be
     // understood is the wrong header (§1.13a). The grip's header is blank: a
@@ -2242,7 +2264,7 @@ function paRender() {
           ? listStores.map(s => `<th class="pa-c-stock">${escapeHtml(_paStoreName(s.id))}</th>`).join('')
           : `<th class="pa-c-stock">${cuT('Stock', '库存')}</th>`}
         <th class="pa-c-price">${cuT('Price', '价格')}</th>
-        <th class="pa-c-margin">${cuT('Margin', '毛利')}</th>
+        ${withCost ? `<th class="pa-c-margin">${cuT('Margin', '毛利')}</th>` : ''}
         <th class="pa-c-status">${cuT('Status', '状态')}</th>
       </tr></thead>`;
 
@@ -2289,12 +2311,12 @@ function paRender() {
             ? listStores.map(s => `<td class="pa-c-stock">${_paStoreStockCell(u, s.id)}</td>`).join('')
             : `<td class="pa-c-stock">${_paStockCell(u)}</td>`}
           <td class="pa-c-price">${_paPriceCell(u)}</td>
-          <td class="pa-c-margin">${_paMarginCell(u)}</td>
+          ${withCost ? `<td class="pa-c-margin">${_paMarginCell(u)}</td>` : ''}
           <td class="pa-c-status">${_paStatusCell(u)}</td>
         </tr>`;
     }).join('');
 
-    grid.innerHTML = `<table id="pa-table"${tblCls ? ` class="${tblCls}"` : ''} data-stores="${Math.min(nStock, 5)}">`
+    grid.innerHTML = `<table id="pa-table"${tblCls ? ` class="${tblCls}"` : ''} data-stores="${Math.min(nStock, 5)}"${withCost ? '' : ' data-nocost'}>`
       + cols + head + '<tbody>' + rows + '</tbody></table>';
     paApplyRowSelection();
     return;
@@ -2764,6 +2786,21 @@ async function pdOpen(id) {
     } }
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
+  // THE WHOLE COST BLOCK LEAVES for an operator without products:costs — the
+  // field, its source note, the two warnings and the margin readout are one
+  // `.field` in retail-admin.html, so hiding that hides all five together, and
+  // the "this cost is not complete" tag goes with them (it is a statement about
+  // a figure that is no longer on the page). Hidden rather than emptied: an
+  // empty Cost box invites somebody to type into a field whose save is refused.
+  // The server sends no cost either way, so there is nothing to blank.
+  {
+    const costField = document.getElementById('pd-cost');
+    const costBlock = costField && costField.closest('.field');
+    const flagLabel = document.querySelector('label.pd-cost-flag');
+    const show = paShowMoney();
+    if (costBlock) costBlock.style.display = show ? '' : 'none';
+    if (flagLabel) flagLabel.style.display = show ? '' : 'none';
+  }
   // Blank when unknown, never 0 — see pdRenderMargin.
   set('pd-cost', p && p.unit_cost != null ? p.unit_cost : '');
   pdApplyCostSource(p);
@@ -5433,7 +5470,16 @@ function pdCollectBody() {
     // OMITTED ENTIRELY when a recipe owns the figure. The server drops it in
     // that case anyway, but not sending it keeps the autosave payload honest
     // about what the operator actually changed.
-    ...(document.getElementById('pd-cost') && document.getElementById('pd-cost').readOnly
+    // OMITTED when a recipe owns the figure (readOnly), and now also when the
+    // operator may not read one at all. Both are the same shape of answer and
+    // the server treats them the same way: `'unit_cost' in body` is what every
+    // write branch is guarded by, so an absent key means "not touched".
+    //
+    // Without this the key would still be SENT — g() returns '' for a missing
+    // element, and '' is parsed to NULL on the way in, so editing a name would
+    // have wiped the cost. The server refuses it a second time; this keeps the
+    // payload honest about what the operator actually changed.
+    ...(!paShowMoney() || (document.getElementById('pd-cost') && document.getElementById('pd-cost').readOnly)
         ? {} : { unit_cost: g('pd-cost').trim() }),
     low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
@@ -5448,7 +5494,9 @@ function pdCollectBody() {
     // Always sent, both ways: clearing the tag is as much a statement as
     // setting it ("I have checked this one and it is complete"), so it must
     // reach the server rather than being omitted when false.
-    cost_incomplete: ckd('pd-cost-incomplete'),
+    // Travels WITH unit_cost, never apart from it — the tag is a statement
+    // about that exact figure, so it is omitted on exactly the same condition.
+    ...(paShowMoney() ? { cost_incomplete: ckd('pd-cost-incomplete') } : {}),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
     description_cn: pdRteClean(document.getElementById('pd-rte-cn').innerHTML),

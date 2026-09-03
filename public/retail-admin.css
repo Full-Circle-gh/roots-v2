@@ -2679,6 +2679,29 @@
   #pa-table.pa-reorder[data-stores="4"] col.pa-c-name { width: 15%; }
   #pa-table.pa-reorder[data-stores="5"] col.pa-c-name { width: 11%; }
 
+  /* ── No Margin column (an operator without products:costs) ───────────────
+     The column is removed outright — col, header and cells — so its 13% has
+     to go somewhere or the percentages stop summing to 100 (§1.19) and the
+     browser distributes the slack across every column instead of the one that
+     wants it. PRODUCT TAKES IT, which is this table's own established answer:
+     the single-store and reorder rules above already fund Product from
+     whatever the shape frees up.
+
+     One rule per case the matrix above states, and no case invented — each is
+     that rule's width + 13. Verified by measuring the rendered columns rather
+     than by adding the numbers here; a five-store tenant still needs the
+     re-measure the comment above asks for, in both cost states now. */
+  #pa-table[data-nocost] col.pa-c-name { width: 37%; }
+  #pa-table[data-nocost][data-stores="1"] col.pa-c-name { width: 46%; }
+  #pa-table[data-nocost][data-stores="3"] col.pa-c-name { width: 34%; }
+  #pa-table[data-nocost][data-stores="4"] col.pa-c-name { width: 31%; }
+  #pa-table[data-nocost][data-stores="5"] col.pa-c-name { width: 27%; }
+  #pa-table.pa-reorder[data-nocost] col.pa-c-name { width: 34%; }
+  #pa-table.pa-reorder[data-nocost][data-stores="1"] col.pa-c-name { width: 43%; }
+  #pa-table.pa-reorder[data-nocost][data-stores="3"] col.pa-c-name { width: 31%; }
+  #pa-table.pa-reorder[data-nocost][data-stores="4"] col.pa-c-name { width: 28%; }
+  #pa-table.pa-reorder[data-nocost][data-stores="5"] col.pa-c-name { width: 24%; }
+
   /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component and Orders is its
      anchor (§1.13a rule 3). Every value here is the spec's, not a per-page
      choice: 13px/500 in --td-text on --td-header, padding 10px 12px, a 1px
@@ -13346,6 +13369,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-waste col.wst-c-reason { width: 17%; }
 #tab-waste col.wst-c-cost   { width: 14%; }
 #tab-waste col.wst-c-act    { width: 8%; }
+/* Without `waste:costs` the Cost column is removed entirely (20-waste.js) —
+   col, header and cells — so the six that remain need widths of their own that
+   still sum to EXACTLY 100 (§1.19). The freed 14% goes to Product and Reason,
+   the two that were being clipped at the old widths; nothing else moves.
+   13 + 13 + 36 + 8 + 22 + 8 = 100. */
+#tab-waste table.nocost col.wst-c-prod   { width: 36%; }
+#tab-waste table.nocost col.wst-c-reason { width: 22%; }
 /* Cream header on white rows (§1.4). Single-line labels, no sub-labels — a
    header that needs a sentence to explain it is the wrong header. */
 #tab-waste .wst-table thead th {

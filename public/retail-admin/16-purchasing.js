@@ -1817,6 +1817,7 @@
         <td>
           <div class="item-name">${e2(i.name_en || '')}${i.name_cn ? ` <span class="cn">${e2(i.name_cn)}</span>` : ''}</div>
           ${i.sku ? `<div class="item-sub num">SKU ${e2(i.sku)}</div>` : ''}
+          ${i.note ? `<div class="item-note">${e2(i.note)}</div>` : ''}
         </td>
         <td class="qty num">${n2(i.qty)}${i.unit ? `<span class="unit">${e2(unitCN(i.unit))}</span>` : ''}</td>
         <td class="rate num">${n2(i.cost_per_unit)}</td>
@@ -1871,6 +1872,7 @@
   .item-name { line-height:1.45; font-weight:500; }
   .item-name .cn { color:var(--graphite); font-weight:400; }
   .item-sub { font-size:10.5px; color:var(--graphite); margin-top:3px; line-height:1.5; }
+  .item-note { font-size:11.5px; margin-top:4px; line-height:1.5; font-weight:500; }
   .unit { display:block; font-size:10.5px; color:var(--graphite); margin-top:3px; font-weight:400; }
   .totals { margin-top:4px; display:flex; justify-content:flex-end; }
   .totals table { border-collapse:collapse; min-width:300px; }

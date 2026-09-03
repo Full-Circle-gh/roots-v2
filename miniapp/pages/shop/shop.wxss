@@ -32,7 +32,9 @@
   line-height: 1;
 }
 .page-list,
-.page-list-compact { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
+.page-list-compact,
+.page-grid-2col,
+.page-grid-3col { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
 
 /* ─── Header ─────────────────────────────────────────────────────── */
 .header { padding: 60rpx 44rpx 24rpx; }
