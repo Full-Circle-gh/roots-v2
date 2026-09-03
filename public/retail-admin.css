@@ -2867,14 +2867,20 @@
      screens, because it is the same warning about the same recipe. Amber, not
      Brick: the number is not wrong to exist, it is wrong to trust. */
   #pd-cost-alert { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-  /* Radius is a fixed 12px, not 999px: this sidebar column is narrow enough
-     that the longer sentences here (unit mismatch, no cost yet) wrap to
-     several lines, and a "pill" radius on a box that tall — capped by its
-     width — draws a vertical stadium around the wrapped text instead of a
-     rounded box. 12px reads as a pill on the short one-liners and as a
-     normal rounded card on the wrapped ones. */
+  /* STRETCH, not flex-start: every message this box ever carries is a full
+     sentence (unit mismatch, no cost yet, archived, missing cost), never a
+     short one-liner, so hugging its own content width just means the
+     browser shrinks it toward the narrowest width it can still lay the text
+     out in — one or two words per line, absurdly tall — instead of using
+     the space the sidebar card actually has. Filling the container's width
+     lets the sentence wrap the way the card's other notices already do.
+     Radius is a fixed 12px, not 999px, for the same reason on the other
+     axis: a "pill" radius on a box a wrapped sentence has made tall — capped
+     by its width — draws a vertical stadium around the text instead of a
+     rounded box. 12px still reads fine on the rare short one-liner
+     ("Couldn't load the recipe") and as a normal rounded card on the rest. */
   .pd-cost-warn {
-    display: inline-flex; align-items: flex-start; gap: 8px; align-self: flex-start;
+    display: flex; align-items: flex-start; gap: 8px; align-self: stretch;
     font: 400 12px var(--f-sans); color: var(--td-amber-ink);
     background: var(--td-amber-tint); border-radius: 12px; padding: 6px 14px;
   }
