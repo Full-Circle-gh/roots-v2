@@ -11515,12 +11515,28 @@
   <section id="tab-recipes-record">
     <div class="rcp-scroll" id="rcp-rec-scroll">
       <div class="rcp-page" data-no-i18n>
-        <div class="rcp-rechead">
+        <!-- STICKY. The header does not scroll away, because everything on it is
+             needed at the bottom of a long recipe as much as at the top: which
+             recipe this is, the way back, and the save state. A recipe with
+             thirty ingredient lines used to lose all three within one flick of
+             the wheel, and the operator had to scroll back up to find out
+             whether his work was recorded.
+             Once the summary card has scrolled under it, the bar grows a second
+             line carrying that card's figures in miniature (rcp-recfigs) — the
+             one thing this screen must never let a scroll position hide is
+             whether the recipe looks free. Painted by paintStickyFigs(). -->
+        <div class="rcp-rechead" id="rcp-rechead">
+          <div class="rcp-rechead-main">
           <button type="button" class="rcp-btn ghost sm" onclick="rcpRecordBack()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
             <span id="rcp-rec-backlbl"></span>
           </button>
           <h1 class="rcp-rectitle" id="rcp-rec-title"></h1>
+          <!-- Autosave's whole visible surface: what the record's own copy is
+               doing right now (saved / saving / not saved). Never a toast — a
+               save that happens on its own has to be reportable at any moment,
+               not for 2.6 seconds after it lands. -->
+          <span class="rcp-savestate" id="rcp-rec-savestate"></span>
           <div class="rcp-recacts">
             <!-- §29 step 5. data-cap is recipes:edit only, matching Save/Archive
                  — the client's [data-cap] mechanism has no "requires BOTH"
@@ -11529,9 +11545,15 @@
                  requireMaterialsEditToo) since this writes into the materials
                  masterlist; this button's visibility is UX, not the gate. -->
             <button type="button" class="rcp-btn ghost" id="rcp-rec-materialize" data-cap="recipes:edit" onclick="rcpMaterializeClick()"></button>
+            <!-- History — the other half of autosave. Not gated on
+                 recipes:edit for READING it, but the panel's Restore button is;
+                 the server gates the restore itself either way. -->
+            <button type="button" class="rcp-btn ghost" id="rcp-rec-history" onclick="rcpHistory()"></button>
             <button type="button" class="rcp-btn danger" id="rcp-rec-arch" data-cap="recipes:edit" onclick="rcpArchive()"></button>
             <button type="button" class="rcp-btn primary" id="rcp-rec-save" data-cap="recipes:edit" onclick="rcpSave()"></button>
           </div>
+          </div>
+          <div class="rcp-recfigs" id="rcp-rec-stickyfigs" hidden></div>
         </div>
         <div class="rcp-summary" id="rcp-rec-summary"></div>
         <div class="rcp-subtabs" id="rcp-subtabs"></div>

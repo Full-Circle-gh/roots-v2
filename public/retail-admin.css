@@ -13057,12 +13057,82 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     height: calc(100vh - 56px); min-height: 0; overflow: hidden;
   }
   body.rcp-viewing #tab-recipes-record .rcp-scroll { flex: 1; min-height: 0; overflow: auto; }
-  #tab-recipes-record .rcp-page { padding: 22px var(--s6) var(--s6); }
+  /* No padding-top: the sticky header carries its own, so nothing shows above
+     it when the page is scrolled (a gap of page padding sliding past a bar
+     pinned at top:0 is the tell that a header was made sticky by accident). */
+  #tab-recipes-record .rcp-page { padding: 0 var(--s6) var(--s6); }
 
-  #tab-recipes-record .rcp-rechead { display: flex; align-items: center; gap: 14px;
-    flex-wrap: wrap; margin-bottom: 16px; }
+  /* ── THE STICKY HEADER ──────────────────────────────────────────────────
+     Pinned to the top of .rcp-scroll (the element that actually scrolls —
+     `main` does not; body.rcp-viewing gives it overflow:hidden and the record
+     section a fixed height). Negative side margins + its own padding let it
+     paint edge to edge across the scroll port while its contents stay on the
+     page's column. Ground is --td-paper, the page ground, so lines pass
+     UNDER it rather than showing through.
+     z-index 5: above the record's own cards, below the app's fixed topbar (12)
+     and the dialog scrim. */
+  #tab-recipes-record .rcp-rechead {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-direction: column; gap: 10px;
+    margin: 0 calc(-1 * var(--s6)) 16px; padding: 16px var(--s6) 14px;
+    background: var(--td-paper);
+    /* The hairline appears only once something has scrolled under the bar —
+       at rest the header is part of the page, and a permanent rule under it
+       would draw a box nobody asked for. Transition on colour alone so the
+       layout never shifts by a pixel when it turns on. */
+    border-bottom: 1px solid transparent; transition: border-color .15s ease;
+  }
+  #tab-recipes-record .rcp-rechead.stuck { border-bottom-color: var(--td-border); }
+  #tab-recipes-record .rcp-rechead-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   #tab-recipes-record .rcp-rectitle { font-size: 21px; }
   #tab-recipes-record .rcp-recacts { margin-left: auto; display: flex; gap: 9px; }
+
+  /* Autosave's state line. Quiet by default — "saved" is the normal condition
+     and must not shout; Brick only when something is genuinely unsaved. */
+  #tab-recipes-record .rcp-savestate { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
+  #tab-recipes-record .rcp-savestate.err { color: var(--td-brick-ink); }
+
+  /* The miniature of the summary card, shown only once the real one has
+     scrolled under the bar. Same figures, same order, one type step down —
+     it is the same fact seen from further away, not a second opinion. */
+  #tab-recipes-record .rcp-recfigs { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+  #tab-recipes-record .rcp-recfigs .f { display: inline-flex; align-items: baseline; gap: 8px;
+    font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-recfigs .f b { font-weight: 500; font-size: 15px; color: var(--td-text);
+    font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-recfigs .f.neg b, #tab-recipes-record .rcp-recfigs .f.neg { color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-recfigs .rcp-warnic svg { width: 15px; height: 15px; display: block; }
+  #tab-recipes-record .rcp-recfigs .warn { display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--td-amber-ink); background: var(--td-amber-tint);
+    border-radius: 12px; padding: 3px 12px; }
+  #tab-recipes-record .rcp-recfigs .warn svg { width: 14px; height: 14px; flex: none; }
+
+  /* ── History panel (rcp-hist-*) ────────────────────────────────────────
+     Scoped under .rcp-hist-modal like the materialize modal's own classes,
+     NOT under #tab-recipes-record: the dialog shell appends to <body>, so an
+     id-scoped rule here would style nothing. */
+  .rcp-hist-modal .rcp-hist-list { display: flex; flex-direction: column; gap: 2px;
+    max-height: 44vh; overflow: auto; margin-top: 4px; }
+  .rcp-hist-modal .rcp-hist-row { display: flex; align-items: baseline; gap: 12px; width: 100%;
+    text-align: left; appearance: none; cursor: pointer; background: transparent;
+    border: none; border-radius: 10px; padding: 9px 12px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-row:hover { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-row.on { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-when { font-weight: 500; white-space: nowrap; }
+  .rcp-hist-modal .rcp-hist-who { color: var(--td-text2); font-size: 12.5px;
+    margin-left: auto; text-align: right; white-space: nowrap; }
+  /* The live record sits at the top of the same list as the versions, because
+     it is the same axis: "now" is just the newest state. It is never
+     restorable, so it carries no Restore — the footer button disables on it. */
+  .rcp-hist-modal .rcp-hist-row.now .rcp-hist-when { color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-detail { border-top: 1px solid var(--td-border); margin-top: 12px;
+    padding-top: 12px; font-size: 13px; color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dl { display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; margin: 0; }
+  .rcp-hist-modal .rcp-hist-detail dt { color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dd { margin: 0; color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-empty { color: var(--td-text2); font-size: 13px; padding: 18px 4px; }
 
   /* The persistent summary — cost figures + warnings. Sits above the sub-tabs
      on purpose (see the HTML comment on #tab-recipes-record): it must read the

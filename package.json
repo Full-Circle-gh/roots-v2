@@ -57,6 +57,8 @@
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",
     "test:sync-start": "node scripts/test_sync_start_time.js",
     "test:unit-mismatch": "node scripts/test_recipe_unit_mismatch_warnings.js",
+    "test:recipe-versions": "node scripts/test_recipe_versions.js",
+    "test:recipe-autosave": "node scripts/test_recipe_record_autosave.js",
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:local-fresh": "node scripts/test_local_fresh_notice.js",
     "test:preorder-park": "node scripts/test_preorder_park.js",

@@ -13,6 +13,11 @@ const { checkCycle } = require('../lib/recipe-graph');
 // recipe-derived cost transitively. See lib/recipe-rollup.js.
 const { fireRecompute, backsAnyCostedRow } = require('../lib/recipe-rollup');
 const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
+// Version history (lib/recipe-versions.js). Filed from THIS door too, not only
+// from Tacet's: one recipe has two editors, and a history that silently omitted
+// every kitchen-app save would show a version list with holes in it — worse
+// than none, because a hole looks like "nothing happened".
+const { snapshotRecipe } = require('../lib/recipe-versions');
 // Automatic materialization (§29's third addendum, 2026-08-27): every
 // successful create/update calls this so a recipe's output always has a
 // materials row. See lib/recipe-materialize.js's own comment for the three
@@ -368,6 +373,10 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), blockC
     const refusal = cycleRefusal(req.params.id, ingredients);
     if (refusal) return res.status(400).json({ error: refusal });
   }
+  // File the state about to be overwritten — after the cycle guard (a refused
+  // save displaced nothing) and before the writes. 'manual': the Cost Sheet
+  // saves on a button, not on a timer.
+  snapshotRecipe(db, req.params.id, { source: 'manual', actor: req.user && (req.user.username || req.user.id) });
   try {
     db.prepare('UPDATE recipes SET name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,image_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
       .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null, req.params.id);
@@ -415,6 +424,9 @@ router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), b
   // behaviour is unchanged: a picked type is written, a cleared picker still
   // clears. It shares the write with Tacet's cost route so the absent-key rule
   // is one rule rather than two copies — see lib/recipe-cost-data-write.js.
+  // Coalesced against the recipe save that usually precedes it by a second, so
+  // one Cost Sheet save is one version, not two (lib/recipe-versions.js).
+  snapshotRecipe(db, req.params.id, { source: 'manual', actor: req.user && (req.user.username || req.user.id) });
   saveRecipeCostData(db, req.params.id, req.body);
   // Recompute trigger (§29 step 3): labour/packaging/overhead feed a linked
   // material's recipe cost exactly like an ingredient line does.

@@ -444,11 +444,20 @@ function runRecipeFns(lines) {
 }
 
 // The save must go through. This is a warning, not a gate.
-check('rcpSave warns AFTER the write and never blocks or converts', () => {
-  const save = extractFunction(RECIPES_JS, 'window.rcpSave = async function ()');
-  const putAt = save.indexOf("'/api/retail-admin/recipes/' + id");
-  const warnAt = save.indexOf('mismatchedLines()');
+// The write moved out of rcpSave into writeRecord() when the record learned to
+// autosave (2026-09-03) — rcpSave is now the REPORTING half and writeRecord the
+// writing half. The property is unchanged and is still what is asserted: the
+// mismatch is counted after the record is on the server, and nothing about it
+// blocks the save or touches a unit.
+check('the mismatch is counted AFTER the write, and never blocks or converts', () => {
+  const write = extractFunction(RECIPES_JS, 'async function writeRecord(');
+  const putAt = write.indexOf("'/api/retail-admin/recipes/' + recipeId");
+  const warnAt = write.indexOf('mismatchedLines()');
   assert.ok(putAt > -1 && warnAt > putAt, 'the warning is not after the save');
+  assert.ok(!/\.unit\s*=/.test(write), 'the write assigns to a line unit — nothing may be auto-converted');
+  assert.ok(!/return \{ ok: false[^}]*mismatch/i.test(write), 'the write refuses on a mismatch');
+
+  const save = extractFunction(RECIPES_JS, 'window.rcpSave = async function ()');
   assert.ok(/Saved — but/.test(save), 'the sentence does not confirm the save first');
   assert.ok(/NOT included in this recipe's cost/.test(save), 'it does not say the cost is excluded');
   assert.ok(!/\.unit\s*=/.test(save), 'rcpSave assigns to a line unit — nothing may be auto-converted');

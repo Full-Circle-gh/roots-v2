@@ -47,6 +47,10 @@ const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialF
 // correct no matter which door saved it.
 const { fireRecompute, backsAnyCostedRow, costOneRecipe } = require('../lib/recipe-rollup');
 const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
+// Version history (the undo behind the record's autosave) — every save through
+// this door files the state it displaced, and the History panel puts one back.
+// See lib/recipe-versions.js for why the snapshot is whole-record JSON.
+const { snapshotRecipe, listVersions, getVersion, restoreVersion } = require('../lib/recipe-versions');
 
 const router = express.Router();
 
@@ -128,6 +132,27 @@ function readBody(b) {
 function materialBlockState(recipeId) {
   const r = costOneRecipe(db, recipeId, new Map());
   return { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
+}
+
+// Who to name beside a filed version. The operator, as requireRetailAdmin
+// already resolved him (routes/retail.js sets req.user for the backend realm
+// precisely so handlers like this don't have to know which realm they're in).
+// A display name reads better in the History list than a login, but the login
+// is the identifier that is always there.
+function actorOf(req) {
+  const u = req.user || {};
+  return u.display_name || u.username || (u.id ? 'user #' + u.id : null);
+}
+
+// How this save was made, as the client declares it: 'auto' is the record's
+// debounced background save, 'manual' is someone pressing Save. It changes ONLY
+// how aggressively versions coalesce (lib/recipe-versions.js COALESCE_MS) and
+// what the History list labels the row — never what is written to the recipe.
+// Anything unrecognised is treated as a manual save, which is the safer of the
+// two: it files a restore point rather than folding into an existing one.
+function saveSourceOf(req) {
+  const v = String((req.body && req.body.save_source) || '').toLowerCase();
+  return v === 'auto' ? 'auto' : 'manual';
 }
 
 // ═══ List ══════════════════════════════════════════════════════════════════
@@ -347,6 +372,13 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     const refusal = cycleRefusal(req.params.id, lines);
     if (refusal) return res.status(400).json({ success: false, error: 'cycle', message: refusal });
   }
+  // File the state this save is about to overwrite, BEFORE the writes below and
+  // AFTER the cycle guard — a refused save changed nothing and must not leave a
+  // version behind claiming it did. Reads through the same `db` handle the
+  // UPDATE writes to, so the filed state is genuinely the one being displaced.
+  // Never throws: snapshotRecipe returns a reason instead, because a save that
+  // succeeded must not report failure over its history entry.
+  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   try {
     db.prepare(`UPDATE recipes SET
       name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,
@@ -390,6 +422,13 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
   // otherwise a tenant's save is admitted or refused on Roots' recipe list.
   const existing = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
+  // One logical save from the record is TWO requests (the recipe PUT above and
+  // this one), and they must not file two versions of nearly the same state.
+  // They don't: the recipe PUT files its point first, and COALESCE_MS folds
+  // this call into it — see lib/recipe-versions.js. Called anyway rather than
+  // skipped, because a cost-only save (nothing touched on the other three tabs)
+  // is a real change to what this recipe costs and deserves its own point.
+  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   // THIS SCREEN HAS NO PACKAGING-TYPE PICKER, so its payload never carries
   // `packaging_type_id` — and the write underneath keeps the stored one rather
   // than coalescing the missing key to NULL. That is the whole of finding 11:
@@ -415,6 +454,54 @@ router.put('/api/retail-admin/recipes/:id/archive', requireRetailAdmin, (req, re
   const active = req.body && req.body.restore ? 1 : 0;
   db.prepare('UPDATE recipes SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(active, req.params.id);
   res.json({ success: true, is_active: active });
+});
+
+// ═══ Version history ═══════════════════════════════════════════════════════
+// The record autosaves, so these three routes are not a nicety — they are the
+// half of autosave that lets a change be taken back. Every save above files the
+// state it displaced (lib/recipe-versions.js); this lists those states, reads
+// one back, and puts one on the live recipe.
+//
+// Registered under :id/versions, which cannot shadow GET /:id (that route
+// matches a single segment) and cannot be shadowed by it.
+//
+// The two reads are open, as every GET under this prefix is (lib/cap-routes.js
+// gates write verbs only). The restore is a POST and so carries recipes:edit,
+// the same capability a save carries — which is the right gate, since it can
+// only ever write a state this very recipe was already in. It opens nothing a
+// save does not.
+
+router.get('/api/retail-admin/recipes/:id/versions', requireRetailAdmin, (req, res) => {
+  const recipe = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: listVersions(db, req.params.id, req.query.limit) });
+});
+
+router.get('/api/retail-admin/recipes/:id/versions/:versionId', requireRetailAdmin, (req, res) => {
+  const v = getVersion(db, req.params.id, req.params.versionId);
+  if (!v) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: v });
+});
+
+router.post('/api/retail-admin/recipes/:id/versions/:versionId/restore', requireRetailAdmin, (req, res) => {
+  const result = restoreVersion(db, req.params.id, req.params.versionId, {
+    actor: actorOf(req),
+    // The cost inputs go back through the SAME writer and the SAME handle the
+    // cost route uses, so a restore obeys the absent-vs-cleared rule
+    // (lib/recipe-cost-data-write.js) rather than carrying a second copy of it.
+    costDb: tdb(),
+    saveCostData: saveRecipeCostData,
+  });
+  if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
+  // The same two things every other successful write here does. A restore can
+  // move a linked material's cost exactly as a save can — it IS a save, of an
+  // older state — and a restored name can clear or cause a materialize
+  // collision just as a typed one can.
+  if (backsAnyCostedRow(tdb(), req.params.id)) {
+    fireRecompute(tdb(), { source: 'retail-recipes.restore', recipe_id: Number(req.params.id) });
+  }
+  const materialize = ensureMaterialized(db, req.params.id);
+  res.json({ success: true, version_id: result.version_id, held: result.held, materialize });
 });
 
 // ═══ Materialize (§29 step 5) ═══════════════════════════════════════════════
