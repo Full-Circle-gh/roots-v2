@@ -643,6 +643,13 @@
   // sort_order is derived from array position at save time (retail-recipes.js
   // already writes it that way), so reordering the array is the whole fix.
   let _lineDrag = null;
+  // Shared by lineRow() (initial paint) and paintLineCosts() (in-place
+  // refresh on every keystroke) so the two can never drift apart.
+  function lineCostText(l) {
+    const isFree = !!l.master_free;
+    const hasCost = l.master_cost > 0 || isFree;
+    return hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—');
+  }
   function lineRow(l, idx) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
@@ -679,7 +686,7 @@
              The strike is a CLASS on the row, applied by paintLineWarns(), so
              changing the unit re-marks the line without repainting the tab.
              Nothing stored moves. -->
-        <span class="rcp-line-cost">${hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—')}</span>
+        <span class="rcp-line-cost" data-line="${idx}">${lineCostText(l)}</span>
         <button type="button" class="rcp-line-rm" title="${esc(T('Remove', '移除'))}" onclick="rcpLineRemove(${idx})">${I.x}</button>
       </div>`;
   }
@@ -925,11 +932,27 @@
     });
   }
 
+  // Same in-place idiom as paintLineWarns() just above: only the text of the
+  // one span each row already carries is touched, so a keystroke in the qty
+  // box never repaints the row it lives in.
+  function paintLineCosts() {
+    const host = document.getElementById('rcp-lines');
+    if (!host) return;
+    host.querySelectorAll('.rcp-line-cost').forEach((el) => {
+      const idx = Number(el.getAttribute('data-line'));
+      const l = _lines[idx];
+      if (!l) return;
+      const want = lineCostText(l);
+      if (el.textContent !== want) el.textContent = want;
+    });
+  }
+
   window.rcpRecompute = function () {
     _dirty = true;
     paintSummary();
     paintBreakdown();
     paintLineWarns();
+    paintLineCosts();
   };
 
   function breakdownHtml(c) {
