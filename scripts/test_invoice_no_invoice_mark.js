@@ -277,6 +277,71 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
      'and the mark decides, because it is what every screen was already showing', lineOf(92));
   ok(rebootReconcile() === 0, 'a second run changes nothing — idempotent');
 
+  console.log('\n8. 恢复 on the whole ORDER — the press that answered 200 and moved nothing');
+  // A fresh order so the count this section asserts is its own. Line 11 is the
+  // one the buyer marked 不开发票 by itself, BEFORE marking the whole order;
+  // line 12 already has its 发票 in hand and must come through untouched.
+  handle.exec(`
+    INSERT INTO purchase_orders (id, po_number, date, status, supplier, scope, store_id, tenant_id)
+      VALUES (300, 'RPO-0300', '2026-08-31', 'Ordered', 'Lingnan Packaging 岭南包装', 'retail', 1, 1);
+    INSERT INTO po_line_items (id, po_id, name_en, qty, unit, cost_per_unit, total_cost, supplier_name,
+                               invoice_status, no_invoice_expected, sort_order)
+      VALUES (11, 300, 'Foam Box #5 泡沫箱', 1, 'pcs', 84.28, 84.28, 'Lingnan Packaging 岭南包装', 'not_received', 0, 0),
+             (12, 300, 'Isolation Bag 保温袋', 1, 'pcs', 20, 20, 'Lingnan Packaging 岭南包装', 'received', 0, 1);
+  `);
+  const poOf = id => handle.prepare('SELECT no_invoice_expected AS mark FROM purchase_orders WHERE id = ?').get(id);
+  // The state the SCREEN computes, read back from the report the screen reads.
+  const invStatusOf = async (lineId) => {
+    const r = await fetch(base + '/api/retail-admin/purchasing/invoices/outstanding');
+    const j = await r.json();
+    for (const g of ((j.data && j.data.groups) || [])) {
+      const l = g.lines.find(x => x.line_id === lineId);
+      if (l) return l.status;
+    }
+    return null;
+  };
+  await send('PUT', '/api/retail-admin/purchasing/po/300/line/11/no-invoice', { no_invoice_expected: true });
+  const poMark = await send('PUT', '/api/retail-admin/purchasing/po/300/no-invoice', { no_invoice_expected: true });
+  ok(poMark.status === 200 && poOf(300).mark === 1, 'the whole order can be marked 不开发票', poMark.json);
+  ok(lineOf(11).mark === 1 && lineOf(12).mark === 0,
+     'marking the ORDER writes the order\'s own column only — it puts no words in the lines\' mouths',
+     [lineOf(11), lineOf(12)]);
+  ok(await invStatusOf(12) === 'no_invoice_expected',
+     'and the umbrella already speaks for every line on the screen');
+
+  const poRestore = await send('PUT', '/api/retail-admin/purchasing/po/300/no-invoice', { no_invoice_expected: false });
+  ok(poRestore.status === 200 && poOf(300).mark === 0, '恢复 lifts the order\'s mark', poRestore.json);
+  ok(lineOf(11).mark === 0 && lineOf(11).invoice_status === 'not_received',
+     'AND the line that carried its own — THE PRESS THAT USED TO DO NOTHING, because the '
+     + 'screen reads the OR of the two levels and only one of them was being lifted', lineOf(11));
+  ok(await invStatusOf(11) === 'awaiting',
+     'so the row the buyer pressed 恢复 on is back in the chase, which is what they asked for');
+  ok(lineOf(12).invoice_status === 'received',
+     '恢复 still leaves a 发票 already in hand alone — it clears a note that says no_invoice, '
+     + 'it does not blank the buyer\'s other answer', lineOf(12));
+  ok(poRestore.json.lines_restored === 1,
+     'and it reports how many lines came back with the order, so the screen can say so', poRestore.json);
+  ok(legacyReboot() === 0 && rebootReconcile() === 0,
+     'both columns moved together, so a restart has nothing to re-derive');
+
+  console.log('\n9. the same on the kitchen side, and no button that cannot do its job');
+  await send('PUT', '/api/purchases/200/line/3/no-invoice', { no_invoice_expected: true });
+  await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: true });
+  const kPoRestore = await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: false });
+  ok(kPoRestore.status === 200 && poOf(200).mark === 0 && lineOf(3).mark === 0,
+     'the kitchen order 恢复 lifts both levels too', [poOf(200), lineOf(3)]);
+  ok(kPoRestore.json.lines_restored === 1, 'and reports the lines it took with it', kPoRestore.json);
+  const missing = await send('PUT', '/api/purchases/9999/no-invoice', { no_invoice_expected: false });
+  ok(missing.status === 404, 'an order that does not exist is still a 404, not a silent success', missing.status);
+  const APP_SRC = fs.readFileSync(path.join(ROOT, 'public', 'app.html'), 'utf8');
+  ok(APP_SRC.includes('l.po_no_invoice'),
+     'the kitchen Invoices tab asks WHERE the mark is before offering to lift it');
+  ok(APP_SRC.includes('poRestoreNoInvoice(${l.po_id})'),
+     'and a row marked by its ORDER offers the order 恢复 — not the line toggle, which wrote a '
+     + 'column that was already 0 while the row never moved');
+  ok(UI_SRC.includes('lines_restored'),
+     'the Tacet Invoices tab reads the count back and says it out loud, so no press is silent');
+
   server.close();
   console.log(`\n${fail ? '✗ ' + fail + ' failed' : '✓ ' + pass + ' passed, 0 failed'}`);
   process.exit(fail ? 1 : 0);

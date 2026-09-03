@@ -12,7 +12,7 @@ const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 const { storeCategory } = require('../lib/category-text');
 // The no-invoice mark and invoice_status are one fact in two columns; every
 // write of either goes through here so the two can never contradict each other.
-const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark');
+const { setNoInvoiceMark, setPONoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark');
 const { nextKitchenPONumber } = require('../lib/po-number');
 const { supersedingCopy } = require('../lib/po-supersede');
 // Goods that arrived, were accepted, and went BACK. One definition site for
@@ -1287,11 +1287,15 @@ router.put('/api/purchases/:id/line/:line_id/supplier', requireAuth, requirePerm
 // awaiting-invoice list. Toggle, not destructive.
 router.put('/api/purchases/:id/no-invoice', requireAuth, requirePermission('purchases'), (req, res) => {
   const flag = !!(req.body && req.body.no_invoice_expected);
-  const r = db.prepare('UPDATE purchase_orders SET no_invoice_expected = ? WHERE id = ?')
-    .run(flag ? 1 : 0, req.params.id);
-  if (r.changes === 0) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
-  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', req.params.id, { no_invoice_expected: flag }, req.ip);
-  res.json({ success: true });
+  const po = db.prepare('SELECT id FROM purchase_orders WHERE id = ?').get(req.params.id);
+  if (!po) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
+  // 恢复 clears the lines' own marks with the order's — see lib/invoice-mark.js.
+  // The state every screen reads is the OR of the two levels, so lifting one
+  // and leaving the other is a press that answers 200 and changes nothing.
+  const { lines_restored } = setPONoInvoiceMark(db, po.id, flag);
+  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id,
+              { no_invoice_expected: flag, lines_restored }, req.ip);
+  res.json({ success: true, no_invoice_expected: flag, lines_restored });
 });
 
 // GET /api/lots/expiring?days=7 — line items whose expiry_date is within N days

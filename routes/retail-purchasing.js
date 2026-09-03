@@ -61,7 +61,8 @@ const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 // The no-invoice mark and the receive row's invoice_status are one fact stored
 // in two columns; every write of either goes through here so a later re-derive
 // cannot reverse a buyer's decision. See lib/invoice-mark.js.
-const { setNoInvoiceMark, setLineInvoiceStatus, invoiceStatusSets } = require('../lib/invoice-mark');
+const { setNoInvoiceMark, setPONoInvoiceMark, setLineInvoiceStatus,
+        invoiceStatusSets } = require('../lib/invoice-mark');
 
 const router = express.Router();
 
@@ -1915,9 +1916,13 @@ router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin,
   const po = db.prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const flag = !!(req.body && req.body.no_invoice_expected);
-  db.prepare('UPDATE purchase_orders SET no_invoice_expected = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(flag ? 1 : 0, po.id);
-  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id, { no_invoice_expected: flag }, req.ip);
-  res.json({ success: true, no_invoice_expected: flag });
+  // 恢复 here clears the lines' own marks too — lib/invoice-mark.js holds the
+  // reason. Without that, a line marked 不开发票 before the whole order was
+  // kept the row reading 不开发票 afterwards, and the press looked ignored.
+  const { lines_restored } = setPONoInvoiceMark(db, po.id, flag);
+  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id,
+              { no_invoice_expected: flag, lines_restored }, req.ip);
+  res.json({ success: true, no_invoice_expected: flag, lines_restored });
 });
 
 router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
