@@ -2,11 +2,36 @@
 /**
  * Grant `till:use` to the roles that can already ring a counter sale.
  *
+ * ── YOU PROBABLY DO NOT NEED TO RUN THIS ──────────────────────────────────
+ * THE MIGRATION RUNS ITSELF, AT BOOT. lib/roles.js migrateTillCap() does
+ * exactly what this script does, from routes/backend-auth.js, guarded by the
+ * _migrations ledger under the name `grant_till_use_to_order_editors_v1`. It
+ * had to: this project's deploy ships files and bounces pm2, and nothing in
+ * that path runs a script — so a migration that needed a human to remember it
+ * would be a lockout waiting for the one deploy nobody thought about.
+ *
+ * So this file is the INSPECTION tool, not the migration. It is worth keeping
+ * for three things the boot path deliberately cannot do:
+ *
+ *   1. SHOW YOU THE ANSWER BEFORE IT HAPPENS. A dry run against a copy of prod
+ *      prints every role that would change, and every role that would not, with
+ *      the reason. The boot migration prints one number.
+ *   2. RE-RUN IT AFTER THE LEDGER SAYS DONE. If the grant is ever rolled back
+ *      by hand, or a tenant is restored from a backup taken before it, the boot
+ *      path will refuse (once-only, by design). This does not consult the
+ *      ledger and will do the work.
+ *   3. TAKE A BACKUP FIRST. The boot path runs inside a live process and
+ *      cannot copy the database out from under itself.
+ *
  * READ-ONLY BY DEFAULT. Prints what it would do and writes nothing. Pass
  * --apply to write; --apply takes a backup first and runs in ONE transaction.
  *
  *   node scripts/backfill_till_cap.js            # dry run (default)
  *   node scripts/backfill_till_cap.js --apply    # take backup, then write
+ *
+ * NOTE: --apply does NOT write the ledger row, on purpose — running this by
+ * hand is a repair, and a repair must not convince the boot path that the
+ * migration it never ran is finished.
  *
  * ── WHY THIS SCRIPT HAS TO EXIST ──────────────────────────────────────────
  * A tenant's roles are DATA, not code. `lib/roles.js` seeds `tenant_roles` once

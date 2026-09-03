@@ -297,6 +297,17 @@ try {
   // earlier boot stamped beside a key-migrated role. Both are the same thing —
   // bringing a tenant's roles back to one row per role.
   if (made) console.log('[backend-auth] reconciled ' + made + ' tenant role record(s)');
+  // AFTER the seed, so a tenant seeded on this very boot already carries
+  // `till:use` from the preset and is skipped rather than written twice.
+  //
+  // This is the counter till's one-time grant, and it runs here because the
+  // deploy pipeline ships files and bounces pm2 — it never runs a script. See
+  // the long note above migrateTillCap(): without it, shipping the till's new
+  // capability gates would tell every non-owner cashier on every live tenant
+  // that they have no permission, mid-shift. Once-only via the _migrations
+  // ledger, so a tenant that later unticks the capability keeps that decision.
+  const tills = roles.migrateTillCap();
+  if (tills) console.log('[backend-auth] granted till:use to ' + tills + ' role(s) that already hold orders:edit');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.

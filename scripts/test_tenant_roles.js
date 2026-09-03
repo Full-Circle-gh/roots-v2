@@ -407,6 +407,56 @@ function versionOf(tid) {
   is(r.body.role.stockAppOnly, false, 'while a role that does not ask for it is unlocked, as before');
 
   // ─────────────────────────────────────────────────────────────────────
+  section('18 · the counter till’s one-time grant');
+  // THIS IS THE STEP THAT STOPS A DEPLOY BEING A LOCKOUT, so it is asserted
+  // rather than trusted. Roles are data: a capability added to a preset never
+  // reaches an already-seeded tenant, and the till's new gates all read
+  // `till:use`. Ship them without this and every non-owner cashier on every
+  // live tenant is told they have no permission, mid-shift.
+  const tT = mkTenant('Till grant test');
+  mkUser(tT, 't_owner', 'owner');
+  mkUser(tT, 't_staff', 'staff');
+  mkUser(tT, 't_dispatch', 'dispatch');
+  mkUser(tT, 't_kitchen', 'kitchen');
+  roles.seedTenant(tT);
+  // Rewind this tenant to a genuine pre-deploy box: rows stamped before the
+  // capability existed, and the ledger row not yet written.
+  const rewind = db.prepare('UPDATE tenant_roles SET caps_json = ? WHERE id = ?');
+  for (const row of db.prepare('SELECT id, role_key, caps_json FROM tenant_roles WHERE tenant_id = ?').all(tT)) {
+    if (row.role_key === 'owner') continue;
+    const list = JSON.parse(row.caps_json).filter(k => k !== 'till:use');
+    rewind.run(JSON.stringify(list), row.id);
+  }
+  db.prepare('DELETE FROM _migrations WHERE name = ?').run(roles.TILL_CAP_MIGRATION);
+  roles.invalidate(tT);
+  const heldTill = key => (roles.recordFor(tT, key) || { caps: [] }).caps.includes('till:use');
+  falsy(heldTill('staff'), 'before the migration, a seeded Shop floor has no till — the lockout, reproduced');
+
+  const grantedN = roles.migrateTillCap();
+  roles.invalidate(tT);
+  truthy(grantedN > 0, 'the boot migration grants');
+  truthy(heldTill('staff'), 'Shop floor can reach the till again — it holds orders:edit');
+  truthy(heldTill('dispatch'), 'so can Dispatch, which could ring a counter sale before this cap existed');
+  falsy(heldTill('kitchen'), 'Kitchen does not — no orders:edit, so it could not transact today either');
+  // The whole business, in one query: nobody who can ring a sale lost the till,
+  // and nobody who could not was handed it.
+  is(db.prepare("SELECT COUNT(*) n FROM tenant_roles WHERE role_key != 'owner'"
+     + " AND caps_json LIKE '%orders:edit%' AND caps_json NOT LIKE '%till:use%'").get().n, 0,
+    'across every tenant, no order-editing role was left without the till');
+  is(db.prepare("SELECT COUNT(*) n FROM tenant_roles WHERE role_key != 'owner'"
+     + " AND caps_json LIKE '%till:use%' AND caps_json NOT LIKE '%orders:edit%'").get().n, 0,
+    'and no role was handed a till it cannot save a sale from');
+
+  // ONCE-ONLY, NOT IDEMPOTENT-POLICY. A tenant that unticks the capability has
+  // made a decision, and the next pm2 restart must not overrule it.
+  const staffRow = db.prepare("SELECT id, caps_json FROM tenant_roles WHERE tenant_id = ? AND role_key = 'staff'").get(tT);
+  rewind.run(JSON.stringify(JSON.parse(staffRow.caps_json).filter(k => k !== 'till:use')), staffRow.id);
+  roles.invalidate(tT);
+  is(roles.migrateTillCap(), 0, 'a second boot grants nothing — the ledger says done');
+  roles.invalidate(tT);
+  falsy(heldTill('staff'), 'and a tenant’s decision to take the till away survives the restart');
+
+  // ─────────────────────────────────────────────────────────────────────
   server.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
