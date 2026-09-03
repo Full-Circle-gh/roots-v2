@@ -483,6 +483,11 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
 // letting the browser's default masquerade as one.
 {
   const LINE_ROW_FN = extractFunction(RECIPES_JS, 'function lineRow(l, idx)');
+  // lineRow() calls lineCostText() (the per-line cost cell, shared with the
+  // in-place repaint that keeps that figure live without a Save) rather than
+  // computing it inline, so both functions have to be sliced out together —
+  // extracting lineRow alone leaves lineCostText undefined in the sandbox.
+  const LINE_COST_TEXT_FN = extractFunction(RECIPES_JS, 'function lineCostText(l)');
   function runLineRow(l, idx) {
     const sb = {
       esc: (s) => String(s == null ? '' : s),
@@ -494,7 +499,7 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
       Number, String,
     };
     vm.createContext(sb);
-    vm.runInContext(LINE_ROW_FN + '\nthis.__row = lineRow;', sb, { filename: '19-recipes.js#lineRow' });
+    vm.runInContext(LINE_COST_TEXT_FN + '\n' + LINE_ROW_FN + '\nthis.__row = lineRow;', sb, { filename: '19-recipes.js#lineRow' });
     return sb.__row(l, idx);
   }
 
