@@ -560,10 +560,7 @@
       let reason = null;
       if (!picked) reason = T('Pick a product.', '请选择产品。');
       else if (!Number.isInteger(qty) || qty <= 0) reason = T('Quantity must be a whole number above zero.', '数量必须是大于零的整数。');
-      else if (qty > Number(picked.on_hand)) {
-        // The UI says it first; the API refusal stays the backstop.
-        reason = T('Only ' + picked.on_hand + ' in stock.', T('In stock', '库存') + ' ' + picked.on_hand);
-      } else if (reasonSel.value === 'other' && !noteIn.value.trim()) {
+      else if (reasonSel.value === 'other' && !noteIn.value.trim()) {
         // 'Other' requires a note — enforced here so the operator is told
         // before they press, and again by the API so it cannot be bypassed.
         reason = T('Tell us what happened when the reason is Other.', '原因选择“其他”时请填写备注。');

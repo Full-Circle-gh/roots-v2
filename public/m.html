@@ -1150,11 +1150,11 @@ reg('wstPick', id=>{ const w=state.wst;
   const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
   w.pick=p; w.qty=1; w.formErr=null; render(); loadWastePreview(); });
 reg('wstUnpick', ()=>{ const w=state.wst; w.pick=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
-/* Clamped at on-hand here as well as refused there. This is the UI saying it
-   first; the API's 409 stays the backstop, not the only line of defence. */
+/* Not capped at on-hand: a shelf whose tracked count is already wrong is
+   exactly why a waste record is being made (docs/tacet-consolidation-
+   decisions.md — negative stock is a signal, not an error to refuse). */
 reg('wstQty', d=>{ const w=state.wst;
-  const max=w.pick?Number(w.pick.on_hand):1;
-  w.qty=Math.max(1,Math.min(max,w.qty+Number(d)));
+  w.qty=Math.max(1,w.qty+Number(d));
   render(); loadWastePreview(); });
 reg('wstNote', v=>{ const w=state.wst, el=document.getElementById('mWstNote');
   w.note=String(v||''); state.focus={id:'mWstNote',pos:el?el.selectionStart:null}; render(); });
@@ -1189,10 +1189,10 @@ reg('wstSave', ()=>{
   .catch(e=>{
     w.busy=false;
     if(String(e.message)==='auth') return;
-    /* The server's own words where it wrote them for a person — insufficient
-       stock names the figure we hold, and "tell us what happened" is already
-       the sentence we would write. Anything else gets the house line. */
-    w.formErr=(e.code==='insufficient_stock'||e.code==='note_required_for_other'||e.code==='waste_disabled')
+    /* The server's own words where it wrote them for a person — "tell us what
+       happened" is already the sentence we would write. Anything else gets
+       the house line. */
+    w.formErr=(e.code==='note_required_for_other'||e.code==='waste_disabled')
       ? e.message
       : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
@@ -3829,10 +3829,6 @@ function wstBlocked(){
   if(!w.storeId) return T('Choose a store.','请选择门店。');
   if(!w.pick) return T('Choose a product.','请选择产品。');
   if(!Number.isInteger(w.qty)||w.qty<=0) return T('How many?','数量是多少？');
-  /* No measure word, in either language — the desktop screen's rule. A count
-     of something sold by weight rendered as “3 件” reads as three pieces,
-     which is a different fact. */
-  if(w.qty>Number(w.pick.on_hand)) return T('Only '+w.pick.on_hand+' on hand.','库存只有 '+w.pick.on_hand+'。');
   if(!w.code) return T('Pick a reason.','请选择原因。');
   if(w.code==='other'&&!w.note.trim()) return T('Tell us what happened.','请填写备注说明。');
   return '';
@@ -3847,9 +3843,9 @@ function sheetWaste(){
         `<button class="chip ${String(w.storeId)===String(s.id)?'on':''}" onclick="APP.cmd('wstPickStore',${s.id})"><span>${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span></button>`).join('')}</div>
     </div>` : '';
   /* Chosen product: the search field is replaced by the thing it found, with
-     ON-HAND under the NAME rather than under the stepper. The API refuses a
-     quantity above it, and finding that out after pressing the button is the
-     worse half of the same information. The × puts the search back. */
+     ON-HAND under the NAME rather than under the stepper — still worth
+     showing even though a waste record is no longer capped by it. The ×
+     puts the search back. */
   const product = w.pick ? `
     <div style="display:flex;flex-direction:column;gap:6px">
       <span class="eyebrow">${T('Product','产品')}</span>
@@ -3884,7 +3880,7 @@ function sheetWaste(){
       <div style="display:flex;align-items:center;gap:12px">
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('wstQty',-1)" ${w.qty<=1?'disabled':''} aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
         <span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em">${w.qty}</span>
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('wstQty',1)" ${w.pick&&w.qty>=Number(w.pick.on_hand)?'disabled':''} aria-label="${T('More','增加')}">${ic('plus',24)}</button></div>
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('wstQty',1)" aria-label="${T('More','增加')}">${ic('plus',24)}</button></div>
     </div>`;
   const reasons = `
     <div style="display:flex;flex-direction:column;gap:6px">

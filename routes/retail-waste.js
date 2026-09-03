@@ -408,27 +408,14 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
 
   try {
     const out = db.transaction(() => {
-      // REFUSE, DO NOT CLAMP. adjustStock's delta path silently applies
-      // `Math.max(0, old + delta)` and discards the shortfall — a behaviour §10
-      // has already withdrawn but which is still live. Reusing it without this
-      // check would write a waste row saying 5 and a movement saying 3, with no
-      // error anywhere. A mismatch means the count is already wrong, and the
-      // person entering it is the one who can see the shelf; tell them the
-      // figure we hold and let them decide.
-      //
-      // The check lives INSIDE the transaction so the quantity it read cannot
-      // move before the movement is applied. Passing it also makes the clamp
-      // unreachable, which is the point — this does not fix adjustStock, it
-      // stops depending on it being wrong.
-      const onHand = db.prepare(
-        'SELECT COALESCE(physical_qty, 0) AS q FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
-      ).get(locationId, productId)?.q ?? 0;
-      if (qty > onHand) {
-        const e = new Error('insufficient_stock');
-        e.detail = { on_hand: onHand, requested: qty };
-        throw e;
-      }
-
+      // NEGATIVE STOCK IS ALLOWED (docs/tacet-consolidation-decisions.md, the
+      // stock-stage decision). Refusing here would leave staff unable to log
+      // real waste against a shelf whose tracked count is already wrong — and
+      // the count being wrong is exactly why the record is being made. So this
+      // always writes the qty the person entered and always moves the shelf by
+      // that same qty (`floorAtZero: false` below): the two numbers must never
+      // disagree, whichever side of zero they land on. A resulting negative
+      // balance is a SIGNAL that a recount is due, not an error to swallow.
       const unitYuan = productUnitCostYuan(db, productId);
       const cost = resolveCostCents(unitYuan, qty);
 
@@ -457,6 +444,7 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
         actorLabel: actor.label,
         note: `waste #${wasteId} · ${reason}`,
         reason: 'waste',
+        floorAtZero: false,
       });
 
       linkLedgerToWaste(db, locationId, productId, wasteId);
@@ -473,13 +461,6 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
     if (!canSeeCosts(req)) return res.json({ success: true, costs_hidden: true, data: stripCost(out) });
     res.json({ success: true, data: out });
   } catch (e) {
-    if (e.message === 'insufficient_stock') {
-      return res.status(409).json({
-        error: 'insufficient_stock',
-        message: `Only ${e.detail.on_hand} on hand at this location — cannot write off ${e.detail.requested}.`,
-        ...e.detail,
-      });
-    }
     console.error('[waste] record failed:', e);
     res.status(500).json({ error: 'record_failed', message: e.message });
   }
@@ -587,6 +568,7 @@ router.post('/api/retail-admin/waste/:id/void', requireRetailAdmin, requireWaste
         actorLabel: actor.label,
         note: `void of waste #${original.id}`,
         reason: 'waste',
+        floorAtZero: false,
       });
 
       linkLedgerToWaste(db, original.location_id, original.store_product_id, reversalId);

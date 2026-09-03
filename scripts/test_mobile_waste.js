@@ -25,8 +25,12 @@
  *     corrections is how one goes unnoticed.
  *   • EMPTY AND NO-RESULTS ARE TWO STATES AND TWO SENTENCES, and a load that
  *     FAILED is a third — it must never fall through to "nothing was wasted".
- *   • THE WRITE IS REFUSED BEFORE IT IS SENT, and always says why. Over
- *     on-hand, no reason picked, and `other` with no note each name themselves.
+ *   • THE WRITE IS REFUSED BEFORE IT IS SENT for what sending it cannot fix:
+ *     no reason picked, or `other` with no note — each names itself. Going
+ *     over on-hand is NOT refused: the shelf count being wrong is why the
+ *     record is being made, so it goes through and leaves the count visibly
+ *     wrong rather than blocking the person who can see the shelf
+ *     (docs/tacet-consolidation-decisions.md — negative stock is a signal).
  *   • waste:record GATES THE BUTTON, NOT THE SCREEN. A ledger reads fine
  *     without the write, so a view-only operator gets the title and an empty
  *     Dusk slot rather than a button that 403s.
@@ -127,9 +131,10 @@ const CASES = [
   ]],
   // Every refusal below is the API's, said first by the screen. wstBlocked()
   // is the single place that decides, and it always returns a sentence.
-  ['more than is on the shelf', `${FORM}state.wst.qty=99;render();`, [
-    ['refused with the figure we hold', `sheetText().includes('Only 18 on hand')`],
-    ['and the button is dead',          `/disabled/.test(document.querySelector('.sheet .cta').outerHTML)`],
+  ['more than is on the shelf — allowed, not refused', `${FORM}state.wst.qty=99;render();`, [
+    ['no "only N on hand" refusal', `!sheetText().includes('on hand.')`],
+    ['the button stays live',       `!/disabled/.test(document.querySelector('.sheet .cta').outerHTML)`],
+    ['and the shelf figure goes negative, as the signal it is', `sheetText().includes('stock drops to -81')`],
   ]],
   ['no reason picked', `${FORM}state.wst.code='';render();`, [
     ['asks for one',   `sheetText().includes('Pick a reason')`],

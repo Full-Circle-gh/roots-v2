@@ -181,7 +181,7 @@ const WITHOUT = ['waste:view', 'waste:record', 'waste:void'];
     // Neither client renders it, which is exactly why it survived a reading of
     // both screens. It is money and it was on the wire.
     absent(no.body.data[0], 'unit_cost', 'and it is stripped for a cost-blind caller');
-    is(no.body.data[0].on_hand, 18, 'on-hand stays — it is what the refusal is about');
+    is(no.body.data[0].on_hand, 18, 'on-hand stays — it is shown while choosing, not used to refuse');
     is(no.body.data[0].name_en, 'Oat milk 1L', 'and the product is still pickable');
   }
 
