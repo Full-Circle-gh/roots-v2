@@ -2959,6 +2959,11 @@
      line there would leave it dangling. Weight alone is enough to let the
      operator find WHICH warning this is without reading the paragraph. */
   .pd-cost-warn-k { font-weight: 600; letter-spacing: .01em; }
+  /* WHICH INGREDIENTS. Its own line under the sentence, never inside it: the
+     names are data and the sentence around them is locked copy, and a list
+     spliced into that copy would read as a variant of it. Slightly quieter than
+     the sentence — read second, once the operator knows what he is being told. */
+  .pd-cost-warn-who { display: block; margin-top: 3px; opacity: .85; }
   /* "Couldn't load the recipe" is not a warning about the recipe — it is this
      line admitting it could not check. It must be visible (silence would read
      as all-clear) without wearing the colour of a real finding. */
@@ -13109,6 +13114,31 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     background: var(--td-amber-tint); border-radius: 12px; padding: 6px 16px; }
   #tab-recipes-record .rcp-warn.err { color: var(--td-brick-ink); background: var(--td-brick-tint); }
   #tab-recipes-record .rcp-warn svg { width: 16px; height: 16px; flex: none; }
+  /* ── the pill that points ────────────────────────────────────────────────
+     A pill with ingredients behind it is a BUTTON: the label names the
+     condition, the line under it names the rows, and clicking goes to them.
+     Everything below the first two lines is button chrome being taken back off
+     — same tint, same radius, same 13px as the div form, so the two read as
+     one component and only the pointer says one of them can be pressed. */
+  #tab-recipes-record button.rcp-warn { appearance: none; border: none; margin: 0;
+    font: inherit; text-align: left; cursor: pointer; }
+  #tab-recipes-record .rcp-warn-b { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  /* The label keeps EXACTLY the weight it always had — one of these pills is a
+     locked two-word label and another is a whole sentence, and a weight that
+     flatters the first sets the second in bold for no reason. The class is a
+     hook, not a treatment. The names under it are the quieter half: read
+     second, once the operator knows what he is being told. */
+  #tab-recipes-record .rcp-warn-who { opacity: .85; }
+  #tab-recipes-record .rcp-warn-jump:hover .rcp-warn-who { opacity: 1; text-decoration: underline; }
+  #tab-recipes-record .rcp-warn-jump:focus-visible { outline: 2px solid var(--td-text); outline-offset: 2px; }
+  /* The material caption's own version of the same line — a button in a
+     caption, so it carries no tint of its own and only the underline says it
+     can be pressed. */
+  #tab-recipes-record .rcp-matwho { display: block; margin-top: 2px; appearance: none;
+    background: transparent; border: none; padding: 0; font: inherit; cursor: pointer;
+    color: inherit; text-align: left; text-decoration: underline;
+    text-decoration-color: var(--td-border); }
+  #tab-recipes-record .rcp-matwho:hover { text-decoration-color: currentColor; }
   /* A material is internal plumbing, not a sellable thing — subordinate to the
      product line above it, and it says so by staying a caption. */
   #tab-recipes-record .rcp-matline { font-size: 13px; color: var(--td-text2); }
@@ -13211,6 +13241,21 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      it is how an operator judges whether the line or the material is wrong. */
   #tab-recipes-record .rcp-line.is-unit-mismatch .rcp-line-cost {
     text-decoration: line-through; opacity: .65;
+  }
+  /* ── arrived from the pill ───────────────────────────────────────────────
+     rcpFocusLines() lights every row a warning was about and takes the class
+     off again a few seconds later. A TINT AND A RULE, not a colour change: the
+     row's own amber mark is what says what is wrong, and a second amber
+     treatment on the same row would compete with it. Nothing here changes a
+     value — it only says "this is the one you came for".
+     Reduced motion drops the fade, never the tint: the tint IS the answer. */
+  #tab-recipes-record .rcp-line.is-focused {
+    background: var(--td-amber-tint); box-shadow: inset 2px 0 0 var(--td-amber-ink);
+    animation: rcp-focus-fade 2.6s ease-out both;
+  }
+  @keyframes rcp-focus-fade { 0%, 60% { opacity: 1; } 100% { opacity: 1; background: transparent; } }
+  @media (prefers-reduced-motion: reduce) {
+    #tab-recipes-record .rcp-line.is-focused { animation: none; }
   }
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
   #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }

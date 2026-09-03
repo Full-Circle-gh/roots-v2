@@ -21401,6 +21401,20 @@ router.delete('/api/retail-admin/products/:id/recipe-link', requireRetailAdmin, 
   res.json({ success: true, data: { ...row, recipe_name_en: null, recipe_name_cn: null } });
 });
 
+// The offending lines behind recipe-health's two counts, in the recipe's own
+// order and capped. FACTS, NOT SENTENCES, exactly like the counts beside them:
+// the name and the two units go out, and the editor composes the wording in the
+// language it is being read in.
+const HEALTH_LINES_SHOWN = 3;
+function healthLines(c, kind) {
+  const all = (c && Array.isArray(c.lines)) ? c.lines : [];
+  const pick = kind === 'unreconciled'
+    ? (l => l.unreconciledUnit)
+    : (l => l.lineCost === null && !l.unreconciledUnit && !l.freeByDesign);
+  return all.filter(pick).slice(0, HEALTH_LINES_SHOWN)
+    .map(l => ({ name: l.name, unit: l.unit, masterUnit: l.masterUnit }));
+}
+
 // ═══ Is the recipe behind this cost actually healthy? ══════════════════════
 //
 // THE SAME ALARM THE RECIPE SCREEN RINGS, ON THE SCREEN WHERE THE NUMBER IS
@@ -21452,6 +21466,14 @@ router.get('/api/retail-admin/products/:id/recipe-health', requireRetailAdmin, (
     // mark (markRecipeUnitMismatch) points at, so opening the product explains
     // the mark rather than leaving it unexplained.
     unreconciled: c.unreconciledUnitLines,
+    // WHICH LINES, for each of the two counts above. A pill that says "3
+    // ingredients" and stops leaves an operator setting a price with no way to
+    // reach the three without opening Recipes and comparing lines by eye. These
+    // come off the breakdown the counts come off — no second query, no second
+    // rule about what counts — and are capped at the first few, the same cap
+    // and the same shape the recipes list sends.
+    missing_lines: healthLines(c, 'zero'),
+    unreconciled_lines: healthLines(c, 'unreconciled'),
     ingredient_lines: c.ingredientLines,
     // What applyProductCosts() would actually write. null (or 0) means the
     // cascade writes nothing and the Cost field is frozen at whatever is there.

@@ -88,11 +88,48 @@
                                   `该食谱中有 ${n} 项原料缺少成本。`),
     no_batch_size:       () => T('This recipe has no batch size set.', '该食谱未设置批量大小。'),
     no_cost_per_unit:    () => T("This recipe's cost can't be worked out right now.", '该食谱的成本暂无法计算。'),
+    // THE REASON THAT WAS MISSING FROM THIS MAP. costOneRecipe has refused an
+    // unreconciled line on its own reason since the §7 addendum, and with no
+    // entry here every one of those recipes fell through to the vague
+    // no_cost_per_unit fallback — a recipe blocked by a unit mismatch was told
+    // its cost "can't be worked out right now" while the very same card carried
+    // a UNIT MISMATCH pill naming the actual cause. Both halves are the LOCKED
+    // `unitMismatchPill` wording (docs/tacet-delivery-vocabulary.md, minted
+    // 2026-09-01), copied from that table exactly as 09-products.js copies it,
+    // behind the locked label pair — no new string is composed here.
+    unreconciled_units:   n => T(
+      `UNIT MISMATCH — ${n} ingredient${n === 1 ? '' : 's'} in this recipe ${n === 1 ? 'is' : 'are'} `
+      + `counted in a unit the material is not stocked in, so ${n === 1 ? 'its' : 'their'} cost is `
+      + `left out. The cost shown is incomplete.`,
+      `单位不符 —— 本配方中有 ${n} 项原料所用单位与物料的库存单位计量的不是同一类量,`
+      + `其成本不计入。显示成本不完整。`),
   };
-  const blockReasonText = (reason, unpriced) => {
+  // Takes the WHOLE block, not a reason and one count: two of the reasons carry
+  // a count of their own (unpriced_lines, unreconciled_units) and picking the
+  // wrong one prints "3 ingredients are missing a cost" about a recipe whose
+  // three lines are all priced.
+  const blockReasonText = (mb) => {
+    const reason = mb && mb.reason;
     const f = BLOCK_REASON[reason];
     if (!f) return T("This recipe's cost can't be worked out right now.", '该食谱的成本暂无法计算。');
-    return reason === 'unpriced_lines' ? f(unpriced) : f();
+    if (reason === 'unpriced_lines') return f(Number(mb.unpriced) || 0);
+    if (reason === 'unreconciled_units') return f(Number(mb.unreconciled) || 0);
+    return f();
+  };
+  // The ingredients behind a block, named the same way the record's pills name
+  // them — the server sends the rows it already costed (routes/retail-recipes.js
+  // materialBlockState), so nothing is re-derived here and the list and the
+  // record cannot disagree about which line is at fault. '' whenever the block
+  // is about the recipe rather than its lines (archived, no batch size), which
+  // is the one case where naming an ingredient would be a wrong answer.
+  const blockWho = (mb) => {
+    const rows = (mb && Array.isArray(mb.lines)) ? mb.lines : [];
+    if (!rows.length) return '';
+    const shown = rows.slice(0, 3).map(r => (mb.reason === 'unreconciled_units'
+      ? `${r.name || '?'} (${r.unit || '—'} vs ${r.masterUnit || '—'})`
+      : (r.name || '?'))).join(', ');
+    const total = Number(mb.reason === 'unreconciled_units' ? mb.unreconciled : mb.unpriced) || rows.length;
+    return shown + (total > rows.length ? ` +${total - rows.length} more` : '');
   };
 
   // ── Recipe type ───────────────────────────────────────────────────────────
@@ -322,19 +359,29 @@
       // slot for one and widening it here would be composing a variant of a
       // locked pair. The missing-cost sentence keeps its count and its own
       // sourced Chinese exactly as it was.
+      //
+      // AND EACH SENTENCE NAMES ITS ROWS. A tooltip that said only "2
+      // ingredients missing cost" left the operator to open the recipe and
+      // compare the lines by eye; the route already costed those lines to reach
+      // the count, so it forwards the first few names with it and nothing is
+      // re-derived here. The names are DATA, appended after the sentence rather
+      // than folded into it, so the locked pair above is still copied whole and
+      // still carries no count.
       const warnBits = [];
       if (rcp.zeroCostIngredientLines > 0) {
         warnBits.push(T(`${rcp.zeroCostIngredientLines} ingredient(s) missing cost — costs shown are too low`,
-                        `${rcp.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`));
+                        `${rcp.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`)
+                      + whoTail(rowWho(rcp.zeroCostNames, rcp.zeroCostIngredientLines, false)));
       }
       if (rcp.unreconciledUnitLines > 0) {
-        warnBits.push(T('UNIT MISMATCH', '单位不符'));
+        warnBits.push(T('UNIT MISMATCH', '单位不符')
+                      + whoTail(rowWho(rcp.unitMismatchNames, rcp.unreconciledUnitLines, true)));
       }
       const warnIcon = warnBits.length
         ? `<span class="rcp-warnic" title="${esc(warnBits.join(' · '))}">${I.warn}</span>`
         : '';
       const matBadge = rcp.backsMaterial
-        ? `<span class="rcp-badge${rcp.materialBlock && !rcp.materialBlock.ok ? ' blocked' : ''}" title="${esc(rcp.materialBlock && !rcp.materialBlock.ok ? blockReasonText(rcp.materialBlock.reason, rcp.materialBlock.unpriced) : T('Backs material', '产出为物料'))}">${esc(T('Material', '物料'))}</span>`
+        ? `<span class="rcp-badge${rcp.materialBlock && !rcp.materialBlock.ok ? ' blocked' : ''}" title="${esc(rcp.materialBlock && !rcp.materialBlock.ok ? blockReasonText(rcp.materialBlock) + whoTail(blockWho(rcp.materialBlock)) : T('Backs material', '产出为物料'))}">${esc(T('Material', '物料'))}</span>`
         : '';
       return `
         <tr onclick="rcpRecordOpen(${rcp.id})">
@@ -609,6 +656,70 @@
     return _lines
       .map((l, i) => ({ l, i }))
       .filter(x => lineUnitMismatch(x.l));
+  }
+  // The OTHER way a line is left out of the total: the material carries no cost
+  // at all. Mirrors buildLines()'s zeroCostLines counter exactly, ORDER OF
+  // PRECEDENCE INCLUDED — free_by_design first, then the unit question, and only
+  // what survives both is a missing cost.
+  function unpricedLines() {
+    // A SCREEN THAT CANNOT CHECK MUST NOT ACCUSE — lineUnitMismatch()'s own
+    // rule, and it decides this list too. With the shared module unloaded every
+    // line reads as reconcilable, so a line that is BOTH unpriced and
+    // mismatched would be named under "missing cost" and send the operator to
+    // price a material that is already priced. Named by nobody instead: the
+    // count still shows, from the server's own breakdown.
+    if (!COST()) return [];
+    return _lines
+      .map((l, i) => ({ l, i }))
+      .filter(x => x.l && !x.l.master_free && !lineUnitMismatch(x.l) && !(Number(x.l.master_cost) > 0));
+  }
+
+  // ── WHICH INGREDIENT ─────────────────────────────────────────────────────
+  //
+  // A count says how many; these say WHICH. Every warning on this screen used
+  // to name the condition and stop there, so an operator reading UNIT MISMATCH
+  // on a card with eleven lines had been handed a fact he could not act on
+  // without comparing eleven units by eye — the complaint this exists to
+  // answer. The save toast already named its lines this way; the same list is
+  // now on the pills, the recipe list's tooltip and the material line.
+  //
+  // NAMES ARE DATA, NOT COPY. Nothing here is translated and none of it needs
+  // an amendment to docs/tacet-delivery-vocabulary.md: a material's name is a
+  // proper noun and the units are the stored strings. The one English tail,
+  // "+N more", is the save toast's own overflow wording, copied from it (CN
+  // PENDING there for the same reason — composing Chinese is forbidden,
+  // §30 rule 3 — and pending here).
+  //
+  // THREE, then the tail. Long enough to name the usual case outright, short
+  // enough that a pill stays a pill; the marks on the rows themselves carry the
+  // rest, and rcpFocusLines() below puts the operator in front of all of them.
+  const WHO_SHOWN = 3;
+  function lineWho(l) { return (l && (l.name_en || l.master_name_en)) || '?'; }
+  // For a mismatch, the NAME ALONE IS NOT ENOUGH: the fix is a choice between
+  // the two units, so both are printed the way the save toast prints them.
+  function lineWhoUnits(l) { return `${lineWho(l)} (${(l && l.unit) || '—'} vs ${(l && l.master_unit) || '—'})`; }
+  function whoList(items, fmt) {
+    if (!items.length) return '';
+    const shown = items.slice(0, WHO_SHOWN).map(x => fmt(x.l)).join(', ');
+    return shown + (items.length > WHO_SHOWN ? ` +${items.length - WHO_SHOWN} more` : '');
+  }
+  // The punctuation between a sentence and the names that follow it, where they
+  // have to share one line (a title attribute holds no markup). COPIED from the
+  // save toast, which already sets a full-width colon in its Chinese half and an
+  // ASCII one in its English — punctuation, not a composed phrase.
+  function whoSep() { return T(': ', '：'); }
+  function whoTail(who) { return who ? whoSep() + who : ''; }
+  // The same list, built from what a LIST row carries: the route sends the first
+  // few offending lines ({ name, unit, masterUnit }) beside the count it already
+  // sends. A row from a payload that predates those keys names nothing and reads
+  // exactly as it always did — the count alone.
+  function rowWho(rows, total, withUnits) {
+    if (!Array.isArray(rows) || !rows.length) return '';
+    const shown = rows.map(r => (withUnits
+      ? `${r.name || '?'} (${r.unit || '—'} vs ${r.masterUnit || '—'})`
+      : (r.name || '?'))).join(', ');
+    const n = Number(total) || rows.length;
+    return shown + (n > rows.length ? ` +${n - rows.length} more` : '');
   }
   // What the mark says, in full, on the line it is attached to. The locked pair
   // (docs/tacet-delivery-vocabulary.md, minted by Ash 2026-08-27) is UNIT
@@ -1058,9 +1169,10 @@
     // card flooded with tint competes with everything else on the page.
     const warns = [];
     if (missing) {
-      warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
+      warns.push(warnPill(T(
         `${c.zeroCostIngredientLines} ingredient${c.zeroCostIngredientLines === 1 ? '' : 's'} missing cost — costs shown are too low`,
-        `${c.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`))}</span></div>`);
+        `${c.zeroCostIngredientLines} 项原料缺少成本 — 显示成本偏低`),
+        whoList(unpricedLines(), lineWho), 'nocost'));
     }
     // A line whose unit cannot be reconciled with its material's stocking unit
     // (§7 addendum). Deliberately its own pill and not folded into the one
@@ -1074,15 +1186,21 @@
     // here would be composing a variant of a locked pair. It reads on all three
     // classes the counter flags — volume↔mass, mass↔count, and any dimension
     // pair a later table entry adds.
+    //
+    // THE LABEL NAMES THE CONDITION; THE LINE UNDER IT NAMES THE ROWS. Those
+    // names are not part of the pair and cannot widen it — they are data, sat
+    // on their own line in the pill so the locked string still reads whole.
+    // Without them this pill said "something in here is wrong" to an operator
+    // looking at eleven lines, which is why it is a button: clicking it opens
+    // Ingredients on the offending rows.
     if (c.unreconciledUnitLines > 0) {
-      warns.push(`<div class="rcp-warn">${I.warn}<span>${esc(T(
-        'UNIT MISMATCH', '单位不符'))}</span></div>`);
+      warns.push(warnPill(T('UNIT MISMATCH', '单位不符'),
+        whoList(mismatchedLines(), lineWhoUnits), 'mismatch'));
     }
     // Selling below cost is an error, not a warning, and it is worth saying in
     // words as well as in Brick — a minus sign on a figure is easy to skim past.
     if (soloM && soloM.money < 0) {
-      warns.push(`<div class="rcp-warn err">${I.warn}<span>${esc(T(
-        'Selling below cost', '低于成本销售'))}</span></div>`);
+      warns.push(warnPill(T('Selling below cost', '低于成本销售'), '', '', 'err'));
     }
     if (warns.length) html += `<div class="rcp-warns">${warns.join('')}</div>`;
 
@@ -1095,6 +1213,58 @@
 
     host.innerHTML = html;
   }
+
+  // ── One warning pill ─────────────────────────────────────────────────────
+  //
+  // `who` is the list of ingredients behind the label, and it decides the
+  // pill's SHAPE: with rows to point at it is a button that goes to them, and
+  // with nothing to point at (Selling below cost is about a price, not a line)
+  // it stays the div it always was. The two are never the same thing with
+  // different behaviour.
+  //
+  // The names sit on their OWN line under the label, never spliced into it —
+  // UNIT MISMATCH · 单位不符 is a locked pair and a variant carrying a list
+  // inside it would be a new string nobody minted.
+  function warnPill(label, who, kind, cls) {
+    const body = `${I.warn}<span class="rcp-warn-b"><span class="rcp-warn-l">${esc(label)}</span>`
+      + (who ? `<span class="rcp-warn-who">${esc(who)}</span>` : '')
+      + `</span>`;
+    return who
+      ? `<button type="button" class="rcp-warn rcp-warn-jump${cls ? ' ' + cls : ''}" onclick="rcpFocusLines('${kind}')">${body}</button>`
+      : `<div class="rcp-warn${cls ? ' ' + cls : ''}">${body}</div>`;
+  }
+
+  // ── Take him to the rows ─────────────────────────────────────────────────
+  //
+  // The pill names the ingredients; this puts the operator in front of the
+  // inputs that fix them — the Ingredients tab, scrolled to the first offending
+  // row, with EVERY one of them lit for a few seconds so a recipe with three
+  // does not cost three trips. The per-line marks are already there and stay
+  // there; this only decides where the page is looking.
+  //
+  // NOTHING IS CHANGED BY LOOKING. No unit is touched, no cost recomputed and
+  // nothing is saved — it scrolls, and adds a class that takes itself off.
+  window.rcpFocusLines = function (kind) {
+    const items = kind === 'nocost' ? unpricedLines() : mismatchedLines();
+    if (!items.length) return;
+    rcpSubtab('ingredients');
+    const host = document.getElementById('rcp-lines');
+    if (!host) return;
+    let first = null;
+    items.forEach(({ i }) => {
+      const slot = host.querySelector('.rcp-line-warn[data-line="' + i + '"]');
+      const row = slot && slot.closest ? slot.closest('.rcp-line') : null;
+      if (!row) return;
+      if (!first) first = row;
+      // Removed, forced through a layout read, then re-added, so a second click
+      // on the same pill restarts the flash instead of doing nothing visible.
+      row.classList.remove('is-focused');
+      void row.offsetWidth;
+      row.classList.add('is-focused');
+      setTimeout(() => row.classList.remove('is-focused'), 2600);
+    });
+    if (first && first.scrollIntoView) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
 
   // Margin for one product row, via the SHARED helper (_paMargin, part 09) —
   // the same gross-on-price figure the Products list and the product editor
@@ -1131,7 +1301,14 @@
     const costTxt = cpu > 0 ? `${moneyU(cpu)}/${esc(unitTxt)}` : T('not yet costed', '尚未计算成本');
     return `<div class="rcp-matline${blocked ? ' blocked' : ''}">`
       + esc(T('Also stocked as a material: ', '同时作为物料备货:')) + `<b>${esc(_rec.backsMaterial.name_en)}</b> — ${costTxt}`
-      + (blocked ? ` — ${esc(T('frozen at its last computed value.', '已冻结为最近一次计算的值。'))} ${esc(blockReasonText(mb.reason, mb.unpriced))}` : '')
+      + (blocked ? ` — ${esc(T('frozen at its last computed value.', '已冻结为最近一次计算的值。'))} ${esc(blockReasonText(mb))}` : '')
+      // WHICH INGREDIENT STOPPED IT. The sentence above says a count; this says
+      // the rows, on their own line so the caption still reads as one sentence,
+      // and it is a button for the same reason the pills are — the fix is three
+      // fields away, in a tab this line cannot see.
+      + (blocked && blockWho(mb)
+          ? `<button type="button" class="rcp-matwho" onclick="rcpFocusLines('${mb.reason === 'unreconciled_units' ? 'mismatch' : 'nocost'}')">${esc(blockWho(mb))}</button>`
+          : '')
       + `</div>`;
   }
 
@@ -1311,13 +1488,13 @@
       // forbidden (§30 rule 3), so it is English on both halves.
       const bad = mismatchedLines();
       if (bad.length) {
-        const names = bad.slice(0, 3)
-          .map(x => `${x.l.name_en || x.l.master_name_en || '?'} (${x.l.unit || '—'} vs ${x.l.master_unit || '—'})`)
-          .join(', ');
-        const more = bad.length > 3 ? ` +${bad.length - 3} more` : '';
+        // whoList() is the SAME builder the card's pills and the recipe list
+        // use — one list of names on every screen that reports this, rather
+        // than three that drift apart on the cap or the overflow tail.
+        const names = whoList(bad, lineWhoUnits);
         const en = `Saved — but ${bad.length} ingredient${bad.length === 1 ? '' : 's'} `
                  + `${bad.length === 1 ? 'is' : 'are'} NOT included in this recipe's cost: `
-                 + `${names}${more}. UNIT MISMATCH — the line's unit and the `
+                 + `${names}. UNIT MISMATCH — the line's unit and the `
                  + `material's stocking unit measure different kinds of thing, so nothing was `
                  + `converted. The cost shown is incomplete.`;
         // The count and the names are the same in both halves — they are data,
@@ -1325,7 +1502,7 @@
         // restated, so the Chinese confirms the save in the same words every
         // other save on this screen uses.
         const cn = `${T('Saved', '已保存')} —— 但有 ${bad.length} 项原料不计入本配方成本:`
-                 + `${names}${more}。单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,`
+                 + `${names}。单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,`
                  + `系统不作换算。显示成本不完整。`;
         toast(T(en, cn), 'err');
       } else {

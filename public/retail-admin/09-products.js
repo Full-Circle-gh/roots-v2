@@ -1079,7 +1079,8 @@ function pdRecipeHealthPaint(id) {
       const n = Number(d.missing) || 0;
       if (n > 0) {
         pills.push(pdCostPill(cuT(n + ' ingredient' + (n === 1 ? '' : 's') + ' missing cost — costs shown are too low',
-                                  n + ' 项原料缺少成本 — 显示成本偏低')));
+                                  n + ' 项原料缺少成本 — 显示成本偏低'),
+                              '', _pdHealthWho(d.missing_lines, n, false)));
       }
       // UNIT MISMATCH — a line counted in a unit its material is not stocked
       // in, left out of the cost entirely (lib/recipe-cost.js, the §7
@@ -1101,7 +1102,8 @@ function pdRecipeHealthPaint(id) {
                    + `so ${um === 1 ? 'its' : 'their'} cost is left out. The cost shown is incomplete.`;
         const tailCn = ` —— 本配方中有 ${um} 项原料所用单位与物料的库存单位计量的不是同一类量,`
                      + `其成本不计入。显示成本不完整。`;
-        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符'), cuT(tail, tailCn)));
+        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符'), cuT(tail, tailCn),
+                              _pdHealthWho(d.unreconciled_lines, um, true)));
       }
       // NO COST AT ALL — the cascade writes nothing, so whatever sits in the
       // field is stale or blank. The same sentence the link modal shows at link
@@ -1143,12 +1145,32 @@ function pdRecipeHealthPaint(id) {
 // locked wording (docs/tacet-delivery-vocabulary.md, `unitMismatchPill`) and
 // stays inside `body` where it was minted. The other three pills pass one
 // argument and render exactly as before.
-function pdCostPill(text, body) {
+// A THIRD ARGUMENT, AND IT IS DATA. `who` names the ingredients the pill is
+// about — material names and the stored units, never a translated string — on
+// its own line under the sentence. A pill that reported a count and nothing else
+// left the operator to go and find the lines himself, which is the whole
+// complaint this answers; and keeping the names OUT of `text`/`body` is what
+// lets the locked wording above still be copied whole.
+function pdCostPill(text, body, who) {
   const lead = body
     ? '<b class="pd-cost-warn-k">' + escapeHtml(text) + '</b>' + escapeHtml(body)
     : escapeHtml(text);
   return '<div class="pd-cost-warn">' + PD_ICON_WARN
-    + '<span class="pd-cost-warn-t">' + lead + '</span></div>';
+    + '<span class="pd-cost-warn-t">' + lead
+    + (who ? '<span class="pd-cost-warn-who">' + escapeHtml(who) + '</span>' : '')
+    + '</span></div>';
+}
+// The names the route sent, as one line. Same cap, same shape and the same
+// "+N more" tail the recipe screen uses (19-recipes.js whoList) — one way of
+// naming these rows across both screens rather than two that drift apart.
+// A payload predating the keys names nothing and the pill reads as it did.
+function _pdHealthWho(rows, total, withUnits) {
+  if (!Array.isArray(rows) || !rows.length) return '';
+  const shown = rows.map(r => (withUnits
+    ? (r.name || '?') + ' (' + (r.unit || '—') + ' vs ' + (r.masterUnit || '—') + ')'
+    : (r.name || '?'))).join(', ');
+  const n = Number(total) || rows.length;
+  return shown + (n > rows.length ? ' +' + (n - rows.length) + ' more' : '');
 }
 // Can a recipe be linked here at all? Recipes only exist as a screen when
 // Production is on, so offering the action with it off would point the operator

@@ -288,6 +288,36 @@ passed whether or not a Chinese half existed. Section 6 of that file now flips
 the language and asserts the output CHANGED, and scans both files for the shape
 the bug wore — `T(x, x)` / `cuT(x, x)`, the same variable passed as both halves.
 
+**AMENDED 2026-09-03 — the warnings now name the INGREDIENT. No new Chinese.**
+Reported by Ash against the recipe record: "if there is an alert like unit
+mismatch or any other alert, it should point which ingredient is the problem so
+it will be easier for the user to find it." Every warning above named a condition
+and a count; on a recipe with eleven lines that is a fact the operator cannot act
+on without comparing eleven units by eye.
+
+Nothing here is a new string and nothing needed minting. What was added is DATA
+sitting beside the locked copy: the material's own name, its stored unit and the
+line's stored unit — proper nouns and stored values, never translated — on their
+own line under the label, never spliced into it. The one English tail, `+N more`,
+is the save toast's own overflow wording, copied from it and still CN PENDING for
+the same reason (composing Chinese is forbidden, Rule 4).
+
+| Where | File | What it names |
+|---|---|---|
+| The record card's two pills | `public/retail-admin/19-recipes.js` `paintSummary()` / `warnPill()` | The offending rows, and the pill becomes a button: `rcpFocusLines()` opens Ingredients on them. |
+| The recipes list tooltip | `public/retail-admin/19-recipes.js` `tableHtml()`, fed by `routes/retail-recipes.js` `flaggedNames()` | The same rows, from the breakdown the count already came off — no second query, no second rule. |
+| The product editor's cost pills | `public/retail-admin/09-products.js` `pdRecipeHealthPaint()`, fed by `routes/retail.js` `healthLines()` | The rows behind each count, on the screen where the price is being set. |
+| The material line's block reason | `public/retail-admin/19-recipes.js` `materialHtml()` / `BLOCK_REASON`, fed by `materialBlockState()` | See below — this one was also saying the wrong thing. |
+
+**AND ONE BUG.** `costOneRecipe` (`lib/recipe-rollup.js`) has refused an
+unreconciled line on its own `unreconciled_units` reason since the §7 addendum,
+and the screen's `BLOCK_REASON` map had no entry for it — so every such recipe
+fell through to the vague fallback and read "This recipe's cost can't be worked
+out right now." on the same card that carried a UNIT MISMATCH pill naming the
+actual cause. The entry now reuses `unitMismatchPill`'s locked wording, both
+halves, behind the locked label. The test asserts the map has copy for every
+reason that function can return, so the next reason added cannot ship mute.
+
 **DO NOT CONFUSE WITH UNCONVERTED**, which is the §6 addendum's state for a recipe
 with a blank serving size. Different state, different screen region, different
 cause.

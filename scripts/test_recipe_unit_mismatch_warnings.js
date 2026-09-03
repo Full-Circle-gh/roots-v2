@@ -46,6 +46,7 @@ const read        = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 const DATABASE_JS = read('database.js');
 const SCHEMA_SQL  = read('schema.sql');
 const PRODUCTS_JS = read('public', 'retail-admin', '09-products.js');
+const PRODUCTS_JS_SRC = PRODUCTS_JS;
 const RECIPES_JS  = read('public', 'retail-admin', '19-recipes.js');
 const RETAIL_JS   = read('routes', 'retail.js');
 const RECIPES_CSS = read('public', 'retail-admin.css');
@@ -567,7 +568,11 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
 // is lifted out with the two helpers it calls and run against stubs — every
 // assertion reads the HTML the shipped function returned.
 {
-  const LIST_FNS = ['function tableHtml()', 'function primaryCost(row)', 'function rowsInView()']
+  // whoSep/whoTail/rowWho ride along because tableHtml() now calls them to name
+  // the offending ingredients — lifted out rather than stubbed, so what runs
+  // here is the wording that ships.
+  const LIST_FNS = ['function tableHtml()', 'function primaryCost(row)', 'function rowsInView()',
+                    'function whoSep()', 'function whoTail(who)', 'function rowWho(rows, total, withUnits)']
     .map(d => extractFunction(RECIPES_JS, d)).join('\n');
   const esc = s2 => String(s2 == null ? '' : s2)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -579,7 +584,7 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
       money: n => '¥' + (Number(n) || 0).toFixed(2),
       moneyU: n => '¥' + (Number(n) || 0).toFixed(4),
       I: { warn: '<svg id="the-triangle"></svg>', book: '' },
-      blockReasonText: () => '', Number, String,
+      blockReasonText: () => '', blockWho: () => '', Number, String,
     };
     vm.createContext(sb2);
     vm.runInContext(LIST_FNS + '\nthis.__t = tableHtml;', sb2, { filename: '19-recipes.js#tableHtml' });
@@ -602,9 +607,42 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
   // The behaviour that was already there must be untouched, word for word.
   check('the missing-cost icon keeps its own count and its own sentence', () => {
     const html = listHtml([R({ zeroCostIngredientLines: 3 })]);
-    assert.ok(/title="3 ingredient\(s\) missing cost — costs shown are too low"/.test(html),
+    assert.ok(/title="3 ingredient\(s\) missing cost — costs shown are too low["：:]/.test(html),
       'the missing-cost wording changed: ' + html);
     assert.ok(!html.includes('UNIT MISMATCH'), 'a clean-unit recipe was accused: ' + html);
+  });
+
+  // ── WHICH INGREDIENT ─────────────────────────────────────────────────────
+  // The count was never the operator's question. A row saying "2 ingredients
+  // missing cost" and nothing else is a fact he cannot act on without opening
+  // the recipe and comparing lines by eye, which is exactly what the record
+  // card's pill was changed to stop doing.
+  check('the tooltip names the ingredients missing a cost', () => {
+    const html = listHtml([R({ zeroCostIngredientLines: 2,
+      zeroCostNames: [{ name: 'Tahini' }, { name: 'Olive oil' }] })]);
+    assert.ok(/title="[^"]*Tahini[^"]*Olive oil[^"]*"/.test(html), 'the names are missing: ' + html);
+  });
+
+  check('a mismatched line is named WITH both units — the fix is a choice between them', () => {
+    const html = listHtml([R({ unreconciledUnitLines: 1,
+      unitMismatchNames: [{ name: 'Olive oil', unit: 'ml', masterUnit: 'g' }] })]);
+    assert.ok(/title="[^"]*Olive oil \(ml vs g\)[^"]*"/.test(html), 'the units are missing: ' + html);
+  });
+
+  // Three names, then a tail — a tooltip is not a list view, and the rows
+  // themselves carry the rest.
+  check('more offenders than are shown end in a "+N more" tail', () => {
+    const html = listHtml([R({ unreconciledUnitLines: 7,
+      unitMismatchNames: [{ name: 'A', unit: 'ml', masterUnit: 'g' },
+                          { name: 'B', unit: 'ml', masterUnit: 'g' },
+                          { name: 'C', unit: 'ml', masterUnit: 'g' }] })]);
+    assert.ok(/\+4 more/.test(html), 'no overflow tail: ' + html);
+  });
+
+  check('a row whose payload carries no names still says its sentence', () => {
+    const html = listHtml([R({ zeroCostIngredientLines: 2 })]);
+    assert.ok(/title="2 ingredient\(s\) missing cost — costs shown are too low"/.test(html),
+      'a nameless row grew punctuation with nothing after it: ' + html);
   });
 
   // Two triangles in a name cell read as a severity, not as two facts.
@@ -622,6 +660,11 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
     const html = listHtml([R({ unreconciledUnitLines: 7 })]);
     assert.ok(!/7[^"]*UNIT MISMATCH|UNIT MISMATCH[^"·]*7/.test(html),
       'a count was spliced into the locked pair: ' + html);
+    // Naming the rows must not widen the pair either: the names arrive AFTER
+    // the locked string, behind punctuation, never inside it.
+    const named = listHtml([R({ unreconciledUnitLines: 1,
+      unitMismatchNames: [{ name: 'Olive oil', unit: 'ml', masterUnit: 'g' }] })]);
+    assert.ok(/UNIT MISMATCH[:：]/.test(named), 'the names were spliced into the label: ' + named);
   });
 
   check('the icon is the same triangle the list already used', () => {
@@ -758,6 +801,215 @@ function assertRealPair(label, en, cn) {
   check('the product editor pill carries a Chinese sentence', () => {
     assert.ok(/cuT\(tail, tailCn\)/.test(PRODUCTS_SRC), 'the pill tail has no Chinese half');
     assert.ok(PRODUCTS_SRC.includes('本配方中有'), 'the pill’s Chinese sentence is missing');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('7. Every warning says WHICH ingredient, not just how many');
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The count was never the question. "UNIT MISMATCH" on a card with eleven lines
+// is a fact the operator cannot act on, and "3 ingredients missing cost" sends
+// him to compare eleven prices by eye. Reported by Ash: the alert should point
+// at the ingredient. Everything below runs the shipped functions.
+
+// The record card's own naming helpers, lifted out together — whoList() calls
+// the formatters, and the two predicates decide which rows it is handed.
+{
+  const WHO_FNS = ['function lineUnitMismatch(l)', 'function mismatchedLines()',
+                   'function unpricedLines()', 'function lineWho(l)',
+                   'function lineWhoUnits(l)', 'function whoList(items, fmt)',
+                   'function warnPill(label, who, kind, cls)']
+    .map(d => extractFunction(RECIPES_JS, d)).join('\n');
+  function runWho(lines) {
+    const sb = {
+      COST: () => RC, T: (en) => en, _lines: lines,
+      esc: x => String(x == null ? '' : x),
+      I: { warn: '<svg id="the-triangle"></svg>' },
+      WHO_SHOWN: 3, Number, String,
+    };
+    vm.createContext(sb);
+    vm.runInContext(WHO_FNS
+      + '\nthis.__names = (fn, fmt) => whoList(fn === "nocost" ? unpricedLines() : mismatchedLines(), fmt);'
+      + '\nthis.__who = lineWho; this.__whoU = lineWhoUnits; this.__pill = warnPill;'
+      + '\nthis.__unpriced = unpricedLines;',
+      sb, { filename: '19-recipes.js#whoList' });
+    return sb;
+  }
+
+  const LINES = [
+    { name_en: 'Tahini',    qty: 200, unit: 'g',   master_unit: 'g',  master_cost: 0.05 },
+    { name_en: 'Olive oil', qty: 160, unit: 'ml',  master_unit: 'g',  master_cost: 0.5  },
+    { name_en: 'Water',     qty: 500, unit: 'ml',  master_unit: 'g',  master_cost: 0, master_free: 1 },
+    { name_en: 'Lemon',     qty: 2,   unit: 'pcs', master_unit: 'g',  master_cost: 3    },
+    { name_en: 'Salt',      qty: 5,   unit: 'g',   master_unit: 'g',  master_cost: 0    },
+  ];
+
+  check('the mismatch list names the rows, each with BOTH units', () => {
+    const t = runWho(LINES).__names('mismatch', runWho(LINES).__whoU);
+    assert.ok(t.includes('Olive oil (ml vs g)'), t);
+    assert.ok(t.includes('Lemon (pcs vs g)'), t);
+    assert.ok(!t.includes('Tahini') && !t.includes('Water'), 'a clean line was named: ' + t);
+  });
+
+  // The two counters answer different questions and must name different rows:
+  // a mismatched material is PRICED, and sending the operator to price it again
+  // is the misdirection the two pills exist to keep apart.
+  check('the missing-cost list names only the unpriced row — never the mismatched one', () => {
+    const sb = runWho(LINES);
+    const t = sb.__names('nocost', sb.__who);
+    assert.strictEqual(t, 'Salt');
+  });
+
+  check('a free-by-design line is on neither list', () => {
+    const sb = runWho(LINES);
+    assert.ok(!sb.__unpriced().some(x => x.l.name_en === 'Water'), 'free_by_design was called unpriced');
+  });
+
+  // The predicates must agree with the counters the pills print, or a pill says
+  // "3" and names two rows.
+  check('the two lists add up to the two counts lib/recipe-cost.js reports', () => {
+    const sb = runWho(LINES);
+    const built = RC.buildLines(LINES.map(l => ({ ...l, master_cost: l.master_cost })));
+    assert.strictEqual(sb.__names('mismatch', sb.__whoU).split(', ').length, built.unreconciledUnitLines);
+    assert.strictEqual(sb.__unpriced().length, built.zeroCostIngredientLines === undefined
+      ? built.zeroCostLines : built.zeroCostLines);
+  });
+
+  check('three names, then a tail — and the tail counts the ones it did not name', () => {
+    const many = [0, 1, 2, 3, 4].map(i => ({ name_en: 'Oil ' + i, unit: 'ml', master_unit: 'g', master_cost: 1 }));
+    const sb = runWho(many);
+    const t = sb.__names('mismatch', sb.__whoU);
+    assert.ok(t.includes('Oil 0') && t.includes('Oil 2') && !t.includes('Oil 3'), t);
+    assert.ok(t.endsWith('+2 more'), t);
+  });
+
+  // The pill is a BUTTON when it has rows to point at, and the locked pair is
+  // still copied whole — the names sit on their own line, never inside it.
+  check('a pill with names is a button that goes to the rows', () => {
+    const sb = runWho(LINES);
+    const html = sb.__pill('UNIT MISMATCH', 'Olive oil (ml vs g)', 'mismatch');
+    assert.ok(/<button[^>]*onclick="rcpFocusLines\('mismatch'\)"/.test(html), html);
+    assert.ok(/rcp-warn-l">UNIT MISMATCH</.test(html), 'the locked label was widened: ' + html);
+    assert.ok(/rcp-warn-who">Olive oil \(ml vs g\)</.test(html), 'the names are not on their own line: ' + html);
+  });
+
+  check('a pill with nothing to point at stays the div it always was', () => {
+    const html = runWho(LINES).__pill('Selling below cost', '', '', 'err');
+    assert.ok(html.startsWith('<div class="rcp-warn err">'), html);
+    assert.ok(!html.includes('button'), 'a pill about a price offered to jump to a line: ' + html);
+  });
+}
+
+// Looking must change nothing. rcpFocusLines only scrolls and marks.
+check('rcpFocusLines takes the operator to the rows and touches no value', () => {
+  const fn = extractFunction(RECIPES_JS, 'window.rcpFocusLines = function (kind)');
+  assert.ok(fn.includes("rcpSubtab('ingredients')"), 'it does not open the Ingredients tab');
+  assert.ok(fn.includes('scrollIntoView'), 'it does not scroll to the row');
+  assert.ok(!/\.unit\s*=|\.qty\s*=|api\(/.test(fn), 'it writes something — looking must be read-only');
+  assert.ok(/is-focused/.test(fn) && /\.rcp-line\.is-focused \{/.test(RECIPES_CSS),
+    'the row it lands on is not marked');
+});
+
+// ── The material line's reason map ──────────────────────────────────────────
+//
+// THE BUG THIS SECTION EXISTS FOR. costOneRecipe refuses an unreconciled line
+// on its OWN reason, and the client's map had no entry for it — so a recipe
+// blocked by a unit mismatch was told its cost "can't be worked out right now"
+// on the same card that carried a UNIT MISMATCH pill naming the actual cause.
+{
+  const ROLLUP_SRC = read('lib', 'recipe-rollup.js');
+  const COST_FN = extractFunction(ROLLUP_SRC, 'function costOneRecipe(db, recipeId, overrides)');
+  const reasons = [...new Set((COST_FN.match(/reason: '([a-z_]+)'/g) || [])
+    .map(m => m.replace(/reason: '|'/g, '')))].filter(r => r !== 'recipe_missing');
+
+  check('every reason the rollup can refuse with has copy on the screen', () => {
+    const map = RECIPES_JS.slice(RECIPES_JS.indexOf('const BLOCK_REASON = {'),
+                                 RECIPES_JS.indexOf('const blockReasonText'));
+    const missing = reasons.filter(r => !map.includes(r + ':'));
+    assert.deepStrictEqual(missing, [], 'reasons with no sentence, so they fall through to the vague one');
+  });
+
+  check('the unit-mismatch block names the cause instead of the vague fallback', () => {
+    const map = RECIPES_JS.slice(RECIPES_JS.indexOf('const BLOCK_REASON = {'),
+                                 RECIPES_JS.indexOf('const blockReasonText'));
+    const at = map.indexOf('unreconciled_units:');
+    const entry = map.slice(at, at + 700);
+    assert.ok(entry.includes('UNIT MISMATCH'), 'the locked EN label is not used: ' + entry);
+    assert.ok(entry.includes('单位不符'), 'the locked CN label is not used');
+    assert.ok(HAN.test(entry), 'the sentence has no Chinese half at all');
+    assert.ok(!/can't be worked out right now/.test(entry), 'it still says the vague sentence');
+  });
+}
+
+// ── The server sends the rows, and only the right ones ──────────────────────
+{
+  const RECIPES_ROUTE_SRC = read('routes', 'retail-recipes.js');
+  const RETAIL_SRC = read('routes', 'retail.js');
+
+  // The cap rides along from the source rather than being restated here, so a
+  // later change to it moves the assertion with it instead of failing.
+  function runPicker(src, decl, exportAs, capName) {
+    const cap = (src.match(new RegExp('const ' + capName + ' = \\d+;')) || [])[0];
+    assert.ok(cap, `${capName} has moved`);
+    const sb = { Array, Number, String };
+    vm.createContext(sb);
+    vm.runInContext(cap + '\n' + extractFunction(src, decl) + `\nthis.__f = ${exportAs};`,
+      sb, { filename: decl });
+    return sb.__f;
+  }
+  const flaggedNames = runPicker(RECIPES_ROUTE_SRC, 'function flaggedNames(c, kind)', 'flaggedNames', 'BLOCK_LINES_SHOWN');
+  const healthLines  = runPicker(RETAIL_SRC, 'function healthLines(c, kind)', 'healthLines', 'HEALTH_LINES_SHOWN');
+
+  const c = RC.buildLines([
+    { name_en: 'Tahini',    qty: 200, unit: 'g',   master_unit: 'g', master_cost: 0.05 },
+    { name_en: 'Olive oil', qty: 160, unit: 'ml',  master_unit: 'g', master_cost: 0.5  },
+    { name_en: 'Water',     qty: 500, unit: 'ml',  master_unit: 'g', master_cost: 0, master_free: 1 },
+    { name_en: 'Salt',      qty: 5,   unit: 'g',   master_unit: 'g', master_cost: 0    },
+  ]);
+
+  for (const [where, fn] of [['the recipes list', flaggedNames], ['recipe-health', healthLines]]) {
+    // Re-parsed rather than compared as-is: these objects were built inside a
+    // vm realm, so a structural comparison against a literal from this one fails
+    // on the prototype alone. JSON is also what actually crosses the wire.
+    const wire = v => JSON.parse(JSON.stringify(v));
+    check(`${where} sends the mismatched line with both its units`, () => {
+      assert.deepStrictEqual(wire(fn(c, 'unreconciled')),
+        [{ name: 'Olive oil', unit: 'ml', masterUnit: 'g' }]);
+    });
+    check(`${where} sends the unpriced line, and neither the free nor the mismatched one`, () => {
+      assert.deepStrictEqual(fn(c, 'zero').map(x => x.name), ['Salt']);
+    });
+    check(`${where} caps the list rather than shipping every line of a long recipe`, () => {
+      const many = RC.buildLines([0, 1, 2, 3, 4].map(i =>
+        ({ name_en: 'Oil ' + i, qty: 1, unit: 'ml', master_unit: 'g', master_cost: 1 })));
+      assert.strictEqual(fn(many, 'unreconciled').length, 3);
+    });
+    check(`${where} survives a breakdown it was handed nothing of`, () => {
+      assert.deepStrictEqual(wire(fn(null, 'zero')), []);
+      assert.deepStrictEqual(wire(fn({}, 'unreconciled')), []);
+    });
+  }
+
+  check('the list row carries the names beside each count', () => {
+    const at = RECIPES_ROUTE_SRC.indexOf('zeroCostIngredientLines: c.zeroCostIngredientLines');
+    const row = RECIPES_ROUTE_SRC.slice(at, at + 2200);
+    assert.ok(row.includes("zeroCostNames: flaggedNames(c, 'zero')"), 'no names for the missing-cost count');
+    assert.ok(row.includes("unitMismatchNames: flaggedNames(c, 'unreconciled')"), 'no names for the mismatch count');
+  });
+
+  check('the material block carries its own count and its own rows', () => {
+    const fn = extractFunction(RECIPES_ROUTE_SRC, 'function materialBlockState(recipeId)');
+    assert.ok(/unreconciled: r\.unreconciled/.test(fn), 'the unit-mismatch count is not forwarded');
+    assert.ok(/lines: blockedLines\(r\)/.test(fn), 'the blocked rows are not forwarded');
+  });
+
+  check('the product editor is sent the rows behind both of its counts', () => {
+    assert.ok(RETAIL_SRC.includes("missing_lines: healthLines(c, 'zero')"), 'no rows for the missing-cost pill');
+    assert.ok(RETAIL_SRC.includes("unreconciled_lines: healthLines(c, 'unreconciled')"), 'no rows for the mismatch pill');
+    assert.ok(PRODUCTS_JS_SRC.includes('_pdHealthWho(d.unreconciled_lines'), 'the editor never reads them');
+    assert.ok(/pd-cost-warn-who/.test(PRODUCTS_JS_SRC) && /\.pd-cost-warn-who \{/.test(RECIPES_CSS),
+      'the names have nowhere to sit in the pill');
   });
 }
 

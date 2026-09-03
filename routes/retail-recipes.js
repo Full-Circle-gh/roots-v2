@@ -127,7 +127,50 @@ function readBody(b) {
 // not a per-recipe status read's.
 function materialBlockState(recipeId) {
   const r = costOneRecipe(db, recipeId, new Map());
-  return { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
+  return {
+    ok: r.ok,
+    reason: r.ok ? null : r.reason,
+    unpriced: r.unpriced || 0,
+    // Carried for the same reason `unpriced` is, and it had been missing: the
+    // client's reason map has an entry per reason costOneRecipe can return, and
+    // this one arrives with a count of its own. Without it a recipe blocked by a
+    // unit mismatch showed a count of 0 lines, or fell through to the vague
+    // "can't be worked out right now".
+    unreconciled: r.unreconciled || 0,
+    // WHICH LINES. The screen said how many and left the operator to find them
+    // among eleven; costOneRecipe already costed every line to decide the block,
+    // so naming the first few costs nothing and re-derives nothing. Capped —
+    // this rides on every row of a 100-recipe list, and the record's own marks
+    // carry the rest.
+    lines: blockedLines(r),
+  };
+}
+
+// The lines a block is actually about, in the recipe's own order. Empty for a
+// block that is about the RECIPE rather than its lines (archived, no batch
+// size, no cost per unit) — naming an ingredient there would send the operator
+// to a row that is perfectly fine.
+const BLOCK_LINES_SHOWN = 3;
+function blockedLines(r) {
+  const all = (r && r.detail && Array.isArray(r.detail.lines)) ? r.detail.lines : [];
+  const pick = r && r.reason === 'unreconciled_units' ? (l => l.unreconciledUnit)
+             : r && r.reason === 'unpriced_lines'     ? (l => l.lineCost === null && !l.unreconciledUnit && !l.freeByDesign)
+             : null;
+  if (!pick) return [];
+  return all.filter(pick).slice(0, BLOCK_LINES_SHOWN)
+    .map(l => ({ name: l.name, unit: l.unit, masterUnit: l.masterUnit }));
+}
+
+// The same two lists for a row of the LIST, off the breakdown that row already
+// ran. Same cap, same shape, same order — the tooltip on the list and the pill
+// on the record name the same ingredients in the same words.
+function flaggedNames(c, kind) {
+  const all = (c && Array.isArray(c.lines)) ? c.lines : [];
+  const pick = kind === 'unreconciled'
+    ? (l => l.unreconciledUnit)
+    : (l => l.lineCost === null && !l.unreconciledUnit && !l.freeByDesign);
+  return all.filter(pick).slice(0, BLOCK_LINES_SHOWN)
+    .map(l => ({ name: l.name, unit: l.unit, masterUnit: l.masterUnit }));
 }
 
 // ═══ List ══════════════════════════════════════════════════════════════════
@@ -187,6 +230,11 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       // (3 of the 4 recipes named in the build gate have both unset).
       batchCost: c.batchCost, costPerServing: c.costPerServing, costPerGram: c.costPerGram,
       zeroCostIngredientLines: c.zeroCostIngredientLines,
+      // The first few of those lines BY NAME. The count alone sent an operator
+      // into the recipe to work out which line it meant; these come off the same
+      // breakdown the count does, so the list can name them without a second
+      // query and without a second rule.
+      zeroCostNames: flaggedNames(c, 'zero'),
       // Lines whose unit measures a different kind of thing than their
       // material's stocking unit (§7 addendum), left out of the cost entirely.
       // Carried for the SAME reason zeroCostIngredientLines is: the list paints
@@ -201,6 +249,9 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       // multiplied by. Two facts, two counters, two sentences — the separation
       // the recipe record's two pills already keep on screen.
       unreconciledUnitLines: c.unreconciledUnitLines,
+      // Named with BOTH units, because the fix is a choice between them —
+      // exactly what the recipe record's own mark prints on the line.
+      unitMismatchNames: flaggedNames(c, 'unreconciled'),
       backsMaterial: material ? { id: material.id, name_en: material.name_en, cost_per_unit: material.cost_per_unit, unit: material.unit } : null,
       materialBlock: material ? materialBlockState(r.id) : null,
     };
