@@ -203,11 +203,34 @@ change; each is a boundary.
 2. **Damaged units still cannot be returned, and are still expensed in full.**
    The reasoning is under *drawn from accepted, never from damaged*. Both halves
    of that are pre-existing; only the first is newly enforced.
-3. **A downward correction to an arrived count still clamps at zero stock**
+3. ~~**A downward correction to an arrived count still clamps at zero stock**
    rather than refusing. Returns refuse; corrections behave as they always have.
    Making both refuse is a one-line change to `applyReceivedToStock` and a
    behavioural change to a path the warehouse uses daily, which is not something
-   to smuggle in beside a new feature.
+   to smuggle in beside a new feature.~~
+
+   **SUPERSEDED 2026-09-03 by §39 ruling 7. The correction no longer clamps, and
+   it is not refused either — it takes the shelf NEGATIVE.** This entry named
+   two options and Ash chose a third. **The reasoning: if only 8 boxes actually
+   arrived, the 10 in the system is a lie, and blocking the correction protects
+   the lie.** A negative balance is ugly but true — it says stock was sold that
+   was never held, which really happened and which someone should be able to
+   see. Same reasoning as the dispatch ruling, which settled the identical
+   question at the warehouse end.
+
+   **The asymmetry this entry recorded therefore STANDS, and is now deliberate
+   rather than deferred: returns refuse, corrections go negative.** They are
+   different assertions. A return says goods left the shelf, which is false if
+   they were never there — so it is refused. A correction says the count was
+   always wrong, which is a claim about the record rather than the goods, and
+   refusing it would keep a number everybody already knows to be false.
+
+   **What made this safe to change was not this file.** The clamp lived in
+   `lib/inventory.js` and governed five call sites; removing it required the
+   dispatch ruling, a guard on the Kitchen Quick Stock delta path, and a fix to
+   the dashboard queries that filtered on `= 0` and would have hidden every
+   negative it created. Recorded in `docs/tacet-stock-movement-schema.md`
+   PART E.
 4. **No period lock.** A return restates the month the purchase was booked in,
    and nothing stops it. Locking closed periods is a Finance-wide decision with
    nothing to do with returns.

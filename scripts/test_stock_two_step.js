@@ -234,28 +234,49 @@ function makeOrder({ lines, shelves = {} }) {
   eq(itemsOf(zero)[0].qty_received, 0, 'qty_received is 0, which is not NULL');
   eq(refRows('restock_transfer_in', zero).length, 0, 'no ledger row — the ledger records movements');
 
-  // ══ 13 — the clamp, and why this assertion is NOT built ══════════════════
-  section('13. Dispatch exceeding warehouse stock — NOT ASSERTED THIS ROUND');
-  // B9 assertion 13 expects a dispatch larger than the shelf to roll back rather
-  // than clamp. It is NOT built here, and the omission is deliberate:
+  // ══ 13 — a dispatch larger than the shelf goes NEGATIVE ══════════════════
+  section('13. Dispatch exceeding warehouse stock goes negative, and is not clamped');
+  // FLIPPED 2026-09-03. This assertion previously CHARACTERISED the clamp — it
+  // recorded that the warehouse floored at 0 and the shortfall was discarded,
+  // because E2 was unruled and the clamp had to stay. E2 is now ruled (§39
+  // ruling 7) and the clamp is gone, so the assertion states the real behaviour.
   //
-  //   • the plan puts that behaviour in Step 1b, which deletes the zero clamp
-  //     at lib/inventory.js;
-  //   • Step 1b is GATED on E2, the PO-receiving downward correction, which is
-  //     unruled — and this build brief says the clamp stays in place this round.
-  //
-  // So the plan and the brief disagree about assertion 13 alone. Rather than
-  // choose, this records today's behaviour so the change is visible when 1b
-  // lands: the clamp floors the warehouse at 0 and the shortfall is discarded.
+  // B9's original wording expected a ROLLBACK. Ash ruled the other way for the
+  // dispatch: the send is never blocked, because the picker's hands are right
+  // and the record is wrong. So this asserts the ruled outcome, not B9's
+  // anticipated one, and the difference is deliberate.
   const bust = makeOrder({
     lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 50, qty_sent: 50 }],
     shelves: { '1:900': 20, '2:900': 0 },
   });
-  setStatus(bust, 'prepared');
-  eq(shelf(WH, 900), 0, '13(characterisation). the clamp floors the warehouse at 0 — it does NOT go to −30');
-  eq(refRows('restock_transfer_out', bust)[0].delta, -20,
-     '13(characterisation). the ledger records −20, not the −50 that was sent — the shortfall is discarded');
-  ok(true, '13. the rollback assertion is deliberately NOT built — see the comment above and the build report');
+  const inTransitBefore = inTransit(900);   // an earlier order in this file is still on a van
+  const bustRes = setStatus(bust, 'prepared');
+  ok(bustRes.body && bustRes.body.success && !bustRes.body.stock_transfer,
+     '13. the dispatch is NOT refused — the send goes through');
+  eq(shelf(WH, 900), -30, '13. the warehouse goes to −30, not floored at 0');
+  eq(refRows('restock_transfer_out', bust)[0].delta, -50,
+     '13. the ledger records the full −50 that was sent — no shortfall is discarded');
+  eq(refRows('restock_transfer_out', bust)[0].balance_after, -30,
+     '13. balance_after records the negative honestly');
+  eq(orderRow(bust).goods_state, 'in_transit', '13. and the transfer proceeds normally');
+  eq(inTransit(900) - inTransitBefore, 50,
+     '13. all 50 are in transit — the units physically exist even though the record did not');
+
+  // The receipt half settles it the same way, at whatever the store counted.
+  receive(bust, [{ item_id: itemsOf(bust)[0].id, qty_received: 50 }]);
+  eq(shelf(SHOP, 900), 50, '13. the destination receives the full counted 50');
+  eq(shelf(WH, 900), -30, '13. and the warehouse stays at −30 — a standing statement that the record undercounted');
+
+  section('A downward correction may take a shelf negative (§39 ruling 7)');
+  // The PO-receiving case the ruling actually settles, exercised through
+  // adjustStock directly — routes/retail-purchasing.js reaches it with exactly
+  // this shape (deltaQty = good − alreadyApplied, negative on a correction).
+  const inv = require(path.join(h.REPO, 'lib/inventory.js'));
+  F.setShelf(h.db, SHOP, 901, 1);
+  const corrected = inv.adjustStock({ storeId: SHOP, productId: 901, deltaQty: -2, reason: 'restock' });
+  eq(corrected.newQty, -1, 'correcting 10 arrived down to 8 when 9 were sold leaves −1, not 0');
+  eq(corrected.delta, -2, 'the full −2 is recorded — the shortfall is not silently discarded');
+  eq(shelf(SHOP, 901), -1, 'the shelf itself holds the negative');
 
   // ══ 14 — the warehouse setting ═══════════════════════════════════════════
   section('14. An unset warehouse refuses and names the setting');
@@ -273,6 +294,49 @@ function makeOrder({ lines, shelves = {} }) {
   // The old code guessed here: whichever store held the most stock became the
   // warehouse, silently. A wrong source is worse than a refusal.
   setCfg(String(WH));
+
+  section('The Kitchen Quick Stock delta path refuses a negative');
+  // With the floor gone, an unguarded negative delta here would write a negative
+  // balance through a door whose whole contract is "I made N more". The guard
+  // states that contract; the absolute path is where a reduction belongs.
+  const invRoute = require(path.join(h.REPO, 'routes/retail-inventory.js'));
+  const STOCK_ROUTE = '/api/retail-admin/stores/:storeId/stock/:productId';
+  F.setShelf(h.db, SHOP, 900, 12);
+  const stockCall = (body) => F.callRoute(invRoute, 'patch', STOCK_ROUTE, {
+    params: { storeId: String(SHOP), productId: '900' }, body,
+    user: { ...ACTOR, role: 'admin' }, permissions: { retail_admin: 1, inventory: 1 },
+  });
+  const negRes = stockCall({ delta: -5 });
+  eq(negRes.status, 400, 'a negative delta is refused');
+  eq((negRes.body || {}).error, 'delta_must_be_positive', 'and refused by name, not silently absorbed');
+  eq(shelf(SHOP, 900), 12, 'the shelf is untouched by the refused request');
+  const posRes = stockCall({ delta: 5 });
+  ok(posRes.status !== 400, 'a positive delta still works');
+  eq(shelf(SHOP, 900), 17, 'and adds as it always did');
+
+  section('A negative shelf appears on the dashboard "Needs you" panel');
+  // FOUR CLAUSES, not one: count and preview are separate queries per card, so
+  // a partial fix gives a card whose number and list disagree. Under the old
+  // `= 0` a negative matched neither the low card nor the out-of-stock one and
+  // vanished from the panel entirely — shipping negatives while hiding them
+  // would have been worse than the clamp.
+  const retail = require(path.join(h.REPO, 'routes/retail.js'));
+  h.db.prepare(`UPDATE store_products SET status='Active', is_active=1, is_published=1 WHERE id IN (900,901)`).run();
+  F.setShelf(h.db, WH, 901, -4);
+  F.setShelf(h.db, SHOP, 901, 0);
+  const ops = F.callRoute(retail, 'get', '/api/retail-admin/dashboard/ops', {
+    params: {}, body: {}, user: { ...ACTOR, role: 'admin' }, permissions: { retail_admin: 1 },
+  });
+  const oos = ((ops.body || {}).data || ops.body || {}).out_of_stock || {};
+  const negItem = (oos.items || []).find(i => i.id === 901);
+  ok(!!negItem, 'the negative product is listed on the out-of-stock card (clause 4)');
+  eq(negItem && negItem.stock_qty, -4,
+     'and it is listed WITH its negative figure — proof the row came through, not a coincidence');
+  eq(oos.count, (oos.items || []).length,
+     'the COUNT clause (clause 3) agrees with the list — a partial fix would show them disagreeing');
+  const lowIds = ((((ops.body || {}).data || ops.body || {}).low) || {}).items || [];
+  ok(!lowIds.map(i => i.id).includes(901),
+     'and it does NOT also appear on the low-stock card — a product must not be on both');
 
   section('The receipt refuses an order that never left');
   const never = makeOrder({

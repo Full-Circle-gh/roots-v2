@@ -339,6 +339,29 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   // kitchen client never reads the current count — it only ever sends "+N".
   if ('delta' in b) {
     const d = parseInt(b.delta, 10) || 0;
+    // THE DELTA PATH IS ADDITIVE ONLY, and it is now enforced rather than
+    // assumed. Until §39 ruling 7 removed the floor inside adjustStock, a
+    // negative delta arriving here was absorbed silently: the shelf stopped at
+    // zero and the surplus vanished. With the floor gone the same request would
+    // write a negative balance — an honest number, but one nobody asked for
+    // through this door.
+    //
+    // This route already says the delta path is for adding: `kitchenOp` users
+    // are refused outright unless they use it (`kitchen_add_only` above), and
+    // the comment below describes it as the kitchen's "I made N more". The UI
+    // has only ever sent `+N`. So this guard states the existing contract
+    // instead of leaving it to a clamp that no longer exists.
+    //
+    // A genuine reduction has its own door: `physical_qty`, the absolute
+    // recount, which is what a correction actually is — a new count, not an
+    // increment. Deliberately NOT a silent clamp back to zero: refusing tells
+    // the caller it asked for the wrong thing, which absorbing it never did.
+    if (d < 0) {
+      return res.status(400).json({
+        success: false, error: 'delta_must_be_positive',
+        message: 'This adds stock — send a positive number. To reduce a count, set the new total instead.',
+      });
+    }
     if (d !== 0) {
       out.adjust = inventory.adjustStock({
         storeId, productId, deltaQty: d,

@@ -15245,6 +15245,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // means "not archived"; a product can be Active-but-unpublished (is_published=0
     // = "Show in shop" off). Those are disabled/hidden from customers, so nagging
     // to restock them is noise on a NEEDS-YOU card — exclude them.
+    // `> 0` STAYS, deliberately. A negative balance is claimed by the
+    // out-of-stock card below (`<= 0`), and a product must not appear on both
+    // cards at once — the panel would double-count it and the operator would
+    // chase the same row twice. "Low" means a positive figure running down;
+    // a negative is a different condition with a different fix.
     const lowCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} > 0
@@ -15263,19 +15268,34 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     `).all({ ...storeBind, ...lowBind, low_default: lowDefault, preview: previewLimit });
     low = { count: lowCount, items: lowItems.map(parseStores) };
 
+    // `<= 0`, NOT `= 0`, and the difference is the whole point of this change.
+    //
+    // Since §39 rulings 1 and 7 removed the floor inside adjustStock, a shelf can
+    // hold a NEGATIVE balance: a dispatch of 50 against a recorded 20, or a
+    // correction saying only 8 of 10 boxes arrived. Both are honest statements
+    // that the record was already wrong, and both are more urgent than a plain
+    // zero — a negative says stock was sold that was never held.
+    //
+    // Under `= 0` such a product matched NEITHER this clause nor the low-stock
+    // one above, so it vanished from the "Needs you" panel entirely: not shown
+    // wrong, shown nowhere. Shipping negative balances while hiding them would
+    // have been worse than the clamp that used to prevent them.
+    //
+    // Count and preview are separate queries by construction, so BOTH move
+    // together — fixing one would give a card whose number and list disagree.
     const oosCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
-       WHERE ${REAL_STOCK} = 0
+       WHERE ${REAL_STOCK} <= 0
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
     `).get(storeBind).n;
     const oosItems = tdb().prepare(`
       SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty${BREAKDOWN_COL}
         FROM store_products p
-       WHERE ${REAL_STOCK} = 0
+       WHERE ${REAL_STOCK} <= 0
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
-       ORDER BY p.name_en LIMIT @preview
+       ORDER BY stock_qty ASC, p.name_en LIMIT @preview
     `).all({ ...storeBind, preview: previewLimit });
     out_of_stock = { count: oosCount, items: oosItems.map(parseStores) };
 

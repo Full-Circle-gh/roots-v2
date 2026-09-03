@@ -297,9 +297,20 @@ function applyReceivedToStock(poId, req, storeId) {
 // with no sign on any screen that they do, which is worse than a refusal the
 // operator can read and act on.
 //
-// inventory.adjustStock's `Math.max(0, …)` clamp is deliberately NOT changed —
-// other callers depend on it. This pre-check is what stops this path from ever
-// reaching it, and the assertion below is what proves it never did.
+// SUPERSEDED 2026-09-03 by §39 ruling 7 — the sentence that stood here said
+// inventory.adjustStock's `Math.max(0, …)` clamp was deliberately NOT changed
+// because other callers depended on it. THAT IS NO LONGER TRUE: the clamp is
+// gone, and adjustStock now writes a negative balance rather than flooring one.
+// The reasoning is left visible rather than deleted, because a reader meeting
+// this pre-check needs to know it was NOT built on the clamp.
+//
+// NOTHING HERE CHANGES, and that is the point. This path's refusal was never
+// the clamp's doing — the pre-check below computes the shortfall itself and
+// refuses the whole reversal, and the post-call assertion proves the clamp never
+// bit. Both stand on their own. What changes is only what WOULD have happened
+// had they failed: the shelf would now go negative instead of stopping at zero.
+// The assertion that catches that (`reversal_clamped`) can no longer fire, and
+// is kept as a tripwire rather than removed.
 //
 // EVERYTHING RUNS ON tdb(). Three reasons, all load-bearing:
 //   1. It is the handle adjustStock writes through, so the outer transaction
@@ -413,9 +424,13 @@ function blockedResponse(res, blocking) {
 // half-applied is worse than one not applied at all.
 //
 // ONLY WHEN THE SAVE INCREASES A RETURN. A save that merely lowers an arrived
-// count reaches adjustStock the same way and has always been allowed to clamp;
-// tightening that is a separate change to a path the warehouse uses daily, and
-// is recorded in docs/purchase-returns.md rather than smuggled in here. So the
+// count reaches adjustStock the same way. It used to CLAMP there; since §39
+// ruling 7 (2026-09-03) it takes the shelf NEGATIVE instead, and that is the
+// ruled outcome rather than an oversight: if only 8 boxes actually arrived, the
+// 10 in the system is a lie, and blocking the correction protects the lie. A
+// negative says stock was sold that was never held — which really happened, and
+// which someone should be able to see. It is NOT refused and must not be, so
+// the asymmetry below with the returns path is deliberate and stays. So the
 // caller gates on plan.increased, and within such a save the removal is
 // measured in full — including any the corrected counts add — because by then
 // the operator is being refused anyway and half a rule would be a lie.
