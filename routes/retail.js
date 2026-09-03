@@ -28176,6 +28176,21 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       } catch (e) { console.error('[inventory.commit (admin paid)]', e); }
     }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
+    // Lifetime revenue-share, same as markOrderPaid() and the restock-promote
+    // path both do beside their creditReferralReward call. This admin path
+    // bypasses markOrderPaid() and had only the bounty, so a referred
+    // customer's SECOND and later orders settled off-app (cash at the till, a
+    // bank transfer) paid the referrer nothing while the identical order
+    // settled through the gateway paid them the full share. Which button
+    // closed the sale is not a fact about what the shop owes.
+    //
+    // Self-guarded and safe to call unconditionally here: it early-returns
+    // unless the programme is on and a rate is set, and its UNIQUE(order_id)
+    // + INSERT OR IGNORE means the wallet is credited at most once per order
+    // however many times it is called. The route's own transition guard
+    // (STATUS_TRANSITIONS.paid.prev = ['pending_payment']) already refuses a
+    // second pass, so this is belt and braces, not the only rail.
+    try { creditLifetimeCommission(id); } catch (e) { console.error('[creditLifetimeCommission]', e); }
     // Auto-print the bill, same as the gateway callbacks do inside
     // markOrderPaid(). This admin path bypasses markOrderPaid(), so without
     // this an off-app "Mark paid" order would never reach the store printer.
