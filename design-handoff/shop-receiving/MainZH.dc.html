@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.7;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+
+    /* Same ledger as picking. No filter row and no shop split in the caption —
+       she only ever sees her own box — so the row gets that width back.
+       CJK sets denser than Latin, so the name holds 15px where English drops to 14. */
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);}
+    .row.done{background:var(--raised);box-shadow:inset 4px 0 0 var(--sage);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .mid{flex:1;min-width:0;}
+    .nm{font-size:15px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+    /* One tap on the tick says "exactly what was sent". Count opens the keypad
+       for anything else. Both leave once the line is resolved. */
+    .count{height:56px;padding:0 12px;flex:none;border-radius:12px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+           font-size:13px;font-weight:500;color:var(--graphite);}
+    .tick{width:52px;height:56px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+    .todo{background:var(--raised);border:1px solid var(--line);}
+    .hr{height:1px;background:var(--line);}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
+
+  <!-- The OS status bar owns this strip. Nothing is painted into it. -->
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 12px;flex:none">
+    <div style="font-size:22px;font-weight:600;line-height:1.3">收货</div>
+    <!-- Zero Dusk here. The box has arrived, so nothing is in transit any more
+         and there is no Tacet action left to mark — the budget was spent on the
+         in-transit screen, which is the one state only Tacet can show her. -->
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <span class="num" style="font-size:13px;color:var(--graphite);flex:1;min-width:0">来自仓库 · 共 14 项</span>
+      <span class="num" style="font-size:13px;color:var(--graphite);flex:none">RS-260902-004</span>
+    </div>
+  </div>
+
+  <!-- The number on an uncounted row is what the warehouse SENT. Once she
+       confirms, it becomes what she FOUND, and the caption carries the gap. -->
+  <div style="flex:1;overflow:hidden">
+
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">40</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">冷冻水饺 500g</div>
+        <div class="cap">与发货一致</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <!-- Short. Cream and Sage edge because the line is done; the count and the
+         gap keep full Ink because they are the only thing that still matters. -->
+    <div class="row done">
+      <div class="qty">12</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">辣椒油 250ml</div>
+        <div class="cap"><span style="color:var(--ink);font-weight:600">短少 2</span> · 发出 14</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">24</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">猪肉韭菜包 6个装</div>
+        <div class="cap">与发货一致</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <!-- Over. Identical treatment to short — a gap is a gap, whichever way it runs. -->
+    <div class="row done">
+      <div class="qty">32</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">芝麻酱 400g</div>
+        <div class="cap"><span style="color:var(--ink);font-weight:600">多收 2</span> · 发出 30</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">16</div>
+      <div class="mid"><div class="nm">冷冻包子 12个装</div><div class="cap">FB-012</div></div>
+      <div class="count">点数</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">12</div>
+      <div class="mid"><div class="nm">香醋 500ml</div><div class="cap">BV-500</div></div>
+      <div class="count">点数</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">5</div>
+      <div class="mid"><div class="nm">黄豆酱 300g</div><div class="cap">SY-300</div></div>
+      <div class="count">点数</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">10</div>
+      <div class="mid"><div class="nm">米粉 400g</div><div class="cap">RN-400</div></div>
+      <div class="count">点数</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">8</div>
+      <div class="mid"><div class="nm">芝麻油 250ml</div><div class="cap">SO-250</div></div>
+      <div class="count">点数</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+
+  </div>
+
+  <!-- The count IS the explanation for the inactive button. There is no
+       "accept everything" — if the counting can be skipped it will be, and
+       every uncounted short becomes phantom stock on her shelf. -->
+  <div style="flex:none;background:var(--surface);border-top:1px solid var(--line)">
+    <div style="height:3px;background:var(--line);display:flex">
+      <div style="width:28.5%;background:var(--sage)"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px 18px">
+      <div style="flex:1;min-width:0">
+        <div class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">4 <span style="font-weight:400;font-size:15px;color:var(--graphite)">/</span> 14</div>
+        <div style="font-size:13px;color:var(--graphite);margin-top:-2px">项已点</div>
+      </div>
+      <div style="height:52px;padding:0 20px;border-radius:12px;background:var(--raised);border:1px solid var(--line);color:var(--graphite);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500">
+        确认收货
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --dusk-tint:#EEEDF6; --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;}
+    .qty{width:62px;flex:none;text-align:right;font-size:28px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:var(--graphite);}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;color:var(--graphite);
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .hr{height:1px;background:var(--line);}
+    @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
+    .dot{animation:breathe 2.4s ease-in-out infinite;}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
+
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 12px;flex:none">
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">On the way</div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · from the warehouse</div>
+  </div>
+
+  <!-- THE SINGLE DUSK SPEND FOR THE WHOLE RECEIVING FLOW.
+       Stock that has left one place and not yet arrived at another exists in no
+       building and on no shelf — it is a state only Tacet holds, and the one
+       thing on this screen the shop could not work out for itself. Every other
+       action in receiving is hers, so every other screen is Ink. -->
+  <div style="margin:0 16px 12px;background:var(--dusk-tint);border-radius:14px;padding:16px;flex:none">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="dot" style="width:7px;height:7px;border-radius:999px;background:var(--dusk);flex:none"></span>
+      <span style="font-size:13px;color:var(--dusk-ink);font-weight:500">In transit</span>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px">
+      <span class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-0.02em">118</span>
+      <span style="font-size:15px;color:var(--graphite)">units · 14 lines</span>
+    </div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:8px">Left the warehouse 13:04 · about 41 minutes ago</div>
+    <div class="num" style="font-size:13px;color:var(--graphite)">Usually arrives within 1–2 hours</div>
+  </div>
+
+  <div style="padding:0 16px 8px;flex:none">
+    <div style="font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite)">What is coming</div>
+  </div>
+
+  <!-- Read-only. Nothing here is countable yet, so nothing carries a control —
+       but knowing what is on the van is what changes what she tells a customer. -->
+  <div style="flex:1;overflow:hidden">
+    <div class="hr"></div>
+    <div class="row"><div class="qty">40</div><div style="flex:1;min-width:0"><div class="nm">Frozen dumplings 500g</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">30</div><div style="flex:1;min-width:0"><div class="nm">Sesame paste 400g</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">24</div><div style="flex:1;min-width:0"><div class="nm">Pork &amp; chive buns 6pk</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">16</div><div style="flex:1;min-width:0"><div class="nm">Frozen bao 12pk</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">14</div><div style="flex:1;min-width:0"><div class="nm">Chilli oil 250ml</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">12</div><div style="flex:1;min-width:0"><div class="nm">Black vinegar 500ml</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">10</div><div style="flex:1;min-width:0"><div class="nm">Rice noodles 400g</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">8</div><div style="flex:1;min-width:0"><div class="nm">Sesame oil 250ml</div></div></div>
+    <div class="hr"></div>
+    <div class="row"><div class="qty">6</div><div style="flex:1;min-width:0"><div class="nm">Soy paste 300g</div></div></div>
+    <div class="hr"></div>
+  </div>
+
+  <!-- No button. The box is not here, and a disabled "start receiving" would
+       only be a control advertising that it does not work yet. -->
+  <div style="flex:none;padding:14px 16px 24px;border-top:1px solid var(--line);background:var(--surface)">
+    <div style="font-size:13px;color:var(--graphite);line-height:1.45">
+      Counting opens when the van arrives. Two of these lines were packed short — you will see which when you count.
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

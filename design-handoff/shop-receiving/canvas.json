@@ -1,0 +1,133 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Receive flow"
+    },
+    {
+      "id": "page-2",
+      "name": "Row directions"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Transit.dc.html",
+      "page": "page-1",
+      "title": "1 · On the way",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Main.dc.html",
+      "page": "page-1",
+      "title": "2 · Receiving list (EN)",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "MainZH.dc.html",
+      "page": "page-1",
+      "title": "2 · Receiving list (中文)",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Count.dc.html",
+      "page": "page-1",
+      "title": "3 · Counting a line",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Resume.dc.html",
+      "page": "page-1",
+      "title": "4 · Back after a break",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Confirm.dc.html",
+      "page": "page-1",
+      "title": "5 · Confirm receipt",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Received.dc.html",
+      "page": "page-1",
+      "title": "6 · Received, with gaps",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Empty.dc.html",
+      "page": "page-1",
+      "title": "7 · Nothing to receive",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "RowStates.dc.html",
+      "page": "page-2",
+      "title": "One line, four states",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 1000
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-noglobal",
+      "page": "page-1",
+      "x": 470,
+      "y": -280,
+      "w": 860,
+      "text": "Every line is confirmed, and there is still no wall of taps\n\nThe constraint held: no global accept, anywhere. What makes fourteen confirmations bearable is that thirteen of them are one tap on a tick that means \"this many arrived\" — the number is already on the row, so agreeing with it costs nothing. Only a line that disagrees costs a keypad.\n\nThe alternative considered and rejected was a \"mark the rest as sent\" action once most lines were done. It is a global accept wearing a smaller hat: the moment it exists, the fast path through the screen is to count two boxes and wave the other twelve through, and the shelf and the record start to drift on exactly the days the shop is busiest.\n\nThe inactive Confirm receipt carries \"4 of 14 lines counted\" and nothing else — the same remainder pattern as the picker's allocation sheet. No error, no red, no nagging. It simply is not finished yet, and the sentence says how far off it is."
+    },
+    {
+      "id": "note-dusk",
+      "page": "page-1",
+      "x": 0,
+      "y": -280,
+      "w": 400,
+      "text": "The one Dusk spend in receiving\n\nIn transit is the only state on any of these screens that neither building can see. The goods left the warehouse and have not reached the shelf; they exist in no room, and only Tacet is holding the fact.\n\nEverything else in receiving is her own work — counting, correcting, confirming — so every other screen is Ink and cream. This card is the exception and stays the exception.\n\nNo button here. The box is not in the room, and a disabled \"start receiving\" would be a control whose only message is that it does not work yet."
+    },
+    {
+      "id": "note-noblame",
+      "page": "page-1",
+      "x": 1410,
+      "y": -280,
+      "w": 860,
+      "text": "A short box is a fact she reports, not a mistake she confesses\n\nThe keypad asks \"How many arrived?\" — not \"is this right?\", not \"confirm the quantity\". She is describing a box, not defending herself.\n\nNo reason field. No \"are you sure\". No confirmation step on the discrepancy. \"Recorded as it is. Nothing else needed.\" is the whole of it, and the closing screen repeats the shape: \"Nothing else is needed from you.\"\n\nOne shortcut back: All 30 arrived returns the line to the sent figure in a tap, for a miscount she wants to undo. It reads as a correction of her own typing, not a retraction of a claim.\n\nThe interruption case is the picker's resume card unchanged, and it earns its place harder here — a customer walking in mid-count is more likely than anything that stops a picker. Cream, not Dusk: the progress is hers, and nothing was done for her while she was away."
+    },
+    {
+      "id": "note-count-leads",
+      "page": "page-2",
+      "x": 0,
+      "y": -280,
+      "w": 400,
+      "text": "Short and over are the same event\n\nIdentical treatment: same cream fill, same Sage edge, same quiet tick, count and gap in full Ink. A gap is a gap whichever way it runs, and finding two extra is no more an error than finding four fewer. Giving over its own colour would make one direction a fault and the other an accident.\n\nWhat she counted leads at 34px. The sent figure survives only as a Graphite caption, because the count is what becomes the shelf — if the record ever prefers the warehouse's number to hers, the shelf and the record part company and the shop is the one that finds out.\n\nBoth controls leave a resolved row, generalising the picker's tick decision: on a settled line the only Ink left is the gap, so the gap wins the glance."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

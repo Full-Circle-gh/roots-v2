@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    .lbl{font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite);padding:0 16px;}
+    .note{font-size:13px;color:var(--graphite);line-height:1.45;padding:0 16px;}
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);}
+    .row.done{background:var(--raised);box-shadow:inset 4px 0 0 var(--sage);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .mid{flex:1;min-width:0;}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;margin-top:1px;}
+    .count{height:56px;padding:0 12px;flex:none;border-radius:12px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+           font-size:13px;font-weight:500;color:var(--graphite);}
+    .tick{width:52px;height:56px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+    .todo{background:var(--raised);border:1px solid var(--line);}
+    .hr{height:1px;background:var(--line);}
+  </style>
+</helmet>
+
+<div style="width:390px;height:1000px;background:var(--paper);padding:24px 0;display:flex;flex-direction:column;gap:10px">
+
+  <div style="padding:0 16px">
+    <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em">One line, four states</div>
+    <div class="note" style="padding:0;margin-top:2px">The gap between sent and found is the subject. When they match the row goes quiet; when they don't, it is the only thing left holding Ink.</div>
+  </div>
+
+  <div class="lbl" style="margin-top:6px">Not yet counted</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row">
+      <div class="qty">30</div>
+      <div class="mid"><div class="nm">Sesame paste 400g</div><div class="cap">SP-400</div></div>
+      <div class="count">Count</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+  </div>
+  <div class="note">The number is what the warehouse sent. One tap on the tick says it all arrived; Count opens the keypad for anything else.</div>
+
+  <div class="lbl" style="margin-top:6px">Counted, as sent</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">30</div>
+      <div class="mid"><div class="nm" style="color:var(--graphite)">Sesame paste 400g</div><div class="cap">as sent</div></div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+  </div>
+  <div class="note">No gap, so nothing to look at. Everything drops to Graphite and both controls leave with the work.</div>
+
+  <div class="lbl" style="margin-top:6px">Counted short</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row done">
+      <div class="qty">26</div>
+      <div class="mid"><div class="nm" style="color:var(--graphite)">Sesame paste 400g</div><div class="cap"><span style="color:var(--ink);font-weight:600">4 short</span> · 30 sent</div></div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+  </div>
+  <div class="note">What she counted leads. The sent figure sits behind it in Graphite — a fact for reference, not the number that matters now.</div>
+
+  <div class="lbl" style="margin-top:6px">Counted over</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row done">
+      <div class="qty">32</div>
+      <div class="mid"><div class="nm" style="color:var(--graphite)">Sesame paste 400g</div><div class="cap"><span style="color:var(--ink);font-weight:600">2 over</span> · 30 sent</div></div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+  </div>
+  <div class="note">Identical treatment. A gap is a gap whichever way it runs, and finding two extra is no more an error than finding four fewer.</div>
+
+  <div style="margin-top:auto;padding:12px 16px 0;border-top:1px solid var(--line)">
+    <div class="note" style="padding:0"><span style="color:var(--ink);font-weight:600">What she counts is what the shop now holds.</span> Not what the warehouse said it sent — that number survives only as the caption, so the shelf and the record cannot drift apart.</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

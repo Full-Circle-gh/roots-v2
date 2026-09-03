@@ -7,6 +7,10 @@
     {
       "id": "page-2",
       "name": "Row directions"
+    },
+    {
+      "id": "page-3",
+      "name": "Five shops"
     }
   ],
   "artboards": [
@@ -108,6 +112,24 @@
       "y": 0,
       "w": 390,
       "h": 844
+    },
+    {
+      "file": "FiveShopFilter.dc.html",
+      "page": "page-3",
+      "title": "Filter at five shops",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "FiveShopAllocate.dc.html",
+      "page": "page-3",
+      "title": "Allocation at five shops",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
     }
   ],
   "annotations": [
@@ -166,10 +188,18 @@
       "y": -230,
       "w": 400,
       "text": "The tick recedes as well\n\nDrawn both ways at eight lines and compared. A solid Ink tick made three completed rows the heaviest mass on the screen, so the darkest thing on the list was the work already finished — the contrast rule inverted. The short line's Ink numbers had to compete with three dark blocks and lost.\n\nWith the container dropped and a Graphite check left in its place, the only Ink in the settled band is the shortfall, and it wins the glance outright.\n\nThe tick is not the state marker — cream fill and the Sage edge already are. It is a control, and on a resolved line the thing it controls is undo. A quieter undo is the right undo."
+    },
+    {
+      "id": "note-fiveshops",
+      "page": "page-3",
+      "x": 0,
+      "y": -230,
+      "w": 860,
+      "text": "Proof the pattern survives a real customer\n\nNeither of these is a Roots state. Roots has two shops; a merchant with five is an ordinary customer, and both of these layouts quietly assumed two.\n\nThe filter row now holds exactly two controls at any shop count. Chips are kept only while they fit — past three shops the named ones fold into one picker. \"All shops\" keeps a chip of its own because combined is the default and has to stay one tap away; folding it in with the rest would make the common case cost two taps to save a control nobody needed removed.\n\nThe allocation sheet scrolls its rows and pins the remainder, the keypad and Save. Collapsing the keypad on blur was the alternative and it loses twice: the layout would jump under his thumb every time focus moved, and the remainder is the only explanation the inactive Save ever gets, so it cannot scroll away."
     }
   ],
   "launch": {
     "view": "canvas",
-    "page": "page-1"
+    "page": "page-3"
   }
 }
