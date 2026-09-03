@@ -2766,16 +2766,33 @@
   };
 
   // ── the no-invoice mark, both levels ──────────────────────────────────────
+  // Both toggles SAY SO when they land. They used to repaint the table and
+  // nothing else, which is fine while the row moves and useless when it does
+  // not — and 恢复 on an order whose lines carried their own mark did not move
+  // it at all: the state is an OR of the two levels (routes/retail-purchasing
+  // lineStatus), so the row went on reading 不开发票 with nothing on screen to
+  // say why. The server now lifts both levels together (lib/invoice-mark.js)
+  // and returns how many lines went with the order, and that count is said out
+  // loud here, because a press that quietly changes more than the row it was
+  // aimed at should not be silent either.
   window.puInvNoInvoicePO = async function (poId, flag) {
     try {
-      await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
+      const r = await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`,
+                          { method: 'PUT', body: { no_invoice_expected: !!flag } });
       await invReload();
+      const n = Number(r && r.lines_restored) || 0;
+      toast(flag ? T('Whole order marked as no-invoice ✓', '整单已标记不开发票 ✓')
+                 : (n ? T(`Order restored — ${n} line${n === 1 ? '' : 's'} back to awaiting ✓`,
+                          `整单已恢复 —— ${n} 条明细恢复待开票 ✓`)
+                      : T('Order restored to awaiting ✓', '整单已恢复待开票 ✓')), 'ok');
     } catch (e) { toast(e.message, 'err'); }
   };
   window.puInvNoInvoiceLine = async function (poId, lineId, flag) {
     try {
       await api(`/api/retail-admin/purchasing/po/${poId}/line/${lineId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
       await invReload();
+      toast(flag ? T('Line marked as no-invoice ✓', '该明细已标记不开发票 ✓')
+                 : T('Line restored to awaiting ✓', '该明细已恢复待开票 ✓'), 'ok');
     } catch (e) { toast(e.message, 'err'); }
   };
 
