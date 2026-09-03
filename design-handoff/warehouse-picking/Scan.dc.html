@@ -10,90 +10,92 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
   <style>
     :root{
-      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
-      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
-      --sage-ink:#5F7357; --dusk-ink:#524C8F;
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
     }
     body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
          font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
     *{box-sizing:border-box;}
-    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
     .num{font-variant-numeric:tabular-nums;}
-    .corner{position:absolute;width:34px;height:34px;border-color:#FBF9F4;border-style:solid;border-width:0;}
+    .corner{position:absolute;width:32px;height:32px;border-color:#FBF9F4;border-style:solid;border-width:0;}
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .mid{flex:1;min-width:0;}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;margin-top:1px;}
+    .short{width:48px;height:56px;flex:none;border-radius:12px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+           font-size:13px;font-weight:500;color:var(--graphite);}
+    .tick{width:52px;height:56px;flex:none;border-radius:12px;background:var(--raised);
+          border:1px solid var(--line);display:flex;align-items:center;justify-content:center;}
   </style>
 </helmet>
 
-<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden;display:flex;flex-direction:column">
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
 
-  <!-- Live camera. Rendered as a plain dark field — no fake photograph. -->
-  <div style="position:relative;height:392px;background:#111A2B;flex:none;overflow:hidden">
+  <!-- Live camera. A plain dark field — no fake photograph. -->
+  <div style="position:relative;height:440px;background:var(--ink);flex:none;overflow:hidden">
     <div style="position:absolute;top:44px;left:16px;right:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
       <div style="color:#FBF9F4;font-size:17px;font-weight:600">Scan a product</div>
       <div style="width:44px;height:44px;border-radius:999px;background:rgba(251,249,244,.14);display:flex;align-items:center;justify-content:center">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </div>
     </div>
-
-    <!-- Reticle -->
-    <div style="position:absolute;left:57px;top:150px;width:276px;height:150px">
+    <div style="position:absolute;left:57px;top:170px;width:276px;height:160px">
       <div class="corner" style="left:0;top:0;border-left-width:3px;border-top-width:3px;border-top-left-radius:8px"></div>
       <div class="corner" style="right:0;top:0;border-right-width:3px;border-top-width:3px;border-top-right-radius:8px"></div>
       <div class="corner" style="left:0;bottom:0;border-left-width:3px;border-bottom-width:3px;border-bottom-left-radius:8px"></div>
       <div class="corner" style="right:0;bottom:0;border-right-width:3px;border-bottom-width:3px;border-bottom-right-radius:8px"></div>
     </div>
-
-    <div style="position:absolute;left:16px;right:16px;bottom:20px;text-align:center;color:rgba(251,249,244,.75);font-size:13px">
+    <div style="position:absolute;left:16px;right:16px;bottom:16px;text-align:center;color:rgba(251,249,244,.75);font-size:13px">
       Hold the barcode inside the frame
     </div>
   </div>
 
-  <!-- The match lands inline, in place, where he is already looking. -->
-  <div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:0">
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
 
-    <div style="display:flex;align-items:center;gap:8px">
-      <span style="width:7px;height:7px;border-radius:999px;background:var(--sage);flex:none"></span>
-      <span class="num" style="font-size:13px;color:var(--sage-ink);font-weight:500">Matched · 6901234567890</span>
+    <div style="padding:14px 16px 10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:7px;height:7px;border-radius:999px;background:var(--sage);flex:none"></span>
+        <span class="num" style="font-size:13px;color:var(--graphite)">Found · 6901234567890</span>
+      </div>
+      <!-- The scan says WHICH product, and stops there. -->
+      <div style="font-size:15px;font-weight:600;margin-top:6px;line-height:1.35">Jumped to line 7</div>
     </div>
 
-    <!-- Same card, same numbers, now ticked. Scanning only did what a tap does. -->
-    <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Sesame paste 400g</div>
-        <div class="num" style="font-size:13px;color:var(--graphite);flex:none">SP-400</div>
+    <!-- The line, brought to him, untouched. Ink hairline because it is where he
+         now is — the same emphasis the Next divider uses on the resume screen.
+         Its own controls are here at full size; confirming is a separate act. -->
+    <div style="border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)">
+      <div class="row">
+        <div class="qty">30</div>
+        <div class="mid">
+          <div class="nm">Sesame paste 400g</div>
+          <div class="cap">Tianhe 18 · Yuexiu 12</div>
+        </div>
+        <div class="short">Short</div>
+        <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-          <span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em">30</span>
-          <span style="font-size:13px;color:var(--graphite)">picked</span>
-        </div>
-        <div style="width:64px;height:64px;border-radius:12px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex:none">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">Tianhe</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">18</span>
-        </div>
-        <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border-radius:8px;padding:6px 12px;min-height:40px">
-          <span style="font-size:13px;color:var(--graphite)">Yuexiu</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">12</span>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:2px">
-        <div style="flex:1;height:48px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;color:var(--graphite)">Undo</div>
-        <div style="flex:1;height:48px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;color:var(--graphite)">Short instead</div>
+    </div>
+
+    <div style="padding:12px 16px 0">
+      <div style="font-size:13px;color:var(--graphite);line-height:1.45">
+        A barcode names a product, not a quantity. Pulling 30 means counting 30 — so the tick is still yours to press.
       </div>
     </div>
 
     <div style="flex:1"></div>
 
-    <!-- The fallback carries the same weight as the camera, never a footnote. -->
-    <div style="height:56px;border-radius:12px;background:var(--surface);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;font-size:15px;font-weight:500">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>
-      Enter code by hand
+    <div style="padding:0 16px 18px;display:flex;flex-direction:column;gap:8px">
+      <!-- The fallback carries the same weight as the camera, never a footnote. -->
+      <div style="height:52px;border-radius:12px;background:var(--surface);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;font-size:15px;font-weight:500">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>
+        Enter code by hand
+      </div>
+      <div style="font-size:13px;color:var(--graphite);text-align:center">Or close the camera and tap any line.</div>
     </div>
-    <div style="font-size:13px;color:var(--graphite);text-align:center">Or close the camera and tap any line.</div>
 
   </div>
 

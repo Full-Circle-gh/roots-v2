@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
   <style>
     :root{
-      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
       --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
       --scrim:rgba(17,26,43,.38);
       --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
@@ -18,70 +18,83 @@
     body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
          font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
     *{box-sizing:border-box;}
-    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
     .num{font-variant-numeric:tabular-nums;}
-    .key{height:56px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
-         display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;
+    .key{height:52px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+         display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:500;
          font-variant-numeric:tabular-nums;color:var(--ink);}
+    /* An allocation row: who asked, a one-tap shortcut for that amount, and the
+       field. The field starts EMPTY — never pre-filled, never a default. */
+    .alloc{display:flex;align-items:center;gap:8px;}
+    .askchip{height:44px;padding:0 12px;border-radius:8px;background:var(--surface);
+             border:1px solid var(--line);display:flex;align-items:center;flex:none;
+             font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;}
+    .field{width:84px;height:56px;flex:none;border-radius:8px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:flex-end;
+           padding:0 12px;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;
+           letter-spacing:-0.01em;}
   </style>
 </helmet>
 
 <div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden">
 
-  <!-- The list, still there behind the scrim — he has not left the screen. -->
+  <!-- The list is still behind him — he has not left the screen. -->
   <div style="position:absolute;inset:0;display:flex;flex-direction:column">
     <div style="height:44px;flex:none"></div>
     <div style="padding:8px 16px 12px">
       <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
-      <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · 14 lines</div>
     </div>
-    <div style="padding:0 16px;display:flex;flex-direction:column;gap:8px">
-      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;height:132px"></div>
-      <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;height:132px"></div>
-    </div>
+    <div style="height:1px;background:var(--line)"></div>
+    <div style="height:76px;background:var(--surface)"></div>
   </div>
   <div style="position:absolute;inset:0;background:var(--scrim)"></div>
 
-  <!-- The sheet -->
-  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);padding:0 16px 20px">
+  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);padding:0 16px 18px">
 
-    <div style="display:flex;justify-content:center;padding:10px 0 6px">
+    <div style="display:flex;justify-content:center;padding:10px 0 4px">
       <div style="width:36px;height:4px;border-radius:999px;background:var(--line)"></div>
     </div>
 
-    <div style="padding:4px 0 0">
-      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Frozen dumplings 500g</div>
-      <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">FD-500 · asked for 65</div>
+    <div>
+      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Chilli oil 250ml</div>
+      <div class="num" style="font-size:13px;color:var(--graphite)">CO-250 · asked for 18</div>
     </div>
 
-    <!-- The number he is entering is the biggest thing in the sheet. -->
-    <div style="margin:18px 0 12px">
-      <div style="font-size:13px;color:var(--graphite)">How many did you find?</div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin-top:2px">
-        <span class="num" style="font-size:56px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">58</span>
-        <span style="font-size:15px;font-weight:600">7 short</span>
+    <div style="display:flex;align-items:baseline;gap:10px;margin:10px 0 12px">
+      <span class="num" style="font-size:44px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">14</span>
+      <span style="font-size:13px;color:var(--graphite)">found</span>
+      <span style="font-size:15px;font-weight:600">4 short</span>
+    </div>
+
+    <div style="height:1px;background:var(--line)"></div>
+
+    <!-- THE ALLOCATION. Tacet pre-fills nothing: both fields start empty, each
+         labelled with what that shop asked for, and he assigns every unit. -->
+    <div style="font-size:13px;color:var(--graphite);margin:12px 0 8px">Assign the 14 across the shops</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Tianhe</div>
+        <div class="askchip">asked 10</div>
+        <div class="field">8</div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Yuexiu</div>
+        <div class="askchip">asked 8</div>
+        <!-- Empty and focused. An empty field, not a zero — zero is an amount
+             he chose, blank is an amount he has not. -->
+        <div class="field" style="border:1px solid var(--ink)"></div>
       </div>
     </div>
 
-    <!-- The split is PROPOSED, never asked for. Fill in request order, so the
-         numbers stay whole — proportional would hand him 35.7 packs.
-         Tianhe was filled and recedes; Yuexiu took the shortfall and holds Ink. -->
-    <div style="display:flex;align-items:center;gap:10px;background:var(--raised);border-radius:8px;padding:10px 12px;min-height:56px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:var(--graphite)">Split across the two shops</div>
-        <div style="display:flex;align-items:baseline;gap:6px;margin-top:1px">
-          <span style="font-size:13px;color:var(--graphite)">Tianhe</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--graphite)">40</span>
-          <span style="color:var(--graphite);font-size:13px">·</span>
-          <span style="font-size:13px;color:var(--graphite)">Yuexiu</span>
-          <span class="num" style="font-size:19px;font-weight:700;letter-spacing:-0.01em">18</span>
-        </div>
-      </div>
-      <div style="height:44px;padding:0 14px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;font-size:15px;font-weight:500;flex:none">Adjust</div>
+    <!-- The remainder IS the explanation for the inactive button. It counts
+         down, it never scolds, and there is no error message anywhere. -->
+    <div style="display:flex;align-items:baseline;gap:6px;margin-top:10px">
+      <span class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">6</span>
+      <span style="font-size:15px;color:var(--graphite)">still to assign</span>
     </div>
 
-    <!-- Keypad. Large keys, wide gutters, no system keyboard. -->
-    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin-top:14px">
+    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin-top:12px">
       <div class="key">1</div><div class="key">2</div><div class="key">3</div>
       <div class="key">4</div><div class="key">5</div><div class="key">6</div>
       <div class="key">7</div><div class="key">8</div><div class="key">9</div>
@@ -92,9 +105,11 @@
       </div>
     </div>
 
-    <!-- One tap out. No reason field, no confirmation step. -->
-    <div style="height:56px;border-radius:12px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;margin-top:14px">
-      Save 58 and continue
+    <!-- Inactive until the remainder is zero. Stated as a fact, not a warning. -->
+    <div style="height:56px;border-radius:12px;background:var(--raised);border:1px solid var(--line);
+                color:var(--graphite);display:flex;align-items:center;justify-content:center;
+                font-size:15px;font-weight:500;margin-top:12px">
+      Save and continue
     </div>
 
   </div>

@@ -18,101 +18,83 @@
     *{box-sizing:border-box;}
     a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
     .num{font-variant-numeric:tabular-nums;}
-    /* §1.6 — sentence case, 13px Inter 500, Graphite, +0.04em. There is no
-       licensed uppercase in Tacet, section labels included. */
-    .cap{font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite);}
-    .note{font-size:13px;color:var(--graphite);line-height:1.45;}
-    .shop{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;
-          border-radius:8px;padding:6px 12px;min-height:40px;}
-    .shop .nm{font-size:13px;color:var(--graphite);}
-    .shop .n{font-size:19px;font-weight:700;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;}
-    .big{font-size:44px;font-weight:700;line-height:1;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
-    .tickInk{width:64px;height:64px;border-radius:12px;background:var(--ink);flex:none;
-             display:flex;align-items:center;justify-content:center;}
+    /* §1.6 — sentence case, 13px Inter 500, Graphite, +0.04em. */
+    .lbl{font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite);padding:0 16px;}
+    .note{font-size:13px;color:var(--graphite);line-height:1.45;padding:0 16px;}
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);}
+    .row.done{background:var(--raised);box-shadow:inset 4px 0 0 var(--sage);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .mid{flex:1;min-width:0;}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+    .short{width:48px;height:56px;flex:none;border-radius:12px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+           font-size:13px;font-weight:500;color:var(--graphite);}
+    .tick{width:52px;height:56px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+    .todo{background:var(--raised);border:1px solid var(--line);}
+    .ink{background:var(--ink);}
+    .hr{height:1px;background:var(--line);}
   </style>
 </helmet>
 
-<div style="width:390px;height:800px;background:var(--paper);padding:24px 16px;display:flex;flex-direction:column;gap:12px">
+<div style="width:390px;height:640px;background:var(--paper);padding:24px 0;display:flex;flex-direction:column;gap:10px">
 
-  <div>
+  <div style="padding:0 16px">
     <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em">One line, three states</div>
-    <div class="note" style="margin-top:2px">Fill and edge say whether a line is done. Contrast says whether it still wants you.</div>
+    <div class="note" style="padding:0;margin-top:2px">Fill and edge say whether a line is done. Contrast says whether it still wants you.</div>
   </div>
 
-  <!-- 1 -->
-  <div class="cap">To pull</div>
-  <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-      <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Frozen dumplings 500g</div>
-      <div class="num" style="font-size:13px;color:var(--graphite);flex:none">FD-500</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-        <span class="big">65</span><span style="font-size:13px;color:var(--graphite)">to pull</span>
+  <div class="lbl" style="margin-top:6px">To pull</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row">
+      <div class="qty">65</div>
+      <div class="mid">
+        <div class="nm">Frozen dumplings 500g</div>
+        <div class="cap">Tianhe 40 · Yuexiu 25</div>
       </div>
-      <div style="height:64px;padding:0 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;font-weight:500;color:var(--graphite)">Short</div>
-      <div style="width:64px;height:64px;border-radius:12px;background:var(--raised);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
     </div>
-    <div style="display:flex;gap:8px">
-      <div class="shop" style="background:var(--raised)"><span class="nm">Tianhe</span><span class="n">40</span></div>
-      <div class="shop" style="background:var(--raised)"><span class="nm">Yuexiu</span><span class="n">25</span></div>
-    </div>
+    <div class="hr"></div>
   </div>
-  <div class="note">White card, ruled border, no edge. Everything at full Ink — nothing is settled yet.</div>
+  <div class="note">White, no edge, everything at full Ink. Short is a labelled control, not a gesture — a new hire finds it by looking.</div>
 
-  <!-- 2 -->
-  <div class="cap" style="margin-top:4px">Picked in full</div>
-  <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-      <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;color:var(--graphite)">Frozen dumplings 500g</div>
-      <div class="num" style="font-size:13px;color:var(--graphite);flex:none">FD-500</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-        <span class="big" style="color:var(--graphite)">65</span><span style="font-size:13px;color:var(--graphite)">picked</span>
+  <div class="lbl" style="margin-top:6px">Picked in full</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">65</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">Frozen dumplings 500g</div>
+        <div class="cap">Tianhe 40 · Yuexiu 25</div>
       </div>
-      <div class="tickInk">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-      </div>
+      <div class="tick ink"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
     </div>
-    <div style="display:flex;gap:8px">
-      <div class="shop" style="background:var(--surface)"><span class="nm">Tianhe</span><span class="n" style="color:var(--graphite)">40</span></div>
-      <div class="shop" style="background:var(--surface)"><span class="nm">Yuexiu</span><span class="n" style="color:var(--graphite)">25</span></div>
-    </div>
+    <div class="hr"></div>
   </div>
-  <div class="note">Cream fill, Sage edge, Ink tick. Every value drops to Graphite — resolved, stop looking.</div>
+  <div class="note">Cream, Sage edge, Ink tick. Every value drops to Graphite, and Short leaves with the work it belonged to.</div>
 
-  <!-- 3 -->
-  <div class="cap" style="margin-top:4px">Picked short</div>
-  <div style="background:var(--raised);border-radius:14px;padding:14px 16px;box-shadow:inset 4px 0 0 var(--sage);display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-      <div style="font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;color:var(--graphite)">Frozen dumplings 500g</div>
-      <div class="num" style="font-size:13px;color:var(--graphite);flex:none">FD-500</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <!-- Same shell as picked-in-full — the line IS done. The numbers are the
-           only thing that stays at full Ink, and that is the whole signal. -->
-      <div style="flex:1;display:flex;align-items:baseline;gap:8px;min-width:0">
-        <span class="big">58</span>
-        <span class="num" style="font-size:13px;color:var(--graphite)">of 65</span>
-        <span style="font-size:13px;font-weight:600">· 7 short</span>
+  <div class="lbl" style="margin-top:6px">Picked short</div>
+  <div>
+    <div class="hr"></div>
+    <div class="row done">
+      <div class="qty">58</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">Frozen dumplings 500g</div>
+        <div class="cap"><span style="color:var(--ink);font-weight:600">7 short</span> · Tianhe 36 · Yuexiu 22</div>
       </div>
-      <div class="tickInk">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-      </div>
+      <div class="tick ink"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FBF9F4" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
     </div>
-    <div style="display:flex;gap:8px">
-      <!-- The shop that was filled recedes; the shop that lost units does not. -->
-      <div class="shop" style="background:var(--surface)"><span class="nm">Tianhe</span><span class="n" style="color:var(--graphite)">40</span></div>
-      <div class="shop" style="background:var(--surface)"><span class="nm">Yuexiu</span><span class="n">18</span></div>
-    </div>
+    <div class="hr"></div>
   </div>
-  <div class="note">Same cream fill and Sage edge — it is finished. But the numbers hold full Ink while everything settled around them goes quiet.</div>
+  <div class="note">Same cream, same Sage edge — it is finished. The quantity and the shortfall hold full Ink while every settled line around them goes quiet. The split is what the picker assigned; nothing was pre-filled.</div>
 
-  <div style="margin-top:2px;padding-top:12px;border-top:1px solid var(--line)">
-    <div class="note"><span style="color:var(--ink);font-weight:600">Graphite means resolved, stop looking. Full Ink means this still wants you.</span> Contrast does the work a colour was doing, so the palette stays at five.</div>
+  <div style="margin-top:auto;padding:12px 16px 0;border-top:1px solid var(--line)">
+    <div class="note" style="padding:0"><span style="color:var(--ink);font-weight:600">Graphite means resolved, stop looking. Full Ink means this still wants you.</span> Contrast does the work a colour was doing, and it does more of it at eight lines a screen than it did at four.</div>
   </div>
 
 </div>
