@@ -207,5 +207,110 @@ if (valueCol) {
       WHERE key LIKE 'affiliate.%' ORDER BY key`);
 }
 
+// ── 11-14: customer 306's invitees, order by order ──────────────────────────
+// Run #83 found exactly one lifetime_eligible referrer (306) among the eight
+// converted referrals. These sections walk that one referrer's invitees down to
+// the individual order, because the aggregate cannot tell apart the three
+// reasons a commission might be missing: no qualifying order exists, the order
+// exists and the commission is genuinely absent, or the order is the FIRST paid
+// one and therefore the bounty's by design rather than a miss.
+//
+// HOW THE SETTLEMENT PATH IS IDENTIFIED, and what each mark is worth:
+//
+//   activity_log — the admin PATCH /orders/:id/status route calls logActivity
+//     with action='status_change' (retail.js:28124). markOrderPaid does NOT log
+//     at all. So a status_change row whose details carry "to":"paid" is POSITIVE
+//     evidence of the admin path. Its absence is weaker: activity_log is purged
+//     at ACTIVITY_LOG_RETENTION_DAYS (default 90, database.js:4300), so an old
+//     order could have lost its row. Every order here is from late August 2026,
+//     inside that window, but the caveat is stated rather than assumed away.
+//
+//   retail_payments.out_trade_no LIKE 'MANUAL%' — the admin path mints that ref
+//     when it has to INSERT a payment row (retail.js:28165). It does NOT when it
+//     settles an already-open row in place, so this mark confirms the admin path
+//     but its absence proves nothing.
+//
+//   retail_orders.payment_method in the OFFLINE set (cash, bank_transfer,
+//     wechat_offline, alipay_offline, other — retail.js:27840) — written only
+//     when the operator picked a tender. Same asymmetry.
+//
+// All three are reported side by side rather than collapsed into one verdict,
+// because each is conclusive when present and inconclusive when absent, and a
+// single column would hide which of those two situations produced a blank.
+const HAS_ACTIVITY_LOG = (() => {
+  try { return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='activity_log'").get(); }
+  catch { return false; }
+})();
+console.log('\nactivity_log table present: ' + HAS_ACTIVITY_LOG);
+
+const REFERRER = 306;
+
+section(`11. customers referred by ${REFERRER}`,
+  `SELECT id, referral_applied_at, referred_by_customer_id, created_at
+     FROM retail_customers WHERE referred_by_customer_id = ?
+    ORDER BY id`, [REFERRER]);
+
+// status='paid' OR paid_at set — the union, so an order that moved past 'paid'
+// into preparing/dispatched/delivered still appears. Those are paid orders that
+// simply advanced; restricting to status='paid' would hide them.
+const ORDERS_SQL = `
+  SELECT o.id AS order_id, o.customer_id, o.order_no, o.status, o.paid_at, o.total,
+         o.payment_method, o.source, o.channel,
+         (o.payment_method IN ('cash','bank_transfer','wechat_offline','alipay_offline','other')) AS offline_tender,
+         (SELECT COUNT(*) FROM retail_payments p
+           WHERE p.order_id = o.id AND COALESCE(p.out_trade_no,'') LIKE 'MANUAL%') AS manual_payment_rows,
+         (SELECT GROUP_CONCAT(COALESCE(p.out_trade_no,'(null)'), ' | ') FROM retail_payments p
+           WHERE p.order_id = o.id) AS payment_refs${HAS_ACTIVITY_LOG ? `,
+         (SELECT COUNT(*) FROM activity_log a
+           WHERE a.entity_type = 'retail_order' AND a.entity_id = o.id
+             AND a.action = 'status_change' AND a.details LIKE '%"to":"paid"%') AS admin_statuschange_rows` : ''}
+    FROM retail_orders o
+   WHERE o.customer_id IN (SELECT id FROM retail_customers WHERE referred_by_customer_id = ?)
+     AND (o.status = 'paid' OR o.paid_at IS NOT NULL)
+   ORDER BY o.customer_id, o.paid_at, o.id`;
+
+section(`12. paid orders from ${REFERRER}'s invitees, with settlement marks`, ORDERS_SQL, [REFERRER]);
+
+// Matched / unmatched against the commission ledger, per order, plus whether
+// the order is that customer's FIRST paid one (the bounty's, not a miss).
+section(`13. those orders vs retail_lifetime_commissions`,
+  `SELECT o.id AS order_id, o.customer_id, o.paid_at, o.total,
+          (lc.id IS NOT NULL) AS has_commission,
+          lc.commission_amount, lc.rate_percent, lc.reversed_at,
+          (NOT EXISTS (SELECT 1 FROM retail_orders o2
+                        WHERE o2.customer_id = o.customer_id
+                          AND o2.paid_at IS NOT NULL
+                          AND o2.paid_at < o.paid_at)) AS is_first_paid_order
+     FROM retail_orders o
+     LEFT JOIN retail_lifetime_commissions lc ON lc.order_id = o.id
+    WHERE o.customer_id IN (SELECT id FROM retail_customers WHERE referred_by_customer_id = ?)
+      AND (o.status = 'paid' OR o.paid_at IS NOT NULL)
+    ORDER BY o.customer_id, o.paid_at, o.id`, [REFERRER]);
+
+section(`13b. the same, counted`,
+  `SELECT COUNT(*) AS paid_orders,
+          SUM(lc.id IS NOT NULL) AS matched,
+          SUM(lc.id IS NULL) AS unmatched
+     FROM retail_orders o
+     LEFT JOIN retail_lifetime_commissions lc ON lc.order_id = o.id
+    WHERE o.customer_id IN (SELECT id FROM retail_customers WHERE referred_by_customer_id = ?)
+      AND (o.status = 'paid' OR o.paid_at IS NOT NULL)`, [REFERRER]);
+
+// Referral 12's bounty order: confirm it is the invitee's FIRST paid order and
+// carries no commission row — excluded by design, not a miss.
+section('14. referral 12 first_paid_order_id — is it the bounty order, or a miss?',
+  `SELECT r.id AS referral_id, r.referrer_id, r.invitee_id, r.status,
+          r.first_paid_order_id, r.reward_amount, r.referee_reward_amount, r.rewarded_at,
+          o.paid_at AS bounty_order_paid_at, o.total AS bounty_order_total, o.status AS bounty_order_status,
+          (lc.id IS NOT NULL) AS bounty_order_has_commission,
+          (NOT EXISTS (SELECT 1 FROM retail_orders o2
+                        WHERE o2.customer_id = o.customer_id
+                          AND o2.paid_at IS NOT NULL
+                          AND o2.paid_at < o.paid_at)) AS bounty_order_is_first_paid
+     FROM retail_referrals r
+     LEFT JOIN retail_orders o ON o.id = r.first_paid_order_id
+     LEFT JOIN retail_lifetime_commissions lc ON lc.order_id = r.first_paid_order_id
+    WHERE r.id = 12`);
+
 db.close();
 console.log('\ndone — nothing was written.');
