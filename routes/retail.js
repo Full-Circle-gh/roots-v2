@@ -1657,6 +1657,14 @@ function applyBundleCost(row) {
   return row;
 }
 
+// Who may read what a product COSTS — `products:costs`. The rules, and why
+// they live in lib/ rather than inline the way waste's and materials' do, are
+// in lib/product-cost-visibility.js. This file is too large to stand up in a
+// test; that module is not.
+const {
+  canSeeProductCosts, stripProductCosts, stripProductCostWrites,
+} = require('../lib/product-cost-visibility');
+
 // ── The cost snapshot written onto every order line ────────────────────────
 // What one unit of `productId` costs us right now, in ¥, for stamping into
 // retail_order_items.unit_cost_at_sale at the moment a sale is written. See the
@@ -20995,6 +21003,16 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // transitions backwards for exactly one save: a product becoming a bundle
   // would store a hand-typed cost the reads then hide, and one ceasing to be a
   // bundle would have the operator's first real cost dropped on the floor.
+  // YOU CANNOT CHANGE WHAT YOU CANNOT SEE — and here that is data loss, not
+  // just a permission. The editor hides the Cost field for an operator without
+  // products:costs, g('pd-cost') on a missing element returns '', and the
+  // branch below turns '' into NULL — so editing a product's NAME would have
+  // wiped its cost, blanked the margin everywhere it is read, and cleared the
+  // cost_incomplete tag with it. Deleting the keys from the body is the whole
+  // fix: every branch below is guarded by `'unit_cost' in body`, so an absent
+  // key means "not touched" through the existing contract rather than a new
+  // one. Same rule as routes/retail-materials.js's buy_price.
+  stripProductCostWrites(req, body);
   const willBeBundle = ('bundle_items' in body)
     ? sanitizeBundleItems(body.bundle_items, id) != null
     : bundleOwnsProductCost(tdb(), id);
@@ -21197,7 +21215,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     row.nutrition = null;
   }
   if (row) row.options = loadProductOptions(id);
-  res.json({ success: true, data: row });
+  res.json({ success: true, data: stripProductCosts(req, row) });
 });
 
 // ═══ Which recipe a product's cost comes from ══════════════════════════════
@@ -21387,7 +21405,8 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
     // catalogue. A non-bundle row costs one primary-key lookup and is then left
     // exactly as it was — the only path here that pays it per row rather than
     // per bundle, which an uncapped once-a-day export can afford.
-    rows.forEach(applyBundleCost);
+    const withCost = canSeeProductCosts(req);
+    if (withCost) rows.forEach(applyBundleCost);
     // Per-store stock gets one column per open store (Tianhe, Yuexiu, …), which
     // is what the grid shows. Pulled in ONE query keyed by store, not a
     // correlated subquery per product per store.
@@ -21422,7 +21441,11 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
     const head = [
       'ID', 'SKU', 'Barcode', 'Name (EN)', 'Name (CN)', 'Status', 'In shop',
       'Top category', 'Subcategory', 'Legacy category',
-      'Weight / size', 'Price', 'Compare-at price', 'Unit cost',
+      // The Cost column leaves the spreadsheet entirely for an operator without
+      // products:costs — header and cell together, so the columns stay aligned.
+      // An export is the widest of these surfaces: it is the file that gets
+      // mailed around and outlives anyone's memory of who was allowed to make it.
+      'Weight / size', 'Price', 'Compare-at price', ...(withCost ? ['Unit cost'] : []),
       'Stock (all stores)', ...stores.map(s => `Stock — ${s.label}`),
       'Fallback stock_qty', 'Low-stock threshold',
       'Variant group', 'Variant (EN)', 'Variant (CN)', 'Variant order',
@@ -21449,7 +21472,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
       lines.push([
         r.id, r.sku, r.barcode, r.name_en, r.name_cn, r.status, yn(r.is_published),
         r.top_category, r.subcategory, r.category,
-        r.weight, r.sell_price, r.compare_at_price, r.unit_cost,
+        r.weight, r.sell_price, r.compare_at_price, ...(withCost ? [r.unit_cost] : []),
         total, ...perStore,
         r.stock_qty, r.low_stock_threshold,
         r.variant_group_id, r.variant_label, r.variant_label_cn, r.variant_sort,
@@ -21513,7 +21536,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   } else { row.nutrition = null; }
   row.product_facts = parseFactsCol(row.product_facts);
   row.options = loadProductOptions(id);
-  res.json({ success: true, data: row });
+  res.json({ success: true, data: stripProductCosts(req, row) });
 });
 
 // Create a product straight from the Mini App Backend product page. Standalone
@@ -22417,7 +22440,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
       r.mt_units   = m && Number.isFinite(m.units)   ? m.units   : null;
     });
   }
-  res.json({ success: true, data: rows });
+  // The grid is where the Margin column is built from, so this is the read
+  // that matters most. Stripped after applyBundleCost has run: a bundle's
+  // cost is derived on the way out, and deriving it into a field nobody may
+  // read would just be work.
+  res.json({ success: true, data: stripProductCosts(req, rows) });
 });
 
 // GET /api/retail-admin/products/:id/image — stream a product's primary photo

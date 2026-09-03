@@ -180,8 +180,15 @@ section('4 · money, marked and summarised');
 has(html, 'rl-coin moves', 'a money-moving permission carries the marker');
 has(html, 'A purchase order commits the business to pay', 'with the registry’s own reason underneath it');
 has(html, 'move money', 'and the role summarises its money reach');
-is(vm.runInContext('rlMoneyLine(new Set(["orders:refund","reports:view","products:view"]))', sandbox),
+// `products:costs`, not `products:view`. The catalogue itself stopped showing
+// money on 2026-09-03 when cost and margin were split out of it — so a set built
+// from products:view now tallies ONE show, and this case is about counting two.
+is(vm.runInContext('rlMoneyLine(new Set(["orders:refund","reports:view","products:costs"]))', sandbox),
   '1 move money · 2 show it', 'the summary counts both kinds separately');
+// The split itself, asserted where the operator actually reads the tally:
+// opening the catalogue is no longer a money permission.
+is(vm.runInContext('rlMoneyLine(new Set(["products:view","categories:view"]))', sandbox),
+  'Touches no money', 'and the catalogue alone touches none');
 is(vm.runInContext('rlMoneyLine(new Set(["orders:view","categories:edit"]))', sandbox),
   'Touches no money', 'and says so plainly when a role touches none');
 

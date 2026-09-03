@@ -278,7 +278,7 @@ function versionOf(tid) {
   is(unclassified.length, 0, 'every money value is shows or moves');
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 20, '20 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 105, 'across all 105');
+  is(caps.CAPABILITIES.length, 106, 'across all 106');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,
@@ -318,6 +318,14 @@ function versionOf(tid) {
   truthy(caps.sect('materials').includes('materials:costs'), 'the section does contain the money key');
   falsy(caps.presetCapsFor('warehouse').includes('materials:costs'),
     'and no preset expands the section blindly into it');
+  // And the third: the catalogue. Widest of them — FIVE presets held
+  // products:view, two of them commented as having no money at all.
+  falsy(caps.MONEY_KEYS['products:view'], 'the catalogue itself shows no money');
+  is(caps.MONEY_KEYS['products:costs'], 'shows', 'its cost and margin do');
+  for (const role of ['staff', 'marketing']) {
+    falsy(caps.presetCapsFor(role).includes('products:costs'),
+      'the ' + role + ' preset, commented as having no money, now has none here either');
+  }
   const sm = caps.presetCapsFor('store_manager').filter(k => caps.MONEY_KEYS[k] === 'moves');
   is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit'],
     'the shipped store_manager preset moves money five ways — the marker is why this is now visible');

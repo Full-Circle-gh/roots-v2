@@ -323,16 +323,64 @@ recorded pack.
 Proof: `scripts/test_material_cost_visibility.js` — 34 assertions, four read
 sections plus the write and the fail-closed rule.
 
-**Still open — `products:view` and `recipes:view`,** and they are not the same
-question as each other:
+**Products: done, 2026-09-03** (Ash: *"do products"*). `products:costs`, the third
+and widest of the three, and the one the other two were rehearsal for.
+`products:view` carried `money: 'shows'` with the note *"The product list shows
+unit cost and margin"*, and **five presets hold it** — including `staff`,
+commented in `lib/capabilities.js` as having "no money-sensitive powers", and
+`marketing`, "no operations/money". Both read a margin **percentage** on every
+row of the catalogue.
 
-- **`products:view` is worth doing and is the bigger job.** `staff` and
-  `marketing` both hold it, and both presets are commented as having no money —
-  while the list renders a margin **percentage** on every row and
-  `routes/retail.js` sends `unit_cost` with it. But ~108 money references, and a
-  real design question first: `products:edit` has to *set* cost, so it is not a
-  simple hide. Start with the edit-vs-see decision, not the code.
-- **`recipes:view` should be left alone.** No preset outside owner/admin/manager
-  grants it, so splitting it adds a permission nobody would untick on a screen
-  no floor role can open. Revisit only if a preset ever hands recipes to a floor
-  role.
+**The design question first, as the note above said to.** `products:edit` has to
+*set* a cost, so this was never a simple hide. The answer: **the two are
+separate, and a store manager keeps the edit.** They set what customers are
+charged for their store; they do it without seeing what we paid. Pricing is
+their job, the cost basis is not — so `store_manager` and `warehouse` keep
+`products:edit` and lose `products:costs`.
+
+| Role | view | costs | edit |
+|---|---|---|---|
+| owner · admin · manager | ✓ | ✓ | ✓ |
+| store_manager · warehouse | ✓ | — | ✓ |
+| staff · marketing | ✓ | — | — |
+
+**Sell price is not what moves.** What a customer is charged is on the
+storefront; withholding it would break the catalogue for no gain. What goes is
+`unit_cost` — what we pay — the margin derived from it, and `cost_incomplete`,
+which travels with the figure because it is a statement *about* that figure.
+
+**A module, where the other two are inline.** `routes/retail-waste.js` and
+`routes/retail-materials.js` each keep the three functions inside the route,
+because each is small enough for a test to mount on a bare express app.
+`routes/retail.js` is ~32,000 lines with the whole product surface in it and
+cannot be stood up that way, so the rules live in
+`lib/product-cost-visibility.js` and are held to the same contract there. The
+route requires it; nothing re-implements it.
+
+Four read payloads stripped — the grid, the record, the post-save row, and the
+**CSV export**, which drops the Unit cost column and the bundle roll-up that
+fills it rather than exporting a blank one.
+
+**And the same write hazard, a third time.** The editor hides the Cost field,
+its `g()` helper returns `''` for a missing element, and `''` is parsed to NULL
+on the way in — so editing a product's **name** would have wiped its cost,
+blanked the margin everywhere it is read, and cleared the `cost_incomplete` tag
+with it. `stripProductCostWrites` deletes the keys, and every branch that writes
+a cost is already guarded by `'unit_cost' in body`, so "absent" means "not
+touched" through the contract that was already there.
+
+**The grid re-lays out rather than leaving a gap.** The Margin column, its
+`<col>` and its cells are removed together, and `[data-nocost]` carries a second
+set of name-column widths. Measured in Chromium, not added up: the Product
+column goes 292px → 473px, absorbing the 181px Margin column exactly, at every
+one of the five breakpoints and in reorder mode.
+
+Proof: `scripts/test_product_cost_visibility.js` — 36 assertions. Two client
+tests moved with it: `test_role_editor_client.js` (a fixture asserted
+`products:view` shows money) and `test_cost_incomplete_flag.js` (its sandbox had
+no `CAPS`, so the fail-closed helper correctly dropped the field).
+
+**Still open — `recipes:view`, and it should be left alone.** No preset outside
+owner/admin/manager grants it, so splitting it adds a permission nobody would
+untick on a screen no floor role can open. Revisit only if a preset ever hands
+recipes to a floor role.
