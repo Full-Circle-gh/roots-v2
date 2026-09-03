@@ -132,6 +132,34 @@ CREATE TABLE IF NOT EXISTS recipe_steps (
   FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 );
 
+-- Version history for a recipe (lib/recipe-versions.js). One row per SAVE,
+-- holding the state that save DISPLACED -- recipe fields, ingredient lines,
+-- steps and the manual cost inputs, as one JSON blob. It exists because the
+-- Recipes record autosaves: without a filed previous state there is no moment
+-- at which an operator could decline a change, so every change would be final
+-- the instant it was typed.
+--
+-- JSON rather than mirrored tables on purpose: nothing ever queries INTO a
+-- version, it is only read back whole, and a mirrored schema would need every
+-- later ALTER TABLE applied twice. content_hash lets an unchanged save be
+-- recognised and skipped; the summary columns (name/line_count/step_count) are
+-- there so the History panel can list 60 versions without reading 60 blobs.
+CREATE TABLE IF NOT EXISTS recipe_versions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id     INTEGER NOT NULL,
+  source        TEXT DEFAULT 'manual',   -- 'manual' | 'auto' | 'restore'
+  actor         TEXT,                    -- who saved over it, for the list
+  name_en       TEXT,                    -- summary, so the list needs no blob
+  name_cn       TEXT,
+  line_count    INTEGER DEFAULT 0,
+  step_count    INTEGER DEFAULT 0,
+  content_hash  TEXT,
+  snapshot      TEXT NOT NULL,           -- JSON {recipe, ingredients, steps, costData}
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_recipe_versions_recipe ON recipe_versions(recipe_id, id DESC);
+
 CREATE TABLE IF NOT EXISTS recipe_cost_data (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   recipe_id     INTEGER NOT NULL UNIQUE,

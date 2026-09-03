@@ -13057,87 +13057,82 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     height: calc(100vh - 56px); min-height: 0; overflow: hidden;
   }
   body.rcp-viewing #tab-recipes-record .rcp-scroll { flex: 1; min-height: 0; overflow: auto; }
+  /* No padding-top: the sticky header carries its own, so nothing shows above
+     it when the page is scrolled (a gap of page padding sliding past a bar
+     pinned at top:0 is the tell that a header was made sticky by accident). */
   #tab-recipes-record .rcp-page { padding: 0 var(--s6) var(--s6); }
 
-  /* ── THE PINNED BLOCK ────────────────────────────────────────────────────
-     Head + summary + sub-tabs, held at the top of .rcp-scroll. The card was
-     already required to read the same on every sub-tab; it is now required to
-     read on every ROW too, because the number an operator is watching —
-     batch cost — is the one the quantity they are typing thirty lines down is
-     moving, and it used to scroll away exactly when the editing started.
-
-     The negative side margins put the block's paper background across the
-     full scrollport width, so nothing shows through the page gutters as it
-     passes underneath. The sub-tabs' own margin-bottom is moved onto this
-     block's padding: a last child's bottom margin COLLAPSES out of a parent
-     with no bottom padding, and the 18px it took with it was a gap rows were
-     visible through — and, worse, 18px that offsetHeight did not report, so
-     the column header below parked short by exactly that much. */
-  #tab-recipes-record .rcp-pin {
-    position: sticky; top: 0; z-index: 20; background: var(--td-paper);
-    margin: 0 calc(-1 * var(--s6)); padding: 22px var(--s6) 18px;
-    transition: padding .18s var(--ease-out); }
-  #tab-recipes-record .rcp-pin .rcp-subtabs { margin-bottom: 0; }
-  /* NO FADE UNDER THIS BLOCK. A soft edge is the usual way to say "content
-     passes behind here", and it was tried — but the ingredient list's own
-     column header parks flush against this block's bottom edge, so every pixel
-     of the fade lands on the header and greys out the one row of text that has
-     to stay legible. The header's own hairline is the edge instead. */
-
-  /* ── CONDENSED, once you have scrolled past the summary ──────────────────
-     Pinning the block whole costs ~260px of the scrollport — on a 15" screen
-     that is a third of the rows gone, which defeats the point of pinning it
-     to watch rows change. So past the first scroll the block gives up its
-     display SIZE and its prose, and keeps every FIGURE and every WARNING:
-     all four numbers stay live and visible, the pills stay, and the blocked
-     material sentence stays (it is the reason a cost is frozen — a strip
-     that dropped it would be quieter and less true). What goes is the
-     recipe's identity — the title shrinks, "Makes X" and the product rows
-     go — because that is what the operator already knows and cannot change
-     by typing in the list. Nothing here is display:none that an operator
-     would act on.
-
-     LOCKED STRINGS ARE UNTOUCHED. The pills shrink; they are never
-     shortened or recomposed (UNIT MISMATCH · 单位不符 is minted and locked in
-     docs/tacet-delivery-vocabulary.md, and a condensed variant of it would be
-     a second string for the same condition). The pill radius stays 12px for
-     the same reason it is 12px above — the missing-cost pill is a sentence
-     that still wraps at this size, and 999px would draw a stadium round it. */
-  #rcp-rec-scroll.is-stuck .rcp-pin { padding-top: 12px; padding-bottom: 12px; }
-  #rcp-rec-scroll.is-stuck .rcp-rechead { margin-bottom: 10px; }
-  #rcp-rec-scroll.is-stuck .rcp-rectitle { font-size: 17px; }
-  #rcp-rec-scroll.is-stuck .rcp-summary {
-    flex-direction: row; align-items: center; flex-wrap: wrap;
-    gap: 8px 24px; padding: 12px 16px; margin-bottom: 12px; }
-  #rcp-rec-scroll.is-stuck .rcp-sumrow { flex: 1 1 auto; align-items: baseline; gap: 28px; }
-  #rcp-rec-scroll.is-stuck .rcp-sumfig { flex-direction: row; align-items: baseline; gap: 7px; }
-  #rcp-rec-scroll.is-stuck .rcp-sumfig .v { font-size: 17px; }
-  #rcp-rec-scroll.is-stuck .rcp-sumfig .v.dim { font-size: 13px; }
-  #rcp-rec-scroll.is-stuck .rcp-summarg .pct { font-size: 13px; }
-  #rcp-rec-scroll.is-stuck .rcp-sumdiv { align-self: center; height: 16px; }
-  #rcp-rec-scroll.is-stuck .rcp-warns { flex-direction: row; flex-wrap: wrap; gap: 6px; }
-  #rcp-rec-scroll.is-stuck .rcp-warn { font-size: 12px; padding: 3px 12px; }
-  #rcp-rec-scroll.is-stuck .rcp-warn svg { width: 14px; height: 14px; }
-  /* Past the hairline: the blocked sentence survives, everything else does
-     not. .rcp-outputs takes the full row so a wrapped sentence never squeezes
-     the figures beside it. */
-  #rcp-rec-scroll.is-stuck .rcp-hr,
-  #rcp-rec-scroll.is-stuck .rcp-prodline,
-  #rcp-rec-scroll.is-stuck .rcp-prodrow,
-  #rcp-rec-scroll.is-stuck .rcp-prodhead,
-  #rcp-rec-scroll.is-stuck .rcp-matline:not(.blocked) { display: none; }
-  #rcp-rec-scroll.is-stuck .rcp-outputs { flex-basis: 100%; gap: 4px; }
-  #rcp-rec-scroll.is-stuck .rcp-matline.blocked { font-size: 12px; }
-  /* The transitions are a courtesy, not information — an operator who has
-     asked for less motion gets the same two states with no tween. */
-  @media (prefers-reduced-motion: reduce) {
-    #tab-recipes-record .rcp-pin { transition: none; }
+  /* ── THE STICKY HEADER ──────────────────────────────────────────────────
+     Pinned to the top of .rcp-scroll (the element that actually scrolls —
+     `main` does not; body.rcp-viewing gives it overflow:hidden and the record
+     section a fixed height). Negative side margins + its own padding let it
+     paint edge to edge across the scroll port while its contents stay on the
+     page's column. Ground is --td-paper, the page ground, so lines pass
+     UNDER it rather than showing through.
+     z-index 5: above the record's own cards, below the app's fixed topbar (12)
+     and the dialog scrim. */
+  #tab-recipes-record .rcp-rechead {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-direction: column; gap: 10px;
+    margin: 0 calc(-1 * var(--s6)) 16px; padding: 16px var(--s6) 14px;
+    background: var(--td-paper);
+    /* The hairline appears only once something has scrolled under the bar —
+       at rest the header is part of the page, and a permanent rule under it
+       would draw a box nobody asked for. Transition on colour alone so the
+       layout never shifts by a pixel when it turns on. */
+    border-bottom: 1px solid transparent; transition: border-color .15s ease;
   }
-
-  #tab-recipes-record .rcp-rechead { display: flex; align-items: center; gap: 14px;
-    flex-wrap: wrap; margin-bottom: 16px; }
+  #tab-recipes-record .rcp-rechead.stuck { border-bottom-color: var(--td-border); }
+  #tab-recipes-record .rcp-rechead-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   #tab-recipes-record .rcp-rectitle { font-size: 21px; }
   #tab-recipes-record .rcp-recacts { margin-left: auto; display: flex; gap: 9px; }
+
+  /* Autosave's state line. Quiet by default — "saved" is the normal condition
+     and must not shout; Brick only when something is genuinely unsaved. */
+  #tab-recipes-record .rcp-savestate { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
+  #tab-recipes-record .rcp-savestate.err { color: var(--td-brick-ink); }
+
+  /* The miniature of the summary card, shown only once the real one has
+     scrolled under the bar. Same figures, same order, one type step down —
+     it is the same fact seen from further away, not a second opinion. */
+  #tab-recipes-record .rcp-recfigs { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
+  #tab-recipes-record .rcp-recfigs .f { display: inline-flex; align-items: baseline; gap: 8px;
+    font-size: 13px; color: var(--td-text2); }
+  #tab-recipes-record .rcp-recfigs .f b { font-weight: 500; font-size: 15px; color: var(--td-text);
+    font-variant-numeric: tabular-nums; }
+  #tab-recipes-record .rcp-recfigs .f.neg b, #tab-recipes-record .rcp-recfigs .f.neg { color: var(--td-brick-ink); }
+  #tab-recipes-record .rcp-recfigs .rcp-warnic svg { width: 15px; height: 15px; display: block; }
+  #tab-recipes-record .rcp-recfigs .warn { display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--td-amber-ink); background: var(--td-amber-tint);
+    border-radius: 12px; padding: 3px 12px; }
+  #tab-recipes-record .rcp-recfigs .warn svg { width: 14px; height: 14px; flex: none; }
+
+  /* ── History panel (rcp-hist-*) ────────────────────────────────────────
+     Scoped under .rcp-hist-modal like the materialize modal's own classes,
+     NOT under #tab-recipes-record: the dialog shell appends to <body>, so an
+     id-scoped rule here would style nothing. */
+  .rcp-hist-modal .rcp-hist-list { display: flex; flex-direction: column; gap: 2px;
+    max-height: 44vh; overflow: auto; margin-top: 4px; }
+  .rcp-hist-modal .rcp-hist-row { display: flex; align-items: baseline; gap: 12px; width: 100%;
+    text-align: left; appearance: none; cursor: pointer; background: transparent;
+    border: none; border-radius: 10px; padding: 9px 12px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-row:hover { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-row.on { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-when { font-weight: 500; white-space: nowrap; }
+  .rcp-hist-modal .rcp-hist-who { color: var(--td-text2); font-size: 12.5px;
+    margin-left: auto; text-align: right; white-space: nowrap; }
+  /* The live record sits at the top of the same list as the versions, because
+     it is the same axis: "now" is just the newest state. It is never
+     restorable, so it carries no Restore — the footer button disables on it. */
+  .rcp-hist-modal .rcp-hist-row.now .rcp-hist-when { color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-detail { border-top: 1px solid var(--td-border); margin-top: 12px;
+    padding-top: 12px; font-size: 13px; color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dl { display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; margin: 0; }
+  .rcp-hist-modal .rcp-hist-detail dt { color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dd { margin: 0; color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-empty { color: var(--td-text2); font-size: 13px; padding: 18px 4px; }
 
   /* The persistent summary — cost figures + warnings. Sits above the sub-tabs
      on purpose (see the HTML comment on #tab-recipes-record): it must read the
@@ -13252,27 +13247,23 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   /* ── THE COLUMN HEADER ───────────────────────────────────────────────────
      Five controls to a row and, until now, nothing naming any of them: a
      number, a unit, a free-text box and a ¥ figure, left to be inferred from
-     what happens to be typed in them. The header names each track.
+     whatever happened to be typed in them. The header names each track.
 
-     It STICKS, parked at the bottom edge of .rcp-pin (--rcp-pin-h, measured
-     and written by 19-recipes.js syncPin() — the block changes height when it
-     condenses, so the offset can never be a constant). A header that scrolls
-     away is one you read once, and it is row 30, not row 1, where you have
-     forgotten which box is the note.
+     It STICKS, parked at the bottom edge of the sticky bar above it
+     (--rcp-headh, measured and written by onRecScroll() — the bar grows a line
+     when its miniature appears, so the offset can never be a constant). A
+     header that scrolls away is one you read once, and it is row 30, not row 1,
+     where you have forgotten which box is the note.
 
      Same flex tracks as .rcp-line below, declared against the same widths so
      the two cannot drift; the labels carry the 12px inset of the inputs they
      sit over rather than aligning to the control's border.
 
-     z-index 4 keeps it UNDER the picker's result list (.rcp-pick, z-index 5)
-     and under the pinned block (20): the only two things that may ever cover
-     it. Its own background is what hides the rows passing behind it — there is
-     deliberately no extra masking strip above it: one was tried, to insure
-     against --rcp-pin-h lagging a frame behind the condense, and at rest it
-     sat over the bottom of the card's own "Ingredient lines" heading and cut
-     it in half. A permanent defect is not worth insuring a transient one. */
+     z-index 3 keeps it UNDER the sticky bar (5) and the picker's result list
+     (.rcp-pick, also 5) — the only two things that may ever cover it — and
+     above the rows, which are static and pass behind its own background. */
   #tab-recipes-record .rcp-lhead {
-    position: sticky; top: var(--rcp-pin-h, 0px); z-index: 4;
+    position: sticky; top: var(--rcp-headh, 0px); z-index: 3;
     display: flex; align-items: center; gap: 10px; padding: 0 0 8px;
     background: var(--td-surface, #fff); border-bottom: 1px solid var(--td-border);
     font: 500 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
@@ -13289,7 +13280,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-lhead .lh-note { width: 140px; flex: none; padding-left: 12px; }
   #tab-recipes-record .rcp-lhead .lh-cost { width: 90px;  flex: none; text-align: right; }
   #tab-recipes-record .rcp-lhead .lh-rm   { flex: none; width: 24px; }
-
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
@@ -13388,9 +13378,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
        naming a track that is no longer there. The field keeps its own
        placeholder, which is the same word. */
     #tab-recipes-record .rcp-lhead .lh-note { display: none; }
-    /* The condensed strip wraps to two rows of figures at this width; 48px
-       between them was tuned for one line and leaves the second stranded. */
-    #rcp-rec-scroll.is-stuck .rcp-sumrow { gap: 6px 18px; }
   }
 
 /* ══════════════════════════════════════════════════════════════════════════

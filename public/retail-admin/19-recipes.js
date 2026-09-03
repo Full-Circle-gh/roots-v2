@@ -24,6 +24,22 @@
    150g bag and a 25g sample at two prices, and one averaged margin across
    them would be true of neither.
 
+   THE RECORD SAVES ITSELF (2026-09-03). There is no "did I press Save?"
+   moment on this screen any more: an edit is on the server within a second or
+   two, the sticky header says so continuously, and Save survives as the
+   deliberate mark that files its own restore point. That is only safe because
+   the other half shipped with it — every save, from EITHER door, files the
+   state it displaced (lib/recipe-versions.js) and rcpHistory() puts one back.
+   Autosave without that history is not a convenience, it is a delete key with
+   no confirm. Do not keep one without the other.
+
+   AND THE HEADER IS STICKY, for the same reason the summary is persistent: a
+   recipe with thirty ingredient lines is several screens tall, and which
+   recipe this is, the way back, and whether the work is recorded are needed at
+   the bottom of it as much as at the top. Once the summary card scrolls under
+   the bar, the bar grows a miniature of its figures — "never let a recipe look
+   free" is a rule about every scroll position, not just the first one.
+
    TWO SCREENS, TWO SECTIONS, same shape as Materials: the list paints into
    #rcp-root inside <section id="tab-recipes">; the record is a FULL PAGE in
    its own sibling <section id="tab-recipes-record">, reached through the
@@ -402,53 +418,352 @@
     openTakeover();
   };
 
-  function setRecord(row) {
+  // `keepTab` is for a re-read of the SAME record — a save, a restore, a
+  // material being linked. Those all repaint, and sending the operator back to
+  // Details each time is how a save from the Cost & Pricing tab used to lose
+  // his place. Opening a DIFFERENT recipe still starts on Details.
+  function setRecord(row, keepTab) {
     _rec = row;
     _lines = (row.ingredients || []).map(l => ({ ...l }));
     _steps = (row.steps || []).map(s => ({ ...s }));
-    _subtab = 'details';
+    if (!keepTab) _subtab = 'details';
   }
 
   function openTakeover() {
     if (_recOpen) { paintRecord(); return; }
     _recOpen = true;
     _dirty = false;
+    _autoOff = false;
+    _saveErr = null;
+    _savedAt = 0;
+    cancelAutosave();
     goTab('recipes-record');
     document.body.classList.add('rcp-viewing');
     history.pushState({ rcpRec: true }, '');
     window.addEventListener('popstate', onPop);
     const sc = document.getElementById('rcp-rec-scroll');
     if (sc) sc.scrollTop = 0;
-    bindPin();
     paintRecord();
+    bindRecScroll();
+    onRecScroll();
+    // "Saved · 4 min ago" has to keep being true while nobody touches the
+    // record. Cleared on teardown so a closed record costs no timer.
+    clearInterval(_agoTimer);
+    _agoTimer = setInterval(paintSaveState, 30000);
   }
 
-  function onPop() { teardown(true); goTab('recipes'); }
+  // The browser Back button. It cannot be made to wait for a save, so the save
+  // is STARTED (flushSave reads the DOM before its first await) and the
+  // takeover comes down over the top of it. The request completes regardless —
+  // nothing is unloading, only a section is being hidden.
+  function onPop() { if (_dirty) flushSave(); teardown(true); goTab('recipes'); if (_savedAt) load(); }
 
   function teardown(viaPop) {
     if (!_recOpen) return;
     _recOpen = false;
+    cancelAutosave();
+    clearInterval(_agoTimer); _agoTimer = null;
     document.body.classList.remove('rcp-viewing');
     window.removeEventListener('popstate', onPop);
     if (!viaPop) history.back();
   }
 
   window.rcpRecordBack = async function () {
-    if (_dirty && !(await askConfirm({
-      titleEn: 'Leave without saving?', titleCn: '未保存就离开?',
-      bodyEn: 'Your changes to this recipe will be lost.', bodyCn: '你对该食谱的更改将丢失。',
-      confirmEn: 'Leave', confirmCn: '离开', danger: true,
-    }))) return;
+    if (!(await leaveGuard())) return;
     teardown(false);
     goTab('recipes');
+    // The list behind this was painted before the edit. A recipe that was
+    // created, renamed or recosted in here must not still read the old way on
+    // the row the operator lands back on.
+    if (_savedAt) load();
   };
 
+  // A rail click tears the takeover down where it stands — it always has, and
+  // it cannot be made to await. What it can do is put the work on the wire on
+  // the way out, which is the whole difference between this and the confirm
+  // dialog it replaces.
   document.addEventListener('click', (e) => {
     if (!_recOpen) return;
-    if (e.target.closest && e.target.closest('.tabs [data-tab]')) teardown(false);
+    if (e.target.closest && e.target.closest('.tabs [data-tab]')) { if (_dirty) flushSave(); teardown(false); }
   }, true);
 
-  window.rcpDirty = function () { _dirty = true; };
+  // ═══════════════════════════════════════════════════════════════════════
+  //  AUTOSAVE — and the sticky bar's scroll behaviour
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // A recipe record is not a form that gets filled in and submitted; it is a
+  // document somebody works on across four sub-tabs, often with a scale in the
+  // other hand. Asking that person to remember a Save button is asking him to
+  // lose an afternoon's costing to a closed tab, and the confirm dialog that
+  // used to stand in the way only converted "work lost silently" into "work
+  // lost after one more click".
+  //
+  // WHAT THIS DOES NOT REMOVE. Save is still there and still does something
+  // this does not: it is a deliberate mark, and the server files a restore
+  // point for it that autosave's own points are allowed to coalesce into
+  // (lib/recipe-versions.js). Nothing here writes anything a manual save would
+  // not have written — same body, same two requests, same order.
+  //
+  // AND THE PART THAT MAKES IT SAFE. Every save files the state it displaced,
+  // and rcpHistory() puts one back. Autosave without that is not a convenience,
+  // it is a delete key with no confirm: a mistyped batch size would be the
+  // record within the second, with the old figure gone and nothing to show it
+  // ever existed. The two ship together or neither does.
+  const AUTOSAVE_IDLE_MS = 1200;   // settle after the last keystroke…
+  const AUTOSAVE_MAX_MS  = 8000;   // …but never hold work longer than this
+  let _autoTimer = null;
+  let _autoDeadline = 0;
+  let _saveInFlight = null;   // the Promise of the save currently on the wire
+  let _editGen = 0;           // bumped on every edit; decides if a save is stale
+  let _saveErr = null;        // last failure, shown in the bar until it clears
+  let _savedAt = 0;           // when the record last landed on the server
+  let _autoOff = false;       // suspended across archive / restore / teardown
+  let _agoTimer = null;
+  let _scrollBound = false;
+
+  // The one entry point for "something changed". Everything that used to
+  // assign `_dirty = true` calls this instead, so no edit can exist that the
+  // autosave timer never heard about.
+  function markDirty() {
+    _dirty = true;
+    _editGen++;
+    _saveErr = null;
+    scheduleAutosave();
+    paintSaveState();
+  }
+  window.rcpDirty = markDirty;
+
+  function canEdit() { return typeof can !== 'function' || can('recipes:edit'); }
+
+  function autosaveEligible() {
+    if (_autoOff || !_recOpen || !_rec) return false;
+    if (!canEdit()) return false;
+    // A recipe that has never been saved IS created by autosave — but only once
+    // it carries the one thing the server requires, because a POST without it
+    // is a guaranteed 400 and a red bar on a record whose only sin is that the
+    // operator has not finished typing the name yet. Until then edits stay in
+    // the browser and the leave-guard still asks before dropping them.
+    if (!_rec.id) return !!String(val('name_en') || '').trim();
+    return true;
+  }
+
+  function scheduleAutosave() {
+    if (!autosaveEligible()) return;
+    const now = Date.now();
+    // The deadline is set by the FIRST edit of a burst and not moved by the
+    // ones after it: continuous typing must not be able to postpone the save
+    // forever, which a plain debounce does.
+    if (!_autoDeadline) _autoDeadline = now + AUTOSAVE_MAX_MS;
+    clearTimeout(_autoTimer);
+    _autoTimer = setTimeout(() => { saveNow('auto'); },
+      Math.max(0, Math.min(AUTOSAVE_IDLE_MS, _autoDeadline - now)));
+  }
+
+  function cancelAutosave() { clearTimeout(_autoTimer); _autoTimer = null; _autoDeadline = 0; }
+
+  // Reads the DOM and the drafts, writes the recipe, the lines, the steps and
+  // the cost inputs — the same two requests rcpSave has always made, in the
+  // same order. Returns what happened; it never toasts and never repaints, so
+  // both callers can decide those for themselves.
+  async function writeRecord(source) {
+    const body = readDetails();
+    if (!body.name_en) return { ok: false, error: 'name_required' };
+    body.ingredients = _lines.map(l => ({
+      ingredient_id: l.ingredient_id, name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
+      qty: Number(l.qty) || 0, unit: l.unit || 'g', notes: l.notes || null, substitutes: l.substitutes || null,
+    }));
+    body.steps = _steps.map(s => ({ name: s.name || null, instructions: s.instructions || null }));
+    // Declared, not inferred: the server uses it only to decide how tightly
+    // version points coalesce and what the History list calls the row. It
+    // changes nothing about what is written to the recipe.
+    body.save_source = source;
+    const wasNew = !_rec.id;
+    let recipeId = _rec.id;
+    if (recipeId) {
+      await api('/api/retail-admin/recipes/' + recipeId, { method: 'PUT', body });
+    } else {
+      const j = await api('/api/retail-admin/recipes', { method: 'POST', body });
+      recipeId = j.id;
+      // Claimed immediately so a second autosave (or a fast double click on
+      // Save) updates this recipe instead of creating a second one.
+      _rec.id = recipeId;
+    }
+    const cost = draftCostData();
+    cost.save_source = source;
+    await api('/api/retail-admin/recipes/' + recipeId + '/cost', { method: 'PUT', body: cost });
+    const fresh = await api('/api/retail-admin/recipes/' + recipeId);
+    return { ok: true, id: recipeId, created: wasNew, fresh: fresh.data, mismatched: mismatchedLines() };
+  }
+
+  /**
+   * Save, at most one at a time. `source` is 'auto' or 'manual'.
+   *
+   * A save in flight is never duplicated: a second caller waits on the first
+   * and then, if the record has moved on since, another save is scheduled. The
+   * generation counter is what decides that — an edit made WHILE the request
+   * was on the wire bumps it, and the record stays dirty even though a save
+   * just succeeded, which is exactly right: the server has the older text.
+   */
+  async function saveNow(source, depth) {
+    if (!_rec) return { ok: false, error: 'no_record' };
+    if (_saveInFlight) {
+      const prev = await _saveInFlight.catch(() => null);
+      // The record may have moved on while that request was on the wire.
+      // Whoever is waiting here wants the CURRENT state saved, not the one
+      // that just went — so save again. `depth` bounds it at one extra round:
+      // each round is a real request, and a leave path must not be able to
+      // spin here.
+      if (_dirty && !_saveInFlight && !depth) return saveNow(source, 1);
+      return prev || { ok: !_dirty, error: _dirty ? 'busy' : null };
+    }
+    if (!canEdit()) return { ok: false, error: 'forbidden_capability' };
+    cancelAutosave();
+    const gen = _editGen;
+    const p = writeRecord(source);
+    _saveInFlight = p;
+    paintSaveState();
+    let out;
+    try {
+      out = await p;
+      if (out.ok) {
+        _saveErr = null;
+        _savedAt = Date.now();
+        // A background save refreshes only what the SERVER knows, never the
+        // fields — see mergeServerFacts. A manual save repaints in full, and
+        // does it in rcpSave where the operator is watching.
+        if (source === 'auto') mergeServerFacts(out.fresh);
+        // Only clear the dirty flag if nothing was typed while this was in
+        // flight. If something was, the next timer picks it up.
+        if (_editGen === gen) _dirty = false; else scheduleAutosave();
+      } else if (out.error === 'name_required') {
+        // Not a failure to report in red: the operator simply has not named it
+        // yet. The leave-guard still protects the work.
+        _saveErr = null;
+      }
+    } catch (e) {
+      out = { ok: false, error: e.code || 'save_failed', message: (e.data && e.data.message) || e.message || '' };
+      _saveErr = out;
+    } finally {
+      _saveInFlight = null;
+      paintSaveState();
+    }
+    return out;
+  }
+
+  /**
+   * Get whatever is on screen onto the server NOW, and answer whether it got
+   * there. Used by every path that is about to leave the record.
+   *
+   * Reads the DOM before its first await, so a caller may tear the takeover
+   * down straight after calling it without waiting.
+   */
+  async function flushSave() {
+    cancelAutosave();
+    if (!_dirty && !_saveInFlight) return true;
+    if (_dirty && autosaveEligible()) { await saveNow('auto'); return !_dirty; }
+    if (_saveInFlight) { await _saveInFlight.catch(() => null); return !_dirty; }
+    return !_dirty;
+  }
+
+  // The one question every leave path asks. It only reaches a dialog when the
+  // work genuinely could not be saved — an unnamed new recipe, a server that
+  // refused, an operator without recipes:edit — and then it says WHY, because
+  // "your changes will be lost" without a reason is not something anyone can
+  // act on.
+  async function leaveGuard() {
+    if (!_dirty && !_saveInFlight) return true;
+    if (await flushSave()) return true;
+    const why = _saveErr ? (_saveErr.message || _saveErr.error)
+      : (!canEdit() ? T('you do not have permission to edit recipes', '你没有编辑食谱的权限')
+        : T('this recipe still needs an English name', '该食谱还需要填写英文名称'));
+    return askConfirm({
+      titleEn: 'Leave without saving?', titleCn: '未保存就离开?',
+      bodyEn: `This recipe could not be saved — ${why}. Your changes will be lost.`,
+      bodyCn: `该食谱无法保存 —— ${why}。你的更改将丢失。`,
+      confirmEn: 'Leave', confirmCn: '离开', danger: true,
+    });
+  }
+
+  // ── the save-state line in the sticky bar ────────────────────────────────
+  // Autosave's entire visible surface. A toast cannot do this job: a save that
+  // happens on its own has to be answerable at ANY moment ("is my work in?"),
+  // not for the 2.6 seconds after it landed.
+  function agoText(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 45) return T('just now', '刚刚');
+    const m = Math.round(s / 60);
+    if (m < 60) return T(`${m} min ago`, `${m} 分钟前`);
+    const h = Math.round(m / 60);
+    return T(`${h} h ago`, `${h} 小时前`);
+  }
+  function paintSaveState() {
+    const el = document.getElementById('rcp-rec-savestate');
+    if (!el) return;
+    let txt = '', err = false;
+    if (_saveErr) {
+      err = true;
+      txt = T('Not saved', '未保存') + ' — ' + (_saveErr.message || _saveErr.error || '');
+    } else if (_saveInFlight) {
+      txt = T('Saving…', '保存中…');
+    } else if (_dirty) {
+      txt = canEdit() ? T('Unsaved changes', '有未保存的更改') : T('Read only', '只读');
+    } else if (_savedAt) {
+      txt = T('Saved', '已保存') + ' · ' + agoText(Date.now() - _savedAt);
+    }
+    el.textContent = txt;
+    el.classList.toggle('err', err);
+  }
+
+  // ── the sticky bar's two states ──────────────────────────────────────────
+  // A hairline once anything has scrolled under it, and the miniature of the
+  // summary card once THAT has. The threshold is measured in the scroller's
+  // own coordinates, and `sum.offsetTop - head.offsetHeight` is invariant under
+  // the miniature appearing (it grows the header and pushes the summary down by
+  // the same amount), so showing it can never re-trigger the test that hid it.
+  function onRecScroll() {
+    const sc = document.getElementById('rcp-rec-scroll');
+    const head = document.getElementById('rcp-rechead');
+    if (!sc || !head) return;
+    head.classList.toggle('stuck', sc.scrollTop > 2);
+    // The ingredient list's column header parks on this bar's bottom edge, and
+    // the bar changes height when its miniature appears — so the offset is
+    // measured here, on the same events, rather than written as a constant that
+    // would be wrong for one of the two states.
+    sc.style.setProperty('--rcp-headh', head.offsetHeight + 'px');
+    const figs = document.getElementById('rcp-rec-stickyfigs');
+    const sum = sumRoot();
+    if (!figs) return;
+    if (!sum || !sum.innerHTML) { figs.hidden = true; return; }
+    // VIEWPORT coordinates, not offsetTop: the record's offsetParent is not the
+    // scroller (nothing between them is positioned), so an offsetTop compared
+    // against scrollTop would be out by the topbar and main's padding — the
+    // strip would appear at the wrong point rather than not at all, which is
+    // the kind of wrong nobody chases down.
+    figs.hidden = sum.getBoundingClientRect().bottom > head.getBoundingClientRect().bottom;
+  }
+  function bindRecScroll() {
+    if (_scrollBound) return;
+    const sc = document.getElementById('rcp-rec-scroll');
+    if (!sc) return;
+    sc.addEventListener('scroll', onRecScroll, { passive: true });
+    window.addEventListener('resize', onRecScroll);
+    _scrollBound = true;
+  }
+
+  // The browser's own last line of defence, for the tab that gets closed
+  // mid-request or before an unnamed recipe has a name. Only armed while the
+  // record is genuinely unsaved, so it never nags on a clean one.
+  window.addEventListener('beforeunload', (e) => {
+    if (!_recOpen || (!_dirty && !_saveInFlight)) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+  // Switching tabs or locking the phone is a leave as far as the work is
+  // concerned — get it on the server rather than waiting out the timer.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && _recOpen && _dirty) flushSave();
+  });
+
 
   // ── sub-tabs ──────────────────────────────────────────────────────────────
   const SUBTABS = [
@@ -501,50 +816,14 @@
     return `<select class="rcp-input" id="rcp-f-${key}" onchange="rcpDirty();${extra || ''}">${o}</select>`;
   }
 
-  // ── The pinned head ──────────────────────────────────────────────────────
-  // Two facts the CSS cannot work out for itself: whether the block is
-  // currently HOLDING anything (is-stuck, which is what condenses it), and how
-  // TALL it is (--rcp-pin-h, which is where .rcp-lhead parks). The height is
-  // measured rather than assumed because the block changes height as it
-  // condenses — a stale value either leaves a gap rows are visible through
-  // (too large) or hides the first rows behind the header (too small).
-  //
-  // 8px of slack before is-stuck, not 0: a trackpad resting at the top of a
-  // list emits sub-pixel scrolls, and a strip that condensed and expanded
-  // under a resting hand would be worse than one that never moved.
-  let _pinBound = false, _pinRAF = 0;
-  function syncPin() {
-    const sc = document.getElementById('rcp-rec-scroll');
-    const pin = document.getElementById('rcp-pin');
-    if (!sc || !pin) return;
-    sc.classList.toggle('is-stuck', sc.scrollTop > 8);
-    sc.style.setProperty('--rcp-pin-h', pin.offsetHeight + 'px');
-  }
-  function bindPin() {
-    if (_pinBound) return;
-    const sc = document.getElementById('rcp-rec-scroll');
-    const pin = document.getElementById('rcp-pin');
-    if (!sc || !pin) return;
-    _pinBound = true;
-    // One frame per scroll burst: this reads offsetHeight, and doing that on
-    // every raw scroll event is a forced layout per pixel.
-    sc.addEventListener('scroll', () => {
-      if (_pinRAF) return;
-      _pinRAF = requestAnimationFrame(() => { _pinRAF = 0; syncPin(); });
-    }, { passive: true });
-    window.addEventListener('resize', syncPin);
-    // The condense is a transition, so the height is only true once it lands —
-    // measuring on the scroll that STARTED it parks the column header at the
-    // height the block is leaving, not the one it is arriving at.
-    pin.addEventListener('transitionend', syncPin);
-  }
-
-  function paintRecord() {
-    const host = recRoot();
-    if (!host || !_rec) return;
+  // Everything in the sticky bar EXCEPT the inputs — extracted from
+  // paintRecord() so an autosave can refresh it (a renamed recipe, a material
+  // that appeared, the id a create just minted) WITHOUT rebuilding the fields
+  // under a typing operator.
+  function paintHead() {
+    if (!_rec) return;
     const m = _rec;
     const isNew = !m.id;
-
     const setTxt = (id, s) => { const el = document.getElementById(id); if (el) el.textContent = s; };
     setTxt('rcp-rec-title', isNew ? T('New recipe', '新建食谱') : (m.name_en || T('Recipe', '食谱')));
     setTxt('rcp-rec-backlbl', T('Recipes', '食谱'));
@@ -552,6 +831,11 @@
     setTxt('rcp-rec-arch', m.is_active === 0 ? T('Restore', '恢复') : T('Archive', '归档'));
     const archBtn = document.getElementById('rcp-rec-arch');
     if (archBtn) archBtn.hidden = isNew;
+
+    // History — hidden until the recipe exists, because a record with no id has
+    // no saves behind it and an empty panel explains nothing.
+    const histBtn = document.getElementById('rcp-rec-history');
+    if (histBtn) { histBtn.hidden = isNew; histBtn.textContent = T('History', '修改记录'); }
 
     // §29 step 5 — state-dependent: "Make available as material" when
     // unlinked, "Linked to material: X" (click to unlink) when linked.
@@ -563,6 +847,35 @@
         ? T('Linked to material: ', '已关联物料:') + m.backsMaterial.name_en
         : T('Make available as material', '设为可用物料');
     }
+    paintSaveState();
+  }
+
+  // What the SERVER knows that the screen cannot derive: the id a create just
+  // minted, the material that auto-materialized, the products this recipe
+  // makes, its archive state. Taken from a save's answer WITHOUT touching
+  // `_lines`, `_steps` or any mounted input — those hold what the operator is
+  // typing right now, and the server's copy of them is by definition older.
+  function mergeServerFacts(fresh) {
+    if (!_rec || !fresh) return;
+    _rec.id = fresh.id;
+    _rec.is_active = fresh.is_active;
+    _rec.backsMaterial = fresh.backsMaterial;
+    _rec.materialBlock = fresh.materialBlock;
+    _rec.products = fresh.products;
+    // The title reads from _rec.name_en, and a rename is the operator's own
+    // text coming back unchanged — safe, and the alternative is a header that
+    // still says the old name after the record has been renamed.
+    _rec.name_en = fresh.name_en;
+    _rec.name_cn = fresh.name_cn;
+    paintHead();
+    paintSummary();
+  }
+
+  function paintRecord() {
+    const host = recRoot();
+    if (!host || !_rec) return;
+    const m = _rec;
+    paintHead();
 
     const subnav = document.getElementById('rcp-subtabs');
     if (subnav) {
@@ -582,8 +895,10 @@
     try { applyCapGates(); } catch (_) {}
     paintSummary();
     paintBreakdown();
-    syncPin();
     paintLineWarns();
+    // The page just changed height under the sticky bar; re-decide whether the
+    // bar is stuck and whether its miniature belongs on screen.
+    onRecScroll();
   }
 
   // ── Details ──────────────────────────────────────────────────────────────
@@ -803,7 +1118,7 @@
   window.rcpLineField = function (idx, key, val) {
     if (!_lines[idx]) return;
     _lines[idx][key] = key === 'qty' ? (val === '' ? 0 : Number(val)) : val;
-    _dirty = true;
+    markDirty();
     // Only the cost figure and the summary need to move — repainting the
     // whole tab on every keystroke would fight the input the operator is
     // typing into (same caret-loss failure Materials' search box guards
@@ -812,7 +1127,7 @@
   };
   window.rcpLineRemove = function (idx) {
     _lines.splice(idx, 1);
-    _dirty = true;
+    markDirty();
     renderSubbody('ingredients');
     rcpRecompute();
     updateIngredientsBadge();
@@ -836,7 +1151,7 @@
     if (from == null || from === idx) { window.rcpLineDragEnd(); return; }
     const [moved] = _lines.splice(from, 1);
     _lines.splice(idx, 0, moved);
-    _dirty = true;
+    markDirty();
     renderSubbody('ingredients');
     rcpRecompute();
   };
@@ -887,7 +1202,7 @@
       qty: 0, unit: m.unit || 'g', notes: null, substitutes: null,
       master_cost: m.cost_per_unit, master_unit: m.unit, master_free: m.free_by_design, master_name_en: m.name_en,
     });
-    _dirty = true;
+    markDirty();
     _pickResults = [];
     renderSubbody('ingredients');
     rcpRecompute();
@@ -928,15 +1243,15 @@
         </div>
       </div>`;
   }
-  window.rcpStepField = function (idx, key, val) { if (_steps[idx]) { _steps[idx][key] = val; _dirty = true; } };
-  window.rcpStepAdd = function () { _steps.push({ name: '', instructions: '' }); _dirty = true; renderSubbody('steps'); };
-  window.rcpStepRemove = function (idx) { _steps.splice(idx, 1); _dirty = true; renderSubbody('steps'); };
+  window.rcpStepField = function (idx, key, val) { if (_steps[idx]) { _steps[idx][key] = val; markDirty(); } };
+  window.rcpStepAdd = function () { _steps.push({ name: '', instructions: '' }); markDirty(); renderSubbody('steps'); };
+  window.rcpStepRemove = function (idx) { _steps.splice(idx, 1); markDirty(); renderSubbody('steps'); };
   window.rcpStepMove = function (idx, dir) {
     const to = idx + dir;
     if (to < 0 || to >= _steps.length) return;
     const [s] = _steps.splice(idx, 1);
     _steps.splice(to, 0, s);
-    _dirty = true;
+    markDirty();
     renderSubbody('steps');
   };
 
@@ -1043,7 +1358,7 @@
   }
 
   window.rcpRecompute = function () {
-    _dirty = true;
+    markDirty();
     paintSummary();
     paintBreakdown();
     paintLineWarns();
@@ -1078,14 +1393,38 @@
 
   // ── the persistent summary — must read correctly no matter which sub-tab
   //    is open, and must never let a partly-priced recipe look free. ───────
-  function paintSummary() {
-    const host = sumRoot();
-    if (!host || !_rec) return;
+  // THE ONE DERIVATION, read by BOTH the summary card and the sticky bar's
+  // miniature of it. Extracted the day the bar was added, and extracted rather
+  // than copied for the reason every comment in this function already gives:
+  // two places deriving "which margin is a fact about this recipe" is exactly
+  // how one screen ends up printing two different margins for one recipe. The
+  // rules it encodes are unchanged — read them below, they were only moved.
+  function summaryFacts() {
     const c = liveCost();
-    const missing = c.zeroCostIngredientLines > 0;
     const primary = c.costPerServing != null
       ? { lbl: T('Cost per serving', '每份成本'), v: money(c.costPerServing) }
       : (c.costPerGram != null ? { lbl: T('Cost per gram', '每克成本'), v: moneyU(c.costPerGram) } : null);
+    const prods = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
+    const solo = prods.length === 1 ? prods[0] : null;
+    const soloOwned = solo ? costStillFromRecipe(solo) : false;
+    const soloM = (solo && soloOwned) ? margeOf(solo) : null;
+    const recM = (!soloOwned && c.marginPerServing != null && c.sellPrice > 0 && c.costPerServing != null)
+      ? { money: c.marginPerServing, pct: ((c.sellPrice - c.costPerServing) / c.sellPrice) * 100 }
+      : null;
+    const showM = soloM || recM;
+    // CN PENDING — names the build list, which has no sourced Chinese.
+    const mLbl = soloM ? T('Margin', '毛利')
+      : (recM ? T('Margin (recipe)', 'Margin (recipe)') : T('Margin', '毛利'));
+    return { c, primary, solo, soloM, showM, mLbl, missing: c.zeroCostIngredientLines > 0 };
+  }
+
+  function paintSummary() {
+    const host = sumRoot();
+    if (!host || !_rec) return;
+    const f = summaryFacts();
+    const c = f.c;
+    const missing = f.missing;
+    const primary = f.primary;
 
     // ONE product means its price and margin are facts about the recipe, so
     // they belong in the metric row beside the costs — cost, price, what's
@@ -1093,8 +1432,7 @@
     // is true of the recipe, so the row stays cost-only and the figures go
     // down into columns instead (productsHtml below). The data has two shapes;
     // so does the card.
-    const prods = (_rec && Array.isArray(_rec.products)) ? _rec.products : [];
-    const solo = prods.length === 1 ? prods[0] : null;
+    const solo = f.solo;
     // THE PREMISE THIS STRIP WAS BUILT ON CAN NOW BE FALSE. The comment above
     // says one product means its price and margin are facts about the recipe.
     // That held while the recipe wrote store_products.unit_cost. A product
@@ -1106,17 +1444,11 @@
     // the strip shows the RECIPE's own margin — its recipe_cost_data sell
     // price against its own cost per serving, both already computed — and
     // labels it, so nothing on the row is a fact about something else.
-    const soloOwned = solo ? costStillFromRecipe(solo) : false;
-    const soloM = (solo && soloOwned) ? margeOf(solo) : null;
-    // The recipe's own margin, used when the product's is not this recipe's to
-    // report. computeRecipeCost already derives both halves.
-    const recM = (!soloOwned && c.marginPerServing != null && c.sellPrice > 0 && c.costPerServing != null)
-      ? { money: c.marginPerServing, pct: ((c.sellPrice - c.costPerServing) / c.sellPrice) * 100 }
-      : null;
-    const showM = soloM || recM;
-    // CN PENDING — names the build list, which has no sourced Chinese.
-    const mLbl = soloM ? T('Margin', '毛利')
-      : (recM ? T('Margin (recipe)', 'Margin (recipe)') : T('Margin', '毛利'));
+    // ...so summaryFacts() above prefers the recipe's OWN margin whenever the
+    // product no longer answers to this recipe, and labels it.
+    const soloM = f.soloM;
+    const showM = f.showM;
+    const mLbl = f.mLbl;
 
     let html = `<div class="rcp-sumrow">
       <div class="rcp-sumfig"><span class="lbl">${esc(T('Batch cost', '整批成本'))}</span><span class="v">${money(c.batchCost)}</span></div>
@@ -1172,10 +1504,39 @@
     if (outputs) html += `<div class="rcp-hr"></div><div class="rcp-outputs">${outputs}</div>`;
 
     host.innerHTML = html;
-    // A warning appearing or clearing changes the pinned block's height, and
-    // the column header parks on its bottom edge — re-measure, or a unit fixed
-    // mid-list leaves the header floating where the taller card used to end.
-    syncPin();
+    // The bar's miniature is repainted from the SAME facts in the same breath,
+    // so the two can never disagree about what this recipe costs.
+    paintStickyFigs(f);
+  }
+
+  // ── the sticky bar's miniature of the card above ─────────────────────────
+  // Only the figures, one type step down, in the same order: what it costs,
+  // then what it earns. The warning comes with them and is not optional — the
+  // rule this screen exists to keep ("never let a recipe look free") is a rule
+  // about every place a cost is shown, and a scrolled-past warning is a hidden
+  // one. Visibility is the scroll handler's business, not this function's.
+  function paintStickyFigs(facts) {
+    const host = document.getElementById('rcp-rec-stickyfigs');
+    if (!host || !_rec) return;
+    const f = facts || summaryFacts();
+    const c = f.c;
+    const fig = (lbl, v, cls) => `<span class="f${cls ? ' ' + cls : ''}">${esc(lbl)} <b>${v}</b></span>`;
+    let html = fig(T('Batch cost', '整批成本'), money(c.batchCost));
+    if (f.primary) html += fig(f.primary.lbl, f.primary.v);
+    if (f.solo) {
+      html += fig(T('Sells for', '售价'), esc(Number(f.solo.sell_price) > 0 ? money(f.solo.sell_price) : '—'));
+      html += fig(f.mLbl,
+        esc(f.showM ? (f.showM.money < 0 ? '−' : '') + money(Math.abs(f.showM.money)) : '—'),
+        f.showM && f.showM.money < 0 ? 'neg' : '');
+    }
+    if (f.missing) {
+      html += `<span class="warn">${I.warn}${esc(T(
+        `${c.zeroCostIngredientLines} missing cost`, `${c.zeroCostIngredientLines} 项缺少成本`))}</span>`;
+    }
+    if (c.unreconciledUnitLines > 0) {
+      html += `<span class="warn">${I.warn}${esc(T('UNIT MISMATCH', '单位不符'))}</span>`;
+    }
+    host.innerHTML = html;
   }
 
   // Margin for one product row, via the SHARED helper (_paMargin, part 09) —
@@ -1304,21 +1665,18 @@
   // tab has loaded once, so a bare pdOpen() from here would open a blank
   // "New product" form.
   //
-  // The dirty guard is the reason this isn't just an inline call. Clicking any
+  // The leave guard is the reason this isn't just an inline call. Clicking any
   // rail tab while a record is open tears the takeover down through the
-  // capture-phase listener above, WITHOUT asking — fine for a deliberate rail
-  // click, not fine for a link that sits inside the record's own header next to
-  // fields the operator may have just edited. So ask the same question
-  // rcpRecordBack asks, and only then let the teardown happen.
+  // capture-phase listener above; that listener starts a save on the way out,
+  // but it cannot wait for one, and a link sitting inside the record's own
+  // header next to fields the operator has just edited can. So this takes the
+  // same route rcpRecordBack does — get the work onto the server, and only ask
+  // anything at all if it could not go.
   window.rcpOpenProduct = async function (productId) {
     const id = Number(productId);
     if (!id) return;
-    if (_dirty && !(await askConfirm({
-      titleEn: 'Leave without saving?', titleCn: '未保存就离开?',
-      bodyEn: 'Your changes to this recipe will be lost.', bodyCn: '你对该食谱的更改将丢失。',
-      confirmEn: 'Leave', confirmCn: '离开', danger: true,
-    }))) return;
-    _dirty = false;   // consented once; don't let anything ask a second time
+    if (!(await leaveGuard())) return;
+    _dirty = false;   // saved, or consented once; don't ask a second time
     if (typeof dashOpenProductFromFeed === 'function') { dashOpenProductFromFeed(id); return; }
     // No dashboard part loaded (shouldn't happen — it loads first). Fail by
     // doing nothing visible rather than throwing inside an onclick.
@@ -1348,78 +1706,76 @@
 
   window.rcpSave = async function () {
     if (!_rec) return;
-    const body = readDetails();
-    if (!body.name_en) { toast(T('An English name is required', '英文名称必填'), 'err'); rcpSubtab('details'); return; }
-    body.ingredients = _lines.map(l => ({
-      ingredient_id: l.ingredient_id, name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
-      qty: Number(l.qty) || 0, unit: l.unit || 'g', notes: l.notes || null, substitutes: l.substitutes || null,
-    }));
-    body.steps = _steps.map(s => ({ name: s.name || null, instructions: s.instructions || null }));
-    const id = _rec.id;
-    try {
-      let recipeId = id;
-      if (id) {
-        await api('/api/retail-admin/recipes/' + id, { method: 'PUT', body });
-      } else {
-        const j = await api('/api/retail-admin/recipes', { method: 'POST', body });
-        recipeId = j.id;
-      }
-      // Cost & Pricing — sent whenever the tab has been touched or a fresh
-      // save is happening; harmless to send unconditionally (an all-default
-      // upsert on an untouched recipe just stores the defaults it already had).
-      await api('/api/retail-admin/recipes/' + recipeId + '/cost', { method: 'PUT', body: draftCostData() });
-      _dirty = false;
-      // ── SAVED, AND HERE IS WHAT THE SAVE DID NOT COST ───────────────────
-      //
-      // THE SAVE IS NEVER BLOCKED AND THE UNIT IS NEVER CHANGED. A line in ml
-      // against a material stocked in g may be exactly what the kitchen does;
-      // what is not acceptable is that it was stored, silently left out of the
-      // cost (lib/recipe-cost.js, the §7 addendum — no conversion without a
-      // stated factor), and the operator told only "Saved". This says the
-      // second half out loud at the one moment he is looking.
-      //
-      // It NAMES the ingredients rather than counting them, because the fix is
-      // per line and a count sends him back to hunt for it. Three at most, then
-      // "+N more" — the marks on the rows themselves carry the rest, and they
-      // are still on screen when this fades.
-      //
-      // 'err' is the toast's LONG-LIVED variant (6s against 2.6s) and this
-      // needs the reading time; it is not a claim that the save failed — the
-      // sentence says Saved first, and the record behind it is written.
-      //
-      // CN PENDING on the sentence. UNIT MISMATCH · 单位不符 is the locked pair
-      // (docs/tacet-delivery-vocabulary.md) and is used as the label; the
-      // explanation around it has no sourced Chinese and composing one is
-      // forbidden (§30 rule 3), so it is English on both halves.
-      const bad = mismatchedLines();
-      if (bad.length) {
-        const names = bad.slice(0, 3)
-          .map(x => `${x.l.name_en || x.l.master_name_en || '?'} (${x.l.unit || '—'} vs ${x.l.master_unit || '—'})`)
-          .join(', ');
-        const more = bad.length > 3 ? ` +${bad.length - 3} more` : '';
-        const en = `Saved — but ${bad.length} ingredient${bad.length === 1 ? '' : 's'} `
-                 + `${bad.length === 1 ? 'is' : 'are'} NOT included in this recipe's cost: `
-                 + `${names}${more}. UNIT MISMATCH — the line's unit and the `
-                 + `material's stocking unit measure different kinds of thing, so nothing was `
-                 + `converted. The cost shown is incomplete.`;
-        // The count and the names are the same in both halves — they are data,
-        // not copy. 已保存 is the toast's own existing pair, reused rather than
-        // restated, so the Chinese confirms the save in the same words every
-        // other save on this screen uses.
-        const cn = `${T('Saved', '已保存')} —— 但有 ${bad.length} 项原料不计入本配方成本:`
-                 + `${names}${more}。单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,`
-                 + `系统不作换算。显示成本不完整。`;
-        toast(T(en, cn), 'err');
-      } else {
-        toast(T('Saved', '已保存'));
-      }
-      const fresh = await api('/api/retail-admin/recipes/' + recipeId);
-      setRecord(fresh.data);
-      paintRecord();
-    } catch (e) {
-      const msg = (e.data && e.data.message) || e.message || '';
-      toast(T('Save failed', '保存失败') + ': ' + msg, 'err');
+    // Save still exists, and still means something autosave cannot: it is a
+    // deliberate mark, and the server files a restore point for it that the
+    // background saves around it fold into (lib/recipe-versions.js). It is also
+    // the only path that reports in words — autosave's report is the bar.
+    if (!String(val('name_en') || '').trim()) {
+      toast(T('An English name is required', '英文名称必填'), 'err');
+      rcpSubtab('details');
+      return;
     }
+    const out = await saveNow('manual');
+    if (!out || !out.ok) {
+      if (out && out.error === 'name_required') return;   // already said, above
+      toast(T('Save failed', '保存失败') + ': ' + ((out && out.message) || (out && out.error) || ''), 'err');
+      return;
+    }
+    // ── SAVED, AND HERE IS WHAT THE SAVE DID NOT COST ───────────────────
+    //
+    // THE SAVE IS NEVER BLOCKED AND THE UNIT IS NEVER CHANGED. A line in ml
+    // against a material stocked in g may be exactly what the kitchen does;
+    // what is not acceptable is that it was stored, silently left out of the
+    // cost (lib/recipe-cost.js, the §7 addendum — no conversion without a
+    // stated factor), and the operator told only "Saved". This says the
+    // second half out loud at the one moment he is looking.
+    //
+    // It NAMES the ingredients rather than counting them, because the fix is
+    // per line and a count sends him back to hunt for it. Three at most, then
+    // "+N more" — the marks on the rows themselves carry the rest, and they
+    // are still on screen when this fades.
+    //
+    // 'err' is the toast's LONG-LIVED variant (6s against 2.6s) and this
+    // needs the reading time; it is not a claim that the save failed — the
+    // sentence says Saved first, and the record behind it is written.
+    //
+    // AUTOSAVE DOES NOT SAY ANY OF THIS, and that is deliberate: a sentence
+    // this long, fired by a timer while somebody is still typing the line it
+    // is about, is an interruption rather than a warning. The marks on the
+    // rows and the pill in the summary carry it continuously instead — this
+    // is the version for the moment he asked.
+    //
+    // CN PENDING on the sentence. UNIT MISMATCH · 单位不符 is the locked pair
+    // (docs/tacet-delivery-vocabulary.md) and is used as the label; the
+    // explanation around it has no sourced Chinese and composing one is
+    // forbidden (§30 rule 3), so it is English on both halves.
+    const bad = out.mismatched || [];
+    if (bad.length) {
+      const names = bad.slice(0, 3)
+        .map(x => `${x.l.name_en || x.l.master_name_en || '?'} (${x.l.unit || '—'} vs ${x.l.master_unit || '—'})`)
+        .join(', ');
+      const more = bad.length > 3 ? ` +${bad.length - 3} more` : '';
+      const en = `Saved — but ${bad.length} ingredient${bad.length === 1 ? '' : 's'} `
+               + `${bad.length === 1 ? 'is' : 'are'} NOT included in this recipe's cost: `
+               + `${names}${more}. UNIT MISMATCH — the line's unit and the `
+               + `material's stocking unit measure different kinds of thing, so nothing was `
+               + `converted. The cost shown is incomplete.`;
+      // The count and the names are the same in both halves — they are data,
+      // not copy. 已保存 is the toast's own existing pair, reused rather than
+      // restated, so the Chinese confirms the save in the same words every
+      // other save on this screen uses.
+      const cn = `${T('Saved', '已保存')} —— 但有 ${bad.length} 项原料不计入本配方成本:`
+               + `${names}${more}。单位不符 —— 该条的单位与物料的库存单位计量的不是同一类量,`
+               + `系统不作换算。显示成本不完整。`;
+      toast(T(en, cn), 'err');
+    } else {
+      toast(T('Saved', '已保存'));
+    }
+    // A manual save is a deliberate stop, so this is the one save that is
+    // allowed to repaint the whole record from the server's answer — autosave
+    // never does, because rebuilding the inputs under a typing operator is the
+    // caret-loss failure renderSubbody() exists to avoid.
+    if (out.fresh) { setRecord(out.fresh, true); paintRecord(); }
   };
 
   // §29 step 6 — names the actual consequence of archiving a recipe that
@@ -1449,6 +1805,10 @@
 
   window.rcpArchive = async function () {
     if (!_rec || !_rec.id) return;
+    // Archiving is not a discard: whatever is on screen is still this recipe's
+    // content and is recorded before the state changes, so bringing it back
+    // brings back what was actually there.
+    await flushSave();
     const restoring = _rec.is_active === 0;
     let ok;
     if (restoring) {
@@ -1471,6 +1831,10 @@
       });
     }
     if (!ok) return;
+    // No background save may fire between here and the teardown — it would
+    // write the draft back over a recipe that has just been archived.
+    _autoOff = true;
+    cancelAutosave();
     try {
       await api('/api/retail-admin/recipes/' + _rec.id + '/archive', { method: 'PUT', body: { restore: restoring } });
       toast(restoring ? T('Restored', '已恢复') : T('Archived', '已归档'));
@@ -1478,9 +1842,213 @@
       teardown(false);
       goTab('recipes');
     } catch (e) {
+      _autoOff = false;
       toast(T('Failed', '操作失败') + ': ' + (e.message || ''), 'err');
     }
   };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  HISTORY — the other half of autosave
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // A version is the state a save DISPLACED, so a row reads "this is how the
+  // recipe stood UNTIL <time>". That is the sentence the panel puts on screen,
+  // because the obvious alternative reading — "this is what was saved at
+  // <time>" — is the opposite of what the row holds, and an operator who
+  // restores on that misreading gets the change he was trying to undo.
+  //
+  // The live record is the first row of the same list rather than a separate
+  // heading: "now" is just the newest state, and putting it on the same axis is
+  // what makes "the one before this" legible. It is the only row that cannot be
+  // restored, and the Restore button says so by disabling.
+  //
+  // Same dialog shell as the materialize modal (askCustom / .tdlg-*), and its
+  // own .rcp-hist-* classes are scoped under .rcp-hist-modal for the same
+  // reason: the scrim is appended to <body>, outside #tab-recipes-record.
+  const HIST_SOURCE = {
+    manual:  () => T('saved', '保存'),
+    auto:    () => T('autosaved', '自动保存'),
+    restore: () => T('restored an older version', '恢复了旧版本'),
+  };
+
+  // SQLite writes CURRENT_TIMESTAMP as 'YYYY-MM-DD HH:MM:SS' in UTC. Read
+  // without the zone a browser takes it as LOCAL, which puts every row hours
+  // out — and a history whose clock is wrong is worse than no history, because
+  // it is wrong in a way that looks authoritative.
+  function parseTs(v) {
+    if (!v) return null;
+    const str = String(v).trim();
+    const hasZone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(str);
+    const d = new Date(str.replace(' ', 'T') + (hasZone ? '' : 'Z'));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function whenText(v) {
+    const d = parseTs(v);
+    if (!d) return '—';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  window.rcpHistory = async function () {
+    if (!_rec || !_rec.id) return;
+    // Get what is on screen onto the server first, so the "now" row really is
+    // now and the newest version really is the one before it. Without this the
+    // panel would describe a record two edits behind the one being looked at.
+    await flushSave();
+    let rows = [];
+    try {
+      const j = await api('/api/retail-admin/recipes/' + _rec.id + '/versions');
+      rows = j.data || [];
+    } catch (e) {
+      toast(T('Could not load history', '无法加载修改记录') + ': ' + (e.message || ''), 'err');
+      return;
+    }
+    openHistoryModal(rows);
+  };
+
+  function openHistoryModal(rows) {
+    const st = { sel: 'now', cache: {} };
+    const bodyHtml = `
+      <h3 class="tdlg-title">${esc(T('History', '修改记录'))}</h3>
+      <p class="tdlg-msg">${esc(T(
+        'Every save files the state it replaced. Pick one to see what it held, then put it back.',
+        '每次保存都会存档被替换的内容。选择一条查看其内容,并可恢复。'))}</p>
+      <div class="rcp-hist-list" id="rcp-hist-list"></div>
+      <div class="rcp-hist-detail" id="rcp-hist-detail"></div>`;
+    const footHtml = `
+      <button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>${esc(T('Close', '关闭'))}</button>
+      <button type="button" class="tdlg-btn tdlg-btn--primary" data-submit disabled>${esc(T('Restore this version', '恢复该版本'))}</button>`;
+    // Focus the first row, not the footer: the panel is read before it is
+    // acted on, and arrow-key navigation of the list is the point.
+    const { scrim, closer } = askCustom('tdlg-neutral rcp-hist-modal', bodyHtml, footHtml, '.rcp-hist-row');
+    const close = () => closer(null);
+    scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', close));
+    const submitBtn = scrim.querySelector('[data-submit]');
+    // Reading history is open to anyone who can open the record; writing an
+    // older state back over the live one is an edit, and is gated like one.
+    // The server gates it regardless — this is UX, not the enforcement.
+    if (!canEdit()) submitBtn.hidden = true;
+
+    const listHost = scrim.querySelector('#rcp-hist-list');
+    const detailHost = scrim.querySelector('#rcp-hist-detail');
+
+    function renderList() {
+      const nowRow = `
+        <button type="button" class="rcp-hist-row now${st.sel === 'now' ? ' on' : ''}" data-v="now">
+          <span class="rcp-hist-when">${esc(T('Now — the live recipe', '当前 —— 正在使用的版本'))}</span>
+          <span class="rcp-hist-who">${esc(T(`${_lines.length} ingredients · ${_steps.length} steps`,
+            `${_lines.length} 项原料 · ${_steps.length} 个步骤`))}</span>
+        </button>`;
+      const verRows = rows.map(v => `
+        <button type="button" class="rcp-hist-row${String(st.sel) === String(v.id) ? ' on' : ''}" data-v="${v.id}">
+          <span class="rcp-hist-when">${esc(T('until ', '直到 '))}${esc(whenText(v.created_at))}</span>
+          <span class="rcp-hist-who">${esc(v.actor || T('unknown', '未知'))} ${esc((HIST_SOURCE[v.source] || HIST_SOURCE.manual)())}</span>
+        </button>`).join('');
+      listHost.innerHTML = nowRow + (verRows || `<div class="rcp-hist-empty">${esc(T(
+        'No earlier versions yet — this recipe has not been changed since it was created.',
+        '暂无更早的版本 —— 该食谱自创建以来未被修改。'))}</div>`);
+      listHost.querySelectorAll('.rcp-hist-row').forEach(b => b.addEventListener('click', () => select(b.dataset.v)));
+    }
+
+    async function select(v) {
+      st.sel = v;
+      renderList();
+      submitBtn.disabled = v === 'now';
+      if (v === 'now') { renderDetail(null); return; }
+      if (st.cache[v]) { renderDetail(st.cache[v]); return; }
+      detailHost.innerHTML = `<div class="rcp-hist-empty">${esc(T('Loading…', '加载中…'))}</div>`;
+      try {
+        const j = await api('/api/retail-admin/recipes/' + _rec.id + '/versions/' + v);
+        st.cache[v] = j.data;
+      } catch (e) {
+        detailHost.innerHTML = `<div class="rcp-hist-empty">${esc(T('Could not read that version', '无法读取该版本'))}</div>`;
+        submitBtn.disabled = true;
+        return;
+      }
+      if (String(st.sel) === String(v)) renderDetail(st.cache[v]);
+    }
+
+    function renderDetail(v) {
+      if (!v) {
+        detailHost.innerHTML = `<div class="rcp-hist-empty">${esc(T(
+          'The recipe as it stands right now. Pick an earlier row to compare.',
+          '这是当前的食谱内容。选择上方的历史条目进行对比。'))}</div>`;
+        return;
+      }
+      const snap = v.snapshot || {};
+      const r = snap.recipe || {};
+      const lines = snap.ingredients || [];
+      const cd = snap.costData || {};
+      const row = (lbl, val) => `<dt>${esc(lbl)}</dt><dd>${esc(dash(val))}</dd>`;
+      // The ingredient lines are the reason anyone opens this panel — a deleted
+      // one is the change nothing else on the screen can show was ever there.
+      // Named, not counted, for the same reason the unit-mismatch toast names
+      // its lines: a count sends the reader back to guess which.
+      const shown = lines.slice(0, 8).map(l => `${l.name_en || '?'} ${l.qty}${l.unit || ''}`).join(', ');
+      const more = lines.length > 8 ? T(` +${lines.length - 8} more`, ` 等 ${lines.length} 项`) : '';
+      detailHost.innerHTML = `
+        <p style="margin:0 0 10px">${esc(T(
+          `How this recipe stood until ${whenText(v.created_at)}.`,
+          `该食谱直到 ${whenText(v.created_at)} 时的内容。`))}</p>
+        <dl>
+          ${row(T('Name', '名称'), r.name_en)}
+          ${row(T('Category', '分类'), r.category)}
+          ${row(T('Batch size', '批量大小'), r.batch_size)}
+          ${row(T('Servings', '份数'), r.servings)}
+          ${row(T('Ingredients', '原料'), lines.length ? shown + more : T('none', '无'))}
+          ${row(T('Steps', '步骤'), (snap.steps || []).length)}
+          ${row(T('Sell price', '售价'), cd.sell_price != null ? money(cd.sell_price) : null)}
+          ${row(T('Labour', '人工'), cd.labour != null ? money(cd.labour) : null)}
+        </dl>`;
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      const vid = st.sel;
+      if (!vid || vid === 'now') return;
+      const v = st.cache[vid] || {};
+      const ok = await askConfirm({
+        titleEn: 'Restore this version?', titleCn: '恢复该版本?',
+        bodyEn: `The recipe goes back to how it stood until ${whenText(v.created_at)} — its details, `
+              + `ingredient lines, steps and cost inputs, all four. What is on the record now is filed `
+              + `first, so this can itself be undone.`,
+        bodyCn: `该食谱将恢复为直到 ${whenText(v.created_at)} 时的内容 —— 基本信息、原料明细、步骤与成本输入,四者一并恢复。`
+              + `当前内容会先被存档,因此本次恢复同样可以撤销。`,
+        confirmEn: 'Restore', confirmCn: '恢复',
+      });
+      if (!ok) return;
+      submitBtn.disabled = true;
+      // Nothing may autosave the on-screen draft over the top of the state
+      // being written — the restore is the authority for the next moment.
+      _autoOff = true;
+      cancelAutosave();
+      try {
+        const j = await api('/api/retail-admin/recipes/' + _rec.id + '/versions/' + vid + '/restore', { method: 'POST' });
+        close();
+        const fresh = await api('/api/retail-admin/recipes/' + _rec.id);
+        setRecord(fresh.data, true);
+        _dirty = false;
+        _saveErr = null;
+        _savedAt = Date.now();
+        paintRecord();
+        // `held` names anything the restore could NOT put back — today only a
+        // SKU another recipe has taken since. Said out loud rather than left
+        // for someone to notice: a silent partial restore is a lie about what
+        // the record now contains.
+        const held = (j.held || []);
+        toast(held.length
+          ? T(`Restored — except ${held.join(', ')}, which another recipe now owns.`,
+              `已恢复 —— 但 ${held.join('、')} 现已被其他食谱占用,未一并恢复。`)
+          : T('Restored', '已恢复'), held.length ? 'err' : 'ok');
+      } catch (e) {
+        submitBtn.disabled = false;
+        toast(T('Restore failed', '恢复失败') + ': ' + ((e.data && e.data.message) || e.message || ''), 'err');
+      } finally {
+        _autoOff = false;
+      }
+    });
+
+    renderList();
+    renderDetail(null);
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   //  §29 STEP 5 — "Make available as material"
@@ -1507,6 +2075,9 @@
 
   window.rcpMaterializeClick = async function () {
     if (!_rec || !_rec.id) return;
+    // Both branches end in a full repaint from the server's copy, so anything
+    // still only in the browser has to be on the server first.
+    await flushSave();
     if (_rec.backsMaterial) { unlinkFlow(); return; }
     openMaterializeModal();
   };
@@ -1524,7 +2095,7 @@
       await api('/api/retail-admin/recipes/' + _rec.id + '/materialize', { method: 'DELETE' });
       toast(T('Unlinked', '已取消关联'));
       const fresh = await api('/api/retail-admin/recipes/' + _rec.id);
-      setRecord(fresh.data);
+      setRecord(fresh.data, true);
       paintRecord();
     } catch (e) {
       toast(T('Failed', '操作失败') + ': ' + (e.message || ''), 'err');
@@ -1683,7 +2254,7 @@
         // first paint rather than the blank pre-link state.
         toast(j.warning || T('Now available as a material', '已设为可用物料'), 'ok', j.warning ? 5000 : undefined);
         const fresh = await api('/api/retail-admin/recipes/' + _rec.id);
-        setRecord(fresh.data);
+        setRecord(fresh.data, true);
         paintRecord();
       } catch (e) {
         submitBtn.disabled = false;
