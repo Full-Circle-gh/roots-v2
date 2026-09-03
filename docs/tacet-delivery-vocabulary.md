@@ -937,7 +937,7 @@ and `点` is the act of counting, so a screen that reached for `点数` here wou
 name an action where it means a number.
 
 **THE CHINESE `Received` ARTBOARD WAS BLOCKED ON THESE AND IS NOW DRAWN**
-(`design-handoff/shop-receiving/ReceivedZH.dc.html`). Nothing shipped
+(`design-handoff/store-receiving/ReceivedZH.dc.html`). Nothing shipped
 English-on-both-sides in the interval — the screen simply was not drawn in
 Chinese until the pairs existed, which is the behaviour Rule 4 asks for rather
 than a delay to apologise for.
@@ -979,7 +979,7 @@ to a locked one to every reader who comes after.
 
 **THREE CHINESE SOURCE COMMENTS EXIST AND ARE NOT VOCABULARY**, recorded so the
 next reader does not mistake them for strings that escaped a lock:
-`warehouse-picking/MainZH.dc.html:82`, and `shop-receiving/ReceivedZH.dc.html`
+`warehouse-picking/MainZH.dc.html:82`, and `store-receiving/ReceivedZH.dc.html`
 lines 76 and 95. They are reasoning notes to whoever builds the screen, they
 render nothing, and they are exempt — but they were composed in the same pass
 and are named here for the same reason the seven above are.
