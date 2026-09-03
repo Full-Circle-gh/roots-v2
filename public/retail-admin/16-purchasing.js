@@ -2734,7 +2734,7 @@
           // is true, and carries a resting border so it reads as a control at a
           // glance instead of as a caption beside the figures.
           ? `<span class="pu2-pill grey">${esc(T('No invoice', '不开发票'))}</span>
-             <button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Put the whole order back on the chase — the supplier should issue an invoice', '整单恢复待开票 —— 供应商应开发票'))}" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore order to awaiting', '整单恢复待开票'))}</button>`
+             <button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Put the whole order back on the chase — the supplier should issue an invoice', '整单恢复待开票 —— 供应商应开发票'))}" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore whole order to awaiting', '整单恢复待开票'))}</button>`
           : `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('This whole order will never have an invoice — cash or market', '整单不会开发票 —— 现金或市场采购'))}" onclick="puInvNoInvoicePO(${po.po_id}, true)">${esc(T('Mark whole order as no-invoice', '整单标记不开发票'))}</button>`}
       </div>
       ${po.lines.map(l => {
@@ -2754,7 +2754,17 @@
             // overshoots its own header.
             ? `<span class="pu2-pill amber" title="${esc(T('More has been invoiced than this line is now worth — goods went back after it was recorded', '该明细已开票金额高于当前应付金额 —— 开票后有退货'))}"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(l.credit_due)}</span>`
             : ''}
-          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice ? ''
+          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice
+            // AN EMPTY CELL IS NOT AN ANSWER. While the ORDER carries the mark
+            // the line has no toggle of its own to offer — the state is the OR
+            // of the two levels, so a line-level 恢复 pressed here would change
+            // a column nobody reads and leave the row saying 不开发票. Correct,
+            // and it left this cell blank beside a grey 不开发票 pill, which
+            // reads as a control that failed to render rather than as a
+            // decision made one row up. Say where the mark comes from and where
+            // it comes off; the line's own toggle returns the moment the
+            // order's umbrella lifts (the branch below).
+            ? `<span class="pu2-mut" title="${esc(T('This line is covered by the order-level no-invoice mark — restore the whole order on the row above to give this line its own control back', '该明细由整单“不开发票”标记覆盖 —— 请在上方该订单行点击“整单恢复待开票”,该明细才会恢复单独操作'))}">${esc(T('by whole-order mark', '由整单标记'))}</span>`
             // Same rule as the order row above. The pill one column to the left
             // already says 不开发票 when this line is marked; a button here that
             // says it too — for a line that is NOT marked — is the screen
