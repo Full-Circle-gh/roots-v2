@@ -42,7 +42,12 @@ function it(name, fn) {
 const ROOT = path.join(__dirname, '..');
 const M_HTML = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
-/** A braced block (function declaration), anchor → its matching `}`. */
+/**
+ * A braced block, anchor → its matching `}`. Works for a function declaration
+ * and for a block-bodied arrow (`const f=v=>{ … }`) alike: it walks braces
+ * from the first `{` after the anchor, so it is indifferent to how many lines
+ * the body takes.
+ */
 function sliceBlock(src, anchor) {
   const start = src.indexOf(anchor);
   assert.notStrictEqual(start, -1, `not found in the shipped file: ${anchor}`);
@@ -69,11 +74,16 @@ function sliceLines(src, anchor, lines) {
 
 // ── The shipped code under test, plus the helpers opsFires leans on ───────
 const SRC = [
-  sliceLines(M_HTML, 'const money=(cur,n)=>', 2),
+  sliceBlock(M_HTML, 'const money=(cur,n)=>'),
   sliceLines(M_HTML, 'const money0=(cur,n)=>', 1),
   sliceLines(M_HTML, 'const DOW_ABBR_EN=', 2),
   sliceBlock(M_HTML, 'function deltaText(cur, base, bl)'),
-  sliceLines(M_HTML, 'const _date=v=>', 1),
+  // The block-bodied arrows (money, _date) are sliced by braces like the
+  // functions are. _date was a one-liner when this file was written; it grew a
+  // body twice since (date-only forms, then the zoneless-timestamp rule), and
+  // a fixed line count cut it mid-arrow, so the whole script failed to parse
+  // and nothing here ran.
+  sliceBlock(M_HTML, 'const _date=v=>'),
   sliceBlock(M_HTML, 'function oldestMins(items)'),
   sliceBlock(M_HTML, 'function oldestOf(items)'),
   sliceBlock(M_HTML, 'function opsFires()'),
