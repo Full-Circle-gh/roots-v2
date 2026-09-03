@@ -9783,7 +9783,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // any-distance) | 'sameday' (legacy — falls back to old standard pricing
   // when no zone matches, but real GZ zones own the price now)
   const deliveryMode = body.delivery_mode || body.delivery_method || 'standard';
-  const customerNote  = body.customer_note || null;
+  // Capped like the admin order-creation path (:23005) — an unbounded note
+  // stored here has printed a slip past Feieyun's 5000-byte content ceiling,
+  // failing every print of the order until the code changed (lib/feie.js
+  // truncates defensively too, but that's a safety net, not a reason to let
+  // checkout store an unbounded field in the first place).
+  const customerNote  = body.customer_note == null ? null : String(body.customer_note).slice(0, 2000);
   const needsCutlery  = body.needs_cutlery ? 1 : 0;
   const needsInvoice  = body.needs_invoice ? 1 : 0;
   const invoiceTitle  = needsInvoice ? (body.invoice_title || null) : null;
