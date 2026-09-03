@@ -26,6 +26,7 @@ const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
 const { productUnitCostYuan } = require('../lib/product-cost');
+const { settlementGap, describeSettlementGap } = require('../lib/channel-settlement');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -536,6 +537,65 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_total_mismatch log failed:', logErr.message); }
     }
 
+    // The SECOND money question, and a different one from moneyGap above.
+    // moneyGap asks whether the platform's total and our line items tell the same
+    // story; this asks whether the four columns the Settlement panel prints add
+    // up to the total it prints them under:
+    //
+    //     subtotal + packing + delivery - discount = total
+    //
+    // The panel has refused to show a commission or an income figure over an
+    // unreconciled total since PR #206, which is right, but it said so only in
+    // the drawer and only as "Breakdown incomplete" — no components, no gap, no
+    // record anywhere that an order had come in that way. EL20260903163199 sat
+    // like that from ingest until somebody opened it and asked why, by which
+    // point the answer needed the archived payload.
+    //
+    // So the check runs HERE, against exactly what the INSERT above wrote (fees
+    // COALESCEd to 0, discount left NULL), while the payload that produced it is
+    // still in the request. Warn, never reject: an order that doesn't reconcile
+    // is still a real order the customer placed, and refusing it would lose money
+    // we do hold over money we don't.
+    //
+    // This records the order AS IT ARRIVED, and some of these heal: the discount
+    // and the economics are blank-filled by /update-order-status on a later poll
+    // (see the COALESCE group there), so a row logged here can reconcile an hour
+    // later and the log entry stays behind describing a state that no longer
+    // exists. That is the intended division — this log answers "what did the
+    // platform send us", scripts/diagnose_channel_settlement.js reads the live
+    // rows and answers "what is still wrong now". Don't read a warn row here as
+    // a standing fault without checking the order.
+    const settleGap = settlementGap({
+      subtotal, total,
+      packing_fee:      packingFee  != null ? packingFee  : 0,
+      shipping_fee:     shippingFee != null ? shippingFee : 0,
+      channel_discount: shopDiscount,
+    });
+    if (settleGap) {
+      try {
+        db.prepare(`
+          INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_settlement_mismatch', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({
+            ref, orderNo, ...settleGap,
+            // WHICH FIELD each figure was read out of. Without this the three
+            // faults that produce an identical gap — a fee the customer was
+            // never charged, a discount bigger than the term we capture, and a
+            // total read off a delivery-free key — are indistinguishable, which
+            // is the exact position EL20260903163199 left us in. The parser has
+            // always known the paths (lib/eleme-browser.js pickMoney returns
+            // one with every value); until now only the total's survived.
+            keyPaths: order.moneyKeyPaths || { total: order.totalKeyPath || null },
+            moneyDivisor: order.moneyDivisor != null ? order.moneyDivisor : null,
+            commission: commission, settleAmount: settleAmount,
+          }),
+          describeSettlementGap(settleGap)
+        );
+      } catch (logErr) { console.error('[eleme-internal] order_settlement_mismatch log failed:', logErr.message); }
+    }
+
     // Visible in the admin's Eleme log rather than only in the response body —
     // "stock deliberately not deducted" is exactly the kind of silent decision that
     // looks like a bug six weeks later.
@@ -553,7 +613,8 @@ router.post('/ingest-order', (req, res) => {
     }
 
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved, bornVoid,
-                subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null });
+                subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null,
+                settlementGap: settleGap || null });
   } catch (err) {
     console.error('[eleme-internal] ingest-order error:', err);
     res.status(500).json({ error: err.message });

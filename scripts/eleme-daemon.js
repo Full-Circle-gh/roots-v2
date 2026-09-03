@@ -304,6 +304,10 @@ function archiveFields(order) {
     // said the basket was worth. Stored because the two disagreeing is the whole
     // of the EL20260901417897 bug and neither number, on its own, could say why.
     totalKeyPath: order.totalKeyPath,
+    // The same question for the other five money fields. A settlement that
+    // doesn't reconcile is diagnosable only if each term can say which payload
+    // field it came out of — see the moneyKeyPaths note in lib/eleme-browser.js.
+    moneyKeyPaths: order.moneyKeyPaths || null,
     channelTotal: order.total,
     itemsTotal: order.itemsTotal,
     merchantIncome: order.merchantIncome,
