@@ -1,6 +1,8 @@
 # Tacet stock movement — schema survey and migration plan
 
-**v1.1 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+**v1.2 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+
+**v1.2 records D6, Ash's ruling on Q5 — the last of the six open questions — and its consequences for B6's scoping. All six are now answered; nothing in PART C gates implementation, and the one thing that does (E2) blocks a single migration step rather than the migration.**
 
 **v1.1 folds in a second document that briefly existed at this same path on branch `claude/stock-movement-schema-decisions-av2e21`.** That branch was written without sight of this one — the session had only `origin/main` and its own branch in its refs, found no file here, and wrote a parallel one. **This document is primary and that branch is SUPERSEDED and abandoned**; its file is left in place as history and nothing further is committed to it. What it contributed and this document lacked is now here: **Ash's five rulings and their reasoning (PART D)**, which close four of PART C's open questions, and **the debt and consequences those rulings leave behind (PART E)**. Where the two said the same thing, this document's wording was kept — it was first, and its IN TRANSIT naming is the more precise.
 
@@ -161,6 +163,8 @@ What exists:
 There is also a unit problem underneath: a batch is `batches_made` × the recipe's `batch_size`, or `servings_made`. §39 wants a count of sellable units. `store_products_recipe_link_v1` asserts *"One serving is one sellable unit"*, but it asserts that only for the products it linked, and only to derive a cost.
 
 **Verdict, plainly: the mapping is one-directional, non-unique and incomplete, and production-to-stock cannot be built on it as it stands.** B6 scopes the fix as its own piece of work, per the brief's instruction not to fold it in.
+
+**D6 (2026-09-03) hardens this rather than softening it.** Ash has ruled that a batch may yield several products, so the fix **must not** be a `UNIQUE` index on `store_products.recipe_id` or a single `output_product_id` column — the two cheapest repairs are both now forbidden, because each asserts one recipe makes at most one product. **What is needed is a mapping that is single-valued in neither direction, and the 36 pairs this migration left ambiguous are a gate on building it** — see B6.1.
 
 ---
 
@@ -361,19 +365,36 @@ All three come off one row of `restock_items` with no joins and no aggregation. 
 
 **Per A5, the recipe-to-product mapping does not exist in a usable form, so this is a prerequisite piece of work and not part of the stock-movement migration.** Scoped here, not planned in detail, and not to be started alongside B1-B5.
 
-**Prerequisite P1 — a recipe → product link that is single-valued and explicit.** The options, for a separate brief to choose between:
+~~**Prerequisite P1 — a recipe → product link that is single-valued and explicit.** The options, for a separate brief to choose between: a `recipes.output_product_id` column; a `UNIQUE` index on `store_products.recipe_id`; a `recipe_outputs` join table, if one recipe genuinely yields several products in one run. The third is the only one that survives a recipe producing both a 200g and a 500g jar, and nothing in the survey tells us whether Roots does that. **That question is Ash's — Q5.**~~
 
-- a `recipes.output_product_id` column (`store_products.id`), authored per recipe;
-- a `UNIQUE` index on `store_products.recipe_id`, reusing what exists and declaring that one recipe makes at most one product;
-- a `recipe_outputs` join table, if one recipe genuinely yields several products in one run.
+**RESOLVED 2026-09-03 by D6: Roots does that, so the third option wins and the first two are withdrawn** — both encode "one recipe, at most one product", which is now known to be false. **The link must be single-valued in neither direction.** What follows is no longer a choice between shapes; it is an ordered piece of work.
 
-The third is the only one that survives a recipe producing both a 200g and a 500g jar, and nothing in the survey tells us whether Roots does that. **That question is Ash's — Q5.**
+### B6.1 — production wiring, in order, as its own brief
+
+**This is clearly larger than a column addition, and stating that plainly is the point of this section.** Four pieces, in this order, none of which can usefully start before the one above it:
+
+**1. A recipe → product mapping that points the right way.** This is the prerequisite and it is where the difficulty is. Today:
+
+- `store_products.recipe_id` is **product → recipe** — the wrong direction for "what can this batch produce", which must ask recipe → products;
+- it carries **no `UNIQUE` index**, and under D6 it must not gain one;
+- it is **partial by design** — `store_products_recipe_link_v1` links only where two of three signals agree, so a recipe someone produces today may have no product at all;
+- the kitchen-side `products.recipe_id` is **documented as wrong data by that same migration**, which refuses to use it as a signal and cites product 23 "81% Hazel Chocolate Spread" pointing at recipe 46 "Pickle carrot（Do chua）" — *"one bad row in four is not a signal"*.
+
+**Neither column supports asking what a batch can produce, and no amount of indexing makes them.** A5 has the full survey.
+
+**2. The batch output table.** One row per (batch, product, quantity) — D6's link table. `production_batches` gains no product column.
+
+**3. The UI for entering a split, with the one-line pre-fill.** D6: the general shape, with the single-product case pre-filled to one confirm. One code path.
+
+**4. The stock increment itself.** Per output line, at the configured output location, through `adjustStock`, one ledger row per product, guarded by a `stock_applied_at`-style stamp on `production_batches`.
+
+**THE GATE ON STEP 1, AND NOBODY MAY GUESS PAST IT.** `store_products_recipe_link_v1` deliberately left **36 ambiguous pairs** unlinked — one signal only, all SKU-only — **for Ash to confirm by hand.** Those 36 are a data question, not a schema question, and §29's own addendum already established the rule for exactly this situation: no automatic signal is trustworthy as a silent discriminator, migration tooling must surface each candidate for a person to confirm, and **must not act on its own judgement.** **Step 1 cannot be called done while they are open, and no session may resolve them by inference.** They are Ash's.
 
 **Prerequisite P2 — units.** `production_batches` records `batches_made` (a multiplier on `recipes.batch_size`) and `servings_made`. `store_products_recipe_link_v1` asserts one serving is one sellable unit, but only for the products it costed. Whether that holds generally is unestablished. Without it, "increment stock by N" has no N.
 
-**Once P1 and P2 exist**, the production work itself is small and follows the shape B1-B5 establishes: logging a batch calls `adjustStock` at `cfgValue('production.outputStoreId')` with a new reason `production_output`, `refTable='production_batches'`, `refId` the batch id, guarded by a `stock_applied_at`-style stamp on `production_batches`. §39's "closes off the request that asked for it" is a second link — `production_batches` has no column pointing at the `restock_orders` row that prompted it — and is part of the same separate brief.
+**The mechanics of step 4 are small and follow the shape B1-B5 establishes**: logging a batch calls `adjustStock` at `cfgValue('production.outputStoreId')` with a new reason `production_output`, `refTable='production_batches'`, `refId` the batch id, guarded by a `stock_applied_at`-style stamp on `production_batches`. **Under D6 that is once per output line rather than once per batch.** §39's "closes off the request that asked for it" is a second link — `production_batches` has no column pointing at the `restock_orders` row that prompted it — and is part of the same separate brief.
 
-**Nothing in B1-B5 depends on any of this.** The two can ship in either order.
+**PRODUCTION STAYS OUT OF SCOPE FOR THE STOCK-MOVEMENT MIGRATION. It is its own piece of work, with its own brief, sequenced after the two-step transfer ships.** Not because the two conflict — they do not, and B1-B5 depends on none of it — but because step 1 alone carries an open data question that is Ash's to answer, and attaching that to the transfer migration would hold a shippable change behind an unrelated decision. **The dependency runs one way only: production needs nothing from B1-B5 except the provenance change in B4, which ships as Step 1 of the migration regardless.**
 
 ---
 
@@ -420,7 +441,9 @@ The second query is the one that matters: an order at `prepared` or `delivered` 
 
 **Step 1b — the zero clamp comes out (D1), and it is GATED.** Deleting `Math.max(0, oldQty + deltaQty)` at `lib/inventory.js:1084` is one line, but it is **not a one-line change**, and it must not ship until all four of these land in the same step: **(a)** the clamp deletion itself; **(b)** the `d < 0` guard on `routes/retail-inventory.js:343`, or an explicit ruling that a kitchen delta may go negative; **(c)** a resolution of the PO-receiving downward correction (E2) — **which needs Ash and is the actual blocker, not an implementer's call** — together with the amendment to `docs/purchase-returns.md` item 3 that any resolution forces; and **(d)** the dashboard filter fix (E3), all four clauses, or a negative balance is true in the database and invisible on the screen built to surface exactly this. **Callers already carrying their own guard need nothing** (`retail-waste.js`, `retail-purchasing.js:366`). **The four channel ingest paths of E1 are explicitly NOT part of this step** and keep clamping; that is per-channel work with its own decisions.
 
-Ordering note: this can ship **before or after** Step 1, but **must precede Step 4** — the split transfer is where a dispatch first outlives its receipt by hours, and a clamp still in place at that point is A0.2 with a longer fuse.
+**What this step blocks, and what it does not.** E2 is unresolved and is the gate on **this step alone**. **Every other step — 0, 1, 2, 3, 4, 5, 6, 7 — proceeds without it**, because none of them touches `applyReceivedToStock`. **The two-step transfer can therefore ship complete while the clamp is still in place.** What it cannot do is ship honest: until 1b lands, a dispatch exceeding warehouse stock still invents units (A0.2), and under two steps it does so with the two halves hours apart, which is harder to spot rather than easier.
+
+Ordering note: this can ship **before or after** Step 1, and **preferably before Step 4** — the split transfer is where a dispatch first outlives its receipt by hours, and a clamp still in place at that point is A0.2 with a longer fuse. **That is a preference, not a dependency**: if E2 is still open when Step 4 is ready, Step 4 ships and 1b follows, rather than the migration waiting on a purchasing decision it has nothing to do with.
 
 **Step 2 — columns.** `addColumn()` for `qty_received`, **`auto_settled_at`** (D2, per B2 — the mark that keeps an assumed line distinguishable from a counted one), `goods_state`, `dispatched_at`, `received_confirmed_at`, plus `CREATE INDEX idx_restock_goods_state ON restock_orders(goods_state)`. Pure additions; no rebuild; safe on a populated table. **Every existing row backfills `auto_settled_at` as NULL, which is correct** — no historical line was ever auto-settled, and NULL is exactly the claim "this was not assumed by the system".
 
@@ -494,7 +517,9 @@ Both suites use `scripts/test-support/tenant-fixture.js` — `harness()`, `openT
 
 # PART C — OPEN QUESTIONS
 
-**STATUS, 2026-09-03: Q1, Q2, Q3, Q4 and Q6 are ANSWERED by Ash's rulings in PART D. Only Q5 is still open.** Each question's text is left exactly as written — the framing is what a later reader needs in order to understand why the answer went the way it did — with the answer marked at the end of it. **Q3's answer went against this document's own recommendation.**
+**STATUS, 2026-09-03: ALL SIX QUESTIONS ARE ANSWERED.** Q1, Q2, Q3, Q4 and Q6 by the first five rulings in PART D; **Q5 by D6**, which closed the last of them. Each question's text is left exactly as written — the framing is what a later reader needs in order to understand why the answer went the way it did — with the answer marked at the end of it. **Q3's answer went against this document's own recommendation.**
+
+**Nothing in PART C now gates implementation. One thing outside it does: E2**, the purchase-order receiving downward correction, which Ash is ruling on. **E2 blocks one migration step, not the migration** — B8 says exactly which.
 
 ## For Ash
 
@@ -504,7 +529,7 @@ Both suites use `scripts/test-support/tenant-fixture.js` — `harness()`, `openT
 
 **Q3 — should a dispatch exceeding warehouse stock be refused?** A0.2: today `adjustStock` clamps at zero and creates units. B4 proposes throwing instead, for the restock OUT half only. This is a behaviour change to a live path — a picker who could previously dispatch 50 from a shelf showing 20 would now be stopped. Whether that is a correct refusal or an obstruction depends on how much Roots trusts its warehouse counts, which is Ash's to judge. **Note that leaving it as-is means the migration knowingly preserves a path that invents stock.** **ANSWERED — D1, AGAINST THIS DOCUMENT'S RECOMMENDATION: not refused. A dispatch is never blocked by the record; the clamp is deleted and the balance goes negative. B4's `refuseNegative` proposal is withdrawn.**
 
-**Q5 — can one recipe make more than one sellable product?** A5/B6: a 200g and a 500g jar from one batch. The answer picks the shape of the recipe→product link, and getting it wrong means redoing it. Nothing in the survey answers it. **STILL OPEN — the only one. Ash has indicated one recipe can yield more than one sellable product, but the shape is not confirmed. If the split varies per batch, a batch must record which products it produced and how many of each — a link table, not a column — and the person logging the batch has to type the split, because Tacet cannot infer it. That keeps production wiring behind the recipe→product mapping (A5/B6) as prerequisite work, not part of this migration.**
+**Q5 — can one recipe make more than one sellable product?** A5/B6: a 200g and a 500g jar from one batch. The answer picks the shape of the recipe→product link, and getting it wrong means redoing it. Nothing in the survey answers it. **ANSWERED — D6: YES, and both happen at Roots.** So the model is the many-products shape, because it contains the one-product case: a single-product batch is a split with one line in it, and there are not two code paths. A batch records what came out of it per product — **a link table, not a column** — the split is **typed by the person logging the batch and never inferred**, and stock increments **per output line, one ledger row per product**. The one-product case is pre-filled to a single confirm, which is convenience, not inference. **This confirms production wiring is larger than a column addition and keeps it out of this migration** — B6.1 sequences it as its own brief, gated on a recipe→product mapping whose 36 ambiguous pairs are Ash's to resolve.
 
 ## For you and me
 
@@ -599,6 +624,24 @@ const good = Math.round(onHandQty(l) || 0);
 
 **Kept.** Q6 asked whether it still earns its place once B1 empties it of stock meaning. It does: **once it stops carrying stock meaning it still records a true, distinct fact — the driver finished his leg.** At Roots delivery and counting happen close enough together that the distinction barely shows; on a longer route, or a warehouse serving stores across town, they are genuinely different instants, and `delivered_at` is the only field that answers *"how long did this sit uncounted after it physically arrived"* — which under D2 is the exact question a repeat-offender signal is built on. **Document that its job changed** from a nominal stock gate to a pure logistics timestamp.
 
+## D6. A batch yields one product or several — Q5 ANSWERED, and the last open question closes
+
+**Ash: a batch can yield one product or several, and both happen at Roots.** So P1's third option wins outright.
+
+**The model is the many-products shape, because it contains the one-product case.** A single-product batch is a split with one line in it. **There are not two paths and must never be two paths** — a one-product branch beside a many-product branch is two implementations of one fact, and they drift.
+
+**A batch records what came out of it, per product.** One `production_batches` row, one or more **output lines**, each naming a product and a quantity. **That is a link table, not a column** on `production_batches`. **`recipes.output_product_id` and a `UNIQUE` index on `store_products.recipe_id` are both withdrawn** — each encodes "one recipe, at most one product", which Ash has just said is false.
+
+**`recipe_id` keeps its job and does not gain one.** It stays the record of **what was made from what**. It does **not** determine what the batch yielded — the output lines do. A recipe is the method; the split is an observation about one run of it, and the same recipe run twice may split differently.
+
+**The split is entered, never inferred.** Ash's answer is that it varies. **Tacet cannot compute it, cannot default it from the recipe, and must not guess.** Whoever logs the batch states it. This is the same discipline `qty_sent` and `qty_received` already keep: a person's number, typed by the person who can see the goods.
+
+**But the common case must not become a form.** Where a recipe has only ever produced one product, the log **pre-fills that product and asks only for the quantity — one confirm.** The multi-product case is the general shape; the single-product case is that shape with one line already filled. **Same code path, different amount of typing.** Note what the pre-fill is allowed to be: a convenience drawn from what this recipe has produced *before*, presented for confirmation and freely overridable. It is **not** an inference about what this batch produced, and it must never be committed unconfirmed — that would be the guess this ruling forbids, wearing a default's clothing.
+
+**Stock increments per output line**, at `cfgValue('production.outputStoreId')`, through the ledgered path, **one ledger row per product.** Not one row for the batch: each product's stock moved, so each product's movement is a ledger row, with `refTable='production_batches'` and `refId` the batch id so all lines of one batch are recoverable together (B4's provenance change is what makes that possible).
+
+**P2 (units) is untouched by this ruling and still stands.** The split says *which products and how many of each*; it does not say what one unit of a product is. `production_batches` still records `batches_made` and `servings_made`, and "one serving is one sellable unit" is still asserted only for the products `store_products_recipe_link_v1` costed. **A quantity per output line is a number the logger types, which sidesteps P2 for the batch itself** — but any later attempt to *check* that number against the recipe's yield still needs P2 settled.
+
 ---
 
 # PART E — DEBT AND CONSEQUENCES OF D1
@@ -619,9 +662,11 @@ const good = Math.round(onHandQty(l) || 0);
 
 **Making each channel honest is separate, per-channel work and is deliberately NOT in scope here.** Per-channel rather than one change because the right answer differs by path: an unattended daemon inferring loss from a scraped listing (`scripts/guanyi-daemon.js` — already burned once by a bad read that removed 1,863 units and needed `scripts/repair_guanyi_false_pickup.js` to undo) has a real argument for keeping a floor, while an operator confirming a pickup by hand has the same argument for losing one that the picker in D1 does. **Nothing here approves stripping the other four in one pass.**
 
-## E2. THE PO-RECEIVING DOWNWARD CORRECTION — STILL OPEN, AND IT BLOCKS D1
+## E2. THE PO-RECEIVING DOWNWARD CORRECTION — STILL OPEN, AND IT BLOCKS STEP 1b ONLY
 
 **Ash is ruling on this now. Do not act on it.**
+
+**Scope of the block, stated precisely because "blocks D1" has been read too widely.** E2 gates **Step 1b — the clamp deletion — and nothing else.** Steps 0, 1, 2, 3, 4, 5, 6 and 7 do not touch `applyReceivedToStock` and can all proceed while this is open. **The two-step transfer can ship in full with the clamp still in place**; what it cannot do is ship *honest*, because A0.2's invented units survive until Step 1b lands. B8 carries the same statement at the step itself.
 
 `routes/retail-purchasing.js:232` (`applyReceivedToStock`) calls `adjustStock` with `deltaQty: good − alreadyApplied`, so it **is** on the path the clamp governs, and lowering an arrived count on a re-save produces a negative delta. **The codebase has already ruled on this path twice, in writing, and both rulings assume the clamp stays.**
 
