@@ -2132,8 +2132,14 @@ const BX_MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'
 const BX_MON_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 function bxParseDate(str) {
   if (!str) return null;
-  // Accept ISO or SQLite "YYYY-MM-DD HH:MM:SS".
-  const d = new Date(String(str).replace(' ', 'T'));
+  // Accept ISO or SQLite "YYYY-MM-DD HH:MM:SS". The bare form is what the
+  // server stores — always UTC (CURRENT_TIMESTAMP, and the send/stop times it
+  // writes) — so it gets a 'Z' before parsing; without it the browser read it
+  // as local and every stored time showed eight hours early in GZ. Values with
+  // a 'T' come from the composer's own datetime-local inputs and are local by
+  // definition, so they are left alone.
+  const s = String(str);
+  const d = new Date(/^\d{4}-\d{2}-\d{2} /.test(s) ? s.replace(' ', 'T') + 'Z' : s);
   return isNaN(d.getTime()) ? null : d;
 }
 function bxMonthLabel(d) {
@@ -2231,26 +2237,74 @@ function bcScheduleMode() {
   }
   bxWhenChanged();
 }
+function bcExpireMode() {
+  const sel = $('#bc-expire-mode');
+  const at  = $('#bc-expire-at');
+  if (sel.value === 'at') {
+    at.style.display = '';
+    if (!at.value) {
+      // Default to a week after it goes out — long enough to be seen, short
+      // enough that the operator is choosing an end rather than accepting one.
+      const start = bxStartMs();
+      const d = new Date(start + 7 * 24 * 60 * 60 * 1000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      at.value = d.toISOString().slice(0, 16);
+    }
+  } else {
+    at.style.display = 'none';
+  }
+  bxWhenChanged();
+}
+// When the message actually goes out, in epoch ms — now, or the scheduled time.
+function bxStartMs() {
+  const mode = $('#bc-schedule-mode').value;
+  const at   = $('#bc-schedule-at').value;
+  if (mode === 'later' && at) {
+    const t = new Date(at).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return Date.now();
+}
+// The stop time the composer would send, in epoch ms, or null for "never".
+function bxExpireMs() {
+  const sel = $('#bc-expire-mode');
+  if (!sel || sel.value !== 'at') return null;
+  const raw = $('#bc-expire-at').value;
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  return isNaN(t) ? null : t;
+}
 function bxWhenChanged() {
   const mode = $('#bc-schedule-mode').value;
   const at = $('#bc-schedule-at').value;
   const sum = $('#bx-when-sum');
   if (sum) {
-    sum.textContent = (mode === 'later' && at)
+    const start = (mode === 'later' && at)
       ? bxFmtDateTime(at)
       : (mode === 'later' ? cuT('Pick a time', '选择时间') : cuT('Now', '立即'));
+    sum.textContent = start + bxUntilSuffix();
   }
   bxUpdateSendLabel();
   bxUpdateAudChip();
 }
+// " → until Jun 8, 10:00" for a capped broadcast; "" when it has no end.
+function bxUntilSuffix() {
+  const sel = $('#bc-expire-mode');
+  if (!sel || sel.value !== 'at') return '';
+  const raw = $('#bc-expire-at').value;
+  if (!raw) return ' · ' + cuT('pick an end time', '选择结束时间');
+  return ' → ' + cuT('until ', '至 ') + bxFmtDateTime(raw);
+}
 
 // ── composer reset ────────────────────────────────────────────────
 function bcResetComposer() {
-  ['bc-title-en','bc-title-cn','bc-body-en','bc-body-cn','bc-deeplink','bc-schedule-at'].forEach(k => { const el = $('#' + k); if (el) el.value = ''; });
+  ['bc-title-en','bc-title-cn','bc-body-en','bc-body-cn','bc-deeplink','bc-schedule-at','bc-expire-at'].forEach(k => { const el = $('#' + k); if (el) el.value = ''; });
   $('#bc-deeplink-preset').value = '';
   $('#bc-deeplink').style.display = 'none';
   $('#bc-schedule-mode').value = 'now';
   $('#bc-schedule-at').style.display = 'none';
+  $('#bc-expire-mode').value = 'never';
+  $('#bc-expire-at').style.display = 'none';
   $('#bc-send-status').textContent = '';
   if ($('#bc-activity')) $('#bc-activity').value = 'all';
   document.querySelectorAll('.bc-tier:checked, .bc-city:checked').forEach(el => { el.checked = false; });
@@ -2323,7 +2377,7 @@ function bxUpdateAudChip() {
   const mode = $('#bc-schedule-mode').value;
   const at = $('#bc-schedule-at').value;
   const when = (mode === 'later' && at) ? bxFmtDateTime(at) : (mode === 'later' ? cuT('scheduled', '定时') : cuT('now', '立即'));
-  chip.textContent = who + ' · ' + when;
+  chip.textContent = who + ' · ' + when + bxUntilSuffix();
 }
 async function loadBroadcastAudienceCount() {
   const aud = bcAudienceObj();
@@ -2471,13 +2525,22 @@ function bxFeedRow(b) {
     draft:     cuT('Draft', '草稿'),
     recalled:  cuT('Recalled', '已撤回'),
     cancelled: cuT('Cancelled', '已取消'),
+    expired:   cuT('Expired', '已过期'),
   };
+  // A sent broadcast whose end date has passed still reads 'sent' in the
+  // database — its copies are hidden, not deleted — so the row says "Ended"
+  // rather than leaving the operator to compare dates.
+  const endsAt = bxParseDate(b.expires_at);
+  const ended = !!endsAt && endsAt.getTime() <= Date.now();
   let pillText = PILL[status] || status;
+  let pillClass = status;
   if (status === 'scheduled' && b.scheduled_for) pillText = cuT('Scheduled', '排期') + ' · ' + bxFmtDateTime(b.scheduled_for);
-  const pill = `<span class="bx-pill ${status}"><span class="pd"></span>${escapeHtml(pillText)}</span>`;
+  if (status === 'sent' && ended) { pillText = cuT('Ended', '已结束') + ' · ' + bxFmtDate(b.expires_at); pillClass = 'expired'; }
+  const pill = `<span class="bx-pill ${pillClass}"><span class="pd"></span>${escapeHtml(pillText)}</span>`;
 
   const meta = [];
   if (status !== 'scheduled' && b.sent_at) meta.push(bxFmtDate(b.sent_at));
+  if (b.expires_at && !ended) meta.push(cuT('until ', '至 ') + bxFmtDateTime(b.expires_at));
   if (b.recipient_count) meta.push(cuT(b.recipient_count + (b.recipient_count === 1 ? ' person' : ' people'), b.recipient_count + ' 位'));
   if (b.audience && String(b.audience).charAt(0) === '{') {
     try {
@@ -2499,7 +2562,9 @@ function bxFeedRow(b) {
     actions = `<button class="bx-btn danger sm" onclick="recallBroadcast(${b.id}, 'scheduled')">${cuT('Cancel', '取消')}</button>`;
   } else {
     actions = `<button class="bx-btn ghost sm" onclick="bxSendAgain(${b.id})">${cuT('Send again', '再次发送')}</button>`;
-    if (status === 'sent') actions += `<button class="bx-btn danger sm" onclick="recallBroadcast(${b.id}, 'sent')">${cuT('Recall', '撤回')}</button>`;
+    // Nothing to pull back once the window has closed — the copies stopped
+    // showing on their own.
+    if (status === 'sent' && !ended) actions += `<button class="bx-btn danger sm" onclick="recallBroadcast(${b.id}, 'sent')">${cuT('Recall', '撤回')}</button>`;
   }
 
   return `
@@ -2536,10 +2601,15 @@ function bxSendAgain(id) {
   let aud = { activity: 'all', tiers: [], cities: [] };
   if (b.audience && String(b.audience).charAt(0) === '{') { try { aud = JSON.parse(b.audience); } catch (_) {} }
   bxApplyAudience(aud);
-  // Always start "send now" — re-sends shouldn't inherit an old schedule time.
+  // Always start "send now" — re-sends shouldn't inherit an old schedule time,
+  // and an end date copied from a window that has already run out would only
+  // have to be corrected before sending.
   $('#bc-schedule-mode').value = 'now';
   $('#bc-schedule-at').style.display = 'none';
   $('#bc-schedule-at').value = '';
+  $('#bc-expire-mode').value = 'never';
+  $('#bc-expire-at').style.display = 'none';
+  $('#bc-expire-at').value = '';
   bxWhenChanged();
   bxOpensChanged();
   loadBroadcastAudienceCount();
@@ -2555,6 +2625,8 @@ async function sendBroadcast() {
   const deeplink = $('#bc-deeplink').value.trim();
   const mode     = $('#bc-schedule-mode').value;
   const scheduledRaw = mode === 'later' ? $('#bc-schedule-at').value : '';
+  const expireMode   = $('#bc-expire-mode').value;
+  const expiresRaw   = expireMode === 'at' ? $('#bc-expire-at').value : '';
   const status = $('#bc-send-status');
 
   if (!title_en && !title_cn) {
@@ -2571,15 +2643,32 @@ async function sendBroadcast() {
     bxStep('when');
     return;
   }
+  if (expireMode === 'at' && !expiresRaw) {
+    status.innerHTML = '<span class="err">Pick a time to stop showing. · 请选择结束时间。</span>';
+    bxStep('when');
+    return;
+  }
+  // Caught here as well as on the server: an end at or before the send time
+  // would reach nobody, and the operator should hear that before confirming.
+  const expireMs = bxExpireMs();
+  if (expireMs != null && expireMs <= bxStartMs()) {
+    status.innerHTML = '<span class="err">It has to stop after it goes out. · 结束时间需晚于发送时间。</span>';
+    bxStep('when');
+    return;
+  }
   const audCount = bxAudCount();
   const verb = mode === 'later' ? 'Schedule' : 'Send';
-  if (!(await askConfirm({ title: `${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`, confirmLabel: `${verb} · ${verb === 'Schedule' ? '排期' : '发送'}` }))) return;
+  const until = expiresRaw
+    ? ` It stops showing on ${bxFmtDateTime(expiresRaw)}. · 将于 ${bxFmtDateTime(expiresRaw)} 停止显示。`
+    : '';
+  if (!(await askConfirm({ title: `${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？` + until, confirmLabel: `${verb} · ${verb === 'Schedule' ? '排期' : '发送'}` }))) return;
 
   const payload = { title_en, title_cn, body_en, body_cn, deeplink, audience: bcAudienceObj() };
   if (scheduledRaw) {
     // datetime-local has no timezone; treat as local time and convert.
     payload.scheduled_for = new Date(scheduledRaw).toISOString();
   }
+  if (expiresRaw) payload.expires_at = new Date(expiresRaw).toISOString();
   const btn = $('#bc-send-btn');
   btn.disabled = true;
   status.textContent = cuT('Sending…', '发送中…');

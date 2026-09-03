@@ -6290,6 +6290,7 @@
       .bx-pill.scheduled { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
       .bx-pill.recalled  { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
       .bx-pill.cancelled { background:var(--bg-elev-1);        color:var(--text-2); }
+      .bx-pill.expired   { background:var(--bg-elev-1);        color:var(--text-2); }
       .bx-pill.draft     { background:var(--bg-elev-1);        color:var(--text-2); }
 
       .bx-empty { padding:40px 20px; text-align:center; }
@@ -6381,6 +6382,13 @@
                 <option value="later">Schedule for later · 定时发送</option>
               </select>
               <input id="bc-schedule-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
+              <div class="bx-gap"></div>
+              <label class="bx-label">Stops showing · 停止显示 <span class="bx-opt">— when it should drop out of the inbox · 何时从收件箱消失</span></label>
+              <select id="bc-expire-mode" class="bx-sel" onchange="bcExpireMode()">
+                <option value="never">Never — stays until recalled · 一直保留,直到撤回</option>
+                <option value="at">On a date · 到期时间</option>
+              </select>
+              <input id="bc-expire-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
             </div>
           </div>
 

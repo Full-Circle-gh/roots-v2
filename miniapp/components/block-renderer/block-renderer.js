@@ -905,9 +905,11 @@ Component({
               const sold = p.flash.stock_sold || 0;
               const cap = p.flash.stock_limit;
               const pct = (cap != null && cap > 0) ? Math.min(100, Math.round((sold / cap) * 100)) : null;
-              const meter = L === 'cn'
-                ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
-                : (cap != null ? `${sold} of ${cap} sold` : `${sold} sold`);
+              const meter = sold > 0
+                ? (L === 'cn'
+                  ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
+                  : (cap != null ? `${sold} of ${cap} sold` : `${sold} sold`))
+                : '';
               return {
                 id: p.id,
                 image: absUrl(p.image_url) || p.image_data || '',
@@ -965,9 +967,11 @@ Component({
                 const sold = p.flash.stock_sold || 0;
                 const cap = p.flash.stock_limit;
                 const pctc = (cap != null && cap > 0) ? Math.min(100, Math.round((sold / cap) * 100)) : null;
-                const soldLbl = L === 'cn'
-                  ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
-                  : (cap != null ? `${sold} OF ${cap} SOLD` : `${sold} SOLD`);
+                const soldLbl = sold > 0
+                  ? (L === 'cn'
+                    ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
+                    : (cap != null ? `${sold} OF ${cap} SOLD` : `${sold} SOLD`))
+                  : '';
                 return {
                   id: p.id,
                   image: absUrl(p.image_url) || p.image_data || '',
