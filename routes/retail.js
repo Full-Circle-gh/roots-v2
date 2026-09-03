@@ -14835,35 +14835,31 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // Wallet top-ups — real money in, settled (status='success', paid_at set).
     //
     // retail_topup_transactions is not a top-up table; it is the WALLET LEDGER,
-    // and `payment_method` is its event-type discriminator. The affiliate payout
-    // paths credit and claw back through it deliberately, so a referrer's reward
-    // shows in wallet history beside their real top-ups (see creditReferralReward
-    // / creditLifetimeCommission). Unfiltered, this stream read every one of those
-    // as money a customer had just put in — so a ¥20 referral bounty PAID OUT by
-    // the shop was reported to the operator as ¥20 of revenue IN, and the negative
-    // clawback rows quietly netted against the day's genuine top-ups.
+    // and `payment_method` is its event-type discriminator: affiliate rewards/
+    // clawbacks, admin adjustments, migrations, refund reversals and — the one
+    // that broke this feed — order_redeem (a customer SPENDING existing balance
+    // on an order) all live in the same table as genuine top-ups.
     //
-    // The six affiliate methods are excluded by name rather than the real tenders
-    // being listed by name, so a new payment provider keeps landing here by
-    // default and only a new AFFILIATE method needs adding to this list. Affiliate
-    // money now has its own stream below.
+    // A redeem row is negative and is paid_at-stamped at the moment the order
+    // was paid, not when the balance was ever added. Read unfiltered, this
+    // stream reported that spend back as a fresh "topped up ¥-N" event timed to
+    // the order, not the real top-up (which may have happened days earlier) —
+    // e.g. a customer who topped up yesterday and spent it on today's order
+    // showed as topping up *today*, for a negative amount.
     //
-    // NOT excluded, and deliberately left alone: 'admin_adjust', 'order_redeem',
-    // 'migration' and 'refund_reverse' are also not top-ups, and they have been
-    // counted here since this stream was written. That is a separate miscount with
-    // its own blast radius (the desktop dashboard reads the same rows) and is not
-    // this change's to make.
+    // Fixed the same way topupCashReceived() (above) defines a real top-up:
+    // an allowlist of actual money-in tenders, amount > 0. New payment
+    // providers must be added here to appear as top-ups — the safe default for
+    // an unlisted method is to NOT show up as one. Affiliate money has its own
+    // stream below.
     const topups = tdb().prepare(`
       SELECT t.id, t.customer_id, t.amount, t.paid_at,
              COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
         FROM retail_topup_transactions t
         LEFT JOIN retail_customers c ON c.id = t.customer_id
        WHERE t.status = 'success' AND t.paid_at IS NOT NULL AND t.paid_at >= ?
-         AND COALESCE(t.payment_method, '') NOT IN (
-           'referral_reward', 'referral_welcome', 'lifetime_commission',
-           'referral_clawback', 'referral_welcome_clawback',
-           'lifetime_commission_clawback'
-         )
+         AND t.amount > 0
+         AND t.payment_method IN ('wechat', 'alipay')
        ORDER BY t.paid_at DESC LIMIT ?
     `).all(sinceIso, limit);
     for (const r of topups) events.push({
