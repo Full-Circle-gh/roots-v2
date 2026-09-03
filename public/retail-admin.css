@@ -13243,12 +13243,52 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   /* ── ingredient / step lines ── */
   #tab-recipes-record .rcp-lines { display: flex; flex-direction: column; }
+
+  /* ── THE COLUMN HEADER ───────────────────────────────────────────────────
+     Five controls to a row and, until now, nothing naming any of them: a
+     number, a unit, a free-text box and a ¥ figure, left to be inferred from
+     whatever happened to be typed in them. The header names each track.
+
+     It STICKS, parked at the bottom edge of the sticky bar above it
+     (--rcp-headh, measured and written by onRecScroll() — the bar grows a line
+     when its miniature appears, so the offset can never be a constant). A
+     header that scrolls away is one you read once, and it is row 30, not row 1,
+     where you have forgotten which box is the note.
+
+     Same flex tracks as .rcp-line below, declared against the same widths so
+     the two cannot drift; the labels carry the 12px inset of the inputs they
+     sit over rather than aligning to the control's border.
+
+     z-index 3 keeps it UNDER the sticky bar (5) and the picker's result list
+     (.rcp-pick, also 5) — the only two things that may ever cover it — and
+     above the rows, which are static and pass behind its own background. */
+  #tab-recipes-record .rcp-lhead {
+    position: sticky; top: var(--rcp-headh, 0px); z-index: 3;
+    display: flex; align-items: center; gap: 10px; padding: 0 0 8px;
+    background: var(--td-surface, #fff); border-bottom: 1px solid var(--td-border);
+    font: 500 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--td-text2); }
+  /* letter-spacing and uppercase are a Latin small-caps idiom: 原料 uppercased
+     is 原料, and the tracking that suits QTY only loosens Han characters. The
+     labels are one language at a time (cuT), so the whole row switches. */
+  html[data-ui-lang="cn"] #tab-recipes-record .rcp-lhead {
+    letter-spacing: 0; text-transform: none; font-size: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-drag { flex: none; width: 17px; }
+  #tab-recipes-record .rcp-lhead .lh-name { flex: 1 1 auto; min-width: 0; }
+  #tab-recipes-record .rcp-lhead .lh-qty  { width: 90px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-unit { width: 70px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-note { width: 140px; flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-cost { width: 90px;  flex: none; text-align: right; }
+  #tab-recipes-record .rcp-lhead .lh-rm   { flex: none; width: 24px; }
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
   #tab-recipes-record .rcp-line.rcp-drop-before { box-shadow: inset 0 2px 0 var(--td-brass, #b08d57); }
   #tab-recipes-record .rcp-line.rcp-drop-after  { box-shadow: inset 0 -2px 0 var(--td-brass, #b08d57); }
-  #tab-recipes-record .rcp-line-drag { flex: none; cursor: grab; color: var(--td-text2);
+  /* Width fixed, not left to the glyph: .rcp-lhead's spacer above holds the
+     same 17px, and a header whose first track is a hair wider than the row's
+     shifts every label after it. */
+  #tab-recipes-record .rcp-line-drag { flex: none; width: 17px; cursor: grab; color: var(--td-text2);
     text-align: center; user-select: none; font-size: 13px; line-height: 1; padding: 4px 2px; }
   #tab-recipes-record .rcp-line-drag:active { cursor: grabbing; }
   #tab-recipes-record .rcp-line-name { flex: 1 1 auto; min-width: 0; }
@@ -13334,6 +13374,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
     #tab-recipes-record .rcp-line { flex-wrap: wrap; }
     #tab-recipes-record .rcp-line-note { width: 100%; order: 10; }
+    /* The note field drops to its own line here, so its column label would be
+       naming a track that is no longer there. The field keeps its own
+       placeholder, which is the same word. */
+    #tab-recipes-record .rcp-lhead .lh-note { display: none; }
   }
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -359,23 +359,40 @@ section('6. The miniature appears only once the real figures have gone');
 // VIEWPORT coordinates: the miniature belongs on screen exactly when the
 // summary card's bottom edge has passed above the bar's bottom edge. These
 // stubs hand it rects, which is what it actually reads.
-function scrollSandbox({ scrollTop, sumBottom, headBottom, sumHtml }) {
+function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, sumHtml }) {
   const figs = { hidden: true };
+  // offsetHeight as well as the rect: the bar's height is what the ingredient
+  // list's column header parks on, and onRecScroll publishes it as a custom
+  // property on the scroller. Stubbed to the bar's own bottom edge by default,
+  // which is what it is while pinned at top 0.
   const head = { getBoundingClientRect: () => ({ bottom: headBottom }), _cls: new Set(),
+    offsetHeight: headHeight === undefined ? headBottom : headHeight,
     classList: { toggle: (c, on) => { if (on) head._cls.add(c); else head._cls.delete(c); } } };
-  const sc = { scrollTop };
+  const sc = { scrollTop, _vars: {},
+    style: { setProperty: (k, v) => { sc._vars[k] = v; } } };
   const sum = { getBoundingClientRect: () => ({ bottom: sumBottom }),
     innerHTML: sumHtml === undefined ? '<div/>' : sumHtml };
   const sandbox = {
     document: { getElementById: (id) => ({ 'rcp-rec-scroll': sc, 'rcp-rechead': head, 'rcp-rec-stickyfigs': figs }[id] || null) },
     sumRoot: () => sum,
-    figs, head, console,
+    figs, head, sc, console,
   };
   vm.createContext(sandbox);
   vm.runInContext(extractFunction(RECIPES_JS, 'function onRecScroll('), sandbox);
   vm.runInContext('onRecScroll()', sandbox);
   return sandbox;
 }
+
+// The column header of the ingredient list is sticky and parks at the bottom
+// edge of this bar. It cannot know that offset for itself — the bar grows a
+// line when the miniature appears — so onRecScroll has to publish it on every
+// scroll, in both states.
+check('the bar publishes its height for the column header to park on', () => {
+  const rest = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126 });
+  assert.strictEqual(rest.sc._vars['--rcp-headh'], '126px');
+  const grown = scrollSandbox({ scrollTop: 320, sumBottom: 80, headBottom: 168, headHeight: 168 });
+  assert.strictEqual(grown.sc._vars['--rcp-headh'], '168px');
+});
 
 check('at the top of the page: no hairline, no miniature', () => {
   const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126 });

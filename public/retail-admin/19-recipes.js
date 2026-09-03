@@ -725,6 +725,11 @@
     const head = document.getElementById('rcp-rechead');
     if (!sc || !head) return;
     head.classList.toggle('stuck', sc.scrollTop > 2);
+    // The ingredient list's column header parks on this bar's bottom edge, and
+    // the bar changes height when its miniature appears — so the offset is
+    // measured here, on the same events, rather than written as a constant that
+    // would be wrong for one of the two states.
+    sc.style.setProperty('--rcp-headh', head.offsetHeight + 'px');
     const figs = document.getElementById('rcp-rec-stickyfigs');
     const sum = sumRoot();
     if (!figs) return;
@@ -1058,12 +1063,50 @@
       </div>`;
   }
 
+  // ── The column header ────────────────────────────────────────────────────
+  // EVERY PAIR HERE IS ALREADY LIVE — none is minted. Rule 4 of
+  // docs/tacet-delivery-vocabulary.md locks the Chinese half of anything this
+  // admin says ("never compose new Chinese; copy from these tables"), and a
+  // column header is not an exemption from it. Each label below is copied from
+  // a place that already names the same thing:
+  //   原料  — the Ingredients sub-tab, SUBTABS above.
+  //   数量  — the qty box's own placeholder in lineRow(), and 21-product-build
+  //           T_QTY on the same control.
+  //   单位  — 21-product-build T_UNIT, again on the same control.
+  //   备注  — the note box's own placeholder in lineRow().
+  //   成本  — the recipes list's own ¥ column header (recipeRow above), and
+  //           20-waste's, and 21-product-build T_COST.
+  // The English half is the ordinary singular of the live label, since each
+  // ROW is one ingredient; the Chinese is character-for-character the live
+  // string, which is what the rule actually locks.
+  //
+  // ONE LANGUAGE AT A TIME, like every other label on this screen: cuT()
+  // returns one half, and a header printing both would be the only bilingual
+  // chrome in the admin. Rendered only when there ARE lines — over the empty
+  // state it would be a header for nothing, and that state already says what
+  // is missing.
+  function lineHeadRow() {
+    // aria-hidden on the two spacer tracks: the grip and the remove button are
+    // controls carrying their own labels, and two empty header cells announced
+    // before every row is noise.
+    return `
+      <div class="rcp-lhead">
+        <span class="lh-drag" aria-hidden="true"></span>
+        <span class="lh-name">${esc(T('Ingredient', '原料'))}</span>
+        <span class="lh-qty">${esc(T('Qty', '数量'))}</span>
+        <span class="lh-unit">${esc(T('Unit', '单位'))}</span>
+        <span class="lh-note">${esc(T('Note', '备注'))}</span>
+        <span class="lh-cost">${esc(T('Cost', '成本'))}</span>
+        <span class="lh-rm" aria-hidden="true"></span>
+      </div>`;
+  }
+
   function ingredientsTab() {
     const lines = _lines.map(lineRow).join('') || `<div class="rcp-emptyline">${esc(T('No ingredients yet.', '暂无原料。'))}</div>`;
     return `
       <div class="rcp-card rcp-blk">
         <h3 class="rcp-blk-h">${esc(T('Ingredient lines', '原料明细'))}</h3>
-        <div class="rcp-lines" id="rcp-lines">${lines}</div>
+        <div class="rcp-lines" id="rcp-lines">${_lines.length ? lineHeadRow() : ''}${lines}</div>
         <div class="rcp-pickwrap">
           <input class="rcp-input" id="rcp-pick-q" placeholder="${esc(T('Search materials to add…', '搜索要添加的物料…'))}"
                  oninput="rcpPickSearch(this.value)" autocomplete="off">
