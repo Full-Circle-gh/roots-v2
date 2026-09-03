@@ -174,35 +174,50 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 // Resolve the warehouse (source) retail_stores.id — the location goods
 // ship OUT of. Preference: explicit setting → a warehouse-role user's
 // bound store → the store holding the most stock. null if undeterminable.
-function _resolveWarehouseStoreId() {
-  // (1) optional explicit override, for a future multi-warehouse world.
-  // NOTE: there is no `settings` table in this schema — nothing creates one,
-  // and this is its only reader in the repo — so this lookup always throws
-  // "no such table" and falls through to (2). That was already true on the
-  // shared handle; moving it to tdb() keeps it exactly as dead, but on the
-  // right connection for when the table does arrive (it would be data-plane:
-  // a warehouse id is a tenant's retail_stores id, not a global one).
+// ONE READ OF ONE SETTING. The three-tier guess this replaces is recorded in
+// docs/tacet-stock-movement-schema.md A4/B7, and each tier is dropped for its
+// own reason:
+//
+//   Tier 1 read `SELECT value FROM settings` — a table that does not exist in
+//   this schema, is created by nothing, and had no writer anywhere in the
+//   repository. The read always threw and always fell through, so the "explicit
+//   override" never overrode anything. This IS that tier, on a table that is
+//   real and a key something can write.
+//
+//   Tier 2 took a warehouse-role user's bound store off control-plane `users`
+//   and used it as a tenant `retail_stores.id` — a cross-plane reference the
+//   file's own comment already flagged.
+//
+//   Tier 3 picked whichever active store held the most stock. The day a second
+//   warehouse exists it silently picks whichever happens to be fuller, and
+//   nothing on any screen says a guess was made. It is also wrong BEFORE that
+//   day: a store that has just taken a large delivery can outweigh the warehouse.
+//   Guessing the source of a stock movement is worse than refusing to move it.
+//
+// UNSET RETURNS NULL AND THE CALLER REFUSES, naming the setting. That is the
+// intended behaviour, not a gap: no guess is better than a wrong one.
+//
+// THE READ IS ON tdb(), THE TENANT HANDLE, AND THAT IS THE WHOLE POINT.
+// `storefront_config` is data-plane (absent from lib/tenant-db.js's
+// CONTROL_PLANE_TABLES), so it is cloned per tenant and each tenant carries its
+// own warehouse. A read on the shared handle would hand EVERY tenant Roots'
+// warehouse and move their stock at a location they do not own — the same class
+// of bug as the :333 stamp, which is why assertion 19 of the test plan exists.
+//
+// `cfgValue` in routes/retail.js is not exported, so this is its four-line twin
+// rather than a require that would close a cycle (retail.js requires this file's
+// siblings). Same table, same tdb(), same JSON shape.
+function _cfgWarehouseStoreId() {
   try {
-    const s = tdb().prepare("SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'").get();
-    const id = s && parseInt(s.value, 10);
-    if (id) return id;
-  } catch { /* no settings table / row — fall through */ }
-  // (2) the store a warehouse-role user is assigned to. `users` is
-  // control-plane, so this one genuinely stays on the shared handle — but the
-  // retail_store_id it returns is a TENANT retail_stores id. Pre-existing
-  // cross-plane reference; not changed here.
-  const wu = db.prepare(`
-    SELECT retail_store_id FROM users
-     WHERE role = 'warehouse' AND retail_store_id IS NOT NULL
-     ORDER BY id LIMIT 1`).get();
-  if (wu?.retail_store_id) return wu.retail_store_id;
-  // (3) fallback: whichever active store carries the most on-hand stock.
-  const top = tdb().prepare(`
-    SELECT rss.store_id AS id, SUM(rss.physical_qty) AS q
-      FROM retail_store_stock rss
-      JOIN retail_stores s ON s.id = rss.store_id AND COALESCE(s.is_active,1) = 1
-     GROUP BY rss.store_id ORDER BY q DESC LIMIT 1`).get();
-  return top?.id || null;
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    if (!row) return null;
+    const id = parseInt(JSON.parse(row.value_json), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }   // table absent on an older tenant file, or bad JSON
+}
+
+function _resolveWarehouseStoreId() {
+  return _cfgWarehouseStoreId();
 }
 
 // Resolve the receiving (destination) retail_stores.id. Never returns the
@@ -291,94 +306,216 @@ function _checkTransferIds(items, conn = tdb()) {
 //   { ok: false, error: 'message' }    — nothing moved, nothing stamped, retryable
 // Never throws. Idempotent via stock_applied_at, which is now only ever set on
 // a transfer that fully applied.
-function _applyRestockTransfer(orderId, actorUser) {
-  // Captured ONCE, up front, and used for every read and write in this
-  // function — the order row, the lines, the catalogue check, the transaction
-  // boundary and the stock_applied_at stamp. adjustStock resolves the same
-  // connection through tdb(), so the outer boundary and the inner writes are
-  // provably on one handle whatever tenant scope we run in.
+// Everything both halves need, resolved once and identically: the order, the
+// two locations and the connection every read and write runs on.
+//
+// `conn` is captured ONCE and used for the order row, the lines, the catalogue
+// check, the transaction boundary and the stamps. adjustStock resolves the same
+// connection through tdb(), so the outer boundary and the inner writes are
+// provably on one handle whatever tenant scope we run in. The bug this shape
+// prevents is on record: the stamp used to be written through the shared global
+// `db` from inside a transaction opened on the tenant handle, so for any
+// non-Roots tenant it landed in a different database file, matched zero rows,
+// reported success, and left the idempotency guard permanently disengaged.
+//
+// Returns { ok: false, error } — caller returns it verbatim
+//      or { skipped: 'reason' } — nothing to do, correctly
+//      or { conn, o, label, warehouseStoreId, destStoreId }
+function _transferContext(orderId) {
   const conn = tdb();
   const o = conn.prepare('SELECT * FROM restock_orders WHERE id = ?').get(orderId);
   if (!o) return { ok: false, error: 'That restock order no longer exists. No stock was moved.' };
   // Kitchen direction uses ingredient inventory, not per-store retail stock.
-  if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return { ok: true, skipped: 'kitchen_direction' };
-  // Idempotency — never move stock twice for the same order.
-  if (o.stock_applied_at) return { ok: true, skipped: 'already_applied' };
+  if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return { skipped: 'kitchen_direction' };
 
   const label = o.rs_number || ('RS#' + o.id);
   const warehouseStoreId = _resolveWarehouseStoreId();
-  const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
-  if (!warehouseStoreId || !destStoreId || warehouseStoreId === destStoreId) {
-    console.warn(`[restock-transfer] ${label}: cannot resolve source/dest ` +
-      `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
-    return { ok: false, error: 'Could not work out which location the goods leave from and which they arrive at, so no stock was moved. Set the warehouse and the receiving store, then try again.' };
+  // NAME THE SETTING. This is the refusal that replaces the most-stock guess,
+  // and a message saying only "could not work out the locations" would send an
+  // operator looking for a broken order instead of an unset setting.
+  if (!warehouseStoreId) {
+    console.warn(`[restock-transfer] ${label}: stock.warehouseStoreId is not set — stock not moved`);
+    return {
+      ok: false,
+      error: 'No stock was moved because this business has not said which location is its warehouse. Set stock.warehouseStoreId to the warehouse\'s location id, then try again.',
+    };
   }
+  const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
+  if (!destStoreId || warehouseStoreId === destStoreId) {
+    console.warn(`[restock-transfer] ${label}: cannot resolve destination ` +
+      `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
+    return { ok: false, error: 'Could not work out which location the goods arrive at, so no stock was moved. Check the receiving store on this order, then try again.' };
+  }
+  return { conn, o, label, warehouseStoreId, destStoreId };
+}
 
-  const items = conn.prepare(`
+// ── OUT half — the warehouse's shelf, at dispatch ──────────────────────────
+//
+// Fires when the warehouse packs the order (status → 'prepared', where the whole
+// movement used to fire). Moves the SENT quantity out of the warehouse and puts
+// it nowhere: between this and the receipt the units are IN TRANSIT, belonging
+// to neither location, derived from the order rather than stored anywhere.
+//
+// All or nothing. Every line's decrement, every ledger row and the
+// `dispatched_at`/`goods_state` stamp share ONE transaction on `conn`.
+// adjustStock opens its own transaction per call and better-sqlite3 nests those
+// as savepoints, so a throw anywhere — including a ledger insert that cannot be
+// written — unwinds the whole dispatch and leaves it retryable.
+//
+// Never throws. Idempotent on `dispatched_at`, which is only ever set by a
+// dispatch that fully applied.
+function _applyDispatch(orderId, actorUser) {
+  const ctx = _transferContext(orderId);
+  if (ctx.ok === false || ctx.skipped) return ctx.skipped ? { ok: true, skipped: ctx.skipped } : ctx;
+  const { conn, o, label, warehouseStoreId, destStoreId } = ctx;
+
+  // Idempotency, three ways, because they answer three different questions.
+  if (o.dispatched_at) return { ok: true, skipped: 'already_dispatched' };
+  if (o.goods_state && o.goods_state !== 'none') return { ok: true, skipped: 'already_dispatched' };
+  // BELT AND BRACES FOR TENANT DATABASES. The goods_state backfill
+  // (restock_goods_state_backfill_v1) runs against the main database only —
+  // lib/tenant-db.js's reconcileTenantColumns adds the COLUMN to a tenant file
+  // and its DEFAULT, but never runs a main-database data migration. So a tenant
+  // whose orders moved stock under the old one-step model can carry
+  // stock_applied_at with goods_state 'none', and without this check a dispatch
+  // would move those units a second time.
+  if (o.stock_applied_at) return { ok: true, skipped: 'already_applied_old_model' };
+
+  const lines = conn.prepare(`
     SELECT product_id, product_name, qty_requested, qty_sent
       FROM restock_items
      WHERE restock_id = ?
        AND product_id IS NOT NULL
        AND COALESCE(qty_sent, qty_requested, 0) > 0
-  `).all(o.id);
-  const lines = items.filter(it => {
-    // Prefer qty_sent (what actually shipped); fall back to requested.
-    const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
-    return qty > 0;
-  });
+  `).all(o.id).filter(it => _sentQty(it) > 0);
   if (!lines.length) return { ok: true, skipped: 'no_lines' };
 
-  // Refuse the whole transfer if any line's product cannot be matched across
-  // the two catalogues — same all-or-nothing rule as a mid-transfer failure.
+  // Refuse the whole dispatch if any line's product cannot be matched across the
+  // two catalogues — same all-or-nothing rule as a mid-transfer failure.
   const problems = _checkTransferIds(lines, conn);
   if (problems.length) {
-    console.warn(`[restock-transfer] ${label}: refused — ${problems.length} line(s) failed the catalogue check`);
-    return {
-      ok: false,
-      error: 'No stock was moved, because some lines could not be matched to the store catalogue. ' + problems.join(' '),
-    };
+    console.warn(`[restock-dispatch] ${label}: refused — ${problems.length} line(s) failed the catalogue check`);
+    return { ok: false, error: 'No stock was moved, because some lines could not be matched to the store catalogue. ' + problems.join(' ') };
   }
 
-  // One transaction on the connection adjustStock uses (captured above).
   try {
     const moved = conn.transaction(() => {
       let n = 0;
       for (const it of lines) {
-        const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
-        // − out of the warehouse
         inventory.adjustStock({
-          storeId: warehouseStoreId, productId: it.product_id, deltaQty: -qty,
+          storeId: warehouseStoreId, productId: it.product_id, deltaQty: -_sentQty(it),
           actorUserId: actorUser?.id || null, actorLabel: 'restock',
           reason: 'restock_transfer_out', note: label,
+          // PROVENANCE — the ledger row now names the order that caused it, so
+          // "has the OUT half for this transfer already been written?" is a
+          // query rather than a string match on `note`. See lib/inventory.js.
+          refTable: 'restock_orders', refId: o.id,
         });
-        // + into the receiving store
+        n++;
+      }
+      conn.prepare(`UPDATE restock_orders
+                       SET goods_state = 'in_transit', dispatched_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`).run(o.id);
+      return n;
+    })();
+    console.log(`[restock-dispatch] ${label}: ${moved} line(s) left store ${warehouseStoreId} for ${destStoreId}`);
+    return { ok: true, moved };
+  } catch (e) {
+    console.error(`[restock-dispatch] ${label}: failed and rolled back —`, e.message);
+    return {
+      ok: false,
+      error: 'No stock was moved. The dispatch was stopped and everything was put back, so nothing has changed. Try again, and if it keeps failing tell whoever looks after the system: ' + e.message,
+    };
+  }
+}
+
+// What the warehouse actually sent. NULL qty_sent means "the warehouse did not
+// override", so the requested figure stands — the existing convention (A2), kept.
+function _sentQty(it) {
+  return (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
+}
+
+// ── IN half — the store's shelf, at confirmed receipt ──────────────────────
+//
+// WHAT THE STORE COUNTS IS WHAT THE STORE HOLDS (§39). The RECEIVED quantity
+// sets stock, never the dispatched one: a short delivery becomes 47 at the store
+// immediately, not 50. If the record preferred the warehouse's number to the
+// counter's, the shelf and the record would part company and the store would be
+// the one to find out.
+//
+// Short AND over are both accepted without blocking — no reason field, no
+// confirmation step. The discrepancy stays legible on the transfer (asked, sent,
+// counted are three columns on one row) and is the warehouse's to look at.
+//
+// EVERY LINE MUST BE COUNTED FIRST. A line still at NULL is one nobody has
+// looked at, and settling around it would silently write off whatever was in
+// that box. The caller reports how many remain.
+//
+// Never throws. Idempotent on `received_confirmed_at`, independently of the
+// outbound stamp — that independence is the whole point of two stamps.
+function _applyReceipt(orderId, actorUser) {
+  const ctx = _transferContext(orderId);
+  if (ctx.ok === false || ctx.skipped) return ctx.skipped ? { ok: true, skipped: ctx.skipped } : ctx;
+  const { conn, o, label, destStoreId } = ctx;
+
+  if (o.received_confirmed_at) return { ok: true, skipped: 'already_received' };
+  if (o.goods_state !== 'in_transit') {
+    return { ok: false, error: 'This transfer has not been dispatched yet, so there is nothing to receive. The warehouse marks it prepared when the goods leave.' };
+  }
+
+  const all = conn.prepare(`
+    SELECT id, product_id, product_name, qty_requested, qty_sent, qty_received
+      FROM restock_items
+     WHERE restock_id = ? AND product_id IS NOT NULL AND COALESCE(qty_sent, qty_requested, 0) > 0
+  `).all(o.id);
+  const uncounted = all.filter(it => it.qty_received == null);
+  if (uncounted.length) {
+    return {
+      ok: false, uncounted: uncounted.length, counted: all.length - uncounted.length, total: all.length,
+      error: `${uncounted.length} of ${all.length} lines have not been counted yet. Count every line, then confirm the receipt.`,
+    };
+  }
+
+  // The catalogue can drift between dispatch and receipt — hours apart now — so
+  // this runs on BOTH halves rather than once at dispatch.
+  const problems = _checkTransferIds(all, conn);
+  if (problems.length) {
+    console.warn(`[restock-receipt] ${label}: refused — ${problems.length} line(s) failed the catalogue check`);
+    return { ok: false, error: 'No stock was moved, because some lines could not be matched to the store catalogue. ' + problems.join(' ') };
+  }
+
+  try {
+    const moved = conn.transaction(() => {
+      let n = 0;
+      for (const it of all) {
+        const qty = Number(it.qty_received);
+        // A counted ZERO is a real observation and settles the line, but it moves
+        // nothing — the ledger records movements, and there is no movement to
+        // record. The discrepancy lives on the row (sent 12, counted 0), which is
+        // where a person reads it.
+        if (!(qty > 0)) continue;
         inventory.adjustStock({
           storeId: destStoreId, productId: it.product_id, deltaQty: qty,
           actorUserId: actorUser?.id || null, actorLabel: 'restock',
           reason: 'restock_transfer_in', note: label,
+          refTable: 'restock_orders', refId: o.id,
         });
         n++;
       }
-      // Inside the transaction, and only reached when every line applied.
-      // This MUST be `conn`, the handle the transaction was opened on. It used
-      // to be the shared global `db`, with a comment claiming the two were the
-      // same handle — true only for Roots, where tdb() returns mainDb. For any
-      // other tenant the stamp landed in a different database, outside this
-      // transaction, so a rollback left the order marked as applied while no
-      // stock had moved: the exact double-spend the idempotency guard exists
-      // to prevent.
-      conn.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
+      conn.prepare(`UPDATE restock_orders
+                       SET goods_state = 'settled', received_confirmed_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`).run(o.id);
       return n;
     })();
-    console.log(`[restock-transfer] ${label}: moved ${moved} line(s) store ${warehouseStoreId} → ${destStoreId}`);
+    console.log(`[restock-receipt] ${label}: ${moved} line(s) landed at store ${destStoreId}`);
     return { ok: true, moved };
   } catch (e) {
-    // Rolled back: no stock moved, stock_applied_at still empty, so the
-    // transfer can be run again once the cause is fixed.
-    console.error(`[restock-transfer] ${label}: failed and rolled back —`, e.message);
+    // Rolled back: no stock moved AND no stamp, so the order stays in_transit
+    // and the receipt can be retried once the cause is fixed.
+    console.error(`[restock-receipt] ${label}: failed and rolled back —`, e.message);
     return {
       ok: false,
-      error: 'No stock was moved. The transfer was stopped and everything was put back, so nothing has changed. Try again, and if it keeps failing tell whoever looks after the system: ' + e.message,
+      error: 'No stock was moved. The receipt was stopped and everything was put back, so nothing has changed. Try again, and if it keeps failing tell whoever looks after the system: ' + e.message,
     };
   }
 }
@@ -706,15 +843,22 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
   tdb().prepare(`UPDATE restock_orders SET status = ?, ${tsCol} = ? WHERE id = ?`).run(status, now, order.id);
 
   logActivity(req.user.id, req.user.username, 'status_change', 'restock', order.id, { from: order.status, to: status }, req.ip);
-  // Auto inventory transfer — fires once per order when the warehouse
-  // packs it ('prepared' = stock physically leaves). Deducts what was
-  // sent from the warehouse and adds it to the receiving store, both in
-  // the real retail_store_stock. 'delivered' repeats the call as a safety
-  // net; stock_applied_at makes the second call a no-op, so it can never
-  // double-count.
+  // OUTBOUND HALF ONLY, and only at 'prepared' — the moment stock physically
+  // leaves the warehouse shelf. What arrives at the store is settled separately,
+  // by whoever counts it (PUT /api/restock/:id/receive).
+  //
+  // 'delivered' NO LONGER MOVES STOCK, and that is the one behavioural change to
+  // an existing transition. It used to re-run the whole transfer as a "safety
+  // net", made harmless only by the stamp. Under two steps that net is wrong
+  // rather than redundant: delivered means the driver handed the boxes over,
+  // which is not the same event as someone counting them, and at Roots the two
+  // are near-simultaneous while on a longer route they are not. The status keeps
+  // its meaning and its timestamp — it simply records the driver's leg ending
+  // (§39 ruling 5). The idempotency it used to provide now lives on the receipt
+  // endpoint's own guard.
   let transfer = null;
-  if (status === 'prepared' || status === 'delivered') {
-    transfer = _applyRestockTransfer(order.id, req.user);
+  if (status === 'prepared') {
+    transfer = _applyDispatch(order.id, req.user);
   }
   // Push fan-out — only for the cross-side transitions the other party
   // actually needs to act on. `received` is internal warehouse state.
@@ -736,6 +880,24 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
 router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox, (req, res) => {
   const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found · 项目未找到' });
+  // ONCE THE GOODS HAVE LEFT, THE LINES ARE FROZEN.
+  //
+  // In-transit is DERIVED from these rows rather than stored in a counter
+  // (docs/tacet-stock-movement-schema.md B3), which is what makes it impossible
+  // for the two to disagree — but it also means editing a line after dispatch
+  // retroactively changes a quantity that has already moved. The ledger's OUT
+  // rows would not follow, so the derived total and the ledger would part
+  // company with nothing to reconcile them.
+  //
+  // The honest fix is to refuse the edit, not to store a counter. A quantity
+  // that turns out wrong after the van left is a RECEIPT discrepancy — counted
+  // against sent — which is exactly what the receipt endpoint records.
+  const order = tdb().prepare('SELECT goods_state FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (order && order.goods_state && order.goods_state !== 'none') {
+    return res.status(409).json({
+      error: 'These goods have already left the warehouse, so the lines can no longer be changed. Record what actually arrived when you confirm the receipt.',
+    });
+  }
   const { is_checked, qty_sent } = req.body;
   tdb().prepare(`UPDATE restock_items SET
     is_checked = COALESCE(?, is_checked),
@@ -746,6 +908,127 @@ router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox,
       item.id
     );
   res.json({ success: true });
+});
+
+// ── Confirm receipt (store side) ───────────────────────────────────────────
+//
+// A NEW ENDPOINT RATHER THAN A SIXTH STATUS, and the reason is structural.
+// `STATUS_FLOW` is strictly ordered and `toIdx <= fromIdx` is refused, so a
+// `receipt_confirmed` value would mean a store confirming receipt BEFORE the
+// warehouse marked `delivered` gets rejected — and at Roots the driver marking
+// delivered and the store counting are genuinely concurrent. A strictly ordered
+// request lifecycle cannot express two lifecycles that interleave, which is why
+// the goods live in their own column and settle through their own door.
+//
+// Body: { counts: [{ item_id, qty_received }, …] }
+//
+// Counts are SAVED whether or not they complete the order, so a partial count
+// survives the person putting the phone down — that is the resumable count the
+// receiving screens are built around. Settlement happens only when every line
+// carries a figure.
+//
+// NULL AND ZERO: passing 0 counts the line as "none arrived". Omitting the line
+// leaves it NULL — nobody looked. The endpoint will not settle around a NULL.
+router.put('/api/restock/:id/receive', requireAuth, requireRestockOrInbox, (req, res) => {
+  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+
+  // THE STATE IS CHECKED BEFORE ANY COUNT IS WRITTEN, and the order matters.
+  // Writing first would let a count land on an order that never left the
+  // warehouse, and — worse — let a second call overwrite qty_received on an
+  // order already settled, silently changing a recorded count after the stock
+  // it justified had moved. The row and the ledger would then disagree with
+  // nothing to reconcile them.
+  if (order.received_confirmed_at || order.goods_state === 'settled') {
+    return res.json({ success: true, settled: true, already: true, counts_written: 0 });
+  }
+  if (order.goods_state !== 'in_transit') {
+    return res.status(409).json({
+      error: 'This transfer has not been dispatched yet, so there is nothing to receive. The warehouse marks it prepared when the goods leave.',
+      counts_written: 0,
+    });
+  }
+
+  const counts = Array.isArray(req.body && req.body.counts) ? req.body.counts : [];
+  // Written on the tenant handle, in one transaction, before anything is
+  // settled: a rejected settlement must still keep the numbers the counter
+  // typed, or they retype them.
+  const conn = tdb();
+  const setCount = conn.prepare('UPDATE restock_items SET qty_received = ? WHERE id = ? AND restock_id = ?');
+  let written = 0;
+  try {
+    conn.transaction(() => {
+      for (const c of counts) {
+        const itemId = Number(c && c.item_id);
+        const qty = Number(c && c.qty_received);
+        // A count is a number, including zero. Anything else is not a count and
+        // is skipped rather than written as 0 — which would be an observation
+        // nobody made.
+        if (!itemId || !Number.isFinite(qty) || qty < 0) continue;
+        written += setCount.run(qty, itemId, order.id).changes;
+      }
+    })();
+  } catch (e) {
+    return res.status(500).json({ error: 'Could not save the counts: ' + e.message });
+  }
+
+  const receipt = _applyReceipt(order.id, req.user);
+  if (receipt.ok === false) {
+    // An incomplete count is not an error the operator did — it is the ordinary
+    // state of a count in progress, so it comes back 200 with the tally. A real
+    // refusal (never dispatched, catalogue mismatch, rollback) is a 409.
+    if (receipt.uncounted) {
+      return res.json({
+        success: true, settled: false, counts_written: written,
+        counted: receipt.counted, total: receipt.total, message: receipt.error,
+      });
+    }
+    return res.status(409).json({ error: receipt.error, counts_written: written });
+  }
+  if (receipt.skipped === 'already_received') {
+    return res.json({ success: true, settled: true, already: true, counts_written: written });
+  }
+  // BROADCAST AS 'delivered', DELIBERATELY, AND IT IS A NAMING DEBT.
+  // _broadcastRestock's audience map is keyed on (direction, kind) and returns
+  // undefined — silently sending nothing — for a kind it does not know. A new
+  // 'received' kind would therefore have to land in the map AND in the front
+  // ends that act on it, and front-end work is out of scope this round. Sending
+  // 'delivered' reaches the warehouse_inbox audience, which is exactly who wants
+  // to know a transfer was counted. Rename it when the receipt screens ship.
+  _broadcastRestock(order.id, 'delivered', req.user.id);
+  res.json({ success: true, settled: true, counts_written: written, moved: receipt.moved || 0 });
+});
+
+// ── In-transit, DERIVED ────────────────────────────────────────────────────
+//
+// Never stored. A stored counter would be a third place a quantity lives,
+// incremented by one code path and decremented by another hours later, with a
+// crash between them leaving it wrong forever and nothing to reconcile it
+// against. This form CANNOT disagree with the rows it is derived from.
+//
+// No pseudo-location either: a `retail_stores` row called "In transit" would
+// appear in every store picker, every stock report and every channel
+// availability sweep, and `_resolveDestStoreId`'s "exactly one active store that
+// isn't the warehouse" rule would silently break. §39 says in-transit stock
+// belongs to NEITHER location, and a row in the locations table is a location.
+//
+// Cost is one indexed join over orders currently on a van — single digits at
+// Roots. `idx_restock_goods_state` serves the filter.
+function inTransitByProduct(conn = tdb()) {
+  try {
+    return conn.prepare(`
+      SELECT ri.product_id, SUM(COALESCE(ri.qty_sent, ri.qty_requested)) AS qty_in_transit
+        FROM restock_items ri
+        JOIN restock_orders ro ON ro.id = ri.restock_id
+       WHERE ro.goods_state = 'in_transit'
+         AND ri.product_id IS NOT NULL
+       GROUP BY ri.product_id
+    `).all();
+  } catch (e) { return []; }
+}
+
+router.get('/api/restock/in-transit', requireAuth, requireRestockOrInbox, (req, res) => {
+  res.json({ success: true, data: inTransitByProduct() });
 });
 
 // ── Archive / unarchive ────────────────────────────────────────────────────

@@ -860,6 +860,107 @@ addColumn('restock_orders', 'archived_at', 'DATETIME');
 // the same order (network retry, accidental re-tap, etc.).
 addColumn('restock_orders', 'stock_applied_at', 'DATETIME');
 
+// ── Two-step warehouse → store movement ────────────────────────────────────
+// docs/tacet-stock-movement-schema.md B1/B2, §39. The van run takes one to two
+// hours: stock leaves the warehouse at dispatch, exists IN TRANSIT belonging to
+// neither location, and arrives at the store on receipt. One transaction cannot
+// span that gap, so the single movement becomes two halves with two guards.
+//
+// A SECOND LIFECYCLE BESIDE `status`, NOT A REDEFINITION OF IT. `status`
+// (draft→sent→received→prepared→delivered) is the REQUEST's lifecycle and every
+// one of its values keeps its present meaning — `sent` is the store submitting a
+// request, `received` the warehouse acknowledging it, neither is about goods.
+// Both are consumed by front-end string equality in two large HTML files with no
+// tests over them, so redefining any of them would silently change what a picker
+// can do. `goods_state` is the GOODS' lifecycle, in its own column with a
+// DISJOINT vocabulary — no value of one can be mistaken for a value of the other.
+//
+//   none        nothing has left the warehouse. Every existing row starts here.
+//   in_transit  the OUT half is written. The units belong to no location.
+//   settled     the IN half is written, at what the store counted.
+addColumn('restock_orders', 'goods_state', "TEXT DEFAULT 'none'");
+// The two idempotency stamps that replace the single `stock_applied_at`. They
+// MUST be independent: the OUT half succeeding must never imply the IN half has
+// run, which is precisely what one stamp guarding a pair of writes did imply.
+addColumn('restock_orders', 'dispatched_at', 'DATETIME');
+addColumn('restock_orders', 'received_confirmed_at', 'DATETIME');
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_restock_goods_state ON restock_orders(goods_state)');
+} catch (e) { console.error('[index idx_restock_goods_state]', e); }
+
+// What the store actually counted on arrival, per line.
+//
+// NULL AND ZERO ARE DIFFERENT FACTS AND MUST NEVER BE CONFLATED:
+//   NULL = nobody has counted this line yet. The state every line is in between
+//          dispatch and receipt, and the state a resumed count leaves untouched
+//          lines in.
+//   0    = someone counted and found none. A real observation: nothing lands on
+//          the shelf and the whole dispatched quantity is a discrepancy.
+// Conflating them makes an uncounted delivery indistinguishable from one that
+// entirely failed to arrive.
+//
+// REAL, not INTEGER, to match `qty_sent` and `qty_requested` beside it
+// (schema.sql). The wider REAL/INTEGER split against retail_store_stock's
+// INTEGER columns is real, known, and separate work (§39 ruling 4); a column
+// disagreeing in type with the one it is compared against on the same line is
+// the worse defect.
+addColumn('restock_items', 'qty_received', 'REAL');
+// LOAD-BEARING, and not decorative bookkeeping. §39 ruling 2 settles that an
+// abandoned count auto-settles at the end of the trading day with uncounted
+// lines landing at the SENT quantity, marked unverified PERMANENTLY. But such a
+// line has `qty_received` WRITTEN — so without a separate mark it becomes
+// byte-identical to a line a person counted, the moment the sweep runs, and the
+// permanent mark the ruling is conditional on would exist only in prose.
+//
+// A timestamp rather than a flag because it also answers WHEN, which the
+// ruling's mandatory repeat-offender safeguard needs.
+//
+// The three line states then read cleanly:
+//   qty_received IS NULL                          → outstanding, nobody counted
+//   qty_received set, auto_settled_at IS NULL     → COUNTED BY A PERSON
+//   qty_received set, auto_settled_at NOT NULL    → assumed by the system
+// Only the middle one may ever be treated as the counter's number (§39's
+// precedence rule). Every existing row backfills NULL, which is the correct
+// claim: nothing historical was ever auto-settled.
+//
+// The sweep that writes it is deliberately NOT built yet — it is its own brief
+// once the transfer is proven. This ships the column and the semantics so the
+// sweep cannot later arrive without them.
+addColumn('restock_items', 'auto_settled_at', 'DATETIME');
+
+// Backfill `goods_state` from the old single stamp. `stock_applied_at` is READ
+// and never modified, so this is re-derivable after a revert.
+//
+// TWO DELIBERATE CHOICES, both of which look like omissions:
+//
+// 1. `qty_received` STAYS NULL even on a settled order. Nobody counted those
+//    lines — the old one-step model moved `qty_sent` and never asked. Writing
+//    qty_received = qty_sent would fabricate an observation, and every later
+//    discrepancy report would read "no gaps" for a period where a gap was not
+//    recordable. NULL on a settled order means "closed under the old model".
+//
+// 2. An order at `prepared`/`delivered` with `stock_applied_at` NULL becomes
+//    `none`, NOT `in_transit`. Its stock genuinely never moved — that is what
+//    the empty stamp means — so it has nothing on a van, and `none` leaves it
+//    dispatchable under the new model, which is the honest state.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_goods_state_backfill_v1');
+  if (!ran) {
+    db.exec('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    db.prepare(`UPDATE restock_orders
+                   SET goods_state = 'settled',
+                       dispatched_at = COALESCE(dispatched_at, stock_applied_at),
+                       received_confirmed_at = COALESCE(received_confirmed_at, stock_applied_at)
+                 WHERE stock_applied_at IS NOT NULL`).run();
+    db.prepare("UPDATE restock_orders SET goods_state = 'none' WHERE goods_state IS NULL").run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_goods_state_backfill_v1');
+  }
+} catch (e) { console.error('[migration restock_goods_state_backfill_v1]', e); }
+// Unguarded NULL sweep for rows that predate the column on a database where the
+// migration above already ran (a tenant file healed by reconcileTenantColumns
+// gets the column and its DEFAULT, but never this main-database migration).
+try { db.prepare("UPDATE restock_orders SET goods_state = 'none' WHERE goods_state IS NULL").run(); } catch {}
+
 // Per-store inventory. One row per (market, product). Incremented
 // automatically when a restock_orders row is confirmed delivered to
 // that market. Editable by admin via /api/markets/:id/stock for

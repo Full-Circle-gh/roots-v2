@@ -59,6 +59,11 @@ F.seedProduct(h.db, { id: 901, name: 'Tortilla', sku: 'P-901' });
 // on the wrong product's shelf.
 F.seedProduct(h.db, { id: 902, name: 'Falafel', sku: 'P-902', storeName: 'Pickles', storeSku: 'S-902' });
 
+// The warehouse is now a SETTING, not a guess. _resolveWarehouseStoreId reads
+// storefront_config via tdb(); unset means the transfer refuses and names it
+// (see the two-step suites). Seeded here so this suite exercises the movement.
+h.db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', ?)").run(String(WH));
+
 F.setShelf(h.db, WH, 900, 100); F.setShelf(h.db, WH, 901, 50); F.setShelf(h.db, WH, 902, 20);
 F.setShelf(h.db, SHOP, 900,  5); F.setShelf(h.db, SHOP, 901, 0); F.setShelf(h.db, SHOP, 902, 1);
 
@@ -102,34 +107,40 @@ async function call(method, p, body) {
   eq(prepared.status, 200, 'status → prepared');
   ok(!prepared.body.stock_transfer, 'no stock_transfer error returned');
 
+  // TWO STEPS NOW: 'prepared' is the OUTBOUND half only. The destination stays
+  // exactly as it was until somebody counts the delivery — the units are IN
+  // TRANSIT, belonging to neither location.
   eq(shelf(WH,   900), 90, 'source 900 decremented by qty_sent (100 − 10)');
-  eq(shelf(SHOP, 900), 15, 'destination 900 incremented by qty_sent (5 + 10)');
+  eq(shelf(SHOP, 900),  5, 'destination 900 UNCHANGED at dispatch — in transit, not arrived');
   eq(shelf(WH,   901), 20, 'source 901 decremented by qty_requested (50 − 30)');
-  eq(shelf(SHOP, 901), 30, 'destination 901 incremented by qty_requested (0 + 30)');
+  eq(shelf(SHOP, 901),  0, 'destination 901 UNCHANGED at dispatch');
 
   const lOut = ledger(WH, 900), lIn = ledger(SHOP, 900);
   eq(lOut.length, 1, 'one ledger row at source for 900');
-  eq(lIn.length,  1, 'one ledger row at destination for 900');
+  eq(lIn.length,  0, 'NO ledger row at destination yet — the IN half has not run');
   eq(lOut[0].delta, -10, 'source delta');
   eq(lOut[0].reason, 'restock_transfer_out', 'source reason');
   eq(lOut[0].balance_after, 90, 'source balance_after');
-  eq(lIn[0].delta, 10, 'destination delta');
-  eq(lIn[0].reason, 'restock_transfer_in', 'destination reason');
-  eq(lIn[0].balance_after, 15, 'destination balance_after');
   eq(lOut[0].actor_user_id, 7, 'ledger records the actor');
   const rs = h.db.prepare('SELECT rs_number FROM restock_orders WHERE id = ?').get(id).rs_number;
   eq(lOut[0].note, rs, 'ledger note carries the RS number');
 
-  const stampedAt = h.db.prepare('SELECT stock_applied_at FROM restock_orders WHERE id = ?').get(id).stock_applied_at;
-  ok(!!stampedAt, 'stock_applied_at is set');
+  const goods = h.db.prepare('SELECT goods_state, dispatched_at, stock_applied_at FROM restock_orders WHERE id = ?').get(id);
+  eq(goods.goods_state, 'in_transit', 'goods_state → in_transit at dispatch');
+  ok(!!goods.dispatched_at, 'dispatched_at stamped');
+  // The old single stamp is FROZEN: nothing writes it any more. It stays in the
+  // schema because it is the only record that a pre-migration order moved its
+  // stock under the one-step model.
+  ok(!goods.stock_applied_at, 'stock_applied_at is NOT written by the new path — it is historical only');
 
+  // 'delivered' means the driver handed the boxes over. It moves no stock.
   eq((await call('PUT', `/api/restock/${id}/status`, { status: 'delivered' })).status, 200, 'status → delivered');
-  eq(shelf(WH, 900),  90, 'source unchanged by the delivered retry');
-  eq(shelf(SHOP, 900), 15, 'destination unchanged by the delivered retry');
-  eq(ledger(WH, 900).length,  1, 'no extra source ledger row from the retry');
-  eq(ledger(SHOP, 900).length, 1, 'no extra destination ledger row from the retry');
-  eq(h.db.prepare('SELECT stock_applied_at FROM restock_orders WHERE id = ?').get(id).stock_applied_at,
-     stampedAt, 'stock_applied_at not re-stamped');
+  eq(shelf(WH, 900),  90, 'source unchanged by delivered');
+  eq(shelf(SHOP, 900),  5, 'destination unchanged by delivered — it is not a receipt');
+  eq(ledger(WH, 900).length,  1, 'no extra source ledger row from delivered');
+  eq(ledger(SHOP, 900).length, 0, 'delivered wrote no destination ledger row');
+  eq(h.db.prepare('SELECT goods_state FROM restock_orders WHERE id = ?').get(id).goods_state,
+     'in_transit', 'delivered leaves goods_state alone — still in transit until counted');
 
   section('Case 2 — the cross-catalogue guard refuses a SKU mismatch');
   const whBefore = shelf(WH, 902), shopBefore = shelf(SHOP, 902);
@@ -171,11 +182,15 @@ async function call(method, p, body) {
   const sentPush = notes.push.find(c => /New restock/.test(c.msg.title));
   ok(sentPush && /2 items/.test(sentPush.msg.body), 'push body carries the item summary');
 
-  section('Case 4 — a mid-transfer failure rolls back the stock AND the stamp');
-  // A trigger that aborts the SECOND line's inbound ledger row, so the first
+  section('Case 4 — a mid-dispatch failure rolls back the stock AND the stamp');
+  // A trigger that aborts the SECOND line's OUTBOUND ledger row, so the first
   // line's writes have already succeeded when the failure lands.
+  //
+  // RETARGETED FROM restock_transfer_in TO restock_transfer_out: under two steps
+  // the dispatch writes only OUT rows, so a trigger on the IN reason would never
+  // fire at 'prepared' and this case would silently stop testing anything.
   h.db.exec(`CREATE TRIGGER _boom BEFORE INSERT ON retail_stock_ledger
-             WHEN NEW.product_id = 901 AND NEW.reason = 'restock_transfer_in'
+             WHEN NEW.product_id = 901 AND NEW.reason = 'restock_transfer_out'
              BEGIN SELECT RAISE(ABORT, 'simulated ledger failure'); END`);
   const a = { wh900: shelf(WH, 900), sh900: shelf(SHOP, 900), wh901: shelf(WH, 901), sh901: shelf(SHOP, 901) };
   const boom = await call('POST', '/api/restock', {
@@ -194,13 +209,27 @@ async function call(method, p, body) {
   eq(shelf(SHOP, 900), a.sh900, 'line 1 destination rolled back');
   eq(shelf(WH, 901),   a.wh901, 'line 2 source rolled back');
   eq(shelf(SHOP, 901), a.sh901, 'line 2 destination rolled back');
-  ok(!h.db.prepare('SELECT stock_applied_at FROM restock_orders WHERE id = ?').get(boomId).stock_applied_at,
-     'stock_applied_at rolled back with the stock — the order stays retryable');
+  const boomRow = h.db.prepare('SELECT goods_state, dispatched_at FROM restock_orders WHERE id = ?').get(boomId);
+  eq(boomRow.goods_state, 'none', 'goods_state rolled back to none — nothing is on a van');
+  ok(!boomRow.dispatched_at, 'dispatched_at rolled back with the stock — the order is still dispatchable');
   h.db.exec('DROP TRIGGER _boom');
+
+  // ── A GAP THIS SUITE NOW DOCUMENTS RATHER THAN COVERS ────────────────────
+  // The old model retried a failed transfer at 'delivered', which re-ran the
+  // whole thing as a "safety net". 'delivered' no longer moves stock, and
+  // STATUS_FLOW refuses a backward move, so an order whose dispatch failed sits
+  // at status 'prepared' with goods_state 'none' and NO ROUTE REACHES
+  // _applyDispatch AGAIN. The function itself is perfectly retryable — its
+  // guards are on dispatched_at/goods_state, both of which rolled back — so
+  // what is missing is a door, not a capability.
+  //
+  // Deliberately NOT invented here: a re-dispatch endpoint is new API surface
+  // and needs a decision about who may press it. Recorded in the build report.
   eq((await call('PUT', `/api/restock/${boomId}/status`, { status: 'delivered' })).status, 200,
-     'retry at delivered succeeds once the cause is fixed');
-  eq(shelf(WH, 901),   a.wh901 - 7, 'retry moved line 2 out of source');
-  eq(shelf(SHOP, 901), a.sh901 + 7, 'retry moved line 2 into destination');
+     'delivered still accepted after a failed dispatch');
+  eq(shelf(WH, 901),   a.wh901, 'delivered does NOT retry the dispatch — it moves no stock');
+  eq(h.db.prepare('SELECT goods_state FROM restock_orders WHERE id = ?').get(boomId).goods_state,
+     'none', 'the failed dispatch is still unretried — no route reaches it (see report)');
 
   section('Case 5 — the handle split itself');
   const T = require(path.join(h.REPO, 'lib/tenant-db.js'));

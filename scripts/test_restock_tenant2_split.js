@@ -77,6 +77,8 @@ const setStatus = (id, status) => F.inTenant(T, 2, () =>
 const shelf  = (s, p) => F.shelf(t2, s, p);
 const ledgerCount = () => t2.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n;
 const stampOf = (id) => t2.prepare('SELECT stock_applied_at FROM restock_orders WHERE id = ?').get(id).stock_applied_at;
+const dispatchedOf = (id) => t2.prepare('SELECT dispatched_at FROM restock_orders WHERE id = ?').get(id).dispatched_at;
+const goodsOf = (id) => t2.prepare('SELECT goods_state FROM restock_orders WHERE id = ?').get(id).goods_state;
 
 // ── seed TENANT 2's data plane ──────────────────────────────────────────────
 // initTenantSchema clones structure only (control-plane tables excluded), so
@@ -85,6 +87,10 @@ const stampOf = (id) => t2.prepare('SELECT stock_applied_at FROM restock_orders 
 ok(t2 !== h.db, 'tenant 2 is a genuinely different database from the shared one');
 eq(t2.pragma('foreign_keys', { simple: true }), 1, 'foreign_keys is ON for the tenant connection');
 
+// TENANT 2'S OWN warehouse setting. storefront_config is data-plane, so this
+// row exists only in tenant 2's file — which is the point: a read on the shared
+// handle would hand this tenant Roots' warehouse.
+t2.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', '1')").run();
 t2.prepare("INSERT OR IGNORE INTO retail_stores (id,code,name_en,is_active) VALUES (1,'t2-wh','T2 Warehouse',1)").run();
 t2.prepare("INSERT OR IGNORE INTO retail_stores (id,code,name_en,is_active) VALUES (2,'t2-shop','T2 Shop',1)").run();
 F.seedProduct(t2, { id: 500, name: 'T2 Hummus',   sku: 'T2-500' });
@@ -130,41 +136,49 @@ t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku
   ok(out.body && out.body.success, 'status → prepared handled inside the tenant scope');
   ok(!out.body.stock_transfer, 'no stock_transfer error');
 
+  // Two steps: 'prepared' is the OUT half only, so the destination is untouched.
   eq(shelf(1, 500), 71, 'tenant 2 source 500 decremented (80 → 71)');
-  eq(shelf(2, 500), 12, 'tenant 2 destination 500 incremented (3 → 12)');
+  eq(shelf(2, 500),  3, 'tenant 2 destination 500 UNCHANGED at dispatch — in transit');
   eq(shelf(1, 501), 54, 'tenant 2 source 501 decremented (60 → 54)');
-  eq(shelf(2, 501),  6, 'tenant 2 destination 501 incremented (0 → 6)');
-  ok(!!stampOf(77), 'stock_applied_at stamped IN TENANT 2');          // ← fails pre-1588d18
+  eq(shelf(2, 501),  0, 'tenant 2 destination 501 UNCHANGED at dispatch');
+  ok(!!dispatchedOf(77), 'dispatched_at stamped IN TENANT 2');        // ← the 1588d18 assertion, on the new stamp
+  eq(goodsOf(77), 'in_transit', 'goods_state in_transit IN TENANT 2')
 
   eq(h.db.prepare('SELECT COUNT(*) AS n FROM restock_orders WHERE id = 77').get().n, 0,
      'the shared database has no copy of the order (nothing was cross-written)');
   eq(h.db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n, 0,
      'the shared database got no ledger rows');
 
-  section('Case B — the delivered retry is a real no-op');
-  // THE CONSEQUENCE of the stamp landing in the wrong database: the guard never
-  // engaged, so this safety-net call used to move the stock a second time.
+  section('Case B — delivered moves nothing at all');
+  // THE ORIGINAL CONSEQUENCE of the stamp landing in the wrong database: the
+  // guard never engaged, so this safety-net call moved the stock a second time.
+  // The safety net is now GONE rather than merely guarded — delivered records
+  // the driver's leg ending and touches no shelf — so these assertions hold for
+  // a stronger reason than they used to.
   const after = { wh: shelf(1, 500), sh: shelf(2, 500), ledger: ledgerCount() };
   const again = setStatus(77, 'delivered');
   ok(again.body && again.body.success, 'status → delivered accepted');
-  eq(shelf(1, 500), after.wh,     'source NOT decremented a second time by the delivered retry');   // ← fails pre-1588d18
-  eq(shelf(2, 500), after.sh,     'destination NOT incremented a second time by the delivered retry'); // ← fails pre-1588d18
-  eq(ledgerCount(), after.ledger, 'no duplicate ledger rows from the retry');                        // ← fails pre-1588d18
+  eq(shelf(1, 500), after.wh,     'source NOT decremented a second time by delivered');
+  eq(shelf(2, 500), after.sh,     'destination NOT incremented by delivered');
+  eq(ledgerCount(), after.ledger, 'no duplicate ledger rows from delivered');
+  eq(goodsOf(77), 'in_transit', 'delivered leaves the goods in transit — it is not a receipt')
 
   section('Case C — a mid-transfer failure rolls back the stamp too, in tenant 2');
   t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
               VALUES (78,'T2-RS-002','2026-09-02','received','T2 Shop', 7, 'warehouse','store')`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested)
               VALUES (78,501,'T2 Tortilla','T2-501',5)`).run();
+  // Retargeted to the OUT reason: the dispatch writes only OUT rows now.
   t2.exec(`CREATE TRIGGER _boom2 BEFORE INSERT ON retail_stock_ledger
-           WHEN NEW.product_id = 501 AND NEW.reason = 'restock_transfer_in'
+           WHEN NEW.product_id = 501 AND NEW.reason = 'restock_transfer_out'
            BEGIN SELECT RAISE(ABORT,'simulated'); END`);
   const b = { wh: shelf(1, 501), sh: shelf(2, 501) };
   const failed = setStatus(78, 'prepared');
   ok(failed.body.stock_transfer && failed.body.stock_transfer.ok === false, 'failure reported to the caller');
   eq(shelf(1, 501), b.wh, 'tenant 2 source rolled back');
   eq(shelf(2, 501), b.sh, 'tenant 2 destination rolled back');
-  ok(!stampOf(78), 'stock_applied_at rolled back WITH the stock — the order stays retryable');
+  ok(!dispatchedOf(78), 'dispatched_at rolled back WITH the stock — the order stays dispatchable');
+  eq(goodsOf(78), 'none', 'goods_state rolled back to none in tenant 2');
   t2.exec('DROP TRIGGER _boom2');
 
   section('Case E — routes/production.js writes to the tenant, not the shared db');
