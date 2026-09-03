@@ -41,7 +41,7 @@
         <text wx:if="{{c.priceWas}}" class="fsd-was">{{c.priceWas}}</text>
       </view>
       <view wx:if="{{c.meterPct !== null}}" class="fsd-meter"><view class="fsd-meter-bar" style="width:{{c.meterPct}}%"></view></view>
-      <view class="fsd-sold">{{c.soldLbl}}</view>
+      <view wx:if="{{c.soldLbl}}" class="fsd-sold">{{c.soldLbl}}</view>
     </view>
   </view>
 </template>
@@ -62,7 +62,7 @@
       <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
         <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
       </view>
-      <view class="fs-meter-lbl">{{item.meterLabel}}</view>
+      <view wx:if="{{item.meterLabel}}" class="fs-meter-lbl">{{item.meterLabel}}</view>
     </view>
   </view>
 </template>

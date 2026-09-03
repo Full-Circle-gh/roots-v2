@@ -2280,8 +2280,13 @@ function attachSoldCounts(rows) {
   if (!rows || !rows.length) return;
   const sb = getSocialConfig().sold_badge;
   // Feature disabled → zero out so the mini-app hides the "X SOLD" cap on
-  // every card without needing a republish.
-  if (!sb.enabled) { for (const r of rows) r.units_sold = 0; return; }
+  // every card without needing a republish. Also blanks the flash-sale
+  // strip's own "N sold" caption (real flash_sold, attached by
+  // flashsales.decorateProduct) — same toggle, same rule, for consistency.
+  if (!sb.enabled) {
+    for (const r of rows) { r.units_sold = 0; if (r.flash) r.flash.stock_sold = 0; }
+    return;
+  }
   const minUnits = Math.max(1, Number(sb.min_units) || 1);
   const boostR   = readBoostRange(sb);
   try {
@@ -2327,6 +2332,9 @@ function attachSoldCounts(rows) {
       }
       const display = real + base + Math.round(accrued);
       r.units_sold = display >= minUnits ? display : 0;
+      // Same min-units gate applied to the flash-sale strip's real
+      // flash_sold count (no baseline boost — it's a real order tally).
+      if (r.flash && (Number(r.flash.stock_sold) || 0) < minUnits) r.flash.stock_sold = 0;
     }
   } catch (e) {
     console.error('[sold-counts]', e.message);
@@ -2914,9 +2922,14 @@ router.get('/api/retail/flash-sales', (req, res) => {
       const kb = b.flash.state === 'upcoming' ? b.flash.starts_at : b.flash.ends_at;
       return new Date(ka).getTime() - new Date(kb).getTime();
     })
-    .slice(0, limit)
-    // Swap heavy inline base64 photos for streamed-image URLs (see shop-list).
-    .map(r => lazifyProductImage(r, baseUrl));
+    .slice(0, limit);
+  // Same "Show X SOLD badges" toggle/min-units gate the shop grid respects
+  // (routes/retail.js RETAIL_PRODUCT_LIST) — this endpoint has its own row
+  // set, so it needs its own call or the flash strip's "N sold" caption
+  // ignores the setting entirely.
+  attachSoldCounts(rows);
+  // Swap heavy inline base64 photos for streamed-image URLs (see shop-list).
+  rows.forEach(r => lazifyProductImage(r, baseUrl));
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { server_time_ms: now } });
 });

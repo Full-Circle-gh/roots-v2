@@ -1037,7 +1037,7 @@
     var endsLabel2 = CN() ? '距结束' : 'ENDS IN';
     function fsCard(p) {
       var d = cardData(p);
-      var meter = CN() ? (d.cap != null ? ('已抢 ' + d.sold + ' / ' + d.cap) : ('已抢 ' + d.sold)) : (d.cap != null ? (d.sold + ' of ' + d.cap + ' sold') : (d.sold + ' sold'));
+      var meter = d.sold > 0 ? (CN() ? (d.cap != null ? ('已抢 ' + d.sold + ' / ' + d.cap) : ('已抢 ' + d.sold)) : (d.cap != null ? (d.sold + ' of ' + d.cap + ' sold') : (d.sold + ' sold'))) : '';
       return ctaWrap('product:' + d.id, '<div class="sb-fs-card">' +
         '<div class="sb-fs-card-img">' + (d.image ? '<img class="sb-img-full" src="' + attr(d.image) + '" alt="">' : '') +
         (d.off > 0 ? '<div class="sb-fs-badge">-' + d.off + '%</div>' : '') + '</div>' +
@@ -1045,7 +1045,7 @@
         '<div class="sb-fs-card-prices"><span class="sb-fs-price-now" style="' + (flashAccent ? 'color:' + attr(flashAccent) : '') + '">' + escapeHtml(d.priceNow) + '</span>' +
         (d.priceWas ? '<span class="sb-fs-price-was">' + escapeHtml(d.priceWas) + '</span>' : '') + '</div>' +
         (d.meterPct !== null ? '<div class="sb-fs-meter"><div class="sb-fs-meter-bar" style="width:' + d.meterPct + '%;' + (flashAccent ? 'background:' + attr(flashAccent) : '') + '"></div></div>' : '') +
-        '<div class="sb-fs-meter-lbl">' + escapeHtml(meter) + '</div></div></div>');
+        (meter ? '<div class="sb-fs-meter-lbl">' + escapeHtml(meter) + '</div>' : '') + '</div></div>');
     }
     if (view === 'hero' || view === 'banner') {
       var clockHero = (view === 'hero' || view === 'banner') ? '<div class="sb-fh-ends">' + escapeHtml(endsLabel2) + '</div>' +
