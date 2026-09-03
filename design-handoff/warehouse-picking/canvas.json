@@ -1,22 +1,114 @@
 {
   "pages": [
-    { "id": "page-1", "name": "Pick flow" },
-    { "id": "page-2", "name": "Row directions" }
+    {
+      "id": "page-1",
+      "name": "Pick flow"
+    },
+    {
+      "id": "page-2",
+      "name": "Row directions"
+    }
   ],
   "artboards": [
-    { "file": "Main.dc.html",      "page": "page-1", "title": "1 · Pick list (EN)",      "x": 0,    "y": 0,    "w": 390, "h": 844 },
-    { "file": "MainZH.dc.html",    "page": "page-1", "title": "1 · Pick list (中文)",    "x": 470,  "y": 0,    "w": 390, "h": 844 },
-    { "file": "Filter.dc.html",    "page": "page-1", "title": "1b · Filtered to Tianhe", "x": 940,  "y": 0,    "w": 390, "h": 844 },
-    { "file": "Resume.dc.html",    "page": "page-1", "title": "4 · Back after a break",  "x": 1410, "y": 0,    "w": 390, "h": 844 },
-    { "file": "RowStates.dc.html", "page": "page-1", "title": "2 · One line, 3 states",  "x": 1880, "y": 0,    "w": 390, "h": 640 },
-
-    { "file": "ShortPick.dc.html", "page": "page-1", "title": "3 · Short pick",          "x": 0,    "y": 964,  "w": 390, "h": 844 },
-    { "file": "Allocate.dc.html",  "page": "page-1", "title": "3b · Assigning a short",  "x": 470,  "y": 964,  "w": 390, "h": 1210 },
-    { "file": "Scan.dc.html",      "page": "page-1", "title": "Scan · jumped to line",   "x": 940,  "y": 964,  "w": 390, "h": 844 },
-    { "file": "Dispatch.dc.html",  "page": "page-1", "title": "5 · Ready to dispatch",   "x": 1410, "y": 964,  "w": 390, "h": 844 },
-    { "file": "Empty.dc.html",     "page": "page-1", "title": "6 · Nothing to pick",     "x": 1880, "y": 964,  "w": 390, "h": 844 },
-
-    { "file": "OptionB.dc.html",   "page": "page-2", "title": "Option B · not chosen",   "x": 0,    "y": 0,    "w": 390, "h": 844 }
+    {
+      "file": "Main.dc.html",
+      "page": "page-1",
+      "title": "1 · Pick list (EN)",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "MainZH.dc.html",
+      "page": "page-1",
+      "title": "1 · Pick list (中文)",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Filter.dc.html",
+      "page": "page-1",
+      "title": "1b · Filtered to Tianhe",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Resume.dc.html",
+      "page": "page-1",
+      "title": "4 · Back after a break",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "RowStates.dc.html",
+      "page": "page-1",
+      "title": "2 · One line, 3 states",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 640
+    },
+    {
+      "file": "ShortPick.dc.html",
+      "page": "page-1",
+      "title": "3 · Short pick",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Allocate.dc.html",
+      "page": "page-1",
+      "title": "3b · Assigning a short",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 1210
+    },
+    {
+      "file": "Scan.dc.html",
+      "page": "page-1",
+      "title": "Scan · jumped to line",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Dispatch.dc.html",
+      "page": "page-1",
+      "title": "5 · Ready to dispatch",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Empty.dc.html",
+      "page": "page-1",
+      "title": "6 · Nothing to pick",
+      "x": 1880,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "OptionB.dc.html",
+      "page": "page-2",
+      "title": "Option B · not chosen",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    }
   ],
   "annotations": [
     {
@@ -25,7 +117,7 @@
       "x": 0,
       "y": -230,
       "w": 860,
-      "text": "The ledger column\n\nThe total locks to one x-position at 34px/700 tabular, so the quantities read as a column you run your eye down rather than a value you hunt for on each card. Eight lines a screen against the split card's four: a 14-line run is under two screenfuls instead of four.\n\nThe shop split drops to a 13px caption. That is the price of the density, and it is the right price — the total is what his hands do, because he walks the freezer once and pulls 65 in one grab.\n\nFill and edge say whether a line is done: white = to pull, cream + Sage edge = settled. Contrast says whether it still wants him: Graphite means resolved, full Ink means it needs attention. That second signal does more work at eight lines than it did at four."
+      "text": "The ledger column\n\nThe total locks to one x-position at 34px/700 tabular, so the quantities read as a column you run your eye down rather than a value you hunt for on each card. Eight lines a screen against the split card's four: a 14-line run is under two screenfuls instead of four.\n\nThe shop split drops to a 13px caption. That is the price of the density, and it is the right price — the total is what his hands do, because he walks the freezer once and pulls 65 in one grab.\n\nFill and edge say whether a line is done: white = to pull, cream + Sage edge = settled. Contrast says whether it still wants him: Graphite means resolved, full Ink means it needs attention. That second signal does more work at eight lines than it did at four — which is why the tick recedes too."
     },
     {
       "id": "note-short",
@@ -41,7 +133,7 @@
       "x": 0,
       "y": 1900,
       "w": 860,
-      "text": "The picker assigns every short line himself\n\nTacet pre-fills nothing. Both fields open blank — blank, not zero, because zero is an amount he chose and blank is an amount he has not. Each carries what that shop asked for as a one-tap shortcut, and tapping an empty field takes the whole remainder; neither happens on its own.\n\nThe remainder counts down and is the entire explanation for the inactive Save. There is no error state, no warning and nothing that tells him off. Over-assigning shows a negative rather than silently clamping, because capping his last entry would leave a number on screen he never typed.\n\nA full pick is untouched by any of this: he found everything, each shop gets what it asked for, no extra step."
+      "text": "The picker assigns every short line himself\n\nTacet pre-fills nothing. Every field opens blank — blank, not zero, because zero is an amount he chose and blank is an amount he has not. Each carries what that shop asked for as a one-tap shortcut, and tapping an empty field takes the whole remainder; neither happens on its own.\n\nThe remainder counts down and is the entire explanation for the inactive Save. There is no error state, no warning and nothing that tells him off. Over-assigning shows a negative rather than silently clamping, because capping his last entry would leave a number on screen he never typed.\n\nA full pick is untouched by any of this: he found everything, each shop gets what it asked for, no extra step."
     },
     {
       "id": "note-scan",
@@ -65,8 +157,19 @@
       "x": 0,
       "y": -190,
       "w": 400,
-      "text": "What was compared\n\nThree row treatments were drawn. The ledger column won on density and is built out on the Pick flow page; its sketch is gone because Main is now the real thing.\n\nB is kept here as the record of what density cost. It reads better — the total leads and each shop's number is 19px rather than 13 — but four lines a screen makes a 14-line freezer run four screenfuls.\n\nC (two boxes, no total) was deleted outright. It only worked because Roots has exactly two shops, and a merchant with five is an ordinary customer."
+      "text": "What was compared\n\nThree row treatments were drawn, plus a tick comparison on the winner. The ledger column won on density and is built out on the Pick flow page; its sketch is gone because Main is now the real thing.\n\nB is kept here as the record of what density cost. It reads better — the total leads and each shop's number is 19px rather than 13 — but four lines a screen makes a 14-line freezer run four screenfuls.\n\nC (two boxes, no total) was deleted outright. It only worked because Roots has exactly two shops, and a merchant with five is an ordinary customer."
+    },
+    {
+      "id": "note-tick",
+      "page": "page-1",
+      "x": 1410,
+      "y": -230,
+      "w": 400,
+      "text": "The tick recedes as well\n\nDrawn both ways at eight lines and compared. A solid Ink tick made three completed rows the heaviest mass on the screen, so the darkest thing on the list was the work already finished — the contrast rule inverted. The short line's Ink numbers had to compete with three dark blocks and lost.\n\nWith the container dropped and a Graphite check left in its place, the only Ink in the settled band is the shortfall, and it wins the glance outright.\n\nThe tick is not the state marker — cream fill and the Sage edge already are. It is a control, and on a resolved line the thing it controls is undo. A quieter undo is the right undo."
     }
   ],
-  "launch": { "view": "canvas", "page": "page-1" }
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
 }
