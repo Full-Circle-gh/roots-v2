@@ -3826,6 +3826,17 @@ function screenWaste(){
    `waste`, so the default grant handed a waste-only operator an empty list and
    no explanation (hazard H13). Calling /products here would rebuild the bug on
    a new surface. */
+/* This is where the debounced fetch behind wstSearch lands — 180ms plus
+   round-trip after the operator's last keystroke, so #mWstQ is almost always
+   still focused when it does. Repaint through wstRepaintPicks(), not a bare
+   render(): render() replaces the WHOLE app in one innerHTML, which the
+   browser can only do by tearing every node down first, #mWstQ included, and
+   a focused element removed from the document is blurred by spec. Recreating
+   it and calling .focus() afterward does not reliably reopen a soft keyboard
+   on every Android build even done synchronously — Ash still saw it drop
+   typing two letters after wstSearch itself stopped re-rendering per key.
+   wstRepaintPicks() patches just the results box when the operator is still
+   in the field, so #mWstQ is never removed from the document at all. */
 function loadWastePicks(){
   const w=state.wst;
   if(!w.storeId){ w.picks=null; return; }
@@ -3834,11 +3845,19 @@ function loadWastePicks(){
   const seq=++w.pickSeq;
   api('/waste/products?'+q).then(rows=>{
     if(seq!==w.pickSeq) return;            // a later keystroke already won
-    w.picks=(Array.isArray(rows)?rows:[]).slice(0,12); w.pickErr=null; render();
+    w.picks=(Array.isArray(rows)?rows:[]).slice(0,12); w.pickErr=null; wstRepaintPicks();
   }).catch(e=>{
     if(seq!==w.pickSeq||String(e.message)==='auth') return;
-    w.picks=[]; w.pickErr=E('Could not search products.','无法搜索商品。'); render();
+    w.picks=[]; w.pickErr=E('Could not search products.','无法搜索商品。'); wstRepaintPicks();
   });
+}
+function wstRepaintPicks(){
+  const box=document.getElementById('mWstPicksBox');
+  if(box && document.activeElement && document.activeElement.id==='mWstQ' && !state.wst.pick){
+    box.innerHTML = wstPicksHtml();
+  } else {
+    render();
+  }
 }
 /* The preview endpoint, not arithmetic done here — the same accessor and the
    same rounding the write uses, so the figure shown and the figure stored
@@ -3869,6 +3888,25 @@ function wstBlocked(){
   if(w.code==='other'&&!w.note.trim()) return T('Tell us what happened.','请填写备注说明。');
   return '';
 }
+/* The results fragment ALONE — never the input above it. loadWastePicks()
+   patches this element's innerHTML directly instead of going through
+   render() while the operator is still typing, so #mWstQ itself is never
+   torn down and rebuilt (see loadWastePicks). Kept in its own function so
+   the full sheetWaste() render and that targeted patch build the exact same
+   markup from the exact same state, rather than two copies drifting apart. */
+function wstPicksHtml(){
+  const w=state.wst;
+  return `${w.pickErr?`<div style="font-size:13px;color:var(--brick-ink)">${w.pickErr}</div>`:''}
+      ${!w.storeId?`<div style="font-size:13px;color:var(--text-secondary)">${T('Choose a store first.','请先选择门店。')}</div>`
+        :w.picks===null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+        :!w.picks.length?`<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
+        :`<div class="list">${w.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
+          <button class="row" onclick="APP.cmd('wstPick',${p.id})" style="min-height:52px">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||''))}</span>
+              <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(p.on_hand+' on hand','库存 '+p.on_hand)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
+          </button>`).join('')}</div>`}`;
+}
 function sheetWaste(){
   const w=state.wst, stores=state.stores||[];
   const blocked=wstBlocked();
@@ -3895,16 +3933,7 @@ function sheetWaste(){
       <span class="eyebrow">${T('Product','产品')}</span>
       <input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
         placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">
-      ${w.pickErr?`<div style="font-size:13px;color:var(--brick-ink)">${w.pickErr}</div>`:''}
-      ${!w.storeId?`<div style="font-size:13px;color:var(--text-secondary)">${T('Choose a store first.','请先选择门店。')}</div>`
-        :w.picks===null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
-        :!w.picks.length?`<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
-        :`<div class="list">${w.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
-          <button class="row" onclick="APP.cmd('wstPick',${p.id})" style="min-height:52px">
-            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
-              <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||''))}</span>
-              <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(p.on_hand+' on hand','库存 '+p.on_hand)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
-          </button>`).join('')}</div>`}
+      <div id="mWstPicksBox">${wstPicksHtml()}</div>
     </div>`;
   /* Whole units, so a stepper and never a number field: the API refuses a
      fraction (qty_whole_units_required) because the stock column is an
