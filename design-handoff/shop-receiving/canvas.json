@@ -118,6 +118,14 @@
       "text": "A short box is a fact she reports, not a mistake she confesses\n\nThe keypad asks \"How many arrived?\" — not \"is this right?\", not \"confirm the quantity\". She is describing a box, not defending herself.\n\nNo reason field. No \"are you sure\". No confirmation step on the discrepancy. \"Recorded as it is. Nothing else needed.\" is the whole of it, and the closing screen repeats the shape: \"Nothing else is needed from you.\"\n\nOne shortcut back: All 30 arrived returns the line to the sent figure in a tap, for a miscount she wants to undo. It reads as a correction of her own typing, not a retraction of a claim.\n\nThe interruption case is the picker's resume card unchanged, and it earns its place harder here — a customer walking in mid-count is more likely than anything that stops a picker. Cream, not Dusk: the progress is hers, and nothing was done for her while she was away."
     },
     {
+      "id": "note-twogaps",
+      "page": "page-1",
+      "x": 0,
+      "y": 1900,
+      "w": 860,
+      "text": "Two gaps, and they appear together only at the end\n\nGap A is the warehouse: Tianhe asked for 18 chilli oil, only 14 were found, and 14 is what the van carried. Gap B is the road: 14 left, 10 arrived. The receiving row showed gap B alone, which left her 8 short of her order with nothing on screen saying so — and that is the number that decides whether she reorders today.\n\nThe Received screen now carries all three quantities on one line: asked 18 · sent 14 · counted 10. The counted figure leads at 34px because it is what the shop now holds; asked and sent sit behind it in Graphite, in the order the goods moved, so no subtraction is left to her.\n\nThe heading changed with them. \"What differed\" meant differed FROM WHAT WAS SENT — so a line the warehouse cut before loading could arrive exactly as sent and never appear at all. Frozen bao is that line: asked 20, sent 16, counted 16, four short of the order and previously invisible on every screen in this flow.\n\nNeither gap appears before the count. Knowing which lines are short would bias the count, and the count is the entire value of the screen. The in-transit warning that named a number without naming the items is gone for the same reason, plus one of its own: on that screen she can do nothing either way."
+    },
+    {
       "id": "note-count-leads",
       "page": "page-2",
       "x": 0,

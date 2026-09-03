@@ -871,3 +871,29 @@ end has a supplier or a customer in it.
   locations table and are never hardcoded.
 - Order references (RS-260902-004), SKUs, and unit suffixes (500g, 250ml) are
   exempt from the no-English-in-the-Chinese-view rule.
+
+**THE RECEIVED SCREEN'S TWO-GAP LINE NEEDS THREE TERMS THE TABLES ABOVE DO NOT
+COVER, AND THEY ARE NOT INVENTED HERE.** Added 2026-09-03 with the receiving
+artboards' `Received` screen, which now states both gaps on one line — what the
+shop asked for, what the warehouse sent, and what she counted. `发出` covers the
+middle figure and is locked above. The other two are not in any table here and
+are not live anywhere in the product, so under the *when no locked source
+exists* amendment (`docs/tacet-consolidation-decisions.md`, 2 Sep 2026) they are
+**composed, marked PROVISIONAL, and carry a review debt**: Ash or a native
+operator confirms them before the screen ships. **A composed string that is not
+marked provisional is a rule violation regardless of whether it turns out to be
+correct** — these are marked.
+
+| Key | EN | CN | Source | What it says |
+|---|---|---|---|---|
+| `askedQty` | asked | **PENDING** | **PROVISIONAL** — no pair composed, awaiting Ash | What this shop requested, before the warehouse allocated anything. The gap between it and `发出` is the warehouse's, not the road's. Nothing live names this quantity: `补货申请` is the request as a document, not the number on a line. |
+| `countedQty` | counted | **PENDING** | **PROVISIONAL** — no pair composed, awaiting Ash | What she counted off the van, standing alone on a line rather than as the `项已点` tally. `点数` above is the CONTROL that opens the keypad, not the resulting quantity, and the two must not collapse. |
+| `againstAsked` | Against what you asked for | **PENDING** | **PROVISIONAL** — no pair composed, awaiting Ash | The section heading over those lines. It replaced *What differed*, which meant differed from what was SENT and therefore hid every line the warehouse cut before loading. |
+
+**THE CHINESE HALVES ARE LEFT EMPTY RATHER THAN DRAFTED**, which is a stronger
+reading of Rule 4 than the fourth amendment's delegation and is deliberate here:
+Ash confirmed this section's sixteen entries himself the same day, so a
+composed half sitting beside them would be indistinguishable from a confirmed
+one at a glance. There is no Chinese `Received` artboard, so nothing ships
+English-on-both-sides in the meantime — the screen simply is not drawn in
+Chinese until the pairs exist.
