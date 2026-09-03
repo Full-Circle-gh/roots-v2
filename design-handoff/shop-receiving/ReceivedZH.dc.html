@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--raised);
+         box-shadow:inset 4px 0 0 var(--sage);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;color:var(--graphite);}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;margin-top:1px;}
+    .hr{height:1px;background:var(--line);}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
+
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 14px;flex:none">
+    <div style="font-size:22px;font-weight:600;line-height:1.3">已收货</div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · 今天 14:52</div>
+  </div>
+
+  <!-- 申请 / 发出 / 实收 in the order the goods moved, same as the English.
+       申请 matches the already-locked 补货申请, so one word carries from the
+       request through to the receipt. -->
+  <div style="padding:0 16px 12px;flex:none">
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <span class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-0.02em;color:var(--graphite)">116</span>
+        <span style="font-size:15px;color:var(--graphite)">件已入本店库存</span>
+      </div>
+      <div class="num" style="font-size:13px;color:var(--graphite);margin-top:6px">共 14 项 · 申请 126 · 发出 118</div>
+    </div>
+  </div>
+
+  <!-- THE HEADING IS 与申请对比, NOT a translation of "what differed".
+       The English heading changed because "what differed" meant differed FROM
+       WHAT WAS SENT and hid every line the warehouse cut before loading; the
+       Chinese has to carry that same widening, so it names 申请 rather than
+       any word for a discrepancy. -->
+  <div style="padding:0 16px 8px;flex:none">
+    <div style="font-size:13px;font-weight:500;letter-spacing:0.04em;color:var(--graphite)">与申请对比</div>
+  </div>
+
+  <div style="flex:none">
+    <div class="hr"></div>
+    <!-- 实收 leads at 34px because it is what the store now holds. 申请 and 发出
+         sit behind it in Graphite. 实收 is the OUTCOME quantity and is never
+         点数 (the control) or 项已点 (the tally): 收 is the outcome, 点 is the
+         act of counting. -->
+    <div class="row">
+      <div class="qty">10</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">辣椒油 250ml</div>
+        <div class="cap">申请 18 · 发出 14 · <span style="color:var(--ink);font-weight:600">实收 10</span></div>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <!-- 与发货一致，但仍少于申请。这一行正是标题不叫「差异」的原因。 -->
+    <div class="row">
+      <div class="qty">16</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">冷冻包子 12个装</div>
+        <div class="cap">申请 20 · 发出 16 · <span style="color:var(--ink);font-weight:600">实收 16</span></div>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div class="row">
+      <div class="qty">32</div>
+      <div style="flex:1;min-width:0">
+        <div class="nm">芝麻酱 400g</div>
+        <div class="cap">申请 30 · 发出 30 · <span style="color:var(--ink);font-weight:600">实收 32</span></div>
+      </div>
+    </div>
+    <div class="hr"></div>
+  </div>
+
+  <!-- 无追问、无解释要求。同英文版一样，这是她上报的事实，不是她要承认的错误。 -->
+  <div style="padding:14px 16px 0;flex:none">
+    <div style="font-size:13px;color:var(--graphite);line-height:1.45">
+      三项均已记入本次收货，仓库可以看到。无需您再做任何操作。
+    </div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <div style="flex:none;padding:16px 16px 24px">
+    <div style="height:52px;border-radius:12px;background:var(--surface);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">
+      返回库存
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

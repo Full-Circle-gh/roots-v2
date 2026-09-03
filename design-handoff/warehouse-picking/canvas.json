@@ -10,7 +10,7 @@
     },
     {
       "id": "page-3",
-      "name": "Five shops"
+      "name": "Five stores"
     }
   ],
   "artboards": [
@@ -114,18 +114,18 @@
       "h": 844
     },
     {
-      "file": "FiveShopFilter.dc.html",
+      "file": "FiveStoreFilter.dc.html",
       "page": "page-3",
-      "title": "Filter at five shops",
+      "title": "Filter at five stores",
       "x": 0,
       "y": 0,
       "w": 390,
       "h": 844
     },
     {
-      "file": "FiveShopAllocate.dc.html",
+      "file": "FiveStoreAllocate.dc.html",
       "page": "page-3",
-      "title": "Allocation at five shops",
+      "title": "Allocation at five stores",
       "x": 470,
       "y": 0,
       "w": 390,
@@ -139,7 +139,7 @@
       "x": 0,
       "y": -230,
       "w": 860,
-      "text": "The ledger column\n\nThe total locks to one x-position at 34px/700 tabular, so the quantities read as a column you run your eye down rather than a value you hunt for on each card. Eight lines a screen against the split card's four: a 14-line run is under two screenfuls instead of four.\n\nThe shop split drops to a 13px caption. That is the price of the density, and it is the right price — the total is what his hands do, because he walks the freezer once and pulls 65 in one grab.\n\nFill and edge say whether a line is done: white = to pull, cream + Sage edge = settled. Contrast says whether it still wants him: Graphite means resolved, full Ink means it needs attention. That second signal does more work at eight lines than it did at four — which is why the tick recedes too."
+      "text": "The ledger column\n\nThe total locks to one x-position at 34px/700 tabular, so the quantities read as a column you run your eye down rather than a value you hunt for on each card. Eight lines a screen against the split card's four: a 14-line run is under two screenfuls instead of four.\n\nThe store split drops to a 13px caption. That is the price of the density, and it is the right price — the total is what his hands do, because he walks the freezer once and pulls 65 in one grab.\n\nFill and edge say whether a line is done: white = to pull, cream + Sage edge = settled. Contrast says whether it still wants him: Graphite means resolved, full Ink means it needs attention. That second signal does more work at eight lines than it did at four — which is why the tick recedes too."
     },
     {
       "id": "note-short",
@@ -155,7 +155,7 @@
       "x": 0,
       "y": 1900,
       "w": 860,
-      "text": "The picker assigns every short line himself\n\nTacet pre-fills nothing. Every field opens blank — blank, not zero, because zero is an amount he chose and blank is an amount he has not. Each carries what that shop asked for as a one-tap shortcut, and tapping an empty field takes the whole remainder; neither happens on its own.\n\nThe remainder counts down and is the entire explanation for the inactive Save. There is no error state, no warning and nothing that tells him off. Over-assigning shows a negative rather than silently clamping, because capping his last entry would leave a number on screen he never typed.\n\nA full pick is untouched by any of this: he found everything, each shop gets what it asked for, no extra step."
+      "text": "The picker assigns every short line himself\n\nTacet pre-fills nothing. Every field opens blank — blank, not zero, because zero is an amount he chose and blank is an amount he has not. Each carries what that store asked for as a one-tap shortcut, and tapping an empty field takes the whole remainder; neither happens on its own.\n\nThe remainder counts down and is the entire explanation for the inactive Save. There is no error state, no warning and nothing that tells him off. Over-assigning shows a negative rather than silently clamping, because capping his last entry would leave a number on screen he never typed.\n\nA full pick is untouched by any of this: he found everything, each store gets what it asked for, no extra step."
     },
     {
       "id": "note-scan",
@@ -179,7 +179,7 @@
       "x": 0,
       "y": -190,
       "w": 400,
-      "text": "What was compared\n\nThree row treatments were drawn, plus a tick comparison on the winner. The ledger column won on density and is built out on the Pick flow page; its sketch is gone because Main is now the real thing.\n\nB is kept here as the record of what density cost. It reads better — the total leads and each shop's number is 19px rather than 13 — but four lines a screen makes a 14-line freezer run four screenfuls.\n\nC (two boxes, no total) was deleted outright. It only worked because Roots has exactly two shops, and a merchant with five is an ordinary customer."
+      "text": "What was compared\n\nThree row treatments were drawn, plus a tick comparison on the winner. The ledger column won on density and is built out on the Pick flow page; its sketch is gone because Main is now the real thing.\n\nB is kept here as the record of what density cost. It reads better — the total leads and each store's number is 19px rather than 13 — but four lines a screen makes a 14-line freezer run four screenfuls.\n\nC (two boxes, no total) was deleted outright. It only worked because Roots has exactly two stores, and a merchant with five is an ordinary customer."
     },
     {
       "id": "note-tick",
@@ -190,12 +190,12 @@
       "text": "The tick recedes as well\n\nDrawn both ways at eight lines and compared. A solid Ink tick made three completed rows the heaviest mass on the screen, so the darkest thing on the list was the work already finished — the contrast rule inverted. The short line's Ink numbers had to compete with three dark blocks and lost.\n\nWith the container dropped and a Graphite check left in its place, the only Ink in the settled band is the shortfall, and it wins the glance outright.\n\nThe tick is not the state marker — cream fill and the Sage edge already are. It is a control, and on a resolved line the thing it controls is undo. A quieter undo is the right undo."
     },
     {
-      "id": "note-fiveshops",
+      "id": "note-fivestores",
       "page": "page-3",
       "x": 0,
       "y": -230,
       "w": 860,
-      "text": "Proof the pattern survives a real customer\n\nNeither of these is a Roots state. Roots has two shops; a merchant with five is an ordinary customer, and both of these layouts quietly assumed two.\n\nThe filter row now holds exactly two controls at any shop count. Chips are kept only while they fit — past three shops the named ones fold into one picker. \"All shops\" keeps a chip of its own because combined is the default and has to stay one tap away; folding it in with the rest would make the common case cost two taps to save a control nobody needed removed.\n\nThe allocation sheet scrolls its rows and pins the remainder, the keypad and Save. Collapsing the keypad on blur was the alternative and it loses twice: the layout would jump under his thumb every time focus moved, and the remainder is the only explanation the inactive Save ever gets, so it cannot scroll away."
+      "text": "Proof the pattern survives a real customer\n\nNeither of these is a Roots state. Roots has two stores; a merchant with five is an ordinary customer, and both of these layouts quietly assumed two.\n\nThe filter row now holds exactly two controls at any store count. Chips are kept only while they fit — past three stores the named ones fold into one picker. \"All stores\" keeps a chip of its own because combined is the default and has to stay one tap away; folding it in with the rest would make the common case cost two taps to save a control nobody needed removed.\n\nThe allocation sheet scrolls its rows and pins the remainder, the keypad and Save. Collapsing the keypad on blur was the alternative and it loses twice: the layout would jump under his thumb every time focus moved, and the remainder is the only explanation the inactive Save ever gets, so it cannot scroll away."
     }
   ],
   "launch": {
