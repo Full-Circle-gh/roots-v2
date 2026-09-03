@@ -681,6 +681,15 @@
                oninput="rcpLineField(${idx},'qty',this.value)" placeholder="${esc(T('qty', '数量'))}">
         <select class="rcp-input rcp-line-unit" onchange="rcpLineField(${idx},'unit',this.value)">
           ${RECIPE_UNITS().map(u => `<option value="${esc(u)}"${l.unit === u ? ' selected' : ''}>${esc(u)}</option>`).join('')}
+          <!-- A stored unit outside RECIPE_UNITS() (an old/legacy value, e.g.
+               "L") matches none of the options above, so the browser marks
+               none of them selected and falls back to displaying the FIRST
+               option — silently showing "g" for a line that is really still
+               "L" and was never touched. Appending the raw value as its own
+               selected option makes the select honest instead: it shows what
+               is actually stored, so a save that changes nothing cannot look
+               like a fix. It disappears on its own once a real unit is picked. -->
+          ${l.unit && !RECIPE_UNITS().includes(l.unit) ? `<option value="${esc(l.unit)}" selected>${esc(l.unit)}</option>` : ''}
         </select>
         <input class="rcp-input rcp-line-note" type="text" value="${esc(l.notes || '')}"
                placeholder="${esc(T('Note', '备注'))}" oninput="rcpLineField(${idx},'notes',this.value)">
