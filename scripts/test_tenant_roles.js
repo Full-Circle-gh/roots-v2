@@ -278,7 +278,7 @@ function versionOf(tid) {
   is(unclassified.length, 0, 'every money value is shows or moves');
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 20, '20 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 104, 'across all 104');
+  is(caps.CAPABILITIES.length, 105, 'across all 105');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,
@@ -297,6 +297,27 @@ function versionOf(tid) {
   for (const role of ['manager', 'admin']) {
     truthy(caps.presetCapsFor(role).includes('waste:costs'), role + ' does');
   }
+  // The same split on Materials (Ash, 2026-09-03), for the same reason: the
+  // list's two money columns are what a supplier charges and the cost basis of
+  // every margin, and the two floor presets were reading both.
+  falsy(caps.MONEY_KEYS['materials:view'], 'the masterlist itself shows no money');
+  is(caps.MONEY_KEYS['materials:costs'], 'shows', 'its prices are where the money is');
+  truthy(caps.MONEY_NOTES['materials:costs'], 'and it carries its note');
+  // materials:edit KEEPS its money marker, and that is not an oversight: cost
+  // per unit is derived from the buy price AND the pack size, so an editor
+  // without materials:costs still moves every margin by halving a pack.
+  is(caps.MONEY_KEYS['materials:edit'], 'moves', 'editing a material still moves money via pack size');
+  for (const role of ['warehouse', 'store_manager']) {
+    const set = caps.presetCapsFor(role);
+    truthy(set.includes('materials:view'), role + ' still reads the masterlist');
+    falsy(set.includes('materials:costs'), role + ' does NOT read its prices');
+  }
+  // sect('materials') now contains a money key, so a preset that expands the
+  // whole section grants it. warehouse used to do exactly that — the day this
+  // capability was added it would have handed the prices straight back.
+  truthy(caps.sect('materials').includes('materials:costs'), 'the section does contain the money key');
+  falsy(caps.presetCapsFor('warehouse').includes('materials:costs'),
+    'and no preset expands the section blindly into it');
   const sm = caps.presetCapsFor('store_manager').filter(k => caps.MONEY_KEYS[k] === 'moves');
   is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit'],
     'the shipped store_manager preset moves money five ways — the marker is why this is now visible');

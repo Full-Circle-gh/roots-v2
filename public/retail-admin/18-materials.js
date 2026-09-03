@@ -34,6 +34,20 @@
   // and hiding them is how they stay unfixed.
   const dash = v => (v === null || v === undefined || v === '' ? '—' : v);
 
+  // ── Who may read what a material costs (Ash, 2026-09-03) ────────────────
+  //
+  // `materials:view` opens the masterlist; `materials:costs` reads the two
+  // money columns on it. FAILS CLOSED, unlike can(), which answers true on a
+  // null cap set so a resolution hiccup never locks an operator out of their
+  // own app — money inverts that trade. The server does not SEND a price to a
+  // caller without the capability (routes/retail-materials.js), so this
+  // decides layout and the payload decides what is knowable; where they
+  // disagree the payload wins, which is why the readers below all handle an
+  // absent figure rather than trusting this to have hidden it.
+  const showMoney = () => (typeof CAPS !== 'undefined' && CAPS !== null)
+    ? CAPS.has('materials:costs')
+    : false;
+
   const KIND_LABEL = {
     food:      () => T('Food', '食品'),
     packaging: () => T('Packaging', '包装'),
@@ -166,7 +180,14 @@
       <div class="mat-pagehead">
         <div class="mat-eyebrow">${esc(T('Production', '生产'))}</div>
         <h1 class="mat-title">${esc(T('Materials', '物料'))}</h1>
-        <p class="mat-sub">${esc(T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies. What each one costs per unit is worked out from the pack price.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。每单位成本由整包价格自动折算。'))}</p>
+        ${/* The second sentence explains a column that is not on the page for
+              an operator without materials:costs. Telling somebody how a
+              number they cannot see is worked out is worse than saying
+              nothing — it describes the page they were not given. The first
+              sentence, which says what a material IS, holds for everyone. */''}
+        <p class="mat-sub">${esc(showMoney()
+          ? T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies. What each one costs per unit is worked out from the pack price.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。每单位成本由整包价格自动折算。')
+          : T('Everything you buy and hold but don’t sell — food, packaging, equipment, supplies.', '你采购并库存但不出售的物品 — 食品、包装、设备、耗材。'))}</p>
       </div>`;
   }
 
@@ -269,6 +290,13 @@
             T(`${elsewhere} in ${otherLabel} →`, `${otherLabel}中有 ${elsewhere} 条 →`))}</button></p>` : ''}
         </div>`;
     }
+    // Both money columns are REMOVED for an operator without materials:costs —
+    // header and cells — rather than dashed out. A dash means "we have no
+    // price for this", which is a real and different state the catalogue uses;
+    // reusing it for "you may not see the price" would make the two
+    // indistinguishable on the screen where somebody is meant to fix the first.
+    // The table is auto-layout, so dropping two columns needs no width work.
+    const withCost = showMoney();
     const rows = _rows.map(m => {
       const cpu = Number(m.cost_per_unit) || 0;
       const cpuTxt = m.free_by_design
@@ -285,8 +313,8 @@
           <td class="mat-mono">${esc(dash(m.sku))}</td>
           <td>${esc(dash(m.category))}</td>
           <td>${esc(dash(m.supplier))}</td>
-          <td class="right mat-num">${m.buy_price > 0 ? money(m.buy_price) : '—'}<span class="mat-per">${m.buy_price > 0 ? '/' + esc(m.buy_unit || '') : ''}</span></td>
-          <td class="right mat-num">${cpuTxt}</td>
+          ${withCost ? `<td class="right mat-num">${m.buy_price > 0 ? money(m.buy_price) : '—'}<span class="mat-per">${m.buy_price > 0 ? '/' + esc(m.buy_unit || '') : ''}</span></td>
+          <td class="right mat-num">${cpuTxt}</td>` : ''}
         </tr>`;
     }).join('');
     return `
@@ -299,8 +327,8 @@
               <th>${esc(T('SKU', '货号'))}</th>
               <th>${esc(T('Category', '分类'))}</th>
               <th>${esc(T('Supplier', '供应商'))}</th>
-              <th class="right">${esc(T('Buy price', '采购价'))}</th>
-              <th class="right">${esc(T('Cost per unit', '单位成本'))}</th>
+              ${withCost ? `<th class="right">${esc(T('Buy price', '采购价'))}</th>
+              <th class="right">${esc(T('Cost per unit', '单位成本'))}</th>` : ''}
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
@@ -806,8 +834,14 @@
                        select('buy_unit', m.buy_unit, BUY_UNITS().map(u => [u, u]), 'matUnitsChanged()'),
                        T('The unit you buy it by.', '采购时的计量单位。'))}
               ${field(T('Packs per order', '每次采购包数'), input('buy_pack_size', m.buy_pack_size, 'type="number" min="0" step="any"', 'matPreviewCost()'))}
-              ${field(T('Buy price', '采购价'), input('buy_price', m.buy_price, 'type="number" min="0" step="any"', 'matPreviewCost()'),
-                       T('What one pack costs.', '一包的价格。'))}
+              ${/* The one field an editor without materials:costs does not get.
+                    Everything around it stays: units, pack size and contents
+                    are what somebody holding the sack is best placed to
+                    correct, and they are measurements rather than money. The
+                    server carries the stored price through on save, so editing
+                    a name here cannot wipe it. */''}
+              ${showMoney() ? field(T('Buy price', '采购价'), input('buy_price', m.buy_price, 'type="number" min="0" step="any"', 'matPreviewCost()'),
+                       T('What one pack costs.', '一包的价格。')) : ''}
             </div>
             <div id="mat-pack-row" class="mat-fgrid" ${isContainer(m.buy_unit) ? '' : 'hidden'}>
               ${field(T('Contents per pack', '每包内容量'), input('pack_contents_qty', m.pack_contents_qty, 'type="number" min="0" step="any"', 'matPreviewCost()'))}
@@ -861,11 +895,17 @@
               <button class="mat-btn sm" data-cap="purchasing:edit" onclick="matSupNew()"><span class="mat-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
             </div>
           </div>
+          ${/* Cost history is nothing but prices, so the whole block goes for
+                an operator without materials:costs — rather than rendering
+                "No price changes recorded", which would be a lie about a
+                material that has changed price twenty times. Bought in stays:
+                which POs a material arrived on, when and how many is
+                purchasing history, and only its money is withheld. */''}
           ${isNew ? '' : `
-          <div class="mat-card mat-blk">
+          ${showMoney() ? `<div class="mat-card mat-blk">
             <h3 class="mat-blk-h">${esc(T('Cost history', '价格历史'))}</h3>
             ${histHtml()}
-          </div>
+          </div>` : ''}
           <div class="mat-card mat-blk">
             <h3 class="mat-blk-h">${esc(T('Bought in', '采购记录'))}</h3>
             ${purchHtml()}
@@ -886,6 +926,15 @@
     if (!c) return '';
     const draft = src || _rec.row;
     const d = c.deriveCostPerUnit(draft, draft.buy_price);
+    // Without materials:costs the FIGURE goes and the DIAGNOSIS stays. "This
+    // pack has no recorded contents" is the sentence that gets a material
+    // costed at all, and it is about pack maths, not money — withholding it
+    // would leave the person best placed to fix the gap unable to see it.
+    // (The server also strips `cpu`, so there is nothing to print either way.)
+    if (!showMoney()) {
+      if (d.cpu !== null) return '';
+      // fall through to the reason lines below
+    }
     if (d.cpu === null) {
       const why = {
         no_price:          T('No price entered yet.', '尚未填写价格。'),
@@ -935,7 +984,11 @@
     return '<div class="mat-mini">' + p.map(r => `
       <div class="mat-minirow">
         <span class="mat-mono">${esc(r.po_number || '')}</span>
-        <span class="mat-sub2">${esc((r.date || '').slice(0, 10))} · ${esc(String(r.qty || 0))} ${esc(r.unit || '')} · ${money(r.total_cost)}</span>
+        ${/* The PO, the day and how many stay; what it cost does not. Losing
+              the whole line would take away the useful half — "this arrived on
+              RPO-0042 on the 14th, 20kg" is the answer somebody checking a
+              delivery actually wants. */''}
+        <span class="mat-sub2">${esc((r.date || '').slice(0, 10))} · ${esc(String(r.qty || 0))} ${esc(r.unit || '')}${showMoney() && r.total_cost != null ? ' · ' + money(r.total_cost) : ''}</span>
       </div>`).join('') + '</div>';
   }
 

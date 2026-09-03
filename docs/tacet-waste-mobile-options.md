@@ -293,10 +293,46 @@ touch the separate, still-standing decision that a store manager sees *revenue*
 (dashboard pulse and Reports): that is their own store's takings, which is their
 business. What they lose is the cost of a loss, which is the company's margin.
 
-**Still open:** the same split has not been made for the other screens whose
-`money: 'shows'` marker bundles a ledger with its money — `materials:view`
-("Materials show cost per unit"), `recipes:view` ("A recipe is a cost") and
-`products:view` ("The product list shows unit cost and margin"). Each is the same
-shape of question and none is urgent; none should be changed by pattern-matching on
-this one, because who needs to read a material's cost is a different argument from
-who needs to read a loss's.
+**Materials: done, 2026-09-03.** `materials:costs`, the same shape as
+`waste:costs` and for the same reason — the Materials list carries two money
+columns (Buy price, Cost per unit), so the warehouse and store_manager presets
+read what every supplier charges and the cost basis of every margin. The same
+warehouse operator had just been stopped from seeing what a dropped jar cost;
+leaving them every ingredient's buy price was the same fact by another door.
+
+Four read payloads carry money on that API and all four are stripped: the list
+rows, the record, its price history, and the PO lines it arrived on. Two things
+were worth more than the disclosure fix:
+
+- **A write hazard that was data loss, not privacy.** The editor omits the Buy
+  price field for a cost-blind operator, `readBody()` turns an absent field into
+  `0`, and the UPDATE wrote it unconditionally — so *renaming* a material would
+  have wiped its price, written a price-history row recording the wipe, and
+  fired a >5% change alert. The server now carries the stored price through.
+- **`sect('materials')` in the warehouse preset.** It means "every verb in this
+  section", so the moment the new key existed it would have handed that role
+  every buy price straight back — as a side effect of the change made to take
+  them away. Now listed explicitly, with a test asserting no preset expands the
+  section blindly.
+
+`materials:edit` **keeps** its `money: 'moves'` marker, and that is not an
+oversight: cost per unit is derived from the buy price **and the pack size**, so
+an editor without `materials:costs` still moves every margin by halving a
+recorded pack.
+
+Proof: `scripts/test_material_cost_visibility.js` — 34 assertions, four read
+sections plus the write and the fail-closed rule.
+
+**Still open — `products:view` and `recipes:view`,** and they are not the same
+question as each other:
+
+- **`products:view` is worth doing and is the bigger job.** `staff` and
+  `marketing` both hold it, and both presets are commented as having no money —
+  while the list renders a margin **percentage** on every row and
+  `routes/retail.js` sends `unit_cost` with it. But ~108 money references, and a
+  real design question first: `products:edit` has to *set* cost, so it is not a
+  simple hide. Start with the edit-vs-see decision, not the code.
+- **`recipes:view` should be left alone.** No preset outside owner/admin/manager
+  grants it, so splitting it adds a permission nobody would untick on a screen
+  no floor role can open. Revisit only if a preset ever hands recipes to a floor
+  role.
