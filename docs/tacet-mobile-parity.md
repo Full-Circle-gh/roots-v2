@@ -851,6 +851,7 @@ opens.
 |---|---|
 | **The "Today" tile fell back to `¥12,840 · 37 orders · ¥347 · 1,204 visitors`** — four numbers typed into a mockup, under a heading that says *Today*. Any slow or failed `/dashboard` call put invented money in front of an operator, in the worst possible place for it | Removed. The tile keeps its four labels and shows `—` until the figure arrives |
 | **Quick actions offered "Add product", "Create coupon", "Send broadcast"** — three verbs the phone cannot perform, each opening a read-only list. Not wired to `noop`, which is why they outlived that sweep, but they make the same promise and break it the same way | Replaced with three things the phone genuinely does in one tap: answer the inbox, tick a delivery in, fix a price or a count |
+| **…and those three were still *our* choice.** A stocker who never opens the inbox and lives in Receiving got the owner's rows; a shop with no purchase orders got a row it never taps. The row an operator reaches for every morning is a fact about their shop, and no default knows it | The list is the operator's: **Edit** on the heading opens a picker offering every destination and More row their role can reach (the same two sources `searchIndex()` reads, so nothing is findable in search and unpickable here), up to six, in their order, remembered on the phone under `tacet-m-quick` beside the theme and the language. The three above stay the default, so an operator who never opens the picker keeps the Home they had. Keys are stored and rows resolved at render, so a shortcut to a screen a narrowed role has lost drops off Home quietly and returns if the capability does; an emptied list stays empty and Home offers to fill it |
 | `opsFires` read `o.<key>.items` inline, and arguments are evaluated before `add()` looks at its condition — so a `/dashboard/ops` payload missing any key threw mid-render. A render that throws leaves the *previous* screen on the glass, so Home would have looked stale rather than broken | Defensive, and pinned by a test |
 
 The needs-you queue itself was already the ops snapshot and stays: delivery,
@@ -858,8 +859,12 @@ payment mismatch, payments to confirm, refunds, orders to start, awaiting
 restock, invoices, stock — ranked brick before amber, then by how long the
 oldest thing in each queue has waited.
 
-`scripts/test_mobile_home.js` — 23 assertions, 6 cases, each fake figure
-asserted absent by its own value.
+`scripts/test_mobile_home.js` — 85 assertions, 25 cases, each fake figure
+asserted absent by its own value, and the shortcut list held to its whole
+contract: what the picker offers is capability-filtered, a change lands on
+Home, the order is the operator's, six is the ceiling, an emptied list is not
+quietly refilled with the defaults, and the choice survives the phone being
+put down.
 
 ### Orders and Customers — the mock outliving the fetch, again
 

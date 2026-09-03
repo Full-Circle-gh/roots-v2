@@ -499,6 +499,13 @@ const state = {
   trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* The operator's own Quick actions — an array of catalogue keys, null until
+     the first read pulls it back off this phone (see quickKeys()), and
+     quickMounted the house guard against a sheet that re-enters on every tap:
+     same flag, same name, same two lines as poMounted / custMounted, and this
+     picker needs it more than most, since every add, remove and move repaints
+     while .sheet carries `animation:tSheetUp .4s`. */
+  quick:null, quickSheet:false, quickMounted:false,
   /* Installed-app state. canInstall is set by the browser telling us it would
      offer an install (beforeinstallprompt); installBar is the strip that says
      so, dismissible and remembered; installSheet is the iOS walkthrough, which
@@ -1992,6 +1999,150 @@ function vitalsBlock(){
                   :T('nothing sent back','无退款'))}
     </div></div>`;
 }
+
+/* ==========================================================================
+   Quick actions — the operator's own rows, not ours
+   --------------------------------------------------------------------------
+   Home used to offer "Add product", "Create coupon", "Send broadcast" — three
+   verbs the phone cannot perform, each opening a read-only list. They were
+   replaced by three it genuinely can do in one tap (answer the inbox, tick a
+   delivery in, fix a price or a count), which fixed the lie and left the
+   smaller problem behind it: WE were still choosing. A stocker who never opens
+   the inbox and lives in Receiving got the owner's three rows; a shop with no
+   purchase orders got a row it never taps, sitting where its Waste row should
+   be. The row an operator reaches for every morning is a fact about their
+   shop, and no default knows it.
+
+   So the list is theirs. Everything this app can reach and their role allows
+   is offered; up to six ride Home, in the order they put them in, remembered
+   on this phone the way the theme and the language are — an operator who set
+   their shortcuts has set them, not set them until the next launch.
+
+   The three we picked are still the DEFAULT. Somebody who never opens the
+   picker keeps exactly the Home they had.
+   ========================================================================== */
+const M_QUICK_KEY='tacet-m-quick', QUICK_MAX=6;
+const QUICK_DEFAULT=['inbox','purchasing','tab:products'];
+/* A shortcut is named for the VERB only where there is one worth saying, and
+   the three defaults keep the wording Home has always used for them. Every
+   other row is offered under the name it already wears in More: a verb
+   invented for a screen is exactly how "Add product" happened. */
+const QUICK_VERB={
+  inbox:['Answer the inbox','回复消息'],
+  purchasing:['Tick a delivery in','确认收货'],
+  'tab:products':['Fix a price or a count','改价或改库存'],
+};
+/* Everything reachable, flat: the four destinations that are not Home, then
+   every More row this role can open. The same two sources searchIndex() reads,
+   so a screen can never be findable in search and unpickable here — and both
+   are already capability-filtered, so the picker cannot offer a row whose
+   screen would 403. */
+function quickCatalogue(){
+  const out=Object.keys(TAB_META).filter(k=>k!=='home'&&k!=='more'&&canRoute(k))
+    .map(k=>({key:'tab:'+k, icon:TAB_META[k].icon, en:TAB_META[k].en, zh:TAB_META[k].zh,
+              group:['Destinations','主页面'], cmd:`APP.cmd('tab','${k}')`}));
+  moreGroups().forEach(g=>g.rows.forEach(r=>out.push({
+    key:r.key, icon:r.icon, en:r.en, zh:r.zh, group:g.h||['More','更多'], cmd:r.cmd})));
+  return out;
+}
+function quickLabel(it){ const v=QUICK_VERB[it.key]; return v?T(...v):T(it.en,it.zh); }
+/* Read once, then held in state. An empty ARRAY is a real answer — an operator
+   who cleared the list wanted it cleared, and must not have the defaults handed
+   back at the next launch — so only a missing or unreadable key falls back. */
+function quickKeys(){
+  if(state.quick) return state.quick;
+  let saved=null;
+  try{ const raw=localStorage.getItem(M_QUICK_KEY); if(raw) saved=JSON.parse(raw); }catch(e){}
+  state.quick = Array.isArray(saved)
+    ? saved.filter(k=>typeof k==='string').slice(0,QUICK_MAX)
+    : QUICK_DEFAULT.slice();
+  return state.quick;
+}
+function quickSave(){ try{ localStorage.setItem(M_QUICK_KEY,JSON.stringify(state.quick)); }catch(e){} }
+/* KEYS are stored; the rows are resolved at render. So a shortcut to a screen
+   this operator has since lost — a narrowed role, a route retired — drops off
+   Home quietly instead of 403ing, and comes back if the capability does,
+   because nothing erased it. */
+function quickRows(){
+  const by={}; quickCatalogue().forEach(c=>{ by[c.key]=c; });
+  return quickKeys().map(k=>by[k]).filter(Boolean);
+}
+reg('quickEdit', ()=>{ state.quickSheet=true; state.quickMounted=false; render(); state.quickMounted=true; });
+reg('quickClose', ()=>{ state.quickSheet=false; render(); });
+reg('quickToggle', key=>{
+  const k=String(key), list=quickKeys().slice(), i=list.indexOf(k);
+  if(i>=0) list.splice(i,1);
+  else if(list.length>=QUICK_MAX){
+    // The cap is the phone's, not a rule: past six the list is a second screen
+    // to scroll, which is the thing a shortcut exists to avoid.
+    showToast(T('Six shortcuts is the most that fits','最多只能放 6 个快捷方式')); return;
+  } else list.push(k);
+  state.quick=list; quickSave(); render();
+});
+reg('quickMove', (key,dir)=>{
+  const list=quickKeys().slice(), i=list.indexOf(String(key)), j=i+Number(dir);
+  if(i<0||j<0||j>=list.length) return;
+  list.splice(j,0,list.splice(i,1)[0]);
+  state.quick=list; quickSave(); render();
+});
+reg('quickReset', ()=>{ state.quick=QUICK_DEFAULT.slice(); quickSave(); render(); });
+/* The picker. Chosen rows sit at the top in the order Home draws them, each
+   with the two controls a phone can do this with — move and remove; everything
+   still available is grouped underneath exactly as More groups it, so the
+   operator is picking from the app they already know rather than from a list
+   of keys. Every change saves on the tap: there is no Save button here for the
+   same reason the theme switch has none. */
+function sheetQuick(){
+  const cat=quickCatalogue();
+  const chosen=quickRows();
+  const taken={}; chosen.forEach(c=>{ taken[c.key]=true; });
+  const rest=cat.filter(c=>!taken[c.key]);
+  const groups=[];
+  rest.forEach(c=>{
+    const g=groups.filter(x=>x.h[0]===c.group[0])[0];
+    if(g) g.rows.push(c); else groups.push({h:c.group, rows:[c]});
+  });
+  const full=chosen.length>=QUICK_MAX;
+  const iconbtn=(icon,cmd,label,dis)=>`<button ${dis?'disabled':''} onclick="${cmd}" aria-label="${escAttr(label)}"
+    style="width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;
+    border:none;border-radius:9px;color:var(--text-secondary);cursor:pointer;${dis?'opacity:.3;cursor:default':''}">${ic(icon,20)}</button>`;
+  const noAnim=state.quickMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('quickClose')"></div>
+   <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('quickClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Quick actions','快捷操作')}</span>
+         <span style="width:36px;flex:none"></span></div>
+       <div style="font-size:13px;color:var(--text-secondary);padding:2px 8px 0">${
+         T('Pick the screens you open every day — up to '+QUICK_MAX+', in your order.',
+           '选择您每天都会打开的页面 — 最多 '+QUICK_MAX+' 个，顺序由您决定。')}</div></div>
+     <div id="mQuickBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
+       <div>
+         <div class="eyebrow" style="padding:2px 4px 8px">${T('On Home','显示在首页')}</div>
+         ${chosen.length?`<div class="list">${chosen.map((c,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+           <div style="display:flex;align-items:center;gap:6px;padding:8px 10px 8px 16px">
+             <span class="rowico">${ic(c.icon)}</span>
+             <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(c)}</span>
+             ${iconbtn('chevron-up',`APP.cmd('quickMove','${escAttr(c.key)}',-1)`,T('Move up','上移'),i===0)}
+             ${iconbtn('chevron-down',`APP.cmd('quickMove','${escAttr(c.key)}',1)`,T('Move down','下移'),i===chosen.length-1)}
+             ${iconbtn('minus',`APP.cmd('quickToggle','${escAttr(c.key)}')`,T('Remove','移除'),false)}
+           </div>`).join('')}</div>`
+         : `<div style="padding:18px 16px;border-radius:14px;background:var(--surface-raised);font-size:14px;color:var(--text-secondary);line-height:1.5">${
+             T('Nothing yet. Home leaves the section out until you add one.','还没有选择。在您添加之前，首页不会显示这一栏。')}</div>`}
+       </div>
+       ${full?`<div style="font-size:13px;color:var(--amber-ink);padding:0 4px">${
+         T('That is all six. Remove one to add another.','已满 6 个。要添加请先移除一个。')}</div>`:''}
+       ${groups.map(g=>`<div>
+         <div class="eyebrow" style="padding:2px 4px 8px">${T(...g.h)}</div>
+         <div class="list">${g.rows.map((c,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+           <button class="row" ${full?'disabled':''} onclick="APP.cmd('quickToggle','${escAttr(c.key)}')" style="${full?'opacity:.45':''}">
+             <span class="rowico">${ic(c.icon)}</span>
+             <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(c)}</span>
+             <span style="color:var(--text-secondary);display:flex;flex:none">${ic('plus')}</span></button>`).join('')}</div></div>`).join('')}
+       <button class="btn2" style="width:100%" onclick="APP.cmd('quickReset')">${T('Back to the suggested three','恢复默认三项')}</button>
+     </div></div>`;
+}
 function screenHome(){
   const fires=opsFires()||[];
   /* This tile used to fall back to ¥12,840 · 37 orders · ¥347 · 1,204 visitors
@@ -1999,16 +2150,12 @@ function screenHome(){
      first screen the app opens. Nothing else in the app was in a worse place
      to be inventing money. A tile with no figure yet says so. */
   const kpis = state.liveKpis;
-  /* "Add product", "Create coupon", "Send broadcast" — three verbs, none of
-     which the phone can do, each opening a read-only list. They are not
-     controls wired to nothing, which is why they survived the noop sweep, but
-     they promise the same thing and break it. These three are what a phone
-     can genuinely do in one tap. */
-  const quick=[
-    {icon:'message-square-text',label:T('Answer the inbox','回复消息'),cmd:"APP.cmd('push','inbox')"},
-    {icon:'shopping-cart',label:T('Tick a delivery in','确认收货'),cmd:"APP.cmd('push','purchasing')"},
-    {icon:'box',label:T('Fix a price or a count','改价或改库存'),cmd:"APP.cmd('tab','products')"},
-  ];
+  /* Whatever this operator put here — see the block above quickCatalogue().
+     Defaults to the three the phone can genuinely do in one tap. */
+  const quick=quickRows();
+  /* A role narrowed to nothing but Home has nothing to shortcut TO, so the
+     section and its Edit button both go rather than offering an empty picker. */
+  const quickAny=quickCatalogue().length>0;
   const today=new Date();
   const dateLine = LANG==='en'
     ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
@@ -2044,12 +2191,18 @@ function screenHome(){
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>
     ${vitalsBlock()}
-    <div class="rise" style="animation-delay:.18s">
-      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
-      <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+    ${quickAny?`<div class="rise" style="animation-delay:.18s">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 4px 8px">
+        <span style="font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</span>
+        <button onclick="APP.cmd('quickEdit')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${T('Edit','编辑')}</button></div>
+      ${quick.length?`<div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${q.cmd}"><span class="rowico">${ic(q.icon)}</span>
-        <span style="flex:1;font-size:15px">${q.label}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>
+        <span style="flex:1;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(q)}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>`
+      : `<div class="list"><button class="row" onclick="APP.cmd('quickEdit')">
+          <span class="rowico">${ic('plus')}</span>
+          <span style="flex:1;font-size:15px;color:var(--text-secondary)">${T('Choose your shortcuts','选择您的快捷方式')}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button></div>`}</div>`:''}
   </div>`;
 }
 
@@ -8290,6 +8443,12 @@ function render(){
      exactly as they are. */
   const _wb=document.getElementById('mWstBody');
   const _wkeep=_wb?_wb.scrollTop:0;
+  /* The Quick actions picker, for the same reason and by the same two lines:
+     every add, remove and move repaints it, and a list that jumps back to
+     Operations each time you pick something out of Content is a list nobody
+     finishes setting up. */
+  const _qb=document.getElementById('mQuickBody');
+  const _qkeep=_qb?_qb.scrollTop:0;
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
     return;
@@ -8310,12 +8469,14 @@ function render(){
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
   if(state.chanSheet) html += sheetChannel();
+  if(state.quickSheet) html += sheetQuick();
   if(state.wst.open) html += sheetWaste();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
   if(_wkeep){ const b=document.getElementById('mWstBody'); if(b) b.scrollTop=_wkeep; }
+  if(_qkeep){ const b=document.getElementById('mQuickBody'); if(b) b.scrollTop=_qkeep; }
   wireDrag();
   wirePull();
   syncHistory();
@@ -8467,6 +8628,7 @@ function layers(){
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  if(state.quickSheet) L.push(()=>{ state.quickSheet=false; });
   if(state.reply!=null) L.push(()=>{ state.reply=null; });
   if(state.detailActions) L.push(()=>{ state.detailActions=false; });
   if(state.search) L.push(()=>{ state.search=false; });

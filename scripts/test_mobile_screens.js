@@ -131,6 +131,10 @@ function buildCases(src) {
     'sheet:thread': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:null,page:'checkout',appVersion:'2.4.1',photos:['/x.png'],msgs:[{id:0,author:'customer',body:'Pickup time is wrong.',created_at:'2026-08-19 10:02:00'},{id:1,author:'admin',author_name:'Mei',body:'Looking at it now.',created_at:'2026-08-19 10:40:00'},{id:2,author:'customer',body:'Still doing it.',created_at:'2026-08-22 09:10:00'}]};render()",
     'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:E('Could not load the conversation.','\u65e0\u6cd5\u52a0\u8f7d\u5bf9\u8bdd\u3002'),msgs:null};render()",
     'sheet:search': "APP.cmd('openSearch')",
+    // The Quick actions picker, in both states that lay out differently: room
+    // for more, and the six-row ceiling with every add row dimmed.
+    'sheet:quick': "APP.cmd('tab','home');APP.cmd('quickEdit')",
+    'sheet:quick-full': "state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices'];APP.cmd('tab','home');APP.cmd('quickEdit')",
     // The two writes the phone gained: one store on one channel, and coming
     // back from holiday mode. Both render their confirm as well as their sheet.
     'sheet:channel': "APP.cmd('push','sales');state.chanTried=true;state.chan={channels:[{channel:'meituan',integrated:true,cardOpen:true,cells:[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',open:true},{storeCode:'panyu',nameEn:'Panyu',nameCn:'番禺店',open:false}]}]};render();APP.cmd('openChannel','meituan')",
