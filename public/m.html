@@ -378,6 +378,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 function ic(name, size, stroke){
   size = size||20; stroke = stroke||1.75;
   const L = window.lucide;
+  /* kebab → Pascal, and it only strips a hyphen that is followed by a LETTER.
+     A lucide name ending in a digit therefore does NOT resolve: 'trash-2'
+     becomes 'Trash-2', not 'Trash2', and lucide has no such key — so the tile
+     renders EMPTY, with no error anywhere. That cost the Waste row its icon.
+     Every name in this file is digit-free for that reason; if you need one
+     that is not, fix the regex here rather than passing the Pascal name in. */
   const P = String(name).replace(/(^|-)([a-z])/g,(_,__,c)=>c.toUpperCase());
   const node = L && L.icons && L.icons[P];
   const kids = node && Array.isArray(node[2]) ? node[2] : [];
@@ -576,6 +582,32 @@ const state = {
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
       add:{},inflight:{},rowErr:{},timers:{}},
+  /* WASTE — the ledger and its one write. Namespaced like `qs` rather than
+     spread across a dozen flat keys, for the reason the note above this
+     literal gives: `pick`, `note`, `range` and `busy` are exactly the short
+     names a later screen reaches for, and the collision they would cause is
+     silent. Two lifetimes in one bag, deliberately: the LEDGER half (rows …
+     reasons) survives the record sheet opening and closing, and the FORM half
+     (open … previewSeq) is reset on every open by CMD.wasteNew, so a sheet
+     never reopens carrying the last entry's product. */
+  wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
+       range:'week',reason:'',store:'',reasons:null,
+       /* `mounted` is the house guard against a sheet that re-enters on every
+          tap. render() rebuilds the whole app with innerHTML, so the .sheet
+          node is DESTROYED AND RECREATED on each keystroke and each chip —
+          and .sheet carries `animation:tSheetUp .4s`, which therefore replays
+          every time and slides the form up from the bottom of the screen
+          again. Same flag, same name, same two lines as poMounted /
+          detailMounted / prodMounted / custMounted. */
+       open:false,mounted:false,busy:false,formErr:null,
+       storeId:null,pick:null,qty:1,code:'',note:'',q:'',
+       /* TWO sequence counters, not one. The picker and the cost preview are
+          two independent races — a keystroke supersedes a keystroke, a
+          quantity tap supersedes a quantity tap — and sharing a counter makes
+          each one cancel the other's in-flight answer. One counter is the
+          version of this that works until somebody types while a preview is
+          loading. */
+       picks:null,pickErr:null,preview:null,pickSeq:0,previewSeq:0,timer:null},
   /* THE BOOT FLASH. caps null means "all allowed" — the right answer for a
      resolution hiccup, and the wrong one before anyone has asked. The app used
      to paint at once, so a narrowed operator got the whole of Tacet for as long
@@ -1062,6 +1094,110 @@ reg('catTop', v=>{ state.catTop=v||null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
+/* ── Waste ────────────────────────────────────────────────────────────────
+   Every filter refetches rather than narrowing what is already here: the
+   TOTALS are computed server-side over the live subset of the same filter
+   (§32 rule 11), so a client-side filter would leave the pulse line reporting
+   a different set from the rows under it. */
+/* A filter change DROPS the rows before refetching, and a refresh after a write
+   does not. The difference is whether what is on screen is still true: rows
+   from the last filter under chips saying something else are a set that does
+   not match its own heading — including the pulse line, which is the server's
+   arithmetic over the OLD filter and would sit there looking authoritative.
+   Rows after a write are merely one entry short, which the arriving answer
+   fixes without ever having shown anything false. */
+function wstRefilter(){ const w=state.wst; w.rows=null; w.totals=null; loadWaste(true); render(); }
+reg('wstRange',  v=>{ state.wst.range=v;  wstRefilter(); });
+reg('wstReason', v=>{ state.wst.reason=v; wstRefilter(); });
+reg('wstStore',  v=>{ state.wst.store=v;  wstRefilter(); });
+reg('wstClear',  ()=>{ const w=state.wst; w.range='week'; w.reason=''; w.store=''; wstRefilter(); });
+reg('wstRetry',  ()=>{ state.wst.err=null; wstRefilter(); });
+/* Opening the sheet RESETS the form half, always. A sheet that reopens
+   carrying the last entry's product is how the second jar of the morning gets
+   logged against the first one's SKU. The store is the exception and is
+   seeded, not blanked: an operator works one shelf, and re-picking it for
+   every entry is the tax this screen exists to remove. */
+reg('wasteNew', ()=>{
+  const w=state.wst, stores=state.stores||[];
+  w.open=true; w.busy=false; w.formErr=null;
+  w.pick=null; w.qty=1; w.note=''; w.q=''; w.picks=null; w.pickErr=null; w.preview=null;
+  /* The reason is left UNSET rather than defaulted to Spoiled. A pre-picked
+     reason is the one field somebody in a hurry will not re-read, and
+     "spoiled" and "staff consumption" are a different fact about the same
+     jar — §32 rule 8 keeps them apart precisely so the number can be acted
+     on, which a default quietly undoes. */
+  w.code='';
+  /* One store, no question: it is not a choice (§1.9). The filter's store is
+     preferred over the first in the list — somebody who narrowed the ledger to
+     Panyu and then pressed Record means Panyu. */
+  w.storeId = w.store ? Number(w.store) : (stores.length===1 ? stores[0].id : (w.storeId||null));
+  if(w.storeId) loadWastePicks();
+  /* Paint ONCE with the entrance animation, then arm the guard so every later
+     paint is still. Set after the render, not before it — the same two lines,
+     in the same order, as openPO and openCustomer. */
+  w.mounted=false; render(); w.mounted=true;
+});
+reg('wstClose', ()=>{ state.wst.open=false; state.wst.mounted=false; state.wst.formErr=null; render(); });
+reg('wstPickStore', id=>{ const w=state.wst;
+  if(String(w.storeId)===String(id)) return;
+  /* A different shelf holds different stock, so the chosen product and its
+     on-hand no longer mean anything — dropped rather than carried across. */
+  w.storeId=Number(id); w.pick=null; w.picks=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
+reg('wstSearch', v=>{ const w=state.wst, el=document.getElementById('mWstQ');
+  w.q=String(v||''); state.focus={id:'mWstQ',pos:el?el.selectionStart:null};
+  clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); render(); });
+reg('wstPick', id=>{ const w=state.wst;
+  const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
+  w.pick=p; w.qty=1; w.formErr=null; render(); loadWastePreview(); });
+reg('wstUnpick', ()=>{ const w=state.wst; w.pick=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
+/* Clamped at on-hand here as well as refused there. This is the UI saying it
+   first; the API's 409 stays the backstop, not the only line of defence. */
+reg('wstQty', d=>{ const w=state.wst;
+  const max=w.pick?Number(w.pick.on_hand):1;
+  w.qty=Math.max(1,Math.min(max,w.qty+Number(d)));
+  render(); loadWastePreview(); });
+reg('wstNote', v=>{ const w=state.wst, el=document.getElementById('mWstNote');
+  w.note=String(v||''); state.focus={id:'mWstNote',pos:el?el.selectionStart:null}; render(); });
+reg('wstCode', c=>{ state.wst.code=String(c||''); state.wst.formErr=null; render(); });
+reg('wstSave', ()=>{
+  const w=state.wst;
+  if(w.busy||wstBlocked()) return;
+  w.busy=true; w.formErr=null; render();
+  /* Read BEFORE the await. The toast is built from what was sent, and by the
+     time the promise settles the form may already have been reset — the same
+     failure shape the desktop file records against itself. */
+  const what=T(w.pick.name_en||w.pick.name_cn||'', w.pick.name_cn||w.pick.name_en||'');
+  const qty=w.qty;
+  apiWrite('/waste',{location_id:Number(w.storeId),subject_type:'product',
+    store_product_id:w.pick.id,qty:qty,reason_code:w.code,note:w.note.trim()||null})
+  .then(j=>{
+    const saved=(j&&j.data)||{};
+    w.busy=false; w.open=false;
+    /* Say what was recorded INCLUDING the cost that was snapshotted, at the
+       moment it happened (§32 rule 10 again). Then refetch: this write moved
+       stock, so the pulse and every row's on-hand behind it are now stale. */
+    /* THE TOAST IS A MONEY SURFACE TOO, and it is the one that gets forgotten:
+       the screen behind it can be gated perfectly and this still announces the
+       figure. Same gate, said once more. */
+    showToast(!wstShowMoney()
+      ? T('Recorded '+qty+' × '+what,'已登记 '+what+' × '+qty)
+      : saved.is_uncosted
+        ? T('Recorded '+qty+' × '+what+' — no cost on file','已登记 '+what+' × '+qty+' — 暂无成本')
+        : T('Recorded '+qty+' × '+what+' · '+wstMoney(saved.cost_total_cents),'已登记 '+what+' × '+qty+' · '+wstMoney(saved.cost_total_cents)));
+    loadWaste(true); render();
+  })
+  .catch(e=>{
+    w.busy=false;
+    if(String(e.message)==='auth') return;
+    /* The server's own words where it wrote them for a person — insufficient
+       stock names the figure we hold, and "tell us what happened" is already
+       the sentence we would write. Anything else gets the house line. */
+    w.formErr=(e.code==='insufficient_stock'||e.code==='note_required_for_other'||e.code==='waste_disabled')
+      ? e.message
+      : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false;
   state.poMounted=false; render(); state.poMounted=true;
   // The arrivals booked against this order, so the order and its deliveries
@@ -1690,19 +1826,49 @@ function recapRows(){
   const paid=of('paid_order'), disp=of('order_dispatched'), deliv=of('order_delivered');
   const autoCanc=of('order_cancelled').filter(e=>e.payload&&e.payload.reason==='auto_cancelled_unpaid');
   const refunded=of('refund_paid'), newCust=of('new_customer'), topups=of('topup');
+  const comm=of('affiliate_commission');
   const pickups=of('gzgrocery_pickup').filter(e=>!(e.payload&&e.payload.is_return));
   const noMoney=recapNoMoney();
   const wh=state.pos==='warehouse';
   const delivery=state.pos==='dispatch'||state.pos==='customer_service';
   const rows=[];
   const n1=(a,one,many)=>a.length===1?one:many;
+  /* How many of the orders ALREADY COUNTED on the paid line came through a
+     referral. Deliberately a parenthetical on that line and not a line of its
+     own: these orders are a subset of `paid`, so a second row would read as
+     more orders than were placed. The flag is absent (not false) on shops with
+     the referral program switched off, so this is 0 there and nothing shows. */
+  const affPaid=paid.filter(e=>e.payload&&e.payload.affiliate).length;
   if(paid.length&&!delivery){
     rows.push(wh
       ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
-      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total')), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
+      /* The affiliate count rides the money branch only. It is commercial
+         context — what the referral program is driving — and the warehouse
+         branch is the money-free version of this sentence by design.
+         CN: 推荐订单 is the term already used for these orders (app.html's
+         Referrers table), 笔 the measure word this very line already uses,
+         and （） the full-width form every other parenthetical in this file
+         takes — so no leading space before it, unlike the English half. */
+      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total'))+(affPaid?' ('+affPaid+' via affiliate)':''), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))+(affPaid?'（推荐订单 '+affPaid+' 笔）':'')));
   }
   if(disp.length) rows.push(T(disp.length+' '+n1(disp,'order','orders')+' dispatched', disp.length+' 个订单已发货'));
   if(deliv.length&&!wh) rows.push(T(deliv.length+' '+n1(deliv,'order','orders')+' delivered', deliv.length+' 个订单已送达'));
+  /* Commission the shop PAID OUT. Money, so it sits behind the same owner-only
+     gate as the revenue figures beside it — a warehouse or dispatch account
+     sees its queue without the cost of sale, exactly as the paid total, refunds
+     and top-ups already decide. Omitted at zero rather than shown as ¥0: a
+     shop not running referrals should not carry a permanent empty line, and
+     nor should one whose only movement today netted out.
+
+     CN: 已发出奖励 — the Affiliate tab's own headline for this exact money
+     (retail-admin/10-extras.js, "You have paid out"). NOT 佣金, which every
+     other use in this codebase spends on the PLATFORM's cut — the channel
+     fee Meituan and Eleme take, and the commission the platform bills a
+     tenant. Reusing it here would name the shop's own referral spend after
+     somebody else's. The one number covers both halves of the programme,
+     the one-shot bounty and the repeat-order share alike, which is why the
+     server unions the two tables into a single event type. */
+  if(!noMoney&&comm.length&&sum(comm,'amount')>0) rows.push(T(m(sum(comm,'amount'))+' affiliate commission', '已发出奖励 '+m(sum(comm,'amount'))));
   if(!noMoney&&autoCanc.length) rows.push(T(autoCanc.length+' unpaid '+n1(autoCanc,'order','orders')+' cancelled automatically', autoCanc.length+' 个未付款订单已自动取消'));
   if(!noMoney&&refunded.length) rows.push(T(refunded.length+' '+n1(refunded,'refund','refunds')+' settled — '+m(sum(refunded,'amount')), refunded.length+' 笔退款已完成，共 '+m(sum(refunded,'amount'))));
   if(!noMoney&&topups.length) rows.push(T(topups.length+' wallet '+n1(topups,'top-up','top-ups')+' — '+m(sum(topups,'amount')), topups.length+' 笔钱包充值，共 '+m(sum(topups,'amount'))));
@@ -2257,7 +2423,7 @@ const MORE_GROUPS=[
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -3377,6 +3543,415 @@ function screenActivity(){
 }
 
 /* ==========================================================================
+   Waste — a stock movement with a reason (desktop: retail-admin/20-waste.js)
+   --------------------------------------------------------------------------
+   OPTION A of docs/tacet-waste-mobile-options.md, chosen 2026-09-02: Waste's
+   own row in More, its own Worklist, and the record flow as a sheet.
+
+   WHY THIS SCREEN EXISTS AT ALL. `waste` appeared zero times in this file
+   while `lib/capabilities.js` handed waste:view and waste:record to the
+   warehouse and store_manager presets BY DEFAULT — so the permission an owner
+   granted a warehouse operator changed nothing they could see on a phone,
+   because there was no screen here to gate. The loss happens on the shelf and
+   was only recordable at a desk.
+
+   THIS SCREEN HOLDS NO RULES OF ITS OWN. routes/retail-waste.js settled all of
+   them and re-deciding any here is how two surfaces start disagreeing:
+     • Whole units only — the stepper, not a number field (qty_whole_units).
+     • Refuse, don't clamp — so on-hand is shown WHILE CHOOSING, and the
+       button is dead with a reason before the API ever says 409.
+     • The cost is a snapshot the server takes once. `is_uncosted` prints
+       "No cost", never ¥0.00 and never a dash: zero and unknown must not look
+       alike (§32 rule 10).
+     • Money arrives in WHOLE CENTS. wstMoney is the only place that divides,
+       for the reason the desktop file gives — a second /100 elsewhere is how
+       one screen ends up a hundred times wrong and another right.
+     • Reason codes are the SERVER's list, fetched from /waste/reasons. A
+       second copy in the browser is exactly how the kitchen screen ended up
+       with a vocabulary that existed only in a browser constant.
+
+   THREE THINGS THE DESKTOP HAS THAT THIS DELIBERATELY DOES NOT:
+     • NO VOID. It is waste:void — an owner capability that neither warehouse
+       nor store_manager holds, so it would be a control almost nobody
+       standing in the aisle can press. Voided rows still LIST, greyed, with
+       their reversal beside them: a ledger that hides its own corrections is
+       how one goes unnoticed, and that is true on a phone too.
+     • NO FREE DATE RANGE. Two native date pickers to ask "this week" is four
+       taps and a keyboard for a question with three usual answers. Three
+       range chips instead — the same three Stock activity already offers, on
+       the same Guangzhou day boundary. The range a preset cannot express
+       stays on the desktop.
+     • NO STATUS LINE. Nothing in a waste ledger is WAITING on an operator —
+       every row is finished business (§1.7's work rule, and the desktop
+       screen says the same about itself). The money figure that would be
+       tempting there is the pulse line's job, one region down.
+   ========================================================================== */
+/* Cents in, the tenant's currency out. The ONLY division in this file. */
+const wstMoney=c=>money(CUR,Number(c||0)/100);
+/* WHO MAY SEE WHAT A LOSS COST — `waste:costs`, decided per person by whoever
+   manages the team (Ash, 2026-09-02). It began as a role list here; it is a
+   capability now, because "who may see the money" is the admin's decision and
+   not a constant in a phone build. `waste:view` opens the ledger, `waste:costs`
+   reads the money in it, and the warehouse and store_manager presets ship with
+   the first and not the second.
+
+   ONE PLACE DECIDES, and every figure asks it: the pulse total, the uncosted
+   count that travels with it, each row's cost, the sheet's preview and the
+   toast after a save. A gate applied to four of those five is not a gate — the
+   fifth is where the number leaks, and the toast is the one everybody forgets.
+
+   FAILS CLOSED, which is the opposite of mCan() one screen over, and the
+   difference is deliberate. A null cap set means "we could not resolve this
+   operator", and everywhere else that resolves to ALLOW, because being locked
+   out of your own app by a hiccup is worse than being shown a row you cannot
+   use. Money inverts it: a missing figure for one render is recoverable, a
+   figure shown to somebody who may not read one is not.
+
+   AND IT IS NOT THE ENFORCEMENT. routes/retail-waste.js does not SEND a cost
+   to a caller without the capability, so this decides layout — whether a
+   column exists — rather than whether a number is secret. If the two ever
+   disagree the server wins, because there is nothing in the payload to draw. */
+const wstShowMoney=()=>Array.isArray(state.caps)&&state.caps.indexOf('waste:costs')!==-1;
+/* The same three windows Stock activity offers, ending today in Guangzhou —
+   the boundary the server counts its business days on, so "today" here and
+   `business_date` there mean the same day. */
+function wstWindow(){
+  const to=GZ_ISO();
+  const back=d=>new Date(Date.parse(to+'T00:00:00Z')-d*86400000).toISOString().slice(0,10);
+  const r=state.wst.range;
+  return {from:r==='today'?to:r==='month'?back(29):back(6), to};
+}
+/* The reason list is the SERVER's (routes/retail-waste.js REASONS), fetched
+   once. A failure here must not stop the ledger painting: the codes fall back
+   to themselves, which is ugly and true, rather than to a second hardcoded
+   vocabulary that would drift out of step the first time one is added. */
+function loadWasteReasons(){
+  if(state.wst.reasons) return;
+  state.wst.reasons=[];
+  api('/waste/reasons').then(r=>{ state.wst.reasons=Array.isArray(r)?r:[]; render(); }).catch(()=>{});
+}
+function wstReasonName(code){
+  const r=(state.wst.reasons||[]).find(x=>x.code===code);
+  return r?T(r.en,r.cn):(code||'—');
+}
+function loadWaste(force){
+  const w=state.wst;
+  if(w.tried&&!force) return;
+  w.tried=true; w.loading=true; w.err=null;
+  /* Three chips are three taps a second apart at most, and the fetches do not
+     have to come back in the order they went out — so the LAST one asked for
+     wins, not the last one to arrive. Without this, tapping Today then 30 days
+     can leave 30 days lit above today's rows. */
+  const seq=++w.listSeq;
+  const {from,to}=wstWindow();
+  const q=new URLSearchParams({from,to,include_voided:'1'});
+  if(w.reason) q.set('reason',w.reason);
+  if(w.store) q.set('location_id',String(w.store));
+  /* apiRaw, not api: the totals ride BESIDE the rows on the envelope, and
+     api() unwraps to `data` and throws the totals away. The uncosted count is
+     in there, and §32 rule 10 says it travels with the total always. */
+  apiRaw('/waste?'+q).then(j=>{
+    if(seq!==w.listSeq) return;            // a later filter already won
+    w.rows=Array.isArray(j&&j.data)?j.data:[];
+    w.totals=(j&&j.totals)||null;
+    w.loading=false; w.err=null; render();
+  }).catch(e=>{
+    if(seq!==w.listSeq||String(e.message)==='auth') return;
+    w.loading=false; w.rows=null; w.totals=null;
+    /* §1.12 — a section with bad data SHOWS that it failed. It must not fall
+       through to the empty state, which would read as "nothing was wasted". */
+    w.err=E('Could not load waste records.','无法加载损耗记录。'); render();
+  });
+}
+function wstStoreName(row){
+  const en=row.location_name_en||row.location_code||'', cn=row.location_name_cn||row.location_code||'';
+  return (en||cn) ? T(en||cn, cn||en) : T('Unknown','未知');
+}
+/* A product deleted outright leaves a null name on the server's join. Say so
+   rather than rendering a blank — a blank reads as "nothing here", and
+   something was definitely here. */
+function wstProductName(row){
+  const en=row.product_name_en||'', cn=row.product_name_cn||'';
+  if(!en&&!cn) return T('Unknown','未知');
+  return T(en||cn, cn||en);
+}
+/* The pulse, as one line rather than tiles — four figures cannot share a
+   390px row, and showing two of them would be an arbitrary subset. The
+   uncosted count is here and not optional (§32 rule 10): a total presented
+   alone reads as complete, and the entire point of the flag is that sometimes
+   it is not. Voided is stated for the same reason — a reader can see that
+   corrections exist AND that they are not in the number. */
+function wstPulse(){
+  const t=state.wst.totals; if(!t) return '';
+  const bits=[];
+  // Same disagreement guard as the rows: a stripped total is absent, not zero.
+  if(wstShowMoney() && t.cost_total_cents!=null){
+    bits.push(`<span class="num" style="color:var(--text-primary);font-weight:500">${wstMoney(t.cost_total_cents)}</span> ${T('written off','已核销')}`);
+    // The uncosted count is a fact ABOUT the money, so it goes with it.
+    if(Number(t.uncosted_entries||0)) bits.push(`<span class="num" style="color:var(--amber-ink)">${t.uncosted_entries} ${T('with no cost','暂无成本')}</span>`);
+  } else {
+    // Without money there is still something worth saying, and it is the one
+    // number this operator put there: how many losses are in the range. An
+    // empty pulse would read as a screen that failed to load its own summary.
+    bits.push(`<span class="num" style="color:var(--text-primary);font-weight:500">${Number(t.entries||0)}</span> ${T(Number(t.entries)===1?'entry':'entries','条记录')}`);
+  }
+  // A void is a correction, not an amount — it is stated to both audiences.
+  if(Number(t.voided_entries||0)) bits.push(`<span class="num">${t.voided_entries} ${T('voided','已作废')}</span>`);
+  return `<div style="padding:0 16px;font-size:13px;color:var(--text-secondary)">${bits.join(' · ')}</div>`;
+}
+/* Three row kinds, and each says which it is. A REVERSAL is not a loss and
+   must never read as one — it is in the list only because hiding a correction
+   is how a correction goes unnoticed. Both it and the row it cancelled go
+   grey: they are still evidence, they are no longer money. */
+function wstRow(r){
+  const voided=r.voided_by_waste_id!=null, reversal=r.reverses_waste_id!=null, mute=voided||reversal;
+  const mark = voided ? T('Voided','已作废') : reversal ? T('Reversal','冲销') : '';
+  /* No cost column at all for a money-blind role — not a blank, not a dash.
+     "No cost" is withheld with the figures: it is a statement about this
+     product's costing, which is the same ledger they may not read. */
+  /* The second clause is the disagreement guard. If this operator's caps say
+     yes and the server stripped the field anyway, wstMoney(undefined) is ¥0 —
+     which does not read as "withheld", it reads as "the jar was free". Absent
+     beats a zero that means something else. */
+  const cost = (!wstShowMoney() || (r.cost_total_cents==null && !r.is_uncosted)) ? ''
+    : r.is_uncosted
+      ? `<span style="color:var(--text-secondary)">${T('No cost','暂无成本')}</span>`
+      : `<span class="num"${mute?' style="color:var(--text-secondary)"':''}>${wstMoney(r.cost_total_cents)}</span>`;
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0;gap:2px">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${mute?'color:var(--text-secondary)':''}">${escAttr(wstProductName(r))}</span>
+        ${mark?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${mark}</span>`:''}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.qty} × · ${escAttr(wstReasonName(r.reason_code))} · ${escAttr(wstStoreName(r))}</span>
+      ${r.note?`<span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.note)}</span>`:''}
+    </span>
+    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none">
+      ${cost?`<span style="font-size:15px;font-weight:500">${cost}</span>`:''}
+      ${/* business_date is the STORE's day (the server's Guangzhou boundary,
+           businessDateForLocation); fmtDateOnly says Today/Yesterday against
+           the PHONE's. They agree for a phone in the shop's timezone, which is
+           every phone this ships to, and a traveller sees a date rather than a
+           wrong word. Same helper and same trade as the PO arrival dates. */''}
+      <span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDateOnly(r.business_date)}</span></span></div>`;
+}
+function screenWaste(){
+  loadWasteReasons(); loadWaste();
+  const w=state.wst;
+  const rangeBtn=(k,label)=>`<button onclick="APP.cmd('wstRange','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${w.range===k?'var(--surface-card)':'transparent'};color:${w.range===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${w.range===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
+  const ranges=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+    ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}</div>`;
+  /* §1.9 data precondition — a picker that can only pick one thing is not a
+     choice. One store, no store filter, and no placeholder explaining its
+     absence. */
+  const stores=state.stores||[];
+  const storeChips = stores.length>1
+    ? chipRow([{key:'',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>
+        ({key:String(s.id),en:s.name_en||s.name_cn||('#'+s.id),zh:s.name_cn||s.name_en||('#'+s.id)}))), String(w.store),'wstStore')
+    : '';
+  const reasonChips = (w.reasons&&w.reasons.length)
+    ? chipRow([{key:'',en:'All reasons',zh:'全部原因'}].concat(w.reasons.map(r=>({key:r.code,en:r.en,zh:r.cn}))), w.reason,'wstReason')
+    : '';
+  const head=`<div style="padding:14px 0 0;display:flex;flex-direction:column;gap:12px">
+    <div style="padding:0 16px">${ranges}</div>
+    ${storeChips}${reasonChips}`;
+  if(w.err) return head+`<div style="padding:12px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${w.err}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('wstRetry')">${T('Try again','重试')}</button></div></div>`;
+  if(!w.rows) return head+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
+  /* §1.12 — empty and no-results are two states and two sentences. The first
+     is a compliment; the second names the filter and offers to clear it.
+     Conflating them is the most common failure in this product. */
+  const filtering=!!(w.reason||w.store||w.range!=='week');
+  if(!w.rows.length) return head+(filtering
+    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
+         <div style="font-size:18px;font-weight:500">${T('Nothing matches those filters','没有匹配的内容')}</div>
+         <button class="btn2" onclick="APP.cmd('wstClear')">${T('Clear the filters','清除筛选')}</button></div></div>`
+    : nothingYet(T('Nothing wasted yet','还没有登记损耗'),
+        T('Long may it last. Anything written off here comes straight off the shelf count.','希望一直如此。在此登记的损耗会直接从库存中扣减。'))+'</div>');
+  return head+`
+    ${wstPulse()}
+    <div style="padding:0 16px 24px"><div class="list">${w.rows.map((r,i)=>
+      `${i?'<div class="sep" style="margin-left:14px"></div>':''}${wstRow(r)}`).join('')}</div></div>
+  </div>`;
+}
+
+/* ── The record sheet ──────────────────────────────────────────────────────
+   §1.13: every field visible on open, fixed height, one commit. Nothing here
+   is abandonable-and-resumable and nothing grows the height by the operator's
+   own actions, so it is a sheet and not a screen.
+
+   FIELD ORDER IS THE ORDER OF THE QUESTIONS somebody holding a dropped jar
+   actually asks — what, how many, why. Store leads only because the picker
+   cannot run without one, and it collapses to nothing at all for a
+   single-store account.
+
+   THE PICKER CALLS /waste/products AND NEVER /products. That endpoint is gated
+   on the waste capability alone — it exists because the kitchen screen's
+   picker sat behind the `products` permission while its own screen sat behind
+   `waste`, so the default grant handed a waste-only operator an empty list and
+   no explanation (hazard H13). Calling /products here would rebuild the bug on
+   a new surface. */
+function loadWastePicks(){
+  const w=state.wst;
+  if(!w.storeId){ w.picks=null; return; }
+  const q=new URLSearchParams({location_id:String(w.storeId)});
+  if(w.q.trim()) q.set('search',w.q.trim());
+  const seq=++w.pickSeq;
+  api('/waste/products?'+q).then(rows=>{
+    if(seq!==w.pickSeq) return;            // a later keystroke already won
+    w.picks=(Array.isArray(rows)?rows:[]).slice(0,12); w.pickErr=null; render();
+  }).catch(e=>{
+    if(seq!==w.pickSeq||String(e.message)==='auth') return;
+    w.picks=[]; w.pickErr=E('Could not search products.','无法搜索商品。'); render();
+  });
+}
+/* The preview endpoint, not arithmetic done here — the same accessor and the
+   same rounding the write uses, so the figure shown and the figure stored
+   cannot disagree. */
+function loadWastePreview(){
+  const w=state.wst;
+  if(!w.pick||!(w.qty>0)){ w.preview=null; return; }
+  const seq=++w.previewSeq;
+  api('/waste/preview?store_product_id='+w.pick.id+'&qty='+w.qty).then(d=>{
+    if(seq!==w.previewSeq) return;
+    w.preview=d||null; render();
+  }).catch(e=>{ if(seq===w.previewSeq&&String(e.message)!=='auth'){ w.preview=null; render(); } });
+}
+/* ONE place decides whether the button is live, and it always says WHY it is
+   not. A dead control with no explanation is the failure the desktop's recipe
+   screen records against itself; this is the same guard, and it runs before
+   the API's own refusal rather than instead of it. */
+function wstBlocked(){
+  const w=state.wst;
+  if(!w.storeId) return T('Choose a store.','请选择门店。');
+  if(!w.pick) return T('Choose a product.','请选择产品。');
+  if(!Number.isInteger(w.qty)||w.qty<=0) return T('How many?','数量是多少？');
+  /* No measure word, in either language — the desktop screen's rule. A count
+     of something sold by weight rendered as “3 件” reads as three pieces,
+     which is a different fact. */
+  if(w.qty>Number(w.pick.on_hand)) return T('Only '+w.pick.on_hand+' on hand.','库存只有 '+w.pick.on_hand+'。');
+  if(!w.code) return T('Pick a reason.','请选择原因。');
+  if(w.code==='other'&&!w.note.trim()) return T('Tell us what happened.','请填写备注说明。');
+  return '';
+}
+function sheetWaste(){
+  const w=state.wst, stores=state.stores||[];
+  const blocked=wstBlocked();
+  const storeRow = stores.length>1 ? `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Store','门店')}</span>
+      <div class="hscroll" style="display:flex;gap:8px">${stores.map(s=>
+        `<button class="chip ${String(w.storeId)===String(s.id)?'on':''}" onclick="APP.cmd('wstPickStore',${s.id})"><span>${escAttr(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))}</span></button>`).join('')}</div>
+    </div>` : '';
+  /* Chosen product: the search field is replaced by the thing it found, with
+     ON-HAND under the NAME rather than under the stepper. The API refuses a
+     quantity above it, and finding that out after pressing the button is the
+     worse half of the same information. The × puts the search back. */
+  const product = w.pick ? `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Product','产品')}</span>
+      <div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(w.pick.name_en||w.pick.name_cn||'', w.pick.name_cn||w.pick.name_en||''))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(w.pick.on_hand+' on hand','库存 '+w.pick.on_hand)}${w.pick.sku?' · '+escAttr(w.pick.sku):''}</span></span>
+        <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" onclick="APP.cmd('wstUnpick')">${ic('x',20,2)}</button></div>
+    </div>` : `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Product','产品')}</span>
+      <input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
+        placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">
+      ${w.pickErr?`<div style="font-size:13px;color:var(--brick-ink)">${w.pickErr}</div>`:''}
+      ${!w.storeId?`<div style="font-size:13px;color:var(--text-secondary)">${T('Choose a store first.','请先选择门店。')}</div>`
+        :w.picks===null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+        :!w.picks.length?`<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
+        :`<div class="list">${w.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
+          <button class="row" onclick="APP.cmd('wstPick',${p.id})" style="min-height:52px">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||''))}</span>
+              <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(p.on_hand+' on hand','库存 '+p.on_hand)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
+          </button>`).join('')}</div>`}
+    </div>`;
+  /* Whole units, so a stepper and never a number field: the API refuses a
+     fraction (qty_whole_units_required) because the stock column is an
+     integer and a waste row disagreeing with its own movement is a defect by
+     design. 56px to match Add stock — same thumb, same aisle. */
+  const qty = `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Quantity','数量')}</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('wstQty',-1)" ${w.qty<=1?'disabled':''} aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
+        <span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em">${w.qty}</span>
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('wstQty',1)" ${w.pick&&w.qty>=Number(w.pick.on_hand)?'disabled':''} aria-label="${T('More','增加')}">${ic('plus',24)}</button></div>
+    </div>`;
+  const reasons = `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Reason','原因')}</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${(w.reasons||[]).map(r=>
+        `<button class="chip ${w.code===r.code?'on':''}" onclick="APP.cmd('wstCode','${escAttr(r.code)}')"><span>${T(r.en,r.cn)}</span></button>`).join('')}</div>
+    </div>`;
+  /* Optional everywhere except on `other`, where the API requires it and says
+     so — enforced here so the operator is told before they press, and again
+     by the server so it cannot be bypassed. */
+  const note = `
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">${T('Note','备注')}${w.code==='other'?'':` <span style="font-weight:400">· ${T('optional','选填')}</span>`}</span>
+      <input id="mWstNote" value="${escAttr(w.note)}" placeholder="${T('What happened?','发生了什么？')}" style="width:100%" oninput="APP.cmd('wstNote',this.value)">
+    </div>`;
+  /* The foot says the cost BEFORE the commit, and says "no cost on file" in
+     the same slot rather than a zero — so a loss that saves without one is
+     heard now and not next week when a total looks wrong. */
+  /* The consequence line. A money-blind operator still gets the half that is
+     theirs — what the shelf will read afterwards — and never the cost. The
+     shelf figure is not money and is the more useful of the two to somebody
+     standing in front of it. */
+  const shelfAfter = w.pick ? `${T('Stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>` : '';
+  const costLine = blocked
+    ? `<span style="color:var(--amber-ink)">${blocked}</span>`
+    : !wstShowMoney()
+      ? (shelfAfter || '&nbsp;')
+      : w.preview
+        ? (w.preview.is_uncosted
+            ? T('No cost on file — it records without one','该产品暂无成本，将不计成本登记')
+            : `${T('Cost','成本')} <span class="num">${wstMoney(w.preview.cost_total_cents)}</span> · ${T('stock drops to','库存降至')} <span class="num">${Number(w.pick.on_hand)-w.qty}</span>`)
+        : '&nbsp;';
+  /* Animate on the way IN and never again. Every tap in this sheet — a store
+     chip, a stepper, a reason, a keystroke in the note — goes through
+     render(), which rebuilds the app with innerHTML and so hands .sheet and
+     .scrim brand-new nodes that replay their entrance. The form slid up from
+     the bottom of the screen on every press. Same guard the other four sheets
+     use. */
+  const noAnim=state.wst.mounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('wstClose')"></div>
+   <div class="sheet" style="top:64px;z-index:46;overflow:hidden;${noAnim}">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('wstClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500">${T('Record waste','记录损耗')}</span>
+         <span style="width:36px;flex:none"></span></div></div>
+     ${/* Named so render() can put its scroll position back. This form is
+          taller than the sheet once a product is picked, so the reason chips
+          and the note are BELOW the fold — and without this, reaching them
+          and tapping one threw the sheet back to the top, which is the same
+          "it jumps" the entrance animation was causing one layer up. */''}
+     <div id="mWstBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
+       ${storeRow}${product}${w.pick?qty:''}${w.pick?reasons:''}${w.pick?note:''}
+       ${/* §1.12 error — a failed write renders where the operator is looking
+            and STAYS. Never a toast that flies away: a loss the operator
+            believes was recorded and was not is worse than one they know
+            failed. */''}
+       ${w.formErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${w.formErr}</span></div>`:''}
+     </div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
+       <div style="font-size:13px;color:var(--text-secondary);min-height:18px">${costLine}</div>
+       <button class="cta" ${blocked||w.busy?'disabled':''} style="${blocked||w.busy?'opacity:.55':''}" onclick="APP.cmd('wstSave')">${w.busy?T('Recording…','登记中…'):T('Record waste','记录损耗')}</button></div></div>`;
+}
+
+/* ==========================================================================
    Purchasing — the goods ledger (desktop: 16-purchasing.js)
    --------------------------------------------------------------------------
    This screen used to be three invented purchase orders out of DB.purchasing,
@@ -4329,6 +4904,15 @@ const SUBS={
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
+  /* No `status` — see the block comment on screenWaste. The CTA carries
+     waste:record on its own: the SCREEN is waste:view (a ledger reads fine
+     without the write), and an operator holding only view gets the title and
+     an empty slot, which §1.7 calls the finished answer rather than a button
+     that 403s. */
+  waste:{title:['Waste','损耗'],
+    cta:()=>mCan('waste:record')
+      ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('wasteNew')">${T('Record','记录')}</button>` : '',
+    render:()=>screenWaste()},
   delivery:{title:['Delivery','配送'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
     if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
@@ -7191,6 +7775,14 @@ const ROUTE_CAP={
      purchasing:receive server-side (lib/cap-routes.js). Showing it to a holder
      of purchasing:view alone would be a screen whose only action 403s. */
   receiving:'purchasing:receive', receive:'purchasing:receive',
+  /* WASTE IS GATED ON VIEW, NOT ON RECORD — the opposite call to Receiving's
+     one line above, and for the opposite reason. Receiving is a screen whose
+     entire purpose is the save at the bottom of it, so a viewer gets a page
+     that 403s. This one is a LEDGER: waste:view is a real grant on its own
+     (an owner reading what the shop lost holds it without waste:record), and
+     the page reads correctly with the CTA gone. The record button carries the
+     second capability itself — see SUBS.waste's cta. */
+  waste:'waste:view',
   stockadd:'quickstock:add',
   stockapp:['quickstock:add','quickstock:recount'],
   // More → Marketing.
@@ -7483,7 +8075,16 @@ function pageHead({title, status, cta, back, controls}){
      44px target underneath them that needed the room. */
   return `<div style="border-bottom:1px solid var(--border-default);padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 10px 14px 16px">
     ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
-    <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${right?'0':'10px'}">
+    ${/* A FILLED BUTTON NEEDS MORE ROOM THAN AN ICON DOES, and it is the same
+         10px either way that makes one look right and the other look jammed.
+         The note above is about ICON controls: their glyph is centred in a
+         44px target, so it reads ~11px inside its own box and the band's 10px
+         lands it optically flush. A Dusk slab has no such inset — its painted
+         edge IS the box edge — so at 10px it sits closer to the screen edge
+         than the title does to the other one (16px), which is what "too stuck
+         to the right" is. 6px here + the band's 10px = a 16px gutter that
+         matches the title's. Controls keep 0, and a bare header keeps 10. */''}
+    <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${controls?'0':(cta?'6px':'10px')}">
       <h1 style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
       ${right}
     </div>
@@ -7604,6 +8205,15 @@ function render(){
   const _sc=document.getElementById('content');
   const _keep=(_sc&&screenKey()===_scrollKey)?_sc.scrollTop:0;
   _scrollKey=screenKey();
+  /* A SHEET has its own scroller, and #content's position says nothing about
+     it. The waste form is the first sheet here tall enough to scroll and busy
+     enough to repaint on every tap, so it is the first to need this. Both
+     halves are unconditional and still correct: a sheet that just opened reads
+     0 and restores nothing, and one that just closed has no element to restore
+     into. Only this sheet is named — the others repaint far less and are left
+     exactly as they are. */
+  const _wb=document.getElementById('mWstBody');
+  const _wkeep=_wb?_wb.scrollTop:0;
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
     return;
@@ -7624,10 +8234,12 @@ function render(){
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
   if(state.chanSheet) html += sheetChannel();
+  if(state.wst.open) html += sheetWaste();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
+  if(_wkeep){ const b=document.getElementById('mWstBody'); if(b) b.scrollTop=_wkeep; }
   wireDrag();
   wirePull();
   syncHistory();

@@ -210,6 +210,13 @@ const sandbox = {
   cuT: (en) => en,
   fmt: n => Number(n).toFixed(2),
   toast() {}, api: () => Promise.resolve({}), logActivity() {},
+  // WHO THIS OPERATOR IS, which this file never had to say until cost and
+  // margin were split out of `products:view` (2026-09-03, `products:costs`).
+  // The whole subject here is a tag ABOUT a cost, so every case below is an
+  // operator who may read one — and paShowMoney() fails CLOSED, so leaving
+  // CAPS unset would silently drop `cost_incomplete` from the save and test
+  // the wrong operator.
+  CAPS: new Set(['products:view', 'products:costs', 'products:edit']),
 };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
