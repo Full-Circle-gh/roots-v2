@@ -1,6 +1,8 @@
 # Tacet stock movement — schema survey and migration plan
 
-**v1.0 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+**v1.1 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+
+**v1.1 folds in a second document that briefly existed at this same path on branch `claude/stock-movement-schema-decisions-av2e21`.** That branch was written without sight of this one — the session had only `origin/main` and its own branch in its refs, found no file here, and wrote a parallel one. **This document is primary and that branch is SUPERSEDED and abandoned**; its file is left in place as history and nothing further is committed to it. What it contributed and this document lacked is now here: **Ash's five rulings and their reasoning (PART D)**, which close four of PART C's open questions, and **the debt and consequences those rulings leave behind (PART E)**. Where the two said the same thing, this document's wording was kept — it was first, and its IN TRANSIT naming is the more precise.
 
 Constraints taken as binding: **SQLite stays** (§24 — the Postgres migration is cancelled, and nothing here is deferred pending it); **every stock write goes through `lib/inventory.js` `adjustStock`** — no new direct writers; **everything must work on a tenant database**, not only Roots; **the markets / `retail_stores` split is out of scope** and is not touched anywhere below.
 
@@ -275,6 +277,8 @@ This mirrors `qty_sent`'s existing NULL-means-not-overridden convention (A2), wh
 | `dispatched_at` | `DATETIME` | nullable | OUT half written. **The idempotency guard for the outbound half.** |
 | `received_confirmed_at` | `DATETIME` | nullable | IN half written. **The idempotency guard for the inbound half.** |
 
+**D2 ADDS A REQUIREMENT THIS TABLE DID NOT ANTICIPATE, and it falls out of the NULL-versus-zero distinction above.** An auto-settled line has `qty_received` **written** — to the sent quantity — so the moment the sweep runs, an unverified line becomes byte-identical to one a person counted. That collapses exactly the distinction this section is built on, in the one case where it matters most. **D2's "permanently marked, never indistinguishable" therefore cannot be carried by `qty_received` and needs its own column** — a nullable `auto_settled_at DATETIME` on `restock_items` is the smallest thing that works, and being a timestamp rather than a flag it also answers *when*, which the repeat-offender safeguard needs. The three line states then read cleanly: `qty_received IS NULL` = outstanding; set with `auto_settled_at IS NULL` = **counted by a person**; set with `auto_settled_at` non-NULL = **assumed by the system, never verified.** Per D0, only the middle one may ever be treated as the counter's number.
+
 `goods_state` is derivable from the two stamps and is stored anyway — it is the column every list query filters on, and a stored enum indexes where a `CASE` over two timestamps does not. The stamps remain the authority; `goods_state` is written in the same transaction and never independently.
 
 **`stock_applied_at` is kept, and frozen.** No new code reads or writes it. It stays because it is the only record that a pre-migration order moved its stock under the old one-step model, and B8 uses it to decide what an in-flight order becomes. Its `database.js:827-832` comment gains a note saying it is historical.
@@ -320,7 +324,11 @@ Checked against every reason in use: `restock`, `restock_transfer_out`, `restock
 
 This is a change to `lib/inventory.js`, which is the file the constraint "all stock writes go through the ledgered path" protects. It **widens the ledgered path's record-keeping without adding a writer**, which is the letter and the spirit of the constraint — but it is a change to shared inventory code and is flagged as such in B8's ordering.
 
-**Also required here: A0.2's zero clamp.** `Math.max(0, oldQty + deltaQty)` must stop silently absorbing an over-decrement. Recommendation: `adjustStock` gains a `refuseNegative` option that **throws** rather than clamping, and the restock OUT half passes it — so a dispatch exceeding warehouse stock rolls the whole transfer back and reports it, exactly as `_checkTransferIds` failures already do. Defaulting it off leaves every other caller unchanged. **This is a behaviour change to a live path and needs Ash — see Q3.**
+**Also required here: A0.2's zero clamp.** `Math.max(0, oldQty + deltaQty)` must stop silently absorbing an over-decrement.
+
+> ~~Recommendation: `adjustStock` gains a `refuseNegative` option that **throws** rather than clamping, and the restock OUT half passes it — so a dispatch exceeding warehouse stock rolls the whole transfer back and reports it, exactly as `_checkTransferIds` failures already do. Defaulting it off leaves every other caller unchanged. **This is a behaviour change to a live path and needs Ash — see Q3.**~~
+
+**WITHDRAWN — Ash ruled the other way on 2026-09-03, see D1.** A dispatch is **never** blocked by the record: a picker who physically finds 50 on a shelf showing 20 sends 50 and the warehouse goes to −30. So the clamp is **deleted outright**, not made conditional, and no `refuseNegative` option is added. The reasoning is that refusing defends a number already known to be wrong, and a visible −30 is a truer record than a silent zero. **Q3 is answered; the strikethrough above is left in place so a later reader meets the rejected proposal rather than re-inventing it.** D1.1 lists which callers this actually reaches, and PART E the debt it leaves.
 
 ---
 
@@ -343,7 +351,9 @@ All three come off one row of `restock_items` with no joins and no aggregation. 
 
 **The rule that keeps them honest: the ledger is written from the same column the screen reads, in the same transaction, and neither is recomputed afterwards.** Concretely — the IN half's `deltaQty` must be `qty_received` read back from the row it just wrote, not a value carried in from the request body. Same discipline the OUT half already keeps with `qty_sent`.
 
-**One case the columns do not cover**, and it should be named rather than discovered: a line dispatched but *absent* from the delivery entirely — not "counted zero", but never counted. `qty_received` stays NULL and the line never settles. Under B1 the order cannot reach `settled` while any line is NULL, which is correct (`Main.dc.html`'s inactive button says so) but means an abandoned count leaves an order stuck `in_transit` forever, holding phantom in-transit stock. **This needs a decision — Q2.**
+**One case the columns do not cover**, and it should be named rather than discovered: a line dispatched but *absent* from the delivery entirely — not "counted zero", but never counted. `qty_received` stays NULL and the line never settles. Under B1 the order cannot reach `settled` while any line is NULL, which is correct (`Main.dc.html`'s inactive button says so) but means an abandoned count leaves an order stuck `in_transit` forever, holding phantom in-transit stock. ~~**This needs a decision — Q2.**~~
+
+**ANSWERED by D2**: at the end of the trading day the sweep settles those lines at the sent quantity and stamps `auto_settled_at`, so the order reaches `settled` and stops holding phantom in-transit stock. **The yardsticks above still work on such a line, and must be read with D0 in mind:** its "counted vs sent" gap computes to exactly zero — not because the delivery was perfect but because nobody looked, which is why the stamp and not the arithmetic is what tells them apart. **Any screen showing a gap on an auto-settled line must show the mark beside it**, or it reports a verified match where none happened.
 
 ---
 
@@ -383,6 +393,8 @@ const id = cfgValue('stock.warehouseStoreId', null);
 
 `production.outputStoreId` is read the same way and defaults to nothing. §39 makes it per-tenant, and Roots' value happens to equal its warehouse — that is a value, not a default.
 
+**D2 adds a third key: `stock.tradingDayEnd`** — the tenant's trading-day boundary (a local clock time plus a zone) that the auto-settle sweep acts on. It is per-tenant for the reasons D2 gives: the per-store hours columns are optional, routinely unset, and fall back to always-open, and no day-boundary calculation in this codebase reads a per-location zone today. **Unset must not mean "never settle"** — an unset boundary should fall back to a stated default (`lib/business-date.js`'s `SYSTEM_DEFAULT_TZ` is the existing precedent) rather than silently leaving transfers open forever, which is the failure D2 exists to end. **And per D3, the sweep must enter each tenant's scope before reading any of these three keys** — it is the one caller here that does not run inside a request.
+
 **Backfill on migration**, for tenants that never had a setting: if exactly one active `retail_stores` row has `code LIKE '%warehouse%'`, write it and log it. Otherwise write nothing and log that the tenant must set it before restock can move stock. **Never guess by stock volume, even once.**
 
 ---
@@ -406,7 +418,11 @@ The second query is the one that matters: an order at `prepared` or `delivered` 
 
 **Step 1 — `lib/inventory.js`: `adjustStock` accepts and writes `refTable` / `refId`** (B4), defaulting to today's literals. Ships alone, changes no behaviour, is independently testable. **Everything else depends on it.**
 
-**Step 2 — columns.** `addColumn()` for `qty_received`, `goods_state`, `dispatched_at`, `received_confirmed_at`, plus `CREATE INDEX idx_restock_goods_state ON restock_orders(goods_state)`. Pure additions; no rebuild; safe on a populated table.
+**Step 1b — the zero clamp comes out (D1), and it is GATED.** Deleting `Math.max(0, oldQty + deltaQty)` at `lib/inventory.js:1084` is one line, but it is **not a one-line change**, and it must not ship until all four of these land in the same step: **(a)** the clamp deletion itself; **(b)** the `d < 0` guard on `routes/retail-inventory.js:343`, or an explicit ruling that a kitchen delta may go negative; **(c)** a resolution of the PO-receiving downward correction (E2) — **which needs Ash and is the actual blocker, not an implementer's call** — together with the amendment to `docs/purchase-returns.md` item 3 that any resolution forces; and **(d)** the dashboard filter fix (E3), all four clauses, or a negative balance is true in the database and invisible on the screen built to surface exactly this. **Callers already carrying their own guard need nothing** (`retail-waste.js`, `retail-purchasing.js:366`). **The four channel ingest paths of E1 are explicitly NOT part of this step** and keep clamping; that is per-channel work with its own decisions.
+
+Ordering note: this can ship **before or after** Step 1, but **must precede Step 4** — the split transfer is where a dispatch first outlives its receipt by hours, and a clamp still in place at that point is A0.2 with a longer fuse.
+
+**Step 2 — columns.** `addColumn()` for `qty_received`, **`auto_settled_at`** (D2, per B2 — the mark that keeps an assumed line distinguishable from a counted one), `goods_state`, `dispatched_at`, `received_confirmed_at`, plus `CREATE INDEX idx_restock_goods_state ON restock_orders(goods_state)`. Pure additions; no rebuild; safe on a populated table. **Every existing row backfills `auto_settled_at` as NULL, which is correct** — no historical line was ever auto-settled, and NULL is exactly the claim "this was not assumed by the system".
 
 **Step 3 — backfill `goods_state`**, guarded by `_migrations` (`database.js:192`, the established pattern):
 
@@ -427,6 +443,8 @@ The second query is the one that matters: an order at `prepared` or `delivered` 
 **Step 5 — `_resolveWarehouseStoreId` → `cfgValue`** (B7), with the single-warehouse backfill.
 
 **Step 6 — front ends.** `public/app.html` and `public/kitchen.html` gain the receipt screen and read `goods_state`. No existing status literal changes (A7), so nothing already on screen breaks.
+
+**Step 7 — the auto-settle sweep (D2), LAST and separable.** It cannot run before Step 4 (nothing is `in_transit` until dispatch and receipt are split) and it must not run before `auto_settled_at` exists, or it silently manufactures verified-looking lines — the one failure D2 is written to prevent. It needs the `stock.tradingDayEnd` key (B7), a tenant-scoped read per D3, and **its mandatory repeat-offender surface, which is part of the ruling and not a follow-up**: shipping the sweep without it is shipping the button D2 rejected. **Until this step lands, an abandoned count still strands a transfer `in_transit`** — the Q2 behaviour, unchanged and now merely time-boxed by intent rather than by code.
 
 **What is reversible.** Steps 1, 2 and 3 are: added columns can be ignored, the backfill is derived entirely from `stock_applied_at` which is never modified, and it can be re-derived after a revert. **Step 4 is the point of no return** — once a dispatch has written an OUT half with no IN half, reverting to one-step code leaves those units nowhere. If Step 4 needs backing out, in-transit orders must be settled first.
 
@@ -476,21 +494,173 @@ Both suites use `scripts/test-support/tenant-fixture.js` — `harness()`, `openT
 
 # PART C — OPEN QUESTIONS
 
+**STATUS, 2026-09-03: Q1, Q2, Q3, Q4 and Q6 are ANSWERED by Ash's rulings in PART D. Only Q5 is still open.** Each question's text is left exactly as written — the framing is what a later reader needs in order to understand why the answer went the way it did — with the answer marked at the end of it. **Q3's answer went against this document's own recommendation.**
+
 ## For Ash
 
-**Q1 — `storefront_config` for warehouse settings, or a rename first?** A4 recommends reusing it: it works, it is per-tenant, and it already holds `inventory.*` keys unrelated to any storefront. But `stock.warehouseStoreId` living in a table called `storefront_config` will read as a mistake to whoever finds it next. Options: use it as-is (recommended, zero risk); use it and rename the table in a separate pass; or create a `tenant_config` table now and accept two config mechanisms during the transition.
+**Q1 — `storefront_config` for warehouse settings, or a rename first?** A4 recommends reusing it: it works, it is per-tenant, and it already holds `inventory.*` keys unrelated to any storefront. But `stock.warehouseStoreId` living in a table called `storefront_config` will read as a mistake to whoever finds it next. Options: use it as-is (recommended, zero risk); use it and rename the table in a separate pass; or create a `tenant_config` table now and accept two config mechanisms during the transition. **ANSWERED — D3: use it as-is. No rename, no settings table; the name mismatch is recorded as deliberate debt.**
 
-**Q2 — an abandoned count.** B5: a delivery someone starts counting and never finishes leaves lines at NULL, so the order never settles and holds phantom in-transit stock indefinitely. §39 forbids a global accept, which rules out the easy answer. Options: leave it open forever and surface it on a warehouse screen; let the *warehouse* close it at dispatched quantities after N days, recorded as a warehouse action rather than a store count; or a manual "close this transfer" with a reason. **§39 does not settle this and neither should I.**
+**Q2 — an abandoned count.** B5: a delivery someone starts counting and never finishes leaves lines at NULL, so the order never settles and holds phantom in-transit stock indefinitely. §39 forbids a global accept, which rules out the easy answer. Options: leave it open forever and surface it on a warehouse screen; let the *warehouse* close it at dispatched quantities after N days, recorded as a warehouse action rather than a store count; or a manual "close this transfer" with a reason. **§39 does not settle this and neither should I.** **ANSWERED — D2: none of the three. A per-tenant end-of-trading-day sweep settles uncounted lines at the sent quantity, permanently marked unverified, conditional on a repeat-offender safeguard. Requires the `auto_settled_at` column in B2.**
 
-**Q3 — should a dispatch exceeding warehouse stock be refused?** A0.2: today `adjustStock` clamps at zero and creates units. B4 proposes throwing instead, for the restock OUT half only. This is a behaviour change to a live path — a picker who could previously dispatch 50 from a shelf showing 20 would now be stopped. Whether that is a correct refusal or an obstruction depends on how much Roots trusts its warehouse counts, which is Ash's to judge. **Note that leaving it as-is means the migration knowingly preserves a path that invents stock.**
+**Q3 — should a dispatch exceeding warehouse stock be refused?** A0.2: today `adjustStock` clamps at zero and creates units. B4 proposes throwing instead, for the restock OUT half only. This is a behaviour change to a live path — a picker who could previously dispatch 50 from a shelf showing 20 would now be stopped. Whether that is a correct refusal or an obstruction depends on how much Roots trusts its warehouse counts, which is Ash's to judge. **Note that leaving it as-is means the migration knowingly preserves a path that invents stock.** **ANSWERED — D1, AGAINST THIS DOCUMENT'S RECOMMENDATION: not refused. A dispatch is never blocked by the record; the clamp is deleted and the balance goes negative. B4's `refuseNegative` proposal is withdrawn.**
 
-**Q5 — can one recipe make more than one sellable product?** A5/B6: a 200g and a 500g jar from one batch. The answer picks the shape of the recipe→product link, and getting it wrong means redoing it. Nothing in the survey answers it.
+**Q5 — can one recipe make more than one sellable product?** A5/B6: a 200g and a 500g jar from one batch. The answer picks the shape of the recipe→product link, and getting it wrong means redoing it. Nothing in the survey answers it. **STILL OPEN — the only one. Ash has indicated one recipe can yield more than one sellable product, but the shape is not confirmed. If the split varies per batch, a batch must record which products it produced and how many of each — a link table, not a column — and the person logging the batch has to type the split, because Tacet cannot infer it. That keeps production wiring behind the recipe→product mapping (A5/B6) as prerequisite work, not part of this migration.**
 
 ## For you and me
 
-**Q4 — `REAL` or `INTEGER` for quantities?** A0.3: `restock_items` says `REAL`, `retail_store_stock` and `retail_stock_ledger` say `INTEGER`, and SQLite enforces neither. B2 proposes `qty_received REAL` to match its neighbours. If stock is genuinely always whole units this should be settled and enforced in application code; if it is not, the ledger's `INTEGER` columns are already lying. **Either way this is bigger than the stock-movement work and should not be fixed inside it** — but a decision is needed on which way `qty_received` leans, and this document's answer is "match `qty_sent`".
+**Q4 — `REAL` or `INTEGER` for quantities?** A0.3: `restock_items` says `REAL`, `retail_store_stock` and `retail_stock_ledger` say `INTEGER`, and SQLite enforces neither. B2 proposes `qty_received REAL` to match its neighbours. If stock is genuinely always whole units this should be settled and enforced in application code; if it is not, the ledger's `INTEGER` columns are already lying. **Either way this is bigger than the stock-movement work and should not be fixed inside it** — but a decision is needed on which way `qty_received` leans, and this document's answer is "match `qty_sent`". **ANSWERED — D4: match `qty_sent`, i.e. `REAL`. The wider split stays named, separate work.**
 
-**Q6 — does `delivered` stay in `STATUS_FLOW` at all?** B1 empties it of stock meaning, leaving it as "the driver handed the boxes over" — a fact nobody currently records except by pressing a button that used to do something else. It may be worth keeping purely as a request-lifecycle milestone, or it may become a button that no longer earns its place on the screen. Design question more than schema, and it does not block anything.
+**Q6 — does `delivered` stay in `STATUS_FLOW` at all?** B1 empties it of stock meaning, leaving it as "the driver handed the boxes over" — a fact nobody currently records except by pressing a button that used to do something else. It may be worth keeping purely as a request-lifecycle milestone, or it may become a button that no longer earns its place on the screen. Design question more than schema, and it does not block anything. **ANSWERED — D5: it stays, as a pure logistics timestamp — the driver finished his leg. D2's repeat-offender safeguard gives it a second job: it is the only field that says how long a delivery sat uncounted after arriving.**
+
+---
+
+# PART D — ASH'S RULINGS, 2026-09-03
+
+**These were ruled after PART C was written and they close Q1, Q2, Q3, Q4 and Q6. Q5 stays open.** They are recorded here with their reasoning because the reasoning is what a later reader needs in order not to re-open them; the decisions themselves are also in `docs/tacet-consolidation-decisions.md` §39. **Nothing below is built.**
+
+## D0. THE PRECEDENCE RULE — which quantity sets stock
+
+**Stated out loud because two rulings read as contradictory without it, and one session lost time treating them as a conflict.** §39 says the received quantity sets stock and never the dispatched quantity; D2 below settles an uncounted line at the sent quantity. **These never apply to the same line**, and the rule that separates them is:
+
+> **A counted quantity always sets stock.** The sent quantity is used **only** for a line nobody counted, and any line settled that way is **permanently marked unverified** and is never indistinguishable from a counted line. **The record never prefers the warehouse's number to the counter's — it falls back to the warehouse's number only where there is no counter's number at all.**
+
+So the order of preference per line is: **counted (`qty_received` set by a person) → sent (`COALESCE(qty_sent, qty_requested)`, marked unverified) → nothing.** A counted zero is a counted quantity and outranks the sent figure absolutely; it is the case B2's NULL-versus-zero distinction exists to protect, and D2 does not weaken it.
+
+## D1. A dispatch is never blocked by the record — Q3 ANSWERED, against B4's recommendation
+
+**The rule.** If the warehouse's on-hand figure says 20 and the picker physically finds and sends 50, **the send goes through for 50**, and the warehouse balance goes to −30. Nothing refuses the dispatch to protect a number that was already wrong.
+
+**Why.** His hands are right and the record is wrong. Blocking the dispatch stops real, physical work in order to defend a figure reality has already contradicted. **−30 is an honest statement — at least 30 more units were at the warehouse than the system believed — and it is visible**, which silently inventing 30 units so the arithmetic stays non-negative is not.
+
+**This overrules B4.** B4 recommended `adjustStock` gain a `refuseNegative` option that **throws**, with the restock OUT half passing it, and Q3 put that to Ash. **Ash ruled the other way: not refuse — go negative.** B4's recommendation is withdrawn; the clamp at `lib/inventory.js:1084` is **deleted** rather than made conditional. A0.2 already establishes the defect and its arithmetic and is not restated here.
+
+**A negative on-hand must be visible somewhere a person looks, not only true in the database.** The one concrete gap found is in PART E.
+
+### D1.1 The clamp removal is narrower than "18 callers" suggests
+
+`adjustStock` has two call shapes and **the clamp governs only one of them.** Pass `deltaQty` and it applies; pass `newPhysicalQty` (an absolute target) and there is **no floor today, before or after this change**. Most channel-ingest callers compute their own `Math.max(0, …)` in JavaScript and pass the *result* as `newPhysicalQty`, so **deleting line 1084 does not reach them at all** (PART E).
+
+Of roughly 20 real call sites, **five are actually touched**:
+
+| Call site | Shape | Guard today | Verdict |
+|---|---|---|---|
+| `routes/retail-inventory.js:343` — admin Quick Stock delta add | `deltaQty` | none; sign not restricted server-side, the UI is trusted to send `+N` | **Needs a small guard** (`d < 0` rejection), or an explicit ruling that a kitchen delta may go negative as a correction |
+| `routes/retail-waste.js:452` — waste write-off | `deltaQty: −qty` | **yes** — reads on-hand in the same transaction and throws `insufficient_stock`; its comment reads *"REFUSE, DO NOT CLAMP… this does not fix adjustStock, it stops depending on it being wrong"* | Already safe. **The pattern to copy** for any `deltaQty` caller that needs one |
+| `routes/retail-waste.js:582` — waste void | `deltaQty: +qty` | n/a | Never negative |
+| `routes/restock.js` — the transfer's OUT and IN halves | `deltaQty: ∓qty` | **none** | **This ruling's own case.** No guard wanted; the point is to stop hiding it. A non-blocking "this dispatch drove the warehouse negative" flag on the response is worth adding as UX, never as a gate |
+| `routes/retail-purchasing.js:232` — PO receiving downward correction | `deltaQty` | partial, and a **named exception** | **Blocks the clamp removal — see PART E** |
+| `routes/retail-purchasing.js:366` — PO receipt reversal | `deltaQty: −qty` | **yes** — `planPOReversal` refuses the whole operation if short, and asserts post-call that the clamp never bit | Already safe; its `reversal_clamped` assertion becomes dead but harmless |
+
+**One consequence carries into all later work on this:** every self-clamping site reads the current quantity, computes an absolute figure in JavaScript, then passes `newPhysicalQty` — the read-then-write race `docs/tacet-stock-model.md` §5 records. **Moving a site onto `deltaQty` is what makes it honest and what closes that race; they are one change, not two.**
+
+## D2. Abandoned counts auto-settle at end of the trading day — Q2 ANSWERED
+
+**Q2 asked what happens to a delivery someone starts counting and never finishes, and named three options. Ash chose a fourth.** A part-counted delivery left open closes automatically at the end of the trading day it arrived on:
+
+- **Counted lines land at the counted quantity** — nothing changes for them, and per D0 a counted figure always wins.
+- **Uncounted lines land at the sent quantity.** The goods are physically on the shelf; leaving them out would have the store selling stock the system believes it lacks.
+- **Uncounted lines are marked as not counted, permanently** — never indistinguishable from a verified line. See B2 for the column this requires.
+- **End of trading day, not a rolling timer.** A fixed-duration timer fires at a different clock time depending on when the delivery arrived; end-of-day is predictable and matches how a shop already thinks about its own business.
+- **The store is told the next morning, and so is the warehouse** — an auto-settle changes what a later unreported discrepancy on that transfer means.
+- **Any line stays correctable afterwards** as an ordinary stock correction. This stops a transfer hanging open; it is not a final number.
+
+**Recorded honestly: this is a global accept with a timer standing in for a button, and Q2 is right that §39 forbids the easy version of that.** A "mark the rest as sent" button was considered and rejected — it would become the fast path on the busiest days, exactly when an under-count is most likely and least likely to be caught. **The timer is defensible only because it catches genuinely abandoned counts rather than being reached for on purpose, and leaves a permanent mark.** Strip either property and it degrades into the thing the button was rejected for.
+
+**MANDATORY SAFEGUARD — the ruling is conditional on it.** **Repeated auto-settling at one store must surface somewhere a person actually looks.** One abandoned count in a fortnight is a busy Tuesday; four means that store has stopped counting, and today nobody would find that out except by noticing stock drift. Without the repeat-offender signal the timer stops being a safety net and becomes the store's normal way of receiving. **Not optional polish — the ruling does not stand without it.**
+
+**What the job is.** A per-tenant sweep that, once per trading day, finds every transfer still `in_transit` past the boundary and settles each uncounted line per the rule above, then notifies store and warehouse. Level-triggered: it compares state against a boundary rather than reacting to an event, so a missed tick (restart, slow deploy) does not strand a transfer — the next tick still finds it.
+
+**What schedules it, and why "every 24 hours" is the wrong shape.** The one existing daily-cadence precedent, `startBillingScheduler()` (`lib/billing-lifecycle.js`), is `setInterval(tick, 24 * 60 * 60 * 1000)` armed at process start — it fires 24 hours after whenever the process last booted, anchored to nothing, and per `docs/tacet-write-surface.md` is never started at all. **A boot-anchored interval is exactly the "8pm one day, 2am the next" problem this ruling rejects.** The job must resolve each tenant's trading-day-end instant and act on that, not on an interval; a frequent cheap poll asking "has any tenant crossed its boundary since the last tick" is the more restart-safe way to get there, closer in shape to `sweepExpiredReservations`.
+
+**Why the boundary cannot be read off `retail_stores`.** `open_time`/`close_time` (`database.js:3231-3232`) are optional free-text `'HH:MM'` captured only by the Add-location wizard, and `lib/store-hours.js` treats either being unset — or `close` not after `open` — as **"not configured", falling back to always-open**. `timezone` (`:3236`) is written by one screen only, defaulting to `Asia/Shanghai`, and `lib/inventory.js`'s `listStores()` omits the column entirely, so most admin surfaces cannot see it. `docs/tacet-multibusiness-audit.md` reached the same place independently: *"No reporting, settlement, cut-off or day-boundary calculation currently reads a per-location time zone… This supports the decision that the business day is business-wide, not per location."* **So the boundary is per-tenant config, not per-store** — a third `storefront_config` key beside B7's two. **A tenant whose stores genuinely keep different hours is a real case this does not solve, and is named rather than assumed away.**
+
+## D3. `storefront_config`, as is — Q1 ANSWERED
+
+**Use it. Do not rename it, do not build a settings table.** A4's recommendation is ratified in full and its reasoning is not restated here. **The name's poor fit for a warehouse setting is recorded as known, deliberate debt** — renaming a live config store mid-build is a gratuitous risk for a naming preference.
+
+**One requirement A4 does not cover: the read must be on the tenant handle.** `cfgValue()` already resolves on `tdb()`, so a request-scoped call is tenant-safe by construction. **The risk is any caller running outside a request's tenant scope** — which is precisely the shape of D2's auto-settle sweep, since it iterates every tenant rather than living inside one tenant's request. A read there on the shared handle would hand every tenant Roots' warehouse: the same class of bug as the `:333` stamp, silently returning another tenant's data instead of erroring. **The sweep must enter each tenant's scope explicitly and never rely on an ambient one.**
+
+## D4. `qty_received` is `REAL` — Q4 ANSWERED
+
+**Match `qty_sent`.** B2's answer is ratified: a column disagreeing in type with the one it is compared against on the same line is a worse defect than the wider split. **The wider REAL/INTEGER inconsistency is real, is separate work, and is named rather than fixed** — A0.3 has the analysis.
+
+**One piece of evidence A0.3 does not carry: the split already costs a rounding step in live code.** `routes/retail-purchasing.js:225-228`, applying a received PO line to store stock:
+
+```js
+// Whole units: retail_store_stock.physical_qty is an INTEGER, so both the
+// applied bookkeeping and the delta are rounded the same way — repeated
+// saves always converge instead of drifting on a fractional entry.
+const good = Math.round(onHandQty(l) || 0);
+```
+
+`qty_received` inherits that same seam at the same boundary. It does not add a second, narrower one between itself and `qty_sent`.
+
+## D5. `delivered` stays — Q6 ANSWERED
+
+**Kept.** Q6 asked whether it still earns its place once B1 empties it of stock meaning. It does: **once it stops carrying stock meaning it still records a true, distinct fact — the driver finished his leg.** At Roots delivery and counting happen close enough together that the distinction barely shows; on a longer route, or a warehouse serving stores across town, they are genuinely different instants, and `delivered_at` is the only field that answers *"how long did this sit uncounted after it physically arrived"* — which under D2 is the exact question a repeat-offender signal is built on. **Document that its job changed** from a nominal stock gate to a pure logistics timestamp.
+
+---
+
+# PART E — DEBT AND CONSEQUENCES OF D1
+
+## E1. NAMED DEBT — four channel ingest paths keep their own clamps, and stay dishonest
+
+**This is D1's largest collateral gap.** Removing the central clamp makes the transfer honest. It leaves **four ingest paths silently doing the exact thing D1 rejects** — absorbing a real shortfall into `Math.max(0, …)` so the shelf figure stays non-negative and the discrepancy is never stated. Each does it in its own file, **before `adjustStock` is called**, so deleting `lib/inventory.js:1084` does not reach any of them.
+
+| Site | What it is | What it does today when the deduction exceeds on-hand |
+|---|---|---|
+| `routes/eleme-internal.js:488` | Eleme order ingest, per-line deduction | `newPhysicalQty: Math.max(0, oldQ - took)`. **Clamps, records nothing.** Not counted, not logged, not flagged — the most silent of the five. |
+| `routes/meituan-internal.js:535,538` | Meituan order ingest, per-line deduction | Clamps identically, but **first** pushes `{ name, sku, have, want }` onto an `oversold[]` list (`:535`) surfaced to the operator. **Clamp-and-report** — the only one that does not lose the number. |
+| `routes/guanyi-admin.js:356` | An **operator** confirming a flagged gzgrocery pickup really happened | `Math.max(0, curQty - inferred_pickup)`. **Clamps, records nothing.** A human asserting a physical event — which is D1's own case. |
+| `scripts/guanyi-daemon.js:588-589` | Guanyi pickup-drift daemon, unattended | Clamps, but computes `clamped` and writes `(CLAMPED at 0)` to the log row and daemon log. **Clamp-and-log** — the shortfall survives in a log, not in the data. |
+| `scripts/gzgrocery-order-daemon.js:493` | gzgrocery order ingest, per-line deduction | `Math.max(0, cur - it.qty)`. Clamps; the ledger note carries `(cur→next)` so truncation is *inferable* from two numbers, but no shortfall is stated as such. |
+
+**Stated plainly, because the scoping is easy to misread as completeness: after D1 ships, a warehouse dispatch tells the truth and four sales channels still do not.** A Meituan, Eleme or gzgrocery order that oversells a shelf, and an operator-confirmed Guanyi pickup exceeding the record, all go on writing a floor of zero and discarding the difference — the same behaviour, in the same direction, that D1 calls silently inventing units.
+
+**Making each channel honest is separate, per-channel work and is deliberately NOT in scope here.** Per-channel rather than one change because the right answer differs by path: an unattended daemon inferring loss from a scraped listing (`scripts/guanyi-daemon.js` — already burned once by a bad read that removed 1,863 units and needed `scripts/repair_guanyi_false_pickup.js` to undo) has a real argument for keeping a floor, while an operator confirming a pickup by hand has the same argument for losing one that the picker in D1 does. **Nothing here approves stripping the other four in one pass.**
+
+## E2. THE PO-RECEIVING DOWNWARD CORRECTION — STILL OPEN, AND IT BLOCKS D1
+
+**Ash is ruling on this now. Do not act on it.**
+
+`routes/retail-purchasing.js:232` (`applyReceivedToStock`) calls `adjustStock` with `deltaQty: good − alreadyApplied`, so it **is** on the path the clamp governs, and lowering an arrived count on a re-save produces a negative delta. **The codebase has already ruled on this path twice, in writing, and both rulings assume the clamp stays.**
+
+`routes/retail-purchasing.js:296-298`:
+
+> `inventory.adjustStock`'s `Math.max(0, …)` clamp is **deliberately NOT changed — other callers depend on it.** This pre-check is what stops this path from ever reaching it, and the assertion below is what proves it never did.
+
+`docs/purchase-returns.md`, *What this does not do*, item 3:
+
+> **A downward correction to an arrived count still clamps at zero stock** rather than refusing. Returns refuse; corrections behave as they always have. Making both refuse is a one-line change to `applyReceivedToStock` and a behavioural change to a path the warehouse uses daily, which is not something to smuggle in beside a new feature.
+
+**So this path has three possible behaviours and only two of them have ever been considered:**
+
+| | Behaviour on a below-zero correction | Status |
+|---|---|---|
+| Today | **Clamps at 0**, shortfall discarded | Recorded and accepted in `docs/purchase-returns.md` item 3 |
+| The documented intent | **Refuses** the save outright, as the returns path already does | Named, deferred, never scheduled |
+| What D1 delivers by default | **Writes a negative balance**, silently | **Never proposed, never ruled on** |
+
+**THE CLAMP CANNOT COME OUT UNTIL THIS IS SETTLED.** Three reasons it is not safe to assume the default is fine. It lands on a path `docs/purchase-returns.md` explicitly calls one *"the warehouse uses daily"*, which is why tightening it was deferred rather than done. Its sibling path in the same file refuses and proves it refused (`planPOReversal`, plus a post-call `reversal_clamped` assertion), so letting corrections drift to silently-negative makes two siblings disagree about the same event. And `stock_applied_qty` is written from `good` regardless (`retail-purchasing.js:239`), so a negative shelf and the line's applied figure would diverge in exactly the way that file's own comment was written to prevent.
+
+**`docs/purchase-returns.md` item 3 becomes false whichever of the last two wins, and must be amended in the same change.**
+
+## E3. THE DASHBOARD FILTER — negative stock disappears from the "Needs you" panel
+
+**Documented, NOT made.** No code has been changed; the clauses below read as shown today.
+
+A negative on-hand is only honest if somebody sees it. The admin dashboard's "Needs you" panel filters stock by strict comparisons that **a negative balance matches none of** — so a store at −30 vanishes from both cards rather than being shown wrong.
+
+**It is four clauses, not one.** Each card's count query and its preview-items query are written separately, so a partial fix makes the count and the list disagree with each other:
+
+| # | File and line | Clause | Card |
+|---|---|---|---|
+| 1 | `routes/retail.js:15249-15250` | `WHERE ${REAL_STOCK} > 0 AND ${REAL_STOCK} <= ${LOW_THRESHOLD}` | **Low stock — count** (`lowCount`) |
+| 2 | `routes/retail.js:15258-15259` | `WHERE ${REAL_STOCK} > 0 AND ${REAL_STOCK} <= ${LOW_THRESHOLD}` | **Low stock — preview items** (`lowItems`) |
+| 3 | `routes/retail.js:15267` | `WHERE ${REAL_STOCK} = 0` | **Out of stock — count** (`oosCount`) |
+| 4 | `routes/retail.js:15275` | `WHERE ${REAL_STOCK} = 0` | **Out of stock — preview items** (`oosItems`) |
+
+**Minimum fix: clauses 3 and 4 both become `<= 0`, in the same change.** Fixing one and not its twin gives a card whose count and list contradict each other, which is worse than the bug. **Whether `low` (clauses 1 and 2) should also catch negatives is an open call** — a negative is arguably more urgent than a low positive, but it is already claimed by `out_of_stock` under the minimum fix, and a product must not appear on both cards.
 
 ---
 
