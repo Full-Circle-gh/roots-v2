@@ -342,6 +342,68 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(UI_SRC.includes('lines_restored'),
      'the Tacet Invoices tab reads the count back and says it out loud, so no press is silent');
 
+  console.log('\n10. a control says what it will DO — never what is already true');
+  // WHAT CAME BACK FROM THE FLOOR AFTER §8 SHIPPED. The mark now lifts at both
+  // levels, and the buyer still reported "它自动设置不开发票 … 我点击恢复 … 它
+  // 不起作用". They were reading the screen correctly. Both branches of the
+  // toggle put 不开发票 in ONE slot in ONE muted grey:
+  //
+  //   marked    <span class="pu2-pill grey">不开发票</span> <button>恢复</button>
+  //   UNMARKED  <button class="ghost">整单不开发票</button>
+  //
+  // and .pu2-btn.ghost is borderless muted text, the same weight and colour as
+  // .pu2-pill.grey — which is itself --td-raised on a --td-raised row, so the
+  // chip had no edge either. An order NOBODY had marked therefore read as
+  // marked, and pressing 恢复 on one that WAS marked left 不开发票 on the row
+  // afterwards, because what the press leaves behind is the button offering to
+  // mark it again. The press worked; the row said it had not.
+  //
+  // THE RULE: a control names its verb and its object. No control anywhere in
+  // this drill may carry a label that is also one of the four state labels.
+  const sliceFn = (src, name) => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i === -1) return '';
+    const j = src.indexOf('\n  function ', i + 1);
+    return src.slice(i, j === -1 ? src.length : j);
+  };
+  const invLines = sliceFn(UI_SRC, 'invLinesHtml');
+  ok(invLines.length > 0, 'the Invoices drill renderer is where this test says it is');
+
+  const metaBlock = UI_SRC.slice(UI_SRC.indexOf('const INV_META = {'),
+                                 UI_SRC.indexOf('async function loadInvOutstanding'));
+  const stateLabels = new Set();
+  for (const m of metaBlock.matchAll(/T\('([^']*)',\s*'([^']*)'\)/g)) { stateLabels.add(m[1]); stateLabels.add(m[2]); }
+  ok(stateLabels.has('No invoice') && stateLabels.has('不开发票') && stateLabels.has('Awaiting'),
+     'the four state labels are read from the screen\'s own INV_META, not retyped here',
+     [...stateLabels]);
+
+  const controlLabels = [...invLines.matchAll(/>\$\{esc\(T\('([^']*)',\s*'([^']*)'\)\)\}<\/button>/g)]
+    .map(m => [m[1], m[2]]);
+  ok(controlLabels.length >= 4, 'every toggle in the drill is a labelled button', controlLabels);
+  const collide = controlLabels.filter(([en, cn]) => stateLabels.has(en) || stateLabels.has(cn));
+  ok(collide.length === 0,
+     'no button in the drill is labelled with a state, word for word — a row that is not marked '
+     + 'can no longer read as marked', collide);
+  // The stricter half, and the one that catches 整单不开发票: a label that merely
+  // AVOIDS being a state word for word can still be a bare noun phrase reading
+  // as one ("No invoice for this order"). Every control here names its verb, in
+  // both languages, so the buyer reads an offer rather than a fact.
+  const verbless = controlLabels.filter(([en, cn]) =>
+    !/^(Mark|Restore|Set)\b/.test(en) || !/(标记|恢复|设置)/.test(cn));
+  ok(verbless.length === 0,
+     'and every one of them starts with what it will DO — so 恢复 can never leave the words '
+     + 'it was pressed to remove sitting on the row it just cleared', verbless);
+
+  ok(/pu2-pill grey">\$\{esc\(T\('No invoice', '不开发票'\)\)\}<\/span>/.test(invLines),
+     'the STATE is still stated — the fix distinguishes the two, it does not delete one');
+  ok(!/pu2-btn ghost sm" data-cap="purchasing:invoices"[^>]*puInvNoInvoice(PO|Line)\(/.test(invLines),
+     'and the two toggles carry a resting border rather than reading as loose grey captions');
+
+  const CSS_SRC = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
+  ok(/\.pu2-invlines \.pu2-pill\.grey \{ box-shadow: inset 0 0 0 1px/.test(CSS_SRC),
+     'the grey state chip gets an edge, because --td-raised on a --td-raised row has none',
+     CSS_SRC.includes('.pu2-invlines .pu2-pill.grey'));
+
   server.close();
   console.log(`\n${fail ? '✗ ' + fail + ' failed' : '✓ ' + pass + ' passed, 0 failed'}`);
   process.exit(fail ? 1 : 0);

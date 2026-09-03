@@ -10818,6 +10818,12 @@
   #prod-view-purchasing .pu2-invlines .lrow .sub { font-size: 11px; color: var(--td-text2); }
   #prod-view-purchasing .pu2-invlines .lrow .pu2-num { text-align: right; }
   #prod-view-purchasing .pu2-invlines .lrow .act { text-align: right; white-space: nowrap; }
+  /* THE STATE NEEDS A SHAPE OF ITS OWN. .pu2-pill.grey is --td-raised on
+     --td-raised inside this drill — the chip has the row's own colour, so the
+     不开发票 state rendered as loose grey text, the same weight and the same
+     grey as the label on the toggle beside it. A hairline is what separates
+     "this order IS marked" from "press here to mark it". */
+  #prod-view-purchasing .pu2-invlines .pu2-pill.grey { box-shadow: inset 0 0 0 1px var(--td-border); }
 
   #prod-view-purchasing .pu2-reach { display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: pointer;
