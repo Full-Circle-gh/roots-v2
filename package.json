@@ -50,6 +50,7 @@
     "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
     "test:phone": "node scripts/test_recipient_phone.js",
     "test:push-mute": "node scripts/test_push_mute_action.js",
+    "test:broadcast-expiry": "node scripts/test_broadcast_expiry.js",
     "test:point-search": "node scripts/test_point_search.js",
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",

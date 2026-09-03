@@ -6678,6 +6678,14 @@ function notifyForOrder(orderId, build) {
   } catch (e) { console.warn('[notify order]', e.message); }
 }
 
+// A broadcast can carry an end date (retail_broadcasts.expires_at, copied onto
+// every fanned-out row). Once it passes the copy stops showing — it is not
+// deleted, so a recall still has rows to remove and the history keeps its
+// recipient count. Everything else, and every row written before the column
+// existed, has expires_at NULL and is never filtered. Both sides are bare UTC,
+// which is what CURRENT_TIMESTAMP compares against.
+const NOTIF_LIVE = '(expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)';
+
 // GET /api/retail/notifications — newest-first page + unread count. Cursor by
 // `before` (id) for "load more".
 router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
@@ -6685,13 +6693,15 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
   const before = req.query.before ? parseInt(req.query.before, 10) : null;
   let sql = `SELECT id, category, type, title_en, title_cn, body_en, body_cn,
                     ref_type, ref_id, broadcast_id, read_at, created_at
-               FROM retail_notifications WHERE customer_id = ?`;
+               FROM retail_notifications
+              WHERE customer_id = ? AND ${NOTIF_LIVE}`;
   const params = [req.customer.id];
   if (before) { sql += ' AND id < ?'; params.push(before); }
   sql += ' ORDER BY id DESC LIMIT ?'; params.push(limit);
   const rows = tdb().prepare(sql).all(...params);
   const unread = tdb().prepare(
-    'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
+    `SELECT COUNT(*) AS n FROM retail_notifications
+      WHERE customer_id = ? AND read_at IS NULL AND ${NOTIF_LIVE}`
   ).get(req.customer.id).n;
   res.json({ success: true, data: rows, meta: { unread: unread || 0, limit } });
 });
@@ -6703,13 +6713,14 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
 // latest unread timestamp (drives the "fresh" pulse animation).
 router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, res) => {
   const n = tdb().prepare(
-    'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
+    `SELECT COUNT(*) AS n FROM retail_notifications
+      WHERE customer_id = ? AND read_at IS NULL AND ${NOTIF_LIVE}`
   ).get(req.customer.id).n;
   let latest_title_en = '', latest_title_cn = '', has_broadcast = 0, latest_created_at = null;
   if (n > 0) {
     const latest = tdb().prepare(
       `SELECT title_en, title_cn, created_at FROM retail_notifications
-        WHERE customer_id = ? AND read_at IS NULL
+        WHERE customer_id = ? AND read_at IS NULL AND ${NOTIF_LIVE}
         ORDER BY id DESC LIMIT 1`
     ).get(req.customer.id);
     if (latest) {
@@ -6719,7 +6730,8 @@ router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, re
     }
     has_broadcast = tdb().prepare(
       `SELECT 1 FROM retail_notifications
-        WHERE customer_id = ? AND read_at IS NULL AND category = 'broadcast' LIMIT 1`
+        WHERE customer_id = ? AND read_at IS NULL AND category = 'broadcast'
+          AND ${NOTIF_LIVE} LIMIT 1`
     ).get(req.customer.id) ? 1 : 0;
   }
   // Order/shipping-excluded scope: lets a notification_bar block opt out of
@@ -6727,13 +6739,15 @@ router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, re
   // broadcasts, invoice, and refund updates.
   const noOrderN = tdb().prepare(
     `SELECT COUNT(*) AS n FROM retail_notifications
-      WHERE customer_id = ? AND read_at IS NULL AND category != 'order'`
+      WHERE customer_id = ? AND read_at IS NULL AND category != 'order'
+        AND ${NOTIF_LIVE}`
   ).get(req.customer.id).n;
   let no_order_title_en = '', no_order_title_cn = '', no_order_created_at = null;
   if (noOrderN > 0) {
     const latestNo = tdb().prepare(
       `SELECT title_en, title_cn, created_at FROM retail_notifications
         WHERE customer_id = ? AND read_at IS NULL AND category != 'order'
+          AND ${NOTIF_LIVE}
         ORDER BY id DESC LIMIT 1`
     ).get(req.customer.id);
     if (latestNo) {
@@ -6861,8 +6875,30 @@ function broadcastCityEn(cityCn) {
   return _bcCityEnMap.get(s) || _bcCityEnMap.get(s.replace(/[市省]$/, '')) || null;
 }
 
+// A bare-UTC SQLite timestamp ("YYYY-MM-DD HH:MM:SS") as epoch ms, or NaN.
+// ISO strings (with a 'T', and possibly a 'Z') parse correctly as-is.
+function bcTimeMs(ts) {
+  if (!ts) return NaN;
+  const s = String(ts);
+  return Date.parse(/^\d{4}-\d{2}-\d{2} /.test(s) ? s.replace(' ', 'T') + 'Z' : s);
+}
+function bcSqlTime(ms) {
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
 async function fanOutBroadcast(brd) {
   const db_ = tdb();
+  // Window already closed before we got here — the only way in is a scheduled
+  // broadcast the sweep reached late (creation rejects an end at or before the
+  // send time). Writing copies now would put an invisible row in every inbox,
+  // so record what happened instead and reach nobody.
+  const expiresMs = bcTimeMs(brd.expires_at);
+  if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) {
+    db_.prepare(
+      `UPDATE retail_broadcasts SET status = 'expired', recipient_count = 0 WHERE id = ?`
+    ).run(brd.id);
+    return 0;
+  }
   const { where, params } = audienceWhere(brd.audience);
   const customers = db_.prepare(
     `SELECT c.id FROM retail_customers c WHERE ${where}`
@@ -6877,8 +6913,8 @@ async function fanOutBroadcast(brd) {
     const insert = tx.prepare(
       `INSERT INTO retail_notifications
          (customer_id, category, type, title_en, title_cn, body_en, body_cn,
-          ref_type, ref_id, broadcast_id)
-       VALUES (?, 'broadcast', 'announcement', ?, ?, ?, ?, ?, ?, ?)`
+          ref_type, ref_id, broadcast_id, expires_at)
+       VALUES (?, 'broadcast', 'announcement', ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const c of customers) {
       insert.run(
@@ -6886,7 +6922,8 @@ async function fanOutBroadcast(brd) {
         brd.title_en || '', brd.title_cn || '',
         brd.body_en || null, brd.body_cn || null,
         refType, refId,
-        brd.id
+        brd.id,
+        brd.expires_at || null
       );
     }
   });
@@ -6916,7 +6953,8 @@ function normalizeDeeplink(raw) {
 router.get('/api/retail-admin/broadcasts', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, title_en, title_cn, body_en, body_cn, deeplink, audience,
-            scheduled_for, sent_at, recipient_count, status, created_by, created_at
+            scheduled_for, expires_at, sent_at, recipient_count, status,
+            created_by, created_at
        FROM retail_broadcasts
       ORDER BY id DESC
       LIMIT 200`
@@ -6964,26 +7002,45 @@ router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), 
   const scheduledRaw = (b.scheduled_for || '').trim();
   let scheduledFor = null;
   let sendNow = true;
+  let startsAt = Date.now();
   if (scheduledRaw) {
     const t = Date.parse(scheduledRaw);
     if (!Number.isFinite(t)) {
       return res.status(400).json({ success: false, error: 'bad_scheduled_for' });
     }
     if (t > Date.now() + 30 * 1000) {  // >30s in the future = schedule
-      scheduledFor = new Date(t).toISOString().slice(0, 19).replace('T', ' ');
+      scheduledFor = bcSqlTime(t);
+      startsAt = t;
       sendNow = false;
     }
+  }
+  // expires_at: the other end of the window. Optional — absent means the
+  // broadcast stays in the inbox until it is read or recalled, which is how
+  // every broadcast behaved before. It has to land after the moment the
+  // message actually goes out, or it would reach nobody: for a send-now that
+  // is right now, for a scheduled one its send time.
+  const expiresRaw = (b.expires_at || '').trim();
+  let expiresAt = null;
+  if (expiresRaw) {
+    const t = Date.parse(expiresRaw);
+    if (!Number.isFinite(t)) {
+      return res.status(400).json({ success: false, error: 'bad_expires_at' });
+    }
+    if (t <= startsAt) {
+      return res.status(400).json({ success: false, error: 'expires_before_send' });
+    }
+    expiresAt = bcSqlTime(t);
   }
   const initialStatus = sendNow ? 'sent' : 'scheduled';
   const audience = JSON.stringify(normalizeAudience(b.audience));
   const info = tdb().prepare(
     `INSERT INTO retail_broadcasts
        (title_en, title_cn, body_en, body_cn, deeplink, audience,
-        scheduled_for, status, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        scheduled_for, expires_at, status, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     title_en, title_cn, body_en, body_cn, deeplink || null, audience,
-    scheduledFor, initialStatus, req.user.id
+    scheduledFor, expiresAt, initialStatus, req.user.id
   );
   const id = info.lastInsertRowid;
   let recipient_count = 0;
