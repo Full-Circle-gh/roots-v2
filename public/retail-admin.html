@@ -11515,6 +11515,15 @@
   <section id="tab-recipes-record">
     <div class="rcp-scroll" id="rcp-rec-scroll">
       <div class="rcp-page" data-no-i18n>
+        <!-- ONE PINNED BLOCK — head + summary + sub-tabs, held at the top of
+             the scrollport by .rcp-pin. The summary already had to read the
+             same on every sub-tab (see the note above); it now also has to
+             read on every ROW, because the figure an operator watches is the
+             one a quantity thirty lines down is moving. Wrapped rather than
+             stuck individually so the three never separate or overlap, and so
+             the ingredient list's own column header has ONE measured edge to
+             park under (--rcp-pin-h, set by 19-recipes.js syncPin()). -->
+        <div class="rcp-pin" id="rcp-pin">
         <div class="rcp-rechead">
           <button type="button" class="rcp-btn ghost sm" onclick="rcpRecordBack()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
@@ -11535,6 +11544,7 @@
         </div>
         <div class="rcp-summary" id="rcp-rec-summary"></div>
         <div class="rcp-subtabs" id="rcp-subtabs"></div>
+        </div>
         <div id="rcp-rec-body"></div>
       </div>
     </div>

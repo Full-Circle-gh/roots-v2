@@ -13057,7 +13057,82 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     height: calc(100vh - 56px); min-height: 0; overflow: hidden;
   }
   body.rcp-viewing #tab-recipes-record .rcp-scroll { flex: 1; min-height: 0; overflow: auto; }
-  #tab-recipes-record .rcp-page { padding: 22px var(--s6) var(--s6); }
+  #tab-recipes-record .rcp-page { padding: 0 var(--s6) var(--s6); }
+
+  /* ── THE PINNED BLOCK ────────────────────────────────────────────────────
+     Head + summary + sub-tabs, held at the top of .rcp-scroll. The card was
+     already required to read the same on every sub-tab; it is now required to
+     read on every ROW too, because the number an operator is watching —
+     batch cost — is the one the quantity they are typing thirty lines down is
+     moving, and it used to scroll away exactly when the editing started.
+
+     The negative side margins put the block's paper background across the
+     full scrollport width, so nothing shows through the page gutters as it
+     passes underneath. The sub-tabs' own margin-bottom is moved onto this
+     block's padding: a last child's bottom margin COLLAPSES out of a parent
+     with no bottom padding, and the 18px it took with it was a gap rows were
+     visible through — and, worse, 18px that offsetHeight did not report, so
+     the column header below parked short by exactly that much. */
+  #tab-recipes-record .rcp-pin {
+    position: sticky; top: 0; z-index: 20; background: var(--td-paper);
+    margin: 0 calc(-1 * var(--s6)); padding: 22px var(--s6) 18px;
+    transition: padding .18s var(--ease-out); }
+  #tab-recipes-record .rcp-pin .rcp-subtabs { margin-bottom: 0; }
+  /* NO FADE UNDER THIS BLOCK. A soft edge is the usual way to say "content
+     passes behind here", and it was tried — but the ingredient list's own
+     column header parks flush against this block's bottom edge, so every pixel
+     of the fade lands on the header and greys out the one row of text that has
+     to stay legible. The header's own hairline is the edge instead. */
+
+  /* ── CONDENSED, once you have scrolled past the summary ──────────────────
+     Pinning the block whole costs ~260px of the scrollport — on a 15" screen
+     that is a third of the rows gone, which defeats the point of pinning it
+     to watch rows change. So past the first scroll the block gives up its
+     display SIZE and its prose, and keeps every FIGURE and every WARNING:
+     all four numbers stay live and visible, the pills stay, and the blocked
+     material sentence stays (it is the reason a cost is frozen — a strip
+     that dropped it would be quieter and less true). What goes is the
+     recipe's identity — the title shrinks, "Makes X" and the product rows
+     go — because that is what the operator already knows and cannot change
+     by typing in the list. Nothing here is display:none that an operator
+     would act on.
+
+     LOCKED STRINGS ARE UNTOUCHED. The pills shrink; they are never
+     shortened or recomposed (UNIT MISMATCH · 单位不符 is minted and locked in
+     docs/tacet-delivery-vocabulary.md, and a condensed variant of it would be
+     a second string for the same condition). The pill radius stays 12px for
+     the same reason it is 12px above — the missing-cost pill is a sentence
+     that still wraps at this size, and 999px would draw a stadium round it. */
+  #rcp-rec-scroll.is-stuck .rcp-pin { padding-top: 12px; padding-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-rechead { margin-bottom: 10px; }
+  #rcp-rec-scroll.is-stuck .rcp-rectitle { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-summary {
+    flex-direction: row; align-items: center; flex-wrap: wrap;
+    gap: 8px 24px; padding: 12px 16px; margin-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumrow { flex: 1 1 auto; align-items: baseline; gap: 28px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig { flex-direction: row; align-items: baseline; gap: 7px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v.dim { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-summarg .pct { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumdiv { align-self: center; height: 16px; }
+  #rcp-rec-scroll.is-stuck .rcp-warns { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn { font-size: 12px; padding: 3px 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn svg { width: 14px; height: 14px; }
+  /* Past the hairline: the blocked sentence survives, everything else does
+     not. .rcp-outputs takes the full row so a wrapped sentence never squeezes
+     the figures beside it. */
+  #rcp-rec-scroll.is-stuck .rcp-hr,
+  #rcp-rec-scroll.is-stuck .rcp-prodline,
+  #rcp-rec-scroll.is-stuck .rcp-prodrow,
+  #rcp-rec-scroll.is-stuck .rcp-prodhead,
+  #rcp-rec-scroll.is-stuck .rcp-matline:not(.blocked) { display: none; }
+  #rcp-rec-scroll.is-stuck .rcp-outputs { flex-basis: 100%; gap: 4px; }
+  #rcp-rec-scroll.is-stuck .rcp-matline.blocked { font-size: 12px; }
+  /* The transitions are a courtesy, not information — an operator who has
+     asked for less motion gets the same two states with no tween. */
+  @media (prefers-reduced-motion: reduce) {
+    #tab-recipes-record .rcp-pin { transition: none; }
+  }
 
   #tab-recipes-record .rcp-rechead { display: flex; align-items: center; gap: 14px;
     flex-wrap: wrap; margin-bottom: 16px; }
@@ -13173,12 +13248,57 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   /* ── ingredient / step lines ── */
   #tab-recipes-record .rcp-lines { display: flex; flex-direction: column; }
+
+  /* ── THE COLUMN HEADER ───────────────────────────────────────────────────
+     Five controls to a row and, until now, nothing naming any of them: a
+     number, a unit, a free-text box and a ¥ figure, left to be inferred from
+     what happens to be typed in them. The header names each track.
+
+     It STICKS, parked at the bottom edge of .rcp-pin (--rcp-pin-h, measured
+     and written by 19-recipes.js syncPin() — the block changes height when it
+     condenses, so the offset can never be a constant). A header that scrolls
+     away is one you read once, and it is row 30, not row 1, where you have
+     forgotten which box is the note.
+
+     Same flex tracks as .rcp-line below, declared against the same widths so
+     the two cannot drift; the labels carry the 12px inset of the inputs they
+     sit over rather than aligning to the control's border.
+
+     z-index 4 keeps it UNDER the picker's result list (.rcp-pick, z-index 5)
+     and under the pinned block (20): the only two things that may ever cover
+     it. Its own background is what hides the rows passing behind it — there is
+     deliberately no extra masking strip above it: one was tried, to insure
+     against --rcp-pin-h lagging a frame behind the condense, and at rest it
+     sat over the bottom of the card's own "Ingredient lines" heading and cut
+     it in half. A permanent defect is not worth insuring a transient one. */
+  #tab-recipes-record .rcp-lhead {
+    position: sticky; top: var(--rcp-pin-h, 0px); z-index: 4;
+    display: flex; align-items: center; gap: 10px; padding: 0 0 8px;
+    background: var(--td-surface, #fff); border-bottom: 1px solid var(--td-border);
+    font: 500 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--td-text2); }
+  /* letter-spacing and uppercase are a Latin small-caps idiom: 原料 uppercased
+     is 原料, and the tracking that suits QTY only loosens Han characters. The
+     labels are one language at a time (cuT), so the whole row switches. */
+  html[data-ui-lang="cn"] #tab-recipes-record .rcp-lhead {
+    letter-spacing: 0; text-transform: none; font-size: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-drag { flex: none; width: 17px; }
+  #tab-recipes-record .rcp-lhead .lh-name { flex: 1 1 auto; min-width: 0; }
+  #tab-recipes-record .rcp-lhead .lh-qty  { width: 90px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-unit { width: 70px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-note { width: 140px; flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-cost { width: 90px;  flex: none; text-align: right; }
+  #tab-recipes-record .rcp-lhead .lh-rm   { flex: none; width: 24px; }
+
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
   #tab-recipes-record .rcp-line.rcp-drop-before { box-shadow: inset 0 2px 0 var(--td-brass, #b08d57); }
   #tab-recipes-record .rcp-line.rcp-drop-after  { box-shadow: inset 0 -2px 0 var(--td-brass, #b08d57); }
-  #tab-recipes-record .rcp-line-drag { flex: none; cursor: grab; color: var(--td-text2);
+  /* Width fixed, not left to the glyph: .rcp-lhead's spacer above holds the
+     same 17px, and a header whose first track is a hair wider than the row's
+     shifts every label after it. */
+  #tab-recipes-record .rcp-line-drag { flex: none; width: 17px; cursor: grab; color: var(--td-text2);
     text-align: center; user-select: none; font-size: 13px; line-height: 1; padding: 4px 2px; }
   #tab-recipes-record .rcp-line-drag:active { cursor: grabbing; }
   #tab-recipes-record .rcp-line-name { flex: 1 1 auto; min-width: 0; }
@@ -13264,6 +13384,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
     #tab-recipes-record .rcp-line { flex-wrap: wrap; }
     #tab-recipes-record .rcp-line-note { width: 100%; order: 10; }
+    /* The note field drops to its own line here, so its column label would be
+       naming a track that is no longer there. The field keeps its own
+       placeholder, which is the same word. */
+    #tab-recipes-record .rcp-lhead .lh-note { display: none; }
+    /* The condensed strip wraps to two rows of figures at this width; 48px
+       between them was tuned for one line and leaves the second stranded. */
+    #rcp-rec-scroll.is-stuck .rcp-sumrow { gap: 6px 18px; }
   }
 
 /* ══════════════════════════════════════════════════════════════════════════

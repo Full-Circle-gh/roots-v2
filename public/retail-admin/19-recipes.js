@@ -419,6 +419,7 @@
     window.addEventListener('popstate', onPop);
     const sc = document.getElementById('rcp-rec-scroll');
     if (sc) sc.scrollTop = 0;
+    bindPin();
     paintRecord();
   }
 
@@ -500,6 +501,44 @@
     return `<select class="rcp-input" id="rcp-f-${key}" onchange="rcpDirty();${extra || ''}">${o}</select>`;
   }
 
+  // ── The pinned head ──────────────────────────────────────────────────────
+  // Two facts the CSS cannot work out for itself: whether the block is
+  // currently HOLDING anything (is-stuck, which is what condenses it), and how
+  // TALL it is (--rcp-pin-h, which is where .rcp-lhead parks). The height is
+  // measured rather than assumed because the block changes height as it
+  // condenses — a stale value either leaves a gap rows are visible through
+  // (too large) or hides the first rows behind the header (too small).
+  //
+  // 8px of slack before is-stuck, not 0: a trackpad resting at the top of a
+  // list emits sub-pixel scrolls, and a strip that condensed and expanded
+  // under a resting hand would be worse than one that never moved.
+  let _pinBound = false, _pinRAF = 0;
+  function syncPin() {
+    const sc = document.getElementById('rcp-rec-scroll');
+    const pin = document.getElementById('rcp-pin');
+    if (!sc || !pin) return;
+    sc.classList.toggle('is-stuck', sc.scrollTop > 8);
+    sc.style.setProperty('--rcp-pin-h', pin.offsetHeight + 'px');
+  }
+  function bindPin() {
+    if (_pinBound) return;
+    const sc = document.getElementById('rcp-rec-scroll');
+    const pin = document.getElementById('rcp-pin');
+    if (!sc || !pin) return;
+    _pinBound = true;
+    // One frame per scroll burst: this reads offsetHeight, and doing that on
+    // every raw scroll event is a forced layout per pixel.
+    sc.addEventListener('scroll', () => {
+      if (_pinRAF) return;
+      _pinRAF = requestAnimationFrame(() => { _pinRAF = 0; syncPin(); });
+    }, { passive: true });
+    window.addEventListener('resize', syncPin);
+    // The condense is a transition, so the height is only true once it lands —
+    // measuring on the scroll that STARTED it parks the column header at the
+    // height the block is leaving, not the one it is arriving at.
+    pin.addEventListener('transitionend', syncPin);
+  }
+
   function paintRecord() {
     const host = recRoot();
     if (!host || !_rec) return;
@@ -543,6 +582,7 @@
     try { applyCapGates(); } catch (_) {}
     paintSummary();
     paintBreakdown();
+    syncPin();
     paintLineWarns();
   }
 
@@ -708,12 +748,50 @@
       </div>`;
   }
 
+  // ── The column header ────────────────────────────────────────────────────
+  // EVERY PAIR HERE IS ALREADY LIVE — none is minted. Rule 4 of
+  // docs/tacet-delivery-vocabulary.md locks the Chinese half of anything this
+  // admin says ("never compose new Chinese; copy from these tables"), and a
+  // column header is not an exemption from it. Each label below is copied from
+  // a place that already names the same thing:
+  //   原料  — the Ingredients sub-tab, SUBTABS above.
+  //   数量  — the qty box's own placeholder in lineRow(), and 21-product-build
+  //           T_QTY on the same control.
+  //   单位  — 21-product-build T_UNIT, again on the same control.
+  //   备注  — the note box's own placeholder in lineRow().
+  //   成本  — the recipes list's own ¥ column header (recipeRow above), and
+  //           20-waste's, and 21-product-build T_COST.
+  // The English half is the ordinary singular of the live label, since each
+  // ROW is one ingredient; the Chinese is character-for-character the live
+  // string, which is what the rule actually locks.
+  //
+  // ONE LANGUAGE AT A TIME, like every other label on this screen: cuT()
+  // returns one half, and a header printing both would be the only bilingual
+  // chrome in the admin. Rendered only when there ARE lines — over the empty
+  // state it would be a header for nothing, and that state already says what
+  // is missing.
+  function lineHeadRow() {
+    // aria-hidden on the two spacer tracks: the grip and the remove button are
+    // controls carrying their own labels, and two empty header cells announced
+    // before every row is noise.
+    return `
+      <div class="rcp-lhead">
+        <span class="lh-drag" aria-hidden="true"></span>
+        <span class="lh-name">${esc(T('Ingredient', '原料'))}</span>
+        <span class="lh-qty">${esc(T('Qty', '数量'))}</span>
+        <span class="lh-unit">${esc(T('Unit', '单位'))}</span>
+        <span class="lh-note">${esc(T('Note', '备注'))}</span>
+        <span class="lh-cost">${esc(T('Cost', '成本'))}</span>
+        <span class="lh-rm" aria-hidden="true"></span>
+      </div>`;
+  }
+
   function ingredientsTab() {
     const lines = _lines.map(lineRow).join('') || `<div class="rcp-emptyline">${esc(T('No ingredients yet.', '暂无原料。'))}</div>`;
     return `
       <div class="rcp-card rcp-blk">
         <h3 class="rcp-blk-h">${esc(T('Ingredient lines', '原料明细'))}</h3>
-        <div class="rcp-lines" id="rcp-lines">${lines}</div>
+        <div class="rcp-lines" id="rcp-lines">${_lines.length ? lineHeadRow() : ''}${lines}</div>
         <div class="rcp-pickwrap">
           <input class="rcp-input" id="rcp-pick-q" placeholder="${esc(T('Search materials to add…', '搜索要添加的物料…'))}"
                  oninput="rcpPickSearch(this.value)" autocomplete="off">
@@ -1094,6 +1172,10 @@
     if (outputs) html += `<div class="rcp-hr"></div><div class="rcp-outputs">${outputs}</div>`;
 
     host.innerHTML = html;
+    // A warning appearing or clearing changes the pinned block's height, and
+    // the column header parks on its bottom edge — re-measure, or a unit fixed
+    // mid-list leaves the header floating where the taller card used to end.
+    syncPin();
   }
 
   // Margin for one product row, via the SHARED helper (_paMargin, part 09) —
