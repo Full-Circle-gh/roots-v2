@@ -277,7 +277,7 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
      'and the mark decides, because it is what every screen was already showing', lineOf(92));
   ok(rebootReconcile() === 0, 'a second run changes nothing — idempotent');
 
-  console.log('\n8. 恢复 on the whole ORDER — the press that answered 200 and moved nothing');
+  console.log('\n8. 恢复 on the whole ORDER lifts the ORDER — and reaches no further');
   // A fresh order so the count this section asserts is its own. Line 11 is the
   // one the buyer marked 不开发票 by itself, BEFORE marking the whole order;
   // line 12 already has its 发票 in hand and must come through untouched.
@@ -311,26 +311,40 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
 
   const poRestore = await send('PUT', '/api/retail-admin/purchasing/po/300/no-invoice', { no_invoice_expected: false });
   ok(poRestore.status === 200 && poOf(300).mark === 0, '恢复 lifts the order\'s mark', poRestore.json);
-  ok(lineOf(11).mark === 0 && lineOf(11).invoice_status === 'not_received',
-     'AND the line that carried its own — THE PRESS THAT USED TO DO NOTHING, because the '
-     + 'screen reads the OR of the two levels and only one of them was being lifted', lineOf(11));
-  ok(await invStatusOf(11) === 'awaiting',
-     'so the row the buyer pressed 恢复 on is back in the chase, which is what they asked for');
+  // THE LINE MARK IS NOT THE ORDER'S TO ERASE. This assertion was the other way
+  // round for one release: the order 恢复 cleared the line marks under it too,
+  // on the reading that lifting the umbrella means "all of it". §11 below is the
+  // case from the floor that disproves that reading — the marked line belongs to
+  // a DIFFERENT SUPPLIER, whose rows the buyer was not even looking at.
+  ok(lineOf(11).mark === 1 && lineOf(11).invoice_status === 'no_invoice',
+     'and leaves the line that carries its OWN mark exactly as the buyer set it', lineOf(11));
+  ok(await invStatusOf(11) === 'no_invoice_expected',
+     'so that row goes on reading 不开发票 — correctly, on the strength of its own mark');
+  ok(await invStatusOf(12) === 'awaiting',
+     'while every line that was only ever under the umbrella is back in the chase');
   ok(lineOf(12).invoice_status === 'received',
-     '恢复 still leaves a 发票 already in hand alone — it clears a note that says no_invoice, '
-     + 'it does not blank the buyer\'s other answer', lineOf(12));
-  ok(poRestore.json.lines_restored === 1,
-     'and it reports how many lines came back with the order, so the screen can say so', poRestore.json);
+     '恢复 still leaves a 发票 already in hand alone — it does not blank the buyer\'s other answer',
+     lineOf(12));
+  ok(poRestore.json.lines_still_marked === 1,
+     'and it reports how many lines kept their own mark, so the screen can say why they did not move',
+     poRestore.json);
   ok(legacyReboot() === 0 && rebootReconcile() === 0,
-     'both columns moved together, so a restart has nothing to re-derive');
+     'both columns still agree, so a restart has nothing to re-derive');
+  // The way out for that row, which is what keeps this from being a press that
+  // "did nothing": with the umbrella off, the drill offers the LINE its own 恢复.
+  const lineRestore = await send('PUT', '/api/retail-admin/purchasing/po/300/line/11/no-invoice', { no_invoice_expected: false });
+  ok(lineRestore.status === 200 && await invStatusOf(11) === 'awaiting',
+     'and the line toggle — the one the drill now shows on that row — lifts it in one press',
+     lineRestore.json);
 
   console.log('\n9. the same on the kitchen side, and no button that cannot do its job');
   await send('PUT', '/api/purchases/200/line/3/no-invoice', { no_invoice_expected: true });
   await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: true });
   const kPoRestore = await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: false });
-  ok(kPoRestore.status === 200 && poOf(200).mark === 0 && lineOf(3).mark === 0,
-     'the kitchen order 恢复 lifts both levels too', [poOf(200), lineOf(3)]);
-  ok(kPoRestore.json.lines_restored === 1, 'and reports the lines it took with it', kPoRestore.json);
+  ok(kPoRestore.status === 200 && poOf(200).mark === 0 && lineOf(3).mark === 1,
+     'the kitchen order 恢复 lifts the order and leaves the line\'s own mark standing too',
+     [poOf(200), lineOf(3)]);
+  ok(kPoRestore.json.lines_still_marked === 1, 'and reports the lines that kept it', kPoRestore.json);
   const missing = await send('PUT', '/api/purchases/9999/no-invoice', { no_invoice_expected: false });
   ok(missing.status === 404, 'an order that does not exist is still a 404, not a silent success', missing.status);
   const APP_SRC = fs.readFileSync(path.join(ROOT, 'public', 'app.html'), 'utf8');
@@ -339,7 +353,7 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(APP_SRC.includes('poRestoreNoInvoice(${l.po_id})'),
      'and a row marked by its ORDER offers the order 恢复 — not the line toggle, which wrote a '
      + 'column that was already 0 while the row never moved');
-  ok(UI_SRC.includes('lines_restored'),
+  ok(UI_SRC.includes('lines_still_marked'),
      'the Tacet Invoices tab reads the count back and says it out loud, so no press is silent');
 
   console.log('\n10. a control says what it will DO — never what is already true');
@@ -403,6 +417,51 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(/\.pu2-invlines \.pu2-pill\.grey \{ box-shadow: inset 0 0 0 1px/.test(CSS_SRC),
      'the grey state chip gets an edge, because --td-raised on a --td-raised row has none',
      CSS_SRC.includes('.pu2-invlines .pu2-pill.grey'));
+
+  console.log('\n11. ONE order, TWO suppliers — a press under one must not move the other');
+  // THE CASE FROM THE FLOOR: "我点击一个供应商恢复等待开票。另一个供应商一样变成
+  // 等待开票，实际上它不需要开票."
+  //
+  // A line is attributed by its OWN supplier_name before the order header's
+  // (routes/retail-purchasing.js SUPPLIER_EXPR), so one buying order routinely
+  // has lines under two suppliers on the Invoices screen — packaging bought on
+  // account, and a bag of ginger from a market stall that issues no 发票, on the
+  // same order. The stall's line is marked 不开发票 deliberately and permanently.
+  // 恢复 pressed on the PACKAGING supplier's row was clearing every line mark on
+  // the order, so the stall's line came back onto the chase under a supplier
+  // group the buyer was not looking at, with nothing said anywhere.
+  handle.exec(`
+    INSERT INTO purchase_orders (id, po_number, date, status, supplier, scope, store_id, tenant_id)
+      VALUES (301, 'RPO-0301', '2026-08-31', 'Ordered', 'Lingnan Packaging 岭南包装', 'retail', 1, 1);
+    INSERT INTO po_line_items (id, po_id, name_en, qty, unit, cost_per_unit, total_cost, supplier_name,
+                               invoice_status, no_invoice_expected, sort_order)
+      VALUES (21, 301, 'Foam Box #5 泡沫箱', 1, 'pcs', 84.28, 84.28, 'Lingnan Packaging 岭南包装', 'not_received', 0, 0),
+             (22, 301, 'Ginger 生姜', 1, 'pcs', 30, 30, 'Wet Market Stall 市场档口', 'no_invoice', 1, 1);
+  `);
+  const groupsOf = async (poNumber) => {
+    const r = await fetch(base + '/api/retail-admin/purchasing/invoices/outstanding');
+    const j = await r.json();
+    return ((j.data && j.data.groups) || [])
+      .filter(g => g.lines.some(l => l.po_number === poNumber))
+      .map(g => g.supplier);
+  };
+  ok((await groupsOf('RPO-0301')).length === 2,
+     'one buying order really does show up under two suppliers — that is what makes this reachable',
+     await groupsOf('RPO-0301'));
+
+  await send('PUT', '/api/retail-admin/purchasing/po/301/no-invoice', { no_invoice_expected: true });
+  const crossRestore = await send('PUT', '/api/retail-admin/purchasing/po/301/no-invoice', { no_invoice_expected: false });
+  ok(crossRestore.status === 200 && poOf(301).mark === 0, '恢复 under the packaging supplier lifts the order');
+  ok(await invStatusOf(21) === 'awaiting',
+     'the packaging line — the one the buyer pressed it for — is back on the chase');
+  ok(lineOf(22).mark === 1 && await invStatusOf(22) === 'no_invoice_expected',
+     'AND THE MARKET STALL\'S LINE IS UNTOUCHED. It is a different supplier, a different '
+     + 'decision, and on a screen the buyer was not looking at — an order-level press has no '
+     + 'business unmaking it', [lineOf(22), await invStatusOf(22)]);
+  ok(crossRestore.json.lines_still_marked === 1,
+     'and the press says so rather than leaving it to be discovered', crossRestore.json);
+  ok(UI_SRC.includes('function poOtherSuppliers('),
+     'the drill also warns BEFORE the press, naming the other suppliers the 整单 buttons cover');
 
   server.close();
   console.log(`\n${fail ? '✗ ' + fail + ' failed' : '✓ ' + pass + ' passed, 0 failed'}`);
