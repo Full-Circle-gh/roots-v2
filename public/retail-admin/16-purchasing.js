@@ -2663,6 +2663,21 @@
 
   // The lines inside one supplier, grouped by the buying order they sit on so
   // the PO-level "no invoice" mark has somewhere honest to live.
+  // THE OTHER SUPPLIERS ON THE SAME BUYING ORDER. A line is attributed by its
+  // OWN supplier_name before the order header's (routes/retail-purchasing.js
+  // SUPPLIER_EXPR), so one order routinely has lines under two suppliers and
+  // this drill shows the buyer only the ones under the group they opened. The
+  // two controls in the row below are ORDER-level: 整单标记不开发票 covers every
+  // line on the order, including the ones on screens they are not looking at.
+  // That is what the umbrella means, and it is worth saying before the press
+  // rather than after — a supplier changing state on its own was reported from
+  // the floor as the screen acting by itself.
+  function poOtherSuppliers(poNumber, thisSupplier) {
+    return ((_invOut && _invOut.groups) || [])
+      .filter(x => x.supplier !== thisSupplier && x.lines.some(l => l.po_number === poNumber))
+      .map(x => supName(x.supplier, x.supplier_cn));
+  }
+
   function invLinesHtml(g) {
     // Only the Unspecified bucket gets the "set supplier" affordances — a line
     // already grouped under a real vendor is attributed, and re-pointing it is
@@ -2692,6 +2707,12 @@
           // it is named here so nobody chases it a second time.
           po.supersedes_invoiced > 0.005
             ? ` · ${T('already invoiced', '已登记发票')} ${money(po.supersedes_invoiced)}` : ''}</span>` : ''}
+        ${(() => {
+          const others = poOtherSuppliers(po.po_number, g.supplier);
+          return others.length
+            ? `<span class="pu2-mut" title="${esc(T('The two order-level buttons on this row cover every line on ' + po.po_number + ', including these: ', '本行的“整单”按钮作用于 ' + po.po_number + ' 的全部明细,包括以下供应商的明细:') + others.join('、'))}">${esc(T(`also ${others.length} other supplier${others.length === 1 ? '' : 's'} on this order`, `本单还含 ${others.length} 个其他供应商的明细`))}</span>`
+            : '';
+        })()}
         <span class="spacer"></span>
         ${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${po.lines.map(l => l.line_id).join(',')}])">${esc(T('Set supplier for this order', '为整单设置供应商'))}</button>` : ''}
         ${po.po_no_invoice
@@ -2806,10 +2827,17 @@
       const r = await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`,
                           { method: 'PUT', body: { no_invoice_expected: !!flag } });
       await invReload();
-      const n = Number(r && r.lines_restored) || 0;
+      // WHAT THE PRESS DID NOT DO, SAID OUT LOUD. 恢复 lifts the ORDER's
+      // umbrella and leaves every line that carries its own mark exactly where
+      // it is (lib/invoice-mark.js). Those rows go on reading 不开发票 — the
+      // state is the OR of the two levels — and each now offers its own 恢复 in
+      // the drill. Naming the count here is what keeps that from reading as a
+      // press that half-worked.
+      const n = Number(r && r.lines_still_marked) || 0;
       toast(flag ? T('Whole order marked as no-invoice ✓', '整单已标记不开发票 ✓')
-                 : (n ? T(`Order restored — ${n} line${n === 1 ? '' : 's'} back to awaiting ✓`,
-                          `整单已恢复 —— ${n} 条明细恢复待开票 ✓`)
+                 : (n ? T(n === 1 ? 'Order restored — 1 line keeps its own no-invoice mark'
+                                  : `Order restored — ${n} lines keep their own no-invoice mark`,
+                          `整单已恢复待开票 —— ${n} 条明细仍自行标记不开发票`)
                       : T('Order restored to awaiting ✓', '整单已恢复待开票 ✓')), 'ok');
     } catch (e) { toast(e.message, 'err'); }
   };
