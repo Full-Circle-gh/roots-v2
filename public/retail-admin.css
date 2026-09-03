@@ -2840,6 +2840,22 @@
   /* The Meituan line under the editor's Cost field, matching the list cell:
      same measure, one step quieter than the list margin above it. */
   #pd-margin .pd-margin-ch { color: var(--td-text2); margin-top: 2px; }
+  /* The margin is the ANSWER the card produces, and it was sitting flush
+     against the warnings above it as one more grey line. A hairline separates
+     what the cost IS from what it MEANS, the same way the rail's figures card
+     rules off its own total. */
+  #pd-editor .pd-cost-card .pd-cost-margin {
+    border-top: 1px solid var(--td-border);
+    padding-top: 9px; margin-top: 11px; font-size: 12.5px; line-height: 1.5;
+  }
+  /* Both warning hosts stack their pills the way #pd-cost-alert already did —
+     the same shape for the same content, so a recipe warning and a below-cost
+     warning cannot land differently. The inline `display:none` the renderers
+     set still wins over this, which is how they hide when they have nothing to
+     say and take their margin with them. */
+  #pd-editor .pd-cost-card .pd-cost-alerts {
+    display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  }
   /* A cost the recipe owns. Reads as a stated figure rather than an empty box
      waiting for input — same type and size, just not on a typing surface. The
      source line beneath it names the recipe, so this only has to say "not
@@ -2847,26 +2863,75 @@
   #pd-cost.is-derived {
     background: var(--td-raised); border-style: dashed; cursor: default;
   }
-  /* Link / Change / Unlink, on the source line under the Cost field. A text
-     button, not a filled one: it sits inside a field's helper line, where a
-     real button would out-weigh the field it explains. Underlined on hover
-     only, so the resting line still reads as a sentence rather than a row of
-     controls. */
-  .pd-cost-act {
-    appearance: none; background: none; border: 0; padding: 0; margin: 0 0 0 8px;
-    font: 400 12px var(--f-sans); color: var(--td-text2);
-    text-decoration: underline; text-decoration-color: transparent;
-    text-underline-offset: 2px; cursor: pointer;
+  /* ── The Cost card in the Cost & Pricing rail ──────────────────────────
+     ONE FIELD, SO ONE COLUMN. `.pdb-fields` is a two-up grid, and on the full
+     page it is pinned to exactly two columns (`.pd-pp-mount #pd-editor
+     .pu-editor-body .pdb-fields`) so forms do not spread to three across. That
+     rule is right for a form and wrong here: this card holds a single field
+     whose helper content — the source line, the recipe warnings, the margin,
+     the not-complete tag — all sits INSIDE it, so pinning it to column one
+     halved the measure to ~126px in a 300px rail and left column two empty.
+     The unit-mismatch sentence came out one and two words to a line, six
+     inches tall, beside a column of nothing. A field with no partner has
+     nothing to sit beside; it takes the card. */
+  #pd-editor .pd-cost-card .pdb-fields,
+  .pd-pp-mount #pd-editor .pu-editor-body .pd-cost-card .pdb-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .pd-cost-act:hover { color: var(--td-text); text-decoration-color: currentColor; }
-  /* First one on an unlinked product carries the line on its own — no leading
-     text to sit beside, so it starts at the margin. */
-  #pd-cost-source > .pd-cost-act:first-child { margin-left: 0; }
+  /* The explanations under the field are a stack. They used to carry their
+     spacing as inline margin-tops of 4px and 6px on individual nodes, which
+     read as an uneven drift rather than a rhythm; it lives here now. */
+  #pd-editor .pd-cost-card #pd-cost { width: 100%; }
+  #pd-editor .pd-cost-card .pd-cost-src { margin-top: 8px; }
+  #pd-editor .pd-cost-card .pd-cost-alerts { margin-top: 9px; }
+  /* Where the figure came from. Two lines at most — the provenance sentence,
+     then the recipe it names with its actions — and each is its own row rather
+     than one run of text that wraps mid-phrase. */
+  .pd-cost-src { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+  .pd-cost-src-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    min-width: 0; line-height: 1.45;
+  }
+  /* THE RECIPE'S NAME WAS RENDERING IN BROWSER-DEFAULT BLUE. Nothing in this
+     stylesheet had ever styled a bare <a>, and this is the only one inside the
+     product editor, so #0000EE landed on a cream-and-sage card — the loudest
+     thing in the panel, and a colour the palette does not contain. Ink and an
+     underline instead: still unmistakably a link, in the screen's own voice.
+     Not sage or dusk — "colour is status, never decoration" is the system's
+     rule and a link is neither status nor the system having acted. */
+  .pd-cost-src-row a {
+    color: var(--td-text); font-weight: 500; text-decoration: underline;
+    text-decoration-color: var(--td-border); text-underline-offset: 2px;
+  }
+  .pd-cost-src-row a:hover { text-decoration-color: currentColor; }
+  /* Change and Unlink travel together. Left to wrap independently, a long
+     recipe name pushed Unlink onto a line of its own — one control orphaned
+     under another, reading as two unrelated things. The pair drops as a pair. */
+  .pd-cost-acts { display: inline-flex; gap: 6px; flex: none; }
+  /* Link / Change / Unlink, on the source line under the Cost field.
+     A CHIP, NOT A RUN OF UNDERLINED WORDS. As plain text buttons at the end of
+     a wrapping sentence they read as part of it — "Recipe Roasted Pumpkin Soup
+     Change Unlink" is what the operator saw, four words of which two are
+     controls that unlink a cost source. An outline says "this is a control"
+     at rest, which is when it matters, instead of only on hover. Still quiet:
+     no fill, text2 ink, smaller than the line it sits on — it explains a
+     field, it does not compete with the Save button. */
+  .pd-cost-act {
+    appearance: none; background: none; border: 1px solid var(--td-border);
+    border-radius: 999px; padding: 2px 9px; margin: 0;
+    font: 500 11.5px var(--f-sans); color: var(--td-text2);
+    cursor: pointer; white-space: nowrap;
+  }
+  .pd-cost-act:hover { color: var(--td-text); border-color: var(--td-text2); }
   /* What the recipe behind this cost is not telling you. Same pill as the
      recipe record's warning (.rcp-warn) — one warning shape across both
      screens, because it is the same warning about the same recipe. Amber, not
      Brick: the number is not wrong to exist, it is wrong to trust. */
-  #pd-cost-alert { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  /* The stacking of these pills is on .pd-cost-alerts above — one rule for both
+     hosts (#pd-cost-alert and #pd-cost-sanity), which is what stops a recipe
+     warning and a below-cost warning laying out differently. This id rule used
+     to carry it, with align-items:flex-start; it is gone rather than left to be
+     overridden, so there is one place to read the answer. */
   /* STRETCH, not flex-start: every message this box ever carries is a full
      sentence (unit mismatch, no cost yet, archived, missing cost), never a
      short one-liner, so hugging its own content width just means the
@@ -2882,9 +2947,18 @@
   .pd-cost-warn {
     display: flex; align-items: flex-start; gap: 8px; align-self: stretch;
     font: 400 12px var(--f-sans); color: var(--td-amber-ink);
-    background: var(--td-amber-tint); border-radius: 12px; padding: 6px 14px;
+    background: var(--td-amber-tint); border-radius: 12px; padding: 8px 11px;
   }
-  .pd-cost-warn svg { width: 14px; height: 14px; flex: none; }
+  /* The triangle sits on the first line of the sentence, not floating above
+     it: 1.5 line-height on 12px puts that line's optical centre 9px down. */
+  .pd-cost-warn svg { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+  .pd-cost-warn-t { min-width: 0; line-height: 1.5; }
+  /* The locked pair (UNIT MISMATCH · 单位不符) leads its own sentence. Bold,
+     not a separate line: the em dash after it is part of the locked copy
+     (docs/tacet-delivery-vocabulary.md `unitMismatchPill`) and breaking the
+     line there would leave it dangling. Weight alone is enough to let the
+     operator find WHICH warning this is without reading the paragraph. */
+  .pd-cost-warn-k { font-weight: 600; letter-spacing: .01em; }
   /* "Couldn't load the recipe" is not a warning about the recipe — it is this
      line admitting it could not check. It must be visible (silence would read
      as all-clear) without wearing the colour of a real finding. */
