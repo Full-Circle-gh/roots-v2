@@ -1,6 +1,8 @@
 # Tacet stock movement — schema survey and migration plan
 
-**v1.2 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+**v1.3 · 2026-09-03 · SURVEY AND PROPOSAL ONLY. No code has been written, no migration exists, no schema has changed.** This document answers the seven unknowns in the stock-movement brief and proposes the schema that would satisfy `docs/tacet-consolidation-decisions.md` §39. It is a plan to be reviewed, not a description of the product. Where the survey contradicts the brief it was written from, it says so and quotes the code.
+
+**v1.3 adds A8, a survey of the recipe screen's "Makes" field, which partly corrects A5 and re-scopes step 1 of the production work.** Short version: **"Makes" is not a stored field** — it is the reverse lookup on `store_products.recipe_id`, rendered read-only, and A5 understated how much of it already ships. **Step 1 shrinks** from building a mapping to finishing its data. **But a second gate appears**: a recipe's output exists as a sellable product *and* as a material, the material has no stock by decision, so **the bulk half of a split batch cannot be recorded at all.** No code, no schema change, no migration.
 
 **v1.2 records D6, Ash's ruling on Q5 — the last of the six open questions — and its consequences for B6's scoping. All six are now answered; nothing in PART C gates implementation, and the one thing that does (E2) blocks a single migration step rather than the migration.**
 
@@ -145,6 +147,8 @@ The name `storefront_config` reads oddly for a warehouse setting, and that is a 
 
 ## A5. Recipe → product — the mapping exists, is one-directional, and is not unique
 
+> **CORRECTED IN PART, 2026-09-03 — see A8.** Everything stated in A5 is factually true and none of it is withdrawn. What A5 got wrong is the **weight** it put on those facts: it presented the reverse lookup as something a future build would have to construct, and concluded production-to-stock "cannot be built on it as it stands". **That lookup is in fact already shipped, rendered on the recipe screen as the "Makes" line, filtered, ordered and read by the cost cascade — and since the recipe-link endpoint exists, the column is writable by hand, which A5 did not establish.** The original text is left exactly as written below, because the survey it records is sound and the conclusion drawn from it is the part that moved. **Read A5 for the facts and A8 for what they mean.**
+
 **This is the piece the brief flagged as most likely missing. It is not missing, but it does not point the way production needs.**
 
 What exists:
@@ -217,6 +221,162 @@ Grepped the whole repository for `stock_applied_at`, `restock_orders`, `restock_
 **`public/app.html:18333`** is the one row-level reader of provenance: it renders a ledger line's `ref_table === 'restock_orders' && l.ref_id` as `RS #…`. **That branch is dead today** — per A0.1 `ref_id` is never written and `ref_table` is always `'retail_store_stock'`. Filling those columns (B4) would bring an existing, already-written UI affordance to life rather than requiring new front-end work.
 
 **Conclusion for B1: every status reader is a front-end string comparison against the five existing values.** There is no server-side consumer to break. That is precisely why B1 refuses to redefine any of the five.
+
+---
+
+## A8. The recipe screen's "Makes" field — surveyed 2026-09-03, and it partly corrects A5
+
+**Why this section exists.** The Tacet recipe screen shows a **Makes** line naming the recipe's output directly — *"Makes Choco-Hazel Bars 120g"* — with a second line reading *"Also stocked as a material: Choco-Hazel Bars — ¥0.1113/g"*. A5 said no recipe→product mapping pointing that direction existed. **Both are true, and the reason they are both true is the finding.**
+
+**First, a correction to the premise this survey was commissioned with: it is not the kitchen app's screen.** `Makes` / `产出` appears in exactly one place in the repository — `public/retail-admin/19-recipes.js`, the **Tacet retail-admin** recipes screen (`:1149` for one product, `:1157` for the header of several). Neither `public/app.html` nor `public/kitchen.html` renders it.
+
+### A8.1 — What "Makes" is: a rendered reverse lookup, not a stored field
+
+**No table and no column stores it.** There is no `makes`, no `output_product_id`, nothing of the kind. The line is built from a query run at read time, `routes/retail-recipes.js:278-293`:
+
+```sql
+SELECT sp.id, sp.name_en, sp.name_cn, sp.weight AS size, sp.sell_price, sp.unit_cost, …
+  FROM store_products sp
+ WHERE sp.recipe_id = ? AND COALESCE(sp.is_active,1) = 1
+ ORDER BY sp.name_en COLLATE NOCASE, sp.id
+```
+
+**That is precisely the reverse lookup A5 named** (`SELECT id FROM store_products WHERE recipe_id = ?`), shipped and rendering. The client (`19-recipes.js:1133` `productsHtml()`) receives it as the array `_rec.products`.
+
+**The screen cannot write it, deliberately.** `19-recipes.js:1099-1102`:
+
+> *"The reverse of the product editor's 'From recipe' note (that one names the recipe from the product; this names the products from the recipe). **READ ONLY — the link is owned and edited on the product side. Nothing here writes it, and there is deliberately no affordance to.**"*
+
+`routes/retail-recipes.js:258` repeats it: *"owned and edited on the product side, never here."*
+
+**The one client-reachable write is on the product side** — `PUT /api/retail-admin/products/:id/recipe-link` (`routes/retail.js:21333`), which runs `UPDATE store_products SET recipe_id = ?` (`:21349`) and fires the cost recompute. Its own header (`:21316-21326`) is worth quoting, because it answers a question A5 left hanging — whether the 36 ambiguous pairs could be resolved at all:
+
+> *"`store_products.recipe_id` was first filled by the one-time link pass in database.js, which links only where two of {SKU, name_en, name_cn} agree exactly and leaves everything weaker 'for Ash to confirm by hand' — but **nothing in the app could write that column**, so **45 active products sit beside a same-SKU recipe with no way to connect them**… The rule is right to be strict; what was missing is the door. **This is that door.**"*
+
+**Two different figures are now on record and this document does not reconcile them:** the migration's **36** group-B pairs (`database.js:4582`, one signal only, all SKU-only) and this endpoint's **45** active products beside a same-SKU recipe. They are different measurements taken at different times and neither is stated to be a subset of the other. **Do not treat them as the same number.**
+
+### A8.2 — What it points at, and what enforces it
+
+| | Points at | FK | Unique | Writable from |
+|---|---|---|---|---|
+| `store_products.recipe_id` | a `store_products` row → `recipes.id` | **NONE** | no | `PUT /api/retail-admin/products/:id/recipe-link` |
+| `products.recipe_id` (kitchen) | a `products` row → `recipes.id` | **`FOREIGN KEY (recipe_id) REFERENCES recipes(id)`** (`schema.sql:171`) | no | kitchen product editor (`routes/products.js:373`) |
+| `ingredients.source_recipe_id` | an `ingredients` row → `recipes.id` | **`INTEGER REFERENCES recipes(id)`** (`database.js:673`) | **YES — partial unique** | not client-reachable; `ensureMaterialized()` only |
+
+**The store-side link has no foreign key, and that is deliberate rather than an oversight.** `database.js:4331-4332`, describing how `store_products` was created by cloning `products`' column list: *"The only dropped constraint is the inline FK to recipes(id) — the store has no recipes."* `foreign_keys = ON` globally (`database.js:28`), so the kitchen link is enforced by the engine and **the store link — the one "Makes" reads — is not.**
+
+**The material link is the only one of the three that is unique**, via `idx_ingredients_source_recipe` (`database.js:674-676`), `CREATE UNIQUE INDEX … ON ingredients(source_recipe_id) WHERE source_recipe_id IS NOT NULL`, whose own comment reads *"A recipe backs at most one material — the partial unique index (below) enforces 'one record, one identity' rather than leaving it a convention."*
+
+### A8.3 — Cardinality: a recipe can already name several products, today
+
+**In the schema:** `store_products.recipe_id` carries **no `UNIQUE` index** (grep confirms none anywhere), so any number of products may point at one recipe.
+
+**In the UI:** the screen already handles it. `19-recipes.js:1148` branches on `rows.length === 1` — one product renders an identity line, **several render a table with a per-product Sells and Margin column.** `routes/retail-recipes.js:269-271`: *"Priced per ROW and never blended. One recipe can feed a 150g bag and a 25g sample at different prices; a single averaged margin across them would be a number that is true of neither."*
+
+**So the premise that this screen supports exactly one output per recipe is not correct, and D6 should be read against what is actually there** — see A8.6.
+
+**The reverse is impossible: two recipes cannot claim the same output.** `recipe_id` is a single scalar column on the product row, so a product has at most one recipe. The many-ness runs one way only — one recipe → many products.
+
+### A8.4 — The size figure: freeform text, connected to nothing
+
+**`120g` is `store_products.weight`, aliased `size` by the query.** Inherited from `products.weight`, declared at `schema.sql:158`:
+
+```sql
+weight          TEXT,                  -- freeform: "150g", "1 pc", "200ml"
+```
+
+**It is a display string. It is not a serving size, not a unit weight, not a pack size, and not a number.** Nothing parses it and nothing computes with it — `19-recipes.js:1142` renders it verbatim (`size = p => p.size ? … esc(p.size) : ''`).
+
+**It has no relationship whatever to `recipes.batch_size` (`REAL`, *"total grams per batch"*), `recipes.servings` (`INTEGER`) or `recipes.serving_size` (`REAL`, *"grams per serving"*)** — `schema.sql:92-94`. The only bridge between a recipe's yield and a sellable unit anywhere in the system is an **assertion, not a column**: `lib/recipe-rollup.js` writes `store_products.unit_cost` as `costPerServing` on the stated rule *"one serving is one sellable unit"*. **That assertion is exactly P2**, and A8 does not weaken it — reading `"120g"` next to a product name may look like the missing unit, and it is not one.
+
+### A8.5 — "Also stocked as a material": two records, no join between them, and only one of them can hold stock
+
+**They are two separate records.** The sellable is a `store_products` row; the material is an `ingredients` row, fetched at `routes/retail-recipes.js:165` — `SELECT id, name_en, cost_per_unit, unit, source_recipe_id FROM ingredients WHERE source_recipe_id IN (…)` — and returned as `backsMaterial` (`:204`, `:301`).
+
+**Nothing links them to each other.** They are siblings, not relatives: both point at the same `recipes.id`, one through `store_products.recipe_id` and the other through `ingredients.source_recipe_id`. **There is no column joining a product to its material**, and no query in the repository joins the two except through the recipe.
+
+**The material row is auto-maintained from the recipe, never authored.** `ensureMaterialized(db, recipeId)` (`lib/recipe-materialize.js:225`) runs on recipe create (`routes/retail-recipes.js:330`) and update (`:379`), mirroring `name_en`, `name_cn` and `sku`. A **repack** is deliberately excluded — *"a one-line recipe needs no material of its own, and must not be given one."*
+
+**What keeps their stock numbers from disagreeing: nothing — and nothing has to, because a material has no stock at all.** No stock column on the master, no material stock table:
+
+- `routes/retail-purchasing.js:217` — *"Materials have no stock table (§28) — a material line's 'receiving' is the price write-back…"*
+- `routes/retail-waste.js:365` — refuses material waste outright: *"Material waste is not available yet. Materials have no stock to move, so a material loss cannot be recorded as a stock movement."*
+- §31 rule 6 and §32's addendum record this as **a decision, not a gap**, which means it cannot be treated as an oversight to patch around.
+
+**So on a produced batch, only the product side can increment. The material side has nowhere to put a quantity.**
+
+**AND THAT IS A LIVE PROBLEM FOR D6, not a curiosity.** §29's addendum records the actual kitchen behaviour, confirmed directly rather than inferred (`docs/tacet-consolidation-decisions.md:4258-4260`):
+
+> *"a batch is part-sold as retail units in serving-sized containers, and **part-held in bulk for later use as a material**. The bulk half goes into reused kitchen tubs…"*
+
+**D6 rules that a batch records what came out of it per product. The bulk half of exactly the split D6 exists to capture cannot be recorded, because its destination has no stock.** A batch that yields 40 bars and 3kg of bulk can record the 40 and must silently drop the 3kg. **This is not solved by the batch-output link table** — it is blocked on material stock, which §32's addendum states is its own decision and *"must not be smuggled into"* another build. See B6.1, where it is now the second gate.
+
+### A8.6 — What this does and does not change about A5
+
+**A5's factual claims all stand.** There is no recipe→product column; `store_products.recipe_id` is product→recipe, non-unique, partial by design; `products.recipe_id` is documented as wrong data; no `product_recipes` join table exists; no `recipes.product_id` column exists. **A8 contradicts none of that.**
+
+**What A5 understated is how much of the reverse direction is already built and load-bearing.** A5 presented `SELECT id FROM store_products WHERE recipe_id = ?` as the reverse lookup one *would* have to do, and concluded *"production-to-stock cannot be built on it as it stands"*. In fact that query is **shipped, rendered on the recipe screen, filtered for active rows, ordered, and consumed by the cost cascade** — and since the recipe-link endpoint exists, the column is **writable by hand**, which A5 did not establish. A recipe→products *set* is a solved problem.
+
+**What remains genuinely missing is narrower than A5 implied, and is not a mapping problem at all:**
+
+1. **Quantities per batch.** `store_products.recipe_id` says *this recipe can produce this product*. It cannot say *this batch produced 40 of it*. That is D6's link table and no reverse lookup substitutes for it.
+2. **Data quality.** The link is partial by design and unenforced on the store side; the 36 group-B pairs and the endpoint's 45 same-SKU products are unresolved, and per §29's addendum nobody may resolve them by inference.
+3. **The material half of a split batch has no destination** (A8.5).
+
+### A8.7 — What reads the link, beyond display
+
+**It is load-bearing for costing, not decoration:**
+
+- `lib/recipe-rollup.js:374` `loadLinkedProducts()` — `SELECT id, name_en, sku, unit_cost, recipe_id FROM store_products WHERE recipe_id IS NOT NULL AND COALESCE(is_active,1) = 1`; the cascade writes `store_products.unit_cost` from `costPerServing` for every row it returns. `routes/retail-recipes.js:262-264` notes the recipe screen deliberately uses **the same `COALESCE(is_active,1) = 1` filter** so *"the header can never advertise a product the rollup would not write to."*
+- `routes/retail-product-build.js:114` reads it when a product gains a build list — after which, per §31's addendum, `recipe_id` is no longer that product's cost source (`19-recipes.js` carries `build_line_count` for exactly this reason, `retail-recipes.js:280-289`).
+- `routes/retail.js:21276-21277`, `:21380-21381` join it for display; `:21349` writes it and fires `fireRecompute`.
+- **Channel sync does not read it** — Meituan/Eleme/Guanyi push stock and price, not recipe links.
+
+### A8.8 — Population: CANNOT BE ANSWERED FROM THIS REPOSITORY
+
+**There is no database in this checkout at all.** `data/*.db` is gitignored (`.gitignore:13-17`) and no file is present — A6 recorded a scaffold `data/roots.db` with zero recipes; there is now not even that. **Every count below is unknown here and must be taken on the box.** Queries for Ash, on the tenant database:
+
+```sql
+-- 1. How many recipes name at least one product ("Makes" renders), and how many do not.
+SELECT (SELECT COUNT(*) FROM recipes WHERE COALESCE(is_active,1)=1)                     AS active_recipes,
+       (SELECT COUNT(DISTINCT sp.recipe_id) FROM store_products sp
+         WHERE sp.recipe_id IS NOT NULL AND COALESCE(sp.is_active,1)=1)                 AS recipes_with_a_product,
+       (SELECT COUNT(*) FROM ingredients WHERE source_recipe_id IS NOT NULL)            AS recipes_backing_a_material;
+
+-- 2. The multi-output population — the recipes D6 is actually about.
+SELECT sp.recipe_id, COUNT(*) AS products, GROUP_CONCAT(sp.name_en, ' | ') AS names
+  FROM store_products sp
+ WHERE sp.recipe_id IS NOT NULL AND COALESCE(sp.is_active,1)=1
+ GROUP BY sp.recipe_id HAVING COUNT(*) > 1
+ ORDER BY products DESC;
+
+-- 3. Both outputs at once: a recipe that makes a sellable product AND backs a material.
+--    These are the split batches of §29's addendum, and the ones A8.5 cannot fully record.
+SELECT r.id, r.name_en,
+       (SELECT COUNT(*) FROM store_products sp WHERE sp.recipe_id = r.id AND COALESCE(sp.is_active,1)=1) AS products,
+       (SELECT i.id FROM ingredients i WHERE i.source_recipe_id = r.id)                                  AS material_id
+  FROM recipes r
+ WHERE COALESCE(r.is_active,1)=1
+   AND (SELECT COUNT(*) FROM store_products sp WHERE sp.recipe_id = r.id AND COALESCE(sp.is_active,1)=1) > 0
+   AND (SELECT i.id FROM ingredients i WHERE i.source_recipe_id = r.id) IS NOT NULL;
+
+-- 4. Dangling store-side links — no FK enforces this one (A8.2).
+SELECT sp.id, sp.name_en, sp.recipe_id
+  FROM store_products sp
+ WHERE sp.recipe_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM recipes r WHERE r.id = sp.recipe_id);
+
+-- 5. Do the two product-side links agree where both exist? (A5's "wrong data" claim, measured.)
+SELECT COUNT(*) AS both_set,
+       SUM(CASE WHEN sp.recipe_id = p.recipe_id THEN 1 ELSE 0 END) AS agree
+  FROM store_products sp JOIN products p ON p.id = sp.kitchen_product_id
+ WHERE sp.recipe_id IS NOT NULL AND p.recipe_id IS NOT NULL;
+
+-- 6. The unresolved hand-link backlog (the 36 / 45 figures of A8.1).
+SELECT sp.id, sp.name_en, sp.sku, r.id AS recipe_id, r.name_en AS recipe_name
+  FROM store_products sp JOIN recipes r ON r.sku = sp.sku
+ WHERE sp.recipe_id IS NULL AND COALESCE(sp.is_active,1)=1 AND COALESCE(r.is_active,1)=1;
+```
 
 ---
 
@@ -373,6 +533,8 @@ All three come off one row of `restock_items` with no joins and no aggregation. 
 
 **This is clearly larger than a column addition, and stating that plainly is the point of this section.** Four pieces, in this order, none of which can usefully start before the one above it:
 
+> **RE-SCOPED 2026-09-03 after the A8 survey.** Step 1 below was written believing the recipe→product direction had to be built. **It does not: it exists, it ships, and it is read by the cost cascade** — A8.1. **Step 1 shrinks from "build a mapping" to "finish the data and decide whether to enforce it", which is much smaller.** What did NOT shrink, and what A8 added, is set out under *What step 1 actually is* below. The original text stands; the estimate attached to it was wrong.
+
 **1. A recipe → product mapping that points the right way.** This is the prerequisite and it is where the difficulty is. Today:
 
 - `store_products.recipe_id` is **product → recipe** — the wrong direction for "what can this batch produce", which must ask recipe → products;
@@ -382,11 +544,26 @@ All three come off one row of `restock_items` with no joins and no aggregation. 
 
 **Neither column supports asking what a batch can produce, and no amount of indexing makes them.** A5 has the full survey.
 
+**A SECOND GATE, FOUND BY A8 AND NOT PREVIOUSLY ON THIS LIST: the material half of a split batch has nowhere to go.** §29's addendum records that a Roots batch is *"part-sold as retail units… and part-held in bulk for later use as a material"*. **A material has no stock** — no column on the master, no material stock table, and §31 rule 6 / §32's addendum record that as a decision rather than a gap (A8.5). So a batch yielding 40 bars and 3 kg of bulk **can record the 40 and must silently drop the 3 kg.** D6's output lines name products; the material half is unrepresentable. **This is not solved by the batch-output table and must not be worked around inside it** — §32's addendum states material stock is its own decision and must not be smuggled into another build. **Either production ships knowingly recording only the sellable half, or material stock is decided first. That is Ash's call and it is not made here.**
+
 **2. The batch output table.** One row per (batch, product, quantity) — D6's link table. `production_batches` gains no product column.
 
 **3. The UI for entering a split, with the one-line pre-fill.** D6: the general shape, with the single-product case pre-filled to one confirm. One code path.
 
+**What the screens actually need, after A8 — less than assumed for viewing, and all of the writing.** The brief for this survey assumed the recipe screen supports exactly one output per recipe. **It does not: it already renders several** (`19-recipes.js:1148` branches one-line vs. a per-product Sells/Margin table, and the server orders and filters the set — A8.3). So the *display* of a multi-output recipe is built. What is missing is everything that writes and everything about quantity:
+
+- **A batch-logging surface that takes a split.** Nothing today captures a per-batch quantity per product; `production_batches` has `batches_made` and `servings_made` and no product dimension at all.
+- **The one-line pre-fill**, drawn from the recipe's existing product set — which A8.1 confirms is a query that already exists and is already exposed on the recipe endpoint. **Offered for confirmation, never committed unconfirmed** (D6).
+- **A write affordance for the link on the recipe side, or a deliberate decision to keep it product-side.** The recipe screen is read-only *by design* (`19-recipes.js:1101`: *"there is deliberately no affordance to"*), and the only door is the product editor, one product at a time. **Setting up a recipe that makes four products means opening four product editors.** That is fine for a rare edit and poor for onboarding a tenant; it is a UX decision, not a schema one, and it should be taken knowingly rather than inherited.
+- **Nothing in the material line.** `backsMaterial` is auto-maintained and carries no quantity; per the second gate above, it is not part of this UI until material stock is decided.
+
 **4. The stock increment itself.** Per output line, at the configured output location, through `adjustStock`, one ledger row per product, guarded by a `stock_applied_at`-style stamp on `production_batches`.
+
+**What step 1 actually is, after A8.** Not a new mapping. Three things, none of which is a schema build:
+
+- **Finish the data.** The link is partial by design; the 36 group-B pairs and the recipe-link endpoint's 45 same-SKU products (two different figures — A8.1 — which must not be assumed to be the same set) are unresolved. **The door to resolve them by hand already exists**: `PUT /api/retail-admin/products/:id/recipe-link`. This is data entry with a human, not development.
+- **Decide whether the store-side link gets a foreign key.** `store_products.recipe_id` has none, deliberately (A8.2), while the kitchen twin does and `foreign_keys = ON`. Query 4 in A8.8 measures whether anything is already dangling. **A decision, not a defect** — but production would be the first feature to depend on that column being sound.
+- **Do NOT add a `UNIQUE` index to it.** D6 forbids it, and A8.3 confirms the non-uniqueness is already exercised: the recipe screen renders a multi-product table today.
 
 **THE GATE ON STEP 1, AND NOBODY MAY GUESS PAST IT.** `store_products_recipe_link_v1` deliberately left **36 ambiguous pairs** unlinked — one signal only, all SKU-only — **for Ash to confirm by hand.** Those 36 are a data question, not a schema question, and §29's own addendum already established the rule for exactly this situation: no automatic signal is trustworthy as a silent discriminator, migration tooling must surface each candidate for a person to confirm, and **must not act on its own judgement.** **Step 1 cannot be called done while they are open, and no session may resolve them by inference.** They are Ash's.
 
@@ -638,7 +815,7 @@ const good = Math.round(onHandQty(l) || 0);
 
 **But the common case must not become a form.** Where a recipe has only ever produced one product, the log **pre-fills that product and asks only for the quantity — one confirm.** The multi-product case is the general shape; the single-product case is that shape with one line already filled. **Same code path, different amount of typing.** Note what the pre-fill is allowed to be: a convenience drawn from what this recipe has produced *before*, presented for confirmation and freely overridable. It is **not** an inference about what this batch produced, and it must never be committed unconfirmed — that would be the guess this ruling forbids, wearing a default's clothing.
 
-**Stock increments per output line**, at `cfgValue('production.outputStoreId')`, through the ledgered path, **one ledger row per product.** Not one row for the batch: each product's stock moved, so each product's movement is a ledger row, with `refTable='production_batches'` and `refId` the batch id so all lines of one batch are recoverable together (B4's provenance change is what makes that possible).
+**Stock increments per output line**, at `cfgValue('production.outputStoreId')`, through the ledgered path, **one ledger row per product.** **A8.5 finds a limit on this that D6 did not anticipate: a recipe's output may also exist as a material, materials have no stock by decision, and so the bulk-held half of a split batch has no destination.** Output lines can name products only. See B6.1's second gate. Not one row for the batch: each product's stock moved, so each product's movement is a ledger row, with `refTable='production_batches'` and `refId` the batch id so all lines of one batch are recoverable together (B4's provenance change is what makes that possible).
 
 **P2 (units) is untouched by this ruling and still stands.** The split says *which products and how many of each*; it does not say what one unit of a product is. `production_batches` still records `batches_made` and `servings_made`, and "one serving is one sellable unit" is still asserted only for the products `store_products_recipe_link_v1` costed. **A quantity per output line is a number the logger types, which sidesteps P2 for the batch itself** — but any later attempt to *check* that number against the recipe's yield still needs P2 settled.
 
