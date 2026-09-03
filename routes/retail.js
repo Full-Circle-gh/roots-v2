@@ -17879,6 +17879,8 @@ function creditLifetimeCommission(orderId) {
 // row, and stamps reversed_at so a re-fire is a no-op. Partial refunds leave the
 // commission intact (the order still counts as a kept order).
 function reverseLifetimeCommission(orderId) {
+  const s = affiliateSettings();
+  if (!s.enabled) return;
   const row = tdb().prepare(
     "SELECT id, referrer_id, customer_id, commission_amount FROM retail_lifetime_commissions WHERE order_id = ? AND reversed_at IS NULL"
   ).get(orderId);
