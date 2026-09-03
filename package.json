@@ -39,6 +39,7 @@
     "test:invoice-off-chase": "node scripts/test_invoice_recorded_off_chase.js",
     "test:invoice-rematch": "node scripts/test_invoice_rematch.js && node scripts/test_invoice_rematch_screen.js",
     "test:invoice-no-payables": "node scripts/test_invoice_no_payables.js",
+    "test:invoice-no-invoice-mark": "node scripts/test_invoice_no_invoice_mark.js",
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:finance-summary": "node scripts/test_finance_summary.js",

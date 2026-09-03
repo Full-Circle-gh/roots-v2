@@ -1645,6 +1645,11 @@
   // decide, so the cell is static: no select means puReceiveSave sends no
   // invoice_status for the line, which is what keeps a later PO-level unmark
   // from leaving every line stuck on "None".
+  //
+  // data-saved is what the row was RENDERED with, kept current by
+  // puSaveLineInvoice. puReceiveSave compares against it and sends the field
+  // only when the two differ, so Confirm delivery on a tab left open cannot
+  // restate a stale value over a mark set on the Invoices screen since.
   function invoiceCell(it, poNoInvoice, dis) {
     if (poNoInvoice) return `<span class="sub">${esc(T('None', '无发票'))}</span>`;
     const sel = it.no_invoice_expected ? 'no_invoice' : (it.invoice_status || 'not_received');
@@ -1957,8 +1962,16 @@
         damaged_qty: tr.querySelector('.pu2-rd').value || 0,
         tracking_number: tr.querySelector('.pu2-rt').value,
         // Absent on a PO-level no-invoice line — leave the field off entirely
-        // there rather than sending a value the row never offered.
-        ...(ri ? { invoice_status: ri.value } : {}),
+        // there rather than sending a value the row never offered. Absent too
+        // when the picker still shows the value it was rendered with: it saves
+        // on change (puSaveLineInvoice), so restating it here says nothing —
+        // and on a tab left open while the mark was set from the Invoices
+        // screen, restating a stale value is how Confirm delivery quietly put
+        // a line marked 不开发票 back to 等待开票. Same present-vs-absent rule
+        // qty_received and the return boxes follow: send the key and the
+        // server writes it, omit it and the stored value stands.
+        ...(ri && ri.value !== (ri.dataset ? ri.dataset.saved : undefined)
+              ? { invoice_status: ri.value } : {}),
         // Returns. OMITTED ENTIRELY when the box is disabled — a line with
         // nothing received has no return to state, and the same present-vs-
         // absent rule that governs qty_received governs this: send the key and

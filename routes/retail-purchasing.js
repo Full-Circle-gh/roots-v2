@@ -58,6 +58,10 @@ const { planRematch, applyRematch } = require('../lib/po-rematch');
 // return.
 const { planReturns, billableQtySql, billableQty, onHandQty } = require('../lib/po-returns');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
+// The no-invoice mark and the receive row's invoice_status are one fact stored
+// in two columns; every write of either goes through here so a later re-derive
+// cannot reverse a buyer's decision. See lib/invoice-mark.js.
+const { setNoInvoiceMark, setLineInvoiceStatus, invoiceStatusSets } = require('../lib/invoice-mark');
 
 const router = express.Router();
 
@@ -1373,9 +1377,13 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
 // po_line_items.invoice_status is a second, STORED mechanism, still never read
 // here: awaiting/received is the buyer's own note on the receive row and says
 // nothing about what has actually been invoiced. Its 'no_invoice' value is the
-// one exception, and it is not read either — the receive route writes the
-// no_invoice_expected mark alongside it, so the two can no longer contradict
-// each other. invoice_pos is dead with 0 rows and is left alone.
+// one exception, and it is not read either — every writer of either column now
+// moves both together (lib/invoice-mark.js), so the two cannot contradict each
+// other and nothing is left for a later re-derive to reverse. That reversal was
+// real: an unguarded boot-time reconciliation in database.js re-derived the
+// mark from a stale note on every server start, which is how a 恢复'd line came
+// back marked 不开发票 hours after the buyer restored it.
+// invoice_pos is dead with 0 rows and is left alone.
 const INV_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
 const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const INV_UNSPECIFIED = '未指定 Unspecified';
@@ -1919,7 +1927,10 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requir
     .get(req.params.lineId, req.params.id, tid);
   if (!line) return res.status(404).json({ success: false, error: 'not_found' });
   const flag = !!(req.body && req.body.no_invoice_expected);
-  db.prepare('UPDATE po_line_items SET no_invoice_expected = ? WHERE id = ?').run(flag ? 1 : 0, line.id);
+  // Writes invoice_status alongside the mark. Writing the mark alone is what
+  // let database.js's boot-time reconciliation — and any later save that
+  // carried the stale status — put a 恢复'd line straight back to 不开发票.
+  setNoInvoiceMark(db, line.id, flag);
   logActivity(req.user.id, req.user.username, 'line_no_invoice_toggle', 'po_line_item', line.id, { no_invoice_expected: flag }, req.ip);
   res.json({ success: true, no_invoice_expected: flag });
 });
@@ -1995,7 +2006,7 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/invoice-status', re
   const status = req.body && req.body.invoice_status;
   if (!VALID_INVOICE.has(status)) return res.status(400).json({ success: false, error: 'invalid_invoice_status' });
   const mark = status === 'no_invoice' ? 1 : 0;
-  db.prepare('UPDATE po_line_items SET invoice_status = ?, no_invoice_expected = ? WHERE id = ?').run(status, mark, line.id);
+  setLineInvoiceStatus(db, line.id, status);
   logActivity(req.user.id, req.user.username, 'line_invoice_status', 'po_line_item', line.id,
               { invoice_status: status, no_invoice_expected: !!mark }, req.ip);
   res.json({ success: true, invoice_status: status, no_invoice_expected: !!mark });
@@ -2145,8 +2156,8 @@ function lineConflict(items) {
 function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
-     expense_category, supplier_name, purchase_channel, invoice_status, note, sort_order)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     expense_category, supplier_name, purchase_channel, invoice_status, no_invoice_expected, note, sort_order)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   // On an edit (reuseExisting), a line the payload names by id is UPDATED in
   // place rather than dropped and re-inserted. invoice_lines.line_id is ON
   // DELETE CASCADE, so re-inserting used to take the supplier-invoice
@@ -2155,11 +2166,18 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   // said so afterwards.
   const updateItem = db.prepare(`UPDATE po_line_items SET
      store_product_id=?, ingredient_id=?, name_en=?, name_cn=?, sku=?, qty=?, unit=?, cost_per_unit=?,
-     total_cost=?, expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?, note=?, sort_order=?
+     total_cost=?, expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?,
+     no_invoice_expected=?, note=?, sort_order=?
      WHERE id=? AND po_id=?`);
-  const existing = reuseExisting
-    ? new Set(db.prepare('SELECT id FROM po_line_items WHERE po_id = ?').all(poId).map(r => r.id))
-    : new Set();
+  // id → what that row already says about invoicing. An edit has to be able to
+  // give those two columns BACK unchanged: the order wizard's payload never
+  // mentions invoice status, and defaulting the field on every save is how a
+  // stored 不开发票 quietly became 'not_received' again the next time anyone
+  // touched the order's lines.
+  const existing = new Map(reuseExisting
+    ? db.prepare('SELECT id, invoice_status, no_invoice_expected FROM po_line_items WHERE po_id = ?')
+        .all(poId).map(r => [r.id, r])
+    : []);
   const kept = new Set();
   // Material lines default unit + supplier from the ingredient master, same
   // fallback order the kitchen insert path uses (routes/purchases.js). Unit
@@ -2171,7 +2189,16 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   items.forEach((item, i) => {
     const qty = parseFloat(item.qty) || 0;
     const cpu = parseFloat(item.cost_per_unit) || 0;
-    const status = VALID_INVOICE.has(item.invoice_status) ? item.invoice_status : 'not_received';
+    // A payload that names an invoice status states BOTH columns; one that says
+    // nothing hands the stored pair straight back (lib/invoice-mark.js holds
+    // the same rule for every other writer). A brand-new line starts at
+    // 'not_received' with no mark, as it always did.
+    const held = existing.get(parseInt(item.id, 10));
+    const status = VALID_INVOICE.has(item.invoice_status) ? item.invoice_status
+                 : (held && held.invoice_status) || 'not_received';
+    const mark = VALID_INVOICE.has(item.invoice_status)
+      ? (item.invoice_status === 'no_invoice' ? 1 : 0)
+      : (held && held.no_invoice_expected ? 1 : 0);
     let unit = item.unit || null;
     let supplierName = item.supplier_name || headerSupplier || null;
     if (item.ingredient_id) {
@@ -2185,7 +2212,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
       item.store_product_id || null, item.ingredient_id || null,
       item.name_en || '', item.name_cn || null, item.sku || null,
       qty, unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
-      supplierName, item.purchase_channel || null, status,
+      supplierName, item.purchase_channel || null, status, mark,
       (item.note || '').trim() || null, i,
     ];
     const lineId = parseInt(item.id, 10);
@@ -2199,7 +2226,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   // Only the lines the buyer actually removed are dropped. Their allocations
   // still cascade away — that is the buyer's own decision — but the caller now
   // gets told, so it can be recorded rather than vanish silently.
-  const dropped = [...existing].filter(id => !kept.has(id));
+  const dropped = [...existing.keys()].filter(id => !kept.has(id));
   if (!dropped.length) return { dropped: 0, orphaned_links: 0, orphaned_amount: 0 };
   const marks = dropped.map(() => '?').join(',');
   const orphaned = db.prepare(
@@ -2532,12 +2559,14 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       if (r.tracking_carrier !== undefined) { sets.push('tracking_carrier = ?'); vals.push((r.tracking_carrier || '').toString().trim() || null); }
       // "None" on the receive row and the Invoices screen's no-invoice mark are
       // the same fact stated twice, and only the mark is ever read (lineStatus
-      // above). Keep them in step: the picker writes both, so a line the buyer
-      // marks "None" here stops being chased as "awaiting" over there.
-      if (r.invoice_status !== undefined && VALID_INVOICE.has(r.invoice_status)) {
-        sets.push('invoice_status = ?'); vals.push(r.invoice_status);
-        sets.push('no_invoice_expected = ?'); vals.push(r.invoice_status === 'no_invoice' ? 1 : 0);
-      }
+      // above). Both columns move together — lib/invoice-mark.js — so a line
+      // the buyer marks "None" here stops being chased as "awaiting" over
+      // there, and a row that says nothing about invoicing writes NEITHER
+      // column: the screen omits the field when its picker still shows the
+      // value it was rendered with, and a stale tab must not undo a mark set
+      // somewhere else in the meantime.
+      const invSets = r.invoice_status === undefined ? null : invoiceStatusSets(r.invoice_status);
+      if (invSets) { sets.push(...invSets.sets); vals.push(...invSets.vals); }
       // Why this line came in short. { write:false } for a caller that sent no
       // reason key and has no stale one to clear, which is every save the
       // desktop screen makes today — so a payload that never mentions reasons
