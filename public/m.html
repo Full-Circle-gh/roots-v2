@@ -1164,9 +1164,20 @@ reg('wstPickStore', id=>{ const w=state.wst;
   /* A different shelf holds different stock, so the chosen product and its
      on-hand no longer mean anything — dropped rather than carried across. */
   w.storeId=Number(id); w.pick=null; w.picks=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
+/* NO render() here, unlike every other search field's handler — and that is
+   the fix, not an oversight. Products/Customers/Receiving filter a list
+   that is already in memory, so their render() is what MOVES the rows on
+   every keystroke; this field only feeds a debounced SERVER search
+   (loadWastePicks, below), and nothing on screen reads w.q before that
+   fires. Calling render() anyway did what it does everywhere else — destroy
+   #mWstQ and recreate it, then refocus the new node — and on a real phone
+   that destroy/refocus cycle does not reliably keep the on-screen keyboard
+   up: Ash saw it drop on every single letter. state.focus is still armed so
+   the caret survives the render loadWastePicks DOES cause when its results
+   land, which happens once per pause in typing rather than once per key. */
 reg('wstSearch', v=>{ const w=state.wst, el=document.getElementById('mWstQ');
   w.q=String(v||''); state.focus={id:'mWstQ',pos:el?el.selectionStart:null};
-  clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); render(); });
+  clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); });
 reg('wstPick', id=>{ const w=state.wst;
   const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
   w.pick=p; w.qty=1; w.formErr=null; render(); loadWastePreview(); });
