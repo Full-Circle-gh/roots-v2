@@ -119,6 +119,14 @@
     ['repacked', () => T('Repacked', '分装')],
   ];
 
+  // Coldest to warmest, matching food-safety convention (frozen → chilled →
+  // ambient). Confirmed by Ash on 2026-09-03.
+  const STORAGE_OPTIONS = [
+    ['freezer',   () => T('Freezer', '冷冻')],
+    ['fridge',    () => T('Fridge', '冷藏')],
+    ['room_temp', () => T('Room temperature', '常温')],
+  ];
+
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
   let _rows = [];
@@ -569,7 +577,7 @@
       <div class="rcp-card rcp-blk">
         <h3 class="rcp-blk-h">${esc(T('Storage & notes', '储存与备注'))}</h3>
         <div class="rcp-fgrid">
-          ${field(T('Storage', '储存方式'), input('storage', m.storage, 'maxlength="120"'))}
+          ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, lbl]) => [v, lbl()]))))}
         </div>
         <div class="rcp-f" style="margin-top:16px">
           <span class="lbl">${esc(T('Notes', '备注'))}</span>
