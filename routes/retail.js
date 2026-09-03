@@ -10951,18 +10951,34 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // Soft-reserve stock at the routed store. Throws insufficient_stock
     // if a concurrent order beat us between routing and reservation —
     // the whole transaction rolls back and the customer retries.
-    // Skipped in two cases:
+    //
+    // Full-cart reservation is skipped in two cases:
     //   1. 'wait_for_restock' flow — those deliberately park without
     //      reservations until missing items come back in stock.
     //   2. stockGate is off (non-GZ, or scheduled-for-later GZ) — the
     //      kitchen restocks before the fulfilment date, so a same-day
     //      reservation now would just block other same-day orders for
     //      no reason.
-    if (!isWaitFlow && stockGate) {
+    //
+    // 'strict' lines reserve regardless of #2. The hard-OOS gate above only
+    // READS real_stock once, up front — it can't see another order's
+    // in-flight reservation or an already-unreserved-committed order, so two
+    // scheduled/out-of-GZ orders for the same last units can both pass it and
+    // both later decrement blind at commitUnreservedOrder (which has no
+    // availability check of its own). A product marked 'strict' promises
+    // "never orderable past zero, in any region" — honoring that needs the
+    // same atomic hold a same-day order gets, not just a point-in-time read.
+    // backorder_gz/always lines are deliberately excluded here: selling past
+    // zero for them is the intended behavior, not a bug.
+    const strictItems = stockGate
+      ? []
+      : expandStockLines(resolved.filter(r => effectiveOosPolicy(r.product) === 'strict'));
+    if (!isWaitFlow && (stockGate || strictItems.length)) {
       inventory.reserveForOrder({
         storeId: fulfillingStore.id,
         orderId,
-        items: expandStockLines(resolved),   // a bundle reserves its COMPONENTS, not itself
+        // a bundle reserves its COMPONENTS, not itself
+        items: stockGate ? expandStockLines(resolved) : strictItems,
         channel: 'wechat',
         ignoreOrderIds: ownPendingOrderIds,  // reuse stock this customer's own unpaid order is sitting on
       });
