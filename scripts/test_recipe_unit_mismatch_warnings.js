@@ -473,6 +473,46 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
     'the line mark is not amber');
 });
 
+// A stored unit outside RECIPE_UNITS() (an old/legacy value such as "L")
+// matches none of the <option>s the select renders, so a browser marks none
+// of them selected and falls back to showing the FIRST option — "g" — as if
+// it had been chosen. An operator "fixing" the line by leaving that dropdown
+// alone (because it already looks right) saves the SAME stale unit back out,
+// which is exactly what made this recipe's mismatch pill outlive several
+// rounds of edits. lineRow() must show the real stored value instead of
+// letting the browser's default masquerade as one.
+{
+  const LINE_ROW_FN = extractFunction(RECIPES_JS, 'function lineRow(l, idx)');
+  function runLineRow(l, idx) {
+    const sb = {
+      esc: (s) => String(s == null ? '' : s),
+      T: (en) => en,
+      moneyU: (n) => String(n),
+      money: (n) => String(n),
+      RECIPE_UNITS: () => ['g', 'ml', 'pcs'],
+      I: { x: 'x' },
+      Number, String,
+    };
+    vm.createContext(sb);
+    vm.runInContext(LINE_ROW_FN + '\nthis.__row = lineRow;', sb, { filename: '19-recipes.js#lineRow' });
+    return sb.__row(l, idx);
+  }
+
+  check('a line whose stored unit is not a recognised value renders it as its own selected option', () => {
+    const html = runLineRow({ name_en: 'Real Thai Coconut Milk', qty: 4, unit: 'L', master_unit: 'g', master_cost: 0.05 }, 3);
+    assert.ok(/<option value="L" selected>L<\/option>/.test(html),
+      'the raw stored unit "L" is not rendered as its own selected option: ' + html);
+    assert.ok(!/<option value="g" selected>/.test(html),
+      'a recognised option was wrongly marked selected in place of the true stored value');
+  });
+  check('a line whose unit IS a recognised value renders exactly as before — no phantom option', () => {
+    const html = runLineRow({ name_en: 'Shallot', qty: 320, unit: 'g', master_unit: 'g', master_cost: 0.03 }, 0);
+    assert.strictEqual((html.match(/<option/g) || []).length, 3,
+      'an extra option leaked in for a line whose unit is already valid: ' + html);
+    assert.ok(/<option value="g" selected>/.test(html));
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 section('5. The Recipes LIST — the screen this is scanned from');
 // ═══════════════════════════════════════════════════════════════════════════
