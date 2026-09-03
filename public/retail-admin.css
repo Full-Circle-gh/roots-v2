@@ -13062,6 +13062,84 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      pinned at top:0 is the tell that a header was made sticky by accident). */
   #tab-recipes-record .rcp-page { padding: 0 var(--s6) var(--s6); }
 
+  /* ── THE PINNED BLOCK ────────────────────────────────────────────────────
+     Head, summary card and sub-tabs, held at the top of .rcp-scroll together.
+     The head alone pinned before this, carrying a miniature of the summary's
+     figures once the card had scrolled past; the card now stays instead, so
+     what an operator watches while typing a quantity thirty lines down is the
+     REAL cost, not a copy of it that has to be kept in step.
+
+     Held whole this costs ~260px of the scrollport, which is a third of the
+     rows on a laptop — so past the first scroll it CONDENSES (below). The
+     negative side margins put its paper ground across the full scrollport
+     width, so nothing shows through the page gutters as it passes underneath.
+
+     z-index 20: above the record's cards and the ingredient list's own column
+     header (3), below the app's fixed topbar (12 — a different scroller, and
+     it never overlaps this one) and the dialog scrim. */
+  #tab-recipes-record .rcp-pin {
+    position: sticky; top: 0; z-index: 20; background: var(--td-paper);
+    margin: 0 calc(-1 * var(--s6)); padding: 16px var(--s6) 18px;
+    transition: padding .18s var(--ease-out); }
+  /* The head is no longer the thing that pins — the block is — so it gives up
+     its own sticky, its own ground and its own edge-to-edge margins here. Its
+     LAYOUT is untouched: the same row, the same gap, the same save-state and
+     buttons in the same places. */
+  #tab-recipes-record .rcp-pin > .rcp-rechead {
+    position: static; margin: 0 0 16px; padding: 0;
+    background: none; border-bottom: none;
+    transition: margin .18s var(--ease-out); }
+  #tab-recipes-record .rcp-pin .rcp-subtabs { margin-bottom: 0; }
+  #tab-recipes-record .rcp-pin .rcp-summary { margin-bottom: 16px; }
+
+  /* ── CONDENSED, once you have scrolled past the summary ──────────────────
+     Everything an operator ACTS on stays: all four figures, every warning
+     pill, and the blocked-material sentence — the one that says why a cost is
+     frozen, which is the last thing a strip should go quiet about. They drop
+     to body size and lose their padding, and the card lies down into one row.
+     What goes is the recipe's identity: the title shrinks, and "Makes X" and
+     the product rows go, because that is what the operator already knows and
+     cannot change by typing in the list.
+
+     LOCKED STRINGS ARE UNTOUCHED. The pills shrink; they are never shortened
+     or recomposed (UNIT MISMATCH · 单位不符 is minted and locked in
+     docs/tacet-delivery-vocabulary.md, and a condensed variant of it would be
+     a second string for one condition). The pill radius stays 12px for the
+     reason it is 12px at full size — the missing-cost pill is a sentence that
+     still wraps here, and 999px would draw a stadium round it. */
+  #rcp-rec-scroll.is-stuck .rcp-pin { padding-top: 12px; padding-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-pin > .rcp-rechead { margin-bottom: 10px; }
+  #rcp-rec-scroll.is-stuck .rcp-rectitle { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-summary {
+    flex-direction: row; align-items: center; flex-wrap: wrap;
+    gap: 8px 24px; padding: 12px 16px; margin-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumrow { flex: 1 1 auto; align-items: baseline; gap: 28px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig { flex-direction: row; align-items: baseline; gap: 7px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v.dim { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-summarg .pct { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumdiv { align-self: center; height: 16px; }
+  #rcp-rec-scroll.is-stuck .rcp-warns { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn { font-size: 12px; padding: 3px 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn svg { width: 14px; height: 14px; }
+  /* Past the hairline: the blocked sentence survives, the identity does not.
+     .rcp-outputs takes the whole row, so a sentence that wraps never squeezes
+     the figures beside it — and it wraps rather than truncating, because a
+     warning nobody can finish reading is a warning nobody reads. */
+  #rcp-rec-scroll.is-stuck .rcp-hr,
+  #rcp-rec-scroll.is-stuck .rcp-prodline,
+  #rcp-rec-scroll.is-stuck .rcp-prodrow,
+  #rcp-rec-scroll.is-stuck .rcp-prodhead,
+  #rcp-rec-scroll.is-stuck .rcp-matline:not(.blocked) { display: none; }
+  #rcp-rec-scroll.is-stuck .rcp-outputs { flex-basis: 100%; gap: 4px; }
+  #rcp-rec-scroll.is-stuck .rcp-matline.blocked { font-size: 12px; }
+  /* The tween is a courtesy, not information: asked for less motion, the two
+     states are the same two states, arrived at instantly. */
+  @media (prefers-reduced-motion: reduce) {
+    #tab-recipes-record .rcp-pin,
+    #tab-recipes-record .rcp-pin > .rcp-rechead { transition: none; }
+  }
+
   /* ── THE STICKY HEADER ──────────────────────────────────────────────────
      Pinned to the top of .rcp-scroll (the element that actually scrolls —
      `main` does not; body.rcp-viewing gives it overflow:hidden and the record

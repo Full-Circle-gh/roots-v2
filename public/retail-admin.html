@@ -11525,6 +11525,16 @@
              line carrying that card's figures in miniature (rcp-recfigs) — the
              one thing this screen must never let a scroll position hide is
              whether the recipe looks free. Painted by paintStickyFigs(). -->
+        <!-- ONE PINNED BLOCK — head, summary card and sub-tabs held together at
+             the top of the scroller. The head alone used to pin, and grew a
+             miniature of the summary's figures once the card had gone past it;
+             the card itself now stays, condensed (see .rcp-pin in the CSS), so
+             the figures are the real ones at every scroll position rather than
+             a copy of them. paintStickyFigs()'s own test — is the card's bottom
+             edge above the bar's? — is never true with the card inside the bar,
+             so the miniature retires itself and nothing had to be deleted to
+             make room for this. -->
+        <div class="rcp-pin" id="rcp-pin">
         <div class="rcp-rechead" id="rcp-rechead">
           <div class="rcp-rechead-main">
           <button type="button" class="rcp-btn ghost sm" onclick="rcpRecordBack()">
@@ -11557,6 +11567,7 @@
         </div>
         <div class="rcp-summary" id="rcp-rec-summary"></div>
         <div class="rcp-subtabs" id="rcp-subtabs"></div>
+        </div>
         <div id="rcp-rec-body"></div>
       </div>
     </div>
