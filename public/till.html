@@ -743,7 +743,14 @@ button{font:inherit;color:inherit;margin:0}
     printReceipt: ['Print receipt', '打印小票'],       // admin: 04-orders.js
     newOrder:     ['New order', '新建订单'],           // admin: retail-admin.html:2218
     // failure — the generic locked sentence, reused rather than re-minted
-    didNotSave:   ['That did not save. Nothing was created.', '未能保存,未创建任何内容。'] // admin: 04-orders.js
+    didNotSave:   ['That did not save. Nothing was created.', '未能保存,未创建任何内容。'], // admin: 04-orders.js
+    // Permission. BOTH halves are lifted from ONE existing string in this
+    // repository — routes/pos.js:29, `'forbidden — POS permission required ·
+    // 无收银权限'` — so this row is quoted, not composed. The only edit is
+    // dropping the leading "forbidden — ", which is an API word: the cashier is
+    // reading a screen, not a status code. Nothing else is touched, and the
+    // Chinese half is byte-for-byte the one already shipped.
+    noPermission: ['POS permission required', '无收银权限']
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -836,7 +843,7 @@ button{font:inherit;color:inherit;margin:0}
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.lang = _lang === 'cn' ? 'zh-CN' : 'en';
     $('boot-msg').textContent = '·';
-    // TWO READS, because a till may only open where the counter is OPEN.
+    // THE SECOND READ, because a till may only open where the counter is OPEN.
     // POS is a sales channel on the Sales page exactly like Meituan, and the
     // location master closes every channel at a store at once — so a shop that
     // has been marked shut must not have a till that still rings up sales and
@@ -848,12 +855,39 @@ button{font:inherit;color:inherit;margin:0}
     // FAILS OPEN, matching the server helper: if channel-status cannot be read
     // the till behaves exactly as it did before this existed. A status endpoint
     // having a bad minute must not shut a shop's counter.
+    //
+    // THE THIRD READ is this operator's capabilities, because the
+    // till became a rail row and a More row in the same commit as this check —
+    // and a nav entry that is merely hidden is not a permission. Anyone who
+    // knows the URL (an installed tablet whose operator was moved to another
+    // role, a bookmark, a shared device) still arrives here.
+    //
+    // THE PAIR, not one cap: `till:use` opens this screen, and `orders:edit` is
+    // what lib/cap-routes.js requires of the POST this screen's Confirm makes.
+    // Holding only the first is a till that builds a basket and then refuses to
+    // take the money once the tenant turns rbac_enforce on, which is the worst
+    // moment to find out.
+    //
+    // FAILS OPEN, matching channel-status beside it and the whole cap layer:
+    // caps is null on a resolution hiccup or a stale session, and null means
+    // allowed. This is a view gate over an already-authenticated operator, not
+    // the security boundary — that is cap-routes.js on the write itself.
+    // NOT A REDIRECT. Nothing in this file redirects on 401/403 and this must
+    // not be the exception: a till that redirects itself mid-shift is the loop
+    // this product has already been bitten by (see the route comment in
+    // server.js). It stops at the boot screen and says why.
     Promise.all([
       api('/api/retail-admin/stores'),
-      api('/api/retail-admin/channel-status').catch(function () { return null; })
+      api('/api/retail-admin/channel-status').catch(function () { return null; }),
+      api('/api/backend/me').catch(function () { return null; })
     ])
       .then(function (r) {
-        var j = r[0], cs = r[1];
+        var j = r[0], cs = r[1], me = r[2];
+        var caps = me && me.user && Array.isArray(me.user.caps) ? me.user.caps : null;
+        if (caps && (caps.indexOf('till:use') === -1 || caps.indexOf('orders:edit') === -1)) {
+          boot('<p>' + esc(T('noPermission')) + '</p>');
+          return;
+        }
         var list = (j.data || []).filter(function (s) { return s.is_active !== 0; });
         var posOpen = null;
         if (cs && cs.channels) {

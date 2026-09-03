@@ -276,6 +276,16 @@ function applyCapGates() {
     const v = el.dataset.cap.trim();
     el.style.display = _capAllows(v.includes(' ') ? v.split(/\s+/) : v) ? '' : 'none';
   });
+  // The counter till — the one rail row that needs ALL of a pair rather than
+  // any of it, so it cannot be written as a data-cap above (that form is
+  // canAny). `till:use` opens the screen; `orders:edit` is what cap-routes.js
+  // requires of the POST its Confirm makes, and a till offered without it rings
+  // up a basket and then refuses to take the money — with a customer standing
+  // there. Named here rather than by inventing an all-of attribute syntax that
+  // one row in the shell would ever use; Tacet Mobile states the same pair the
+  // same way, as the named branch in canRoute().
+  const railTill = document.getElementById('rail-till');
+  if (railTill) railTill.style.display = (can('till:use') && can('orders:edit')) ? '' : 'none';
   // Last, because it counts what the passes above just hid.
   railSyncGroups();
 }

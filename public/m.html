@@ -2455,7 +2455,7 @@ const MORE_GROUPS=[
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -7844,6 +7844,9 @@ const ROUTE_CAP={
      the page reads correctly with the CTA gone. The record button carries the
      second capability itself — see SUBS.waste's cta. */
   waste:'waste:view',
+  /* `till` is deliberately ABSENT from this table — it is the one route that
+     needs ALL of a pair rather than any of it, and an array here means any-of.
+     Its gate is the named branch in canRoute() below. */
   stockadd:'quickstock:add',
   stockapp:['quickstock:add','quickstock:recount'],
   // More → Marketing.
@@ -7866,7 +7869,19 @@ function mCan(v){
   if(v===undefined) return true;
   return Array.isArray(v) ? v.some(k=>state.caps.indexOf(k)!==-1) : state.caps.indexOf(v)!==-1;
 }
-function canRoute(k){ return mCan(ROUTE_CAP[k]); }
+function canRoute(k){
+  /* THE TILL NEEDS BOTH CAPS, and it is the only route that does. Receiving's
+     note in ROUTE_CAP makes the argument: a screen whose entire purpose is the
+     save at the bottom of it must not be offered to somebody whose save will
+     403. The till's Confirm posts the ordinary manual order, which
+     lib/cap-routes.js gates on `orders:edit` — so `till:use` on its own is a
+     tablet that rings up a basket and then refuses to take the money.
+     Written here as an explicit && rather than as a third array syntax in the
+     table: one route needs this, and a table where an array sometimes means
+     any-of and sometimes all-of is a table nobody can read. */
+  if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  return mCan(ROUTE_CAP[k]);
+}
 /* The Quick Stock app is a separate PWA, so its row LEAVES rather than pushing a
    screen. Its label is the mode the operator will actually land in: /stock picks
    add-vs-recount by role, and recount is what anyone holding both resolves to

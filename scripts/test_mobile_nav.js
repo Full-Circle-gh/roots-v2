@@ -125,6 +125,33 @@ run('mobile nav', [
       ['nor the owner’s setup checklist', `${body}.indexOf('Open your store')===-1`],
       ['Orders kept its tab, so More is a folder again', `${bar}.indexOf('Orders')>-1 && ${bar}.indexOf('More')>-1`],
     ]],
+  // ── the counter till needs BOTH caps, and it is the only row that does ──
+  // Its Confirm posts the ordinary manual order, which cap-routes gates on
+  // orders:edit. Offered on till:use alone it is Receiving's bug wearing a
+  // different label: a screen whose only action 403s — except this one 403s
+  // with a customer standing at the counter and a basket already rung up.
+  ['a cashier holding the pair gets the till',
+    "state.caps=['till:use','orders:edit','orders:view'];state.tab='more';state.stack=[];render();", [
+      ['the row is there', `${body}.indexOf('Counter till')>-1`],
+      ['and the jump list offers it', "searchIndex().some(function(x){return x.p[0]==='Counter till'})"],
+      ['it leaves this app rather than pushing a screen',
+        "moreRowsFlat().some(function(r){return r.key==='till'&&r.href==='/till'})"],
+    ]],
+  ['till:use without orders:edit is not a till',
+    "state.caps=['till:use','orders:view'];state.tab='more';state.stack=[];render();", [
+      ['the row is gone', `${body}.indexOf('Counter till')===-1`],
+      ['the jump list does not offer it either',
+        "!searchIndex().some(function(x){return x.p[0]==='Counter till'})"],
+      ['and push refuses it', "push('till'),state.stack.length===0"],
+    ]],
+  // The mirror of the case above: order editing on its own is not a till
+  // either. Without this, granting orders:edit alone would quietly hand every
+  // order desk in the business a counter screen.
+  ['orders:edit without till:use is not a till either',
+    "state.caps=['orders:edit','orders:view'];state.tab='more';state.stack=[];render();", [
+      ['the row is gone', `${body}.indexOf('Counter till')===-1`],
+    ]],
+
   ['the jump list cannot offer what the nav hides', KITCHEN + "render();", [
     ['Receiving is offered', "searchIndex().some(function(x){return x.p[0]==='Receiving'})"],
     ['Coupons is not', "!searchIndex().some(function(x){return x.p[0]==='Coupons'})"],

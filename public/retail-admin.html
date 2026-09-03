@@ -1272,6 +1272,30 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 11h10L20 8H7"/><circle cx="9" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>
     Sales · 销售
   </button>
+  <!-- Counter till — the cashier screen on a shop tablet (public/till.html).
+       A RAIL ROW, because the till used to be reachable only by typing /till
+       after the domain, or by finding a small "Open till" button on the Counter
+       sale card three screens into Sales. A tool nobody can find is a tool
+       nobody has.
+
+       IT LEAVES THE APP, and that is why it carries no data-tab: the till is
+       its own PWA on its own manifest (till-manifest.webmanifest), installed on
+       the tablet from its own URL, so there is nothing here to switch to. A new
+       tab is the honest thing for the desktop to do, and the operator's admin
+       session is same-origin so the till is signed in the moment it opens.
+
+       GATED BY NEITHER TAB_CAP NOR data-cap. TAB_CAP is keyed by data-tab and
+       this row has none. data-cap would fit but says the wrong thing: its
+       multi-value form is ANY-of (canAny), and the till needs BOTH `till:use`
+       (opens the screen) and `orders:edit` (what lib/cap-routes.js requires of
+       the POST its Confirm makes) — offered on the first alone it is a tablet
+       that rings up a basket and then refuses to take the money. So its gate is
+       the named line in applyCapGates(), reached by this id, and the phone
+       states the same pair the same way in canRoute(). -->
+  <button id="rail-till" style="order:8" onclick="window.open('/till','_blank','noopener')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1.5"/><path d="M3 10h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M7 6.5h4"/><path d="M7 14h4"/><path d="M7 17.5h8"/></svg>
+    Counter till · 前台收银
+  </button>
   <!-- Finance (§36) — the money staircase. Sales' neighbour and not its
        sub-view: Sales answers "what sold, through which channel", Finance
        answers "did the business make money", and the second is the one an

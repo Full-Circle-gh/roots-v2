@@ -276,9 +276,12 @@ function versionOf(tid) {
   section('14 · the money marker');
   const unclassified = caps.CAPABILITIES.filter(c => c.money && !['shows', 'moves'].includes(c.money));
   is(unclassified.length, 0, 'every money value is shows or moves');
-  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 20, '20 capabilities move money');
+  // 21st mover, 107th capability: `till:use` (2026-09-03). Counting a sale rung
+  // at the counter as money MOVED is the deliberate call — the till takes
+  // payment and books revenue, which is the definition this marker uses.
+  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 106, 'across all 106');
+  is(caps.CAPABILITIES.length, 107, 'across all 107');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,
@@ -327,8 +330,13 @@ function versionOf(tid) {
       'the ' + role + ' preset, commented as having no money, now has none here either');
   }
   const sm = caps.presetCapsFor('store_manager').filter(k => caps.MONEY_KEYS[k] === 'moves');
-  is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit'],
-    'the shipped store_manager preset moves money five ways — the marker is why this is now visible');
+  is(sm.sort(), ['customers:adjust', 'invoices:manage', 'orders:dispatch_courier', 'orders:refund', 'products:edit', 'till:use'],
+    'the shipped store_manager preset moves money six ways — the marker is why this is now visible');
+  // The sixth arrived with the counter till (2026-09-03) and is the narrowest of
+  // them: ringing a sale at the marked price. It is asserted here rather than
+  // waved through because a store manager gaining a money power is exactly what
+  // this list exists to make somebody notice.
+  truthy(caps.MONEY_NOTES['till:use'], 'and till:use carries its note, so the newest coin argues its case too');
   truthy(caps.MONEY_NOTES['products:edit'], 'products:edit carries a note, so the coin argues its case');
   truthy(caps.MONEY_NOTES['waste:void'], 'and so does waste:void, whose split from waste:record needs its reason');
 
