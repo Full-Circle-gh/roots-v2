@@ -157,5 +157,55 @@ section('6. every payment_method in the wallet ledger',
      FROM retail_topup_transactions
     GROUP BY payment_method ORDER BY n DESC`);
 
+// ── 7-10: WHO can earn the ongoing share ────────────────────────────────────
+// Added after run #82 showed retail_lifetime_commissions empty while the rate
+// was set to 8%. The rate is only half the question: the programme runs in
+// "selected" mode, where creditLifetimeCommission pays only a referrer flagged
+// lifetime_eligible = 1 AND carrying a lifetime_eligible_since at or before the
+// order's paid_at. An empty eligible set pays nobody at any rate, so the count
+// below decides whether the fix shipped in #226 can ever move a number.
+
+section('7. customers flagged lifetime_eligible = 1',
+  `SELECT COUNT(*) AS eligible,
+          MIN(lifetime_eligible_since) AS min_since,
+          MAX(lifetime_eligible_since) AS max_since,
+          SUM(lifetime_eligible_since IS NOT NULL) AS with_since,
+          SUM(referral_code IS NOT NULL AND referral_code <> '') AS with_referral_code
+     FROM retail_customers
+    WHERE lifetime_eligible = 1`);
+
+section('8. customers carrying a referrer (referred_by_customer_id NOT NULL)',
+  `SELECT COUNT(*) AS referred FROM retail_customers
+    WHERE referred_by_customer_id IS NOT NULL`);
+
+// The status='ordered' rows are the referrals that actually paid a bounty. Each
+// one names a referrer; this is the split of those referrers by whether they
+// carry the flag that lets them earn anything further.
+section("9. status='ordered' referrals, split by whether the REFERRER is lifetime_eligible",
+  `SELECT COALESCE(c.lifetime_eligible, 0) AS referrer_lifetime_eligible,
+          COUNT(*) AS n,
+          COUNT(DISTINCT r.referrer_id) AS distinct_referrers
+     FROM retail_referrals r
+     LEFT JOIN retail_customers c ON c.id = r.referrer_id
+    WHERE r.status = 'ordered'
+    GROUP BY COALESCE(c.lifetime_eligible, 0)`);
+
+// Row-by-row, since there are only a handful and the split alone hides which
+// referrer is which (one referrer may hold several of these).
+section("9b. the same rows, one line each",
+  `SELECT r.id AS referral_id, r.referrer_id, r.invitee_id, r.rewarded_at,
+          COALESCE(c.lifetime_eligible, 0) AS referrer_lifetime_eligible,
+          c.lifetime_eligible_since AS referrer_since
+     FROM retail_referrals r
+     LEFT JOIN retail_customers c ON c.id = r.referrer_id
+    WHERE r.status = 'ordered'
+    ORDER BY r.id`);
+
+if (valueCol) {
+  section('10. every affiliate.* key with its stored value',
+    `SELECT key, ${valueCol}, updated_at FROM storefront_config
+      WHERE key LIKE 'affiliate.%' ORDER BY key`);
+}
+
 db.close();
 console.log('\ndone — nothing was written.');
