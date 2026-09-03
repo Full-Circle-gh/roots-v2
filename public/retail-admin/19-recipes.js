@@ -725,11 +725,17 @@
     const head = document.getElementById('rcp-rechead');
     if (!sc || !head) return;
     head.classList.toggle('stuck', sc.scrollTop > 2);
-    // The ingredient list's column header parks on this bar's bottom edge, and
-    // the bar changes height when its miniature appears — so the offset is
+    // CONDENSE THE PINNED BLOCK once anything has gone under it. 8px of slack
+    // rather than 0: a trackpad resting at the top of a list emits sub-pixel
+    // scrolls, and a strip that condensed and expanded under a still hand
+    // would be worse than one that never moved at all.
+    const pin = document.getElementById('rcp-pin');
+    sc.classList.toggle('is-stuck', sc.scrollTop > 8);
+    // The ingredient list's column header parks on the pinned block's bottom
+    // edge, and the block changes height as it condenses — so the offset is
     // measured here, on the same events, rather than written as a constant that
-    // would be wrong for one of the two states.
-    sc.style.setProperty('--rcp-headh', head.offsetHeight + 'px');
+    // would be wrong in one of the two states.
+    sc.style.setProperty('--rcp-headh', (pin || head).offsetHeight + 'px');
     const figs = document.getElementById('rcp-rec-stickyfigs');
     const sum = sumRoot();
     if (!figs) return;
@@ -747,6 +753,12 @@
     if (!sc) return;
     sc.addEventListener('scroll', onRecScroll, { passive: true });
     window.addEventListener('resize', onRecScroll);
+    // The condense is a transition, so the block's height is only true once it
+    // lands — measuring on the scroll that STARTED it parks the ingredient
+    // list's column header at the height the block is leaving, not the one it
+    // is arriving at, and rows show through the gap for a frame.
+    const pin = document.getElementById('rcp-pin');
+    if (pin) pin.addEventListener('transitionend', onRecScroll);
     _scrollBound = true;
   }
 

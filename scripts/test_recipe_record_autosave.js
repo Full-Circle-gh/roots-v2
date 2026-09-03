@@ -359,21 +359,26 @@ section('6. The miniature appears only once the real figures have gone');
 // VIEWPORT coordinates: the miniature belongs on screen exactly when the
 // summary card's bottom edge has passed above the bar's bottom edge. These
 // stubs hand it rects, which is what it actually reads.
-function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, sumHtml }) {
+function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight, sumHtml }) {
   const figs = { hidden: true };
-  // offsetHeight as well as the rect: the bar's height is what the ingredient
-  // list's column header parks on, and onRecScroll publishes it as a custom
-  // property on the scroller. Stubbed to the bar's own bottom edge by default,
-  // which is what it is while pinned at top 0.
+  // offsetHeight as well as the rect: the PINNED BLOCK's height is what the
+  // ingredient list's column header parks on, and onRecScroll publishes it as a
+  // custom property on the scroller. Stubbed to the bar's own bottom edge by
+  // default, which is what it is while pinned at top 0.
   const head = { getBoundingClientRect: () => ({ bottom: headBottom }), _cls: new Set(),
     offsetHeight: headHeight === undefined ? headBottom : headHeight,
     classList: { toggle: (c, on) => { if (on) head._cls.add(c); else head._cls.delete(c); } } };
-  const sc = { scrollTop, _vars: {},
+  // The block that actually pins: head + summary card + sub-tabs. Null-able on
+  // purpose — onRecScroll falls back to the head, so a DOM without it still
+  // publishes a usable offset rather than throwing.
+  const pin = pinHeight === undefined ? null : { offsetHeight: pinHeight };
+  const sc = { scrollTop, _vars: {}, _cls: new Set(),
+    classList: { toggle: (c, on) => { if (on) sc._cls.add(c); else sc._cls.delete(c); } },
     style: { setProperty: (k, v) => { sc._vars[k] = v; } } };
   const sum = { getBoundingClientRect: () => ({ bottom: sumBottom }),
     innerHTML: sumHtml === undefined ? '<div/>' : sumHtml };
   const sandbox = {
-    document: { getElementById: (id) => ({ 'rcp-rec-scroll': sc, 'rcp-rechead': head, 'rcp-rec-stickyfigs': figs }[id] || null) },
+    document: { getElementById: (id) => ({ 'rcp-rec-scroll': sc, 'rcp-rechead': head, 'rcp-rec-stickyfigs': figs, 'rcp-pin': pin }[id] || null) },
     sumRoot: () => sum,
     figs, head, sc, console,
   };
@@ -387,11 +392,27 @@ function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, sumHtml }
 // edge of this bar. It cannot know that offset for itself — the bar grows a
 // line when the miniature appears — so onRecScroll has to publish it on every
 // scroll, in both states.
-check('the bar publishes its height for the column header to park on', () => {
-  const rest = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126 });
-  assert.strictEqual(rest.sc._vars['--rcp-headh'], '126px');
-  const grown = scrollSandbox({ scrollTop: 320, sumBottom: 80, headBottom: 168, headHeight: 168 });
-  assert.strictEqual(grown.sc._vars['--rcp-headh'], '168px');
+check('the pinned block publishes its height for the column header to park on', () => {
+  const rest = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 });
+  assert.strictEqual(rest.sc._vars['--rcp-headh'], '268px');
+  // Condensed, the block is shorter, and the header has to move up with it.
+  const small = scrollSandbox({ scrollTop: 320, sumBottom: 80, headBottom: 126, pinHeight: 132 });
+  assert.strictEqual(small.sc._vars['--rcp-headh'], '132px');
+  // No block in the DOM at all: fall back to the head rather than throw.
+  assert.strictEqual(scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126 })
+    .sc._vars['--rcp-headh'], '126px');
+});
+
+// The block condenses on this class, and nothing else turns it on — so the
+// threshold is behaviour, not decoration. 8px of slack keeps a resting
+// trackpad's sub-pixel scrolls from flapping it open and shut.
+check('the block condenses only once something has gone under it', () => {
+  assert.ok(!scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 })
+    .sc._cls.has('is-stuck'), 'at rest it is not condensed');
+  assert.ok(!scrollSandbox({ scrollTop: 6, sumBottom: 394, headBottom: 126, pinHeight: 268 })
+    .sc._cls.has('is-stuck'), 'a resting hand\'s few pixels do not condense it');
+  assert.ok(scrollSandbox({ scrollTop: 40, sumBottom: 360, headBottom: 126, pinHeight: 132 })
+    .sc._cls.has('is-stuck'), 'scrolled, it is condensed');
 });
 
 check('at the top of the page: no hairline, no miniature', () => {
