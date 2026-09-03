@@ -10,6 +10,9 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
+// The no-invoice mark and invoice_status are one fact in two columns; every
+// write of either goes through here so the two can never contradict each other.
+const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark');
 const { nextKitchenPONumber } = require('../lib/po-number');
 const { supersedingCopy } = require('../lib/po-supersede');
 // Goods that arrived, were accepted, and went BACK. One definition site for
@@ -668,8 +671,8 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
     if (items?.length) {
       const insertItem = db.prepare(`INSERT INTO po_line_items
         (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-         supplier_name, purchase_channel, invoice_status, note, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+         supplier_name, purchase_channel, invoice_status, no_invoice_expected, note, sort_order)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       const VALID_STATUS = new Set(['not_received','received','no_invoice']);
       // When a line is linked to an ingredient, fall back to that
       // ingredient's master supplier — so the canonical "we always buy
@@ -688,7 +691,10 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
           poId, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
           item.qty||0, item.unit || null, item.cost_per_unit||0, total, storeCategory(db, item.expense_category),
           lineSupplier, item.purchase_channel || null,
-          status, (item.note||'').trim() || null, i
+          // The mark travels with the status from the very first row — a line
+          // created as 'no_invoice' that carried no mark was chased as awaiting
+          // on every screen that reads the mark instead. See lib/invoice-mark.js.
+          status, status === 'no_invoice' ? 1 : 0, (item.note||'').trim() || null, i
         );
       });
     }
@@ -730,22 +736,36 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), bl
     // and invoice 25 has read half-allocated ever since, with nothing on the
     // screen to say why. A line the payload names by id is UPDATED in place
     // instead, so everything hanging off that id survives the edit.
-    const existing = new Set(
-      db.prepare('SELECT id FROM po_line_items WHERE po_id = ?').all(req.params.id).map(r => r.id));
+    // id → what that row already says about invoicing, so an edit can hand both
+    // columns back untouched. This screen's payload carries no invoice_status,
+    // and defaulting it on every save is how a stored 不开发票 turned back into
+    // 'not_received' the next time anyone edited the order's lines.
+    const existing = new Map(
+      db.prepare('SELECT id, invoice_status, no_invoice_expected FROM po_line_items WHERE po_id = ?')
+        .all(req.params.id).map(r => [r.id, r]));
     const kept = new Set();
     const insertItem = db.prepare(`INSERT INTO po_line_items
       (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-       supplier_name, purchase_channel, invoice_status, note, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+       supplier_name, purchase_channel, invoice_status, no_invoice_expected, note, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     const updateItem = db.prepare(`UPDATE po_line_items SET
        ingredient_id=?, name_en=?, name_cn=?, sku=?, qty=?, unit=?, cost_per_unit=?, total_cost=?,
-       expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?, note=?, sort_order=?
+       expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?, no_invoice_expected=?,
+       note=?, sort_order=?
        WHERE id=? AND po_id=?`);
     const VALID_STATUS = new Set(['not_received','received','no_invoice']);
     const ingSupplierStmt = db.prepare('SELECT supplier FROM ingredients WHERE id = ?');
     items.forEach((item, i) => {
       const total = (parseFloat(item.qty)||0) * (parseFloat(item.cost_per_unit)||0);
-      const status = VALID_STATUS.has(item.invoice_status) ? item.invoice_status : 'not_received';
+      // A payload that names an invoice status states both columns; one that
+      // says nothing gives the stored pair straight back. Same rule every other
+      // writer follows — lib/invoice-mark.js.
+      const held = existing.get(parseInt(item.id, 10));
+      const status = VALID_STATUS.has(item.invoice_status) ? item.invoice_status
+                   : (held && held.invoice_status) || 'not_received';
+      const mark = VALID_STATUS.has(item.invoice_status)
+        ? (item.invoice_status === 'no_invoice' ? 1 : 0)
+        : (held && held.no_invoice_expected ? 1 : 0);
       // Same fallback chain as the create path: line override → header
       // → ingredient master supplier.
       let lineSupplier = item.supplier_name || supplier || null;
@@ -757,7 +777,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), bl
         item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
         item.qty||0, item.unit || null, item.cost_per_unit||0, total, storeCategory(db, item.expense_category),
         lineSupplier, item.purchase_channel || null,
-        status, (item.note||'').trim() || null, i,
+        status, mark, (item.note||'').trim() || null, i,
       ];
       const lineId = parseInt(item.id, 10);
       if (lineId > 0 && existing.has(lineId)) {
@@ -770,7 +790,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), bl
     // Only the lines the buyer actually removed are dropped. Their invoice
     // allocations still cascade away — that is the buyer's own decision — but
     // it is now recorded rather than silent.
-    const dropped = [...existing].filter(id => !kept.has(id));
+    const dropped = [...existing.keys()].filter(id => !kept.has(id));
     if (dropped.length) {
       const marks = dropped.map(() => '?').join(',');
       const orphaned = db.prepare(
@@ -1213,11 +1233,12 @@ router.put('/api/purchases/:id/line/:line_id/invoice', requireAuth, requirePermi
   if (!INVOICE_STATUSES.has(status)) {
     return res.status(400).json({ error: 'invoice_status must be not_received | received | no_invoice · 状态无效' });
   }
-  // Keep the legacy invoice_received bit in sync so any downstream code
-  // looking at it still gets a sensible truthy value for 'received'.
-  const r = db.prepare(
-    "UPDATE po_line_items SET invoice_status = ?, invoice_received = CASE WHEN ? = 'received' THEN 1 ELSE 0 END WHERE id = ? AND po_id = ?"
-  ).run(status, status, lineId, poId);
+  // Writes the no_invoice_expected mark and the legacy invoice_received bit
+  // alongside the status. The mark is the column the Invoices tab and Finance
+  // actually read: setting 'no_invoice' here without it left this line still
+  // being chased as awaiting, and clearing it here without lowering the mark
+  // left it marked 不开发票 on screens this one cannot see.
+  const r = setLineInvoiceStatus(db, lineId, status, poId);
   if (r.changes === 0) return res.status(404).json({ error: 'Line not found · 行未找到' });
   logActivity(req.user.id, req.user.username, 'invoice_status_change', 'po_line_item', lineId, { invoice_status: status }, req.ip);
   res.json({ success: true });
@@ -1242,8 +1263,7 @@ router.put('/api/purchases/:id/supplier', requireAuth, requirePermission('purcha
 // Toggle, not destructive.
 router.put('/api/purchases/:id/line/:line_id/no-invoice', requireAuth, requirePermission('purchases'), (req, res) => {
   const flag = !!(req.body && req.body.no_invoice_expected);
-  const r = db.prepare('UPDATE po_line_items SET no_invoice_expected = ? WHERE id = ? AND po_id = ?')
-    .run(flag ? 1 : 0, req.params.line_id, req.params.id);
+  const r = setNoInvoiceMark(db, parseInt(req.params.line_id, 10), flag, parseInt(req.params.id, 10));
   if (r.changes === 0) return res.status(404).json({ error: 'Line not found · 行未找到' });
   logActivity(req.user.id, req.user.username, 'line_no_invoice_toggle', 'po_line_item', req.params.line_id, { no_invoice_expected: flag }, req.ip);
   res.json({ success: true });

@@ -2867,10 +2867,22 @@
      screens, because it is the same warning about the same recipe. Amber, not
      Brick: the number is not wrong to exist, it is wrong to trust. */
   #pd-cost-alert { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  /* STRETCH, not flex-start: every message this box ever carries is a full
+     sentence (unit mismatch, no cost yet, archived, missing cost), never a
+     short one-liner, so hugging its own content width just means the
+     browser shrinks it toward the narrowest width it can still lay the text
+     out in — one or two words per line, absurdly tall — instead of using
+     the space the sidebar card actually has. Filling the container's width
+     lets the sentence wrap the way the card's other notices already do.
+     Radius is a fixed 12px, not 999px, for the same reason on the other
+     axis: a "pill" radius on a box a wrapped sentence has made tall — capped
+     by its width — draws a vertical stadium around the text instead of a
+     rounded box. 12px still reads fine on the rare short one-liner
+     ("Couldn't load the recipe") and as a normal rounded card on the rest. */
   .pd-cost-warn {
-    display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+    display: flex; align-items: flex-start; gap: 8px; align-self: stretch;
     font: 400 12px var(--f-sans); color: var(--td-amber-ink);
-    background: var(--td-amber-tint); border-radius: 999px; padding: 4px 14px;
+    background: var(--td-amber-tint); border-radius: 12px; padding: 6px 14px;
   }
   .pd-cost-warn svg { width: 14px; height: 14px; flex: none; }
   /* "Couldn't load the recipe" is not a warning about the recipe — it is this
@@ -13014,9 +13026,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      with everything else on the page; a pill says the same thing and stops.
      Text on a tint is always the -ink variant. */
   #tab-recipes-record .rcp-warns { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-  #tab-recipes-record .rcp-warn { display: inline-flex; align-items: center; gap: 8px;
+  /* 12px, not 999px — see .pd-cost-warn (retail-admin.css): a pill radius on
+     a box a long sentence has wrapped tall draws a vertical stadium around
+     the text instead of a rounded box. Same fixed radius on both, since this
+     is the one warning shape the two screens share. */
+  #tab-recipes-record .rcp-warn { display: inline-flex; align-items: flex-start; gap: 8px;
     align-self: flex-start; font-size: 13px; color: var(--td-amber-ink);
-    background: var(--td-amber-tint); border-radius: 999px; padding: 4px 16px; }
+    background: var(--td-amber-tint); border-radius: 12px; padding: 6px 16px; }
   #tab-recipes-record .rcp-warn.err { color: var(--td-brick-ink); background: var(--td-brick-tint); }
   #tab-recipes-record .rcp-warn svg { width: 16px; height: 16px; flex: none; }
   /* A material is internal plumbing, not a sellable thing — subordinate to the

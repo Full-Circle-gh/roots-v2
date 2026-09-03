@@ -511,13 +511,42 @@ addColumn('purchase_orders', 'no_invoice_expected', 'INTEGER DEFAULT 0');
 // Per-line "no invoice expected" flag — the supplier for THIS line doesn't
 // issue invoices (cash, market, …). Used by the line-level invoice report.
 addColumn('po_line_items', 'no_invoice_expected', 'INTEGER DEFAULT 0');
-// One-off reconciliation: the receive row's invoice picker used to write only
-// po_line_items.invoice_status, which the invoice report never reads — so a
-// line marked "None" there went on being chased as "awaiting". The picker now
-// writes both (routes/retail-purchasing.js receive route); this carries the
-// lines marked before that over. Idempotent, and it never clears a mark.
-db.exec(`UPDATE po_line_items SET no_invoice_expected = 1
-          WHERE invoice_status = 'no_invoice' AND COALESCE(no_invoice_expected, 0) = 0`);
+// One-off reconciliation of the two columns that state ONE fact: will this
+// line ever have a 发票. no_invoice_expected is the mark every reader reads —
+// the Invoices tab (routes/retail-purchasing.js lineStatus) and Finance's
+// awaiting report; invoice_status is the buyer's note on the receive row, and
+// its 'no_invoice' value says the same thing a second time.
+//
+// WHY THIS RUNS ONCE AND NOT ON EVERY BOOT. It used to be an unguarded exec:
+// every server start re-derived the mark from the status. Meanwhile the two
+// screens each wrote only their own column — the Invoices tab's 不开发票 / 恢复
+// buttons wrote the mark, the kitchen report's picker wrote the status — so a
+// buyer's decision was reversed some hours later by a restart they had no way
+// to connect it to. Press 恢复 on a line whose note still read 'no_invoice' and
+// the next boot marked it 不开发票 again; a line that genuinely needed chasing
+// simply vanished from the chase list. That is the defect. Every writer now
+// moves both columns together (lib/invoice-mark.js), so there is nothing left
+// for a boot-time re-derive to fix, and leaving one in place would only give it
+// stale input to act on.
+//
+// THE MARK WINS, in both directions, because it is what the screens have been
+// showing all along: this repair changes no row's appearance anywhere, it only
+// stops a stale note from being able to overturn it later.
+try {
+  db.exec('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  if (!db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('po_invoice_mark_sync_v1')) {
+    const marked = db.prepare(`UPDATE po_line_items SET invoice_status = 'no_invoice'
+                                WHERE COALESCE(no_invoice_expected, 0) = 1
+                                  AND COALESCE(invoice_status, '') <> 'no_invoice'`).run();
+    const freed  = db.prepare(`UPDATE po_line_items SET invoice_status = 'not_received'
+                                WHERE COALESCE(no_invoice_expected, 0) = 0
+                                  AND invoice_status = 'no_invoice'`).run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('po_invoice_mark_sync_v1');
+    if (marked.changes || freed.changes) {
+      console.log(`[migration po_invoice_mark_sync_v1] invoice notes squared with the mark: ${marked.changes} marked, ${freed.changes} freed`);
+    }
+  }
+} catch (e) { console.error('[migration po_invoice_mark_sync_v1]', e); }
 
 // Retail Bills reuse the same invoices + invoice_lines tables as the kitchen,
 // separated by scope (mirrors purchase_orders.scope). store_id pins the bill

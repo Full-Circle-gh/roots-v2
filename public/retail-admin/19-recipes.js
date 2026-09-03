@@ -119,6 +119,14 @@
     ['repacked', () => T('Repacked', '分装')],
   ];
 
+  // Coldest to warmest, matching food-safety convention (frozen → chilled →
+  // ambient). Confirmed by Ash on 2026-09-03.
+  const STORAGE_OPTIONS = [
+    ['freezer',   () => T('Freezer', '冷冻')],
+    ['fridge',    () => T('Fridge', '冷藏')],
+    ['room_temp', () => T('Room temperature', '常温')],
+  ];
+
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
   let _rows = [];
@@ -569,7 +577,7 @@
       <div class="rcp-card rcp-blk">
         <h3 class="rcp-blk-h">${esc(T('Storage & notes', '储存与备注'))}</h3>
         <div class="rcp-fgrid">
-          ${field(T('Storage', '储存方式'), input('storage', m.storage, 'maxlength="120"'))}
+          ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, lbl]) => [v, lbl()]))))}
         </div>
         <div class="rcp-f" style="margin-top:16px">
           <span class="lbl">${esc(T('Notes', '备注'))}</span>
@@ -643,6 +651,13 @@
   // sort_order is derived from array position at save time (retail-recipes.js
   // already writes it that way), so reordering the array is the whole fix.
   let _lineDrag = null;
+  // Shared by lineRow() (initial paint) and paintLineCosts() (in-place
+  // refresh on every keystroke) so the two can never drift apart.
+  function lineCostText(l) {
+    const isFree = !!l.master_free;
+    const hasCost = l.master_cost > 0 || isFree;
+    return hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—');
+  }
   function lineRow(l, idx) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
@@ -666,6 +681,15 @@
                oninput="rcpLineField(${idx},'qty',this.value)" placeholder="${esc(T('qty', '数量'))}">
         <select class="rcp-input rcp-line-unit" onchange="rcpLineField(${idx},'unit',this.value)">
           ${RECIPE_UNITS().map(u => `<option value="${esc(u)}"${l.unit === u ? ' selected' : ''}>${esc(u)}</option>`).join('')}
+          <!-- A stored unit outside RECIPE_UNITS() (an old/legacy value, e.g.
+               "L") matches none of the options above, so the browser marks
+               none of them selected and falls back to displaying the FIRST
+               option — silently showing "g" for a line that is really still
+               "L" and was never touched. Appending the raw value as its own
+               selected option makes the select honest instead: it shows what
+               is actually stored, so a save that changes nothing cannot look
+               like a fix. It disappears on its own once a real unit is picked. -->
+          ${l.unit && !RECIPE_UNITS().includes(l.unit) ? `<option value="${esc(l.unit)}" selected>${esc(l.unit)}</option>` : ''}
         </select>
         <input class="rcp-input rcp-line-note" type="text" value="${esc(l.notes || '')}"
                placeholder="${esc(T('Note', '备注'))}" oninput="rcpLineField(${idx},'notes',this.value)">
@@ -679,7 +703,7 @@
              The strike is a CLASS on the row, applied by paintLineWarns(), so
              changing the unit re-marks the line without repainting the tab.
              Nothing stored moves. -->
-        <span class="rcp-line-cost">${hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—')}</span>
+        <span class="rcp-line-cost" data-line="${idx}">${lineCostText(l)}</span>
         <button type="button" class="rcp-line-rm" title="${esc(T('Remove', '移除'))}" onclick="rcpLineRemove(${idx})">${I.x}</button>
       </div>`;
   }
@@ -925,11 +949,27 @@
     });
   }
 
+  // Same in-place idiom as paintLineWarns() just above: only the text of the
+  // one span each row already carries is touched, so a keystroke in the qty
+  // box never repaints the row it lives in.
+  function paintLineCosts() {
+    const host = document.getElementById('rcp-lines');
+    if (!host) return;
+    host.querySelectorAll('.rcp-line-cost').forEach((el) => {
+      const idx = Number(el.getAttribute('data-line'));
+      const l = _lines[idx];
+      if (!l) return;
+      const want = lineCostText(l);
+      if (el.textContent !== want) el.textContent = want;
+    });
+  }
+
   window.rcpRecompute = function () {
     _dirty = true;
     paintSummary();
     paintBreakdown();
     paintLineWarns();
+    paintLineCosts();
   };
 
   function breakdownHtml(c) {
