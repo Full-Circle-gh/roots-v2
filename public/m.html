@@ -664,6 +664,27 @@ const CMD={}; function reg(n,f){CMD[n]=f;}
    dispatcher cannot feed. */
 window.APP={cmd:(n,...a)=>{ if(CMD[n]) CMD[n](...a); }};
 
+/* A scrim closes its sheet on a tap OUTSIDE it — `onclick` alone is not that.
+   `click`'s target is resolved at TOUCH-UP, not touch-down, and every sheet
+   here can repaint (or lose the keyboard, which reflows the page under a
+   finger already in motion) between the two: start a tap on a product row,
+   have that row's own re-render — or simply the keyboard closing as the
+   input blurs — land the lift under a different element, and if that
+   element is the scrim, `onclick` fires wstClose/closePO/closeCustomer/etc.
+   having never actually been asked to. The operator loses the whole form
+   over a tap that was aimed at a row inside it.
+   The fix is the one the desktop dialogs (tacet-dialogs.js) already use for
+   the same reason, adapted for touch: judge the gesture by where it STARTED,
+   not where it happened to end up. A capture-phase listener remembers
+   whether touch-down landed on a scrim; scrimClose() only acts when that was
+   true, so a tap that began on a row or a field can never close the sheet no
+   matter where the render leaves the corresponding click. */
+let _scrimDownHit = false;
+function _scrimDownTrack(e){ _scrimDownHit = !!(e.target && e.target.classList && e.target.classList.contains('scrim')); }
+document.addEventListener('pointerdown', _scrimDownTrack, true);
+document.addEventListener('touchstart', _scrimDownTrack, true);
+window.APP.scrimClose = (name) => { if(_scrimDownHit && CMD[name]) CMD[name](); };
+
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
 reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
   // The caret rides the re-render, as it does on every other search field here.
@@ -1143,9 +1164,20 @@ reg('wstPickStore', id=>{ const w=state.wst;
   /* A different shelf holds different stock, so the chosen product and its
      on-hand no longer mean anything — dropped rather than carried across. */
   w.storeId=Number(id); w.pick=null; w.picks=null; w.preview=null; w.q=''; render(); loadWastePicks(); });
+/* NO render() here, unlike every other search field's handler — and that is
+   the fix, not an oversight. Products/Customers/Receiving filter a list
+   that is already in memory, so their render() is what MOVES the rows on
+   every keystroke; this field only feeds a debounced SERVER search
+   (loadWastePicks, below), and nothing on screen reads w.q before that
+   fires. Calling render() anyway did what it does everywhere else — destroy
+   #mWstQ and recreate it, then refocus the new node — and on a real phone
+   that destroy/refocus cycle does not reliably keep the on-screen keyboard
+   up: Ash saw it drop on every single letter. state.focus is still armed so
+   the caret survives the render loadWastePicks DOES cause when its results
+   land, which happens once per pause in typing rather than once per key. */
 reg('wstSearch', v=>{ const w=state.wst, el=document.getElementById('mWstQ');
   w.q=String(v||''); state.focus={id:'mWstQ',pos:el?el.selectionStart:null};
-  clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); render(); });
+  clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); });
 reg('wstPick', id=>{ const w=state.wst;
   const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
   w.pick=p; w.qty=1; w.formErr=null; render(); loadWastePreview(); });
@@ -2297,7 +2329,7 @@ function sheetChannel(){
   const m=CHAN_META[key]; if(!c||!m) return '';
   const cells=c.cells||[];
   const open=cells.filter(x=>x.open).length;
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeChannel')"></div>
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeChannel')"></div>
    <div class="sheet" style="top:140px;z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -3794,6 +3826,17 @@ function screenWaste(){
    `waste`, so the default grant handed a waste-only operator an empty list and
    no explanation (hazard H13). Calling /products here would rebuild the bug on
    a new surface. */
+/* This is where the debounced fetch behind wstSearch lands — 180ms plus
+   round-trip after the operator's last keystroke, so #mWstQ is almost always
+   still focused when it does. Repaint through wstRepaintPicks(), not a bare
+   render(): render() replaces the WHOLE app in one innerHTML, which the
+   browser can only do by tearing every node down first, #mWstQ included, and
+   a focused element removed from the document is blurred by spec. Recreating
+   it and calling .focus() afterward does not reliably reopen a soft keyboard
+   on every Android build even done synchronously — Ash still saw it drop
+   typing two letters after wstSearch itself stopped re-rendering per key.
+   wstRepaintPicks() patches just the results box when the operator is still
+   in the field, so #mWstQ is never removed from the document at all. */
 function loadWastePicks(){
   const w=state.wst;
   if(!w.storeId){ w.picks=null; return; }
@@ -3802,11 +3845,19 @@ function loadWastePicks(){
   const seq=++w.pickSeq;
   api('/waste/products?'+q).then(rows=>{
     if(seq!==w.pickSeq) return;            // a later keystroke already won
-    w.picks=(Array.isArray(rows)?rows:[]).slice(0,12); w.pickErr=null; render();
+    w.picks=(Array.isArray(rows)?rows:[]).slice(0,12); w.pickErr=null; wstRepaintPicks();
   }).catch(e=>{
     if(seq!==w.pickSeq||String(e.message)==='auth') return;
-    w.picks=[]; w.pickErr=E('Could not search products.','无法搜索商品。'); render();
+    w.picks=[]; w.pickErr=E('Could not search products.','无法搜索商品。'); wstRepaintPicks();
   });
+}
+function wstRepaintPicks(){
+  const box=document.getElementById('mWstPicksBox');
+  if(box && document.activeElement && document.activeElement.id==='mWstQ' && !state.wst.pick){
+    box.innerHTML = wstPicksHtml();
+  } else {
+    render();
+  }
 }
 /* The preview endpoint, not arithmetic done here — the same accessor and the
    same rounding the write uses, so the figure shown and the figure stored
@@ -3837,6 +3888,25 @@ function wstBlocked(){
   if(w.code==='other'&&!w.note.trim()) return T('Tell us what happened.','请填写备注说明。');
   return '';
 }
+/* The results fragment ALONE — never the input above it. loadWastePicks()
+   patches this element's innerHTML directly instead of going through
+   render() while the operator is still typing, so #mWstQ itself is never
+   torn down and rebuilt (see loadWastePicks). Kept in its own function so
+   the full sheetWaste() render and that targeted patch build the exact same
+   markup from the exact same state, rather than two copies drifting apart. */
+function wstPicksHtml(){
+  const w=state.wst;
+  return `${w.pickErr?`<div style="font-size:13px;color:var(--brick-ink)">${w.pickErr}</div>`:''}
+      ${!w.storeId?`<div style="font-size:13px;color:var(--text-secondary)">${T('Choose a store first.','请先选择门店。')}</div>`
+        :w.picks===null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+        :!w.picks.length?`<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
+        :`<div class="list">${w.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
+          <button class="row" onclick="APP.cmd('wstPick',${p.id})" style="min-height:52px">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||''))}</span>
+              <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(p.on_hand+' on hand','库存 '+p.on_hand)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
+          </button>`).join('')}</div>`}`;
+}
 function sheetWaste(){
   const w=state.wst, stores=state.stores||[];
   const blocked=wstBlocked();
@@ -3863,16 +3933,7 @@ function sheetWaste(){
       <span class="eyebrow">${T('Product','产品')}</span>
       <input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
         placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">
-      ${w.pickErr?`<div style="font-size:13px;color:var(--brick-ink)">${w.pickErr}</div>`:''}
-      ${!w.storeId?`<div style="font-size:13px;color:var(--text-secondary)">${T('Choose a store first.','请先选择门店。')}</div>`
-        :w.picks===null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
-        :!w.picks.length?`<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
-        :`<div class="list">${w.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
-          <button class="row" onclick="APP.cmd('wstPick',${p.id})" style="min-height:52px">
-            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
-              <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'', p.name_cn||p.name_en||''))}</span>
-              <span class="num" style="font-size:12px;color:var(--text-secondary)">${T(p.on_hand+' on hand','库存 '+p.on_hand)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
-          </button>`).join('')}</div>`}
+      <div id="mWstPicksBox">${wstPicksHtml()}</div>
     </div>`;
   /* Whole units, so a stepper and never a number field: the API refuses a
      fraction (qty_whole_units_required) because the stock column is an
@@ -3924,7 +3985,7 @@ function sheetWaste(){
      the bottom of the screen on every press. Same guard the other four sheets
      use. */
   const noAnim=state.wst.mounted?'animation:none;':'';
-  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('wstClose')"></div>
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('wstClose')"></div>
    <div class="sheet" style="top:64px;z-index:46;overflow:hidden;${noAnim}">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -4071,7 +4132,7 @@ function sheetPO(){
       <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closePO')">${ic('x',22,2)}</button>
       <span class="num" style="flex:1;font-size:17px;font-weight:500;min-width:0">${title}</span>${right||'<span style="width:36px;flex:none"></span>'}</div></div>`;
   const noAnim=state.poMounted?'animation:none;':'';
-  if(!d) return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closePO')"></div>
+  if(!d) return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closePO')"></div>
     <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">${head(T('Loading…','加载中…'))}
       <div style="flex:1;min-height:0;padding:40px 16px;text-align:center;font-size:15px;color:var(--text-secondary);background:var(--bg)">${T('Loading…','加载中…')}</div></div>`;
   const items=d.items||[];
@@ -4086,7 +4147,7 @@ function sheetPO(){
     : d.status==='Ordered'
       ? {label:T('Everything arrived','全部到货'),status:'Delivered'}
       : null;
-  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closePO')"></div>
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closePO')"></div>
    <div class="sheet" style="top:76px;z-index:46;overflow:hidden;${noAnim}">
      ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
@@ -6386,7 +6447,7 @@ function invoiceBlock(o){
    works, and one line saying which of the two it is doing. */
 function sheetOrderShell(){
   const noAnim=state.detailMounted?'animation:none;':'';
-  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeOrder')"></div>
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeOrder')"></div>
    <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)">
        <div class="grabber"></div>
@@ -6415,7 +6476,7 @@ function sheetOrderDetail(){
   // On the fetch re-render the sheet is already up — skip the slide-up/fade so it
   // doesn't flick a second time when live detail arrives.
   const noAnim=state.detailMounted?'animation:none;':'';
-  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeOrder')"></div>
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeOrder')"></div>
    <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}transform:translateY(${state.drag}px);transition:${trans}">
      <div id="dragHandle" style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default);touch-action:none;cursor:grab">
        <div class="grabber"></div>
@@ -6693,7 +6754,7 @@ function orderActionRow(o,isPO){
 }
 function sheetAsk(){
   const a=state.ask; if(!a) return '';
-  return `<div class="scrim" style="z-index:49" onclick="APP.cmd('closeAsk')"></div>
+  return `<div class="scrim" style="z-index:49" onclick="APP.scrimClose('closeAsk')"></div>
    <div class="sheet" style="z-index:50;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
      <div class="grabber" style="margin-bottom:12px"></div>
      <div style="padding:0 20px 8px">
@@ -6732,7 +6793,7 @@ function sheetActions(){
     // and that refusal is shown rather than swallowed.
     acts.push(['undo-2',wasDelivered?T('Undo delivery · back to preparing','撤销送达 · 退回备货'):T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
   }
-  return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeActions')"></div>
+  return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
 }
@@ -6790,7 +6851,7 @@ function stockCard(p){
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   const noAnim=state.prodMounted?'animation:none;':'';
-  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeProduct')"></div>
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('closeProduct')"></div>
    <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -6852,7 +6913,7 @@ function sheetReply(){
   const foot = th
     ? T('The customer gets this in their mini-app inbox.','顾客会在小程序消息中收到。')
     : T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。');
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeReply')"></div>
+  return `<div class="scrim" style="z-index:45" onclick="APP.scrimClose('closeReply')"></div>
    <div class="sheet" style="top:${th?'80px':'150px'};z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeReply')">${ic('x',22,2)}</button>
@@ -7109,7 +7170,7 @@ function sheetOverflow(){
   const row=(icn,label,right,cmd,sep)=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${cmd}">
     <span style="color:var(--text-secondary);display:flex;flex:none">${ic(icn)}</span><span style="flex:1;font-size:15px">${label}</span>${right||''}</button>${sep?'<div class="sep" style="margin-left:54px"></div>':''}`;
   const val=t=>`<span style="font-size:14px;color:var(--text-secondary)">${t}</span>`;
-  return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeOverflow')"></div>
+  return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeOverflow')"></div>
    <div class="sheet" style="z-index:41;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber"></div>
      <div style="padding:4px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Menu','菜单')}</div>
      ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
@@ -7555,7 +7616,7 @@ function sheetCustomer(){
      the ask sheet's 49. Back and the order's own Close both take the order off
      first and leave the record exactly where it was. */
   const [zScrim,zSheet]=state.orderOverCust?[43,44]:[47,48];
-  return `<div class="scrim" style="z-index:${zScrim};${noAnim}" onclick="APP.cmd('closeCustomer')"></div>
+  return `<div class="scrim" style="z-index:${zScrim};${noAnim}" onclick="APP.scrimClose('closeCustomer')"></div>
     <div class="sheet" id="custSheet" style="top:46px;overflow:hidden;z-index:${zSheet};${noAnim}">
       <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
         <div class="grabber"></div>
@@ -8461,7 +8522,7 @@ function sheetInstall(){
     <span style="width:24px;height:24px;flex:none;border-radius:50%;background:var(--surface-raised);color:var(--text-secondary);
       display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${n}</span>
     <span style="flex:1;font-size:15px;line-height:1.5">${txt}</span></div>`;
-  return `<div class="scrim" style="z-index:60" onclick="APP.cmd('closeInstall')"></div>
+  return `<div class="scrim" style="z-index:60" onclick="APP.scrimClose('closeInstall')"></div>
    <div class="sheet" style="z-index:61;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 24px)"><div class="grabber"></div>
      <div style="font-size:18px;font-weight:500;padding:6px 0 2px">${T('Add Tacet to your home screen','添加到主屏幕')}</div>
      <p style="margin:2px 0 8px;font-size:14px;color:var(--text-secondary);line-height:1.5">${
