@@ -120,7 +120,10 @@ sandbox.TM_CATALOG = {
 };
 
 const TOTAL = capabilities.ALL_KEYS.length;
-const RUN = capabilities.CAPABILITIES.filter(c => c.group === 'run');
+// dashboard:view is in group 'run' but is drawn in the Dashboard block, not the
+// tree (RL_HOISTED) — so the folder's own count no longer includes it.
+const RUN = capabilities.CAPABILITIES.filter(c => c.group === 'run' && c.key !== 'dashboard:view');
+const DASH_CARDS = require('../lib/roles').DASH_CARDS;
 const stockroomCaps = capabilities.presetCapsFor('warehouse');
 const runOn = RUN.filter(c => stockroomCaps.includes(c.key)).length;
 
@@ -134,6 +137,7 @@ function selectRole(role, canEdit) {
     RL_ROLES: [OWNER_ROLE, role],
     RL_CAN_EDIT: !!canEdit,
     RL_LAYOUTS: ['default', 'store_manager', 'warehouse', 'customer_service', 'dispatch'],
+    RL_DASH_CATALOG: DASH_CARDS,
     RL_OPEN: { run: true },                 // Run the shop expanded, the rest collapsed
   });
   vm.runInContext('rlSelect(' + JSON.stringify(role.key) + ', true)', sandbox);
@@ -226,6 +230,45 @@ vm.runInContext('rlRenderList()', sandbox);
 has(ELS['#rlList'].innerHTML, 'nobody', 'and none reads "nobody", not "0 people"');
 is(vm.runInContext('rlPeopleWord(0)', sandbox), 'Nobody holds this role yet',
   'the pane says the same thing as a whole sentence');
+
+section('9 · the dashboard is one block, with its switch on top');
+// Three settings about one screen — whether it exists (dashboard:view), which
+// board, which cards — used to sit in two places in the wrong order: board and
+// cards near the top, the switch that governs both inside a collapsed folder
+// seventy rows down. An owner set the first two and the phone still opened on
+// Orders. Now they are one block, switch first, dependents greyed while off.
+html = selectRole(stockroom, true);
+has(html, 'id="rlDash"', 'the block exists');
+has(html, 'data-key="dashboard:view"', 'its switch is the capability itself, not a copy of it');
+is((html.match(/data-key="dashboard:view"/g) || []).length, 1, 'and it is drawn ONCE — not again in the tree');
+const dashAt = html.indexOf('id="rlDash"'), layoutAt = html.indexOf('id="rlLayout"'), cardsAt = html.indexOf('rl-dcards');
+if (dashAt !== -1 && dashAt < layoutAt && layoutAt < cardsAt) ok('switch, then layout, then cards — dependency order');
+else bad('switch, then layout, then cards — dependency order', dashAt + ' / ' + layoutAt + ' / ' + cardsAt);
+has(html, 'Home tab on the phone', 'the sentence names the phone — the device the old pane never mentioned');
+has(html, 'first screen on desktop', 'and the desktop');
+has(html, 'Needs you', 'the card picks are there');
+hasnt(html, 'rl-dash-body off', 'and not greyed, because Stockroom has the switch on');
+// The blast radius still comes before the FIRST checkbox — the block is below it.
+const blast2 = html.indexOf('hold this role'), tick2 = html.indexOf('type="checkbox"');
+if (blast2 !== -1 && tick2 !== -1 && blast2 < tick2) ok('and the whole block still sits below the blast radius');
+else bad('and the whole block still sits below the blast radius', blast2 + ' vs ' + tick2);
+
+// The same role with the switch OFF: the layout and cards are still shown, greyed,
+// under a sentence that says what off means on each device.
+const noDash = Object.assign({}, stockroom, { caps: stockroomCaps.filter(k => k !== 'dashboard:view') });
+html = selectRole(noDash, true);
+has(html, 'rl-dash-body off', 'switch off → the body is greyed as a unit');
+has(html, 'no dashboard on any device', 'and the sentence says so');
+has(html, 'usually Orders', 'naming where they land instead');
+has(html, 'id="rlLayout" disabled', 'the layout select is inert');
+has(html, 'data-dcard="needs"><input type="checkbox" checked disabled', 'so are the card ticks — still showing their picks, not cleared');
+
+// Read-only: the block renders, everything inert, the layout as text.
+html = selectRole(stockroom, false);
+has(html, 'id="rlDash"', 'a read-only viewer still sees the block');
+has(html, 'id="rlDashOn" checked disabled', 'with the switch inert');
+hasnt(html, 'id="rlLayout"', 'and the layout as text rather than a dead select');
+has(html, 'Stock and deliveries', 'naming the board');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -2479,11 +2479,32 @@ function rlPeopleWord(n) {
 
 // Capabilities the tenant can actually see, grouped. Entitlement-hidden keys
 // never reach the client, so this is already the real list.
+// Capabilities drawn OUTSIDE the permission tree, in their own block. A key
+// here is still a capability — saved in caps, counted in the role's total,
+// enforced the same way — it is only RENDERED beside the settings it governs
+// instead of in a folder seventy rows below them.
+//
+// dashboard:view is here because of what happened without it: an owner set
+// Warehouse's Home board and ticked its Dashboard cards, both near the top of
+// the pane, and the phone still opened on Orders — because the switch that
+// decides whether a dashboard EXISTS was a row called "View dashboard" inside
+// the collapsed "Run the shop" folder, with nothing on either side pointing at
+// the other. Three settings about one screen, in two places, in the wrong
+// order. Now the master switch heads the block and the other two grey out
+// underneath it when it is off.
+const RL_HOISTED = new Set(['dashboard:view']);
+function rlCatalog(key) {
+  return ((TM_CATALOG && TM_CATALOG.capabilities) || []).find(c => c.key === key) || null;
+}
+
 function rlCatalogGroups() {
   const out = [];
   if (!TM_CATALOG) return out;
   const byGroup = {};
-  TM_CATALOG.capabilities.forEach(c => { (byGroup[c.group] = byGroup[c.group] || []).push(c); });
+  TM_CATALOG.capabilities.forEach(c => {
+    if (RL_HOISTED.has(c.key)) return;     // drawn in the Dashboard block instead
+    (byGroup[c.group] = byGroup[c.group] || []).push(c);
+  });
   (TM_CATALOG.groups || []).forEach(g => {
     const caps = byGroup[g];
     // A group with nothing visible in it is ABSENT — no header, no empty
@@ -2596,14 +2617,7 @@ function rlRenderPane() {
       + `<input class="tm-input" id="rlDescEn" type="text" maxlength="200" value="${escapeAttr(RL_DRAFT.descEn)}" `
       + `data-ph-en="One line, in the words your team uses" placeholder="${escapeAttr(cuT('One line, in the words your team uses', '一句话，用团队自己的说法'))}"></div>`
       + `<div class="tm-field"><label class="tm-flabel" for="rlDescCn">${escapeHtml(cuT('Description (Chinese)', '说明（中文）'))}</label>`
-      + `<input class="tm-input" id="rlDescCn" type="text" maxlength="200" value="${escapeAttr(RL_DRAFT.descCn)}"></div>`
-      // HOME BOARD — the dashboard this role lands on. A field, not the name,
-      // which is what makes renaming safe.
-      + `<div class="tm-field"><label class="tm-flabel" for="rlLayout">${escapeHtml(cuT('Home board', '首页看板'))}</label>`
-      + `<select class="tm-input" id="rlLayout">`
-      + RL_LAYOUTS.map(L => `<option value="${escapeAttr(L)}"${L === RL_DRAFT.layout ? ' selected' : ''}>${escapeHtml(rlLayoutLabel(L))}</option>`).join('')
-      + `</select><div class="tm-fhint">${escapeHtml(cuT('What this role sees first. Renaming the role never changes it.', '该角色登录后首先看到的页面。重命名角色不会影响它。'))}</div></div>`
-      + rlDashCardsField();
+      + `<input class="tm-input" id="rlDescCn" type="text" maxlength="200" value="${escapeAttr(RL_DRAFT.descCn)}"></div>`;
   }
 
   // BLAST RADIUS, before the ticks.
@@ -2624,6 +2638,14 @@ function rlRenderPane() {
   // being told who it reaches. Above, because while it is on the ticks mean
   // nothing, and a switch that decides that cannot be found underneath them.
   if (!ro) html += rlStockOnlyField();
+
+  // THE DASHBOARD, as one block: the switch that says whether this role has
+  // one at all, and under it the layout and the cards that only matter while
+  // it does. Below the lockdown for the same reason the lockdown is below the
+  // blast radius — it carries ticks, and the lockdown makes those ticks moot.
+  // Its master switch is a real capability (dashboard:view), pulled out of the
+  // tree below by RL_HOISTED so it is not drawn twice.
+  html += rlDashboardBlock(r, ro);
 
   html += `<div class="rl-tally">`
     + `<span class="rl-count"><b>${keys.size}</b> ${escapeHtml(cuT('of ' + total + ' on', '/ ' + total + ' 已开启'))}</span>`
@@ -2772,27 +2794,92 @@ function rlLockHint(on) {
   return cuT('On: this role opens the Add Stock app and nothing else. The permissions below have no effect while it is on.',
              '开启后:该角色仅可打开“加库存”应用,下方权限在此期间不生效。');
 }
-// DASHBOARD CARDS — which cards this role's Home board shows. Unset
-// (RL_DRAFT.dashboardCards === null) means no override yet: the checkboxes are
-// seeded from rlDashCardDefaults(layout), i.e. what the role actually shows
-// today, so opening this field for the first time never looks like a blank
-// slate. The moment any box is toggled the draft becomes an explicit array
-// (wired in rlBindPane) — from then on it is what gets saved, independent of
-// `layout`. "Use this board's default" clears it back to null.
-function rlDashCardsField() {
-  const effective = RL_DRAFT.dashboardCards || rlDashCardDefaults(RL_DRAFT.layout);
-  const overridden = RL_DRAFT.dashboardCards !== null;
+/* THE DASHBOARD BLOCK — three settings about one screen, drawn together and
+   in dependency order:
+
+     [x] Has a dashboard            ← dashboard:view, the capability itself
+         Dashboard layout  [select] ← layout (the body.pos-* board)
+         Dashboard cards   [ticks]  ← dashboard_cards
+
+   The switch heads the block because it is the one that decides whether the
+   other two mean anything. Off, the layout and the cards stay on screen but
+   greyed, under a sentence that says what "off" does on EACH device — the
+   phone opens on Orders, the desktop opens on Orders — because that is the
+   question that was asked and could not be answered from the old pane.
+
+   What the source of truth is: the tick is a row in RL_DRAFT.caps like any
+   other capability (data-key="dashboard:view", so rlBindPane's generic
+   handler adds/removes it). Only the RENDERING moved. The server, the count
+   in the tally, the escalation guard — none of them know or care. */
+function rlDashSrc(r) {
+  return RL_DRAFT || {
+    caps: new Set(r.caps || []), layout: r.layout || 'default',
+    dashboardCards: Array.isArray(r.dashboardCards) ? r.dashboardCards : null,
+  };
+}
+function rlDashHint(on) {
+  return on
+    ? cuT('On: the dashboard is this role’s first screen on desktop and the Home tab on the phone. The layout and cards below decide what is on it.',
+          '开启后:仪表盘是该角色在电脑上的首屏,也是手机上的“首页”标签。下方的布局与卡片决定其内容。')
+    : cuT('Off: this role has no dashboard on any device. Desktop and the phone both open on the next screen it can reach — usually Orders. The layout and cards below have no effect while it is off.',
+          '关闭后:该角色在任何设备上都没有仪表盘。电脑和手机都会打开它可访问的下一个页面(通常是“订单”)。关闭期间,下方的布局与卡片不生效。');
+}
+function rlDashboardBlock(r, ro) {
+  const src = rlDashSrc(r);
+  const on = src.caps.has('dashboard:view');
+  const cap = rlCatalog('dashboard:view');
+  const label = cap ? cuT(cap.labelEn, cap.labelCn) : cuT('View dashboard', '查看概览');
+  const dis = ro ? ' disabled' : '';
+  let html = `<div class="rl-dash" id="rlDash">`
+    + `<div class="rl-dash-head">`
+    + `<div class="rl-p${ro ? ' locked' : ''}" data-key="dashboard:view">`
+    + `<input type="checkbox" id="rlDashOn"${on ? ' checked' : ''}${dis}>`
+    + `<label for="rlDashOn"><b>${escapeHtml(cuT('Has a dashboard', '拥有仪表盘'))}</b>`
+    + ` <span class="rl-dash-cap">${escapeHtml(label)}</span></label>`
+    + `</div>`
+    + `<div class="tm-fhint" id="rlDashHint">${escapeHtml(rlDashHint(on))}</div>`
+    + `</div>`
+    + `<div class="rl-dash-body${on ? '' : ' off'}" id="rlDashBody">`;
+  // LAYOUT — which board. A field, not the name, which is what makes renaming
+  // safe. Read-only shows the choice as text; a disabled select reads as broken.
+  html += `<div class="tm-field"><label class="tm-flabel" for="rlLayout">${escapeHtml(cuT('Dashboard layout', '仪表盘布局'))}</label>`;
+  if (ro) {
+    html += `<div class="tm-lead" style="margin:0">${escapeHtml(rlLayoutLabel(src.layout))}</div>`;
+  } else {
+    html += `<select class="tm-input" id="rlLayout"${on ? '' : ' disabled'}>`
+      + RL_LAYOUTS.map(L => `<option value="${escapeAttr(L)}"${L === src.layout ? ' selected' : ''}>${escapeHtml(rlLayoutLabel(L))}</option>`).join('')
+      + `</select>`;
+  }
+  html += `<div class="tm-fhint">${escapeHtml(cuT('Which board it opens on, and the cards it starts with. Renaming the role never changes it.', '打开的看板样式及其初始卡片。重命名角色不会影响它。'))}</div></div>`;
+  html += rlDashCardsField(src, ro || !on);
+  html += `</div></div>`;
+  return html;
+}
+// DASHBOARD CARDS — which cards this role's board shows. Unset
+// (dashboardCards === null) means no override yet: the checkboxes are seeded
+// from rlDashCardDefaults(layout), i.e. what the role actually shows today, so
+// opening this field for the first time never looks like a blank slate. The
+// moment any box is toggled the draft becomes an explicit array (wired in
+// rlBindPane) — from then on it is what gets saved, independent of `layout`.
+// "Use this board's default" clears it back to null. `inert` disables every
+// control: read-only, or the dashboard switch above is off.
+function rlDashCardsField(src, inert) {
+  const effective = src.dashboardCards || rlDashCardDefaults(src.layout);
+  const overridden = src.dashboardCards !== null;
+  const dis = inert ? ' disabled' : '';
   return `<div class="tm-field" style="margin-top:16px">`
     + `<label class="tm-flabel">${escapeHtml(cuT('Dashboard cards', '仪表盘卡片'))}</label>`
     + `<div class="tm-fhint">${escapeHtml(cuT(
         'Which cards this role sees on the dashboard. Unticked cards are hidden entirely, even when they’d otherwise have something to say.',
         '该角色在仪表盘上可见的卡片。未勾选的卡片将完全隐藏，即使原本有内容可显示。'))}</div>`
     + `<div class="rl-dcards">`
-    + RL_DASH_CATALOG.map(key => `<div class="rl-p" data-dcard="${escapeAttr(key)}">`
-        + `<input type="checkbox"${effective.includes(key) ? ' checked' : ''}>`
+    + RL_DASH_CATALOG.map(key => `<div class="rl-p${inert ? ' locked' : ''}" data-dcard="${escapeAttr(key)}">`
+        + `<input type="checkbox"${effective.includes(key) ? ' checked' : ''}${dis}>`
         + `<label>${escapeHtml(rlDashCardLabel(key))}</label></div>`).join('')
     + `</div>`
-    + `<button type="button" class="tm-btn-line" id="rlDashReset" style="margin-top:8px"${overridden ? '' : ' hidden'}>`
+    // Shown/hidden by inline display, like #rlRevert — the `hidden` attribute
+    // loses to .tm-btn-line's own display rule and the button stayed on screen.
+    + `<button type="button" class="tm-btn-line" id="rlDashReset" style="margin-top:8px${overridden && !inert ? '' : ';display:none'}"${dis}>`
     + escapeHtml(cuT('Use this board’s default', '恢复为该看板的默认设置')) + `</button>`
     + `</div>`;
 }
@@ -2903,7 +2990,7 @@ function rlBindPane() {
       const set = new Set(RL_DRAFT.dashboardCards || rlDashCardDefaults(RL_DRAFT.layout));
       if (this.checked) set.add(key); else set.delete(key);
       RL_DRAFT.dashboardCards = [...set];
-      const reset = $('#rlDashReset'); if (reset) reset.hidden = false;
+      const reset = $('#rlDashReset'); if (reset) reset.style.display = '';
       rlSyncCounts();
     });
   });
@@ -2914,8 +3001,26 @@ function rlBindPane() {
     $$('#rlPane .rl-dcards [data-dcard]').forEach(row => {
       row.querySelector('input').checked = defaults.has(row.getAttribute('data-dcard'));
     });
-    dreset.hidden = true;
+    dreset.style.display = 'none';
     rlSyncCounts();
+  });
+  // THE DASHBOARD SWITCH. Its cap add/remove already happened in the generic
+  // [data-key] handler above (the row carries data-key="dashboard:view"); this
+  // only paints the dependency — grey the layout and cards while it is off and
+  // swap the sentence — in place, for the same scroll-preserving reason as the
+  // lockdown below. Nothing is cleared: turning it back on returns exactly the
+  // layout and cards that were there.
+  const don = $('#rlDashOn');
+  if (don) don.addEventListener('change', () => {
+    const on = don.checked;
+    const body = $('#rlDashBody'); if (body) body.classList.toggle('off', !on);
+    const hint = $('#rlDashHint'); if (hint) hint.textContent = rlDashHint(on);
+    if (lay) lay.disabled = !on;
+    $$('#rlPane .rl-dcards [data-dcard]').forEach(row => {
+      row.classList.toggle('locked', !on);
+      row.querySelector('input').disabled = !on;
+    });
+    if (dreset) { dreset.disabled = !on; dreset.style.display = (on && RL_DRAFT.dashboardCards !== null) ? '' : 'none'; }
   });
   const so = $('#rlStockOnly');
   if (so) so.addEventListener('change', () => {
