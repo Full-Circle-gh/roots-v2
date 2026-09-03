@@ -5223,3 +5223,35 @@ It is a statement of a platform's arithmetic, reproduced so an operator can chec
 - ~~docs/tacet-postgres-status.md~~ — **DELETED 2026-08-23** with the migration (§24 THE POSTGRES MIGRATION IS CANCELLED). Recoverable from git history; the two things in it worth keeping were moved out first.
 - docs/tacet-write-surface.md — **what writes to this database**, v1.0, 2026-08-23. Eight processes, twelve in-process schedulers of which eleven run, the read-triggered writes, the inbound callbacks classified by what they tell the caller when the write fails. **Read before anything that takes the database away.**
 - docs/tacet-operating-findings.md — **the findings that outlived the Postgres migration**, v1.0, 2026-08-23. Five instruments that lied, ten refusal rules, the live defects, the operational facts about this box.
+
+## 39. Stock movement — settled decisions
+
+**Decided 2026-09-03.** Ruled by Ash ahead of implementation. Everything below was settled during the picking and receiving design work and had never been written down; it is recorded here so the schema and route work that follows has something to be checked against. **No implementation code exists for any of it yet**, and that is deliberate — this section is the brief, not a description of the product.
+
+**Decision — the kitchen is not a stock location.** At Roots the kitchen and the warehouse share the same building and the same freezers. When the kitchen makes 100 units, those units are warehouse stock the moment they exist. There is no handover to record because nothing travels. Production output lands at a CONFIGURED OUTPUT LOCATION, per tenant. Roots points it at the warehouse; a tenant whose kitchen is genuinely somewhere else points it at that location instead. See §0 — the location is a setting, not an assumption about Roots' building.
+
+**Decision — logging a production batch changes stock.** `production_batches` is a pure log today with no write path to inventory, and its schema comment has said "once that's wired in" since it was written. A logged batch increments stock at the output location, ledgered through the same path as every other stock change, and closes off the request that asked for it.
+
+**Consequence — a warehouse-to-kitchen request correctly moves no stock.** It asks the kitchen to MAKE something, not to move something. Stock changes when the kitchen makes it, not when someone asks. The existing `skipped: kitchen_direction` behaviour is right and stays. It is restated here so it is not read as a bug the production work should fix.
+
+**Decision — warehouse to store is a two-step movement.** The van run takes one to two hours at Roots. Stock leaves the warehouse at dispatch, exists IN TRANSIT belonging to neither location, and arrives at the store on receipt. A single-step transfer would either double-count the units or vanish them while the van is moving, and there is no third option: the units are somewhere for those two hours.
+
+**Decision — what the store counts is what the store holds.** The RECEIVED quantity sets stock, not the dispatched quantity. A short delivery becomes 47 at the store immediately, not 50. If the record ever preferred the warehouse's number to the counter's, the shelf and the record would part company and the store would be the one to find out.
+
+**Decision — the picker allocates every shortfall.** When a line comes up short, Tacet pre-fills nothing. Filling stores in list order was rejected because the same store loses every time; proportional splitting was rejected too. Some products a store can do without for a day and others it cannot, and only the person in the freezer knows which. **One-tap shortcuts are permitted; defaults are not.**
+
+**Decision — short and over receipts are recorded, never blocked.** No reason field, no confirmation step, no accusation. The discrepancy stays open against the transfer and is visible to the warehouse. The store's number updates immediately; nobody waits on anybody.
+
+**Decision — there are two yardsticks and they are not interchangeable.** A line can differ from WHAT THE VAN CARRIED, or from WHAT THE STORE ASKED FOR. These are different failures with different owners: the first belongs to the road, the second to the warehouse's allocation. **Both are shown only after counting.** Showing either beforehand would bias the count, and the count is the entire value of the receiving screen.
+
+**Decision — no automatic cascade.** If a store asks for 50 and the warehouse holds 20, Tacet shows the shortfall and a human decides whether to ask the kitchen. **It does not raise a production request by itself.**
+
+**Design rules established during this work, applying product-wide.** They are recorded here rather than only in `docs/tacet-design-system.md` because each was settled against a real screen and the reasoning is in this document's register:
+
+- **Contrast carries attention.** Graphite means resolved — stop looking. Full Ink means this still wants you.
+- **Controls on resolved work recede with the work.** A tick on a finished line is an UNDO control, not a state marker; state is already carried by fill and edge.
+- **No copy may assume a location count.** Strings must read correctly at one store, two, or nine.
+- **No layout may assume a location count.** Any pattern that only works at two locations is disqualified regardless of how well it reads.
+- **`短少` is the only Chinese word for short, product-wide.** See the eleventh amendment in `docs/tacet-delivery-vocabulary.md`.
+
+**Rationale.** Every decision above is about a moment when goods and the record could disagree — the two hours the van is moving, the gap between what was asked for and what was found, the count that contradicts the dispatch note. Each is settled the same way: the record follows the person who can see the goods, and the system never guesses on their behalf. The screens are drawn in `design-handoff/warehouse-picking/` and `design-handoff/store-receiving/`, and their annotations carry the per-screen reasoning this section summarises.
