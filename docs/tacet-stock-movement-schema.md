@@ -2,6 +2,21 @@
 
 **2026-09-03 · DOCS ONLY. No code, no migration.** This records five rulings by Ash on the warehouse → store stock-movement design, the reasoning behind each, and their consequences for existing code. One question stays explicitly open. Mirrored into `docs/tacet-consolidation-decisions.md` §38.
 
+> ## ⚠ THERE IS A SECOND DOCUMENT WITH THIS FILENAME, AND IT IS OLDER AND LARGER THAN THIS ONE
+>
+> **Read this before citing anything below.** `docs/tacet-stock-movement-schema.md` also exists on branch **`claude/roots-v2-stock-movement-survey-gkss7v`** (commit `3ec933ec`, 2026-09-03, ~502 lines): *"Tacet stock movement — schema survey and migration plan, v1.0 · SURVEY AND PROPOSAL ONLY."* It answers seven unknowns from the stock-movement brief and proposes a **two-step dispatch → in-transit → receipt model**, and it is the document the picking and receiving design work was built against.
+>
+> **This file was written without sight of it.** The session that produced it had only `origin/main` and its own branch in its refs, found no such file, and created a new one at the same path. **The two are not versions of each other — they are parallel documents that will collide on merge.**
+>
+> **That branch also carries its own `§39` in the decisions record** — ten decisions ruled by Ash the same day, appended there behind the appendix while this branch's rulings went in at §38. **Both branches therefore define a §39, differently.** Compared against this document:
+>
+> - **Compatible.** Its *"warehouse to store is a two-step movement"* matches the shape here — stock leaves the warehouse at dispatch and lands at the store on receipt — except that it names the interval explicitly (**IN TRANSIT**, belonging to neither location for the one-to-two-hour van run) where §0 below leaves it unmodelled. That branch is the more specified of the two, not the contradictory one. Its *"short and over receipts are recorded, never blocked"* is Ruling 1's posture arriving from the receiving end.
+> - **DIRECT CONFLICT, and it lands exactly on Ruling 2.** That branch rules: *"**The RECEIVED quantity sets stock, not the dispatched quantity.** A short delivery becomes 47 at the store immediately, not 50. If the record ever preferred the warehouse's number to the counter's, the shelf and the record would part company and the store would be the one to find out."* **Ruling 2 below settles an uncounted line at the SENT quantity** when nobody counts by end of day — which is the record preferring the warehouse's number to the counter's, in the one case where there is no counter's number to prefer. The two rulings are both Ash's and both dated 2026-09-03. **This document does not decide which wins**; it is flagged because an implementer reading either one alone would build the other's rejected behaviour.
+>
+> Nothing here should be implemented until that is settled.
+>
+> **Reconciliation is not attempted here** — the two branches are not merged and this session was told not to merge them.
+
 **What this document is not.** It is not a schema migration and it does not ship a table. Where it names columns (`qty_sent`, `qty_received`, `is_counted`, `delivered_at`) it is describing the shape a later build must follow, not code that exists. The one table that already exists in this area — `restock_orders`/`restock_items` (`schema.sql:298-330`) — is a **kitchen-side, plain-`db` table**, not tenant-scoped, and is described below only as prior art and as the thing this plan's warehouse→store slice supersedes in behaviour (not necessarily in table identity — see §6).
 
 ---
@@ -77,13 +92,55 @@ Of the ~20 real call sites, **only five are actually touched by deleting `lib/in
 
 **Also found, requested by Ash**: a concrete UI gap that the visibility requirement below exists to close — see there for the citation and the fix.
 
+### NAMED DEBT — the four channel ingest paths keep their own clamps, and stay dishonest
+
+**This is the ruling's largest collateral gap and it is recorded here rather than left in a session report.** Removing the central clamp makes the warehouse→store transfer honest. It leaves **four ingest paths silently doing the exact thing Ruling 1 rejects** — absorbing a real shortfall into `Math.max(0, …)` so the shelf figure stays non-negative and the discrepancy is never stated. Each does it in its own file, before `adjustStock` is ever called, so **deleting `lib/inventory.js:1084` does not reach any of them.**
+
+| Site | What it is | What it does today when the deduction exceeds on-hand |
+|---|---|---|
+| `routes/eleme-internal.js:488` | Eleme order ingest, per-line deduction | `newPhysicalQty: Math.max(0, oldQ - took)`. **Clamps, and records nothing.** The shortfall is not counted, not logged, not flagged — the most silent of the five. |
+| `routes/meituan-internal.js:535,538` | Meituan order ingest, per-line deduction | Clamps identically, but **first** pushes `{ name, sku, have, want }` onto an `oversold[]` list (`:535`) that is surfaced to the operator. **Clamp-and-report** — the only one of the five that does not lose the number, and the shape `docs/tacet-stock-model.md` §6 already singled out as best-behaved. |
+| `routes/guanyi-admin.js:356` | An **operator** confirming a flagged gzgrocery pickup really happened | `Math.max(0, curQty - inferred_pickup)`. **Clamps, records nothing.** Called out separately below — this is a human asserting a physical event, which is Ruling 1's own case. |
+| `scripts/guanyi-daemon.js:588-589` | Guanyi pickup-drift daemon, unattended | Clamps, but computes `clamped` explicitly and writes `(CLAMPED at 0)` into both the log row and the daemon log. **Clamp-and-log** — the shortfall survives in a log, not in the data. |
+| `scripts/gzgrocery-order-daemon.js:493` | gzgrocery order ingest, per-line deduction | `Math.max(0, cur - it.qty)`. Clamps; the ledger note carries `(cur→next)` so the truncation is *inferable* from two numbers, but **no shortfall is stated as such.** |
+
+**Stated plainly, because the scoping is easy to misread as completeness: after this ruling ships, a warehouse dispatch tells the truth and four sales channels still do not.** A Meituan, Eleme or gzgrocery order that oversells a shelf, and an operator-confirmed Guanyi pickup that exceeds the record, all go on quietly writing a floor of zero and discarding the difference — the same behaviour, in the same direction, that Ruling 1 calls "silently inventing units."
+
+**Making each channel honest is separate, per-channel work and is deliberately NOT in scope here.** It is per-channel and not one change because the right answer genuinely differs by path: an unattended daemon inferring stock loss from a scraped listing (`scripts/guanyi-daemon.js`, already burned once by a bad read that removed 1,863 units and needed `scripts/repair_guanyi_false_pickup.js` to undo) has a real argument for keeping a floor, while an operator confirming a pickup by hand has the same argument for losing one as the picker in Ruling 1 does. **Nothing here should be read as approval to strip the other four in one pass.**
+
+**One shared consequence worth carrying into that later work:** all five sites read the current quantity, compute an absolute figure in JavaScript, then pass `newPhysicalQty` — the read-then-write race `docs/tacet-stock-model.md` §5 already records, where anything committing between the read and the write is overwritten. Moving a site onto `deltaQty` is what makes it honest **and** what closes that race; they are one change, not two.
+
+### DEBT AND AN OPEN DECISION — the PO-receiving downward correction
+
+`routes/retail-purchasing.js:232` (`applyReceivedToStock`) calls `adjustStock` with `deltaQty: good − alreadyApplied`, so it **is** on the path the clamp governs, and lowering an arrived count on a re-save produces a negative delta. **This is not virgin ground: the codebase has already ruled on it twice, in writing, and both rulings assume the clamp stays.**
+
+`routes/retail-purchasing.js:296-298`, in the reversal path's own header comment:
+
+> `inventory.adjustStock`'s `Math.max(0, …)` clamp is **deliberately NOT changed — other callers depend on it.** This pre-check is what stops this path from ever reaching it, and the assertion below is what proves it never did.
+
+`docs/purchase-returns.md`, *What this does not do*, item 3:
+
+> **A downward correction to an arrived count still clamps at zero stock** rather than refusing. Returns refuse; corrections behave as they always have. Making both refuse is a one-line change to `applyReceivedToStock` and a behavioural change to a path the warehouse uses daily, which is not something to smuggle in beside a new feature.
+
+**What reopening it actually means, spelled out.** Those two records left the corrections path with a known, accepted behaviour (clamp at zero) and a named intended fix (**refuse**, matching the returns path, deferred as too disruptive to land beside a feature). Ruling 1 removes the clamp underneath that path without either half being revisited — so a downward correction that would go below zero stops clamping and **starts going negative**. That is a **third** outcome, and nobody has ever chosen it:
+
+| | Behaviour on a below-zero correction | Status |
+|---|---|---|
+| Today | Clamps at 0, shortfall discarded | Recorded and accepted in `docs/purchase-returns.md` |
+| The documented intended fix | **Refuses** the save outright, as returns already do | Named, deferred, never scheduled |
+| What Ruling 1 delivers by default | **Writes a negative balance**, silently | **Never proposed, never ruled on** |
+
+**Do not assume this is fine.** Three specific reasons it may not be. First, it lands on a path `docs/purchase-returns.md` explicitly describes as one "the warehouse uses daily," which is exactly why tightening it was deferred rather than done. Second, the two paths are deliberately symmetrical today in their *refusal* posture — reversals refuse and prove they refused (`planPOReversal`, plus a post-call assertion throwing `reversal_clamped`) — and letting corrections drift to "silently negative" while reversals refuse makes two sibling paths in one file disagree about the same event. Third, `stock_applied_qty` bookkeeping is written from `good` regardless (`retail-purchasing.js:239`), so a negative shelf and the line's applied figure would now diverge in a way the earlier comment's reasoning ("leave the line and the shelf disagreeing with nothing on any screen saying so") was written to prevent.
+
+**THIS NEEDS ITS OWN RULING FROM ASH BEFORE THE CLAMP COMES OUT, and it is not answered here.** The question is narrow: on a downward PO-receiving correction that would take a shelf below zero, does Tacet **refuse** (the documented intent, symmetric with returns), **go negative** (Ruling 1's default, honest but new for this path), or **keep a local clamp** (today's behaviour, preserved deliberately rather than by omission)? Whichever is chosen, `docs/purchase-returns.md` item 3 stops being true the moment the central clamp is deleted and must be amended in the same change.
+
 ### Sequencing implication
 
-The clamp does not come out as a single one-line change with the other seventeen-odd callers along for the ride — most of them are not on the path it protects. What actually has to land together: (1) delete the `deltaQty` clamp at `lib/inventory.js:1084`; (2) add the small guard to caller #1; (3) resolve caller #14 — either a local guard or finally landing the `docs/purchase-returns.md` fix; (4) fix the dashboard's `out_of_stock` query. Callers #7/#8/#12/#13/#15 need nothing further; they are already correct under the new rule or already guarded. The channel-ingest callers (#4/#6/#9/#11/#16/#18) are explicitly **out of scope** for this pass — each keeping its own clamp is a valid, separate policy choice (per-channel, not uniform), and #17 in particular should keep its clamp on purpose, not by oversight. This is implementation-phase sequencing; this document fixes the destination and names what still needs a decision, not the code itself.
+The clamp does not come out as a single one-line change with the other seventeen-odd callers along for the ride — most of them are not on the path it protects. What actually has to land together: (1) delete the `deltaQty` clamp at `lib/inventory.js:1084`; (2) add the small guard to caller #1; (3) **resolve caller #14 — which needs a ruling from Ash first, not an implementer's judgement** (see the open decision above), and amend `docs/purchase-returns.md` item 3 in the same change whichever way it goes; (4) fix the dashboard's `out_of_stock` query. Callers #7/#8/#12/#13/#15 need nothing further; they are already correct under the new rule or already guarded. The channel-ingest callers (#4/#6/#9/#11/#16/#18) are explicitly **out of scope** for this pass — each keeping its own clamp is a valid, separate policy choice (per-channel, not uniform), and #17 in particular should keep its clamp on purpose, not by oversight. This is implementation-phase sequencing; this document fixes the destination and names what still needs a decision, not the code itself.
 
 ### The visibility requirement
 
-A negative on-hand is only an honest signal if a person can actually see it, and the survey above already found a concrete place where it would not be: the admin dashboard's "Needs you" panel (`routes/retail.js:15248-15280`) queries `low` as `physical_qty > 0 AND physical_qty <= threshold` and `out_of_stock` as `physical_qty = 0`. **A negative balance matches neither clause and disappears from both cards** — worse than being shown wrong, it is shown nowhere. That query needs to become `physical_qty <= 0` for `out_of_stock` at minimum, as part of this ruling, not left for later.
+A negative on-hand is only an honest signal if a person can actually see it, and the survey above already found a concrete place where it would not be: the admin dashboard's "Needs you" panel (`routes/retail.js:15248-15280`) queries `low` as `${REAL_STOCK} > 0 AND ${REAL_STOCK} <= ${LOW_THRESHOLD}` and `out_of_stock` as `${REAL_STOCK} = 0`. **A negative balance matches neither clause and disappears from both cards** — worse than being shown wrong, it is shown nowhere. **This is four clauses, not one**: the count query and the preview-items query are written separately for each card (`:15249-15250`, `:15258-15259`, `:15267`, `:15275`), so a fix that edits one and not its twin makes the count and the list disagree. `out_of_stock` needs `<= 0` in both of its queries at minimum, as part of this ruling, not left for later. **This is a code change and none of it has been made** — the queries in `routes/retail.js` are untouched and still read `= 0` as of this document's date.
 
 Elsewhere the picture is mixed. The per-store stock grid (`public/retail-admin/09-products.js`, the editable stock cell a "Save stock" PATCH writes through) already renders `physical_qty` as a plain signed number — a −30 would show as −30, not as a clamped 0 — so the raw figure is not hidden from someone who opens that screen. But the higher-level "in stock / low / out" badges (`_paUnitStock`, `public/retail-admin/09-products.js:792-797`, summed via `Number(m.effective_stock) || 0`) collapse **zero** and **negative** into the same "out of stock" state. **This is a gap the ruling explicitly requires closing**: a negative balance needs a surface a person looks at without already knowing to go hunting for it — at minimum, the "out of stock" treatment must not read identically for a genuine zero and for a −30 that says the record itself is wrong. Beyond the dashboard query fix above, the exact surface (a distinct badge state, a report row) is implementation-phase; the requirement — negative on-hand must be visible somewhere a person looks, not only true in the database — is decided.
 
