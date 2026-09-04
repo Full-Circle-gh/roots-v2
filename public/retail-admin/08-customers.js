@@ -2190,22 +2190,30 @@ async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn =
     const res = await fetch(url, opts);
     const j = await res.json().catch(() => ({ success: false, error: 'bad_response' }));
     if (!j.success) {
-      // Show the server's logical reason, never a bare code. Prefer the human
-      // `message`; append the stable `error` code in brackets so it can be
-      // quoted in support ("… [use_refund_payout]").
+      // Show the server's logical reason, never a bare code (audit A-09). The
+      // server's own `message` wins when it sent one; otherwise tdErrorText
+      // turns the code into a sentence, and at worst into words. The code
+      // itself moves to the toast's title so it can still be quoted in support
+      // without being what the merchant reads.
       const code = j.error || 'unknown';
-      const reason = j.message ? `${j.message} [${code}]` : code;
+      const reason = (typeof tdErrorText === 'function') ? tdErrorText(code, j.message) : (j.message || code);
       const extra = j.current !== undefined ? ` (current · 当前: ${j.current})` : '';
-      if (!silent) toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err');
-      const err = new Error(j.error || 'request_failed');
+      if (!silent) toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err', { title: code });
+      const err = new Error(reason);
       err.code = code;
+      err.rawMessage = j.message || null;
+      err.failed = true;          // what the catch below tests, not the message text
       err.payload = j;            // silent callers render the reason themselves
       throw err;
     }
     return j;
   } catch (e) {
-    if (!silent && (!e.message || (e.message !== 'request_failed' && !e.message.startsWith('Error')))) {
-      toast(`${errLabelEn} · ${errLabelCn}: ${e.message || 'network'}`, 'err');
+    // `e.failed` marks the throw above, which has ALREADY toasted. Tested on a
+    // flag rather than on the message text, because the message is now a human
+    // sentence (audit A-09) and matching it against 'request_failed' would
+    // double-toast every server refusal.
+    if (!silent && !e.failed) {
+      toast(`${errLabelEn} · ${errLabelCn}: ${e.message || cuT('no connection', '网络不可用')}`, 'err');
     }
     throw e;
   } finally {

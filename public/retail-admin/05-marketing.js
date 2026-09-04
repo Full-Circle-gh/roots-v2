@@ -519,7 +519,7 @@ async function revokeGrant(grantId) {
     await loadGrantedList();
     await loadVouchers();
   } catch (e) {
-    toast(cuT('Failed', '失败') + ': ' + (e.message === 'already_used_or_missing' ? cuT('Already used or missing', '已使用或不存在') : e.message), 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -1086,8 +1086,11 @@ async function vwSave(activate) {
     await loadVouchers();
     if (wasPick && vid) openGrantModal(vid, code);   // hand off to the existing grant flow
   } catch (e) {
-    const msg = e.message === 'code_active' ? 'A live coupon already uses this code · 已有生效中的优惠券使用此编码'
-      : e.message === 'code_exists' ? 'Code already exists · 编码已存在' : e.message;
+    // Compared on `.code`, not `.message`: api() now hands back a human
+    // sentence (audit A-09) and both of these codes are in the dictionary, so
+    // the branches stay only as the place their wording is pinned.
+    const msg = e.code === 'code_active' ? cuT('A live coupon already uses this code', '已有生效中的优惠券使用此编码')
+      : e.code === 'code_exists' ? cuT('Code already exists', '编码已存在') : e.message;
     toast(cuT('Failed', '失败') + ': ' + msg, 'err');
   }
 }
@@ -1625,7 +1628,7 @@ async function testWecomWebhook() {
     await api('/api/retail-admin/wecom/test', { method: 'POST', body: { webhook: url } });
     status.textContent = '✅ Sent — check your WeCom · 已发送,请查看企业微信';
   } catch (e) {
-    status.textContent = '⚠ ' + (e.message === 'no_valid_webhook'
+    status.textContent = '⚠ ' + (e.code === 'no_valid_webhook'
       ? 'Set up the app above, or paste a qyapi.weixin.qq.com URL · 请先配置上方 App 或填入正确地址'
       : (e.message || 'failed'));
   }

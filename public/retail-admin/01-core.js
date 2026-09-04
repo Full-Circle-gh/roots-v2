@@ -50,9 +50,16 @@ function chanIcon(channel) {
   return CHAN_ICON[c] || '';
 }
 
-function toast(msg, kind = 'ok', ms) {
+// `opts` is a NUMBER for every existing caller (a duration in ms) and may also
+// be an object: { ms, title }. `title` puts the machine-readable reason on the
+// element's title attribute — an operator can hover it to quote the exact code
+// to support, without the code being what they read (audit A-09).
+function toast(msg, kind = 'ok', opts) {
+  const isObj = opts && typeof opts === 'object';
+  const ms = isObj ? opts.ms : opts;
   const t = $('#toast');
   t.textContent = msg;
+  if (isObj && opts.title) t.title = String(opts.title); else t.removeAttribute('title');
   // Normalize aliases so every caller lands on a styled variant (.ok / .err).
   const cls = (kind === 'error' || kind === 'err') ? 'err'
             : (kind === 'success' || kind === 'ok') ? 'ok'
@@ -65,6 +72,191 @@ function toast(msg, kind = 'ok', ms) {
   const dur = ms != null ? ms : (cls === 'err' ? 6000 : 2600);
   toast._h = setTimeout(() => t.classList.remove('show'), dur);
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   ERROR CODES, IN WORDS (audit A-09 / G-01)
+
+   The server answers a failed write with a stable code — `sku_taken`,
+   `insufficient_stock`, `forbidden_capability` — and often, but not always, a
+   human `message`. When it sent only the code, the code is what the merchant
+   read: 195 toast sites showed "not_found", "db_insert_failed",
+   "kitchen_add_only" to a shopkeeper.
+
+   Three layers, in order:
+
+     1. The server's own `message`, when it sent one. It knows more than a
+        dictionary can — which SKU, whose product, how many are left.
+     2. This dictionary, for the codes a merchant realistically meets.
+     3. The code with its underscores opened out and a capital on the front.
+        Not a sentence, but words — "Insufficient stock" beats
+        "insufficient_stock", and a code added tomorrow reads as words on the
+        day it ships rather than after somebody remembers this file.
+
+   THE CODE ITSELF IS NEVER LOST. It goes on the error object as `.code` and
+   into the toast's `title`, so an operator can still quote it to support. What
+   changes is what they READ.
+
+   Bilingual, because every other sentence in this product is.
+   ══════════════════════════════════════════════════════════════════════════ */
+const TD_ERR = {
+  // ── Not there, or not yours ──
+  not_found:              ['That record no longer exists — it may have been deleted while this page was open.', '该记录已不存在,可能在本页打开期间被删除。'],
+  order_not_found:        ['That order no longer exists.', '该订单已不存在。'],
+  product_not_found:      ['That product no longer exists.', '该商品已不存在。'],
+  customer_not_found:     ['That customer no longer exists.', '该顾客已不存在。'],
+  store_not_found:        ['That location no longer exists.', '该门店已不存在。'],
+  shipment_not_found:     ['That parcel no longer exists.', '该包裹已不存在。'],
+  version_not_found:      ['That version is no longer saved.', '该版本已不存在。'],
+  forbidden:              ['You do not have permission to do that.', '你没有执行该操作的权限。'],
+  forbidden_capability:   ['Your role does not include this action. An owner can grant it on the Team page.', '你的角色不包含此操作。可由负责人在团队页授权。'],
+  forbidden_store:        ['You can only do that in a location you are assigned to.', '只能在你被分配的门店执行该操作。'],
+  store_not_assigned:     ['You are not assigned to that location.', '你未被分配到该门店。'],
+  account_blocked:        ['That account is blocked.', '该账号已被封禁。'],
+  store_locked:           ['That location is locked and cannot be changed.', '该门店已锁定,无法修改。'],
+
+  // ── The form ──
+  bad_id:                 ['Something is wrong with that link — reload the page and try again.', '链接有误,请刷新页面后重试。'],
+  bad_input:              ['One of the values is not something the system can read.', '有一项内容无法识别。'],
+  bad_request:            ['The system could not read that request. Reload the page and try again.', '无法读取该请求,请刷新页面后重试。'],
+  bad_payload:            ['The system could not read that request. Reload the page and try again.', '无法读取该请求,请刷新页面后重试。'],
+  no_fields:              ['Nothing was changed, so nothing was saved.', '没有任何改动,未保存。'],
+  missing_fields:         ['Some required fields are still empty.', '还有必填项未填写。'],
+  missing_required:       ['Some required fields are still empty.', '还有必填项未填写。'],
+  name_required:          ['Give it a name first.', '请先填写名称。'],
+  title_required:         ['Give it a title first.', '请先填写标题。'],
+  code_required:          ['Enter a code first.', '请先填写编码。'],
+  amount_required:        ['Enter an amount first.', '请先填写金额。'],
+  date_required:          ['Choose a date first.', '请先选择日期。'],
+  reason_required:        ['Give a reason first.', '请先填写原因。'],
+  message_required:       ['Write a message first.', '请先填写内容。'],
+  store_required:         ['Choose a location first.', '请先选择门店。'],
+  supplier_required:      ['Choose a supplier first.', '请先选择供应商。'],
+  address_required:       ['An address is needed first.', '请先填写地址。'],
+  location_required:      ['Choose a location first.', '请先选择地点。'],
+  label_required:         ['Give it a label first.', '请先填写标签。'],
+  lines_required:         ['Add at least one line first.', '请至少添加一行。'],
+  ids_required:           ['Nothing was selected.', '未选择任何项目。'],
+  no_items:               ['There is nothing in it yet.', '目前没有任何项目。'],
+  no_ids:                 ['Nothing was selected.', '未选择任何项目。'],
+  bad_email:              ['That email address does not look right.', '邮箱地址格式不正确。'],
+  bad_phone:              ['That phone number does not look right.', '电话号码格式不正确。'],
+  bad_status:             ['That status is not one this record can be in.', '该状态对此记录无效。'],
+  invalid_status:         ['That status is not one this record can be in.', '该状态对此记录无效。'],
+  invalid_amount:         ['That amount is not a number the system can use.', '该金额无效。'],
+  invalid_qty:            ['That quantity is not a number the system can use.', '该数量无效。'],
+  qty_positive_required:  ['The quantity has to be more than zero.', '数量必须大于 0。'],
+  bad_delta:              ['That adjustment is not a number the system can use.', '该调整数量无效。'],
+  invalid_page:           ['That page does not exist.', '该页面不存在。'],
+  too_large:              ['That file is too big.', '文件过大。'],
+  no_file:                ['No file was chosen.', '未选择文件。'],
+  not_an_image:           ['That file is not an image.', '该文件不是图片。'],
+  bad_image:              ['That image could not be read.', '无法读取该图片。'],
+  bad_data_uri:           ['That image could not be read.', '无法读取该图片。'],
+  unsupported_type:       ['That kind of file is not accepted here.', '此处不接受该类型的文件。'],
+
+  // ── Already taken, already done ──
+  sku_taken:              ['Another product already uses that SKU.', '该货号已被其他商品占用。'],
+  name_taken:             ['Something already uses that name.', '该名称已被占用。'],
+  duplicate_name:         ['Something already uses that name.', '该名称已被占用。'],
+  phone_taken:            ['Another customer already has that phone number.', '该电话号码已属于另一位顾客。'],
+  already_linked:         ['That is already linked.', '已关联。'],
+  already_copied:         ['That has already been copied.', '已复制过。'],
+  already_paid:           ['That has already been paid.', '已付款。'],
+  already_shipped:        ['That has already shipped, so it cannot be undone here.', '已发货,无法在此撤销。'],
+  already_delivered:      ['That has already been delivered.', '已送达。'],
+  already_used_or_missing:['That has already been used, or is no longer there.', '已使用或已不存在。'],
+  already_receiving:      ['Somebody is already receiving that order.', '已有人正在收货。'],
+  courier_already_called: ['A courier has already been called for this order.', '该订单已呼叫运力。'],
+  refund_already_processing: ['A refund is being processed for this order right now — try again in a moment.', '该订单正在处理退款,请稍后重试。'],
+  code_exists:            ['That code is already in use.', '该编码已存在。'],
+  code_active:            ['A live coupon already uses that code.', '已有生效中的优惠券使用该编码。'],
+  id_reserved:            ['That id is reserved.', '该 ID 为保留值。'],
+
+  // ── Stock ──
+  insufficient_stock:     ['There is not enough stock on the shelf for that.', '货架库存不足。'],
+  no_stock:               ['There is no stock on the shelf for that.', '该商品无库存。'],
+  would_go_negative:      ['That would take the count below zero.', '该操作会使库存变为负数。'],
+  flash_stock_exceeded:   ['That is more than the flash sale has left.', '超出限时特惠剩余数量。'],
+  product_unavailable:    ['That product is not on sale at the moment.', '该商品当前不可售。'],
+  no_active_store:        ['No location is open. Add or reopen one in Settings → Operations.', '没有营业中的门店,请在设置 → 运营中添加或重新开启。'],
+  catalog_locked:         ['The catalogue is managed upstream and cannot be edited here.', '商品库由上游统一管理,此处不可编辑。'],
+
+  // ── Orders, refunds, delivery ──
+  order_closed:           ['That order is closed and can no longer be changed.', '该订单已关闭,无法再修改。'],
+  not_cancellable:        ['That order is past the point where it can be cancelled.', '该订单已无法取消。'],
+  not_reversible:         ['That cannot be undone.', '该操作无法撤销。'],
+  not_shippable:          ['That order is not ready to ship.', '该订单尚不可发货。'],
+  not_payable:            ['That order cannot be paid for in its current state.', '该订单当前状态无法付款。'],
+  not_delivered:          ['That has not been delivered yet.', '尚未送达。'],
+  has_tracking:           ['A waybill is already attached.', '已关联运单号。'],
+  no_shipments:           ['That order has no parcels yet.', '该订单还没有包裹。'],
+  invalid_shipment_id:    ['That parcel is not part of this order.', '该包裹不属于此订单。'],
+  invalid_carrier:        ['That carrier is not one the system knows.', '系统不支持该快递公司。'],
+  invalid_method:         ['That method is not one the system knows.', '系统不支持该方式。'],
+  invalid_payment_method: ['That payment method is not one the system knows.', '系统不支持该付款方式。'],
+  unsupported_payment_method: ['That payment method is not accepted here.', '此处不接受该付款方式。'],
+  use_refund_payout:      ['This order already has an approved or paid refund — use the refund payout action instead.', '该订单已有已批准或已支付的退款,请使用退款支付操作。'],
+  return_exceeds_received:['That is more than was received.', '超出已收货数量。'],
+  return_blocked:         ['That return cannot be made.', '无法退货。'],
+  undo_blocked:           ['That cannot be undone from here.', '无法在此撤销。'],
+  slot_unavailable:       ['That delivery window is no longer available.', '该配送时段已不可选。'],
+  address_not_found:      ['That address could not be found on the map.', '地图上找不到该地址。'],
+  no_zone_match:          ['That address is not inside any of your delivery areas.', '该地址不在任何配送区域内。'],
+  pickup_order:           ['That is a collection order, so it is not delivered.', '该订单为自提,不涉及配送。'],
+  no_printer_for_store:   ['No printer is set up for that location.', '该门店未配置打印机。'],
+
+  // ── Points, coupons, wallet ──
+  insufficient_points:    ['There are not enough points for that.', '积分不足。'],
+  points_cannot_cover_shipping: ['Points cannot be used to pay the delivery fee.', '积分不可抵扣运费。'],
+  not_eligible:           ['This does not qualify.', '不符合条件。'],
+  program_disabled:       ['That programme is switched off.', '该功能已关闭。'],
+  code_expired:           ['That code has expired.', '该编码已过期。'],
+  bad_code:               ['That code is not right.', '编码不正确。'],
+  too_many_attempts:      ['Too many tries. Wait a moment and try again.', '尝试次数过多,请稍后重试。'],
+  daily_cap:              ['That is today’s limit.', '已达今日上限。'],
+  too_soon:               ['Too soon — try again in a moment.', '操作过于频繁,请稍后重试。'],
+
+  // ── Not set up ──
+  not_configured:         ['That is not set up yet — finish it in Settings → Integrations.', '尚未配置,请在设置 → 集成中完成。'],
+  unknown_integration:    ['That integration is not one the system knows.', '系统不支持该集成。'],
+  store_not_connected:    ['That location is not linked to the channel yet.', '该门店尚未关联到渠道。'],
+  wechat_creds_not_configured: ['WeChat is not set up yet — finish it in Settings → Integrations.', '微信尚未配置,请在设置 → 集成中完成。'],
+  alipay_not_configured:  ['Alipay is not set up yet — finish it in Settings → Integrations.', '支付宝尚未配置,请在设置 → 集成中完成。'],
+  aliyun_sms_not_configured: ['Text messaging is not set up yet.', '短信服务尚未配置。'],
+  nuonuo_not_configured:  ['Invoicing is not set up yet.', '开票服务尚未配置。'],
+  jd_not_configured:      ['JD Logistics is not set up yet — finish it in Settings → Delivery.', '京东物流尚未配置,请在设置 → 配送中完成。'],
+  kd100_not_configured:   ['Tracking is not set up yet.', '物流查询尚未配置。'],
+  ai_not_configured:      ['The writing assistant is not set up yet.', 'AI 助手尚未配置。'],
+  maps_key_missing:       ['Maps are not set up yet, so addresses cannot be located.', '地图服务尚未配置,无法定位地址。'],
+  email_unconfigured:     ['Email sending is not set up yet.', '邮件发送尚未配置。'],
+  no_access_token:        ['The connection to that service has expired — reconnect it in Settings → Integrations.', '与该服务的连接已过期,请在设置 → 集成中重新连接。'],
+
+  // ── The system itself ──
+  db_insert_failed:       ['That could not be saved. Try again; if it keeps happening, tell support.', '保存失败,请重试;如反复出现请联系客服。'],
+  save_failed:            ['That could not be saved. Try again; if it keeps happening, tell support.', '保存失败,请重试;如反复出现请联系客服。'],
+  update_failed:          ['That could not be saved. Try again; if it keeps happening, tell support.', '保存失败,请重试;如反复出现请联系客服。'],
+  read_failed:            ['That could not be loaded. Try again.', '加载失败,请重试。'],
+  lookup_failed:          ['That could not be looked up. Try again.', '查询失败,请重试。'],
+  bad_response:           ['The server sent something this page could not read. Reload and try again.', '服务器返回了无法识别的内容,请刷新后重试。'],
+  non_json_response:      ['The server sent something this page could not read. Reload and try again.', '服务器返回了无法识别的内容,请刷新后重试。'],
+  request_failed:         ['That did not go through. Try again.', '请求未成功,请重试。'],
+  timeout:                ['That took too long and was stopped. Try again.', '请求超时已中止,请重试。'],
+  row_moved:              ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
+  cycle:                  ['That would make something contain itself.', '该操作会造成循环引用。'],
+};
+
+/* The sentence to SHOW for a failure. `code` is the server's stable error code;
+   `serverMessage` is its own human text when it sent one, which always wins —
+   it knows which SKU, whose product, how many are left. */
+function tdErrorText(code, serverMessage) {
+  if (serverMessage && String(serverMessage).trim()) return String(serverMessage).trim();
+  const entry = TD_ERR[code];
+  if (entry) return (typeof cuT === 'function') ? cuT(entry[0], entry[1]) : entry[0];
+  // Last resort: the code, in words. Not a sentence, but readable — and a code
+  // added tomorrow reads as words on the day it ships.
+  const words = String(code || '').replace(/_/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : '';
+}
+
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (opts.body && typeof opts.body !== 'string') {
@@ -87,7 +279,7 @@ async function api(path, opts = {}) {
     r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
   } catch (e) {
     if (e && e.name === 'AbortError') {
-      const t = new Error('request timed out');
+      const t = new Error(tdErrorText('timeout'));
       t.code = 'timeout';
       throw t;
     }
@@ -105,8 +297,19 @@ async function api(path, opts = {}) {
     // (no message), `err.message` stays equal to that code — so existing
     // `e.code === '…'` / legacy `e.message === '…'` branches keep matching.
     const code = j.error || ('request_failed (' + r.status + ')');
-    const err = new Error(j.message ? `${j.message} [${code}]` : code);
+    // WHAT THE MERCHANT READS (audit A-09). This used to be the bare code when
+    // the server sent no message, and 195 toast sites showed it: "not_found",
+    // "db_insert_failed", "kitchen_add_only", to a shopkeeper. tdErrorText
+    // turns it into a sentence, or at worst into words.
+    //
+    // 🔴 THE OLD NOTE HERE SAID `err.message` STAYS EQUAL TO THE CODE so legacy
+    // `e.message === '…'` branches keep matching. That is no longer true, and
+    // the five branches in the admin that relied on it were converted to
+    // `e.code` in the same commit — which is what they should always have
+    // compared. `err.code` is unchanged and is the thing to test against.
+    const err = new Error(tdErrorText(code, j.message));
     err.code = j.error || ('http_' + r.status);  // raw code for programmatic checks
+    err.rawMessage = j.message || null;          // the server's own words, unwrapped
     err.data = j;            // carry server detail (e.g. sku_taken `conflict`) to callers
     err.status = r.status;
     throw err;
