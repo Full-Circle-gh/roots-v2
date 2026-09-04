@@ -13087,6 +13087,15 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     position: sticky; top: 0; z-index: 20; background: var(--td-paper);
     margin: 0 calc(-1 * var(--s6)); padding: 16px var(--s6) 18px;
     transition: padding .18s var(--ease-out); }
+  /* THE SPACE THE CONDENSE GIVES BACK. The block is the first thing in the
+     document; losing ~130px of its own height took that much out of the
+     document too, so the rows below leapt up mid-scroll and, on a short tab,
+     the scroll range went with them — the scroller clamped to the top, the
+     block expanded, and it flickered for as long as the wheel moved. The exact
+     shrink is measured in onRecScroll() and handed back here as margin, which
+     holds the document's height without touching the block's own. Zero at
+     rest, so nothing is reserved for a state the block is not in. */
+  #tab-recipes-record .rcp-pin { margin-bottom: var(--rcp-pinshrink, 0px); }
   /* The head is no longer the thing that pins — the block is — so it gives up
      its own sticky, its own ground and its own edge-to-edge margins here. Its
      LAYOUT is untouched: the same row, the same gap, the same save-state and

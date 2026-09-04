@@ -719,6 +719,22 @@
   // condensed once it has gone a little further. There is no miniature of the
   // summary card any more: the card itself is inside the pinned block, so a
   // copy of its figures directly above it was the same numbers printed twice.
+  //
+  // THE CONDENSE MUST NOT MOVE THE PAGE UNDER THE HAND THAT IS SCROLLING IT.
+  // The block is the first thing in the document, so shrinking it by ~130px
+  // took 130px out of the document: every row below jumped up mid-gesture,
+  // and on a short tab (Details, with the card's own height in the block) it
+  // took the SCROLL RANGE with it — the scroller clamped back to the top, the
+  // block expanded, the wheel pushed past the threshold again, and the two
+  // states alternated for as long as the wheel was moving. That is the flicker.
+  // So the block gives back exactly what it loses, as margin below itself
+  // (--rcp-pinshrink), measured rather than assumed: the block's height is the
+  // recipe's — its warnings, its blocked-material sentence — never a constant.
+  // Margin cannot feed back into the height it is measured from, so there is no
+  // loop; the document keeps its height, and the rows keep their place.
+  let _pinTall = 0;   // the block's height at rest. Re-measured every time the
+                      // operator is back at the top, so a repaint that changes
+                      // the card (a warning appearing) cannot leave it stale.
   function onRecScroll() {
     const sc = document.getElementById('rcp-rec-scroll');
     const head = document.getElementById('rcp-rechead');
@@ -727,14 +743,24 @@
     // CONDENSE THE PINNED BLOCK once anything has gone under it. 8px of slack
     // rather than 0: a trackpad resting at the top of a list emits sub-pixel
     // scrolls, and a strip that condensed and expanded under a still hand
-    // would be worse than one that never moved at all.
+    // would be worse than one that never moved at all. It takes LESS to stay
+    // condensed (4px) than to become it (8px) — one threshold with a resting
+    // hand on it is a switch being asked to be in two states at once.
     const pin = document.getElementById('rcp-pin');
-    sc.classList.toggle('is-stuck', sc.scrollTop > 8);
+    const stuck = sc.classList.contains('is-stuck') ? sc.scrollTop > 4 : sc.scrollTop > 8;
+    sc.classList.toggle('is-stuck', stuck);
+    // MEASURED AFTER the class, so it is the height the block actually has now
+    // — mid-transition included, which is what keeps the give-back in step with
+    // the shrink while the padding is still tweening.
+    const h = (pin || head).offsetHeight;
+    if (!stuck) _pinTall = h;
+    sc.style.setProperty('--rcp-pinshrink', (stuck ? Math.max(0, _pinTall - h) : 0) + 'px');
     // The ingredient list's column header parks on the pinned block's bottom
     // edge, and the block changes height as it condenses — so the offset is
     // measured here, on the same events, rather than written as a constant that
-    // would be wrong in one of the two states.
-    sc.style.setProperty('--rcp-headh', (pin || head).offsetHeight + 'px');
+    // would be wrong in one of the two states. It is the height the block SHOWS,
+    // not the space it holds: the give-back above is document, not bar.
+    sc.style.setProperty('--rcp-headh', h + 'px');
   }
   function bindRecScroll() {
     if (_scrollBound) return;
