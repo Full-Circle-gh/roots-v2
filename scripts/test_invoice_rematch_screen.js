@@ -135,7 +135,11 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(path.join('/home/user/roots-v2', 'public', 'retail-admin', '16-purchasing.js'), 'utf8'),
+// Resolved from this file, not from an absolute path. It used to read
+// '/home/user/roots-v2/public/…', so the suite passed on exactly one machine
+// and threw ENOENT anywhere else — a CI runner, a second checkout, anybody
+// else's laptop. Nothing caught it because nothing ran these files.
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin', '16-purchasing.js'), 'utf8'),
                 sandbox, { filename: '16-purchasing.js' });
 
 let pass=0, fail=0;
