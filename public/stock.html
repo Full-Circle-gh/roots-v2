@@ -907,11 +907,31 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     });
   }
 
+  /* THE HEAD'S NAME FOLLOWS THE SCREEN, not the app. The counting list is the
+     mode the operator is in — Quick stock, or Add stock for the kitchen — and
+     that is what it has always said.
+
+     THE LAUNCHER IS NOT THAT SCREEN. It offers Pick, Receive, Ask the kitchen
+     and Ask for stock, it deliberately carries no counting tile at all (see THE
+     STOCK HOME), and it is reached from More → Operations → Transfers. Titling
+     it "Quick stock" named it after the one job it does not do, and after a door
+     nobody opened to get here: a row named Transfers opened a screen called
+     Quick stock. It takes the name of the door instead.
+
+     A launcher with no transfer tiles is a kitchen account's — refused all of
+     them at the route, holding only the queue — so it says what it holds. */
+  function headTitle() {
+    if (state.view === 'home') {
+      return rc.on === true ? t('Transfers', '调拨') : t('Kitchen queue', '厨房制作队列');
+    }
+    return state.mode === 'add' ? t('Add stock', '加库存') : t('Quick stock', '快速库存');
+  }
+
   // Fill every static label from the current language. Re-run on language flip.
   function applyLang() {
     var add = state.mode === 'add';
     document.documentElement.setAttribute('lang', lang === 'cn' ? 'zh' : 'en');
-    $('#hTitle').textContent = add ? t('Add stock', '加库存') : t('Quick stock', '快速库存');
+    $('#hTitle').textContent = headTitle();
     $('#q').placeholder = t('Search products', '搜索商品');
     $('#storeSheetH').textContent = t('Choose store', '选择门店');
     $('#acctWho').textContent = state.userName
@@ -2911,6 +2931,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     // The head carries the account button and the store name, both of which
     // belong on the launcher; the search band and its chips do not.
     $('#pageHead').hidden = false; $('#band').hidden = true;
+    $('#hTitle').textContent = headTitle();
     measureHead();
     $('#main').className = '';
     $('#main').innerHTML = homeHtml();
@@ -2930,6 +2951,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function homeGoCount() {
     state.view = 'list';
     $('#pageHead').hidden = false; $('#band').hidden = false;
+    $('#hTitle').textContent = headTitle();
     measureHead();
     render();
   }

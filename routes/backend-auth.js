@@ -617,8 +617,11 @@ router.get('/api/backend/me', (req, res) => {
   // offered to one of those would open onto a redirect.
   //
   // The label travels with it for the reason every pushed screen on the phone
-  // already follows: a back link says where it GOES, and the screen it returns
-  // to is titled with the role's own name.
+  // already follows: a back link says where it GOES. Which screen that is, and
+  // what it is called for THIS operator, is lib/app-home.js — the till is
+  // reached from More → Operations like everything else on this phone, and the
+  // role's name is the right title for that list only where the list is the
+  // home screen.
   let roleLayout = 'default', roleName = null, dashboardCards = null;
   let home = null, homeLabel = null;
   try {
@@ -629,18 +632,14 @@ router.get('/api/backend/me', (req, res) => {
       // body.pos-<roleLayout> CSS rules exactly as before this field existed.
       dashboardCards = rec.dashboardCards;
     }
-    if (!rec || !rec.stockAppOnly) {
-      home = '/m';
-      if (rec && (rec.nameEn || rec.nameCn)) {
-        homeLabel = { en: rec.nameEn || rec.nameCn, cn: rec.nameCn || rec.nameEn };
-      }
-    }
+    const back = require('../lib/app-home').backToTacet(rec, caps);
+    home = back.home; homeLabel = back.homeLabel;
   } catch (e) { /* unseeded tenant — 'default' is the pre-roles board */ }
   const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
             roleLayout, roleName, dashboardCards,
-            home,                   // '/m' when there is somewhere to go back to
+            home,                   // the tool list, when there is somewhere to go back to
             homeLabel,              // that screen's own name, so Back can say it
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             caps, scopeStores,

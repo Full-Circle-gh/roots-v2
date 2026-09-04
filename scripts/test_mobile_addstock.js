@@ -54,7 +54,9 @@ run('add stock', [
   ['an operator who recounts still leaves for the app that does that',
     "state.caps=['quickstock:recount'];state.tab='more';state.stack=[];render();", [
       ['named for the recount', `${body}.indexOf('Quick stock')>-1`],
-      ['and it is a departure', "moreRowsFlat().find(function(r){return r.key==='stockapp'}).href==='/stock'"],
+      // A departure, and a deep link: the row lands on the counting list rather
+    // than on the launcher that would offer it back (see #267).
+    ['and it is a departure', "moreRowsFlat().find(function(r){return r.key==='stockapp'}).href==='/stock?go=add'"],
     ]],
 
   ['the shelf total never reaches the screen', SHELF, [
