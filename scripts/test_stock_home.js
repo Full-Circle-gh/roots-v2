@@ -344,6 +344,22 @@ const CASES = {
     absent: ['Pull a run for the stores', 'Nothing to pick', 'Count a delivery in',
              'Nothing on its way', 'Ask for stock'] },
 
+  /* ── The deep link from /m ────────────────────────────────────────────────
+     A kitchen operator whose role puts them in the mobile backend never sees
+     this launcher: they see /m's More list, where "Add stock" is not a name
+     anybody reads as "the orders waiting for you". That list now carries a
+     Kitchen queue row pointing here with ?go=queue. */
+  'go-queue-opens-the-queue-not-the-launcher': { kitchenOnly: true, search: '?go=queue',
+    js: 'window.__done();',
+    expect: ['Kitchen queue', 'To make', 'RS-260904-002'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  // A LINK CANNOT GRANT ACCESS. Someone who was refused the queue and follows
+  // the same URL lands where they would have anyway — not on a refusal.
+  'go-queue-is-ignored-when-the-queue-was-refused': { deny: true, search: '?go=queue',
+    js: 'window.__done();',
+    expect: ['Quick stock', 'Hummus Asli'], absent: ['To make'] },
+
   'ask-cn': { stores: TWO, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-asopen]'", '250']),
     expect: ['申请补货', '由哪个地点发货?', '越秀店'] },
@@ -378,7 +394,11 @@ function main() {
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
       '});</scr' + 'ipt>';
-    const pre = c.pre ? '<script>' + c.pre + '</scr' + 'ipt>' : '';
+    // location.search on a file:// URL cannot be set by loading the page, so the
+    // query the app reads is stamped in before boot — same thing homeWanted()
+    // looks at, without needing a server.
+    const q = c.search ? '<script>try{history.replaceState(null,"","' + c.search + '")}catch(e){}</scr' + 'ipt>' : '';
+    const pre = q + (c.pre ? '<script>' + c.pre + '</scr' + 'ipt>' : '');
     const html = base.replace('</head>', pre + stub(c) + probe + '</head>');
     const file = path.join(dir, name + '.html');
     fs.writeFileSync(file, html);

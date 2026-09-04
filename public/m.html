@@ -2608,7 +2608,7 @@ const MORE_GROUPS=[
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -8302,6 +8302,13 @@ const ROUTE_CAP={
      Its gate is the named branch in canRoute() below. */
   stockadd:'quickstock:add',
   stockapp:['quickstock:add','quickstock:recount'],
+  /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
+     queue shipped as a tile on the Stock home, and a kitchen operator whose
+     role puts them in THIS app never sees that home — they see this list, and
+     "Add stock" is not a name anybody reads as "the orders waiting for you".
+     Gated on fulfil, the capability the queue's own writes are gated on, so the
+     row cannot appear for somebody whose first tap 403s. */
+  kitchenq:'restock:fulfil',
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
   sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
