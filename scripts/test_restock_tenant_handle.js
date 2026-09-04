@@ -32,11 +32,21 @@ const F = require('./test-support/tenant-fixture');
 const { ok, eq, section, done } = F.counters();
 const h = F.harness();                      // must come before any route require
 const notes = F.captureNotifications(h);
-F.stubAuth(h, { id: 7, username: 'wh', role: 'warehouse', display_name: 'WH' });
+// THE TACET REALM. Raising a request, picking and receiving are Tacet's work
+// now — a kitchen session is refused outright by tacetOnly — so this suite
+// drives the routes as the operator the screens actually sign in as.
+F.stubAuth(h, { id: 7, username: 'wh', role: 'staff', display_name: 'WH' },
+  { restock: 1, warehouse_inbox: 1, kitchen_inbox: 1 }, 'tacet');
 
 const express = require('express');
 const app = express();
 app.use(express.json());
+// The realm is read off the SESSION, not off the stub: requireRestockAccess
+// lives in routes/restock.js and asks `req.session.backendUserId` before it
+// hands over to requireRetailAdmin. Stubbing the latter is not enough on its
+// own — without this the suite presents as a kitchen user and is refused, which
+// is the behaviour it would be testing by accident rather than on purpose.
+app.use((req, _res, next) => { req.session = { backendUserId: 7 }; next(); });
 app.use(require(path.join(h.REPO, 'routes/restock.js')));
 const server = app.listen(0);
 const base = () => 'http://127.0.0.1:' + server.address().port;

@@ -14,6 +14,9 @@ const inventory = require('../lib/inventory');
 // isolation is switched on.
 const { tdb } = require('../lib/tenant-db');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+// Lazily, and deliberately: routes/retail.js requires this file's siblings, so
+// a top-level require here would close a cycle at load time.
+const requireRetailAdmin = (req, res, next) => require('./retail').requireRetailAdmin(req, res, next);
 const router = express.Router();
 
 // Web Push fan-out for restock state changes — no-op until VAPID keys
@@ -541,11 +544,68 @@ function _applyReceipt(orderId, actorUser) {
 // the warehouse-side (warehouse_inbox perm). Reads and warehouse-side
 // writes (status transition, item check-off, wh_notes) accept either.
 // Admin always passes.
-function requireRestockOrInbox(req, res, next) {
-  if (req.user?.role === 'admin') return next();
-  const p = req.permissions || {};
-  if (p.restock || p.warehouse_inbox || p.kitchen_inbox) return next();
-  return res.status(403).json({ error: 'forbidden' });
+/* THE RESTOCK ROUTES BELONG TO TACET, AND THE KITCHEN APP KEEPS ONLY ITS INBOX.
+ *
+ * These endpoints were reachable by ONE identity: the kitchen `users` realm
+ * (session.userId). Tacet operators are `tenant_users` (session.backendUserId),
+ * a deliberately separate key — see routes/backend-auth.js — so every transfer
+ * screen 403'd on the Tacet host and worked only on the kitchen one. That was
+ * never a decision about where the feature belonged; it was the only realm that
+ * could reach the API, and the screens followed it there.
+ *
+ * A Tacet operator now passes through requireRetailAdmin, exactly as every
+ * /api/retail-admin/* route does — the same tenant scoping, the same tdb()
+ * context, the same RBAC choke point. The three capabilities are mapped in
+ * lib/cap-routes.js, so they honour the tenant's own rbac_enforce switch and the
+ * owner bypass rather than inventing a second permission system beside it.
+ *
+ * THE KITCHEN REALM IS NARROWED, NOT REMOVED, AND THE DIFFERENCE MATTERS.
+ * public/kitchen.html is a kitchen-realm client of five of these endpoints — it
+ * IS the kitchen's inbox, the thing an "ask the kitchen" request is sent to.
+ * Refusing that realm outright would have left every kitchen request landing
+ * somewhere nobody can open, so the kitchen keeps exactly what its own app
+ * needs: kitchen-direction orders, and nothing else. Store and warehouse work —
+ * raising a request, picking, dispatching, receiving — is Tacet's alone.
+ */
+function requireRestockAccess(req, res, next) {
+  if (req.session && req.session.backendUserId) {
+    req.restockRealm = 'tacet';
+    return requireRetailAdmin(req, res, next);
+  }
+  return requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    const p = req.permissions || {};
+    if (req.user?.role !== 'admin' && !p.restock && !p.warehouse_inbox && !p.kitchen_inbox) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    req.restockRealm = 'kitchen';
+    next();
+  });
+}
+
+// A kitchen-realm session may only touch KITCHEN-DIRECTION orders. Applied to
+// the routes that name one; the list route narrows itself instead (below).
+function kitchenRealmOwnsOrder(req, res, next) {
+  if (req.restockRealm !== 'kitchen') return next();
+  const o = tdb().prepare('SELECT from_role, to_role FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Not found · 未找到' });
+  if ((o.to_role || 'warehouse') !== 'kitchen' && (o.from_role || 'store') !== 'kitchen') {
+    return res.status(403).json({
+      error: 'This is a transfer between locations, not a kitchen request. Open it in Tacet · 这是门店之间的调拨,请在 Tacet 中处理。',
+    });
+  }
+  next();
+}
+
+// Store and warehouse work is Tacet's. A kitchen session reaching one of these
+// is the kitchen app asking for something that is not its job.
+function tacetOnly(req, res, next) {
+  if (req.restockRealm === 'kitchen') {
+    return res.status(403).json({
+      error: 'Transfers are managed in Tacet · 调拨请在 Tacet 中处理。',
+    });
+  }
+  next();
 }
 // Decide which side of the two-sided workflow this user can ORIGINATE
 // from. Three flows are supported:
@@ -582,7 +642,17 @@ function _inferDirection(req) {
   // store→warehouse. Only `warehouse` and `admin` originate from the
   // warehouse side and can name a destination.
   const role = req.user?.role || '';
-  const isWarehouseOrigin = (role === 'warehouse' || role === 'admin');
+  // A TACET OPERATOR IS ALWAYS WAREHOUSE-ORIGIN. The role names below are the
+  // KITCHEN realm's vocabulary — `warehouse`, `admin` on users — and a Tacet
+  // operator's role comes from tenant_users, where the words are owner / staff /
+  // store_stock and none of them match. Without this line an operator naming
+  // to_role:'kitchen' would have it silently ignored and the request would go to
+  // the warehouse instead: the "ask the kitchen" tile would send, report success
+  // and reach the wrong inbox. Their authority to originate is established by
+  // the realm and the restock:request capability, not by a word on a row in a
+  // different table.
+  const isWarehouseOrigin = req.restockRealm === 'tacet'
+    || role === 'warehouse' || role === 'admin';
   const explicit = (req.body && req.body.to_role) ? String(req.body.to_role) : null;
   if (isWarehouseOrigin) {
     if (explicit === 'store')   return { from_role: 'warehouse', to_role: 'store'   };
@@ -662,7 +732,7 @@ function buildRestockSuggestions(daysWindow = 60) {
   return out;
 }
 
-router.get('/api/restock/suggest', requireAuth, requirePermission('restock'), (req, res) => {
+router.get('/api/restock/suggest', requireRestockAccess, tacetOnly, (req, res) => {
   const days = parseInt(req.query.days) || 60;
   res.json({ success: true, data: buildRestockSuggestions(days) });
 });
@@ -675,7 +745,19 @@ function genRsNumber() {
 }
 
 // ── Orders list (with item count + progress) ────────────────────────────────
-router.get('/api/restock', requireAuth, requireRestockOrInbox, (req, res) => {
+router.get('/api/restock', requireRestockAccess, (req, res) => {
+  // A KITCHEN SESSION MAY LIST ITS OWN INBOX AND NOTHING ELSE, and the refusal
+  // is what keeps the Stock home off the kitchen host. public/stock.html probes
+  // this route with `to_role=store`; a 403 tells it there is one job here and it
+  // lands on the counting list, exactly as it did before the launcher existed.
+  // Without this the probe would succeed, the launcher would paint on the wrong
+  // host, and every tile on it would fail at the first write — a door that opens
+  // onto a wall. public/kitchen.html always asks for to_role=kitchen.
+  if (req.restockRealm === 'kitchen' && req.query.to_role !== 'kitchen') {
+    return res.status(403).json({
+      error: 'Transfers are managed in Tacet · 调拨请在 Tacet 中处理。',
+    });
+  }
   const { status, tab, to_role, from_role } = req.query; // tab: active|history|all
   // Auto-archive sweep: on every `tab=active` fetch, soft-delete any
   // active (non-prepared/delivered/draft) order whose creation day in
@@ -733,7 +815,7 @@ router.get('/api/restock', requireAuth, requireRestockOrInbox, (req, res) => {
 });
 
 // ── Single order with items ─────────────────────────────────────────────────
-router.get('/api/restock/:id', requireAuth, requireRestockOrInbox, (req, res) => {
+router.get('/api/restock/:id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const items = tdb().prepare('SELECT * FROM restock_items WHERE restock_id = ? ORDER BY id').all(order.id);
@@ -746,12 +828,7 @@ router.get('/api/restock/:id', requireAuth, requireRestockOrInbox, (req, res) =>
 // direction from perms — see _inferDirection — so a warehouse user
 // hitting "Send" doesn't need a destination picker; their request
 // always goes to the kitchen.
-router.post('/api/restock', requireAuth, (req, res, next) => {
-  if (req.user?.role === 'admin') return next();
-  const p = req.permissions || {};
-  if (p.restock || p.warehouse_inbox) return next();
-  return res.status(403).json({ error: 'forbidden' });
-}, (req, res) => {
+router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
   const { date, store_name, store_cn, notes, items, status, purpose } = req.body;
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'At least one item required · 至少需要一项' });
 
@@ -843,7 +920,7 @@ router.post('/api/restock', requireAuth, (req, res, next) => {
 });
 
 // ── Update order (store can edit drafts; both sides can edit notes) ────────
-router.put('/api/restock/:id', requireAuth, requireRestockOrInbox, (req, res) => {
+router.put('/api/restock/:id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
   const conn = tdb();
   const order = conn.prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
@@ -896,7 +973,7 @@ router.put('/api/restock/:id', requireAuth, requireRestockOrInbox, (req, res) =>
 });
 
 // ── Status transition (sent / received / prepared / delivered) ─────────────
-router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, res) => {
+router.put('/api/restock/:id/status', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const { status } = req.body;
@@ -955,7 +1032,7 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
 // what was missing is a door, and this is the door.
 //
 // THE PICKER OPENS IT HIMSELF. Same permission as the dispatch he already had
-// (requireRestockOrInbox — the identical middleware the status endpoint uses),
+// (requireRestockAccess — the identical middleware the status endpoint uses),
 // no manager, no unlock, no second person. The transaction rolled back cleanly
 // and nothing is half-done, so the alternative is a warehouse worker standing
 // with cold boxes hunting for someone with a password.
@@ -971,7 +1048,7 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
 // the second call meets dispatched_at and reports that the goods already left,
 // as a success rather than an error — because from the picker's side it IS one,
 // and an error would send him looking for a problem that does not exist.
-router.post('/api/restock/:id/retry-dispatch', requireAuth, requireRestockOrInbox, (req, res) => {
+router.post('/api/restock/:id/retry-dispatch', requireRestockAccess, tacetOnly, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
 
@@ -1026,7 +1103,7 @@ router.post('/api/restock/:id/retry-dispatch', requireAuth, requireRestockOrInbo
 });
 
 // ── Mark item prepared (warehouse side) ────────────────────────────────────
-router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox, (req, res) => {
+router.put('/api/restock/:id/item/:item_id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
   const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found · 项目未找到' });
   // ONCE THE GOODS HAVE LEFT, THE LINES ARE FROZEN.
@@ -1078,7 +1155,7 @@ router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox,
 //
 // NULL AND ZERO: passing 0 counts the line as "none arrived". Omitting the line
 // leaves it NULL — nobody looked. The endpoint will not settle around a NULL.
-router.put('/api/restock/:id/receive', requireAuth, requireRestockOrInbox, (req, res) => {
+router.put('/api/restock/:id/receive', requireRestockAccess, tacetOnly, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
 
@@ -1176,7 +1253,7 @@ function inTransitByProduct(conn = tdb()) {
   } catch (e) { return []; }
 }
 
-router.get('/api/restock/in-transit', requireAuth, requireRestockOrInbox, (req, res) => {
+router.get('/api/restock/in-transit', requireRestockAccess, tacetOnly, (req, res) => {
   res.json({ success: true, data: inTransitByProduct() });
 });
 
@@ -1185,7 +1262,7 @@ router.get('/api/restock/in-transit', requireAuth, requireRestockOrInbox, (req, 
 // stamps archived_at = now; { archived: false } clears it. The row is
 // preserved either way — this only flips the visibility flag the list
 // endpoint filters on.
-router.put('/api/restock/:id/archive', requireAuth, requireRestockOrInbox, (req, res) => {
+router.put('/api/restock/:id/archive', requireRestockAccess, tacetOnly, (req, res) => {
   const order = tdb().prepare('SELECT id, archived_at FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const wantArchived = req.body?.archived !== false;  // default true if omitted
@@ -1200,7 +1277,7 @@ router.put('/api/restock/:id/archive', requireAuth, requireRestockOrInbox, (req,
 // One-click cleanup of an entire inbox tab. Body { tab: 'active'|'history' }
 // flips archived_at for every non-archived row matching that tab. Soft-
 // delete only — rows are preserved with a timestamp, no destruction.
-router.post('/api/restock/archive-bulk', requireAuth, requireRestockOrInbox, (req, res) => {
+router.post('/api/restock/archive-bulk', requireRestockAccess, tacetOnly, (req, res) => {
   const tab = req.body?.tab;
   if (tab !== 'active' && tab !== 'history') {
     return res.status(400).json({ error: 'tab must be "active" or "history"' });
