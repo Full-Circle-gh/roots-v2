@@ -658,7 +658,7 @@ function copyText(t){
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return; state.stack.push({route,title:s.title}); render(); }
-function pop(){ state.stack.pop(); render(); }
+function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -700,7 +700,7 @@ reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
-reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; state.stack=[]; state.tab=t; state.detailId=null;
+reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
      Stamped before the render so the dot goes out on the tap rather than on
      the next poll fifteen seconds later. */
@@ -760,8 +760,8 @@ reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
 reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
-reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
-reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
+reg('ordersGo', f=>{ forgetPushed(); state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
+reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; forgetPushed(); state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
 reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
 reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
@@ -8416,10 +8416,69 @@ function bootHold(){
 }
 /* WHICH SCREEN THIS IS, for the scroll below. The tab plus the pushed stack:
    answering a line, opening a sheet or a toast landing is the SAME screen and
-   must keep its place; a push, a pop or a change of tab is a different one and
-   starts at the top. */
+   holds its place; a push or a change of tab is a DIFFERENT one, which starts
+   at the top the first time it is opened and comes back to where it was left
+   every time after. */
 function screenKey(){ return state.tab+'|'+state.stack.map(f=>f.route).join('>'); }
+/* WHERE EACH SCREEN WAS LEFT, one entry per screenKey — not one position for
+   whichever screen was painted last, which is all this used to hold. Home is
+   where that showed: the Quick actions sit at the BOTTOM of a long board, so
+   reaching one is a scroll to the end of Home, and the tap that opens
+   Receiving or Waste replaced the single remembered position with the pushed
+   screen's own. Back therefore had nothing to return to and Home opened at the
+   top — the operator scrolled the whole board again for every shortcut they
+   took, which is the exact cost the note below was written to remove.
+   A map keeps the position of the screen underneath while the pushed one is
+   open, so Back puts Home back exactly where it was, and the same holds for a
+   tab left and returned to. */
+const _scrollMem=Object.create(null);
 let _scrollKey='';
+/* A screen that is CLOSED forgets where it was. Pushing Receiving a second
+   time is OPENING it, not returning to it, so it starts at the top the way it
+   did the first time; only the screen being returned to keeps its place.
+   NOTED, not deleted, because the render that follows reads the closing
+   screen's position off the DOM one last time and would write it straight back
+   in. The note is spent inside that render, after the read. */
+let _forget=[];
+function forgetScroll(){ _forget.push(screenKey()); }
+/* And everything pushed under this tab, dropped in one go: switching tabs
+   throws the stack away, so the positions inside it go with it. The tab's own
+   root is NOT one of them — that is the screen being returned to. */
+function forgetPushed(){ const p=state.tab+'|', here=screenKey();
+  for(const k in _scrollMem){ if(k.length>p.length&&k.indexOf(p)===0) _forget.push(k); }
+  if(here!==p) _forget.push(here); }
+/* Counter till and Quick Stock are separate pages, so coming back from one is
+   a fresh LOAD of this app — the map above went with the old document, and the
+   operator arrived back at the top of Home for the same reason as before. The
+   one position that matters rides across in sessionStorage: this tab only,
+   gone when the tab is, and read exactly once, here, on the way in.
+   It is spent the moment it lands (or the moment the operator touches the
+   screen, or after the few seconds a boot takes), so it can never yank a list
+   somebody is already reading. */
+const M_SCROLL_KEY='tacet-m-scroll';
+function bootScrollRead(){
+  try{
+    const raw=sessionStorage.getItem(M_SCROLL_KEY);
+    // Taken as it is read: a position is good for ONE return, and a line left
+    // in storage would move a screen the operator opened fresh an hour later.
+    sessionStorage.removeItem(M_SCROLL_KEY);
+    const v=raw?JSON.parse(raw):null;
+    return (v&&typeof v.key==='string'&&v.top>0) ? {key:v.key, top:v.top, until:Date.now()+8000} : null;
+  }catch(e){ return null; }
+}
+let _bootScroll=bootScrollRead();
+document.addEventListener('pointerdown',()=>{ _bootScroll=null; },true);
+/* Written on the way OUT, whatever takes the app out — a shortcut to /till, a
+   mirror link, a reload. pagehide rather than unload: it is the one the phone
+   browsers actually fire. */
+function saveScrollForReturn(){
+  try{
+    const c=document.getElementById('content');
+    if(c&&c.scrollTop>0) sessionStorage.setItem(M_SCROLL_KEY,JSON.stringify({key:screenKey(),top:c.scrollTop}));
+    else sessionStorage.removeItem(M_SCROLL_KEY);
+  }catch(e){}
+}
+window.addEventListener('pagehide',saveScrollForReturn);
 function render(){
   /* THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
      one innerHTML, which destroys the scroller and takes its position with it.
@@ -8428,12 +8487,20 @@ function render(){
      down to where they were. The file already knew the cost — the orders poll
      deliberately does not repaint for exactly this reason — but nothing put the
      position back.
-     Read BEFORE the paint, restored after it, and only when the screen is the
-     same one: a pushed screen that inherited the last screen's scroll would
-     open halfway down itself. */
+     Read BEFORE the paint under the key of the screen that is on it, restored
+     after it under the key of the screen about to be: a pushed screen that
+     inherited the last screen's scroll would open halfway down itself, and a
+     screen returned to that inherited nothing would open at the top. */
   const _sc=document.getElementById('content');
-  const _keep=(_sc&&screenKey()===_scrollKey)?_sc.scrollTop:0;
-  _scrollKey=screenKey();
+  if(_sc&&_scrollKey) _scrollMem[_scrollKey]=_sc.scrollTop;
+  if(_forget.length){ _forget.forEach(k=>{ delete _scrollMem[k]; }); _forget=[]; }
+  const _skey=screenKey();
+  _scrollKey=_skey;
+  let _keep=_scrollMem[_skey]||0;
+  if(_bootScroll){
+    if(_bootScroll.key===_skey&&Date.now()<_bootScroll.until) _keep=Math.max(_keep,_bootScroll.top);
+    else _bootScroll=null;   // a different screen, or too late to be a return
+  }
   /* A SHEET has its own scroller, and #content's position says nothing about
      it. The waste form is the first sheet here tall enough to scroll and busy
      enough to repaint on every tap, so it is the first to need this. Both
@@ -8474,7 +8541,15 @@ function render(){
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
-  if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
+  if(_keep){ const c=document.getElementById('content');
+    if(c){ c.scrollTop=_keep;
+      // What the scroller ACCEPTED, not what was asked of it: a screen still
+      // filling in is shorter than it will be, and remembering the number it
+      // clamped to would lose the position for good.
+      _scrollMem[_skey]=c.scrollTop;
+      // A return that landed is spent; one that fell short waits for the paint
+      // that makes the board tall enough, inside its own few seconds.
+      if(_bootScroll&&c.scrollTop>=_bootScroll.top) _bootScroll=null; } }
   if(_wkeep){ const b=document.getElementById('mWstBody'); if(b) b.scrollTop=_wkeep; }
   if(_qkeep){ const b=document.getElementById('mQuickBody'); if(b) b.scrollTop=_qkeep; }
   wireDrag();
@@ -8610,7 +8685,9 @@ function layers(){
   const L=[];
   // state.stack.pop(), not pop(): the helper renders, and the caller here is
   // about to render anyway. One repaint per Back press.
-  for(let i=0;i<state.stack.length;i++) L.push(()=>{ state.stack.pop(); });
+  // forgetScroll() for the same reason pop() calls it: Back CLOSES this screen,
+  // and the one underneath is the one with a place to go back to.
+  for(let i=0;i<state.stack.length;i++) L.push(()=>{ forgetScroll(); state.stack.pop(); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
