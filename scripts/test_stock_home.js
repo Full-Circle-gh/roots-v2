@@ -65,6 +65,21 @@ const KITCHEN_REQ = {
 };
 const ROWS = [{ product_id: 7, name_en: 'Hummus Asli', name_cn: '鹰嘴豆泥', sku: '1-10', physical_qty: 11, restock_target: 5 }];
 
+/* A request whose SECOND line this shelf has no product for — the case the
+   handoff must show rather than swallow. A kitchen request carries NO
+   product_id (akSend sends null on purpose), so the only join is the SKU, and a
+   SKU the store catalogue has never heard of is a line that can never be added
+   here. Dropping it silently would be a product that quietly never reaches the
+   shelf, which is the failure this screen exists to end. */
+const KITCHEN_REQ2 = {
+  id: 92, rs_number: 'RS-260904-003', status: 'received', from_role: 'warehouse', to_role: 'kitchen',
+  purpose: 'order', goods_state: 'none', item_count: 2,
+  items: [
+    { id: 921, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 4 },
+    { id: 922, product_id: null, product_name: 'Ghost Product', product_cn: '幽灵商品', sku: '9-999', qty_requested: 2 },
+  ],
+};
+
 // TWO LOCATIONS, which is the whole subject of the "Ask for stock" cases below.
 // Roots really has these two, and the second one is what makes the screen mean
 // anything: with one store there is nobody to ask.
@@ -91,18 +106,35 @@ function stub(o) {
   const orders = [];
   if (!o.noRun) orders.push(RUN);
   if (!o.noInbound) orders.push(INBOUND);
+  const ctx = Object.assign({}, CTX);
+  if (o.stores) ctx.stores = o.stores;
+  // 'add' is the kitchen's mode — the one the server sends an operator holding
+  // quickstock:add. The handoff after "Mark as made" exists only for them.
+  if (o.mode) ctx.mode = o.mode;
+  const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
   return '<script>\n' +
-    'window.__e=[];window.__calls=[];\n' +
+    'window.__e=[];window.__calls=[];window.__patch=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
-    'var CTX=' + JSON.stringify(o.stores ? Object.assign({}, CTX, { stores: o.stores }) : CTX) +
+    'var CTX=' + JSON.stringify(ctx) +
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
-    'var KITCHEN=' + JSON.stringify(o.noQueue ? [] : [KITCHEN_REQ]) + ';\n' +
+    'var KITCHEN=' + JSON.stringify(queue) + ';\n' +
+    'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
     'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
+    // The one write Add stock has ever done, and the one the handoff reuses.
+    // Recorded rather than merely answered: what matters is that a delta went
+    // out per line, carrying the request number, and that NOTHING went out
+    // before the operator pressed Add.
+    '  else if(/\\/stores\\/\\d+\\/stock\\/\\d+$/.test(url)){\n' +
+    '    var pm=url.match(/stock\\/(\\d+)$/);\n' +
+    '    window.__patch.push(Object.assign({product_id:Number(pm[1])},JSON.parse(opts.body||"{}")));\n' +
+    '    if(PATCHFAIL) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"nope"})}});\n' +
+    '    body={success:true,data:{}};\n' +
+    '  }\n' +
     '  else if(url.indexOf("/api/retail-admin/products")===0){\n' +
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    body={success:true,data:[{id:7,name_en:"Hummus Asli",name_cn:"鹰嘴豆泥",sku:"1-10",status:"Active"}]};\n' +
@@ -114,7 +146,12 @@ function stub(o) {
     // rejection with no query behind it, so it comes back FASTER than the two
     // 200s beside it — this stub answers the kitchen list on a delay to make
     // that ordering deterministic rather than lucky.
-    '    if(KONLY && url.indexOf("to_role=kitchen")<0)\n' +
+    // ...but only on the LIST. A kitchen-scoped session may read and advance an
+    // order addressed to the kitchen — that is what kitchenScopedOrder is for
+    // (routes/restock.js) — and this stub used to 403 every /api/restock/:id,
+    // so a kitchen operator could open the queue here and never open a request
+    // in it. The confinement is on which orders they see, not on seeing one.
+    '    if(KONLY && url.indexOf("to_role=kitchen")<0 && !/\\/api\\/restock\\/\\d+/.test(url))\n' +
     '      return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
     '      body={success:true,id:99,rs_number:"RS-260904-001"}; }\n' +
@@ -215,10 +252,105 @@ const CASES = {
   'queue-opens-and-shows-the-ask': { js: seq(["'[data-kqopen-home]'", '250']),
     expect: ['Kitchen queue', 'To make', 'Done', 'RS-260904-002', 'For the shelf'] },
 
+  /* THE NOTE USED TO NAME A MECHANISM THAT DOES NOT EXIST. It said stock
+     changes "when the batch is logged", pointing at POST /api/production —
+     which writes production_batches and touches no shelf at all (routes/
+     production.js has no inventory import; its own header says the table is "a
+     log with no path to inventory"). So the single sentence explaining where
+     the stock went named the one step that has never moved any, and the step
+     that DOES — Add stock — went unmentioned. */
   'queue-detail-says-stock-does-not-move': {
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250']),
     expect: ['RS-260904-002', 'Hummus Asli', 'Start making',
-             'Stock changes when the batch is logged, not here'] },
+             'Stock changes when you add what you made, not here'],
+    absent: ['when the batch is logged'] },
+
+  /* ── What you made ───────────────────────────────────────────────────────
+     Marking a kitchen request made closes it and moves NO stock — the server
+     skips the transfer by design (_transferContext → 'kitchen_direction'). The
+     shelf was then filled from memory on a separate screen, one product at a
+     time, with nothing checking it happened. These cases pin the handoff that
+     closes that gap, and the two properties that make it safe: the quantities
+     are a proposal, and nothing is written until somebody says so. */
+
+  // Two taps: sent → received → prepared. The second one closes the request,
+  // and the lines land on the screen that adds them.
+  'made-hands-the-lines-to-add-stock': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['Add what you made', 'RS-260904-002', 'Marked made — the shelf has not changed yet',
+             'Hummus Asli', '1-10', '+6', '6 units'],
+    checkStatus: (st) => (st && st.status === 'prepared') ? null
+      : `the request did not close (status ${st && st.status})`,
+    // THE PROPOSAL IS NOT A WRITE. Prefilling without this guarantee would add
+    // stock nobody confirmed — the exact thing marking-made must not do.
+    checkPatch: (p) => p.length ? `${p.length} write(s) went out before Add was pressed` : null },
+
+  // The quantity is what was ASKED for, quoted back — not what must be added.
+  // Four asked, three made, three added, and the row says why it differs.
+  'the-amount-can-be-corrected-down': { mode: 'add', kitchenOnly: true, twoLine: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"92\"]'", '250',
+             "'[data-kqnext]'", '400', "'[data-hddec=\"0\"]'", '150']),
+    expect: ['+3', '4 asked for', '3 units'] },
+
+  // A line this shelf has no product for is SHOWN, greyed, saying so. It cannot
+  // carry a product_id (a kitchen request never does), so an unknown SKU is the
+  // end of the road — but a dropped row is a product that silently never lands.
+  'an-unmatched-line-is-shown-not-dropped': { mode: 'add', kitchenOnly: true, twoLine: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"92\"]'", '250', "'[data-kqnext]'", '400']),
+    expect: ['Ghost Product', 'Not on this store’s list', 'not on this store’s product list'],
+    // Only the matched line is offered: 4 of the 6 units asked for across both.
+    check: (out) => /data-patch="\[\]"/.test(out) ? null : 'a write went out unprompted' },
+
+  // The write itself: one delta per line, additive, tagged with the request so
+  // the ledger can answer where the units came from. `physical_qty` here would
+  // simply be refused — the server answers kitchen_add_only.
+  'add-writes-one-delta-per-line': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
+    expect: ['On the shelf', '6 units added', 'The request is closed'],
+    checkPatch: (p) => {
+      if (p.length !== 1) return `${p.length} writes, expected 1`;
+      const w = p[0];
+      if (w.product_id !== 7) return `wrote product ${w.product_id}, expected the SKU match (7)`;
+      if (w.delta !== 6) return `wrote delta ${w.delta}, expected 6`;
+      if ('physical_qty' in w) return 'sent an absolute count, which the server refuses from a kitchen';
+      if (w.reason !== 'kitchen_add') return `wrote reason ${w.reason}, expected kitchen_add`;
+      if (w.note !== 'RS-260904-002') return `note was ${w.note}, expected the request number`;
+      return null;
+    } },
+
+  // Skip is a real answer, and it says what it costs rather than implying the
+  // shelf is now right.
+  'skip-writes-nothing-and-says-so': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['Skip — nothing added', 'Skipping leaves the shelf as it is'],
+    checkPatch: (p) => p.length ? 'a write went out on a screen nobody confirmed' : null },
+
+  // A FAILED WRITE HANDS THE AMOUNT BACK, in the row — the rule Add stock
+  // already keeps. A batch that vanishes at the door is the one failure nobody
+  // forgives, and the retry must not be able to add it twice.
+  'a-failed-line-says-so-and-keeps-its-amount': { mode: 'add', kitchenOnly: true, patchFail: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
+    expect: ['Did not go on', 'Nothing was added twice', '+6'],
+    absent: ['On the shelf'] },
+
+  // AN OPERATOR WHO RECOUNTS IS NOT HANDED THIS. Add stock is the kitchen's
+  // mode; a warehouse recount sets absolute counts and has no business being
+  // sent to a screen that adds. They land back on the queue, as before.
+  'a-recount-operator-gets-the-queue-back': { kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['Kitchen queue', 'To make'],
+    absent: ['Add what you made'] },
+
+  'made-hands-over-in-cn': { mode: 'add', kitchenOnly: true,
+    pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['登记已制作', '已标记完成 — 库存尚未变动', '加库存', '跳过 — 不入库'] },
 
   'queue-advances-sent-to-received': {
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250', "'[data-kqnext]'", '300']),
@@ -477,6 +609,7 @@ function main() {
       'document.body.setAttribute("data-rowtext",_stack(".rc-nm",".rc-cap"));' +
       'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
+      'document.body.setAttribute("data-patch",JSON.stringify(window.__patch||[]));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
@@ -511,12 +644,23 @@ function main() {
       const posted = JSON.parse(dec((out.match(/data-post="([^"]*)"/) || [])[1] || 'null'));
       const p = c.checkPost(posted); if (p) failures.push([name, p]);
     }
+    if (c.checkPatch) {
+      const patched = JSON.parse(dec((out.match(/data-patch="([^"]*)"/) || [])[1] || '[]'));
+      const p = c.checkPatch(patched); if (p) failures.push([name, p]);
+    }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
       /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/restock\/\d+\/status$/,
-      /^\/api\/retail-admin\/products$/];
+      /^\/api\/retail-admin\/products$/, /^\/api\/retail-admin\/stores\/\d+\/stock\/\d+$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
+
+    // What the screen ACTUALLY said, on demand. A missing-string failure names
+    // the string it wanted and nothing about the screen it got, which is the
+    // slowest kind of red to read.
+    if (process.env.STOCK_HOME_SHOW && (process.env.STOCK_HOME_SHOW === '1' || process.env.STOCK_HOME_SHOW === name)) {
+      console.log(`\n── ${name}\n${seen}\n   patch=${dec((out.match(/data-patch="([^"]*)"/) || [])[1] || '[]')}`);
+    }
   }
 
   if (failures.length) {

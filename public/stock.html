@@ -3518,13 +3518,27 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   // received → we have seen it. prepared → it is made, and that closes it.
+  //
+  // CLOSING IT IS NOT PUTTING IT ON THE SHELF, and 'prepared' is where those two
+  // part company: the server moves no stock for a kitchen request by design, so
+  // the shelf is still short at the moment this request stops existing. So the
+  // lines are carried straight to the screen that adds them (see WHAT YOU MADE).
+  // The order is read BEFORE the reload clears it — it is the only copy of what
+  // was asked for, and kqLoad drops it.
   function kqAdvance(to) {
     if (kq.busy || !kq.order) return;
     kq.busy = true; kq.err = ''; kqRender();
     rcFetch('/api/restock/' + kq.order.id + '/status', { method: 'PUT', body: { status: to } })
       .then(function () {
         kq.busy = false; kq.order.status = to;
-        if (to === 'prepared') { kq.order = null; kqLoad(); }
+        if (to === 'prepared') {
+          var made = kq.order;
+          kq.order = null; kqLoad();
+          // Falls through to the queue when there is nothing to hand over — an
+          // operator who recounts rather than adds, or lines this shelf has no
+          // product for. hdStart says which by returning false.
+          if (hdStart(made)) return;
+        }
         kqRender();
       })
       .catch(function (e) {
@@ -3601,9 +3615,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       }).join('') + '<div class="rc-hr"></div></div>' +
       // Said out loud, because a tick that closes a request looks like a tick
       // that fills a shelf, and it is not one.
+      //
+      // IT USED TO NAME THE WRONG MECHANISM. "Stock changes when the batch is
+      // logged" pointed at POST /api/production, which writes production_batches
+      // and nothing else — no inventory path exists from it (routes/production.js
+      // says so in its own header). So the one sentence explaining where the
+      // stock went named a step that has never moved any. It now names the step
+      // that does, which is the screen the next tap opens.
       '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
-        t('Marking this made closes the request. Stock changes when the batch is logged, not here.',
-          '标记完成即关闭该申请。库存在登记生产批次时才会变动。') + '</div></div>' +
+        (next === 'prepared'
+          ? t('Marking this made closes the request. Next it asks you to add what you made — that is what changes the shelf.',
+              '标记完成即关闭该申请。随后会让你登记实际制作数量 — 库存在那一步才会变动。')
+          : t('Marking this made closes the request. Stock changes when you add what you made, not here.',
+              '标记完成即关闭该申请。库存在登记实际制作数量时才会变动,不在此处。')) + '</div></div>' +
       '<div class="rc-foot" style="background:transparent;border:none">' +
         '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
         (next
@@ -3633,6 +3657,281 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     each('[data-kqnext]', function (b) {
       b.onclick = function () { kqAdvance(b.getAttribute('data-kqnext')); };
     });
+  }
+
+  /* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
+     The step between closing a request and the shelf being right, and until now
+     it was a step nobody was asked to take.
+
+     THE GAP. Marking a kitchen request made moves no stock and is not supposed
+     to (routes/restock.js _transferContext returns `kitchen_direction` and
+     _applyDispatch does nothing). Stock goes up when the kitchen ADDS what it
+     made, on the Add stock screen, one product at a time, from memory. So the
+     queue closed a request that named three products and three quantities, and
+     then asked the operator to find those same three products again in a list of
+     two hundred. Nothing checked that they did. Nothing said what would happen
+     if they did not. The note on the queue screen said stock changes "when the
+     batch is logged" — a mechanism that does not exist: POST /api/production
+     writes production_batches and touches no shelf at all.
+
+     WHAT THIS IS. The request's own lines, carried straight onto a screen that
+     adds them, with the quantities already filled in. One tap for the normal
+     case; the steppers are there for the case where four were asked for and
+     three got made. It is the SAME write Add stock has always done — one delta
+     per product, reason `kitchen_add` — so the ledger, the channel re-sync and
+     the server's add-only refusal are all unchanged.
+
+     THE PREFILL IS A PROPOSAL, NOT A DEFAULT, and that is the whole reason it
+     asks. §39's no-prefill rule is about not putting words in someone's mouth —
+     a purpose picked for them is a reason they did not give. A quantity here is
+     not that: it is what was ASKED for, quoted back, and the operator says
+     whether it is also what was made. Nothing is written until they say so,
+     which is why the prefill deliberately does NOT arm flushAdd's commit timer.
+
+     NO ID TO TRUST, SO IT MATCHES ON SKU. A kitchen request carries no
+     product_id — akSend sends null on purpose, because restock_items.product_id
+     is read as a KITCHEN products.id and this app only knows store ids (see the
+     note on akLoad). Both screens draw from store_products, so the SKU is the
+     honest join: it is the operator's own code for the thing, and the same code
+     is printed on both lists. A line that cannot be matched is SHOWN, greyed,
+     saying so — never silently dropped, because a dropped line is a product
+     that quietly never reaches the shelf.
+
+     WHAT IT DOES NOT DO. It does not re-offer itself later. A request closed
+     yesterday has no reliable way to know whether somebody already added it —
+     the ledger holds the answer but a kitchen operator is refused every endpoint
+     that could read it (routes/retail-inventory.js strips quantities from their
+     product list) — and a prompt that reappears on a second phone would add the
+     same batch twice. Adding stock twice is worse than adding it late, so Skip
+     says plainly that nothing has been added and where to go. */
+
+  var hd = {
+    rs: null,       // the request these lines came from — also the ledger note
+    lines: null,    // resolved rows: what was asked, what is going on the shelf
+    busy: false,
+    err: '',
+    done: null,     // { added, units } once every line is on
+  };
+
+  // The ask screens' stepper glyphs. Written out rather than borrowed from
+  // AK_MINUS/AK_PLUS: those are `var`s in a section BELOW this one, so at the
+  // moment this line runs they are hoisted and still undefined.
+  var HD_MINUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+  var HD_PLUS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+
+  function hdKey(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+  function hdName(l) {
+    var n = lang === 'cn' ? (l.name_cn || l.name_en) : (l.name_en || l.name_cn);
+    return n || l.sku || '—';
+  }
+
+  /* Match every line on the request against the shelf this app is holding.
+     SKU first, because it is the code both catalogues print; the name only as a
+     fallback, and only on an exact match — a fuzzy name match that puts units on
+     the wrong product is exactly the failure _checkTransferIds exists to stop on
+     the transfer side. First match wins: a duplicate SKU is a catalogue problem,
+     and picking one of them arbitrarily is no worse than the alternative of
+     refusing a line the operator can see in front of them. */
+  function hdResolve(order) {
+    var bySku = {}, byName = {};
+    (state.items || []).forEach(function (it) {
+      var k = hdKey(it.sku);
+      if (k && bySku[k] === undefined) bySku[k] = it;
+      [it.name_en, it.name_cn].forEach(function (n) {
+        var kn = hdKey(n);
+        if (kn && byName[kn] === undefined) byName[kn] = it;
+      });
+    });
+    var out = [];
+    (order.items || []).forEach(function (li) {
+      var qty = rcNum(li.qty_requested);
+      if (qty <= 0) return;
+      var hit = bySku[hdKey(li.sku)] || byName[hdKey(li.product_name)] || byName[hdKey(li.product_cn)] || null;
+      out.push({
+        id: hit ? hit.id : null,
+        name_en: (hit && hit.name_en) || li.product_name || '',
+        name_cn: (hit && hit.name_cn) || li.product_cn || '',
+        sku: li.sku || (hit && hit.sku) || '',
+        asked: qty,        // what the request said, kept so the row can say so
+        want: qty,         // what is actually going on the shelf
+        st: '', msg: '',   // '' | 'saving' | 'ok' | 'err'
+      });
+    });
+    return out;
+  }
+
+  /* Returns false when there is nothing worth showing, and the caller falls back
+     to the queue exactly as before. Three reasons it declines, all of them the
+     honest answer rather than an empty screen: this operator recounts rather
+     than adds, the request has no lines, or not one line could be matched to
+     this shelf. */
+  function hdStart(order) {
+    if (state.mode !== 'add' || state.storeId == null) return false;
+    var lines = hdResolve(order);
+    if (!lines.length) return false;
+    if (!lines.some(function (l) { return l.id != null; })) return false;
+    hd.rs = order.rs_number || ('#' + order.id);
+    hd.lines = lines; hd.busy = false; hd.err = ''; hd.done = null;
+    state.view = 'handoff';
+    hdRender();
+    return true;
+  }
+
+  function hdExit() {
+    hd.rs = null; hd.lines = null; hd.err = ''; hd.done = null;
+    kqEnter();
+  }
+
+  function hdBump(i, d) {
+    var l = (hd.lines || [])[i];
+    if (!l || hd.busy || l.st === 'ok' || l.id == null) return;
+    l.want = Math.max(0, l.want + d);
+    if (l.st === 'err') { l.st = ''; l.msg = ''; }
+    hdRender();
+  }
+
+  function hdPending() {
+    return (hd.lines || []).filter(function (l) { return l.id != null && l.want > 0 && l.st !== 'ok'; });
+  }
+
+  /* One delta per line, all in flight together, each reporting its own fate in
+     its own row. A line that succeeded is marked 'ok' and is never in `todo`
+     again, so pressing Add after a partial failure retries ONLY what failed —
+     the guard that keeps a shaky connection from adding a batch twice. */
+  function hdCommit() {
+    if (hd.busy) return;
+    var todo = hdPending();
+    if (!todo.length) return;
+    hd.busy = true; hd.err = '';
+    todo.forEach(function (l) { l.st = 'saving'; l.msg = ''; });
+    hdRender();
+
+    var left = todo.length, failed = 0, added = 0, units = 0;
+    todo.forEach(function (l) {
+      api(API + '/stores/' + state.storeId + '/stock/' + l.id, {
+        method: 'PATCH',
+        // The note names the request, so the stock ledger answers "where did
+        // these units come from?" without anybody matching timestamps by eye.
+        body: { delta: l.want, reason: 'kitchen_add', note: hd.rs || 'add-stock' },
+      }).then(function () {
+        l.st = 'ok'; added++; units += l.want;
+        var it = itemById(l.id);
+        if (it) it.physical_qty += l.want;
+      }).catch(function (e) {
+        if (e.message === 'auth') { l.st = ''; return; }   // the app is leaving for the sign-in
+        l.st = 'err'; failed++;
+        l.msg = e.message === 'norealm' ? '' : (e.message || '');
+      }).then(function () {
+        if (--left > 0) { hdRender(); return; }
+        hd.busy = false;
+        if (failed) {
+          hd.err = t('Some lines did not go on. Nothing was added twice — press Add again for the ones still marked.',
+                     '部分商品未入库。已入库的不会重复计入 — 请对仍标记错误的商品再按一次「加库存」。');
+        } else {
+          hd.done = { added: added, units: units };
+          // The shelf this app counts has just changed underneath it.
+          kqLoad();
+        }
+        hdRender();
+      });
+    });
+  }
+
+  function hdRowHtml(l, i) {
+    var dead = l.id == null;
+    var badge = l.st === 'ok'   ? t('Added', '已入库')
+              : l.st === 'saving' ? t('Adding…', '入库中…')
+              : l.st === 'err'  ? t('Did not go on', '未入库')
+              : dead            ? t('Not on this store’s list', '本店商品目录中没有')
+              : (l.want !== l.asked ? t(l.asked + ' asked for', '申请 ' + l.asked + ' 件') : '');
+    var stepper = dead || l.st === 'ok'
+      ? '<span class="rc-qty num" style="font-size:22px;color:var(--text2)">' + (l.st === 'ok' ? '+' + l.want : '—') + '</span>'
+      : '<span class="ak-step">' +
+          '<button data-hddec="' + i + '"' + (l.want <= 0 || hd.busy ? ' disabled' : '') + '>' + HD_MINUS + '</button>' +
+          '<span class="n num">+' + l.want + '</span>' +
+          '<button data-hdinc="' + i + '"' + (hd.busy ? ' disabled' : '') + '>' + HD_PLUS + '</button>' +
+        '</span>';
+    return '<div class="rc-hr"></div>' +
+      '<div class="rc-row"' + (dead ? ' style="opacity:.55"' : '') + '>' +
+        '<span class="rc-mid"><span class="rc-nm">' + esc(hdName(l)) + '</span>' +
+        '<span class="rc-cap">' + esc(l.sku || '') + (badge ? (l.sku ? ' · ' : '') + esc(badge) : '') + '</span></span>' +
+        stepper +
+      '</div>';
+  }
+
+  function hdHtml() {
+    if (hd.done) {
+      return '<div class="rc-wrap">' +
+        '<div class="rc-head">' +
+          '<div class="rc-h1">' + t('On the shelf', '已入库') + '</div>' +
+          '<div class="rc-sub">' + esc(hd.rs || '') + '</div>' +
+        '</div>' +
+        '<div class="rc-body"><div style="padding:0 16px">' +
+          '<div class="rc-flat"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em">' +
+            t(hd.done.units + ' units added', '已入库 ' + hd.done.units + ' 件') + '</div>' +
+            '<div class="rc-note" style="margin-top:4px">' +
+            t('Across ' + hd.done.added + ' products. The request is closed.',
+              '共 ' + hd.done.added + ' 种商品。该申请已关闭。') + '</div></div>' +
+        '</div></div>' +
+        '<div class="rc-foot" style="background:transparent;border:none">' +
+          '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+          '<button class="rc-big" data-hdback>' + t('Back to the queue', '返回制作队列') + '</button>' +
+          '</div></div></div>';
+    }
+
+    var lines = hd.lines || [];
+    var units = hdPending().reduce(function (a, l) { return a + l.want; }, 0);
+    var ready = units > 0 && !hd.busy;
+    var lost = lines.filter(function (l) { return l.id == null; }).length;
+
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<div class="rc-h1">' + t('Add what you made', '登记已制作') + '</div>' +
+        '<div class="rc-sub">' + esc(hd.rs || '') + ' · ' +
+          t('Marked made — the shelf has not changed yet', '已标记完成 — 库存尚未变动') + '</div>' +
+      '</div>' +
+      (hd.err ? '<div class="rc-err">' + esc(hd.err) + '</div>' : '') +
+      '<div class="rc-body">' + lines.map(hdRowHtml).join('') + '<div class="rc-hr"></div>' +
+        (lost ? '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+          t(lost === 1 ? 'One line is not on this store’s product list, so it cannot be added here. Tell whoever looks after the catalogue.'
+                       : lost + ' lines are not on this store’s product list, so they cannot be added here. Tell whoever looks after the catalogue.',
+            lost + ' 项不在本店商品目录中,无法在此入库。请联系管理商品目录的同事。') +
+          '</div></div>' : '') +
+        '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+          t('Change a number if you made a different amount. Nothing is added until you press Add.',
+            '实际数量不同请直接修改。按下「加库存」前不会有任何变动。') +
+        '</div></div>' +
+      '</div>' +
+      '<div class="rc-foot"><div class="rc-footrow">' +
+        '<div class="rc-tally"><b>' + units + ' <span>' + t('units', '件') + '</span></b>' +
+        '<i>' + t('onto ' + asHere(), '入库至 ' + asHere()) + '</i></div>' +
+        '<button class="rc-cta' + (ready ? ' on' : '') + '"' + (ready ? ' data-hdadd' : ' disabled') + '>' +
+          (hd.busy ? t('Adding…', '入库中…') : t('Add', '加库存')) + '</button>' +
+      '</div>' +
+      '<div style="padding:0 16px calc(var(--sa-bot) + 16px)">' +
+        '<button class="btn btn-secondary" style="width:100%" data-hdskip>' +
+          t('Skip — nothing added', '跳过 — 不入库') + '</button>' +
+        '<div class="rc-note" style="margin-top:8px;text-align:center">' +
+          t('Skipping leaves the shelf as it is. You would add it yourself on Add stock.',
+            '跳过则库存保持不变,需自行在「加库存」中登记。') +
+        '</div>' +
+      '</div></div></div>';
+  }
+
+  function hdRender() {
+    if (state.view !== 'handoff') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = hdHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-hdinc]', function (b) { b.onclick = function () { hdBump(parseInt(b.getAttribute('data-hdinc'), 10), 1); }; });
+    each('[data-hddec]', function (b) { b.onclick = function () { hdBump(parseInt(b.getAttribute('data-hddec'), 10), -1); }; });
+    each('[data-hdadd]', function (b) { b.onclick = hdCommit; });
+    each('[data-hdskip]', function (b) { b.onclick = hdExit; });
+    each('[data-hdback]', function (b) { b.onclick = hdExit; });
   }
 
   /* ══ ASK FOR STOCK ═════════════════════════════════════════════════════════
