@@ -290,9 +290,15 @@ function versionOf(tid) {
   // no revenue and shows no price. It changes where goods are, not what they
   // are worth. A marker here would put a lock icon on the picker's screen and
   // teach the operator that the marker means "important" rather than "money".
+  // 112 is `production:log` (2026-09-05) — recording what a batch yielded, and
+  // how much of it never reached the shelf. NO money marker, for the reason the
+  // restock keys carry none: it states what the kitchen made, not what anything
+  // is worth. That will need revisiting the day a short batch also writes a
+  // costed waste row, because the loss then has a price on it — see the note in
+  // routes/retail-production.js about what is deliberately not wired yet.
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 111, 'across all 111');
+  is(caps.CAPABILITIES.length, 112, 'across all 112');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

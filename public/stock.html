@@ -518,6 +518,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .ak-step button:disabled{opacity:.4;}
 .ak-step button svg{width:18px;height:18px;}
 .ak-step .n{width:48px;text-align:center;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;}
+/* The short-batch question. Sits UNDER the row it belongs to, indented past the
+   name so it reads as a follow-up to that line rather than a new one, and only
+   ever drawn on a line that is actually short. */
+.hd-why{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 14px 12px;background:var(--surface);}
+.hd-chip{height:36px;padding:0 12px;border-radius:999px;background:var(--raised);border:1px solid var(--line);
+         color:var(--text);font-size:13px;display:inline-flex;align-items:center;}
+.hd-chip.on{background:var(--text);color:var(--bg);border-color:var(--text);}
+.hd-note{font-size:13px;color:var(--text2);margin-right:2px;}
 .ak-search{padding:0 16px 10px;flex:none;}
 .ak-search input{width:100%;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);
                  color:var(--text);padding:0 14px;font-size:15px;}
@@ -939,7 +947,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      them at the route, holding only the queue — so it says what it holds. */
   function headTitle() {
     if (state.view === 'home') {
-      return rc.on === true ? t('Transfers', '调拨') : t('Kitchen queue', '厨房制作队列');
+      return rc.on === true ? t('Transfers', '调拨') : t('Production', '生产');
     }
     return state.mode === 'add' ? t('Add stock', '加库存') : t('Quick stock', '快速库存');
   }
@@ -3104,7 +3112,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // one an ordinary picker does not. The count IS theirs here — unlike the
         // tile above, this is their own queue.
         (kq.on !== true ? '' :
-        homeTileHtml('queue', t('Kitchen queue', '厨房制作队列'),
+        homeTileHtml('queue', t('Production', '生产'),
           toMake ? t('Make what was asked for', '制作已申请的商品')
                  : t('Nothing to make', '暂无待制作'),
           toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home')) +
@@ -3567,7 +3575,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     return '<div class="rc-wrap">' +
       '<div class="rc-head">' +
         '<button class="rc-back" data-kqback>' + RC_CHEV + t('Back', '返回') + '</button>' +
-        '<div class="rc-h1">' + t('Kitchen queue', '厨房制作队列') + '</div>' +
+        '<div class="rc-h1">' + t('Production', '生产') + '</div>' +
         '<div class="rc-sub">' + t('What has been asked for', '待制作的申请') + '</div>' +
       '</div>' +
       (kq.err ? '<div class="rc-err">' + esc(kq.err) + '</div>' : '') +
@@ -3602,7 +3610,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
               : next === 'prepared' ? t('Mark as made', '标记已完成') : '';
     return '<div class="rc-wrap">' +
       '<div class="rc-head">' +
-        '<button class="rc-back" data-kqlist>' + RC_CHEV + t('Kitchen queue', '厨房制作队列') + '</button>' +
+        '<button class="rc-back" data-kqlist>' + RC_CHEV + t('Production', '生产') + '</button>' +
         '<div class="rc-h1">' + esc(o.rs_number || ('#' + o.id)) + '</div>' +
         '<div class="rc-sub">' + t(items.length + ' items', items.length + ' 项') + (p ? ' · ' + esc(p) : '') + '</div>' +
       '</div>' +
@@ -3624,10 +3632,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       // that does, which is the screen the next tap opens.
       '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
         (next === 'prepared'
-          ? t('Marking this made closes the request. Next it asks you to add what you made — that is what changes the shelf.',
-              '标记完成即关闭该申请。随后会让你登记实际制作数量 — 库存在那一步才会变动。')
-          : t('Marking this made closes the request. Stock changes when you add what you made, not here.',
-              '标记完成即关闭该申请。库存在登记实际制作数量时才会变动,不在此处。')) + '</div></div>' +
+          ? t('Marking this made closes the request. Next you record what you made and what went on the shelf — that is what changes the stock.',
+              '标记完成即关闭该申请。随后登记制作数量与实际入库数量 — 库存在那一步才会变动。')
+          : t('Marking this made closes the request. Stock changes when you record what you made, not here.',
+              '标记完成即关闭该申请。库存在登记制作数量时才会变动,不在此处。')) + '</div></div>' +
       '<div class="rc-foot" style="background:transparent;border:none">' +
         '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
         (next
@@ -3707,11 +3715,26 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   var hd = {
     rs: null,       // the request these lines came from — also the ledger note
+    rsId: null,     // and its id, so the production row can name it
     lines: null,    // resolved rows: what was asked, what is going on the shelf
     busy: false,
     err: '',
-    done: null,     // { added, units } once every line is on
+    done: null,     // { added, units, short } once every line is on
+    reasons: null,  // the gap vocabulary, read from the server (never a second copy)
+    openReason: -1, // which row's reason picker is showing, -1 for none
   };
+
+  /* ONE NUMBER PER ROW, AND THE SECOND ONE IS INFERRED.
+     The operator adjusts what goes on the SHELF — the thing in front of them,
+     that they can count. What was MADE is then max(asked, shelved), which is
+     right in all three shapes without asking a second question:
+       asked 20, shelved 18 → made 20, 2 short, and it wants a reason
+       asked 20, shelved 20 → made 20, nothing short, no question
+       asked 20, shelved 22 → made 22, nothing short (an extra tray, not a loss)
+     A screen with two steppers per line would be more expressive and would be
+     wrong more often, on a phone, with cold hands. */
+  function hdMade(l) { return Math.max(l.asked, l.want); }
+  function hdShort(l) { return hdMade(l) - l.want; }
 
   // The ask screens' stepper glyphs. Written out rather than borrowed from
   // AK_MINUS/AK_PLUS: those are `var`s in a section BELOW this one, so at the
@@ -3754,6 +3777,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         sku: li.sku || (hit && hit.sku) || '',
         asked: qty,        // what the request said, kept so the row can say so
         want: qty,         // what is actually going on the shelf
+        reason: '',        // why it is short, when it is — the server refuses a bare gap
         st: '', msg: '',   // '' | 'saving' | 'ok' | 'err'
       });
     });
@@ -3771,10 +3795,39 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (!lines.length) return false;
     if (!lines.some(function (l) { return l.id != null; })) return false;
     hd.rs = order.rs_number || ('#' + order.id);
-    hd.lines = lines; hd.busy = false; hd.err = ''; hd.done = null;
+    hd.rsId = order.id;
+    hd.lines = lines; hd.busy = false; hd.err = ''; hd.done = null; hd.openReason = -1;
     state.view = 'handoff';
     hdRender();
+    hdLoadReasons();
     return true;
+  }
+
+  /* THE GAP VOCABULARY COMES FROM THE SERVER, and it is the waste module's own
+     list plus `made_fewer`. Not typed again here: routes/retail-waste's header
+     records how a reason list kept in a browser is exactly how the old kitchen
+     screen ended up with codes that existed nowhere else. If the fetch fails the
+     picker still offers the two that cover almost every morning, because a
+     screen that cannot name a reason cannot record a short batch at all — and
+     the server would then refuse the whole thing. */
+  function hdLoadReasons() {
+    if (hd.reasons) return;
+    api(API + '/production/reasons').then(function (rows) {
+      hd.reasons = (rows || []).map(function (r) { return { code: r.code, en: r.en, cn: r.cn }; });
+      if (state.view === 'handoff') hdRender();
+    }).catch(function () {
+      hd.reasons = [
+        { code: 'damaged',    en: 'Damaged',    cn: '损坏' },
+        { code: 'made_fewer', en: 'Made fewer', cn: '实际制作较少' },
+      ];
+      if (state.view === 'handoff') hdRender();
+    });
+  }
+
+  function hdReasonLabel(code) {
+    var r = (hd.reasons || []).filter(function (x) { return x.code === code; })[0];
+    if (!r) return code;
+    return lang === 'cn' ? (r.cn || r.en) : (r.en || r.cn);
   }
 
   function hdExit() {
@@ -3787,11 +3840,40 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (!l || hd.busy || l.st === 'ok' || l.id == null) return;
     l.want = Math.max(0, l.want + d);
     if (l.st === 'err') { l.st = ''; l.msg = ''; }
+    // Back to full means there is nothing to explain, so the answer goes with
+    // the question — leaving a stale "damaged" on a line that is no longer short
+    // would file a loss that did not happen.
+    if (hdShort(l) === 0) { l.reason = ''; if (hd.openReason === i) hd.openReason = -1; }
+    else if (!l.reason) hd.openReason = i;   // it just went short: ask, don't wait to be found
     hdRender();
   }
 
+  function hdPickReason(i, code) {
+    var l = (hd.lines || [])[i];
+    if (!l || hd.busy) return;
+    l.reason = code;
+    hd.openReason = -1;
+    hdRender();
+  }
+
+  // Every short line must say why before anything is written. The server
+  // refuses a bare gap too (gap_reason_required) — this is so the operator is
+  // told on the screen rather than by a failed write.
+  function hdUnexplained() {
+    return (hd.lines || []).filter(function (l) {
+      return l.id != null && l.st !== 'ok' && hdShort(l) > 0 && !l.reason;
+    });
+  }
+
+  /* A line is still to do when it was matched and has not landed. NOTE `want`
+     is NOT required to be > 0 any more: a tray that was made and entirely lost
+     is `made 6, shelved 0`, which moves no stock and is exactly the morning
+     most worth recording. The old handoff dropped those rows because all it
+     could do was add to a shelf. */
   function hdPending() {
-    return (hd.lines || []).filter(function (l) { return l.id != null && l.want > 0 && l.st !== 'ok'; });
+    return (hd.lines || []).filter(function (l) {
+      return l.id != null && l.st !== 'ok' && (l.want > 0 || hdShort(l) > 0);
+    });
   }
 
   /* One delta per line, all in flight together, each reporting its own fate in
@@ -3806,15 +3888,28 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     todo.forEach(function (l) { l.st = 'saving'; l.msg = ''; });
     hdRender();
 
-    var left = todo.length, failed = 0, added = 0, units = 0;
+    var left = todo.length, failed = 0, added = 0, units = 0, short = 0;
     todo.forEach(function (l) {
-      api(API + '/stores/' + state.storeId + '/stock/' + l.id, {
-        method: 'PATCH',
-        // The note names the request, so the stock ledger answers "where did
-        // these units come from?" without anybody matching timestamps by eye.
-        body: { delta: l.want, reason: 'kitchen_add', note: hd.rs || 'add-stock' },
+      /* ONE CALL PER LINE, and it is the PRODUCTION endpoint rather than the
+         stock one. That endpoint writes the batch and moves the shelf inside a
+         single transaction, so a line cannot end up half-recorded — which two
+         calls from here could not promise however carefully they were ordered.
+         It is also what keeps `made` alive: the stock route only ever knew the
+         number that arrived. */
+      api(API + '/production', {
+        method: 'POST',
+        body: {
+          store_id: state.storeId,
+          product_id: l.id,
+          qty_made: hdMade(l),
+          qty_shelved: l.want,
+          gap_reason: hdShort(l) > 0 ? l.reason : null,
+          // Names the request, so a batch can be traced back to what asked for
+          // it rather than matched by eye on a timestamp.
+          request_id: hd.rsId || null,
+        },
       }).then(function () {
-        l.st = 'ok'; added++; units += l.want;
+        l.st = 'ok'; added++; units += l.want; short += hdShort(l);
         var it = itemById(l.id);
         if (it) it.physical_qty += l.want;
       }).catch(function (e) {
@@ -3825,10 +3920,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         if (--left > 0) { hdRender(); return; }
         hd.busy = false;
         if (failed) {
-          hd.err = t('Some lines did not go on. Nothing was added twice — press Add again for the ones still marked.',
-                     '部分商品未入库。已入库的不会重复计入 — 请对仍标记错误的商品再按一次「加库存」。');
+          hd.err = t('Some lines were not recorded. Nothing was counted twice — press Record again for the ones still marked.',
+                     '部分商品未登记。已登记的不会重复计入 — 请对仍标记错误的商品再按一次「登记」。');
         } else {
-          hd.done = { added: added, units: units };
+          hd.done = { added: added, units: units, short: short };
           // The shelf this app counts has just changed underneath it.
           kqLoad();
         }
@@ -3839,11 +3934,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   function hdRowHtml(l, i) {
     var dead = l.id == null;
-    var badge = l.st === 'ok'   ? t('Added', '已入库')
-              : l.st === 'saving' ? t('Adding…', '入库中…')
-              : l.st === 'err'  ? t('Did not go on', '未入库')
+    var shortBy = dead ? 0 : hdShort(l);
+    var badge = l.st === 'ok'   ? t('Recorded', '已登记')
+              : l.st === 'saving' ? t('Recording…', '登记中…')
+              : l.st === 'err'  ? t('Not recorded', '未登记')
               : dead            ? t('Not on this store’s list', '本店商品目录中没有')
-              : (l.want !== l.asked ? t(l.asked + ' asked for', '申请 ' + l.asked + ' 件') : '');
+              : (shortBy > 0
+                  ? t('Made ' + hdMade(l) + ' · ' + shortBy + ' short', '制作 ' + hdMade(l) + ' 件 · 少 ' + shortBy + ' 件')
+                  : (l.want > l.asked ? t(l.asked + ' asked for', '申请 ' + l.asked + ' 件') : ''));
     var stepper = dead || l.st === 'ok'
       ? '<span class="rc-qty num" style="font-size:22px;color:var(--text2)">' + (l.st === 'ok' ? '+' + l.want : '—') + '</span>'
       : '<span class="ak-step">' +
@@ -3851,27 +3949,57 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           '<span class="n num">+' + l.want + '</span>' +
           '<button data-hdinc="' + i + '"' + (hd.busy ? ' disabled' : '') + '>' + HD_PLUS + '</button>' +
         '</span>';
+
+    /* THE ONE QUESTION THIS SCREEN ASKS, and it only ever appears on a line that
+       is actually short. On a normal morning nobody sees it at all. Answered
+       inline rather than in a sheet: a modal over a three-line list, on a phone,
+       to answer one word, is a screen between the operator and the thing they
+       are already looking at. */
+    var ask = '';
+    if (!dead && l.st !== 'ok' && shortBy > 0) {
+      if (l.reason && hd.openReason !== i) {
+        ask = '<div class="hd-why"><button class="hd-chip on" data-hdwhy="' + i + '">' +
+              esc(hdReasonLabel(l.reason)) + '</button>' +
+              '<span class="hd-note">' + t('tap to change', '点击可修改') + '</span></div>';
+      } else {
+        var opts = (hd.reasons || []).map(function (r) {
+          return '<button class="hd-chip' + (l.reason === r.code ? ' on' : '') + '" ' +
+                 'data-hdreason="' + i + '" data-hdcode="' + esc(r.code) + '">' +
+                 esc(lang === 'cn' ? (r.cn || r.en) : (r.en || r.cn)) + '</button>';
+        }).join('');
+        ask = '<div class="hd-why"><span class="hd-note">' +
+              t(shortBy + ' short — why?', '少 ' + shortBy + ' 件 — 原因?') + '</span>' +
+              (opts || '<span class="hd-note">' + t('Loading…', '加载中…') + '</span>') + '</div>';
+      }
+    }
+
     return '<div class="rc-hr"></div>' +
       '<div class="rc-row"' + (dead ? ' style="opacity:.55"' : '') + '>' +
         '<span class="rc-mid"><span class="rc-nm">' + esc(hdName(l)) + '</span>' +
         '<span class="rc-cap">' + esc(l.sku || '') + (badge ? (l.sku ? ' · ' : '') + esc(badge) : '') + '</span></span>' +
         stepper +
-      '</div>';
+      '</div>' + ask;
   }
 
   function hdHtml() {
     if (hd.done) {
       return '<div class="rc-wrap">' +
         '<div class="rc-head">' +
-          '<div class="rc-h1">' + t('On the shelf', '已入库') + '</div>' +
+          '<div class="rc-h1">' + t('Recorded', '已登记') + '</div>' +
           '<div class="rc-sub">' + esc(hd.rs || '') + '</div>' +
         '</div>' +
         '<div class="rc-body"><div style="padding:0 16px">' +
           '<div class="rc-flat"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em">' +
-            t(hd.done.units + ' units added', '已入库 ' + hd.done.units + ' 件') + '</div>' +
+            t(hd.done.units + ' units on the shelf', '已入库 ' + hd.done.units + ' 件') + '</div>' +
             '<div class="rc-note" style="margin-top:4px">' +
             t('Across ' + hd.done.added + ' products. The request is closed.',
-              '共 ' + hd.done.added + ' 种商品。该申请已关闭。') + '</div></div>' +
+              '共 ' + hd.done.added + ' 种商品。该申请已关闭。') + '</div>' +
+            // Said back, because it is the number the old flow could not hold.
+            // Seeing "2 did not make it" recorded is what makes it worth asking.
+            (hd.done.short ? '<div class="rc-note" style="margin-top:6px">' +
+              t(hd.done.short + ' made but did not reach the shelf — recorded against this batch.',
+                '另有 ' + hd.done.short + ' 件已制作但未入库 — 已记录在本批次。') + '</div>' : '') +
+          '</div>' +
         '</div></div>' +
         '<div class="rc-foot" style="background:transparent;border:none">' +
           '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
@@ -3880,13 +4008,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }
 
     var lines = hd.lines || [];
-    var units = hdPending().reduce(function (a, l) { return a + l.want; }, 0);
-    var ready = units > 0 && !hd.busy;
+    var pending = hdPending();
+    var units = pending.reduce(function (a, l) { return a + l.want; }, 0);
+    var shortTotal = pending.reduce(function (a, l) { return a + hdShort(l); }, 0);
+    var unexplained = hdUnexplained().length;
+    // NOT READY WHILE A SHORT LINE HAS NO REASON. The server refuses it too
+    // (gap_reason_required); saying so here means the operator is told by the
+    // screen rather than by a write that failed.
+    var ready = pending.length > 0 && !unexplained && !hd.busy;
     var lost = lines.filter(function (l) { return l.id == null; }).length;
 
     return '<div class="rc-wrap">' +
       '<div class="rc-head">' +
-        '<div class="rc-h1">' + t('Add what you made', '登记已制作') + '</div>' +
+        '<div class="rc-h1">' + t('What you made', '登记制作') + '</div>' +
         '<div class="rc-sub">' + esc(hd.rs || '') + ' · ' +
           t('Marked made — the shelf has not changed yet', '已标记完成 — 库存尚未变动') + '</div>' +
       '</div>' +
@@ -3898,22 +4032,28 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
             lost + ' 项不在本店商品目录中,无法在此入库。请联系管理商品目录的同事。') +
           '</div></div>' : '') +
         '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
-          t('Change a number if you made a different amount. Nothing is added until you press Add.',
-            '实际数量不同请直接修改。按下「加库存」前不会有任何变动。') +
+          t('Set what actually went on the shelf. If it is less than was made, say why — that is how the difference gets recorded instead of disappearing.',
+            '请填写实际入库数量。少于制作数量时请选择原因 — 差额才会被记录,而不是凭空消失。') +
         '</div></div>' +
       '</div>' +
       '<div class="rc-foot"><div class="rc-footrow">' +
         '<div class="rc-tally"><b>' + units + ' <span>' + t('units', '件') + '</span></b>' +
-        '<i>' + t('onto ' + asHere(), '入库至 ' + asHere()) + '</i></div>' +
+        '<i>' + (shortTotal
+            ? t(shortTotal + ' short · ' + asHere(), '少 ' + shortTotal + ' 件 · ' + asHere())
+            : t('onto ' + asHere(), '入库至 ' + asHere())) + '</i></div>' +
         '<button class="rc-cta' + (ready ? ' on' : '') + '"' + (ready ? ' data-hdadd' : ' disabled') + '>' +
-          (hd.busy ? t('Adding…', '入库中…') : t('Add', '加库存')) + '</button>' +
+          (hd.busy ? t('Recording…', '登记中…') : t('Record', '登记')) + '</button>' +
       '</div>' +
+      (unexplained ? '<div style="padding:0 16px 10px"><div class="rc-note">' +
+        t(unexplained === 1 ? 'One line is short and has no reason yet.'
+                            : unexplained + ' lines are short and have no reason yet.',
+          '有 ' + unexplained + ' 项数量不足且尚未选择原因。') + '</div></div>' : '') +
       '<div style="padding:0 16px calc(var(--sa-bot) + 16px)">' +
         '<button class="btn btn-secondary" style="width:100%" data-hdskip>' +
-          t('Skip — nothing added', '跳过 — 不入库') + '</button>' +
+          t('Skip — record nothing', '跳过 — 不登记') + '</button>' +
         '<div class="rc-note" style="margin-top:8px;text-align:center">' +
-          t('Skipping leaves the shelf as it is. You would add it yourself on Add stock.',
-            '跳过则库存保持不变,需自行在「加库存」中登记。') +
+          t('Skipping records no batch and leaves the shelf as it is.',
+            '跳过则不登记批次,库存保持不变。') +
         '</div>' +
       '</div></div></div>';
   }
@@ -3929,6 +4069,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     };
     each('[data-hdinc]', function (b) { b.onclick = function () { hdBump(parseInt(b.getAttribute('data-hdinc'), 10), 1); }; });
     each('[data-hddec]', function (b) { b.onclick = function () { hdBump(parseInt(b.getAttribute('data-hddec'), 10), -1); }; });
+    each('[data-hdreason]', function (b) {
+      b.onclick = function () {
+        hdPickReason(parseInt(b.getAttribute('data-hdreason'), 10), b.getAttribute('data-hdcode'));
+      };
+    });
+    each('[data-hdwhy]', function (b) {
+      b.onclick = function () { hd.openReason = parseInt(b.getAttribute('data-hdwhy'), 10); hdRender(); };
+    });
     each('[data-hdadd]', function (b) { b.onclick = hdCommit; });
     each('[data-hdskip]', function (b) { b.onclick = hdExit; });
     each('[data-hdback]', function (b) { b.onclick = hdExit; });

@@ -56,9 +56,18 @@ function check(label, fn) {
 function section(t) { console.log(`\n${t}`); }
 
 // High ids so a developer's own rows are never touched.
-const STORE = 9401;         // the kitchen's own store
-const OTHER = 9403;         // somebody else's, for the scope refusal
-const PROD  = 9402;
+// 9250-range: PICKED BY CHECKING, not by reaching for a round number. The first
+// draft used 9401/9402/9403, which test_addon_stock_gate.js already owns — its
+// cleanup then deleted a store this file's rows still pointed at and the whole
+// suite died on a FOREIGN KEY. Two files agreeing on a "surely nobody else"
+// id is the failure, so these were grepped out of scripts/ first.
+const STORE = 9251;         // the kitchen's own store
+const OTHER = 9252;         // somebody else's, for the scope refusal
+const PROD  = 9253;
+// A SKU nothing else can own. The first draft used '4-670' — a REAL SKU in a
+// developer's database — and store_products.sku is UNIQUE, so the seed collided
+// with the shop's own peanut butter.
+const SKU   = 'PRODTEST-9253';
 
 // ── The door, before the route ─────────────────────────────────────────────
 // A screen and its door go in together. #262 shipped the kitchen queue without
@@ -86,15 +95,36 @@ check('and the route is gated on that one key alone', () => {
 });
 
 // ── The route ──────────────────────────────────────────────────────────────
+
+/* CHILDREN FIRST, THEN PARENTS, and the same function at both ends of the run.
+   The first version used INSERT OR REPLACE on retail_stores to seed, which
+   SQLite implements as a delete and a re-insert — so the second run tripped a
+   FOREIGN KEY on rows the first run had left pointing at that store. A seed
+   that assumes a clean database and a cleanup that only half-runs are the same
+   bug from two directions; this is one ordering, used twice. */
+function cleanup() {
+  db.prepare('DELETE FROM production_batches  WHERE store_id IN (?,?)').run(STORE, OTHER);
+  db.prepare('DELETE FROM retail_stock_ledger WHERE store_id IN (?,?)').run(STORE, OTHER);
+  db.prepare('DELETE FROM retail_store_stock  WHERE store_id IN (?,?)').run(STORE, OTHER);
+  db.prepare('DELETE FROM retail_store_stock  WHERE product_id = ?').run(PROD);
+  db.prepare('DELETE FROM store_products      WHERE id = ?').run(PROD);
+  db.prepare('DELETE FROM retail_stores       WHERE id IN (?,?)').run(STORE, OTHER);
+  // retail_stores.code is UNIQUE, so a row left by an earlier run under a
+  // DIFFERENT id still owns the code and the next seed collides on it. Cleared
+  // by code as well as by id — the codes are derived from the ids above so
+  // nothing else can be holding them.
+  db.prepare('DELETE FROM retail_stores WHERE code IN (?,?)')
+    .run('PRODTEST-' + STORE, 'PRODTEST-' + OTHER);
+}
+
 function seed() {
-  db.prepare('INSERT OR REPLACE INTO retail_stores (id,name_en,name_cn,code,is_active) VALUES (?,?,?,?,1)')
-    .run(STORE, 'ProdTest', '生产测试', 'PT1');
-  db.prepare('INSERT OR REPLACE INTO retail_stores (id,name_en,name_cn,code,is_active) VALUES (?,?,?,?,1)')
-    .run(OTHER, 'ProdTest2', '生产测试二', 'PT2');
-  db.prepare('INSERT OR REPLACE INTO store_products (id,name_en,name_cn,sku,is_active) VALUES (?,?,?,?,1)')
-    .run(PROD, 'Peanut Butter', '花生酱', '4-670');
-  db.prepare('DELETE FROM production_batches WHERE store_id IN (?,?)').run(STORE, OTHER);
-  db.prepare('DELETE FROM retail_store_stock WHERE product_id = ?').run(PROD);
+  cleanup();
+  db.prepare('INSERT INTO retail_stores (id,name_en,name_cn,code,is_active) VALUES (?,?,?,?,1)')
+    .run(STORE, 'ProdTest', '生产测试', 'PRODTEST-' + STORE);
+  db.prepare('INSERT INTO retail_stores (id,name_en,name_cn,code,is_active) VALUES (?,?,?,?,1)')
+    .run(OTHER, 'ProdTest2', '生产测试二', 'PRODTEST-' + OTHER);
+  db.prepare('INSERT INTO store_products (id,name_en,name_cn,sku,is_active) VALUES (?,?,?,?,1)')
+    .run(PROD, 'Peanut Butter', '花生酱', 'PRODTEST-9253');
   inventory.adjustStock({ storeId: STORE, productId: PROD, newPhysicalQty: 0, reason: 'seed' });
 }
 
@@ -258,7 +288,10 @@ async function main() {
   });
 
   srv.close();
-  db.prepare('DELETE FROM production_batches WHERE store_id IN (?,?)').run(STORE, OTHER);
+  // EVERYTHING THIS FILE MADE, REMOVED. A suite that leaves rows behind is a
+  // suite that breaks a different one later, from a distance, in a way nobody
+  // reads as related — which is exactly what the id collision above looked like.
+  cleanup();
 
   console.log(`\n${passed} passed, ${failures} failed`);
   process.exit(failures ? 1 : 0);
