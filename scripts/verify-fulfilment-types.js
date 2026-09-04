@@ -2084,8 +2084,14 @@ check('the phone bar exists, carrying the count and the total',
 // THE BUG THIS ROW EXISTS FOR: the handler was written and the control was
 // drawn, but [data-sheet] was never added to the delegated selector, so the bar
 // did nothing at all. Handler and selector have to move together.
+// The selector list is UNORDERED: what matters is that [data-sheet] is IN it,
+// not that it is last. Pinning it to the end made this fail the moment d7a71ee
+// added [data-back],[data-leave] after it — a red gate over a till that works,
+// which blocks every unrelated deploy behind it and teaches people to wave the
+// gate through. The guarantee is unchanged; only the position is no longer part
+// of it.
 check('the order sheet is reachable — data-sheet is in the click delegation',
-  /closest\('\[data-add\][^']*\[data-sheet\]'\)/.test(POS_TILL_SRC), true);
+  /closest\('\[data-add\][^']*\[data-sheet\][^']*'\)/.test(POS_TILL_SRC), true);
 check('opening and closing the sheet are both wired',
   [/data-sheet="open"/.test(POS_TILL_SRC), /data-sheet="close"/.test(POS_TILL_SRC)], [true, true]);
 // The sheet must not survive into the settle takeover, whose whole point is
