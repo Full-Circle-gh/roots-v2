@@ -77,8 +77,12 @@ function makeOrder({ lines, shelves = {} }) {
     const [store, product] = k.split(':').map(Number);
     F.setShelf(h.db, store, product, qty);
   }
-  h.db.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-                VALUES (?,?,?,'received','Shop',7,'warehouse','store')`).run(id, 'RS-' + id, '2026-09-03');
+  h.db.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role,
+                -- The pair is on the ORDER now, not inferred at dispatch: an order that
+                -- does not say where its goods come from and go to is refused, which is
+                -- what lets Tianhe ask Yuexiu without banning Tianhe→Tianhe.
+                from_store_id, to_store_id)
+                VALUES (?,?,?,'received','Shop',7,'warehouse','store',${WH},${SHOP})`).run(id, 'RS-' + id, '2026-09-03');
   for (const l of lines) {
     h.db.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
                   VALUES (?,?,?,?,?,?)`)
@@ -278,22 +282,62 @@ function makeOrder({ lines, shelves = {} }) {
   eq(corrected.delta, -2, 'the full −2 is recorded — the shortfall is not silently discarded');
   eq(shelf(SHOP, 901), -1, 'the shelf itself holds the negative');
 
-  // ══ 14 — the warehouse setting ═══════════════════════════════════════════
-  section('14. An unset warehouse refuses and names the setting');
-  clearCfg();
-  const noCfg = makeOrder({
+  // ══ 14 — an order that cannot say where its goods go ═════════════════════
+  section('14. A transfer with no source or destination refuses, and names why');
+  // REWRITTEN when the pair moved onto the order. This assertion used to clear
+  // stock.warehouseStoreId and expect the dispatch to refuse, because the
+  // setting WAS the source: every dispatch read it at run time.
+  //
+  // It is not the source any more. The order records where its goods come from
+  // and go to, and the setting is only a default consulted ONCE at creation. So
+  // clearing it can no longer stop a dispatch — the order already knows — and
+  // the refusal this assertion protects moved with the fact it was protecting.
+  //
+  // What is asserted instead is the same guarantee at its new home: an order
+  // that cannot name both ends does not move stock, and says so rather than
+  // guessing. The old guess is what put a Tianhe request on a van to Yuexiu.
+  const noPair = makeOrder({
     lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 2, qty_sent: 2 }],
     shelves: { '1:900': 10, '2:900': 0 },
   });
-  const refused = setStatus(noCfg, 'prepared');
+  h.db.prepare('UPDATE restock_orders SET from_store_id = NULL, to_store_id = NULL WHERE id = ?').run(noPair);
+  const refused = setStatus(noPair, 'prepared');
   ok(refused.body.stock_transfer && refused.body.stock_transfer.ok === false, '14. the dispatch is refused');
-  ok(/stock\.warehouseStoreId/.test(refused.body.stock_transfer.error),
-     '14. the message names stock.warehouseStoreId rather than blaming the order');
+  ok(/leave from|arrive at/.test(refused.body.stock_transfer.error),
+     '14. the message says the order does not name its locations, rather than blaming a setting');
   eq(shelf(WH, 900), 10, '14. no stock moved');
-  eq(orderRow(noCfg).goods_state, 'none', '14. goods_state stays none — nothing is on a van');
-  // The old code guessed here: whichever store held the most stock became the
-  // warehouse, silently. A wrong source is worse than a refusal.
-  setCfg(String(WH));
+  eq(orderRow(noPair).goods_state, 'none', '14. goods_state stays none — nothing is on a van');
+
+  section('14b. A transfer cannot leave from and arrive at the same location');
+  // The rule that replaces "the destination is never the warehouse". That form
+  // banned Yuexiu→Tianhe as a side effect of catching Tianhe→Tianhe; this one
+  // catches only the thing that is actually wrong. It is the case Roots creates
+  // by having one building be both a store and the warehouse.
+  const sameEnds = makeOrder({
+    lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 2, qty_sent: 2 }],
+    shelves: { '1:900': 10 },
+  });
+  h.db.prepare('UPDATE restock_orders SET from_store_id = ?, to_store_id = ? WHERE id = ?').run(WH, WH, sameEnds);
+  const loop = setStatus(sameEnds, 'prepared');
+  ok(loop.body.stock_transfer && loop.body.stock_transfer.ok === false, '14b. it is refused');
+  ok(/same location/.test(loop.body.stock_transfer.error), '14b. and says the two ends are the same place');
+  eq(shelf(WH, 900), 10, '14b. no stock moved');
+
+  section('14c. Goods can flow INTO the warehouse — Tianhe asking Yuexiu');
+  // The request the old model could not express at all. Source and destination
+  // are simply the other way round, and every downstream half works unchanged
+  // because both halves read the pair off the order rather than the setting.
+  const inbound = makeOrder({
+    lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 4, qty_sent: 4 }],
+    shelves: { '1:900': 10, '2:900': 20 },
+  });
+  h.db.prepare('UPDATE restock_orders SET from_store_id = ?, to_store_id = ? WHERE id = ?').run(SHOP, WH, inbound);
+  const back = setStatus(inbound, 'prepared');
+  ok(back.body && back.body.success && !back.body.stock_transfer, '14c. the dispatch goes through');
+  eq(shelf(SHOP, 900), 16, '14c. Yuexiu is decremented — it is the source now');
+  eq(orderRow(inbound).goods_state, 'in_transit', '14c. and the goods are on a van');
+  receive(inbound, [{ item_id: itemsOf(inbound)[0].id, qty_received: 4 }]);
+  eq(shelf(WH, 900), 14, '14c. and Tianhe RECEIVES them — the direction the old resolver refused');
 
   // BOTH SIDES ARE ADDITIONS AT THE SAME POINT, KEPT IN FULL. #243 appended the
   // clamp-removal sections here and #244 appended the retry sections; the merge

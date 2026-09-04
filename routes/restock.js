@@ -221,8 +221,11 @@ function _resolveWarehouseStoreId() {
   return _cfgWarehouseStoreId();
 }
 
-// Resolve the receiving (destination) retail_stores.id. Never returns the
-// warehouse itself. null → cannot resolve, caller skips + warns.
+// Where a NEW order's goods should go, used once at creation to write
+// `to_store_id` and never again at dispatch. It still eliminates the warehouse,
+// because it only answers for the store→warehouse and warehouse→store shapes
+// where the warehouse is one end by definition; an order naming both ends
+// explicitly does not come through here at all.
 function _resolveDestStoreId(order, warehouseStoreId) {
   // 1. store_name / store_cn / code stamped on the order.
   if (order.store_name || order.store_cn) {
@@ -326,28 +329,41 @@ function _transferContext(orderId) {
   const conn = tdb();
   const o = conn.prepare('SELECT * FROM restock_orders WHERE id = ?').get(orderId);
   if (!o) return { ok: false, error: 'That restock order no longer exists. No stock was moved.' };
-  // Kitchen direction uses ingredient inventory, not per-store retail stock.
+  // A kitchen request asks someone to MAKE something. Nothing travels, so there
+  // is no pair to read and nothing to move — stock changes when the kitchen
+  // makes it, which is the production path, not this one.
   if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return { skipped: 'kitchen_direction' };
 
   const label = o.rs_number || ('RS#' + o.id);
-  const warehouseStoreId = _resolveWarehouseStoreId();
-  // NAME THE SETTING. This is the refusal that replaces the most-stock guess,
-  // and a message saying only "could not work out the locations" would send an
-  // operator looking for a broken order instead of an unset setting.
-  if (!warehouseStoreId) {
-    console.warn(`[restock-transfer] ${label}: stock.warehouseStoreId is not set — stock not moved`);
+
+  // THE ORDER SAYS WHERE THE GOODS COME FROM AND WHERE THEY GO. It is not
+  // inferred here, and the three-tier guess that used to live in this function
+  // is gone — see the column comment in database.js for what each tier got
+  // wrong. Two things that guess could not survive, both of them Roots:
+  // Tianhe is a store AND the warehouse, so a direction taken from a user's
+  // role cannot say which hat they wear; and Tianhe must be able to ask Yuexiu,
+  // which the old resolver could not express at all because it always sourced
+  // from the warehouse and refused any destination equal to it.
+  const fromStoreId = o.from_store_id || null;
+  const toStoreId   = o.to_store_id || null;
+  if (!fromStoreId || !toStoreId) {
+    console.warn(`[restock-transfer] ${label}: no source/destination on the order — stock not moved`);
     return {
       ok: false,
-      error: 'No stock was moved because this business has not said which location is its warehouse. Set stock.warehouseStoreId to the warehouse\'s location id, then try again.',
+      error: 'No stock was moved because this transfer does not say which location the goods leave from and which they arrive at. Set both on the order, then try again.',
     };
   }
-  const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
-  if (!destStoreId || warehouseStoreId === destStoreId) {
-    console.warn(`[restock-transfer] ${label}: cannot resolve destination ` +
-      `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
-    return { ok: false, error: 'Could not work out which location the goods arrive at, so no stock was moved. Check the receiving store on this order, then try again.' };
+  // A location cannot send to itself. Under the old resolver this was implicit
+  // in "the destination is never the warehouse"; now it is the only rule, and
+  // it is the honest one — it catches Tianhe→Tianhe without also forbidding
+  // Yuexiu→Tianhe, which the old form banned as a side effect.
+  if (fromStoreId === toStoreId) {
+    console.warn(`[restock-transfer] ${label}: source and destination are the same location (${fromStoreId}) — stock not moved`);
+    return { ok: false, error: 'No stock was moved: this transfer leaves from and arrives at the same location.' };
   }
-  return { conn, o, label, warehouseStoreId, destStoreId };
+  // Kept under its old name so the two halves below read unchanged: it is the
+  // location the goods LEAVE, which for a Yuexiu→Tianhe request is Yuexiu.
+  return { conn, o, label, warehouseStoreId: fromStoreId, destStoreId: toStoreId };
 }
 
 // ── OUT half — the warehouse's shelf, at dispatch ──────────────────────────
@@ -758,17 +774,54 @@ router.post('/api/restock', requireAuth, (req, res, next) => {
   const initialStatus = status === 'sent' ? 'sent' : 'draft';
   const sent_at = initialStatus === 'sent' ? new Date().toISOString() : null;
 
+  // WHERE THE GOODS COME FROM AND WHERE THEY GO, DECIDED ONCE, HERE.
+  //
+  // A caller may name both ends outright — `from_store_id` / `to_store_id` — and
+  // that is the general form: it is how Tianhe asks Yuexiu, a request the old
+  // model could not express because it always sourced from the warehouse and
+  // refused any destination equal to it.
+  //
+  // When they are not named, the two familiar shapes still resolve themselves,
+  // because in both of them the warehouse is one end BY DEFINITION: a store
+  // asking for stock receives it, and a warehouse push sends it. Anything the
+  // pair cannot be worked out for is left NULL rather than guessed — the
+  // transfer refuses on null and says so, which is the honest end for an order
+  // nobody can place. A kitchen request has no pair at all and keeps none.
+  const explicitFrom = parseInt(req.body && req.body.from_store_id, 10);
+  const explicitTo   = parseInt(req.body && req.body.to_store_id, 10);
+  let fromStoreId = Number.isFinite(explicitFrom) && explicitFrom > 0 ? explicitFrom : null;
+  let toStoreId   = Number.isFinite(explicitTo)   && explicitTo   > 0 ? explicitTo   : null;
+  if (dir.to_role === 'kitchen' || dir.from_role === 'kitchen') {
+    fromStoreId = null; toStoreId = null;
+  } else if (!fromStoreId || !toStoreId) {
+    const wh = _resolveWarehouseStoreId();
+    const other = _resolveDestStoreId(
+      { store_name, store_cn, from_role: dir.from_role, created_by: req.user.id }, wh);
+    if (wh && other) {
+      // The warehouse supplies in both shapes; only the far end changes hands.
+      fromStoreId = fromStoreId || wh;
+      toStoreId   = toStoreId   || other;
+    }
+  }
+  if (fromStoreId && toStoreId && fromStoreId === toStoreId) {
+    return res.status(400).json({
+      error: 'A transfer cannot leave from and arrive at the same location · 调拨的发出与接收地点不能相同',
+    });
+  }
+
   // One handle for both statements and the transaction they run in.
   const conn = tdb();
   const insertOrder = conn.prepare(`INSERT INTO restock_orders
-    (rs_number, date, status, store_name, store_cn, notes, sent_at, created_by, from_role, to_role, purpose)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    (rs_number, date, status, store_name, store_cn, notes, sent_at, created_by, from_role, to_role, purpose,
+     from_store_id, to_store_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insertItem = conn.prepare(`INSERT INTO restock_items
     (restock_id, product_id, product_name, product_cn, sku, qty_requested, unit, notes)
     VALUES (?,?,?,?,?,?,?,?)`);
 
   const tx = conn.transaction(() => {
-    const result = insertOrder.run(rs_number, today, initialStatus, store_name || null, store_cn || null, notes || null, sent_at, req.user.id, dir.from_role, dir.to_role, cleanPurpose);
+    const result = insertOrder.run(rs_number, today, initialStatus, store_name || null, store_cn || null, notes || null,
+      sent_at, req.user.id, dir.from_role, dir.to_role, cleanPurpose, fromStoreId, toStoreId);
     const id = result.lastInsertRowid;
     items.forEach(it => {
       const qty = parseFloat(it.qty_requested) || 0;
