@@ -49,8 +49,22 @@ function logActivity(userId, username, action, entityType, entityId, details, ip
     // keep the username string, so the actor is still recorded.
     let uid = userId || null;
     if (uid != null && !db.prepare('SELECT 1 FROM users WHERE id = ?').get(uid)) uid = null;
-    db.prepare('INSERT INTO activity_log (user_id,username,action,entity_type,entity_id,details,ip_address) VALUES (?,?,?,?,?,?,?)')
-      .run(uid, username, action, entityType||null, entityId||null, details?JSON.stringify(details):null, ip||null);
+    // WHOSE history this is. activity_log is a control-plane table — one shared
+    // file for every account — so a row that does not say which account it
+    // belongs to cannot be shown to anybody without showing it to everybody.
+    // Read from the request's tenant scope rather than passed in, because all
+    // 139 call sites already run inside that scope (requireRetailAdmin enters
+    // it) and threading an argument through every one of them is 139 chances to
+    // forget. Outside any scope — the kitchen realm, a boot task — this is
+    // Roots, which is what those writes have always meant.
+    //
+    // require() is inline to keep this module loadable from lib/tenant-db.js's
+    // own dependents without a cycle; Node caches it, so it costs one map
+    // lookup per call.
+    let tenantId = null;
+    try { tenantId = require('../lib/tenant-db').currentTenantId(); } catch (e) { tenantId = null; }
+    db.prepare('INSERT INTO activity_log (user_id,username,action,entity_type,entity_id,details,ip_address,tenant_id) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uid, username, action, entityType||null, entityId||null, details?JSON.stringify(details):null, ip||null, tenantId);
   } catch(e) { console.error('Log error:', e.message); }
 }
 

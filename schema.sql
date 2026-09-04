@@ -584,6 +584,15 @@ CREATE TABLE IF NOT EXISTS activity_log (
   entity_id     INTEGER,
   details       TEXT,                  -- JSON
   ip_address    TEXT,
+  -- Which account this happened in. This table is CONTROL PLANE — one shared
+  -- file for every account (lib/tenant-db.js CONTROL_PLANE_TABLES) — so this
+  -- column is the only thing separating one merchant's history from another's.
+  -- Every reader must filter on it. NULL = written before the column existed,
+  -- which is Roots (account 1), the only account that had written any.
+  -- No FK to tenants: `tenants` lives in the same file today, but this table is
+  -- also opened by the kitchen realm at boot before that table is guaranteed,
+  -- and a failed FK here would drop audit rows silently.
+  tenant_id     INTEGER,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );

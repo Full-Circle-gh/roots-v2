@@ -1840,12 +1840,18 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // saves itself, so a shared "Save settings" button there would either do
   // nothing or claim to have saved something it never touched.
   const _saveBar = document.querySelector('.settings-body > .save-bar');
-  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku') ? 'none' : '';
+  // Change history is on that list too, and more absolutely: it is read-only.
+  // A "Save settings" button over a record of what people did would be an
+  // offer to edit the audit trail.
+  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku' || sub === 'history') ? 'none' : '';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
   // Same, for the SKU rules — the category lists it offers are read from the
   // live catalogue, so a stale copy would hide a category added since boot.
   if (sub === 'sku' && typeof skuLoad === 'function') skuLoad();
+  // Same, for the change history — it is a live record, so it is read fresh on
+  // every open rather than cached from whenever the tab was last visited.
+  if (sub === 'history' && typeof chLoad === 'function') chLoad();
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));

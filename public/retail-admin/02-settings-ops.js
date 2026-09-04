@@ -3425,3 +3425,198 @@ function tmInit() {
   tmLoad();
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHANGE HISTORY — Settings → Change history (audit E-01)
+
+   Every significant write in the admin has been calling logActivity() and
+   landing a row in `activity_log` for as long as the admin has existed. Until
+   now nothing read them, so a merchant who found a price changed, a product
+   unpublished or an order refunded could not find out who did it.
+
+   This is a READING SURFACE ONLY. There is no edit, no delete and no bulk
+   action, deliberately: a history somebody can tidy is not a history.
+
+   Not the Products screen's "Stock activity" — that answers "how did this
+   number get here". This answers "who touched this record".
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let CH_LIMIT = 100;
+let CH_OFFSET = 0;
+let CH_ROWS = [];
+let CH_TOTAL = 0;
+let _CH_SEARCH_T = null;
+
+function chSearchDebounced() {
+  clearTimeout(_CH_SEARCH_T);
+  _CH_SEARCH_T = setTimeout(() => { CH_OFFSET = 0; chLoad(); }, 250);
+}
+
+function chFilterQuery() {
+  const qs = new URLSearchParams();
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  if (v('ch-who'))  qs.set('who', v('ch-who'));
+  if (v('ch-what')) qs.set('entity_type', v('ch-what'));
+  if (v('ch-from')) qs.set('from', v('ch-from'));
+  if (v('ch-to'))   qs.set('to', v('ch-to'));
+  if (v('ch-q'))    qs.set('q', v('ch-q'));
+  return qs;
+}
+
+function chClearFilters() {
+  ['ch-who', 'ch-what', 'ch-from', 'ch-to', 'ch-q'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  CH_OFFSET = 0;
+  chLoad();
+}
+
+function chExportCsv() {
+  const qs = chFilterQuery().toString();
+  window.location.href = '/api/retail-admin/activity-log/export.csv' + (qs ? '?' + qs : '');
+}
+
+function chMore() { CH_OFFSET += CH_LIMIT; chLoad({ append: true }); }
+
+// Turn an action key into something a shopkeeper reads without decoding. The
+// keys are the code's own vocabulary ('update_product', 'refund_approve') and
+// showing them raw is exactly the developer-vocabulary problem the audit
+// records elsewhere. Anything not in the list falls back to the key with its
+// underscores opened out, so a new action added tomorrow still reads as words.
+const CH_ACTIONS = {
+  create: ['Created', '新建'], update: ['Edited', '修改'], delete: ['Deleted', '删除'],
+  login: ['Signed in', '登录'], logout: ['Signed out', '退出'],
+  publish: ['Published', '上架'], unpublish: ['Unpublished', '下架'],
+  refund: ['Refunded', '退款'], cancel: ['Cancelled', '取消'],
+  approve: ['Approved', '批准'], reject: ['Rejected', '拒绝'],
+  receive: ['Received', '收货'], adjust: ['Adjusted', '调整'],
+  block: ['Blocked', '封禁'], unblock: ['Unblocked', '解封'],
+  import: ['Imported', '导入'], export: ['Exported', '导出'],
+};
+function chActionText(action) {
+  const key = String(action || '').toLowerCase();
+  // Longest matching prefix first, so 'update_product' beats a bare 'update'
+  // only when a more specific entry exists.
+  if (CH_ACTIONS[key]) return cuT(CH_ACTIONS[key][0], CH_ACTIONS[key][1]);
+  for (const k of Object.keys(CH_ACTIONS)) {
+    if (key.startsWith(k + '_') || key.endsWith('_' + k)) {
+      const noun = key.replace(new RegExp('_?' + k + '_?'), '').replace(/_/g, ' ');
+      return (cuT(CH_ACTIONS[k][0], CH_ACTIONS[k][1]) + (noun ? ' ' + noun : '')).trim();
+    }
+  }
+  return key.replace(/_/g, ' ');
+}
+
+// The details column is a JSON blob written by 139 different call sites, so
+// there is no schema to render against. Show it as "field: value" pairs, which
+// is what it is nearly always shaped like, and fall back to the raw text when
+// it is not. Long values are cut — the full text stays in the title attribute
+// and in the CSV, where a spreadsheet can hold it.
+function chDetailsText(details) {
+  if (!details) return '';
+  let o = null;
+  try { o = JSON.parse(details); } catch { return String(details); }
+  if (o == null || typeof o !== 'object') return String(details);
+  return Object.entries(o)
+    .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v == null ? '—' : (typeof v === 'object' ? JSON.stringify(v) : v)}`)
+    .join(' · ');
+}
+
+async function chLoad(opts = {}) {
+  const tbody = document.querySelector('#ch-table tbody');
+  if (!tbody) return;
+  const append = !!opts.append;
+  if (!append) { CH_OFFSET = 0; tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Loading…', '加载中…'))}</td></tr>`; }
+
+  const qs = chFilterQuery();
+  qs.set('limit', CH_LIMIT);
+  qs.set('offset', CH_OFFSET);
+
+  let j;
+  try {
+    const res = await fetch('/api/retail-admin/activity-log?' + qs.toString());
+    j = await res.json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the change history. Check your connection and try again.',
+      '无法加载修改记录,请检查网络后重试。'))}</td></tr>`;
+    return;
+  }
+  if (!j || !j.success) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the change history.', '无法加载修改记录。'))}</td></tr>`;
+    return;
+  }
+
+  CH_ROWS = append ? CH_ROWS.concat(j.data || []) : (j.data || []);
+  CH_TOTAL = j.total || 0;
+  chFillFilterOptions(j.people || [], j.kinds || []);
+  chRender();
+}
+
+// The two dropdowns are populated from what this account has actually done, so
+// they can never offer a dead end. Rebuilt on each load but the current choice
+// is carried across, or a filter would clear itself the moment it was applied.
+function chFillFilterOptions(people, kinds) {
+  const fill = (id, values, allEn, allCn) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">${escapeHtml(cuT(allEn, allCn))}</option>`
+      + values.map(v => `<option value="${escapeHtml(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(String(v).replace(/_/g, ' '))}</option>`).join('');
+    // A filtered read returns only the values that survive the filter, so the
+    // active choice can vanish from the list it was chosen from. Put it back.
+    if (keep && sel.value !== keep) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(keep)}" selected>${escapeHtml(keep.replace(/_/g, ' '))}</option>`);
+    }
+  };
+  fill('ch-who', people, 'Everyone', '全部人员');
+  fill('ch-what', kinds, 'Everything', '全部类型');
+}
+
+function chRender() {
+  const tbody = document.querySelector('#ch-table tbody');
+  if (!tbody) return;
+
+  const filtered = [...chFilterQuery().keys()].length > 0;
+  const clearBtn = document.getElementById('ch-clear');
+  if (clearBtn) clearBtn.hidden = !filtered;
+
+  if (!CH_ROWS.length) {
+    // Two empty states, never one (§1.12): "your filters matched nothing" and
+    // "nothing has happened yet" are different facts and lead to different next
+    // moves. Telling a merchant on their first day that their filter matched
+    // nothing, when they have no history at all, is the worse of the two errors.
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="padding:22px 8px;text-align:center">`
+      + (filtered
+        ? escapeHtml(cuT('Nothing matches those filters.', '没有符合条件的记录。'))
+          + ` <a href="#" onclick="chClearFilters();return false;">${escapeHtml(cuT('Clear them', '清除筛选'))}</a>`
+        : escapeHtml(cuT(
+            'Nothing has been changed yet. Every edit your team makes will appear here.',
+            '暂无修改记录。团队的每次修改都会显示在这里。')))
+      + `</td></tr>`;
+    const c = document.getElementById('ch-count'); if (c) c.textContent = '';
+    const m = document.getElementById('ch-more'); if (m) m.hidden = true;
+    return;
+  }
+
+  tbody.innerHTML = CH_ROWS.map(r => {
+    const det = chDetailsText(r.details);
+    const rec = [r.entity_type ? String(r.entity_type).replace(/_/g, ' ') : '', r.entity_id ? '#' + r.entity_id : '']
+      .filter(Boolean).join(' ');
+    return `<tr>`
+      // The shop's own clock, not a hardcoded Guangzhou one — tdWhen reads
+      // window.TD_TZ, which the config load sets from the account's first store.
+      + `<td data-no-i18n>${escapeHtml((typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.at_local) || '')}</td>`
+      + `<td data-no-i18n>${escapeHtml(r.username || cuT('(unknown)', '(未知)'))}</td>`
+      + `<td>${escapeHtml(chActionText(r.action))}</td>`
+      + `<td data-no-i18n>${escapeHtml(rec)}</td>`
+      + `<td class="muted" data-no-i18n title="${escapeHtml(det)}" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(det)}</td>`
+      + `</tr>`;
+  }).join('');
+
+  const c = document.getElementById('ch-count');
+  if (c) c.textContent = cuT(`Showing ${CH_ROWS.length} of ${CH_TOTAL}`, `显示 ${CH_ROWS.length} / ${CH_TOTAL}`);
+  const m = document.getElementById('ch-more');
+  if (m) m.hidden = CH_ROWS.length >= CH_TOTAL;
+}

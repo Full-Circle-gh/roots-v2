@@ -54,6 +54,20 @@ addColumn('ingredients', 'image_data',        'TEXT');
 addColumn('recipes',     'is_favorite',       'INTEGER DEFAULT 0');
 addColumn('po_line_items', 'lot_number',      'TEXT');
 addColumn('po_line_items', 'expiry_date',     'DATE');
+// Which account an activity row belongs to. `activity_log` is a CONTROL-PLANE
+// table (lib/tenant-db.js) — one shared file, never cloned per account — so
+// without this column there is no way to show an operator their own history
+// without showing them everybody else's. NULL means "written before this column
+// existed"; those rows are Roots', because Roots is the only account that has
+// written any. Readers must filter on it explicitly — see the note on
+// GET /api/retail-admin/activity-log.
+addColumn('activity_log', 'tenant_id', 'INTEGER');
+// Created HERE and not in schema.sql: schema.sql runs before the ALTER above,
+// so on an existing database the column does not exist yet when its indexes are
+// declared. The reading screen filters on (tenant_id, created_at) and nothing
+// else, which is exactly this index.
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_activity_log_tenant ON activity_log(tenant_id, created_at)'); }
+catch (e) { console.error('[migrate] activity_log tenant index:', e.message); }
 // Retail purchasing (online store buying dept) shares the kitchen PO engine.
 // scope splits the two worlds' lists ('kitchen' | 'retail'); retail POs pin a
 // retail_stores.id they restock into, and their lines reference store_products

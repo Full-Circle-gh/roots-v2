@@ -14474,6 +14474,128 @@ function activityRows({ where, params }, limit, offset) {
   `).all(limit != null ? { ...params, limit, offset } : params);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   WHO CHANGED WHAT — the change history (audit E-01)
+
+   Every significant write in the admin already calls logActivity(); 139 call
+   sites across four route files have been writing rows into `activity_log`
+   since long before this endpoint existed. Nothing read them. A merchant who
+   found a price changed, a product unpublished or an order refunded had no way
+   to find out who did it.
+
+   THIS IS NOT the Products screen's "Stock activity". That reads
+   `retail_stock_ledger` and answers "how did this number get here" — movements,
+   with balances. This answers "who touched this record, and when".
+
+   🔴 TENANT SCOPING IS THE WHOLE OF THE SECURITY HERE, AND IT IS NOT tdb().
+   `activity_log` is a CONTROL-PLANE table (lib/tenant-db.js
+   CONTROL_PLANE_TABLES): one shared file, never cloned per account, so tdb()
+   would return the same rows to everybody. The read goes through the shared
+   handle deliberately and filters on `tenant_id` — the column added for exactly
+   this reason. Rows written before that column existed are NULL and belong to
+   Roots, the only account that had written any; that is why account 1 also
+   takes the NULLs and no other account ever can.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// The filter, built once for the page, its COUNT and its CSV — the same rule as
+// Orders and Customers, for the same reason.
+function buildChangeLogFilter(req) {
+  const tid = currentTenantId() || ROOTS_TENANT_ID;
+  // Account 1 also owns every row written before tenant_id existed. Any other
+  // account matches its own id and nothing else — a NULL row is never theirs.
+  const where = [tid === ROOTS_TENANT_ID
+    ? '(a.tenant_id = ? OR a.tenant_id IS NULL)'
+    : 'a.tenant_id = ?'];
+  const params = [tid];
+
+  const who = String(req.query.who || '').trim();
+  if (who) { where.push('a.username = ?'); params.push(who); }
+
+  const what = String(req.query.entity_type || '').trim();
+  if (what) { where.push('a.entity_type = ?'); params.push(what); }
+
+  // Free text over the action, the record type and the details blob — the three
+  // places an operator's own words end up ("refund", "price", an order number).
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    where.push('(a.action LIKE ? OR a.entity_type LIKE ? OR a.details LIKE ? OR CAST(a.entity_id AS TEXT) = ?)');
+    const s = `%${q}%`; params.push(s, s, s, q);
+  }
+
+  // Day bounds, read as Guangzhou days because that is what the screen shows.
+  const from = String(req.query.from || '').trim();
+  const to   = String(req.query.to   || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(a.created_at,'+8 hours') >= ?"); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(a.created_at,'+8 hours') <= ?"); params.push(to); }
+
+  return { whereSql: 'WHERE ' + where.join(' AND '), params };
+}
+
+// `created_at` is returned RAW (UTC, as stored) as well as pre-shifted. The
+// screen renders the raw one through tdWhen(), which uses the shop's own
+// timezone — the point of A-04's fix. `at_local` is the fixed +8 rendering the
+// CSV column is labelled with, matching every other export in this service.
+const CHANGE_LOG_SELECT = `
+  SELECT a.id, a.username, a.action, a.entity_type, a.entity_id, a.details, a.ip_address,
+         a.created_at,
+         datetime(a.created_at,'+8 hours') AS at_local
+    FROM activity_log a`;
+
+// GET /api/retail-admin/activity-log — the change history, newest first.
+//
+// Named activity-LOG, not activity: /api/retail-admin/activity is the stock
+// ledger and has been since before this existed. Two different questions, two
+// names, and neither shadows the other.
+router.get('/api/retail-admin/activity-log', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildChangeLogFilter(req);
+    const limit  = Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM activity_log a ${whereSql}`).get(...params).n;
+    const rows  = db.prepare(`${CHANGE_LOG_SELECT} ${whereSql} ORDER BY a.id DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset);
+
+    // The two filter dropdowns are populated from what this account actually
+    // has, not from a hard-coded list: a list naming record types the merchant
+    // has never touched is a list of dead ends, and one that missed a type
+    // would hide rows the operator could see in the table below it.
+    const people = db.prepare(
+      `SELECT DISTINCT a.username FROM activity_log a ${whereSql} AND a.username IS NOT NULL
+        ORDER BY a.username`).all(...params).map(r => r.username);
+    const kinds = db.prepare(
+      `SELECT DISTINCT a.entity_type FROM activity_log a ${whereSql} AND a.entity_type IS NOT NULL
+        ORDER BY a.entity_type`).all(...params).map(r => r.entity_type);
+
+    res.json({ success: true, data: rows, total, limit, offset, people, kinds });
+  } catch (e) {
+    console.error('[activity-log]', e);
+    res.status(500).json({ success: false, error: 'activity_log_failed', message: e.message });
+  }
+});
+
+// The same history as a spreadsheet, same filters, no page window.
+router.get('/api/retail-admin/activity-log/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildChangeLogFilter(req);
+    const rows = db.prepare(`${CHANGE_LOG_SELECT} ${whereSql} ORDER BY a.id DESC`).all(...params);
+    const head = ['When (UTC+8)', 'Who', 'Did what', 'To what', 'Record', 'Details', 'IP address'];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([r.at_local, r.username, r.action, r.entity_type, r.entity_id, r.details, r.ip_address]
+        .map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="change_history_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[activity-log csv]', e);
+    res.status(500).json({ success: false, error: 'activity_log_csv_failed', message: e.message });
+  }
+});
+
 // JSON: paginated rows + per-source summary for the current filter window.
 router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
   try {

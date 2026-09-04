@@ -9576,6 +9576,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
           Operations · 运营
         </button>
+        <!-- Change history — who changed what. The rows have been written since
+             long before there was anywhere to read them (audit E-01); this is
+             the reading surface. Not gated: an operator who can reach Settings
+             can see what was done to the shop they work in, and the endpoint
+             scopes every row to their own account. -->
+        <button data-sub="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
+          Change history · 修改记录
+        </button>
         <!-- SKU codes. Gated on materials:view because that is whose catalogue
              the rules number — an operator who cannot see materials has no use
              for a screen about how materials are coded. The write endpoints are
@@ -10516,6 +10525,45 @@
              baked by cuT(), the same way the Materials screens work. The rules
              live in the tenant's own database (sku_rules / sku_counters), so
              this is not a Roots screen with Roots' letters in it. -->
+        <!-- ────── CHANGE HISTORY ────── -->
+        <div class="sub-panel" id="sub-history">
+          <h2>Change history · 修改记录</h2>
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Who changed what · 谁改了什么</h3>
+              <div class="muted">Every edit anyone on your team makes to products, orders, stock, purchases and settings, newest first. Read-only — nothing here can be altered, which is what makes it worth having. · 团队成员对商品、订单、库存、采购与设置所做的每一次修改,最新在前。只读,不可更改。</div>
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <select id="ch-who" onchange="chLoad()" aria-label="Filter by person"><option value="">Everyone · 全部人员</option></select>
+              <select id="ch-what" onchange="chLoad()" aria-label="Filter by record type"><option value="">Everything · 全部类型</option></select>
+              <label class="sr-only" for="ch-from">From date</label>
+              <input type="date" id="ch-from" onchange="chLoad()" aria-label="From date">
+              <span style="color:var(--text-3)">–</span>
+              <label class="sr-only" for="ch-to">To date</label>
+              <input type="date" id="ch-to" onchange="chLoad()" aria-label="To date">
+              <input type="text" id="ch-q" oninput="chSearchDebounced()" placeholder="Search · 搜索" aria-label="Search the change history" style="flex:1;min-width:180px">
+              <button class="btn btn-sm" type="button" id="ch-clear" hidden onclick="chClearFilters()">Clear filters · 清除筛选</button>
+              <button class="btn btn-sm" type="button" onclick="chExportCsv()" title="Download this history as a spreadsheet · 下载记录表格">Export CSV · 导出</button>
+            </div>
+            <div class="table-wrap">
+              <table id="ch-table">
+                <thead><tr>
+                  <th>When · 时间</th>
+                  <th>Who · 谁</th>
+                  <th>Did what · 做了什么</th>
+                  <th>To what · 对象</th>
+                  <th>Details · 详情</th>
+                </tr></thead>
+                <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-top:10px">
+              <span class="muted" id="ch-count" data-no-i18n></span>
+              <button class="btn btn-sm" type="button" id="ch-more" hidden onclick="chMore()">Show more · 显示更多</button>
+            </div>
+          </div>
+        </div>
+
         <div class="sub-panel" id="sub-sku">
           <div id="sku-root" data-no-i18n></div>
         </div>
