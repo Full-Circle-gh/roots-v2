@@ -83,6 +83,7 @@
     "test:stock-receiving": "node scripts/test_stock_receiving.js",
     "test:stock-picking": "node scripts/test_stock_picking.js",
     "test:stock-home": "node scripts/test_stock_home.js",
+    "test:kitchen-queue": "node scripts/test_kitchen_queue_reachable.js",
     "test:guanyi-expiry": "node scripts/test_guanyi_session_expiry.js",
     "test:stock-movement": "node scripts/test_stock_two_step.js && node scripts/test_stock_two_step_tenant2.js",
     "test:restock-handles": "node scripts/test_restock_tenant_handle.js && node scripts/test_restock_tenant2_split.js && node scripts/test_created_by_fk_migration.js",

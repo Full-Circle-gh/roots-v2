@@ -99,6 +99,7 @@ function stub(o) {
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
     'var KITCHEN=' + JSON.stringify(o.noQueue ? [] : [KITCHEN_REQ]) + ';\n' +
+    'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
@@ -107,6 +108,14 @@ function stub(o) {
     '    body={success:true,data:[{id:7,name_en:"Hummus Asli",name_cn:"鹰嘴豆泥",sku:"1-10",status:"Active"}]};\n' +
     '  }\n' +
     '  else if(url.indexOf("/api/restock")===0){\n' +
+    // A KITCHEN-ONLY OPERATOR, AS THE SERVER ACTUALLY ANSWERS THEM. A Tacet
+    // session holding restock:fulfil and not restock:pick is _kitchenScopedSession,
+    // and the list route 403s it on anything but to_role=kitchen. The 403 is a
+    // rejection with no query behind it, so it comes back FASTER than the two
+    // 200s beside it — this stub answers the kitchen list on a delay to make
+    // that ordering deterministic rather than lucky.
+    '    if(KONLY && url.indexOf("to_role=kitchen")<0)\n' +
+    '      return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
     '      body={success:true,id:99,rs_number:"RS-260904-001"}; }\n' +
     '    else\n' +
@@ -118,6 +127,8 @@ function stub(o) {
     '    else body={success:true,data:ORDERS};\n' +
     '  }\n' +
     '  else body={success:true,data:{}};\n' +
+    '  if(KONLY&&url.indexOf("to_role=kitchen")>-1)\n' +
+    '    return new Promise(function(z){setTimeout(function(){z({status:200,json:function(){return Promise.resolve(body)}})},60)});\n' +
     '  return Promise.resolve({status:200,json:function(){return Promise.resolve(body)}});};\n' +
     '</scr' + 'ipt>';
 }
@@ -303,6 +314,35 @@ const CASES = {
       if (p.to_store_id !== 2) return `to_store_id ${p.to_store_id}, expected Yuexiu (2)`;
       return null;
     } },
+
+  /* ── The kitchen operator, who could not see their own queue ──────────────
+     Ash, on a phone, on a kitchen account: "i don't see the order tianhe push,
+     i don't even see the screen where i can see it."
+
+     Three loaders fire together at boot and the FIRST to answer decides whether
+     the launcher exists (`_landed` latches). A kitchen-only operator is 403'd
+     on the two transfer lists and answered on the kitchen one — and a 403 is a
+     rejection with no query behind it, so it wins that race almost every time.
+     It set `rc.on = false`, `homeAvailable()` went false, and the app stayed on
+     the counting list. The queue shipped in #262 was unreachable by exactly the
+     people it was built for.
+
+     The rule this asserts: BEING REFUSED ONE JOB IS NOT BEING REFUSED ALL OF
+     THEM. Whether a launcher exists is the OR of what answered, never whatever
+     answered first. */
+  'kitchen-only-operator-still-gets-their-queue': { kitchenOnly: true, js: 'window.__done();',
+    expect: ['Kitchen queue', 'Make what was asked for', '1 waiting'],
+    check: (out) => /data-view="home"/.test(out) ? null
+      : 'a kitchen operator was refused the launcher by the transfer 403' },
+
+  // And they are not shown doors that would 403 on the first tap. Pick, Receive
+  // and Ask for stock are all transfer work, which is the thing they were just
+  // refused; Count is theirs because counting is not restock at all.
+  'kitchen-only-operator-is-shown-no-transfer-tiles': { kitchenOnly: true, stores: TWO,
+    js: 'window.__done();',
+    expect: ['Kitchen queue', 'Count'],
+    absent: ['Pull a run for the stores', 'Nothing to pick', 'Count a delivery in',
+             'Nothing on its way', 'Ask for stock'] },
 
   'ask-cn': { stores: TWO, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-asopen]'", '250']),

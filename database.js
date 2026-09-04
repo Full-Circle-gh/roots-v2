@@ -4214,6 +4214,51 @@ try {
   }
 } catch (e) { console.error('[migration restock_explicit_locations_v1]', e); }
 
+// THE KITCHEN ROLE GAINS restock:fulfil ON TENANTS THAT ALREADY HAVE THE ROW.
+//
+// tenant_roles is seeded with INSERT OR IGNORE, so changing the shipped preset
+// reaches new tenants only — every tenant that already has a kitchen role keeps
+// the caps_json written the day it was seeded. That is correct for an edited
+// role and wrong for this one: #262 gated the kitchen queue on a capability the
+// role has never held, so on every existing tenant the queue is invisible to
+// the kitchen. Ash found it on a phone: "i don't even see the screen".
+//
+// ONLY UNEDITED ROWS ARE TOUCHED. The match is on caps_json holding exactly the
+// old shipped preset — ["quickstock:add"] — so a tenant who has deliberately
+// shaped this role keeps their shape and adds the capability themselves in the
+// role editor. Rewriting a considered choice to fix our own omission would be
+// the worse error, and it is unrecoverable in a way this is not.
+//
+// roles_version is bumped per tenant, which is the whole invalidation story:
+// the next request by anyone in that tenant reads the new number off the row it
+// was already fetching and reloads. Nobody has to log out.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('kitchen_role_can_fulfil_v1');
+  if (!ran) {
+    let done = 0, kept = 0;
+    try {
+      const rows = db.prepare("SELECT rowid AS rid, tenant_id, caps_json FROM tenant_roles WHERE role_key = 'kitchen'").all();
+      const put = db.prepare('UPDATE tenant_roles SET caps_json = ? WHERE rowid = ?');
+      const bump = db.prepare('UPDATE tenants SET roles_version = COALESCE(roles_version, 0) + 1 WHERE id = ?');
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          let list = null;
+          try { const p = JSON.parse(r.caps_json || 'null'); if (Array.isArray(p)) list = p; } catch (e) { list = null; }
+          if (!list) { kept++; continue; }
+          if (list.indexOf('restock:fulfil') >= 0) { kept++; continue; }
+          if (list.length !== 1 || list[0] !== 'quickstock:add') { kept++; continue; }
+          put.run(JSON.stringify(['quickstock:add', 'restock:fulfil']), r.rid);
+          bump.run(r.tenant_id);
+          done++;
+        }
+      });
+      tx();
+    } catch (e) { console.error('[migration kitchen_role_can_fulfil_v1] scan', e); }
+    console.log(`[migration] kitchen_role_can_fulfil_v1: granted restock:fulfil to ${done} kitchen role(s), left ${kept} edited or already-granted`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('kitchen_role_can_fulfil_v1');
+  }
+} catch (e) { console.error('[migration kitchen_role_can_fulfil_v1]', e); }
+
 // Seed default reservation TTL config — minutes before an unpaid order's
 // stock reservations expire and stock returns to the available pool.
 try {
