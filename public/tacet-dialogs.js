@@ -146,7 +146,10 @@
     injectStyle();
     const scrim = document.createElement('div');
     scrim.className = 'tdlg-scrim';
-    scrim.innerHTML = `<div class="tdlg-modal ${kindClass}"><div class="tdlg-body">${bodyHtml}</div><div class="tdlg-foot">${footHtml}</div></div>`;
+    // role/aria-modal so assistive technology announces this as a dialog and
+    // treats the page behind it as inert — the other half of the trap below.
+    scrim.innerHTML = `<div class="tdlg-modal ${kindClass}" role="dialog" aria-modal="true">`
+      + `<div class="tdlg-body">${bodyHtml}</div><div class="tdlg-foot">${footHtml}</div></div>`;
     document.body.appendChild(scrim);
     const lastFocus = document.activeElement;
     requestAnimationFrame(() => scrim.classList.add('on'));
@@ -161,7 +164,35 @@
       activeClose = null;
       resolve(result);
     }
-    function onKey(e) { if (e.key === 'Escape') closer(null); }
+    /* ── Focus trap (audit R-05) ────────────────────────────────────────
+       Tab out of a modal and the browser walked the page BEHIND it — the whole
+       admin, in order, while a dialog sat on top waiting for an answer. A
+       keyboard or screen-reader operator could not tell they had left, could
+       not see where they were, and could activate a control the dialog was
+       covering.
+
+       Wrapped rather than blocked: Tab past the last control returns to the
+       first, Shift+Tab before the first goes to the last. The dialog keeps its
+       existing Escape and backdrop dismissals, so nobody is stuck in it. */
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), '
+      + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    function trapTab(e) {
+      const items = [].slice.call(scrim.querySelectorAll(FOCUSABLE))
+        .filter(el => el.offsetParent !== null || el === document.activeElement);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      // Focus somewhere else entirely (the page behind, or nowhere) — pull it
+      // back in rather than letting the wrap logic reason about an outsider.
+      if (!scrim.contains(document.activeElement)) {
+        e.preventDefault(); (e.shiftKey ? last : first).focus(); return;
+      }
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { closer(null); return; }
+      if (e.key === 'Tab') trapTab(e);
+    }
     scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) closer(null); });
     document.addEventListener('keydown', onKey);
 

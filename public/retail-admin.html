@@ -2017,7 +2017,7 @@
 
     <!-- Activity drill-through drawer — populated by dashFeedClick (rows in
          The Recap's "Show the work" fold). Reuses the global .side-drawer chrome. -->
-    <aside id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
+    <aside role="dialog" id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -2035,7 +2035,7 @@
          behind the card's "and N more". Read drawer (dw-dismiss: Esc or an
          outside click closes it). Body + pill filled by dashStockDrawer*
          (03-dashboard); reuses the global .side-drawer chrome. -->
-    <aside id="db-stock-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+    <aside role="dialog" id="db-stock-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-stock-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -5306,7 +5306,7 @@
          switches, label edit, grants, on/off. dw-dismiss = outside click
          closes it; tr.vch-row is exempted in 04-orders.js so the opening
          click doesn't instantly close it. -->
-    <aside id="vch-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+    <aside role="dialog" id="vch-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
       <button type="button" class="drawer-close" onclick="closeDrawer('#vch-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -6107,7 +6107,7 @@
   <!-- Pop-up editor — centered modal (not an edge drawer) so the customer
        preview has room to breathe, matching the Flash sale composer. -->
   <div id="pu-editor-scrim" onclick="closeDrawer('#pu-editor-bg')"></div>
-  <aside id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
+  <aside role="dialog" id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
     <div class="drawer-head">
       <div style="font-size: 14px; font-weight: 600;" id="pu-editor-title">Pop-up · 弹窗</div>
       <button class="btn btn-ghost btn-icon" onclick="closeDrawer('#pu-editor-bg')" title="Close · 关闭 (Esc)">
@@ -7701,7 +7701,7 @@
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
-  <aside id="dz-edit-bg" class="side-drawer" aria-hidden="true">
+  <aside role="dialog" id="dz-edit-bg" class="side-drawer" aria-hidden="true">
     <div class="drawer-head">
       <div>
         <h3 style="margin: 0; font-size: 14px;" id="dz-edit-title">Add zone · 添加配送区</h3>
@@ -8728,7 +8728,7 @@
     </div>
     <!-- Feedback thread drawer — read the conversation + reply. Reuses the
          global .side-drawer chrome; bubbles + composer styled below. -->
-    <aside id="fb-drawer" class="side-drawer dw-compact" aria-hidden="true">
+    <aside role="dialog" id="fb-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#fb-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -9332,7 +9332,7 @@
   </div>
 
   <!-- Media detail / edit drawer (slide-in side drawer) -->
-  <aside id="ml-edit-bg" class="side-drawer" aria-hidden="true">
+  <aside role="dialog" id="ml-edit-bg" class="side-drawer" aria-hidden="true">
     <div class="drawer-head">
       <div>
         <h3 style="margin: 0; font-size: 14px;" id="ml-edit-title">Media · 媒体</h3>
@@ -12657,7 +12657,7 @@
        in-flow page in the content area (body.ord-viewing hides the tab sections
        and drops this to position:static) — no fixed overlay, no slide. On phones
        (<721px) it keeps the full-screen drawer behaviour. -->
-  <aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
+  <aside role="dialog" aria-modal="true" id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
     <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -12699,7 +12699,7 @@
      once, in one rule. The list stays VISIBLE behind it — that is what
      makes this a drawer and not a modal — but reads as inactive. -->
 <div id="cu-scrim" class="ord-scrim" aria-hidden="true" onclick="closeDrawer('#cu-drawer')"></div>
-<aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
+<aside role="dialog" aria-modal="true" id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
@@ -13073,7 +13073,7 @@
 <script src="/assets/retail-admin/23-sku.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
-<aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
+<aside role="dialog" id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
   <div class="drawer-head">
     <div>
       <h3 style="margin: 0; font-size: 14px;">Live Preview · 实时预览</h3>

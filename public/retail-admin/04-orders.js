@@ -5387,12 +5387,61 @@ function onDrawerClose(sel, fn) { _drawerCloseHooks.set(sel, fn); }
 // rather than the last one in DOM source order. The order and customer
 // drawers share z-index:200, so z-index alone can't say which is on top.
 let _drawerOpenSeq = 0;
+/* ── Focus trap for drawers (audit R-05) ──────────────────────────────────
+   Same problem the shared dialogs had: Tab out of an open drawer and the
+   browser walked the page behind it — the whole list, in order, while the
+   drawer sat on top. A keyboard operator could not tell they had left, and
+   could activate a row the drawer was covering.
+
+   ONE listener for every drawer, bound once, resolving the topmost open one at
+   the moment Tab is pressed — because two drawers can be open at a time (an
+   order opened from a customer) and the trap has to hold the one on top, not
+   whichever was wired first.
+
+   Wrapped, not blocked: Tab past the last control returns to the first. Escape
+   still closes, so nobody is stuck. */
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), '
+  + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+if (!window._drawerTrapBound) {
+  window._drawerTrapBound = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    // A shared dialog on top of a drawer owns the keyboard — it runs its own
+    // trap, and two traps fighting over one Tab is worse than none.
+    if (document.querySelector('.tdlg-scrim.on')) return;
+    const open = document.querySelectorAll('.side-drawer.open');
+    if (!open.length) return;
+    const d = topmostOpenDrawer(open);
+    if (!d) return;
+    const items = [].slice.call(d.querySelectorAll(DRAWER_FOCUSABLE))
+      .filter(el => el.offsetParent !== null || el === document.activeElement);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (!d.contains(document.activeElement)) {
+      e.preventDefault(); (e.shiftKey ? last : first).focus(); return;
+    }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
+
 function openDrawer(sel) {
   const d = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!d) return;
   d.dataset.openSeq = String(++_drawerOpenSeq);
   d.classList.add('open');
   d.setAttribute('aria-hidden', 'false');
+  // Where focus came from, so closing can put it back on the row that opened
+  // the drawer rather than dropping the keyboard operator at the top of the
+  // page (audit R-05).
+  d._returnFocus = document.activeElement;
+  // Move focus INTO the drawer. Without this the trap has nothing to hold and
+  // the operator's next Tab starts from wherever they were in the list behind.
+  setTimeout(() => {
+    if (!d.classList.contains('open')) return;
+    const f = d.querySelector(DRAWER_FOCUSABLE);
+    if (f) f.focus();
+  }, 60);
   // Order drawer opens in focus mode: raise the blur+dim scrim behind it.
   // Drawers that open in focus mode raise a blur+dim scrim behind them. Keyed
   // by id so no other drawer changes behaviour.
@@ -5415,6 +5464,12 @@ function closeDrawer(sel) {
     if (sc) sc.classList.remove('show');
   }
   d.setAttribute('aria-hidden', 'true');
+  // Hand the keyboard back where it came from (audit R-05). Guarded on the
+  // element still being on the page — the row that opened this drawer may have
+  // been repainted away by a reload while the drawer was open.
+  const back = d._returnFocus;
+  d._returnFocus = null;
+  if (back && back.isConnected && back.focus) { try { back.focus(); } catch (e) {} }
   const key = typeof sel === 'string' ? sel : '#' + d.id;
   const hook = _drawerCloseHooks.get(key);
   if (hook) setTimeout(hook, 240);

@@ -292,6 +292,16 @@
             : T('A material is anything you buy and keep — flour, cups, a mixer. Add the first one and its cost per unit is worked out for you.', '物料是你采购并留存的任何东西 —— 面粉、杯子、搅拌机。新建第一条,单位成本会自动算好。'))}</p>
           ${elsewhere ? `<p class="mat-emptyline"><button class="mat-linkbtn" onclick="matSetSource('${otherTab}')">${esc(
             T(`${elsewhere} in ${otherLabel} →`, `${otherLabel}中有 ${elsewhere} 条 →`))}</button></p>` : ''}
+          <!-- The button (audit C-03). This screen explained a material better
+               than any other empty state in the product and then offered no way
+               to make one — the operator read the sentence and had to go and
+               find the toolbar. Suppliers has offered its own button all along;
+               this is the same shape.
+               On the "nothing matches" branch the useful action is the opposite
+               one: put the whole list back. -->
+          <div style="margin-top:14px">${blank
+            ? `<button class="mat-btn" type="button" onclick="matClearFilters()">${esc(T('Clear the filters', '清除筛选'))}</button>`
+            : `<button class="mat-btn primary" type="button" data-cap="materials:edit" onclick="matRecordNew()"><span class="mat-ic">${I.plus}</span>${esc(T('Add your first material', '新建第一条物料'))}</button>`}</div>
         </div>`;
     }
     // Both money columns are REMOVED for an operator without materials:costs —
@@ -345,6 +355,18 @@
   window.matSetCat  = function (c) { _cat = c; load(); };
   window.matSetSup  = function (s) { _sup = s; load(); };
   window.matSetArchived = function (on) { _archived = !!on; load(); };
+  // Put the whole list back, in one action (audit C-03 / B-06). The "nothing
+  // matches" empty state offers it, because an operator who has filtered down
+  // to nothing should not have to remember which four controls they touched.
+  // `_archived` and `_source` are NOT reset, and that is the rule: both are
+  // places you chose to be — the archive, and the Bought / Made tabs — not
+  // filters that narrowed the place you were. Clearing should widen the list
+  // you are looking at, never move you to a different one.
+  window.matClearFilters = function () {
+    _q = ''; _kind = ''; _cat = ''; _sup = '';
+    const q = document.getElementById('mat-q'); if (q) q.value = '';
+    load();
+  };
   window.matSearch = function (v) {
     _q = v;
     clearTimeout(_searchTimer);

@@ -529,6 +529,18 @@ app.get('/backend/brand', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-brand.html'));
 });
 
+// The AI brand studio (audit B-04). A finished screen — brief form, progress
+// state, preview, apply — backed by five working endpoints, with no route and
+// no link: reachable only by typing /assets/brand-studio.html, because the
+// static server exposes the whole public folder. Work paid for and unused.
+// Same gate shape as /backend/brand above: signed in here, and the endpoints
+// behind it enforce the role.
+app.get('/backend/brand-studio', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'brand-studio.html'));
+});
+
 // SaaS-admin console — platform owner only (a kitchen `admin` session).
 app.get('/saas-admin', (req, res) => {
   const dbx = require('./database');
