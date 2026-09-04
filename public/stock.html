@@ -382,6 +382,93 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .kp-key svg{width:22px;height:22px;}
 .kp-save{width:100%;height:48px;border-radius:8px;background:var(--text);color:var(--bg);font-size:15px;font-weight:500;margin-top:16px;}
 .kp-save:active{opacity:.86;}
+
+/* ── Receiving ──────────────────────────────────────────────────────────────
+   The store's half of a two-step transfer (decisions §39). Drawn in
+   design-handoff/store-receiving/ against these exact tokens, which is why the
+   artboards carry over unchanged: --paper/--ink/--graphite/--dusk/--sage are
+   the same names on both sides. Prefixed .rc- throughout — .row and .qty
+   already belong to the counting list above and mean something else there. */
+.rc-wrap{display:flex;flex-direction:column;min-height:calc(100vh - var(--sa-top));}
+.rc-head{padding:8px 16px 12px;flex:none;}
+.rc-h1{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.25;}
+.rc-sub{font-size:13px;color:var(--text2);margin-top:2px;font-variant-numeric:tabular-nums;}
+.rc-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;}
+.rc-meta .l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rc-meta .r{flex:none;}
+.rc-back{display:flex;align-items:center;gap:8px;color:var(--text2);font-size:15px;padding:0 0 10px;}
+.rc-back svg{width:20px;height:20px;}
+/* THE SINGLE DUSK SPEND IN THE WHOLE FLOW. Stock that has left one building and
+   not reached another is on no shelf anywhere — the one state only Tacet holds,
+   and the one thing here the shop could not work out for itself. Every other
+   action in receiving is hers, so every other screen is Ink. */
+.rc-transit{margin:0 16px 12px;background:var(--dusk-tint);border-radius:14px;padding:16px;flex:none;}
+.rc-dot{width:7px;height:7px;border-radius:999px;background:var(--dusk);flex:none;display:inline-block;}
+.rc-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;}
+.rc-plain{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px 16px;}
+.rc-flat{background:var(--raised);border-radius:14px;padding:14px 16px;}
+.rc-lbl{font-size:13px;font-weight:500;letter-spacing:.04em;color:var(--text2);padding:10px 16px 8px;flex:none;}
+.rc-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);width:100%;text-align:left;}
+.rc-row.done{background:var(--raised);box-shadow:inset 4px 0 0 var(--sage);}
+.rc-row.next{border-top:1px solid var(--text);border-bottom:1px solid var(--text);}
+.rc-qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+        letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--text);}
+.rc-mid{flex:1;min-width:0;}
+.rc-nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-.01em;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rc-cap{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+/* The gap is the only thing on a settled row that keeps full Ink. */
+.rc-gap{color:var(--text);font-weight:600;}
+.rc-muted{color:var(--text2);}
+.rc-count{height:56px;padding:0 12px;flex:none;border-radius:12px;background:var(--surface);
+          border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+          font-size:13px;font-weight:500;color:var(--text2);}
+.rc-tick{width:52px;height:56px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+.rc-tick.todo{background:var(--raised);border:1px solid var(--line);}
+.rc-tick svg{width:28px;height:28px;}
+.rc-hr{height:1px;background:var(--line);}
+.rc-body{flex:1;}
+/* Sticky rather than fixed: the bar has to stay with the list when the keyboard
+   sheet is up, and a fixed footer would sit over the row under her finger. */
+.rc-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);flex:none;}
+.rc-prog{height:3px;background:var(--line);}
+.rc-prog i{background:var(--sage);display:block;height:100%;}
+.rc-footrow{display:flex;align-items:center;gap:12px;padding:10px 16px calc(var(--sa-bot) + 18px);}
+.rc-tally{flex:1;min-width:0;}
+.rc-tally b{font-size:17px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.rc-tally b span{font-weight:400;font-size:15px;color:var(--text2);}
+.rc-tally i{display:block;font-style:normal;font-size:13px;color:var(--text2);margin-top:-2px;}
+.rc-cta{height:52px;padding:0 20px;border-radius:12px;flex:none;display:flex;align-items:center;
+        justify-content:center;font-size:15px;font-weight:500;background:var(--raised);
+        border:1px solid var(--line);color:var(--text2);}
+.rc-cta.on{background:var(--text);color:var(--bg);border-color:var(--text);}
+.rc-cta.on:active{opacity:.86;}
+/* One deliberate tap, not the picker's press-and-hold. Dispatch sends goods out
+   of the building and the van leaves; here the box is open in front of her, so
+   a mistap costs a recount rather than a consignment — and she is not wearing
+   gloves. The weight belongs on the count she has already done fourteen times. */
+.rc-big{height:56px;width:100%;border-radius:12px;background:var(--text);color:var(--bg);
+        font-size:16px;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;}
+.rc-big:active{opacity:.86;}
+.rc-big[disabled]{background:var(--raised);border:1px solid var(--line);color:var(--text2);}
+.rc-note{font-size:13px;color:var(--text2);line-height:1.45;}
+.rc-err{margin:0 16px 12px;background:var(--brick-tint);border-radius:14px;padding:12px 16px;
+        font-size:14px;color:var(--brick-ink);flex:none;}
+.rc-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+          padding:0 40px 80px;text-align:center;}
+/* The entry into all of this, on the counting list. Cream, not Dusk: an arrival
+   she can see through the door is not something Tacet did for her. */
+/* Cream in BOTH states, and the in-transit one too. The flow's whole Dusk
+   budget is the one card on the transit screen; spending it again out here
+   would make the rarest colour on the phone the most common thing on it. The
+   two states are told apart by what the line says, which is what she reads. */
+.rc-entry{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+          background:var(--raised);border-radius:14px;padding:14px 16px;margin:0 0 12px;}
+.rc-entry .t{flex:1;min-width:0;}
+.rc-entry .t b{display:block;font-size:15px;font-weight:600;line-height:1.35;}
+.rc-entry .t i{display:block;font-style:normal;font-size:13px;color:var(--text2);
+               font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 </style>
 </head>
 <body>
@@ -524,6 +611,49 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     <button class="kp-save" id="kpSave"></button>
   </div>
 </div>
+<!-- Receiving's keypad. Its own sheet rather than a mode on the counting one:
+     that keypad's Sold-out key, its label and its save verb are all quick-stock
+     semantics, and receiving needs a "what the warehouse sent" reset key plus a
+     live short/over readout beside the figure. Two sheets, no shared branches. -->
+<div class="sheet-back" id="rcBack"></div>
+<div class="sheet" id="rcSheet">
+  <div class="grabber"></div>
+  <div class="kp">
+    <div class="kp-head">
+      <div class="kp-name" id="rcName"></div>
+      <div class="kp-sub" id="rcSub"></div>
+    </div>
+    <div class="kp-display">
+      <!-- Neutral. Not "is this right?", not "confirm the quantity" — she is
+           reporting what is in the box, not defending it. -->
+      <div class="kp-label" id="rcLabel"></div>
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <div class="kp-val num" id="rcVal">0</div>
+        <div id="rcGap" style="font-size:15px;font-weight:600"></div>
+      </div>
+      <!-- Stated, not asked about. No reason field, no "why?", nothing that
+           turns a count into a confession. -->
+      <div class="rc-note" id="rcNote" style="margin-top:4px"></div>
+    </div>
+    <button class="kp-key word" id="rcAll" style="width:100%;margin-bottom:12px"></button>
+    <div class="kp-grid" id="rcGrid">
+      <button class="kp-key" data-k="1">1</button>
+      <button class="kp-key" data-k="2">2</button>
+      <button class="kp-key" data-k="3">3</button>
+      <button class="kp-key" data-k="4">4</button>
+      <button class="kp-key" data-k="5">5</button>
+      <button class="kp-key" data-k="6">6</button>
+      <button class="kp-key" data-k="7">7</button>
+      <button class="kp-key" data-k="8">8</button>
+      <button class="kp-key" data-k="9">9</button>
+      <button class="kp-key word" id="rcClear" data-k="clear"></button>
+      <button class="kp-key" data-k="0">0</button>
+      <button class="kp-key" data-k="back" aria-label="Backspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg></button>
+    </div>
+    <button class="kp-save" id="rcSave"></button>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -747,6 +877,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     });
     $('#kpSave').onclick = kpSave;
     $('#kpBack').onclick = closeKeypad;
+    rcMount();
     watchHead();
     startPolling();
   }
@@ -859,6 +990,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function selectStore(id) {
+    // Which transfers are inbound depends on which shelf is on screen.
+    setTimeout(rcLoad, 0);
     state.storeId = id;
     localStorage.setItem('qs_store', String(id));
     var s = state.stores.filter(function (x) { return x.id === id; })[0];
@@ -971,8 +1104,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }
     main.className = enterOnce ? 'enter' : '';
     enterOnce = false;
-    main.innerHTML = html;
+    // The way into Receiving rides above the shelf rather than beside it: a van
+    // at the door outranks a recount, and it leaves the moment nothing is due.
+    main.innerHTML = (rcEntryHtml() ? '<div style="padding:12px 16px 0">' + rcEntryHtml() + '</div>' : '') + html;
     wireMain();
+    rcWireEntry();
   }
 
   function renderSkeleton() {
@@ -1326,6 +1462,576 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }
     $('#main').innerHTML = '<div class="screen"><div class="ic">' + icon + '</div><h2>' + esc(title) + '</h2><p>' + esc(body) + '</p>' + btn + '</div>';
     var r = $('#screenRetry'); if (r) r.onclick = function () { location.reload(); };
+  }
+
+
+  /* ══ RECEIVING — the store's half of a two-step transfer ═══════════════════
+     Decisions §39. Stock leaves the warehouse at dispatch, sits IN TRANSIT
+     belonging to neither location, and arrives here on receipt. The rules this
+     screen exists to keep:
+
+       • WHAT THE SHOP COUNTS IS WHAT THE SHOP HOLDS. Her count sets stock. The
+         dispatched figure is never preferred to it and survives only as the
+         caption on the row.
+       • NOTHING IS PRE-FILLED. The keypad opens EMPTY, never seeded with what
+         the warehouse said it sent — a figure already in the box is a figure
+         nobody counted. "All N arrived" is one deliberate tap that says the
+         same thing, and says it because she chose it.
+       • SHORT AND OVER ARE RECORDED, NEVER BLOCKED. No reason field, no
+         confirmation step, no accusation, and no difference in how the two are
+         treated. A gap is a gap whichever way it runs.
+       • TWO YARDSTICKS, NAMED. A line can differ from what the van carried or
+         from what the store asked for. Confirm compares against the van (all it
+         can do before she confirms); Received compares against the order, which
+         brings in the lines the warehouse cut before loading. Each heading says
+         which, so a number that appears to change is two questions with two
+         answers.
+
+     EVERY WRITE GOES THROUGH routes/restock.js AS IT ALREADY STANDS —
+     GET /api/restock, GET /api/restock/:id, PUT /api/restock/:id/receive. There
+     is no second settlement path here: _applyReceipt on the server moves the
+     stock, writes both ledger halves and stamps goods_state. This screen only
+     ever sends counts and renders what comes back.  */
+
+  var rc = {
+    on: null,        // null = not probed yet, false = this session cannot reach /api/restock
+    list: null,      // inbound transfers for the selected store
+    order: null,     // the open one, with items
+    step: 'list',    // list | transit | count | confirm | done
+    held: null,      // {item_id, qty} — see rcSaveCount
+    entry: null,     // keypad digits as typed, '' until she presses one
+    itemId: null,
+    busy: false,
+    err: '',
+  };
+
+  /* /api/restock is gated by requireAuth — the kitchen `users` realm. /stock is
+     served to BOTH realms, and a Mini App Backend operator's session carries
+     backendUserId instead, so these endpoints answer 401 for them. That is not
+     an error and must not reach api(), whose 401 branch bounces to /stock-login
+     and would throw a backend operator out of Quick Stock for opening a screen
+     they simply do not have. A refusal here disables receiving and says nothing. */
+  function rcFetch(path, opts) {
+    opts = opts || {};
+    var o = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
+    if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
+    return fetch(path, o).then(function (r) {
+      if (r.status === 401 || r.status === 403) { rc.on = false; throw new Error('norealm'); }
+      return r.json().then(function (j) {
+        if (!j.success) { var e = new Error(j.error || 'error'); e.body = j; throw e; }
+        return j;
+      });
+    });
+  }
+
+  function rcNum(v) { var n = Number(v); return Number.isFinite(n) ? n : 0; }
+  /* SQLite writes CURRENT_TIMESTAMP as a ZONELESS 'YYYY-MM-DD HH:MM:SS' in UTC,
+     and every engine reads a zoneless string as LOCAL — which in Guangzhou puts
+     a dispatch eight hours before it happened. Pin the zone explicitly. */
+  function rcStamp(v) {
+    if (!v) return null;
+    var d = new Date(String(v).replace(' ', 'T') + (/[Zz+]|\d-\d\d:\d\d$/.test(String(v)) ? '' : 'Z'));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function rcSent(it) { return rcNum(it.qty_sent != null ? it.qty_sent : it.qty_requested); }
+  function rcGot(it) { return it.qty_received == null ? null : rcNum(it.qty_received); }
+  function rcName(it) {
+    var n = lang === 'cn' ? (it.product_cn || it.product_name) : (it.product_name || it.product_cn);
+    return n || ('#' + it.id);
+  }
+  /* A count held back locally still counts as counted on screen — the operator
+     typed it, so the row and the tally must show it. Only the server has not
+     been told yet, and rcConfirm is what tells it. */
+  function rcHeldFor(it) { return rc.held && rc.held.item_id === it.id ? rc.held.qty : null; }
+  function rcCount(it) { var h = rcHeldFor(it); return h != null ? h : rcGot(it); }
+  function rcItems() {
+    var xs = rc.order && rc.order.items;
+    return (Array.isArray(xs) ? xs : []).filter(function (it) { return rcSent(it) > 0; });
+  }
+  function rcCounted() { return rcItems().filter(function (it) { return rcCount(it) != null; }); }
+  function rcArrived(o) { return !!o.delivered_at; }
+
+  /* Which transfers belong to the shelf she is looking at. The server resolves
+     the destination itself when it settles (_resolveDestStoreId), and it is the
+     authority; this is only the list filter, and it mirrors that function's own
+     tiers: the store stamped on the order, and — where no store is stamped, the
+     single-store case the create route still allows — every store sees it. */
+  function rcForStore(o) {
+    var s = state.stores.filter(function (x) { return x.id === state.storeId; })[0];
+    if (!s) return false;
+    if (!o.store_name && !o.store_cn) return true;
+    var want = [s.name_en, s.name_cn, s.code].filter(Boolean).map(function (v) { return String(v).trim().toLowerCase(); });
+    var got = [o.store_name, o.store_cn].filter(Boolean).map(function (v) { return String(v).trim().toLowerCase(); });
+    return got.some(function (g) { return want.indexOf(g) >= 0; });
+  }
+
+  function rcLoad() {
+    if (rc.on === false) return Promise.resolve();
+    return rcFetch('/api/restock?tab=active&to_role=store').then(function (j) {
+      rc.on = true;
+      rc.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) { return o.goods_state === 'in_transit' && rcForStore(o); });
+      if (state.view === 'list') render(); else rcRender();
+    }).catch(function (e) {
+      if (e.message === 'norealm') { rc.list = []; return; }
+      rc.err = e.message; if (state.view === 'receiving') rcRender();
+    });
+  }
+
+  function rcOpen(id) {
+    rc.busy = true; rc.err = ''; rc.held = null;
+    state.view = 'receiving'; rcRender();
+    rcFetch('/api/restock/' + id).then(function (j) {
+      rc.order = j.data; rc.busy = false;
+      rc.step = rcArrived(rc.order) ? 'count' : 'transit';
+      rcRender();
+    }).catch(function (e) {
+      rc.busy = false;
+      rc.err = e.message === 'norealm' ? '' : e.message;
+      rcRender();
+    });
+  }
+
+  function rcExit() {
+    state.view = 'list'; rc.order = null; rc.step = 'list'; rc.held = null; rc.err = '';
+    $('#pageHead').hidden = false; $('#band').hidden = false;
+    measureHead();
+    render();
+    rcLoad();
+  }
+
+  /* ── Saving a count ───────────────────────────────────────────────────────
+     Counts are written line by line, so a count survives the phone going in a
+     pocket — the resumable count the Resume screen is built on.
+
+     EXCEPT THE ONE THAT COMPLETES THE SET, WHICH IS HELD IN MEMORY. The server
+     settles inside PUT /:id/receive the moment every line carries a figure, and
+     it is right to: a complete count is a complete count. But the flow has a
+     Confirm step — "these units join this store's stock when you confirm" — and
+     a save that settled on the fourteenth line would move the stock before she
+     ever saw it, leaving Confirm reviewing something already done.
+
+     So the last outstanding line is held back and sent by Confirm. The cost is
+     stated rather than hidden: if the phone dies between counting that final
+     line and confirming, that ONE count is lost and gets retyped. Every other
+     line is already on the server. Recounting an earlier line from Confirm is an
+     ordinary save — the set is still incomplete server-side, so it cannot settle
+     early.  */
+  function rcSaveCount(itemId, qty) {
+    var items = rcItems();
+    var outstanding = items.filter(function (it) {
+      return it.id !== itemId && rcCount(it) == null;
+    }).length;
+    var completes = outstanding === 0;
+    if (completes) {
+      rc.held = { item_id: itemId, qty: qty };
+      rc.step = 'confirm';
+      rcRender();
+      return Promise.resolve();
+    }
+    // A held line that is no longer the last one goes to the server with this
+    // save, so nothing is held except while the set is genuinely complete.
+    var counts = [{ item_id: itemId, qty_received: qty }];
+    if (rc.held && rc.held.item_id !== itemId) {
+      counts.push({ item_id: rc.held.item_id, qty_received: rc.held.qty });
+    }
+    rc.busy = true; rc.err = ''; rcRender();
+    return rcFetch('/api/restock/' + rc.order.id + '/receive', { method: 'PUT', body: { counts: counts } })
+      .then(function () {
+        counts.forEach(function (c) {
+          var it = (rc.order.items || []).filter(function (x) { return x.id === c.item_id; })[0];
+          if (it) it.qty_received = c.qty_received;
+        });
+        rc.held = null; rc.busy = false; rcRender();
+      })
+      .catch(function (e) {
+        rc.busy = false;
+        // The number she typed is never thrown away by a failed write. Losing a
+        // delivery's counts at the door is the one failure nobody forgives.
+        rc.held = { item_id: itemId, qty: qty };
+        rc.err = e.message === 'norealm'
+          ? t('This account cannot receive transfers.', '此账号无法确认调拨收货。')
+          : t('That count did not save. It is still on screen — try again.', '数量未保存,仍显示在屏幕上 — 请重试。');
+        rcRender();
+      });
+  }
+
+  function rcConfirm() {
+    if (rc.busy) return;
+    var counts = rcItems().map(function (it) {
+      return { item_id: it.id, qty_received: rcCount(it) };
+    }).filter(function (c) { return c.qty_received != null; });
+    rc.busy = true; rc.err = ''; rcRender();
+    rcFetch('/api/restock/' + rc.order.id + '/receive', { method: 'PUT', body: { counts: counts } })
+      .then(function (j) {
+        rc.busy = false;
+        if (!j.settled) {
+          rc.err = t('Some lines are still uncounted.', '仍有未点数的项目。');
+          rc.step = 'count'; rcRender(); return;
+        }
+        counts.forEach(function (c) {
+          var it = (rc.order.items || []).filter(function (x) { return x.id === c.item_id; })[0];
+          if (it) it.qty_received = c.qty_received;
+        });
+        rc.held = null; rc.step = 'done'; rcRender();
+        // The shelf this app counts has just changed underneath it.
+        if (state.storeId != null) loadStock(true);
+        rcLoad();
+      })
+      .catch(function (e) {
+        rc.busy = false;
+        rc.err = e.message === 'norealm'
+          ? t('This account cannot receive transfers.', '此账号无法确认调拨收货。')
+          : (e.body && e.body.error) || t('That did not go through. Nothing has changed — try again.', '没有成功。数据没有变化 — 请重试。');
+        rcRender();
+      });
+  }
+
+  /* ── The keypad ───────────────────────────────────────────────────────────
+     Opens EMPTY. rc.entry is '' until she presses a digit, and an empty entry
+     cannot be saved — there is no figure to save, and the sent quantity is not
+     one she gave. */
+  function rcOpenPad(itemId) {
+    var it = rcItems().filter(function (x) { return x.id === itemId; })[0];
+    if (!it) return;
+    rc.itemId = itemId; rc.entry = '';
+    var sent = rcSent(it);
+    $('#rcName').textContent = rcName(it);
+    $('#rcSub').textContent = (it.sku ? it.sku + ' · ' : '') + t(sent + ' sent', '发出 ' + sent);
+    $('#rcLabel').textContent = t('How many arrived?', '到货多少?');
+    $('#rcAll').textContent = t('All ' + sent + ' arrived', '全部 ' + sent + ' 件到货');
+    $('#rcClear').textContent = t('Clear', '清除');
+    rcPaintPad();
+    state.sheet = 'receive';
+    $('#rcBack').classList.add('show'); $('#rcSheet').classList.add('show');
+  }
+  function rcClosePad() {
+    state.sheet = null;
+    $('#rcBack').classList.remove('show'); $('#rcSheet').classList.remove('show');
+  }
+  function rcPaintPad() {
+    var it = rcItems().filter(function (x) { return x.id === rc.itemId; })[0];
+    if (!it) return;
+    var sent = rcSent(it);
+    var has = rc.entry !== '';
+    var n = has ? parseInt(rc.entry, 10) : null;
+    $('#rcVal').textContent = has ? String(n) : '—';
+    $('#rcVal').style.color = has ? '' : 'var(--text2)';
+    var d = has ? n - sent : 0;
+    $('#rcGap').textContent = !has || d === 0 ? ''
+      : (d < 0 ? t((-d) + ' short', '短少 ' + (-d)) : t(d + ' over', '多收 ' + d));
+    $('#rcNote').textContent = has
+      ? t('Recorded as it is. Nothing else needed.', '如实记录,无需其他说明。')
+      : t('Count what is in the box.', '请点数箱内实际数量。');
+    var save = $('#rcSave');
+    save.disabled = !has;
+    save.style.opacity = has ? '' : '.5';
+    save.textContent = has ? t('Save ' + n + ' and continue', '保存 ' + n + ' 并继续')
+                           : t('Save and continue', '保存并继续');
+  }
+  function rcPad(k) {
+    if (k === 'clear') rc.entry = '';
+    else if (k === 'back') rc.entry = rc.entry.slice(0, -1);
+    else if (rc.entry.length < 6) rc.entry = (rc.entry === '0' ? '' : rc.entry) + k;
+    rcPaintPad();
+  }
+  function rcAll() {
+    var it = rcItems().filter(function (x) { return x.id === rc.itemId; })[0];
+    if (!it) return;
+    rc.entry = String(rcSent(it));
+    rcPaintPad();
+  }
+  function rcPadSave() {
+    if (rc.entry === '') return;
+    var id = rc.itemId, q = parseInt(rc.entry, 10);
+    rcClosePad();
+    rcSaveCount(id, q);
+  }
+
+  /* ── Rendering ────────────────────────────────────────────────────────────
+     One line, four states (design-handoff/store-receiving/RowStates.dc.html).
+     When sent and found agree the row goes quiet and both controls leave with
+     the work; when they differ, the count and the gap are the only things left
+     holding Ink. */
+  var RC_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+  var RC_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+
+  function rcGapText(got, sent) {
+    var d = got - sent;
+    if (d === 0) return t('as sent', '与发货一致');
+    var g = d < 0 ? t((-d) + ' short', '短少 ' + (-d)) : t(d + ' over', '多收 ' + d);
+    return '<span class="rc-gap">' + g + '</span> · ' + t(sent + ' sent', '发出 ' + sent);
+  }
+
+  function rcRowHtml(it, isNext) {
+    var sent = rcSent(it), got = rcCount(it);
+    if (got == null) {
+      // The number is what the warehouse SENT — a fact for reference, not a
+      // count. One tap on the tick says it all arrived; Count opens the keypad.
+      return '<button class="rc-row' + (isNext ? ' next' : '') + '" data-count="' + it.id + '">' +
+        '<span class="rc-qty num">' + sent + '</span>' +
+        '<span class="rc-mid"><span class="rc-nm">' + esc(rcName(it)) + '</span>' +
+        '<span class="rc-cap">' + esc(it.sku || ('#' + it.id)) + '</span></span>' +
+        '<span class="rc-count">' + t('Count', '点数') + '</span>' +
+        '<span class="rc-tick todo" data-assent="' + it.id + '">' + RC_TICK + '</span>' +
+        '</button>';
+    }
+    var same = got === sent;
+    return '<button class="rc-row done" data-count="' + it.id + '">' +
+      '<span class="rc-qty num' + (same ? ' rc-muted' : '') + '">' + got + '</span>' +
+      '<span class="rc-mid"><span class="rc-nm rc-muted">' + esc(rcName(it)) + '</span>' +
+      '<span class="rc-cap">' + rcGapText(got, sent) + '</span></span>' +
+      '<span class="rc-tick">' + RC_TICK + '</span>' +
+      '</button>';
+  }
+
+  function rcHeadHtml(title, sub, back) {
+    return '<div class="rc-head">' +
+      (back ? '<button class="rc-back" data-rcback>' + RC_CHEV + t('Receiving', '收货') + '</button>' : '') +
+      '<div class="rc-h1">' + esc(title) + '</div>' +
+      (sub ? '<div class="rc-sub">' + esc(sub) + '</div>' : '') + '</div>';
+  }
+
+  function rcErrHtml() { return rc.err ? '<div class="rc-err">' + esc(rc.err) + '</div>' : ''; }
+
+  function rcTransitHtml() {
+    var o = rc.order, items = rcItems();
+    var units = items.reduce(function (a, it) { return a + rcSent(it); }, 0);
+    var left = o.dispatched_at ? clock(rcStamp(o.dispatched_at)) : '';
+    return '<div class="rc-wrap">' +
+      rcHeadHtml(t('On the way', '在途'), (o.rs_number || ('#' + o.id)) + ' · ' + t('from the warehouse', '来自仓库'), true) +
+      rcErrHtml() +
+      '<div class="rc-transit">' +
+        '<div style="display:flex;align-items:center;gap:8px"><span class="rc-dot"></span>' +
+        '<span style="font-size:13px;color:var(--dusk-ink);font-weight:500">' + t('In transit', '在途中') + '</span></div>' +
+        '<div style="display:flex;align-items:baseline;gap:10px;margin-top:8px">' +
+          '<span class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-.02em">' + units + '</span>' +
+          '<span style="font-size:15px;color:var(--text2)">' +
+            t('units · ' + items.length + ' lines', '件 · 共 ' + items.length + ' 项') + '</span>' +
+        '</div>' +
+        (left ? '<div class="rc-sub" style="margin-top:8px">' + t('Left the warehouse ' + left, '离开仓库 ' + left) + '</div>' : '') +
+      '</div>' +
+      '<div class="rc-lbl">' + t('What is coming', '在途商品') + '</div>' +
+      '<div class="rc-body">' + items.map(function (it) {
+        return '<div class="rc-hr"></div><div class="rc-row"><span class="rc-qty num">' + rcSent(it) + '</span>' +
+          '<span class="rc-mid"><span class="rc-nm">' + esc(rcName(it)) + '</span></span></div>';
+      }).join('') + '<div class="rc-hr"></div></div>' +
+      // No button, and no warning either. The box is not here; a disabled
+      // "start receiving" would be a control advertising that it does not work,
+      // and a count of the gaps to expect is the anchor this flow avoids.
+      '<div class="rc-foot"><div class="rc-footrow"><div class="rc-note">' +
+        t('Counting opens when the van arrives.', '货车到店后即可开始点数。') +
+      '</div></div></div></div>';
+  }
+
+  function rcCountHtml() {
+    var o = rc.order, items = rcItems(), done = rcCounted();
+    var next = items.filter(function (it) { return rcCount(it) == null; })[0];
+    var pct = items.length ? Math.round(done.length / items.length * 100) : 0;
+    var all = done.length === items.length && items.length > 0;
+    // Back after a break. The progress is hers and nothing was done for her
+    // while she was away, so this is Cream and not Dusk.
+    var resume = (done.length && !all)
+      ? '<div class="rc-flat" style="margin:0 16px 10px">' +
+          '<div style="font-size:15px;font-weight:600;line-height:1.35">' + t('Picking up where you left off', '继续上次的点数') + '</div>' +
+          '<div class="rc-sub">' + t(done.length + ' of ' + items.length + ' lines counted · nothing was lost',
+                                     '已点 ' + done.length + '/' + items.length + ' 项 · 数据未丢失') + '</div></div>'
+      : '';
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-rcback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Receiving', '收货') + '</div>' +
+        '<div class="rc-meta"><span class="l">' + t('From the warehouse · ' + items.length + ' lines',
+                                                    '来自仓库 · 共 ' + items.length + ' 项') + '</span>' +
+        '<span class="r">' + esc(o.rs_number || ('#' + o.id)) + '</span></div>' +
+      '</div>' +
+      rcErrHtml() + resume +
+      '<div class="rc-body">' + items.map(function (it) {
+        return '<div class="rc-hr"></div>' + rcRowHtml(it, next && it.id === next.id && done.length > 0);
+      }).join('') + '<div class="rc-hr"></div></div>' +
+      // The count IS the explanation for the inactive button. There is no
+      // "accept everything": if the counting can be skipped it will be, and
+      // every uncounted short becomes phantom stock on her shelf.
+      '<div class="rc-foot"><div class="rc-prog"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="rc-footrow"><div class="rc-tally">' +
+          '<b>' + done.length + ' <span>' + t('of', '/') + '</span> ' + items.length + '</b>' +
+          '<i>' + t('lines counted', '项已点') + '</i></div>' +
+        '<button class="rc-cta' + (all ? ' on' : '') + '"' + (all ? ' data-rcreview' : ' disabled') + '>' +
+          t('Confirm receipt', '确认收货') + '</button></div></div></div>';
+  }
+
+  function rcConfirmHtml() {
+    var o = rc.order, items = rcItems();
+    var counted = items.reduce(function (a, it) { return a + (rcCount(it) || 0); }, 0);
+    var sent = items.reduce(function (a, it) { return a + rcSent(it); }, 0);
+    // Against the VAN — all this screen can compare before she confirms.
+    var diff = items.filter(function (it) { return rcCount(it) !== rcSent(it); });
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-rccount>' + RC_CHEV + t('Receiving', '收货') + '</button>' +
+        '<div class="rc-h1">' + t('Confirm receipt', '确认收货') + '</div>' +
+        '<div class="rc-sub">' + esc(o.rs_number || ('#' + o.id)) + ' · ' +
+          t('all ' + items.length + ' lines counted', '全部 ' + items.length + ' 项已点') + '</div>' +
+      '</div>' + rcErrHtml() +
+      '<div class="rc-body" style="padding:0 16px;display:flex;flex-direction:column;gap:8px">' +
+        '<div class="rc-card"><div style="display:flex;align-items:baseline;gap:10px">' +
+          '<span class="num" style="font-size:44px;font-weight:700;line-height:1;letter-spacing:-.02em">' + counted + '</span>' +
+          '<span style="font-size:15px;color:var(--text2)">' + t('units counted', '件已点数') + '</span></div>' +
+          '<div class="rc-sub" style="margin-top:6px">' + t(sent + ' were sent · ' + items.length + ' lines',
+                                                            '发出 ' + sent + ' 件 · 共 ' + items.length + ' 项') + '</div></div>' +
+        (diff.length
+          ? '<div class="rc-plain"><div style="font-size:15px;font-weight:600;line-height:1.35">' +
+              t('Against what the van carried, ' + diff.length + ' line' + (diff.length > 1 ? 's' : '') + ' differ',
+                '与发货对比,' + diff.length + ' 项不一致') + '</div>' +
+              diff.map(function (it) {
+                return '<div class="rc-sub">' + esc(rcName(it)) + ' · ' +
+                  t(rcCount(it) + ' counted, ' + rcSent(it) + ' sent',
+                    '实收 ' + rcCount(it) + ',发出 ' + rcSent(it)) + '</div>';
+              }).join('') +
+              '<div class="rc-note" style="margin-top:8px">' +
+                t('Recorded as counted. The warehouse sees the same numbers you do.',
+                  '按实收记录。仓库看到的数字与您相同。') + '</div></div>'
+          : '') +
+        '<div style="flex:1"></div>' +
+        '<div class="rc-flat rc-note">' +
+          t('These ' + counted + ' units join this store’s stock when you confirm. You can still recount a line before then.',
+            '确认后这 ' + counted + ' 件将计入本店库存。在此之前仍可重新点数。') + '</div>' +
+      '</div>' +
+      '<div class="rc-foot" style="background:transparent;border:none"><div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        '<button class="rc-big"' + (rc.busy ? ' disabled' : ' data-rcconfirm') + '>' +
+          (rc.busy ? t('Confirming…', '确认中…')
+                   : t('Confirm receipt · ' + counted + ' units', '确认收货 · ' + counted + ' 件')) +
+        '</button></div></div></div>';
+  }
+
+  function rcDoneHtml() {
+    var o = rc.order, items = rcItems();
+    var counted = items.reduce(function (a, it) { return a + (rcCount(it) || 0); }, 0);
+    var sent = items.reduce(function (a, it) { return a + rcSent(it); }, 0);
+    var asked = items.reduce(function (a, it) { return a + rcNum(it.qty_requested); }, 0);
+    /* TWO GAPS, NOT ONE, AND ONLY HERE. Gap A is the warehouse — she asked for
+       18 and 14 were found and allocated. Gap B is the road — 14 left and 10
+       arrived. The receiving list showed gap B alone, which left her short of
+       her order with nothing on screen saying so: the number that decides
+       whether she reorders today. So the heading is not "what differed" — a
+       line the warehouse cut before loading can arrive exactly as sent and
+       still be short of the order. */
+    var diff = items.filter(function (it) {
+      return rcCount(it) !== rcSent(it) || rcSent(it) !== rcNum(it.qty_requested);
+    });
+    return '<div class="rc-wrap">' +
+      rcHeadHtml(t('Received', '已收货'),
+                 (o.rs_number || ('#' + o.id)) + ' · ' + clock(new Date()), false) +
+      '<div style="padding:0 16px 12px"><div class="rc-card">' +
+        '<div style="display:flex;align-items:baseline;gap:10px">' +
+          '<span class="num rc-muted" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-.02em">' + counted + '</span>' +
+          '<span style="font-size:15px;color:var(--text2)">' + t('units added to this store', '件已入本店库存') + '</span></div>' +
+        '<div class="rc-sub" style="margin-top:6px">' +
+          t(items.length + ' lines · ' + asked + ' asked · ' + sent + ' sent',
+            '共 ' + items.length + ' 项 · 申请 ' + asked + ' · 发出 ' + sent) + '</div></div></div>' +
+      (diff.length ? '<div class="rc-lbl">' + t('Against what you asked for', '与申请对比') + '</div>' +
+        '<div>' + diff.map(function (it) {
+          return '<div class="rc-hr"></div><div class="rc-row">' +
+            '<span class="rc-qty num">' + rcCount(it) + '</span>' +
+            '<span class="rc-mid"><span class="rc-nm">' + esc(rcName(it)) + '</span>' +
+            '<span class="rc-cap">' +
+              t('asked ' + rcNum(it.qty_requested) + ' · sent ' + rcSent(it) + ' · ',
+                '申请 ' + rcNum(it.qty_requested) + ' · 发出 ' + rcSent(it) + ' · ') +
+              '<span class="rc-gap">' + t('counted ' + rcCount(it), '实收 ' + rcCount(it)) + '</span>' +
+            '</span></span></div>';
+        }).join('') + '<div class="rc-hr"></div></div>' +
+        '<div style="padding:14px 16px 0"><div class="rc-note">' +
+          t('All of these are recorded against this delivery and the warehouse can see them. Nothing else is needed from you.',
+            '以上均已记录在本次配送中,仓库可以看到。您无需其他操作。') + '</div></div>'
+        : '') +
+      '<div class="rc-body"></div>' +
+      '<div class="rc-foot" style="background:transparent;border:none">' +
+        '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        '<button class="rc-big" data-rcback>' + t('Done', '完成') + '</button></div></div></div>';
+  }
+
+  function rcEmptyHtml() {
+    return '<div class="rc-wrap">' + rcHeadHtml(t('Receiving', '收货'), '', false) +
+      '<div class="rc-empty">' +
+        '<div style="font-size:20px;font-weight:600;letter-spacing:-.02em;line-height:1.35">' +
+          t('Nothing to receive', '暂无待收货') + '</div>' +
+        '<div style="font-size:15px;color:var(--text2);margin-top:6px;line-height:1.5">' +
+          t('Nothing is on its way right now.', '目前没有在途的配送。') + '</div></div>' +
+      '<div style="padding:16px 16px calc(var(--sa-bot) + 28px)">' +
+        '<button class="rc-big" data-rcback>' + t('Back', '返回') + '</button></div></div>';
+  }
+
+  function rcRender() {
+    if (state.view !== 'receiving') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    var html;
+    if (rc.busy && !rc.order) html = '<div class="rc-wrap">' + rcHeadHtml(t('Receiving', '收货'), '', false) +
+      '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div></div>';
+    else if (!rc.order) html = rcEmptyHtml();
+    else if (rc.step === 'transit') html = rcTransitHtml();
+    else if (rc.step === 'confirm') html = rcConfirmHtml();
+    else if (rc.step === 'done') html = rcDoneHtml();
+    else html = rcCountHtml();
+    $('#main').className = '';
+    $('#main').innerHTML = html;
+    rcWire();
+  }
+
+  function rcWire() {
+    var m = $('#main');
+    Array.prototype.forEach.call(m.querySelectorAll('[data-rcback]'), function (b) { b.onclick = rcExit; });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-rccount]'), function (b) {
+      b.onclick = function () { rc.step = 'count'; rcRender(); };
+    });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-rcreview]'), function (b) {
+      b.onclick = function () { rc.step = 'confirm'; rcRender(); };
+    });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-rcconfirm]'), function (b) { b.onclick = rcConfirm; });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-count]'), function (b) {
+      b.onclick = function (e) {
+        var tick = e.target.closest('[data-assent]');
+        var id = parseInt(b.getAttribute('data-count'), 10);
+        if (tick) {
+          // "Exactly what was sent", chosen in one tap. A deliberate act, which
+          // is the only thing that separates it from a pre-fill.
+          var it = rcItems().filter(function (x) { return x.id === id; })[0];
+          if (it) rcSaveCount(id, rcSent(it));
+          return;
+        }
+        rcOpenPad(id);
+      };
+    });
+  }
+
+  /* The way in, on top of the counting list. A transfer she can see through the
+     door is not something Tacet did for her, so an arrival is Cream; one still
+     on the road is the flow's one Dusk spend and keeps it here too. */
+  function rcEntryHtml() {
+    if (!rc.list || !rc.list.length) return '';
+    return rc.list.map(function (o) {
+      var arrived = rcArrived(o);
+      return '<button class="rc-entry" data-rcopen="' + o.id + '">' +
+        '<span class="t"><b>' + (arrived ? t('A delivery is waiting to be counted', '有一批配送待点数')
+                                         : t('A delivery is on the way', '有一批配送在途')) + '</b>' +
+        '<i>' + esc(o.rs_number || ('#' + o.id)) + ' · ' +
+          t((o.item_count || 0) + ' lines from the warehouse', '来自仓库 · 共 ' + (o.item_count || 0) + ' 项') + '</i></span>' +
+        '<span style="flex:none;color:var(--text2);transform:rotate(180deg);display:flex">' + RC_CHEV + '</span></button>';
+    }).join('');
+  }
+  function rcWireEntry() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rcopen]'), function (b) {
+      b.onclick = function () { rcOpen(parseInt(b.getAttribute('data-rcopen'), 10)); };
+    });
+  }
+
+  function rcMount() {
+    $('#rcBack').onclick = rcClosePad;
+    $('#rcGrid').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-k]'); if (!b) return;
+      rcPad(b.getAttribute('data-k'));
+    });
+    $('#rcAll').onclick = rcAll;
+    $('#rcSave').onclick = rcPadSave;
   }
 
   boot();
