@@ -2,6 +2,12 @@
 /**
  * A restock request with no destination goes to the WAREHOUSE, not the kitchen.
  *
+ * RUNS IN THE TACET REALM NOW. Raising a request is store and warehouse work,
+ * and that moved to Tacet — a kitchen session is refused outright by tacetOnly,
+ * so a suite driving this route as a kitchen user would be testing a door that
+ * is deliberately shut. The operator here is a tenant_users row on an active
+ * tenant, which is what the screens actually carry.
+ *
  *   node scripts/test_restock_direction_default.js
  *
  * The defect this locks down: _inferDirection defaulted a warehouse or admin
@@ -30,6 +36,10 @@ const express = require('express');
 const ROOT = path.join(__dirname, '..');
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
+// The control-plane tables (tenants, tenant_users) are created at module load by
+// the module that owns them, not by database.js. Requiring it here means the
+// fixture never has to carry a second copy of that DDL.
+require(path.join(ROOT, 'routes', 'backend-auth.js'));
 const router  = require(path.join(ROOT, 'routes', 'restock.js'));
 const db = tdb();
 
@@ -40,12 +50,22 @@ const U_ADMIN     = 9702;
 const U_STORE     = 9703;
 const RS_PREFIX   = '__dirtest';
 
-let CURRENT = U_WAREHOUSE;                       // whose session the app runs as
+let CURRENT = U_WAREHOUSE;
+let TACET = true;   // the realm the screens sign in as                       // whose session the app runs as
 
 function seedUser(id, username, role) {
   db.prepare(`INSERT OR REPLACE INTO users (id, username, password, role, is_active)
               VALUES (?, ?, 'x', ?, 1)`).run(id, username, role);
   db.prepare('INSERT OR REPLACE INTO permissions (user_id, restock) VALUES (?, 1)').run(id);
+}
+// A Tacet operator: tenant_users on an active tenant, which is what
+// requireRetailAdmin resolves and what every screen actually signs in as.
+function seedOperator(id, username, role) {
+  const t = db.prepare('SELECT id FROM tenants WHERE status = ? ORDER BY id LIMIT 1').get('active');
+  const tenantId = t ? t.id : 1;
+  db.prepare(`INSERT OR REPLACE INTO tenant_users (id, tenant_id, username, password, role, is_active)
+              VALUES (?, ?, ?, 'x', ?, 1)`).run(id, tenantId, username, role);
+  return tenantId;
 }
 function cleanup() {
   const ids = db.prepare(`SELECT id FROM restock_orders WHERE notes = ?`).all(RS_PREFIX).map(r => r.id);
@@ -54,6 +74,7 @@ function cleanup() {
     db.prepare('DELETE FROM restock_orders WHERE id = ?').run(id);
   }
   for (const id of [U_WAREHOUSE, U_ADMIN, U_STORE]) {
+    db.prepare('DELETE FROM tenant_users WHERE id = ?').run(id);
     db.prepare('DELETE FROM permissions WHERE user_id = ?').run(id);
     // logActivity stamped an activity_log row per create, and it carries an FK
     // to users(id) — the user cannot go until its trail does.
@@ -71,13 +92,16 @@ function check(label, fn) {
 }
 
 (async () => {
-  seedUser(U_WAREHOUSE, '__dirtest_wh',    'warehouse');
-  seedUser(U_ADMIN,     '__dirtest_admin', 'admin');
-  seedUser(U_STORE,     '__dirtest_store', 'store');
+  // Two identities for the same three cases: the Tacet operators that raise
+  // requests today, and the kitchen users the store-side door is now shut to.
+  seedOperator(U_WAREHOUSE, '__dirtest_wh',    'staff');
+  seedOperator(U_ADMIN,     '__dirtest_admin', 'owner');
+  seedOperator(U_STORE,     '__dirtest_store', 'store_stock');
+  seedUser(U_STORE, '__dirtest_kitchen', 'store');
 
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { req.session = { userId: CURRENT }; next(); });
+  app.use((req, _res, next) => { req.session = TACET ? { backendUserId: CURRENT } : { userId: CURRENT }; next(); });
   app.use(router);
   const server = await new Promise(r => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -103,7 +127,7 @@ function check(label, fn) {
   try {
     console.log('\nNo destination named — the request goes to the warehouse');
 
-    for (const [who, id] of [['a warehouse user', U_WAREHOUSE], ['an admin', U_ADMIN]]) {
+    for (const [who, id] of [['a Tacet operator', U_WAREHOUSE], ['a Tacet owner', U_ADMIN]]) {
       await check(`${who} creating with no to_role succeeds, store→warehouse`, async () => {
         CURRENT = id;
         const { status, body, row } = await post({});
@@ -114,7 +138,7 @@ function check(label, fn) {
       });
     }
 
-    await check('a store user is unaffected, store→warehouse as before', async () => {
+    await check('a store-scoped operator is unaffected, store→warehouse as before', async () => {
       CURRENT = U_STORE;
       const { status, row } = await post({});
       assert.strictEqual(status, 200);
@@ -156,7 +180,16 @@ function check(label, fn) {
       assert.strictEqual(status, 200, `expected 200, got ${status}`);
       assert.strictEqual(row.to_role, 'warehouse');
     });
+    console.log('\nThe kitchen realm is shut out of store and warehouse work');
+    await check('a kitchen session cannot raise a request at all', async () => {
+      TACET = false; CURRENT = U_STORE;
+      const { status, body } = await post({});
+      assert.strictEqual(status, 403, `expected 403, got ${status}`);
+      assert.match(body.error || '', /Tacet/);
+      TACET = true;
+    });
   } finally {
+    TACET = true;
     server.close();
     cleanup();
   }
