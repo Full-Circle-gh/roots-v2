@@ -4385,7 +4385,10 @@
       <div class="pa-split-list">
         <div id="pa-bulkbar"></div>
         <div id="pa-grid" class="pa-grid"></div>
-        <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
+        <!-- Filled by paRender(): a catalogue with nothing in it gets a first action,
+             a filter that matched nothing gets its filters back. Two different
+             nothings — one message used to answer both. -->
+        <div id="pa-empty" class="pa-empty" style="display:none"></div>
         <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:var(--s3) 0 0;font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
       </div>
 

@@ -130,6 +130,20 @@ function paSetStatus(v, toggle) {
   paSyncStatusFilter();
   paRender();
 }
+// Put the whole catalogue back. Every narrowing control on this page in one
+// action — search box, category, subcategory, status — because an operator who
+// has filtered down to nothing should not have to remember which four things
+// they set. Offered from the empty state; safe to call at any time.
+function paClearFilters() {
+  const q = document.getElementById('pa-search');            if (q) q.value = '';
+  const f = document.getElementById('pa-filter');            if (f) f.value = 'all';
+  const s = document.getElementById('pa-subfilter');         if (s) s.value = 'all';
+  PA_STATUS = 'all';
+  PA_PAGE = 1;
+  paSyncStatusFilter();
+  paFillSubFilter();   // category back to All → the subcategory picker hides itself
+  paRender();
+}
 function paSyncStatusFilter() {
   const sel = document.getElementById('pa-statusfilter');
   if (!sel) return;
@@ -2233,6 +2247,24 @@ function paRender() {
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   PA_FILTERED_IDS = rows.map(p => p.id);
+  // TWO DIFFERENT NOTHINGS. One message — "No products match this filter" —
+  // used to answer both a filter that matched nothing AND a catalogue with
+  // nothing in it, so a shop that had just signed up opened the screen that
+  // matters most on day one and was told its filter was wrong. A first
+  // catalogue now gets a first action, the way Suppliers already does; a
+  // narrowed one gets its filters back.
+  if (!total) {
+    const narrowed = !!q || (filter && filter !== 'all') || (subFilter && subFilter !== 'all') || PA_STATUS !== 'all';
+    empty.innerHTML = narrowed
+      ? `<div class="pa-empty-t">${cuT('No products match this filter', '没有匹配此筛选条件的产品')}</div>
+         <div class="pa-empty-s">${cuT('Nothing here matches what you searched for. Clear it and the whole catalogue comes back.',
+                                       '没有符合当前筛选的产品。清除筛选即可看到全部商品。')}</div>
+         <button class="btn pa-empty-b" type="button" onclick="paClearFilters()">${cuT('Clear the filters', '清除筛选')}</button>`
+      : `<div class="pa-empty-t">${cuT('No products yet', '还没有商品')}</div>
+         <div class="pa-empty-s">${cuT('This is your catalogue — what customers see in the shop. Add the first one and it can be on sale in a couple of minutes.',
+                                       '这里是你的商品目录 —— 顾客在店里看到的就是它。添加第一件商品,几分钟就能上架。')}</div>
+         <button class="btn btn-primary pa-empty-b" type="button" onclick="pwOpen()">${cuT('Add your first product', '添加第一件商品')}</button>`;
+  }
   empty.style.display = total ? 'none' : 'block';
   // Docked editor → fixed 18-row pages (list ends near the editor's bottom edge,
   // no dead gap / extra scroll). Overview → operator's "Per page" choice.

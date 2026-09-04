@@ -1406,6 +1406,13 @@ async function loadConfig() {
     const { data: c } = await api('/api/retail-admin/config');
     applyFeatureGates(c);
     _cfgCache = c;
+    // The shop's clock, for public/td-datetime.js. Its own comment says a shop
+    // in another zone "sets TD_TZ" — nothing ever did, so every timestamp in
+    // this admin rendered on Guangzhou's clock for everyone. The server sends
+    // the first active location's zone, or null when no location carries one;
+    // on null we leave the variable alone so the existing fallback stands and
+    // nothing about an unconfigured install changes.
+    if (c && c.timezone) window.TD_TZ = c.timezone;
     syncFeatureToggles();
     // Bulk attach tracking is an opt-in Orders tool — the toolbar button only
     // shows when the operator enabled it under Settings → Delivery.

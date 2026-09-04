@@ -20329,7 +20329,27 @@ router.get('/api/retail/media/:id/sec-status', requireRetailAuth, (req, res) => 
 
 // Storefront config — read full + bulk write.
 router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
-  res.json({ success: true, data: loadConfig() });
+  // THE ADMIN'S CLOCK. public/td-datetime.js renders every timestamp in the
+  // shop's zone and reads it from `window.TD_TZ`, falling back to Asia/Shanghai
+  // — and nothing anywhere set that variable, so every account's orders,
+  // reports and "today" were drawn on Guangzhou's clock whatever the shop's own
+  // was. The zone the product actually stores is per location
+  // (`retail_stores.timezone`, the same column lib/business-date.js reads), so
+  // the shell takes the first active location that carries one.
+  //
+  // NULL WHEN NO LOCATION HAS SET ONE, deliberately: the client leaves TD_TZ
+  // alone in that case and the existing fallback stands, so an install whose
+  // locations carry no zone renders exactly as it did before this line existed.
+  let timezone = null;
+  try {
+    const row = tdb().prepare(
+      `SELECT timezone FROM retail_stores
+        WHERE is_active = 1 AND timezone IS NOT NULL AND TRIM(timezone) <> ''
+        ORDER BY sort_order, id LIMIT 1`
+    ).get();
+    timezone = (row && String(row.timezone).trim()) || null;
+  } catch (e) { timezone = null; }   // column absent on an old account DB → fallback
+  res.json({ success: true, data: { ...loadConfig(), timezone } });
 });
 
 // Live per-tier member counts — context for the Membership tier editor so the

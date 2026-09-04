@@ -4438,6 +4438,13 @@
     background: var(--td-surface); border: 1px dashed var(--td-border);
     border-radius: 14px;
   }
+  /* Two states share this box: a catalogue with nothing in it (title, a sentence
+     saying what a catalogue is for, and the first action) and a filter that
+     matched nothing (title, and the filters back). Same shape as the Suppliers
+     empty state, which is the pattern this page was measured against. */
+  .pa-empty-t { font-size: 16px; font-weight: 500; color: var(--td-text); margin-bottom: 6px; }
+  .pa-empty-s { max-width: 380px; margin: 0 auto; line-height: 1.55; }
+  .pa-empty-b { margin-top: 16px; }
 
   /* The per-operator View tweaks are gone with their popover — the defaults
      they varied from (square crop, badge status, icon empty-state) are the

@@ -5118,11 +5118,18 @@ const SUBS={
     loadCatalogue();
     const L=state.liveProductsLoaded, P=DB.products;
     const n=k=>L?P.filter(x=>x.kind===k).length:null;
-    const cd=[{key:'all',en:'All',zh:'全部',count:L?P.length:118},
-      {key:'live',en:'Live',zh:'在售',count:L?n('on'):96},
-      {key:'draft',en:'Draft',zh:'草稿',count:L?n('draft'):0},
-      {key:'low',en:'Low',zh:'库存低',count:L?n('restock'):14},
-      {key:'out',en:'Out',zh:'缺货',count:L?n('off'):8}];
+    /* NO COUNT UNTIL THERE IS ONE. These five carried 118 / 96 / 0 / 14 / 8 as
+       their before-load values — the last of the mockup's invented numbers,
+       left behind when DB's sample rows were removed for exactly this reason.
+       A shop that had just signed up opened Products and was told it had 118,
+       and a phone that could not reach the catalogue kept saying so. chipRow
+       omits the badge when the count is null, so the chips read as plain labels
+       until the real answer lands. */
+    const cd=[{key:'all',en:'All',zh:'全部',count:L?P.length:null},
+      {key:'live',en:'Live',zh:'在售',count:n('on')},
+      {key:'draft',en:'Draft',zh:'草稿',count:n('draft')},
+      {key:'low',en:'Low',zh:'库存低',count:n('restock')},
+      {key:'out',en:'Out',zh:'缺货',count:n('off')}];
     const cats=prodCategories();
     const rows=prodFiltered();
     const narrowed=!(state.prodStatus==='all'&&state.prodCat==='all'&&!state.prodQ);
