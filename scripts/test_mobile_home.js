@@ -123,11 +123,23 @@ CASES.push(['removing one takes it off Home', `APP.cmd('tab','home');
   ['the others stay',         `txt('content').includes('Tick a delivery in')`],
 ]]);
 CASES.push(['the order is the operator’s', `APP.cmd('tab','home');
-  APP.cmd('quickMove','purchasing',-1); render();`, [
+  APP.cmd('quickMove','receiving',-1); render();`, [
   ['moved above the one it followed',
    `txt('content').indexOf('Tick a delivery in') < txt('content').indexOf('Answer the inbox')`],
   ['and the top row cannot climb further',
-   `(function(){ APP.cmd('quickMove','purchasing',-1); return state.quick[0]==='purchasing'; })()`],
+   `(function(){ APP.cmd('quickMove','receiving',-1); return state.quick[0]==='receiving'; })()`],
+]]);
+// The delivery row names the screen that BOOKS a delivery in, and Purchasing is
+// offered under its own noun. Both used to be able to sit on Home reading "Tick
+// a delivery in" and "Receiving" — two rows, one job, and the verb on the order
+// list rather than on the screen that performs it.
+CASES.push(['the delivery row is not two rows', `APP.cmd('tab','home');
+  state.quick=['receiving','purchasing']; render();`, [
+  ['the verb is on Receiving',   `txt('content').includes('Tick a delivery in')`],
+  ['and Purchasing is Purchasing', `txt('content').includes('Purchasing')`],
+  ['so neither row is called Receiving', `!txt('content').includes('Receiving')`],
+  ['and the verb opens the receiving list',
+   `(function(){ APP.cmd('push','receiving'); return state.stack[state.stack.length-1].route==='receiving'; })()`],
 ]]);
 CASES.push(['six is the ceiling', `APP.cmd('tab','home');
   state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices']; render();

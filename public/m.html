@@ -2022,14 +2022,31 @@ function vitalsBlock(){
    picker keeps exactly the Home they had.
    ========================================================================== */
 const M_QUICK_KEY='tacet-m-quick', QUICK_MAX=6;
-const QUICK_DEFAULT=['inbox','purchasing','tab:products'];
+/* THE DELIVERY DEFAULT POINTS AT RECEIVING, NOT AT PURCHASING. "Tick a delivery
+   in" was written when Purchasing was the only place a phone could book goods
+   in, and it stayed on `purchasing` after Receiving was split out onto its own
+   screen (see the Receiving header). That left an operator who put both on Home
+   reading "Tick a delivery in" above "Receiving" — two rows, one job, no way to
+   tell from the words which one counts what turned up. Purchasing counts
+   ORDERS and their money; Receiving counts DELIVERIES and is the screen whose
+   whole purpose is booking one in. The verb belongs to the second.
+
+   RECEIVING IS GATED ON purchasing:receive AND PURCHASING ON purchasing:view,
+   so this moves the default row off a buyer's Home and onto a receiver's. That
+   is the right way round: the row promises a save, and a holder of view alone
+   gets 403 on it (ROUTE_CAP's note says the same about the screen). A buyer who
+   wants their orders one tap away adds Purchasing in the picker, which is what
+   the picker is for. */
+const QUICK_DEFAULT=['inbox','receiving','tab:products'];
 /* A shortcut is named for the VERB only where there is one worth saying, and
    the three defaults keep the wording Home has always used for them. Every
    other row is offered under the name it already wears in More: a verb
-   invented for a screen is exactly how "Add product" happened. */
+   invented for a screen is exactly how "Add product" happened. Purchasing has
+   no entry here for that reason — it is offered as "Purchasing", the noun it
+   wears in More, so the two rows can never read as one again. */
 const QUICK_VERB={
   inbox:['Answer the inbox','回复消息'],
-  purchasing:['Tick a delivery in','确认收货'],
+  receiving:['Tick a delivery in','确认收货'],
   'tab:products':['Fix a price or a count','改价或改库存'],
 };
 /* Everything reachable, flat: the four destinations that are not Home, then
