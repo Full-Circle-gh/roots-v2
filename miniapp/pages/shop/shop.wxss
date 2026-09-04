@@ -253,14 +253,18 @@
 }
 .diet-chip.on { background: var(--lime); color: var(--ink); border-color: var(--ink); }
 
-/* ─── Grid 2-col ─────────────────────────────────────────────────── */
+/* ─── Grid 2-col / 3-col ─────────────────────────────────────────── */
+/* Both grids live INSIDE the category pane (.list-main), not across the
+   full page, so the gutters are the website's pane gutters (.sl-grid:
+   16px/12px padding, 16px/9px gap) rather than the page's 44rpx margin —
+   otherwise the cards sit squeezed against the rail. */
 .grid-2 {
   display: grid; grid-template-columns: 1fr 1fr; gap: 32rpx;
-  padding: 8rpx 44rpx;
+  padding: 24rpx 32rpx;
 }
 .grid-3 {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16rpx;
-  padding: 8rpx 28rpx;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18rpx;
+  padding: 24rpx;
 }
 .card { position: relative; display: flex; flex-direction: column; }
 /* In the flex-column card, default align-items:stretch widens children to
@@ -297,16 +301,17 @@
   text-align: center; padding: 8rpx 0;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em;
 }
-/* Pre-order: a sold-out card out-of-city shoppers can still reserve. Olive
-   band instead of the dead black SOLD OUT one — the + button stays live. */
+/* Pre-order: a sold-out card out-of-city shoppers can still reserve. Forest
+   band instead of the dead black SOLD OUT one (the website's .sl-coos.batch)
+   — the + button stays live. */
 .card-pre {
   position: absolute; bottom: 0; left: 0; right: 0;
-  background: var(--olive); color: #fff;
+  background: var(--forest); color: #fff;
   text-align: center; padding: 8rpx 0;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em; font-weight: 700;
 }
-.card .name { font-size: calc(30rpx * var(--font-scale)); margin-top: 16rpx; line-height: 1.2; }
-.card .price { font-size: calc(28rpx * var(--font-scale)); margin-top: 4rpx; color: var(--olive); }
+.card .name { font-size: calc(28rpx * var(--font-scale)); margin-top: 18rpx; line-height: 1.2; }
+.card .price { font-size: calc(32rpx * var(--font-scale)); margin-top: 4rpx; color: var(--ink); letter-spacing: 0.04em; }
 .card .price.is-flash { color: #E96174; font-weight: 700; }
 .card .price-stack { display: flex; align-items: baseline; gap: 8rpx; margin-top: 4rpx; }
 .card .price-stack .price { margin-top: 0; }
@@ -401,13 +406,13 @@
   border-top: 2rpx solid rgba(0,0,0,.1);
 }
 .list-side {
-  width: 172rpx;
+  width: 184rpx;   /* the website's 92px rail, 1:2 in rpx */
   background: var(--oat);
   border-right: 3rpx solid var(--ink);
 }
 .side-tab {
   display: flex; align-items: center; justify-content: center;
-  padding: 30rpx 8rpx;
+  padding: 32rpx 10rpx;
   text-align: center;
   font-size: calc(26rpx * var(--font-scale)); color: var(--ink);
   border-bottom: 2rpx solid rgba(0,0,0,.08);
