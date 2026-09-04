@@ -587,5 +587,107 @@ section('M · the real payload — a promotion must not read as the bill');
     b.parseOrderPayload(shuffled)[0].total === 269, b.parseOrderPayload(shuffled)[0].total);
 }
 
+// ── N · the order's STAGE, and the flag that was posing as one ──────────────
+// The always-Paid bug. Eleme's row carries `status: "VALID"` — whether the order
+// is being cooked or was delivered an hour ago — and none of the *Desc candidate
+// names exists in the payload, so the reader took the flag and every mirrored
+// Eleme order landed on 'paid' and stayed there. These pin both halves of the
+// fix: the stage is read from the fields that carry one, and a flag can never
+// stand in for a stage again.
+section('N · the lifecycle stage, not the validity flag');
+{
+  const row = (extra) => Object.assign({
+    orderId: '9000111122223333',
+    status: 'VALID',
+    consumerTotal: 68.5,
+    items: [{ name: '素食卷饼', quantity: 1, price: 68.5, totalPrice: 68.5 }],
+  }, extra);
+  const stage = (extra) => b.parseOrderPayload({ orders: [row(extra)] })[0];
+
+  const o1 = stage({ header: { orderLatestStatus: 'ORDER_COMPLETED' } });
+  ok('the stage beats the validity flag', o1.statusDesc === 'ORDER_COMPLETED', o1.statusDesc);
+  ok('...and says which field it came from',
+    o1.statusKeyPath === 'header.orderLatestStatus', o1.statusKeyPath);
+  ok('...and that the field names a stage', o1.statusIsStage === true, o1.statusIsStage);
+
+  const o2 = stage({ printDataInfo: { statusForPrint: '骑手已取餐' } });
+  ok('the printed label is a stage too', o2.statusDesc === '骑手已取餐', o2.statusDesc);
+
+  const o3 = stage({ deliveryInfo: { distTraceView: { traceView: { status: '配送中' } } } });
+  ok('the delivery trace is read when nothing else carries a stage',
+    o3.statusDesc === '配送中', o3.statusDesc);
+
+  // Priority, not position: the order's own latest status wins over the ticket.
+  const o4 = stage({ printDataInfo: { statusForPrint: '已完成' }, header: { orderLatestStatus: 'DELIVERING' } });
+  ok('the order-level stage beats the ticket label', o4.statusDesc === 'DELIVERING', o4.statusDesc);
+
+  // A numeric trace code is not a label — step over it and keep looking.
+  const o5 = stage({ deliveryInfo: { distTraceView: { traceView: { status: 4 } } },
+                     printDataInfo: { statusForPrint: '商家已接单' } });
+  ok('a numeric code is not a stage', o5.statusDesc === '商家已接单', o5.statusDesc);
+
+  // Nothing but the flag: the label still rides through (the daemon's refresh,
+  // its backfills and the void check all key off having ONE), flagged as not a
+  // stage so the ingest can log it rather than silently mapping it to Paid.
+  const o6 = stage({});
+  ok('with no stage anywhere the flag still rides through', o6.statusDesc === 'VALID', o6.statusDesc);
+  ok('...marked as not a stage', o6.statusIsStage === false, o6.statusIsStage);
+
+  // The plain case must not regress: a payload that DOES use statusDesc is read
+  // exactly as before, flag or no flag.
+  const o7 = stage({ statusDesc: '待接单' });
+  ok('a real statusDesc still wins', o7.statusDesc === '待接单', o7.statusDesc);
+  ok('...from its own key', o7.statusKeyPath === 'statusDesc', o7.statusKeyPath);
+}
+
+// ── O · what the platform's stage means to us ───────────────────────────────
+// The mapping half. A stage read correctly and mapped to nothing leaves the
+// order on Paid just as surely as reading the wrong field did.
+section('O · stage → internal status (routes/eleme-internal.js)');
+{
+  const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'eleme-internal.js'), 'utf8');
+  const start = src.indexOf('function internalStatusForChannel(');
+  if (start === -1) throw new Error('could not find internalStatusForChannel in routes/eleme-internal.js');
+  let depth = 0, i = src.indexOf('{', start);
+  const open = i;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  // eslint-disable-next-line no-new-func
+  const statusOf = new Function('return function internalStatusForChannel(desc) ' + src.slice(open, i + 1))();
+
+  // The flag itself, from either direction. INVALID must NOT read as a cancel:
+  // a cancel skips the stock deduction at ingest, and "flagged invalid" is not
+  // the same claim as "this order was cancelled".
+  ok('VALID → null (never a stage)', statusOf('VALID') === null, statusOf('VALID'));
+  ok('INVALID → null (never a cancel)', statusOf('INVALID') === null, statusOf('INVALID'));
+
+  // ASCII enums, the form the stage-bearing fields actually use.
+  ok('ORDER_COMPLETED → delivered', statusOf('ORDER_COMPLETED') === 'delivered', statusOf('ORDER_COMPLETED'));
+  ok('DELIVERED → delivered', statusOf('DELIVERED') === 'delivered', statusOf('DELIVERED'));
+  ok('SETTLED → delivered', statusOf('SETTLED') === 'delivered', statusOf('SETTLED'));
+  ok('DELIVERING → dispatched', statusOf('DELIVERING') === 'dispatched', statusOf('DELIVERING'));
+  ok('RIDER_PICKED_UP → dispatched (rider HAS it)',
+    statusOf('RIDER_PICKED_UP') === 'dispatched', statusOf('RIDER_PICKED_UP'));
+  ok('RIDER_ASSIGNED → rider_pickup', statusOf('RIDER_ASSIGNED') === 'rider_pickup', statusOf('RIDER_ASSIGNED'));
+  ok('PROCESSING → preparing', statusOf('PROCESSING') === 'preparing', statusOf('PROCESSING'));
+  ok('UNPROCESSED → preparing', statusOf('UNPROCESSED') === 'preparing', statusOf('UNPROCESSED'));
+  ok('ORDER_CANCELED → cancelled', statusOf('ORDER_CANCELED') === 'cancelled', statusOf('ORDER_CANCELED'));
+  ok('REFUND_SUCCESS → refunded', statusOf('REFUND_SUCCESS') === 'refunded', statusOf('REFUND_SUCCESS'));
+  // A refund in flight is not a refunded order — the merchant may still reject it.
+  ok('REFUNDING → null (not yet a refund)', statusOf('REFUNDING') === null, statusOf('REFUNDING'));
+  ok('REFUND_APPLY → null (a request, not a refund)',
+    statusOf('REFUND_APPLY') === null, statusOf('REFUND_APPLY'));
+  ok('UNPAID → null (below paid, not a stage we move to)',
+    statusOf('UNPAID') === null, statusOf('UNPAID'));
+  ok('an enum nobody has seen → null (order stays put)',
+    statusOf('SOME_NEW_ELEME_STATE') === null, statusOf('SOME_NEW_ELEME_STATE'));
+
+  // The Chinese vocabulary is untouched by the ASCII arms.
+  ok('配送中 still → dispatched', statusOf('配送中') === 'dispatched', statusOf('配送中'));
+  ok('已完成 still → delivered', statusOf('已完成') === 'delivered', statusOf('已完成'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

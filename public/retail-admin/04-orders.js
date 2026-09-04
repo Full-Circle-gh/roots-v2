@@ -322,9 +322,18 @@ const MT_STATUS = {
   '部分退款':   { en: 'Partial refund',   tone: 'refunded' },
   '退货退款':   { en: 'Refund / return',  tone: 'refunded' },
 };
+// A platform value that is not a lifecycle label at all: an order-VALIDITY flag
+// (Eleme sends `status: "VALID"` beside the real stage), a placeholder, or a bare
+// numeric code. Null rather than a tone, so a caller renders NOTHING instead of
+// the confident "In progress" the keyword fallback would otherwise invent — which
+// is exactly what this cell showed on delivered Eleme orders before 6b8cda0
+// removed it. Belt to the parser's braces (lib/eleme-browser.js pickStage now
+// looks past these), because the rows already stored still carry them.
+const NOT_A_STATUS_LABEL = /^(valid|invalid|normal|none|null|unknown|default|true|false|-?\d+(\.\d+)?)$/i;
 function channelStatusMeta(desc) {
   const d = String(desc || '').trim();
   if (!d) return null;
+  if (NOT_A_STATUS_LABEL.test(d)) return null;
   if (MT_STATUS[d]) return { en: MT_STATUS[d].en, cn: d, tone: MT_STATUS[d].tone };
   // Keyword fallback for labels not in the table — colour sensibly AND give a
   // generic English word by tone, so the English view never leaks raw Chinese.
@@ -5548,10 +5557,18 @@ function renderReadonlyOrder(o) {
           <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
         </div>` : ''}
         ${(() => {
-          // Eleme's own card is gone (Ash, 2026-09-02): channel_status has read
+          // Eleme's own card is gone (Ash, 2026-09-02): channel_status had read
           // "VALID" on 100% of live Eleme orders — an order-validity flag, never
           // a lifecycle stage — so this cell showed "In progress" on every
-          // delivered Eleme order since it shipped. The drawer's own status pill
+          // delivered Eleme order since it shipped.
+          //
+          // The read behind it is fixed since: lib/eleme-browser.js pickStage
+          // now takes the stage from the fields that carry one and steps over
+          // the validity flag, so channel_status on a NEW Eleme order holds a
+          // real label. The card stays out anyway — that is still Ash's call to
+          // reverse, and rows mirrored before the fix keep their "VALID" — but
+          // it is now one line, and channelStatusMeta above refuses a flag on
+          // every channel so nothing can render one as a stage again. The drawer's own status pill
           // above already carries Tacet's real status, and the lifecycle
           // timestamps below are complete on every row, so nothing here was
           // telling staff something they couldn't already see. Meituan and
