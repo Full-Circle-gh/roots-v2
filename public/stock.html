@@ -1815,12 +1815,33 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         return '<div class="rc-hr"></div><div class="rc-row"><span class="rc-qty num">' + rcSent(it) + '</span>' +
           '<span class="rc-mid"><span class="rc-nm">' + esc(rcName(it)) + '</span></span></div>';
       }).join('') + '<div class="rc-hr"></div></div>' +
-      // No button, and no warning either. The box is not here; a disabled
-      // "start receiving" would be a control advertising that it does not work,
-      // and a count of the gaps to expect is the anchor this flow avoids.
-      '<div class="rc-foot"><div class="rc-footrow"><div class="rc-note">' +
-        t('Counting opens when the van arrives.', '货车到店后即可开始点数。') +
-      '</div></div></div></div>';
+      // THIS SCREEN DESCRIBES A STATE; IT DOES NOT LOCK ONE.
+      //
+      // It first read `delivered_at` as a gate — no way through until the
+      // driver's leg was stamped — which is how the artboard reads on its own:
+      // "counting opens when the van arrives", and no control. But the only
+      // thing that stamps `delivered_at` is app.html, no artboard in either
+      // canvas draws a step that does, and the server never asked for it:
+      // _applyReceipt gates on `goods_state === 'in_transit'` and nothing else.
+      // So the gate was stricter than the rule it was enforcing, and its failure
+      // mode was a shop standing over a box it could see, unable to count it
+      // until someone opened a desktop.
+      //
+      // The screen stays, because opening a delivery before it lands is a real
+      // thing to do and the in-transit card is the one state only Tacet holds.
+      // What goes is the dead end. The note still says where the van is — that
+      // is true and worth knowing — and the control below it works, because a
+      // box in the room outranks a timestamp nobody stamped.
+      //
+      // Still no warning about what is short. A count of the gaps to expect,
+      // delivered before the count, is the anchor this whole flow avoids.
+      '<div class="rc-foot"><div class="rc-footrow">' +
+        '<div class="rc-note rc-tally">' +
+          t('The van is still on the road.', '货车仍在途中。') + ' ' +
+          t('If the box is here, count it.', '若货已到店,可直接点数。') +
+        '</div>' +
+        '<button class="rc-cta on" data-rccount>' + t('Start counting', '开始点数') + '</button>' +
+      '</div></div></div>';
   }
 
   function rcCountHtml() {

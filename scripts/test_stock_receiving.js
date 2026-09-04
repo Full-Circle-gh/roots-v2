@@ -147,12 +147,22 @@ const CASES = {
   'entry': { js: 'window.__done();',
     expect: ['A delivery is waiting to be counted', 'RS-260902-004', '4 lines from the warehouse'] },
 
-  // Not arrived yet. One Dusk card, a read-only manifest, and no control — a
-  // disabled "start receiving" would only advertise that it does not work.
+  // Not arrived yet. One Dusk card and a read-only manifest — nothing countable
+  // on the screen itself, and no confirm, because nothing has been counted.
   'transit': { orderPatch: { delivered_at: null }, js: seq([OPEN]),
-    expect: ['On the way', 'In transit', 'What is coming', 'Counting opens when the van arrives'],
+    expect: ['On the way', 'In transit', 'What is coming', 'The van is still on the road'],
     absent: ['Confirm receipt'],
-    check: (out) => /data-countable="0"/.test(out) ? null : 'the transit screen offered a way to count' },
+    check: (out) => /data-countable="0"/.test(out) ? null : 'the transit screen listed countable rows' },
+
+  // AND IT IS NOT A LOCK. delivered_at is stamped by nothing in either canvas
+  // and by no step in this flow, and the server never asked for it —
+  // _applyReceipt gates on goods_state alone. A shop standing over a box it can
+  // see must be able to count it, so the way through works with the stamp
+  // absent. If this ever goes red, receiving has a dead end again.
+  'transit-is-not-a-lock': { orderPatch: { delivered_at: null },
+    js: seq([OPEN, "'[data-rccount]'", '250']),
+    expect: ['From the warehouse · 4 lines', 'Count', '0 of 4', 'lines counted'],
+    check: (out) => /data-countable="4"/.test(out) ? null : 'no way through from the transit screen' },
 
   // Arrived. The number on an uncounted row is what the warehouse SENT.
   'list': { js: seq([OPEN]),
