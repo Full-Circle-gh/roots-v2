@@ -3623,3 +3623,204 @@ function chRender() {
   const m = document.getElementById('ch-more');
   if (m) m.hidden = CH_ROWS.length >= CH_TOTAL;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WHAT WAS SENT — Settings → What was sent (audit P-03 / P-02)
+
+   Twenty kinds of notification can leave this service and no screen listed any
+   of them. A merchant asking "did the customer get told?" had no answer, and
+   one whose staff had silently stopped receiving orders had no way to notice —
+   a dead push subscription was pruned without a word.
+
+   Read-only, like the change history beside it, and for the same reason: a
+   delivery record somebody can edit is not a record.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let NL_LIMIT = 100;
+let NL_OFFSET = 0;
+let NL_ROWS = [];
+let NL_TOTAL = 0;
+let NL_FAILED = 0;
+let NL_ONLY_FAILED = false;
+let _NL_SEARCH_T = null;
+
+function nlSearchDebounced() {
+  clearTimeout(_NL_SEARCH_T);
+  _NL_SEARCH_T = setTimeout(() => { NL_OFFSET = 0; nlLoad(); }, 250);
+}
+
+function nlFilterQuery() {
+  const qs = new URLSearchParams();
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  if (v('nl-channel')) qs.set('channel', v('nl-channel'));
+  if (v('nl-kind'))    qs.set('kind', v('nl-kind'));
+  if (v('nl-from'))    qs.set('from', v('nl-from'));
+  if (v('nl-to'))      qs.set('to', v('nl-to'));
+  if (v('nl-q'))       qs.set('q', v('nl-q'));
+  if (NL_ONLY_FAILED)  qs.set('failed', '1');
+  return qs;
+}
+
+function nlToggleFailed() { NL_ONLY_FAILED = !NL_ONLY_FAILED; NL_OFFSET = 0; nlLoad(); }
+
+function nlClearFilters() {
+  ['nl-channel', 'nl-kind', 'nl-from', 'nl-to', 'nl-q'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  NL_ONLY_FAILED = false;
+  NL_OFFSET = 0;
+  nlLoad();
+}
+
+function nlMore() { NL_OFFSET += NL_LIMIT; nlLoad({ append: true }); }
+
+// How it was sent, in the words a shopkeeper uses rather than the transport's.
+const NL_CHANNELS = {
+  push:    ['Phone alert', '手机推送'],
+  email:   ['Email', '邮件'],
+  sms:     ['Text message', '短信'],
+  wechat:  ['WeChat message', '微信消息'],
+  wecom:   ['Work chat', '企业微信'],
+  webhook: ['Chat app', '聊天应用'],
+};
+function nlChannelText(c) {
+  const e = NL_CHANNELS[c];
+  return e ? cuT(e[0], e[1]) : String(c || '').replace(/_/g, ' ');
+}
+
+// What it was about. Same fallback rule as the change history's action names:
+// unknown kinds read as words rather than as a key, so one added tomorrow is
+// legible on the day it ships.
+const NL_KINDS = {
+  order_paid:        ['A customer paid', '顾客已付款'],
+  ship_reminder:     ['Time to ship an order', '订单该发货了'],
+  pickup_reminder:   ['A collection is due', '自提订单临近'],
+  low_stock_digest:  ['Daily low-stock list', '每日低库存清单'],
+  signin_code:       ['Sign-in code', '登录验证码'],
+  restock_request:   ['A stock request', '补货申请'],
+  new_order:         ['A new order', '新订单'],
+};
+function nlKindText(k) {
+  const e = NL_KINDS[k];
+  if (e) return cuT(e[0], e[1]);
+  const w = String(k || '').replace(/_/g, ' ').trim();
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+}
+
+// The result column. A broadcast says how many phones it reached; a send to one
+// person says whether it arrived. A failure says WHY, because "failed" on its
+// own tells the merchant nothing they can act on.
+function nlResultHtml(r) {
+  if (r.ok) {
+    const d = r.detail || {};
+    if (typeof d.sent === 'number' && typeof d.total === 'number' && d.total > 1) {
+      const extra = [];
+      if (d.muted)  extra.push(cuT(d.muted + ' muted', d.muted + ' 已静音'));
+      if (d.pruned) extra.push(cuT(d.pruned + ' device gone', d.pruned + ' 设备失效'));
+      return `<span class="nl-ok">${escapeHtml(cuT(d.sent + ' of ' + d.total + ' reached', d.total + ' 台中 ' + d.sent + ' 台已送达'))}</span>`
+        + (extra.length ? ` <span class="muted">· ${escapeHtml(extra.join(' · '))}</span>` : '');
+    }
+    return `<span class="nl-ok">${escapeHtml(cuT('Sent', '已发送'))}</span>`;
+  }
+  // The stored reason is the provider's code as often as not, so it goes
+  // through the same dictionary the toasts use — and keeps the raw text on
+  // hover for support.
+  const why = (typeof tdErrorText === 'function') ? tdErrorText(r.error, null) : (r.error || '');
+  return `<span class="nl-bad" title="${escapeAttr(r.error || '')}">${escapeHtml(cuT('Did not arrive', '未送达'))}</span>`
+    + (why ? ` <span class="muted">· ${escapeHtml(why)}</span>` : '');
+}
+
+async function nlLoad(opts = {}) {
+  const tbody = document.querySelector('#nl-table tbody');
+  if (!tbody) return;
+  const append = !!opts.append;
+  if (!append) { NL_OFFSET = 0; tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Loading…', '加载中…'))}</td></tr>`; }
+
+  const qs = nlFilterQuery();
+  qs.set('limit', NL_LIMIT);
+  qs.set('offset', NL_OFFSET);
+
+  let j;
+  try {
+    const res = await fetch('/api/retail-admin/notification-log?' + qs.toString());
+    j = await res.json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the send record. Check your connection and try again.',
+      '无法加载发送记录,请检查网络后重试。'))}</td></tr>`;
+    return;
+  }
+  if (!j || !j.success) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Could not load the send record.', '无法加载发送记录。'))}</td></tr>`;
+    return;
+  }
+
+  NL_ROWS = append ? NL_ROWS.concat(j.data || []) : (j.data || []);
+  NL_TOTAL = j.total || 0;
+  NL_FAILED = j.failed || 0;
+  nlFillFilterOptions(j.channels || [], j.kinds || []);
+  nlRender();
+}
+
+function nlFillFilterOptions(channels, kinds) {
+  const fill = (id, values, allEn, allCn, label) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">${escapeHtml(cuT(allEn, allCn))}</option>`
+      + values.map(v => `<option value="${escapeAttr(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(label(v))}</option>`).join('');
+    if (keep && sel.value !== keep) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(keep)}" selected>${escapeHtml(label(keep))}</option>`);
+    }
+  };
+  fill('nl-channel', channels, 'Every way', '全部方式', nlChannelText);
+  fill('nl-kind', kinds, 'Everything', '全部内容', nlKindText);
+}
+
+function nlRender() {
+  const tbody = document.querySelector('#nl-table tbody');
+  if (!tbody) return;
+
+  const filtered = [...nlFilterQuery().keys()].length > 0;
+  const clearBtn = document.getElementById('nl-clear');
+  if (clearBtn) clearBtn.hidden = !filtered;
+
+  // The failed-only toggle carries its own count, and lights up when it is on.
+  const failBtn = document.getElementById('nl-failed');
+  if (failBtn) {
+    failBtn.classList.toggle('btn-primary', NL_ONLY_FAILED);
+    failBtn.textContent = NL_FAILED
+      ? cuT('Did not arrive (' + NL_FAILED + ')', '未送达(' + NL_FAILED + ')')
+      : cuT('Did not arrive', '未送达');
+    // Nothing failed and we are not already filtered to failures: the control
+    // has nothing to show, so it does not sit there offering an empty list.
+    failBtn.hidden = !NL_FAILED && !NL_ONLY_FAILED;
+  }
+
+  if (!NL_ROWS.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="padding:22px 8px;text-align:center">`
+      + (filtered
+        ? escapeHtml(cuT('Nothing matches those filters.', '没有符合条件的记录。'))
+          + ` <a href="#" onclick="nlClearFilters();return false;">${escapeHtml(cuT('Clear them', '清除筛选'))}</a>`
+        : escapeHtml(cuT(
+            'Nothing has been sent yet. Every push, email and text will appear here.',
+            '暂无发送记录。每条推送、邮件与短信都会显示在这里。')))
+      + `</td></tr>`;
+    const c = document.getElementById('nl-count'); if (c) c.textContent = '';
+    const m = document.getElementById('nl-more'); if (m) m.hidden = true;
+    return;
+  }
+
+  tbody.innerHTML = NL_ROWS.map(r => `<tr>`
+    + `<td data-no-i18n>${escapeHtml((typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.created_at) || '')}</td>`
+    + `<td>${escapeHtml(nlChannelText(r.channel))}</td>`
+    + `<td>${escapeHtml(nlKindText(r.kind))}${r.subject ? `<div class="muted" data-no-i18n style="font-size:11px">${escapeHtml(r.subject)}</div>` : ''}</td>`
+    + `<td data-no-i18n>${escapeHtml(r.recipient || '')}${r.recipient ? '' : `<span class="muted">${escapeHtml(cuT('your team', '团队'))}</span>`}</td>`
+    + `<td>${nlResultHtml(r)}</td>`
+    + `</tr>`).join('');
+
+  const c = document.getElementById('nl-count');
+  if (c) c.textContent = cuT(`Showing ${NL_ROWS.length} of ${NL_TOTAL}`, `显示 ${NL_ROWS.length} / ${NL_TOTAL}`);
+  const m = document.getElementById('nl-more');
+  if (m) m.hidden = NL_ROWS.length >= NL_TOTAL;
+}

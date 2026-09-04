@@ -2116,7 +2116,7 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // Change history is on that list too, and more absolutely: it is read-only.
   // A "Save settings" button over a record of what people did would be an
   // offer to edit the audit trail.
-  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku' || sub === 'history') ? 'none' : '';
+  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku' || sub === 'history' || sub === 'sent') ? 'none' : '';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
   // Same, for the SKU rules — the category lists it offers are read from the
@@ -2125,6 +2125,8 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // Same, for the change history — it is a live record, so it is read fresh on
   // every open rather than cached from whenever the tab was last visited.
   if (sub === 'history' && typeof chLoad === 'function') chLoad();
+  // Same, for the send record — a live log, read fresh on every open.
+  if (sub === 'sent' && typeof nlLoad === 'function') nlLoad();
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));

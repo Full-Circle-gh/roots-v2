@@ -1822,6 +1822,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_orders_status   ON retail_orders(status);
   CREATE INDEX IF NOT EXISTS idx_retail_orders_placed   ON retail_orders(placed_at);
 
+  -- ── What the system TRIED TO DELIVER (audit P-03) ──────────────────────
+  -- One row per send attempt, across every channel: a push, an email code, a
+  -- text message, a WeChat subscribe message, a chat-app webhook. Twenty kinds
+  -- of notification could leave this service and there was no screen listing
+  -- what went out, so a merchant asking "did the customer get told?" had no way
+  -- to find out — and a merchant whose staff had silently stopped receiving
+  -- orders had no way to notice.
+  --
+  -- ONE ROW PER ATTEMPT, NOT PER RECIPIENT. A push to eleven phones is one row
+  -- saying eleven were tried and nine reached; the question is "did this go
+  -- out", and eleven rows answers a question nobody asked while burying the
+  -- one that matters. The recipient column is filled only when the send was to
+  -- one named person, where who it went to IS the fact.
+  --
+  -- NOT A QUEUE. Nothing reads these rows to decide whether to send again, and
+  -- lib/notify-log.js swallows every failure of its own — a log that can break
+  -- the thing it logs is worse than no log.
+  --
+  -- Distinct from retail_notifications below, which is the customer's in-app
+  -- message centre: a product feature, not a delivery record.
+  CREATE TABLE IF NOT EXISTS notification_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    INTEGER,
+    channel      TEXT NOT NULL,        -- push | email | sms | wechat | wecom | webhook
+    kind         TEXT NOT NULL,        -- order_paid | ship_reminder | low_stock_digest | signin_code | …
+    subject      TEXT,                 -- the line that was sent, or what it was for
+    recipient    TEXT,                 -- one named person; NULL for a broadcast
+    entity_type  TEXT,                 -- what it was ABOUT, so it can be found
+    entity_id    INTEGER,              -- from the order or customer it concerns
+    ok           INTEGER NOT NULL DEFAULT 0,
+    error        TEXT,                 -- the reason when it did not land
+    detail_json  TEXT,                 -- counts for a broadcast: tried/sent/pruned/muted
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_notification_log_when   ON notification_log(tenant_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_notification_log_entity ON notification_log(entity_type, entity_id);
+  CREATE INDEX IF NOT EXISTS idx_notification_log_failed ON notification_log(tenant_id, ok, created_at);
+
   -- Customer in-app notification center. One row per event (order status,
   -- refund transition, invoice issued, …). read_at NULL = unread. ref_type +
   -- ref_id deep-link the mini app to the relevant order/invoice.
@@ -4706,6 +4744,14 @@ if (RETENTION_DAYS > 0) {
     const r = db.prepare("DELETE FROM activity_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
     if (r.changes > 0) console.log(`[retention] purged ${r.changes} activity_log entries older than ${RETENTION_DAYS} days`);
   } catch (e) { /* best-effort */ }
+  // The delivery record (audit P-03) ages out on the same schedule and for the
+  // same reason: it exists to answer "what happened last week", not to be an
+  // archive. Its own try/catch so a table that has not been created yet on some
+  // path cannot stop the activity purge above from having run.
+  try {
+    const n = db.prepare("DELETE FROM notification_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
+    if (n.changes > 0) console.log(`[retention] purged ${n.changes} notification_log entries older than ${RETENTION_DAYS} days`);
+  } catch (e) { /* table not created yet — nothing to purge */ }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

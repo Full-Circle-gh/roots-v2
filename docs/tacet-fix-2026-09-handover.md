@@ -11,9 +11,9 @@ nothing here has deployed. Every commit carries `[skip deploy]` as well.
 
 ## 1. What is fixed
 
-Seventeen commits, worked strictly down by severity. Both Critical findings that
-could be fixed without a decision, every High that could, and eleven Mediums and
-Lows that were cheap and clearly right.
+Twenty commits, worked strictly down by severity. Both Critical findings that
+could be fixed without a decision, every High that could, and fifteen Mediums
+and Lows that were cheap and clearly right — 33 findings in all.
 
 | Finding | Severity | What changed |
 |---|---|---|
@@ -22,7 +22,6 @@ Lows that were cheap and clearly right.
 | **A-02 / A-07** | High / Medium | A mistyped shelf count wrote zero, and a negative count was accepted. Both refused, with a sentence saying what to type. |
 | **A-04** | High | Every timestamp rendered on Guangzhou's clock for everyone. `/config` now returns the account's own timezone and the shared formatter uses it. |
 | **A-08 / I-01** | Medium / High | Nine ways to write an amount. Now two, both from the merchant's currency: `acMoney` (exact, thousands grouped) and `acMoneyCompact` (whole units, KPI tiles and axes only). |
-| **A-09** | Medium | *Partial.* The error paths touched by other fixes now carry a plain sentence. The remaining ~180 raw error codes are listed in §3. |
 | **B-01** | High | A new merchant's Products screen said their filter matched nothing. Two states now: nothing matches, and you have no products yet. |
 | **B-02** | High | An order that arrived from the shop or a marketplace could not be annotated at all. `PATCH /orders/:id/note` and a field in the drawer. |
 | **B-05** | Medium | Escape threw away a half-finished product without asking. |
@@ -40,14 +39,17 @@ Lows that were cheap and clearly right.
 | **E-04** | High | Orders, customers and the finance ledger could not be exported. Three CSV endpoints, each honouring the filters on screen. |
 | **E-06** | High | Stock never told anyone it was running out. A daily digest, on by default, at an hour the merchant sets. |
 | **E-11** | Medium | There was no bookkeeper role. There is now, seeded for every account, holding the books and nothing else. |
-| **G-01** | Medium | *Partial.* "Quotas", the AppID error, and the JD credential block. |
+| **A-09 / G-01** | Medium | 195 toast sites showed the merchant the server's own error codes. Three layers now: the server's own message, a dictionary of 129 codes written as sentences, and — for anything unlisted — the code in words. The code itself moves to the toast's title so support can still be quoted it. Plus "quotas", the AppID error, and the JD credential block. |
+| **B-04** | Low | A finished brand studio was deployed with no route and no link. It has both now, and a way back out. |
+| **C-03** | Low | The Materials empty state explained a material better than any other screen and offered no way to make one. |
 | **G-02 / R-02** | Medium | 280 form fields with no accessible name → zero. 158 labels associated, 58 written by hand, the rest named at runtime by the i18n walker so dynamically-built forms are covered too. |
 | **J-01** | High | Six lists that grew without bound now carry a ceiling, report the real total, and say so on screen when they are cut. |
 | **J-02** | Medium | Two query-per-row loops batched. **The audit was wrong about one of them** and is corrected in the same commit — see §4. |
 | **N-01 / R-01** | Medium | Pinch-zoom was switched off on the phone admin. |
 | **R-03** | Medium | Dark-theme muted text at 3.61:1, used 192 times. Now clears 4.5 on every dark surface. |
 | **R-04** | Low | The product inspector's buttons were 26px against a 44px guideline. |
-| **R-05** | Medium | *Partial.* A skip link past the rail. The focus trap and the 385 non-button click handlers are listed in §3. |
+| **P-03** | Medium | Twenty kinds of notification could leave the system and no screen listed any of them. Settings → What was sent: what went out, to whom, whether it landed, and why not. Also delivers the visible half of **P-02** — every silent failure in the push, email and SMS paths is now a row with its reason. |
+| **R-05** | Medium | A skip link past the rail, and a focus trap in dialogs and drawers. The 385 non-button click handlers remain — see §3. |
 
 ---
 
@@ -124,10 +126,16 @@ subscription, 211 empty `catch` blocks. The pattern to copy already exists — a
 failed printer job writes `print_status` onto the order and the drawer offers a
 reprint.
 
-**What I need:** permission to add a `delivery_attempts`-style record and
-surface it on the thing it was about. This is a week of work, not an afternoon,
-and it touches the send helpers everywhere. Worth confirming you want it before
-I start.
+**Half of this is now done and needs no further permission:** `notification_log`
+records every send attempt on every channel, with its reason when it failed, and
+Settings → What was sent reads it. The four silent exits from the operator push
+— including "nobody on this account holds the capability", which is the D-06
+shape — are rows saying so.
+
+**What I still need:** permission for the other half — surfacing a failure ON
+the thing it was about (a failed customer notification shown on that order, the
+way a failed print already is) and doing something about the 211 empty `catch`
+blocks. That is a week of work and touches the API everywhere.
 
 ### Q6 — D-08 + H-01 + H-03 · What a new merchant is asked on day one *(High ×3)*
 
@@ -197,7 +205,6 @@ that work.
 I can do all of these on a word from you. They are listed with what each costs.
 
 **Larger, worth their own pass:**
-- **P-03** — no history of what was sent. One log table, written by the send helpers. *(Pairs naturally with Q5.)*
 - **E-05** — only suppliers can be imported. Products, customers and opening stock are the largest cost of switching to Tacet.
 - **E-07** — no undo except on products.
 - **G-03** — Settings is nine dropdowns deep with no explanation.
@@ -205,16 +212,13 @@ I can do all of these on a word from you. They are listed with what each costs.
 - **I-02** — money arithmetic inside string-built SQL; the rounding is the database's, not the product's.
 
 **Medium, an afternoon each:**
-- **A-09** — ~180 error toasts still show a raw code. Mechanical but needs a written sentence per case, which is the slow part.
 - **E-08** — filters cannot be saved.
 - **E-10** — notifications cannot be tuned (the low-stock digest is now the only one that can).
 - **B-03** — four endpoints for opening and closing the shop, and no screen.
-- **R-05** — the two remaining parts: a focus trap in dialogs, and 385 `onclick` handlers on elements that are not buttons.
+- **R-05** — one part remains: 385 `onclick` handlers on elements that are not buttons and so are not reachable by keyboard.
 - **C-02** — the phone admin still has its own date family. Its convention matches the shared formatter's, so converging is safe and fixes nothing visible; it is tidiness, and it is an untested surface.
 
 **Small:**
-- **B-04** — a whole brand-design screen deployed with no way in.
-- **C-03** — the products empty state now has two states (B-01) but still lacks the Suppliers screen's buttons.
 - **C-05** — one confirmation gap out of 32.
 - **E-09**, **E-12**, **F-02**, **I-04**, **O-02** — as recorded in the audit.
 
@@ -263,7 +267,8 @@ install. The changes with real behaviour risk, in order:
 2. **D-01's handle rewrite** — three route files moved onto the account handle.
    `getTenantDb(1) === mainDb`, so for Roots this is a passthrough and behaviour
    should be identical.
-3. **E-01 and E-02's schema additions** — three columns, added with the file's
-   own idempotent `addColumn` idiom, all nullable.
+3. **The schema additions** — three columns (E-01, E-02) added with the file's
+   own idempotent `addColumn` idiom, all nullable, and one new table
+   (`notification_log`, P-03) which nothing reads except its own screen.
 4. **The currency pass** — 188 render sites. Output is identical on CNY except
    that thousands are now grouped.

@@ -14596,6 +14596,100 @@ router.get('/api/retail-admin/activity-log/export.csv', requireRetailAdmin, (req
   }
 });
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WHAT WAS SENT (audit P-03, and the visible half of P-02)
+
+   Twenty kinds of notification can leave this service — a push to an operator's
+   phone, a sign-in code by email, a text to a customer, a delivery reminder —
+   and there was no screen anywhere listing what went out, to whom, or whether
+   it landed. A merchant asking "did the customer get told?" had no way to find
+   out, and one whose staff had silently stopped receiving orders had no way to
+   notice.
+
+   `notification_log` is an ACCOUNT table, not control-plane — it is cloned per
+   account like every other data table — so this reads through tdb() and needs
+   no tenant filter of its own. (Contrast the change history above, which reads
+   a shared table and filters on tenant_id explicitly. The difference is real
+   and is why the two endpoints do not look alike.)
+   ══════════════════════════════════════════════════════════════════════════ */
+function buildNotifyLogFilter(req) {
+  const where = ['1=1'];
+  const params = [];
+
+  const channel = String(req.query.channel || '').trim();
+  if (channel) { where.push('n.channel = ?'); params.push(channel); }
+
+  const kind = String(req.query.kind || '').trim();
+  if (kind) { where.push('n.kind = ?'); params.push(kind); }
+
+  // The cut an operator actually reaches for: show me what did not arrive.
+  if (String(req.query.failed || '') === '1') where.push('n.ok = 0');
+
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    where.push('(n.subject LIKE ? OR n.recipient LIKE ? OR n.error LIKE ? OR n.kind LIKE ?)');
+    const t = `%${q}%`; params.push(t, t, t, t);
+  }
+
+  const from = String(req.query.from || '').trim();
+  const to   = String(req.query.to   || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(n.created_at,'+8 hours') >= ?"); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(n.created_at,'+8 hours') <= ?"); params.push(to); }
+
+  return { whereSql: 'WHERE ' + where.join(' AND '), params };
+}
+
+router.get('/api/retail-admin/notification-log', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildNotifyLogFilter(req);
+    const limit  = Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+
+    const total = tdb().prepare(`SELECT COUNT(*) AS n FROM notification_log n ${whereSql}`).get(...params).n;
+    const rows = tdb().prepare(
+      `SELECT n.id, n.channel, n.kind, n.subject, n.recipient, n.entity_type, n.entity_id,
+              n.ok, n.error, n.detail_json, n.created_at
+         FROM notification_log n ${whereSql}
+        ORDER BY n.id DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset);
+    for (const r of rows) {
+      if (typeof r.detail_json === 'string' && r.detail_json) {
+        try { r.detail = JSON.parse(r.detail_json); } catch { r.detail = null; }
+      } else { r.detail = null; }
+      delete r.detail_json;
+      r.ok = !!r.ok;
+    }
+
+    // How many did not arrive, in the SAME window the rows are drawn from but
+    // ignoring the failed-only toggle — otherwise the count and the toggle
+    // would describe each other in a circle.
+    const failedParams = buildNotifyLogFilter({ query: { ...req.query, failed: '' } });
+    const failed = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM notification_log n ${failedParams.whereSql} AND n.ok = 0`
+    ).get(...failedParams.params).n;
+
+    // The two dropdowns, built from what this account has actually sent, so
+    // neither can offer a dead end.
+    const channels = tdb().prepare(
+      `SELECT DISTINCT n.channel FROM notification_log n ORDER BY n.channel`
+    ).all().map(r => r.channel);
+    const kinds = tdb().prepare(
+      `SELECT DISTINCT n.kind FROM notification_log n ORDER BY n.kind`
+    ).all().map(r => r.kind);
+
+    res.json({ success: true, data: rows, total, failed, limit, offset, channels, kinds });
+  } catch (e) {
+    // The table may not exist yet on a database that has not restarted since
+    // this shipped. An empty log is the honest answer, not a 500.
+    if (/no such table/i.test(e.message || '')) {
+      return res.json({ success: true, data: [], total: 0, failed: 0, channels: [], kinds: [] });
+    }
+    console.error('[notification-log]', e);
+    res.status(500).json({ success: false, error: 'notification_log_failed', message: e.message });
+  }
+});
+
 // JSON: paginated rows + per-source summary for the current filter window.
 router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
   try {

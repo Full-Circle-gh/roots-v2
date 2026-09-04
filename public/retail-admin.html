@@ -9690,6 +9690,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
           Change history · 修改记录
         </button>
+        <!-- What was sent — the delivery record (audit P-03). Twenty kinds of
+             notification could leave the system and no screen listed any of
+             them, so "did the customer get told?" had no answer. -->
+        <button data-sub="sent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          What was sent · 发送记录
+        </button>
         <!-- SKU codes. Gated on materials:view because that is whose catalogue
              the rules number — an operator who cannot see materials has no use
              for a screen about how materials are coded. The write endpoints are
@@ -10686,6 +10693,46 @@
             <div class="row" style="justify-content:space-between;align-items:center;margin-top:10px">
               <span class="muted" id="ch-count" data-no-i18n></span>
               <button class="btn btn-sm" type="button" id="ch-more" hidden onclick="chMore()">Show more · 显示更多</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────── WHAT WAS SENT ────── -->
+        <div class="sub-panel" id="sub-sent">
+          <h2>What was sent · 发送记录</h2>
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Every message the system tried to deliver · 系统尝试发送的每条消息</h3>
+              <div class="muted">Pushes to your team's phones, sign-in codes, texts to customers, delivery reminders — what went out, to whom, and whether it landed. Read-only. · 团队手机推送、登录验证码、顾客短信、配送提醒 —— 发了什么、发给谁、是否送达。只读。</div>
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <select id="nl-channel" onchange="nlLoad()" aria-label="Filter by how it was sent · 按发送方式筛选"><option value="">Every way · 全部方式</option></select>
+              <select id="nl-kind" onchange="nlLoad()" aria-label="Filter by what it was about · 按内容筛选"><option value="">Everything · 全部内容</option></select>
+              <input type="date" id="nl-from" onchange="nlLoad()" aria-label="From date · 起始日期">
+              <span style="color:var(--text-3)">–</span>
+              <input type="date" id="nl-to" onchange="nlLoad()" aria-label="To date · 结束日期">
+              <input type="text" id="nl-q" oninput="nlSearchDebounced()" placeholder="Search · 搜索" aria-label="Search what was sent · 搜索发送记录" style="flex:1;min-width:160px">
+              <!-- The cut an operator actually reaches for. Its count is taken
+                   with every other filter applied and this one not, so the
+                   number and the list it produces cannot disagree. -->
+              <button class="btn btn-sm" type="button" id="nl-failed" onclick="nlToggleFailed()">Did not arrive · 未送达</button>
+              <button class="btn btn-sm" type="button" id="nl-clear" hidden onclick="nlClearFilters()">Clear filters · 清除筛选</button>
+            </div>
+            <div class="table-wrap">
+              <table id="nl-table">
+                <thead><tr>
+                  <th>When · 时间</th>
+                  <th>How · 方式</th>
+                  <th>What · 内容</th>
+                  <th>To · 发给</th>
+                  <th>Result · 结果</th>
+                </tr></thead>
+                <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-top:10px">
+              <span class="muted" id="nl-count" data-no-i18n></span>
+              <button class="btn btn-sm" type="button" id="nl-more" hidden onclick="nlMore()">Show more · 显示更多</button>
             </div>
           </div>
         </div>

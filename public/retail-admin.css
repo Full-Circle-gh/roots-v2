@@ -14442,3 +14442,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 }
 .skip-link:focus { top: 8px; outline: 2px solid var(--accent, #365329); outline-offset: 2px; }
 main:focus { outline: none; }
+
+/* The send record's result column (audit P-03). Green for landed, clay for
+   not — never red: a message that did not arrive is a thing to look at, not an
+   emergency, and the calm rule holds here as everywhere else. */
+#sub-sent .nl-ok  { color: var(--accent); font-weight: 500; }
+#sub-sent .nl-bad { color: var(--warn); font-weight: 500; }
