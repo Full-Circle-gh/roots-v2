@@ -134,8 +134,12 @@ const NEXT = "'#pkAssignLbl'";
 const field = (id) => "'[data-pkf=\"" + id + "\"]'";
 
 const CASES = {
+  // The launcher's Pick tile — the door, visible whether or not a run is due.
   'entry': { js: 'window.__done();',
-    expect: ['A run is waiting to be picked', '2 of 2 lines still to pull', '2 stores'] },
+    expect: ['Pick', 'Pull a run for the stores', '2 of 2 lines still to pull'] },
+
+  'entry-when-idle': { emptyRun: true, js: 'window.__done();',
+    expect: ['Pick', 'Nothing to pick'], absent: ['still to pull'] },
 
   // Combined, one row per product, with the per-store split under the name.
   'list': { js: seq([OPEN]),
