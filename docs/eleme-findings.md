@@ -1027,13 +1027,63 @@ The fix is that same shape, applied to the same question:
   delivered; `delivered_at` is deliberately left NULL, because a timer's
   inference must not be presented as an observation.
 
+### The measurement, 2026-09-04, and the two things it corrected
+
+Shipped at 11:42 +08, the screen still showed two Eleme orders on Paid. Two
+read-only captures on the live box settled why, and neither answer was a guess:
+
+- `diagnose_eleme_status_now.js` — **nothing had been re-read.** The last
+  `order_import` and the last `channel_status` write were both `2026-09-03
+  09:37:16`, and every poll since the deploy returned no order rows, which is
+  what an empty in-progress tab looks like. Five Eleme orders exist in total; all
+  five still read `channel_status = "VALID"`, and **all five have `channel_eta`
+  NULL**.
+- `diagnose_eleme_stage_replay.js` — the fixed parser, run over the archived
+  payloads **on the box**, against the checkout's `lib/` rather than the deployed
+  one. It read `statusDesc = "订单商家已自行送出"` from
+  `header.orderLatestStatus`, `isStage = true`. The named path works.
+
+And then: **`→ internal status: null (order would stay where it is)`.**
+
+**THE RIGHT FIELD, READ CORRECTLY, AND THE ORDER STILL DID NOT MOVE.** 送出 —
+this shop delivers its own Eleme orders (自配送), so the stage says the merchant
+sent it out, and `internalStatusForChannel` had no arm for that word. The stage
+vocabulary was written from Meituan's rider flow; the live one is a self-delivery
+flow. Fixed by adding 送出 to the dispatch arm, below 已送达 so a delivered order
+is still delivered.
+
+The same capture named two more things:
+
+- **`printDataInfo.statusForPrint` is NOT a stage** — it reads `已在线支付` on a
+  delivered order, because it is what the ticket prints about payment. It was
+  second in `STATUS_PATHS` on the strength of its name and is now removed: a
+  payment label winning over a real stage is this same bug wearing a hat.
+- **The ETA lives at `header.planDeliverTime`**, an epoch in milliseconds, and
+  none of the six guessed `ETA_KEYS` names appears in the payload at all — which
+  is why `channel_eta` is NULL on all five. That is not a blank cell:
+  `auto-deliver-past-eta` compares against it, so **the half of the fix meant to
+  land an order after it drops off the in-progress tab was inert by
+  construction**. `ETA_PATHS` now names the field.
+
+Two guessed key lists, two silent misses, one shared root cause — and the
+`order_status_unmapped` log row added above is what would have said so on the
+first order rather than on the fifth.
+
 **History is not touched, and cannot be honestly.** The archived payload on an
 old order is the LIST envelope as it looked at import, so replaying it through
 the fixed reader would stamp an order with the stage it had when first seen, not
 the one it ended at — a delivered order rewritten to "preparing" is worse than
 one left on Paid. Orders still on the in-progress list heal themselves on the
 next poll; ones that have aged off it would need a re-read from the platform, and
-`auto-deliver-past-eta` will land the ones that still carry an ETA.
+`auto-deliver-past-eta` will land the ones that carry an ETA.
+
+The two that predate the ETA fix carry none, so nothing would ever land them.
+`scripts/repair_eleme_missing_eta.js` restores exactly that one column from each
+order's own archived `header.planDeliverTime` — and **writes nothing else**. A
+promised delivery time does not go stale, so it is a fact about that payload; the
+STAGE in the same archive is only the stage the order had at import, which is why
+the repair restores the sweep's INPUT and lets the one shipped rule decide,
+rather than adding a second rule that guesses outcomes. Dry run by default.
 
 ---
 
