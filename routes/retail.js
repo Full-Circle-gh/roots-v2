@@ -17590,6 +17590,12 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
     ? !!(tdb().prepare('SELECT lifetime_eligible FROM retail_customers WHERE id = ?').get(req.customer.id) || {}).lifetime_eligible
     : true;
   const lifetimeRateForCustomer = lifetimeEligible ? s.lifetimeRatePercent : 0;
+  // Same `paid_at IS NOT NULL` predicate as the apply guard and the payout
+  // guard — see the comment on POST /affiliate/apply below. One test, so the
+  // screen and the server can never disagree about who is a new customer.
+  const isNewCustomer = !tdb().prepare(
+    'SELECT 1 FROM retail_orders WHERE customer_id = ? AND paid_at IS NOT NULL LIMIT 1'
+  ).get(req.customer.id);
   const referredBy = tdb().prepare(
     `SELECT c.id, c.nickname, c.referral_code
        FROM retail_customers me
@@ -17605,6 +17611,24 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
       // pausing the program for anyone else. See addColumn('retail_customers',
       // 'affiliate_blocked') in database.js.
       affiliate_blocked:    req.customer.affiliate_blocked ? 1 : 0,
+      // Whether this customer may still APPLY someone else's code — the other
+      // half of their standing, and a different question from the two above,
+      // which are about their own code being usable BY others.
+      //
+      // Applying is a new-customer offer, so a customer with a prior paid order
+      // is refused by POST /affiliate/apply below. Sending the fact here lets
+      // the invite screen hide the apply box instead of showing a form whose
+      // only possible outcome is a refusal. Stated as the FACT ("are they new")
+      // rather than as the verdict ("may they apply"), matching
+      // `lifetime_eligible` above: the client already ANDs in `referred_by` and
+      // `enabled`, and a second field that re-decided all of it could disagree
+      // with the server it was meant to mirror.
+      //
+      // The client is an optimisation, never the guard. An older mini-app build
+      // that ignores this field still gets the refusal from the apply route, so
+      // this can ship ahead of a WeChat republish without a window in which the
+      // rule is unenforced.
+      is_new_customer:      isNewCustomer ? 1 : 0,
       reward_per_order:     s.rewardPerOrder,
       reward_referee:       s.rewardReferee,
       // Repeat-order revenue share, so the banner can advertise the ongoing
@@ -17745,6 +17769,7 @@ router.get('/api/retail/affiliate/qr', requireRetailAuth, async (req, res) => {
 // Apply a referral code. One-shot per customer; rejected if:
 //   • affiliate program is disabled
 //   • customer already applied a code (regardless of status)
+//   • customer has already paid for an order — this is a new-customer offer
 //   • code doesn't match anyone, or matches the same customer
 //   • the inviter has themselves been referred BY this customer (would
 //     create a 2-cycle; cheap protection against trivial loops)
@@ -17757,6 +17782,33 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
   const me = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE id = ?').get(req.customer.id);
   if (me.referred_by_customer_id) {
     return res.status(409).json({ success: false, error: 'already_referred' });
+  }
+  // NEW CUSTOMERS ONLY, REFUSED AT THE DOOR. The bounty pays on the friend's
+  // FIRST paid order, so a customer who has already paid for one can never
+  // convert: creditReferralReward's `earlier` check below finds that order and
+  // voids the row as 'not_first_order'. Binding the referrer anyway and voiding
+  // it afterwards is the same answer given later and worse — it consumes the
+  // customer's one-shot `referred_by_customer_id` (so the code they meant to
+  // use is spent on nothing), it tells the referrer they have an invite that
+  // will never pay, and until the void fires the admin ledger shows the row as
+  // "Waiting". /affiliate/overview and the ledger both already carry a `stuck`
+  // /`blocked` count built to surface exactly these rows; this stops new ones
+  // being made, and that count keeps reporting the ones that predate it.
+  //
+  // THE LATER VOID STAYS. It is the backstop for rows created before this guard
+  // and for the race this check cannot close — a customer whose payment lands
+  // between this read and their first order. This refusal is a better answer,
+  // not a replacement, and removing either leaves a hole.
+  //
+  // The predicate is deliberately the SAME `paid_at IS NOT NULL` test the void
+  // and /affiliate/overview's `stuck` use, on the reasoning already recorded
+  // there: a guard that admits someone the payout guard will refuse just moves
+  // the disappointment later.
+  const priorPaidOrder = tdb().prepare(
+    'SELECT 1 FROM retail_orders WHERE customer_id = ? AND paid_at IS NOT NULL LIMIT 1'
+  ).get(me.id);
+  if (priorPaidOrder) {
+    return res.status(409).json({ success: false, error: 'existing_customer' });
   }
   // affiliate_blocked = 0: an admin-disabled affiliate's code is refused the
   // same as one that never existed, so a friend applying it learns nothing
