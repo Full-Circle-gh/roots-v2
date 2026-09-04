@@ -79,6 +79,11 @@
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
     "test:stock-screens": "node scripts/test_stock_screens.js",
     "test:guanyi-expiry": "node scripts/test_guanyi_session_expiry.js",
+    "test:stock-movement": "node scripts/test_stock_two_step.js && node scripts/test_stock_two_step_tenant2.js",
+    "test:restock-handles": "node scripts/test_restock_tenant_handle.js && node scripts/test_restock_tenant2_split.js && node scripts/test_created_by_fk_migration.js",
+    "test:restock-tenant1": "node scripts/test_restock_tenant_handle.js",
+    "test:restock-tenant2": "node scripts/test_restock_tenant2_split.js",
+    "test:created-by-fk": "node scripts/test_created_by_fk_migration.js",
     "test:handle-threading": "node scripts/test_handle_threading_batch1.js && node scripts/test_handle_threading_batch2.js",
     "test:transaction": "node scripts/test_db_transaction.js && node scripts/test_db_transaction_nesting.js",
     "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js"

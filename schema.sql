@@ -337,8 +337,15 @@ CREATE TABLE IF NOT EXISTS restock_orders (
   received_at   DATETIME,
   prepared_at   DATETIME,
   delivered_at  DATETIME,
-  created_by    INTEGER,
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  -- Who raised the order. Deliberately NOT a foreign key to users(id).
+  -- `users` is control-plane: it lives once in the shared database and is never
+  -- cloned into a tenant database, while this table IS cloned. A hard FK here
+  -- pointed at a table that does not exist on the tenant side, so with
+  -- foreign_keys = ON every insert failed with "no such table: main.users" and
+  -- restock could not run for any non-Roots tenant. Same trap, and the same
+  -- fix, as retail_stock_ledger.actor_user_id. It stays a plain audit integer.
+  -- Dropped from existing databases by drop_created_by_user_fk_v1.
+  created_by    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS restock_items (
@@ -373,9 +380,12 @@ CREATE TABLE IF NOT EXISTS production_batches (
   shift         TEXT,
   notes         TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Who logged the batch. Deliberately NOT a foreign key to users(id) — see
+  -- the note on restock_orders.created_by above. `recipes` below IS data-plane
+  -- and cloned per tenant, so that FK is kept.
+  -- Dropped from existing databases by drop_created_by_user_fk_v1.
   created_by    INTEGER,
-  FOREIGN KEY (recipe_id) REFERENCES recipes(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  FOREIGN KEY (recipe_id) REFERENCES recipes(id)
 );
 CREATE INDEX IF NOT EXISTS idx_production_date ON production_batches(date);
 CREATE INDEX IF NOT EXISTS idx_production_recipe ON production_batches(recipe_id);

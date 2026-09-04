@@ -1,9 +1,21 @@
 const express = require('express');
-// Routed through the database seam (lib/db-seam.js). No converter is installed,
-// so this is a zero-cost passthrough; the point is that this file is now on the
-// covered side of the boundary. Proven by scripts/diagnose_seam_batch.js.
-const { seam } = require('../lib/db-seam');
-const db = seam(require('../database'));
+// The request-scoped tenant connection. Both tables this file touches —
+// production_batches and recipes — are data-plane, so they are cloned per
+// tenant and every query belongs on tdb(). There is no control-plane table
+// here, so unlike routes/restock.js there is no shared `db` handle at all;
+// logActivity writes activity_log on the shared handle from inside
+// middleware/auth.js, which is where that belongs.
+//
+// tdb() is itself seam-wrapped (lib/db-seam.js), so this file stays on the
+// covered side of the database seam that the previous `seam(require(...))`
+// put it on — no converter is installed, so it remains a zero-cost passthrough.
+//
+// Done BEFORE production starts writing real stock. Today production_batches is
+// a log with no path to inventory, so a query on the wrong handle only misfiles
+// the log; once a batch moves stock it would misfile the stock too, and that is
+// the failure routes/restock.js already had (see the note in
+// scripts/test_restock_tenant2_split.js).
+const { tdb } = require('../lib/tenant-db');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
@@ -15,7 +27,7 @@ router.get('/api/production', requireAuth, requirePermission('kitchen'), (req, r
   if (period === 'today') from = new Date().toISOString().slice(0, 10);
   else if (period === '7d')  from = new Date(Date.now() -  7*86400000).toISOString().slice(0,10);
   else if (period === '30d') from = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT pb.*, r.name_en AS recipe_name_current, r.name_cn AS recipe_name_cn,
            r.batch_size AS recipe_batch_size, r.servings AS recipe_servings
     FROM production_batches pb
@@ -33,7 +45,7 @@ router.get('/api/production/summary', requireAuth, requirePermission('kitchen'),
   const days = period === 'today' ? 1 : period === '30d' ? 30 : 7;
   const from = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
 
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT pb.*, r.batch_size AS recipe_batch_size, r.servings AS recipe_servings
     FROM production_batches pb
     LEFT JOIN recipes r ON r.id = pb.recipe_id
@@ -69,7 +81,7 @@ router.post('/api/production', requireAuth, requirePermission('kitchen'), (req, 
   let recipe_name = null, recipe_sku = null;
   let derivedServings = parseFloat(servings_made) || null;
   if (recipe_id) {
-    const r = db.prepare('SELECT name_en, sku, servings FROM recipes WHERE id = ?').get(recipe_id);
+    const r = tdb().prepare('SELECT name_en, sku, servings FROM recipes WHERE id = ?').get(recipe_id);
     if (!r) return res.status(404).json({ error: 'Recipe not found' });
     recipe_name = r.name_en;
     recipe_sku = r.sku;
@@ -78,7 +90,7 @@ router.post('/api/production', requireAuth, requirePermission('kitchen'), (req, 
   if (!recipe_name) return res.status(400).json({ error: 'recipe_id required' });
 
   try {
-    const result = db.prepare(`INSERT INTO production_batches
+    const result = tdb().prepare(`INSERT INTO production_batches
       (date, recipe_id, recipe_name, recipe_sku, batches_made, servings_made, staff_name, shift, notes, created_by)
       VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
       date, recipe_id || null, recipe_name, recipe_sku, batches, derivedServings,
@@ -91,7 +103,7 @@ router.post('/api/production', requireAuth, requirePermission('kitchen'), (req, 
 
 // DELETE
 router.delete('/api/production/:id', requireAuth, requireDelete, requirePermission('kitchen'), (req, res) => {
-  const r = db.prepare('DELETE FROM production_batches WHERE id = ?').run(req.params.id);
+  const r = tdb().prepare('DELETE FROM production_batches WHERE id = ?').run(req.params.id);
   if (r.changes === 0) return res.status(404).json({ error: 'Not found' });
   logActivity(req.user.id, req.user.username, 'delete', 'production_batch', req.params.id, null, req.ip);
   res.json({ success: true });

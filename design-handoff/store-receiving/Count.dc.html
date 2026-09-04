@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+      --scrim:rgba(17,26,43,.38);
+      --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    /* Identical geometry to the picker's keypad — same hands, same muscle memory. */
+    .key{height:52px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+         display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:500;
+         font-variant-numeric:tabular-nums;color:var(--ink);}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden">
+
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column">
+    <div style="height:44px;flex:none"></div>
+    <div style="padding:8px 16px 12px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Receiving</div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+    <div style="height:76px;background:var(--surface)"></div>
+    <div style="height:1px;background:var(--line)"></div>
+    <div style="height:76px;background:var(--surface)"></div>
+  </div>
+  <div style="position:absolute;inset:0;background:var(--scrim)"></div>
+
+  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);padding:0 16px 18px">
+
+    <div style="display:flex;justify-content:center;padding:10px 0 4px">
+      <div style="width:36px;height:4px;border-radius:999px;background:var(--line)"></div>
+    </div>
+
+    <div>
+      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Sesame paste 400g</div>
+      <div class="num" style="font-size:13px;color:var(--graphite)">SP-400 · 30 sent</div>
+    </div>
+
+    <!-- The question is neutral. Not "is this right?", not "confirm the
+         quantity" — she is reporting what is in the box, not defending it. -->
+    <div style="margin:16px 0 12px">
+      <div style="font-size:13px;color:var(--graphite)">How many arrived?</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:2px">
+        <span class="num" style="font-size:56px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">26</span>
+        <span style="font-size:15px;font-weight:600">4 short</span>
+      </div>
+      <!-- Stated, not asked about. No reason field, no "why?", nothing that
+           turns a count into a confession. -->
+      <div style="font-size:13px;color:var(--graphite);margin-top:4px">Recorded as it is. Nothing else needed.</div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <!-- One tap back to the sent figure, for a miscount she wants to undo. -->
+      <div style="flex:1;height:48px;border-radius:8px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;color:var(--graphite)">
+        All 30 arrived
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px">
+      <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+      <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+      <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+      <div class="key" style="font-size:15px;color:var(--graphite)">Clear</div>
+      <div class="key">0</div>
+      <div class="key">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg>
+      </div>
+    </div>
+
+    <div style="height:56px;border-radius:12px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;margin-top:12px">
+      Save 26 and continue
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+      --scrim:rgba(17,26,43,.38);
+      --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    .key{height:52px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+         display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:500;
+         font-variant-numeric:tabular-nums;color:var(--ink);}
+    /* An allocation row: who asked, a one-tap shortcut for that amount, and the
+       field. The field starts EMPTY — never pre-filled, never a default. */
+    .alloc{display:flex;align-items:center;gap:8px;}
+    .askchip{height:44px;padding:0 12px;border-radius:8px;background:var(--surface);
+             border:1px solid var(--line);display:flex;align-items:center;flex:none;
+             font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;}
+    .field{width:84px;height:56px;flex:none;border-radius:8px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:flex-end;
+           padding:0 12px;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;
+           letter-spacing:-0.01em;}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden">
+
+  <!-- The list is still behind him — he has not left the screen. -->
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column">
+    <div style="height:44px;flex:none"></div>
+    <div style="padding:8px 16px 12px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
+    </div>
+    <div style="height:1px;background:var(--line)"></div>
+    <div style="height:76px;background:var(--surface)"></div>
+  </div>
+  <div style="position:absolute;inset:0;background:var(--scrim)"></div>
+
+  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);padding:0 16px 18px">
+
+    <div style="display:flex;justify-content:center;padding:10px 0 4px">
+      <div style="width:36px;height:4px;border-radius:999px;background:var(--line)"></div>
+    </div>
+
+    <div>
+      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Chilli oil 250ml</div>
+      <div class="num" style="font-size:13px;color:var(--graphite)">CO-250 · asked for 18</div>
+    </div>
+
+    <div style="display:flex;align-items:baseline;gap:10px;margin:10px 0 12px">
+      <span class="num" style="font-size:44px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">14</span>
+      <span style="font-size:13px;color:var(--graphite)">found</span>
+      <span style="font-size:15px;font-weight:600">4 short</span>
+    </div>
+
+    <div style="height:1px;background:var(--line)"></div>
+
+    <!-- THE ALLOCATION. Tacet pre-fills nothing: every field starts empty, each
+         labelled with what that store asked for, and he assigns every unit. -->
+    <div style="font-size:13px;color:var(--graphite);margin:12px 0 8px">Assign the 14 across the stores</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Tianhe</div>
+        <div class="askchip">asked 10</div>
+        <div class="field">8</div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Yuexiu</div>
+        <div class="askchip">asked 8</div>
+        <!-- Empty and focused. An empty field, not a zero — zero is an amount
+             he chose, blank is an amount he has not. -->
+        <div class="field" style="border:1px solid var(--ink)"></div>
+      </div>
+    </div>
+
+    <!-- The remainder IS the explanation for the inactive button. It counts
+         down, it never scolds, and there is no error message anywhere. -->
+    <div style="display:flex;align-items:baseline;gap:6px;margin-top:10px">
+      <span class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">6</span>
+      <span style="font-size:15px;color:var(--graphite)">still to assign</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin-top:12px">
+      <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+      <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+      <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+      <div class="key" style="font-size:15px;color:var(--graphite)">Clear</div>
+      <div class="key">0</div>
+      <div class="key">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg>
+      </div>
+    </div>
+
+    <!-- Inactive until the remainder is zero. Stated as a fact, not a warning. -->
+    <div style="height:56px;border-radius:12px;background:var(--raised);border:1px solid var(--line);
+                color:var(--graphite);display:flex;align-items:center;justify-content:center;
+                font-size:15px;font-weight:500;margin-top:12px">
+      Save and continue
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

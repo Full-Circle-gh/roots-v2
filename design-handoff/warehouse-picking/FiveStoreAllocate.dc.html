@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+      --scrim:rgba(17,26,43,.38);
+      --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk-ink);}
+    .num{font-variant-numeric:tabular-nums;}
+    .key{height:48px;border-radius:8px;background:var(--raised);border:1px solid var(--line);
+         display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;
+         font-variant-numeric:tabular-nums;color:var(--ink);}
+    .alloc{display:flex;align-items:center;gap:8px;padding:4px 0;}
+    .askchip{height:40px;padding:0 12px;border-radius:8px;background:var(--surface);
+             border:1px solid var(--line);display:flex;align-items:center;flex:none;
+             font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;}
+    .field{width:78px;height:52px;flex:none;border-radius:8px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:flex-end;
+           padding:0 12px;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden">
+
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column">
+    <div style="height:44px;flex:none"></div>
+    <div style="padding:8px 16px 12px">
+      <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
+    </div>
+  </div>
+  <div style="position:absolute;inset:0;background:var(--scrim)"></div>
+
+  <!-- THE SHEET AT FIVE STORES. The rows scroll in their own band; the
+       remainder, the keypad and Save are pinned. Collapsing the keypad on blur
+       was the alternative and it loses: the layout would jump under his thumb
+       every time focus moved, and the remainder — the only explanation for the
+       inactive Save — has to stay on screen the whole time. -->
+  <div style="position:absolute;left:0;right:0;top:96px;bottom:0;background:var(--paper);
+              border-radius:14px 14px 0 0;box-shadow:var(--shadow-overlay);
+              display:flex;flex-direction:column">
+
+    <div style="flex:none;padding:0 16px">
+      <div style="display:flex;justify-content:center;padding:10px 0 4px">
+        <div style="width:36px;height:4px;border-radius:999px;background:var(--line)"></div>
+      </div>
+      <div style="font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-0.01em">Chilli oil 250ml</div>
+      <div class="num" style="font-size:13px;color:var(--graphite)">CO-250 · asked for 64</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin:8px 0 10px">
+        <span class="num" style="font-size:38px;font-weight:700;line-height:1.05;letter-spacing:-0.02em">47</span>
+        <span style="font-size:13px;color:var(--graphite)">found</span>
+        <span style="font-size:15px;font-weight:600">17 short</span>
+      </div>
+      <div style="height:1px;background:var(--line)"></div>
+      <div style="font-size:13px;color:var(--graphite);margin:10px 0 2px">Assign the 47 across the stores</div>
+    </div>
+
+    <!-- Scrolls. Five rows here, twenty on a bigger merchant, same layout. -->
+    <div style="flex:1;min-height:0;overflow:hidden;padding:0 16px">
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Tianhe</div>
+        <div class="askchip">asked 18</div>
+        <div class="field">18</div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Yuexiu</div>
+        <div class="askchip">asked 14</div>
+        <div class="field">14</div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Panyu</div>
+        <div class="askchip">asked 12</div>
+        <div class="field" style="border:1px solid var(--ink)"></div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Haizhu</div>
+        <div class="askchip">asked 11</div>
+        <div class="field"></div>
+      </div>
+      <div class="alloc">
+        <div style="flex:1;min-width:0;font-size:15px;font-weight:500">Baiyun</div>
+        <div class="askchip">asked 9</div>
+        <div class="field"></div>
+      </div>
+    </div>
+
+    <div style="flex:none;padding:0 16px 18px">
+      <div style="height:1px;background:var(--line);margin-bottom:10px"></div>
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">15</span>
+        <span style="font-size:15px;color:var(--graphite)">still to assign</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin-top:10px">
+        <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+        <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+        <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+        <div class="key" style="font-size:15px;color:var(--graphite)">Clear</div>
+        <div class="key">0</div>
+        <div class="key">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg>
+        </div>
+      </div>
+      <div style="height:52px;border-radius:12px;background:var(--raised);border:1px solid var(--line);
+                  color:var(--graphite);display:flex;align-items:center;justify-content:center;
+                  font-size:15px;font-weight:500;margin-top:10px">
+        Save and continue
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
