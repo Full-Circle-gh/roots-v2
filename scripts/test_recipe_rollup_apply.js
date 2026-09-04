@@ -582,6 +582,50 @@ function check(label, actual, expected, detail) {
   db.close();
 }
 
+// ── 19 · an archived recipe CLEARS its product's cost, not merely blocks ──
+// Every other block reason (no cost row, no servings, an unpriced line)
+// leaves the product's existing figure untouched — the source might still
+// resume. An archived recipe is different: costOneRecipe() already refuses
+// it outright on the material side (reason: 'recipe_archived'), and
+// applyProductCosts() must refuse it the same way, clearing the stored
+// figure instead of freezing it — the same reasoning
+// applyProductBuildCosts() already applies to an orphaned build list.
+{
+  const db = seed(makeDb(), { materials: [[99, 1.0, null]] });
+  // Direct INSERT for full control over servings (seed()'s recipes tuple has
+  // no servings slot, and a null-servings recipe always blocks regardless of
+  // is_active, which would prove nothing about THIS guard).
+  db.prepare('INSERT INTO recipes (id,name_en,batch_size,servings,is_active) VALUES (1,?,100,10,1)').run('Recipe 1');
+  db.prepare("INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,qty,unit,sort_order) VALUES (1,99,'line',100,'g',0)").run();
+  seedProduct(db, { id: 600, recipe_id: 1, unit_cost: 42.0 }); // a stale figure from when the recipe was live
+
+  // Setup sanity — the recipe alone really would produce a real, different
+  // cost while still active, so the clear below is provably caused by
+  // archiving it, not by some other block reason.
+  const wouldHaveBeen = computeRecipeCost(1, db);
+  check('setup sanity: the active recipe yields a real cost', wouldHaveBeen.costPerServing, 10);
+
+  db.prepare('UPDATE recipes SET is_active = 0 WHERE id = 1').run();
+  const result = applyRollup(db, { source: 'test-archived-recipe-clears-product' });
+  check('archived recipe: productsBlocked counts it', result.productsBlocked, 1);
+  check('archived recipe: productsWritten does not', result.productsWritten, 0);
+  check('archived recipe: the stale figure is CLEARED, not frozen', productRow(db, 600).unit_cost, null);
+  check('archived recipe: the clear is reported', result.productsArchivedCleared, 1);
+
+  // Idempotent — a second pass against an already-null row must not churn it.
+  const second = applyRollup(db, { source: 'test-archived-recipe-clears-product-2' });
+  check('archived recipe: already-null product still counted blocked', second.productsBlocked, 1);
+  check('archived recipe: nothing cleared twice, no needless write', second.productsArchivedCleared, 0);
+
+  // Restoring the recipe lets the real figure come back — the number was
+  // always derived, never destroyed.
+  db.prepare('UPDATE recipes SET is_active = 1 WHERE id = 1').run();
+  const third = applyRollup(db, { source: 'test-archived-recipe-restored' });
+  check('restored recipe: the real figure is written back', productRow(db, 600).unit_cost, 10);
+  check('restored recipe: reported as written, not cleared', third.productsWritten, 1);
+  db.close();
+}
+
 console.log();
 if (failures) { console.log(`${failures} case(s) behaved wrongly.`); process.exit(1); }
 console.log('All applyRollup/trigger cases behaved as specified.');

@@ -41,6 +41,7 @@
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:offapp-refund": "node scripts/test_offapp_refund_guard.js",
+    "test:material-arrived-tooltip": "node scripts/test_material_arrived_tooltip.js",
     "test:purchasing-line-supplier": "node scripts/test_purchasing_line_supplier.js",
     "test:purchasing-line-order": "node scripts/test_purchasing_line_order.js",
     "test:invoice-supplier-search": "node scripts/test_invoice_supplier_search.js",
@@ -94,7 +95,10 @@
     "test:created-by-fk": "node scripts/test_created_by_fk_migration.js",
     "test:handle-threading": "node scripts/test_handle_threading_batch1.js && node scripts/test_handle_threading_batch2.js",
     "test:transaction": "node scripts/test_db_transaction.js && node scripts/test_db_transaction_nesting.js",
-    "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js"
+    "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js",
+    "test:channel-hub-binding": "node scripts/test_channel_hub_binding.js",
+    "test:affiliate-new-customer": "node scripts/test_affiliate_new_customer.js",
+    "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

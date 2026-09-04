@@ -287,13 +287,67 @@ function publicSession(s) {
   return { storeCode: s.store_code, status: s.status, phoneHint: s.phone_hint, lastError: s.last_error };
 }
 
+// A timestamp out of meituan_sync_log / store_business_status, as epoch ms.
+// SQLite writes these without a zone; they are UTC, so say so before parsing.
+const mtUtc = (t) => (t ? Date.parse(String(t).replace(' ', 'T') + (String(t).includes('Z') ? '' : 'Z')) || 0 : 0);
+
+/* IS THIS STORE'S MEITUAN SESSION WORKING? Lifted out of the route handler and
+   exported, so the decision can be exercised over the shapes that actually
+   occur without standing a database up to hold them. The handler does the
+   reading; this does the deciding, and nothing here touches a db handle.
+
+   Returns { signedIn, issue }. signedIn is null for a store that has never
+   connected — no activity either way — which is not the same answer as false.
+
+   Order matters and is the whole fix; see the comments at each branch. */
+function decideMeituanSignedIn({ bindingLost, sess, lastLoginErr, lastOkAny }) {
+  let signedIn = null;
+  // A LOST BINDING SETTLES IT FIRST. It is a positive assertion from a real
+  // bound call failing, while a relay `ok` only says a session exists and says
+  // nothing about which 门店 it points at — so the two are not rival answers to
+  // one question, and the latch is the more specific fact. A store reporting
+  // "Signed in" while unbound is the whole defect. It fires only where a daemon
+  // actually wrote the latch, so a relay-only tenant (no daemon, no such rows)
+  // reads exactly as it did before.
+  if (bindingLost) signedIn = false;
+  else if (sess && sess.status === 'ok') signedIn = true;
+  else if (sess && (sess.status === 'expired' || sess.status === 'failed')) signedIn = false;
+  else {
+    const errAt = lastLoginErr ? mtUtc(lastLoginErr.created_at) : 0;
+    // store_business_status IS DELIBERATELY NOT PART OF THIS CLOCK. Its read
+    // posts only the `wmPoiId` cookie to /common/businessStatus — see
+    // getBusinessStatus in lib/meituan-browser.js, which sends no acctId and no
+    // region — so it keeps answering 200/code:0 straight through a binding
+    // loss, and through some sign-out states too. Folding read_at in here made
+    // a store look freshly OK on the strength of the one read that proves the
+    // least, and meant no error could ever stay newer than it. The timestamp is
+    // still reported as `checkedAt`, where it says what it actually is: when we
+    // last asked, not evidence that anything works.
+    const okAt = lastOkAny ? mtUtc(lastOkAny.created_at) : 0;
+    if (errAt && errAt > okAt) signedIn = false;
+    else if (okAt) signedIn = true;
+  }
+  // A lost binding NAMES ITSELF rather than borrowing needs_login's word: the
+  // remedy is different — scan the QR and then RE-SELECT the store — and a row
+  // that says "signed out" sends staff to do the half they have already done.
+  // `binding_lost` is a new value for this field; no renderer of this endpoint
+  // ships in the repo yet, so nothing needs updating alongside, but a future
+  // one must handle it.
+  const issue = signedIn === false
+    ? (bindingLost ? 'binding_lost' : (lastLoginErr ? lastLoginErr.event_type : null))
+    : null;
+  return { signedIn, issue };
+}
+
 // ── Meituan per-store connection detail ──────────────────────────────────────
 // GET /api/retail-admin/channel-hub/meituan/stores
 // Feeds the Meituan "Configure" page: for each active store, is the Meituan
 // session signed in, which account it uses (masked — never the secret), and the
 // live proof it's working (last stock push, last order import, mapped products).
 // Signals come from what the daemons already write: meituan_sync_log (ok events
-// vs needs_login/verify_required errors), store_business_status (read_ok/read_at),
+// vs needs_login/verify_required errors, and the binding_lost/binding_cleared
+// latch), store_business_status (is_open/status_desc, and read_at as `checkedAt`
+// only — it does NOT vote on signed-in; see the okAt comment below),
 // meituan_order_import, meituan_product_map — plus relay sessions for
 // self-service tenants. Infra internals (proxy, cookies, daemons) deliberately
 // stay platform-side; this endpoint only reports outcomes.
@@ -318,7 +372,6 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
       if (!s) return null;
       return s.length <= 4 ? s.slice(0, 1) + '***' : s.slice(0, 3) + '****' + s.slice(-2);
     };
-    const utc = (t) => (t ? Date.parse(String(t).replace(' ', 'T') + (String(t).includes('Z') ? '' : 'Z')) || 0 : 0);
 
     const data = stores.map((s) => {
       const code = s.code;
@@ -326,6 +379,28 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
       const lastPush = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
       const lastOkAny = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
       const lastLoginErr = get1("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", code);
+      // THE STORE-BINDING LATCH. A Meituan session can stay AUTHENTICATED and
+      // still lose the acctId/region context that every stock write and order
+      // read needs — so the store is "signed in" and useless. That is the exact
+      // state this row exists to make visible, and the one it could not report:
+      // the daemon has detected it since the 2026-07-09 outage and pages ops for
+      // it, and this endpoint read neither event.
+      //
+      // READ AS A LATCH, not as another entry in the error filter above. Adding
+      // 'binding_lost' to that filter would leave it racing `lastOkAny`, which
+      // is ANY ok event — and the daemon writes twelve kinds, of which
+      // poll_paused, poll_resumed, proxy_elected, proxy_up, queue_resumed and
+      // browser_recovered all keep firing while the binding is still gone. The
+      // first one to land would put the store back to "Signed in" with nothing
+      // restored: the same defect wearing a different clock.
+      //
+      // The pair strictly alternates, so the newer of the two IS the current
+      // state. scripts/meituan-daemon.js noteBindingResult() writes
+      // `binding_lost` once per episode (guarded on !alerts[latch], after the
+      // loss persists past BINDING_ALERT_AFTER_MS) and `binding_cleared` only
+      // where it had alerted.
+      const lastBinding = get1("SELECT event_type FROM meituan_sync_log WHERE store_code = ? AND event_type IN ('binding_lost','binding_cleared') ORDER BY id DESC LIMIT 1", code);
+      const bindingLost = !!(lastBinding && lastBinding.event_type === 'binding_lost');
       const lastOrder = get1('SELECT imported_at FROM meituan_order_import WHERE store_code = ? ORDER BY id DESC LIMIT 1', code);
       const ordersToday = get1("SELECT COUNT(*) AS n FROM meituan_order_import WHERE store_code = ? AND date(imported_at) = date('now')", code);
       // "Live" = matched to a real Meituan listing (meituan_name present) AND
@@ -335,19 +410,11 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
       const live = get1("SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1 AND meituan_name IS NOT NULL AND TRIM(meituan_name) <> ''", code);
       const enabled = get1('SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1', code);
 
-      // Signed in? A relay session is authoritative when present; otherwise a
-      // needs_login/verify error NEWER than the last ok event means signed out.
-      // null = no activity either way (store never connected).
-      let signedIn = null;
-      const sess = sessions[code];
-      if (sess && sess.status === 'ok') signedIn = true;
-      else if (sess && (sess.status === 'expired' || sess.status === 'failed')) signedIn = false;
-      else {
-        const errAt = lastLoginErr ? utc(lastLoginErr.created_at) : 0;
-        const okAt = Math.max(lastOkAny ? utc(lastOkAny.created_at) : 0, (biz && biz.read_ok) ? utc(biz.read_at) : 0);
-        if (errAt && errAt > okAt) signedIn = false;
-        else if (okAt) signedIn = true;
-      }
+      // Signed in? Decided by decideMeituanSignedIn() above, which is where the
+      // ordering and its reasons are written down.
+      const { signedIn, issue } = decideMeituanSignedIn({
+        bindingLost, sess: sessions[code], lastLoginErr, lastOkAny,
+      });
       const creds = mtCreds[code] || {};
       return {
         code,
@@ -355,7 +422,7 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
         nameCn: s.nameCn || s.name || code,
         account: mask(creds.user),
         signedIn,
-        issue: signedIn === false && lastLoginErr ? lastLoginErr.event_type : null,
+        issue,
         checkedAt: (biz && biz.read_at) || null,
         open: biz && biz.read_ok ? biz.is_open === 1 : null,
         statusDesc: biz ? biz.status_desc : null,
@@ -731,3 +798,5 @@ router.delete('/api/retail-admin/channel-hub/web/domain/:domainId', requireRetai
 });
 
 module.exports = router;
+// Exported for scripts/test_channel_hub_binding.js — the decision, without a db.
+module.exports.decideMeituanSignedIn = decideMeituanSignedIn;

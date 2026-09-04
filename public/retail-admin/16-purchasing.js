@@ -1783,16 +1783,42 @@
     // short material delivery. Remove it and a 15-of-20 delivery posts to
     // Expenses at 20. Tried and reverted 2026-08-27 — the banner above it was
     // the defect, not the input.
+    //
+    // AND THE ROW NOW SAYS SO. All of the above was true and invisible: the
+    // Arrived box looks like every other Arrived box while reaching no stock
+    // call, and the In-stock cell shows an em dash for ever because
+    // stock_applied_qty is never written for a material line. Together they read
+    // as "the number you typed did nothing" — which is how the box came to be
+    // proposed for deletion in the first place. One tooltip on BOTH halves of
+    // that impression, because either one alone leaves the other still saying it.
+    //
+    // On demand rather than another line of copy in an already dense table:
+    // teaching copy belongs behind an affordance, not stacked on the screen
+    // (§1.14a — a tooltip explains something already on screen, and this one
+    // explains the two cells it sits on).
+    //
+    // Built with T() so the attribute holds ONE language, per §1.14a and
+    // ttSet's own note: the i18n walker in 10-extras.js splits an authored
+    // data-tt on the first " · ", so a JS-built two-language string would be cut
+    // in half at it. Neither half contains " · " for the same reason. The pair
+    // is locked as `materialArrived` in docs/tacet-delivery-vocabulary.md.
+    //
+    // PRODUCT ROWS GET NONE OF IT — their Arrived box does move stock, so the
+    // sentence would be false on them.
+    const matTip = it.ingredient_id
+      ? ` data-tt="${esc(T('This count goes to Finance → Expenses. Materials are not stocked here, so it never changes stock.',
+                           '此数量会记入财务 → 支出。物料不计入门店库存,库存不会有任何变动。'))}"`
+      : '';
     const itemNote = (it.note || '').trim();
     return `<tr data-line="${it.id}">
       <td>${matBadge(it)}${nameLabel(it)}${lineSupplier ? `<div class="sub">${esc(lineSupplier)}</div>` : ''}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}${itemNote ? `<div class="sub pu2-linenoteview">${esc(T('Note', '备注'))}: ${esc(itemNote)}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
-      <td><span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}${matTip}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="any" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
       <td>${returnCell(it, canReceive)}</td>
       <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
       <td>${invoiceCell(it, poNoInvoice, dis)}</td>
-      <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
+      <td class="right pu2-num"><span${matTip}>${applied}</span>${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
     </tr>`;
   }
 

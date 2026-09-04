@@ -83,6 +83,7 @@ const COPY = {
     errCannotSelf:      "That's your own code.",
     errProgram:         'Program is not running right now.',
     errMutual:          'You and that friend can\'t refer each other.',
+    errExisting:        'Invite codes are for new customers only.',
     errGeneric:         "Couldn't apply that code. Please try again.",
   },
   cn: {
@@ -136,6 +137,10 @@ const COPY = {
     errCannotSelf:      '不能填自己的邀请码。',
     errProgram:         '推广计划暂未开放。',
     errMutual:          '互相邀请不可叠加。',
+    // 仅限新用户 is the phrase this app already ships for the same rule on
+    // signup-only coupons (block-renderer.js, checkout.js, coupons.js); 邀请码
+    // is this file's own word. Nothing new is coined.
+    errExisting:        '邀请码仅限新用户使用。',
     errGeneric:         '邀请码应用失败,请重试。',
   },
 };
@@ -242,7 +247,12 @@ Page({
         rewardReferee: refereeReward,
         shareImage: data.share_image || '',
         referredBy: data.referred_by || null,
-        canApply: !data.referred_by && data.enabled !== false,
+        // Applying is a new-customer offer, so a customer who has already paid
+        // for an order gets no apply box rather than a form the server will
+        // refuse. `!== 0` and not a truthy test: an older server that does not
+        // send the field yet leaves it undefined, and the box must stay for
+        // those customers — the apply route is the guard either way.
+        canApply: !data.referred_by && data.enabled !== false && data.is_new_customer !== 0,
         stats: {
           earned: (Number(data.stats?.earned) || 0).toFixed(2),
           total_invites: data.stats?.total_invites || 0,
@@ -495,6 +505,7 @@ Page({
         cannot_refer_self: c.errCannotSelf,
         program_disabled:  c.errProgram,
         mutual_referral:   c.errMutual,
+        existing_customer: c.errExisting,
       };
       // Only show mapped, localized messages. Unknown backend codes / raw
       // transport strings (e.g. 'network_…', 'server_error_500') would leak
