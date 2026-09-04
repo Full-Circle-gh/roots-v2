@@ -67,6 +67,14 @@ addColumn('po_line_items', 'stock_applied_qty', 'REAL DEFAULT 0');
 try { db.prepare('CREATE INDEX IF NOT EXISTS idx_po_line_items_store_product ON po_line_items(store_product_id)').run(); } catch {}
 addColumn('recipes',       'image_data',      'TEXT');
 addColumn('recipe_ingredients', 'substitutes', 'TEXT');
+// The derived batch size / serving count (see schema.sql and
+// lib/recipe-cost.js resolveYield). The DEFAULT of 1 is right for rows
+// created from here on; every row that already exists is settled by
+// recipe_yield_auto_v1 below, which turns it OFF wherever a figure was
+// already typed so that no live cost moves on deploy.
+addColumn('recipes', 'batch_size_auto', 'INTEGER DEFAULT 1');
+addColumn('recipes', 'servings_auto',   'INTEGER DEFAULT 1');
+addColumn('recipe_ingredients', 'in_yield', 'INTEGER DEFAULT 1');
 addColumn('ingredients', 'pack_contents_qty',  'REAL');
 addColumn('ingredients', 'pack_contents_unit', 'TEXT');
 // REMOVED 2026-08-31 — this ran on EVERY boot, not once, and by the end it was
@@ -772,6 +780,38 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('recipe_type_backfill_v1');
   }
 } catch (e) { console.error('[migration recipe_type_backfill_v1]', e); }
+// ── Derived batch size / serving count: WHICH RECIPES OPT IN ────────────────
+//
+// The columns above default to 1, which is what a recipe created from now on
+// should get: a batch size nobody has to add up by hand. Applying that default
+// to the recipes that already exist would be a different act entirely —
+// batch_size is what costPerGram divides by, costPerGram becomes a material's
+// unit cost, and that becomes a product's cost and its margin. A deploy is not
+// allowed to move those numbers.
+//
+// So the rule is: A FIGURE SOMEBODY TYPED WINS. Any recipe already carrying a
+// batch size keeps it and is marked manual; the same, separately, for servings.
+// A recipe with neither is opted in, because there is no figure to protect and
+// a derived one is strictly better than the nothing it has now — those are
+// exactly the recipes lib/recipe-rollup.js refuses today with 'no_batch_size'.
+//
+// Nothing here writes batch_size, servings or any cost. It writes two flags.
+try {
+  // The table first, then the question: on a virgin database the ledger does not
+  // exist yet, and asking it whether this has run would throw before the answer
+  // ("no") could be acted on.
+  db.exec('CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  const ranYieldAuto = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('recipe_yield_auto_v1');
+  if (!ranYieldAuto) {
+    const batchManual = db.prepare('UPDATE recipes SET batch_size_auto = 0 WHERE COALESCE(batch_size,0) > 0').run();
+    const servManual  = db.prepare('UPDATE recipes SET servings_auto   = 0 WHERE COALESCE(servings,0)   > 0').run();
+    const total = db.prepare('SELECT COUNT(*) AS n FROM recipes').get().n;
+    console.log(`[migration recipe_yield_auto_v1] ${total} recipe${total === 1 ? '' : 's'}: `
+      + `${batchManual.changes} keep a typed batch size, ${total - batchManual.changes} derive one; `
+      + `${servManual.changes} keep a typed serving count, ${total - servManual.changes} derive one`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('recipe_yield_auto_v1');
+  }
+} catch (e) { console.error('[migration recipe_yield_auto_v1]', e); }
 // The tenant-facing FEATURE_CATALOG switch is renamed 'materials' -> 'production'
 // (it now gates Recipes too, not just the materials masterlist — one switch, no
 // second FEATURE_CATALOG entry). storefront_config stores one row per dotted

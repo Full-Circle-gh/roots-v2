@@ -13320,6 +13320,22 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-f.span2 { grid-column: 1 / -1; }
   #tab-recipes-record .rcp-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
   #tab-recipes-record .rcp-f .hint { font-size: 12px; color: var(--td-text2); margin-top: 5px; }
+  /* ── A field that fills itself in, and the account it gives of doing so ───
+     The input is READONLY, not disabled — a disabled control is skipped by
+     assistive tech and, on some browsers, by a form read, and the derived
+     figure is exactly the one that has to be saved. It is tinted so that it
+     reads as settled rather than broken: this number is not missing and not
+     rejected, it is simply not yours to type while the derivation is on.
+     The hint below it carries the switch back, so the field and the way out of
+     it are never in two different places. */
+  #tab-recipes-record .rcp-input.rcp-auto { background: var(--td-raised); color: var(--td-text2);
+    cursor: default; }
+  #tab-recipes-record .rcp-yhint { display: block; }
+  #tab-recipes-record .rcp-yhint .warn { color: var(--td-amber-ink); }
+  #tab-recipes-record .rcp-ylink { background: none; border: none; padding: 0; font: inherit;
+    color: var(--td-brass, #b08d57); text-decoration: underline; text-underline-offset: 2px;
+    cursor: pointer; }
+  #tab-recipes-record .rcp-ylink:hover { color: var(--td-text); }
   #tab-recipes-record .rcp-shelf-life { display: flex; gap: 8px; }
   #tab-recipes-record .rcp-shelf-life .rcp-input:first-child { flex: 1 1 0; min-width: 0; }
   #tab-recipes-record .rcp-shelf-life select.rcp-input { flex: 1 1 0; min-width: 0; }
@@ -13361,6 +13377,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-lhead .lh-qty  { width: 90px;  flex: none; padding-left: 12px; }
   #tab-recipes-record .rcp-lhead .lh-unit { width: 70px;  flex: none; padding-left: 12px; }
   #tab-recipes-record .rcp-lhead .lh-note { width: 140px; flex: none; padding-left: 12px; }
+  /* The yield column. Narrow and centred over its checkbox — it is a yes/no,
+     and a wide track would read as a field with something in it. */
+  #tab-recipes-record .rcp-lhead .lh-yield { width: 46px; flex: none; text-align: center; cursor: help; }
   #tab-recipes-record .rcp-lhead .lh-cost { width: 90px;  flex: none; text-align: right; }
   #tab-recipes-record .rcp-lhead .lh-rm   { flex: none; width: 24px; }
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
@@ -13405,6 +13424,18 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-line.is-unit-mismatch .rcp-line-cost {
     text-decoration: line-through; opacity: .65;
   }
+  /* ── A line that is paid for but does not come out ───────────────────────
+     The quantity is what stops counting — toward the batch weight only, never
+     toward the cost — so the quantity is what dims. Deliberately NOT the amber
+     of a warning and NOT a strike on the cost: nothing is wrong here and the
+     money is real; this is a fact about the yield, recorded on purpose. */
+  #tab-recipes-record .rcp-line-yield { width: 46px; flex: none; display: flex;
+    align-items: center; justify-content: center; cursor: pointer; }
+  #tab-recipes-record .rcp-line-yield input { width: 15px; height: 15px; margin: 0; cursor: pointer;
+    accent-color: var(--td-brass, #b08d57); }
+  #tab-recipes-record .rcp-line.is-out-of-yield .rcp-line-qty,
+  #tab-recipes-record .rcp-line.is-out-of-yield .rcp-line-unit { opacity: .5; }
+
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
   /* .rcp-line prefixed on each, matching the reset above's specificity: without
      it, "auto" (1 ID + 2 classes) beat these (1 ID + 1 class) regardless of

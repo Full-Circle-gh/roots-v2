@@ -92,6 +92,15 @@ CREATE TABLE IF NOT EXISTS recipes (
   batch_size    REAL,                  -- total grams per batch
   servings      INTEGER,
   serving_size  REAL,                  -- grams per serving
+  -- Is the figure above DERIVED or STATED? 1 = derived (batch_size is the sum
+  -- of the ingredient lines that end up in the product; servings is
+  -- batch_size / serving_size, floored). 0 = the stored number stands, which is
+  -- what a recipe that reduces on the stove or fills to a stated pack weight
+  -- needs. See lib/recipe-cost.js resolveYield — the one place either question
+  -- is answered — and lib/recipe-yield.js, which stamps the result back here so
+  -- the dozen readers of the raw column never see a stale figure.
+  batch_size_auto INTEGER DEFAULT 1,
+  servings_auto   INTEGER DEFAULT 1,
   shelf_life    TEXT,
   storage       TEXT,
   notes         TEXT,
@@ -117,6 +126,12 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
   sku           TEXT,
   qty           REAL NOT NULL,
   unit          TEXT DEFAULT 'g',
+  -- Does this ingredient end up in the finished batch? Almost always yes, which
+  -- is why it defaults to 1. A vegetable stock brewed for its flavour and then
+  -- poured away is the case it exists for: a real cost with no share of the
+  -- yield. Read ONLY by the batch-size derivation (lib/recipe-cost.js
+  -- computeYield) — a line left out of the yield is still fully costed.
+  in_yield      INTEGER DEFAULT 1,
   notes         TEXT,
   sort_order    INTEGER DEFAULT 0,
   FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,

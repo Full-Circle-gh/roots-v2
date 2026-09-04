@@ -435,6 +435,11 @@
     setRecord({
       id: null, name_en: '', name_cn: '', sku: '', category: '', recipe_type: 'made',
       batch_size: null, servings: null, serving_size: null,
+      // A NEW recipe derives both, because there is no typed figure to protect
+      // and nobody should have to add up their own ingredient lines. Existing
+      // recipes arrive with whatever database.js's recipe_yield_auto_v1 decided
+      // for them — off wherever a figure was already recorded.
+      batch_size_auto: 1, servings_auto: 1,
       shelf_life: '', storage: '', notes: '', is_active: 1,
       ingredients: [], steps: [], costData: null, cost: null,
       backsMaterial: null, materialBlock: null,
@@ -595,7 +600,12 @@
     if (!body.name_en) return { ok: false, error: 'name_required' };
     body.ingredients = _lines.map(l => ({
       ingredient_id: l.ingredient_id, name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
-      qty: Number(l.qty) || 0, unit: l.unit || 'g', notes: l.notes || null, substitutes: l.substitutes || null,
+      qty: Number(l.qty) || 0, unit: l.unit || 'g',
+      // Whether this line ends up in the finished batch. Always sent from this
+      // screen, because this screen is the one with the control — the doors
+      // that have none preserve whatever is stored instead.
+      in_yield: lineInYield(l) ? 1 : 0,
+      notes: l.notes || null, substitutes: l.substitutes || null,
     }));
     body.steps = _steps.map(s => ({ name: s.name || null, instructions: s.instructions || null }));
     // Declared, not inferred: the server uses it only to decide how tightly
@@ -973,6 +983,11 @@
       <div class="rcp-subbody" data-t="cost" ${_subtab === 'cost' ? '' : 'hidden'}>${costTab(m)}</div>
     `;
     try { applyCapGates(); } catch (_) {}
+    // Same reason paintBreakdown is called here rather than inside costTab():
+    // the hints are written into elements that only exist once the tab bodies
+    // above are mounted, and a derived batch size that appears only after the
+    // first keystroke is a field that looks empty.
+    paintYieldFields();
     paintSummary();
     paintBreakdown();
     paintLineWarns();
@@ -1001,11 +1016,13 @@
       <div class="rcp-card rcp-blk">
         <h3 class="rcp-blk-h">${esc(T('Batch', '批量'))}</h3>
         <div class="rcp-fgrid">
-          ${field(T('Batch size (g)', '批量大小(克)'), input('batch_size', m.batch_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
-                   T('Total grams the whole batch makes. Needed to work out cost per gram.', '整批的总克数,用于折算每克成本。'))}
-          ${field(T('Servings', '份数'), input('servings', m.servings, 'type="number" min="1" step="1"', 'rcpRecompute()'),
-                   T('Needed to work out cost per serving.', '用于折算每份成本。'))}
-          ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"'))}
+          ${yieldField(T('Batch size (g)', '批量大小(克)'), 'batch_size', m.batch_size,
+                       'type="number" min="0" step="any"', autoBatch(), 'rcp-yhint-batch')}
+          ${yieldField(T('Servings', '份数'), 'servings', m.servings,
+                       'type="number" min="1" step="1"', autoServings(), 'rcp-yhint-serv')}
+          ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
+                   T('How much one serving weighs. With this filled in, the serving count works itself out.',
+                     '每份的克数。填写后,份数会自动算出。'))}
           ${field(T('Shelf life', '保质期'), shelfLifeField(m.shelf_life))}
         </div>
       </div>
@@ -1020,6 +1037,178 @@
         </div>
       </div>`;
   }
+
+  // ── The batch size nobody should have to add up ──────────────────────────
+  //
+  // A batch size is the sum of what went into the pot. It was a hand-typed
+  // field, which is why 4 of the recipes that back a material have none at all
+  // and the cost cascade refuses them outright (lib/recipe-rollup.js's
+  // `no_batch_size`). So it is derived — and the serving count with it, once a
+  // serving size is recorded.
+  //
+  // NOTHING HERE HOLDS ITS OWN ARITHMETIC. computeYield and resolveYield are
+  // lib/recipe-cost.js's, the same functions the write path and every cost
+  // reader use, read off `window.RootsRecipeCost` exactly as computeRecipeCost
+  // already is. A screen that summed the lines itself is how a field and the
+  // cost below it start disagreeing about the same batch.
+  const isAutoFlag = v => (v === 1 || v === true || v === '1');
+  function autoBatch()    { return !!_rec && isAutoFlag(_rec.batch_size_auto); }
+  function autoServings() { return !!_rec && isAutoFlag(_rec.servings_auto); }
+  // The ingredient total as it stands right now, whether or not this recipe
+  // uses it — a recipe that states its own yield still gets OFFERED the sum.
+  function yieldNow() {
+    const c = COST();
+    return (c && typeof c.computeYield === 'function') ? c.computeYield(_lines) : null;
+  }
+  // What the two fields resolve to, from the flags and whatever is typed.
+  function resolvedYield() {
+    const c = COST();
+    return (c && typeof c.resolveYield === 'function') ? c.resolveYield(draftDetails(), _lines) : null;
+  }
+  const gramTxt = n => (typeof fmtNum === 'function' ? fmtNum(n) : String(Math.round((Number(n) || 0) * 1e4) / 1e4));
+
+  // A number field that may be filled in for you. Readonly rather than disabled
+  // while it is: a disabled input is skipped by the form read at save time on
+  // some browsers, and the derived figure is exactly what has to be saved.
+  function yieldField(label, key, val, attrs, auto, hintId) {
+    const a = auto ? ' readonly class="rcp-input rcp-auto"' : ' class="rcp-input"';
+    return `<div class="rcp-f">
+      <span class="lbl">${esc(label)}</span>
+      <input id="rcp-f-${key}"${a} value="${esc(val == null ? '' : val)}" ${attrs || ''}
+             oninput="rcpDirty();rcpRecompute()">
+      <span class="hint rcp-yhint" id="${hintId}"></span>
+    </div>`;
+  }
+
+  // The toggle that sits in each hint. Not a checkbox: it is one action with a
+  // named consequence ("type it myself" / "use the ingredient total"), and it
+  // reads as one on a line of prose in a way a bare box does not.
+  function yieldSwitch(which, on, label) {
+    return `<button type="button" class="rcp-ylink" onclick="rcpYieldAuto('${which}',${on ? 1 : 0})">${esc(label)}</button>`;
+  }
+
+  // ── What the two hints say ───────────────────────────────────────────────
+  // Every branch says THREE things: where the number came from, what it was
+  // worked out from, and how to take it over. A field that fills itself in and
+  // does not account for its own figure is a field nobody trusts.
+  function batchHint(y) {
+    const sum = yieldNow();
+    const sep = ' · ';
+    if (autoBatch()) {
+      if (sum && sum.ok) {
+        const ex = sum.excludedLines
+          ? sep + T(`${sum.excludedLines} left out of the batch`, `${sum.excludedLines} 项不计入产出`)
+          : '';
+        return `<span>${esc(T('Auto', '自动'))}${esc(sep)}${esc(T(
+          `${sum.countedLines} ingredient line${sum.countedLines === 1 ? '' : 's'} added up`,
+          `按 ${sum.countedLines} 项原料合计`))}${esc(ex)}</span>`
+          + esc(sep) + yieldSwitch('batch', 0, T('Type it myself', '手动填写'));
+      }
+      // REFUSED, AND IT SAYS WHICH LINES. Grams are only added to grams — an ml
+      // or a pcs line needs a density or a piece weight, and neither exists
+      // (the same rule that keeps the cost from converting them). A total short
+      // one ingredient is worse than none: it divides into the batch cost to
+      // make cost per gram, which becomes a material's cost and a product's
+      // margin. So the recipe keeps whatever batch size it had, and this names
+      // the lines standing in the way rather than reporting a condition.
+      const blocked = (sum && sum.blockingLines) || [];
+      if (blocked.length) {
+        const names = blocked.slice(0, 3).map(b => `${b.name || '?'} (${b.unit || '—'})`).join(', ');
+        const more = blocked.length > 3 ? ` +${blocked.length - 3}` : '';
+        return `<span class="warn">${esc(T(
+          `Can't add these up: ${names}${more} — only grams can be weighed together. `
+            + `Change the line's unit, or type the batch size yourself.`,
+          `以下原料无法按克合计:${names}${more} —— 仅可合计以克计量的原料。`
+            + `请修改该条的单位,或手动填写批量大小。`))}</span>`
+          + esc(sep) + yieldSwitch('batch', 0, T('Type it myself', '手动填写'));
+      }
+      return `<span>${esc(T('Auto — add ingredient lines and this fills in.',
+                            '自动 —— 添加原料后自动填写。'))}</span>`
+        + esc(sep) + yieldSwitch('batch', 0, T('Type it myself', '手动填写'));
+    }
+    // Stated by hand — which is the right answer for a recipe that reduces on
+    // the stove or fills to a pack weight. The sum is still offered.
+    const offer = (sum && sum.ok)
+      ? esc(sep) + yieldSwitch('batch', 1, T(`Use the ingredient total (${gramTxt(sum.grams)} g)`,
+                                             `按原料合计填写(${gramTxt(sum.grams)} 克)`))
+      : '';
+    return `<span>${esc(T('Total grams the whole batch makes. Needed to work out cost per gram.',
+                          '整批的总克数,用于折算每克成本。'))}</span>` + offer;
+  }
+
+  function servHint(y) {
+    const sep = ' · ';
+    const batch = y ? y.batchSize : 0;
+    const size = y ? y.servingSize : 0;
+    if (autoServings()) {
+      if (batch > 0 && size > 0) {
+        if (!(y.servings > 0)) {
+          return `<span class="warn">${esc(T(
+            `One serving (${gramTxt(size)} g) is bigger than the whole batch (${gramTxt(batch)} g).`,
+            `每份 ${gramTxt(size)} 克大于整批 ${gramTxt(batch)} 克。`))}</span>`
+            + esc(sep) + yieldSwitch('servings', 0, T('Type it myself', '手动填写'));
+        }
+        // The remainder is named rather than hidden. Servings floor — 224.55 g
+        // at 25 g is eight servings and 24.55 g still in the pot, and an
+        // operator who cannot see that tail will think the number is wrong.
+        const left = y.servingsLeftover > 0
+          ? sep + T(`${gramTxt(y.servingsLeftover)} g left over`, `剩余 ${gramTxt(y.servingsLeftover)} 克`)
+          : '';
+        return `<span>${esc(T('Auto', '自动'))}${esc(sep)}${esc(
+          `${gramTxt(batch)} g ÷ ${gramTxt(size)} g`)}${esc(left)}</span>`
+          + esc(sep) + yieldSwitch('servings', 0, T('Type it myself', '手动填写'));
+      }
+      return `<span>${esc(T('Auto — fill in a serving size and this works itself out.',
+                            '自动 —— 填写每份克数后自动算出。'))}</span>`
+        + esc(sep) + yieldSwitch('servings', 0, T('Type it myself', '手动填写'));
+    }
+    const canDerive = batch > 0 && size > 0;
+    const offer = canDerive
+      ? esc(sep) + yieldSwitch('servings', 1, T(`Work it out (${Math.floor(Number((batch / size).toFixed(6)))})`,
+                                                `自动算出(${Math.floor(Number((batch / size).toFixed(6)))})`))
+      : '';
+    return `<span>${esc(T('Needed to work out cost per serving.', '用于折算每份成本。'))}</span>` + offer;
+  }
+
+  // Written in place, never by repainting the tab — the operator may be typing
+  // in the serving-size box two fields away, and Details holds the name and the
+  // notes as well. Same in-place discipline as paintLineWarns/paintLineCosts.
+  function paintYieldFields() {
+    if (!_rec) return;
+    const y = resolvedYield();
+    const put = (id, html) => { const el = document.getElementById(id); if (el && el.innerHTML !== html) el.innerHTML = html; };
+    const set = (id, on, v) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.readOnly = on;
+      el.classList.toggle('rcp-auto', on);
+      if (!on) return;
+      const want = v > 0 ? String(v) : '';
+      if (el.value !== want) el.value = want;
+    };
+    if (y) {
+      set('rcp-f-batch_size', autoBatch(), y.batchSize);
+      set('rcp-f-servings', autoServings(), y.servings);
+    }
+    put('rcp-yhint-batch', batchHint(y));
+    put('rcp-yhint-serv', servHint(y));
+  }
+
+  // Take the derivation over, or hand it back. Nothing is repainted: the flag
+  // moves, the field unlocks (and takes focus, since unlocking it is a request
+  // to type in it), and the hints refresh themselves.
+  window.rcpYieldAuto = function (which, on) {
+    if (!_rec) return;
+    const auto = !!Number(on);
+    if (which === 'batch') _rec.batch_size_auto = auto ? 1 : 0;
+    else _rec.servings_auto = auto ? 1 : 0;
+    markDirty();
+    rcpRecompute();
+    if (!auto) {
+      const el = document.getElementById(which === 'batch' ? 'rcp-f-batch_size' : 'rcp-f-servings');
+      if (el) { try { el.focus(); el.select(); } catch (_) {} }
+    }
+  };
 
   // ── Does THIS line's unit disagree with its material's stocking unit? ─────
   //
@@ -1088,6 +1277,22 @@
   let _lineDrag = null;
   // Shared by lineRow() (initial paint) and paintLineCosts() (in-place
   // refresh on every keystroke) so the two can never drift apart.
+  // Does this line end up in the finished batch? Read through the shared
+  // module so the checkbox on the row and the sum in the field can never
+  // disagree about what "excluded" means; the local fallback is the same
+  // default the column carries, for the case where the module has not loaded.
+  function lineInYield(l) {
+    const c = COST();
+    if (c && typeof c.lineInYield === 'function') return c.lineInYield(l);
+    return !(l && (l.in_yield === 0 || l.in_yield === false || l.in_yield === '0'));
+  }
+  const YIELD_TITLE = () => T(
+    'Counts toward the batch weight. Clear it for an ingredient that does not end up in the '
+      + 'finished product — a stock brewed for its flavour and then poured away. The line is '
+      + 'still costed in full either way.',
+    '计入批量重量。若该原料不进入成品(例如仅用于熬煮后弃去的高汤),请取消勾选。'
+      + '无论是否勾选,该条成本均照常计入。');
+
   function lineCostText(l) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
@@ -1138,6 +1343,18 @@
              The strike is a CLASS on the row, applied by paintLineWarns(), so
              changing the unit re-marks the line without repainting the tab.
              Nothing stored moves. -->
+        <!-- IN THE BATCH, OR NOT. A checkbox rather than an icon button: it is a
+             plain yes/no about this line and it is read down a column of thirty
+             rows, where a glyph whose two states differ by a fill is a glyph
+             nobody can scan. Cleared, the row dims its quantity — the number
+             stops being part of the batch weight, and it must not go on
+             looking like it is. Nothing about the COST changes; the line is
+             costed in full either way, which is the whole point of the flag. -->
+        <label class="rcp-line-yield" title="${esc(YIELD_TITLE())}">
+          <input type="checkbox" data-line="${idx}" ${lineInYield(l) ? 'checked' : ''}
+                 onchange="rcpLineYield(${idx},this.checked)"
+                 aria-label="${esc(T('Counts toward the batch weight', '计入批量重量'))}">
+        </label>
         <span class="rcp-line-cost" data-line="${idx}">${lineCostText(l)}</span>
         <button type="button" class="rcp-line-rm" title="${esc(T('Remove', '移除'))}" onclick="rcpLineRemove(${idx})">${I.x}</button>
       </div>`;
@@ -1176,6 +1393,9 @@
         <span class="lh-qty">${esc(T('Qty', '数量'))}</span>
         <span class="lh-unit">${esc(T('Unit', '单位'))}</span>
         <span class="lh-note">${esc(T('Note', '备注'))}</span>
+        <!-- 产出 is live in this domain already (routes/retail-recipes.js's
+             cycle refusal: 配方不能依赖自身产出), reused rather than re-minted. -->
+        <span class="lh-yield" title="${esc(YIELD_TITLE())}">${esc(T('Yield', '产出'))}</span>
         <span class="lh-cost">${esc(T('Cost', '成本'))}</span>
         <span class="lh-rm" aria-hidden="true"></span>
       </div>`;
@@ -1203,6 +1423,15 @@
     // whole tab on every keystroke would fight the input the operator is
     // typing into (same caret-loss failure Materials' search box guards
     // against). Cost is read straight from the DOM at save/recompute time.
+    rcpRecompute();
+  };
+  // Same in-place discipline as rcpLineField: the row is re-marked and the
+  // batch size re-derived, but nothing is repainted — a checkbox that rebuilt
+  // the list under itself would lose the scroll position on row thirty.
+  window.rcpLineYield = function (idx, on) {
+    if (!_lines[idx]) return;
+    _lines[idx].in_yield = on ? 1 : 0;
+    markDirty();
     rcpRecompute();
   };
   window.rcpLineRemove = function (idx) {
@@ -1279,7 +1508,7 @@
     if (!m) return;
     _lines.push({
       ingredient_id: m.id, name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
-      qty: 0, unit: m.unit || 'g', notes: null, substitutes: null,
+      qty: 0, unit: m.unit || 'g', in_yield: 1, notes: null, substitutes: null,
       master_cost: m.cost_per_unit, master_unit: m.unit, master_free: m.free_by_design, master_name_en: m.name_en,
     });
     markDirty();
@@ -1359,7 +1588,16 @@
   // being re-rendered per tab switch.
   function draftDetails() {
     const v = k => { const el = document.getElementById('rcp-f-' + k); return el ? el.value : (_rec ? _rec[k] : null); };
-    return { batch_size: v('batch_size') || null, servings: v('servings') || null };
+    return {
+      batch_size: v('batch_size') || null, servings: v('servings') || null,
+      // serving_size and the two flags are what resolveYield needs to answer
+      // the same question the server answers. Without them this screen would be
+      // computing costs against the raw fields while the row it saves derives
+      // them — the one disagreement the shared module exists to prevent.
+      serving_size: v('serving_size') || null,
+      batch_size_auto: autoBatch() ? 1 : 0,
+      servings_auto: autoServings() ? 1 : 0,
+    };
   }
   function draftCostData() {
     const v = k => { const el = document.getElementById('rcp-f-' + k); return el ? el.value : null; };
@@ -1411,6 +1649,10 @@
       const row = el.closest('.rcp-line');
       const bad = !!l && lineUnitMismatch(l);
       if (row) row.classList.toggle('is-unit-mismatch', bad);
+      // The excluded-from-yield state rides along here for the same reason:
+      // it is a mark on a row, refreshed in place, and it must survive a
+      // keystroke in the qty box without the row being rebuilt.
+      if (row) row.classList.toggle('is-out-of-yield', !!l && !lineInYield(l));
       const want = bad
         ? `<span class="rcp-line-warnic" title="${esc(lineMismatchTitle(l))}">${I.warn}</span>`
           + `<span class="rcp-line-warntx" title="${esc(lineMismatchTitle(l))}">${esc(T('UNIT MISMATCH', '单位不符'))}</span>`
@@ -1439,6 +1681,9 @@
 
   window.rcpRecompute = function () {
     markDirty();
+    // Before the summary: the batch size and serving count it prints per-unit
+    // costs from are the ones these fields resolve to.
+    paintYieldFields();
     paintSummary();
     paintBreakdown();
     paintLineWarns();
@@ -1768,6 +2013,11 @@
       batch_size: val('batch_size') === '' ? null : Number(val('batch_size')),
       servings: val('servings') === '' ? null : Number(val('servings')),
       serving_size: val('serving_size') === '' ? null : Number(val('serving_size')),
+      // Both figures are sent whether derived or typed, and the flags say
+      // which. The server derives them again from the lines it just wrote —
+      // these are what it falls back to when a derivation is refused.
+      batch_size_auto: autoBatch() ? 1 : 0,
+      servings_auto: autoServings() ? 1 : 0,
       shelf_life: readShelfLife(),
       storage: val('storage') || '',
       notes: val('notes') || '',

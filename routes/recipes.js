@@ -23,6 +23,9 @@ const { snapshotRecipe } = require('../lib/recipe-versions');
 // materials row. See lib/recipe-materialize.js's own comment for the three
 // outcomes and why a name collision writes nothing.
 const { ensureMaterialized } = require('../lib/recipe-materialize');
+// Same stamp the retail door applies (lib/recipe-yield.js). A recipe that
+// derives its batch size must derive it whichever door saved the lines.
+const { applyAutoYield } = require('../lib/recipe-yield');
 const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
 
@@ -330,13 +333,21 @@ router.post('/api/recipes', requireAuth, requirePermission('recipes'), blockCost
   const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
   if (!name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
   try {
-    const result = db.prepare('INSERT INTO recipes (name_en,name_cn,sku,category,batch_size,servings,serving_size,shelf_life,storage,notes,image_data) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null);
+    // This door has no control for either flag, so the figures it sends decide:
+    // a typed batch size stays a typed batch size (the column would otherwise
+    // default to derived and the next save would overwrite it), and a create
+    // that sends neither gets the derivation. Identical rule to the retail
+    // door's create — see its comment for why it is "did they send a number".
+    const result = db.prepare('INSERT INTO recipes (name_en,name_cn,sku,category,batch_size,servings,serving_size,batch_size_auto,servings_auto,shelf_life,storage,notes,image_data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null,
+           batch_size ? 0 : 1, servings ? 0 : 1,
+           shelf_life||null, storage||null, notes||null, image_data||null);
     const recipeId = result.lastInsertRowid;
     if (ingredients?.length) {
       const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
       ingredients.forEach((ing, i) => insertIng.run(recipeId, ing.ingredient_id||null, ing.name_en||'', ing.name_cn||null, ing.sku||null, ing.qty||0, ing.unit||'g', ing.notes||null, ing.substitutes||null, i));
     }
+    applyAutoYield(db, recipeId);
     if (steps?.length) {
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(recipeId, i+1, s.name||null, s.instructions||null));
@@ -378,13 +389,45 @@ router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), blockC
   // saves on a button, not on a timer.
   snapshotRecipe(db, req.params.id, { source: 'manual', actor: req.user && (req.user.username || req.user.id) });
   try {
-    db.prepare('UPDATE recipes SET name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,image_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null, req.params.id);
+    // A FIGURE TYPED ON A DOOR WITH NO TOGGLE STILL MEANS SOMETHING. This screen
+    // (the kitchen Cost Sheet) has no control for batch_size_auto, so a batch
+    // size arriving here that differs from the stored one can only be a person
+    // overriding it — and a derivation that overwrote it on the next line would
+    // make the field look broken. Same figure back = same figure back, and the
+    // recipe keeps deriving.
+    const before = db.prepare('SELECT batch_size, servings FROM recipes WHERE id = ?').get(req.params.id) || {};
+    const differs = (sent, stored) => {
+      if (sent === undefined || sent === null || sent === '') return false;
+      const a = parseFloat(sent); const b = parseFloat(stored);
+      if (!Number.isFinite(a)) return false;
+      return !Number.isFinite(b) || Math.abs(a - b) > 1e-6;
+    };
+    const offBatch = differs(batch_size, before.batch_size) ? 0 : null;
+    const offServ  = differs(servings, before.servings) ? 0 : null;
+    db.prepare(`UPDATE recipes SET name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,image_data=?,
+      batch_size_auto=COALESCE(?,batch_size_auto), servings_auto=COALESCE(?,servings_auto),
+      updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null,
+           offBatch, offServ, req.params.id);
     if (ingredients) {
+      // in_yield is carried across the delete-and-reinsert, keyed on
+      // ingredient_id. Nothing on this door can set it, and that is exactly why
+      // it has to be preserved: a Cost Sheet save must not quietly put a
+      // discarded brewing ingredient back into the batch weight. Same rule, same
+      // reasoning as routes/retail-recipes.js's update.
+      const prevYield = new Map(
+        db.prepare('SELECT ingredient_id, in_yield FROM recipe_ingredients WHERE recipe_id = ? AND ingredient_id IS NOT NULL')
+          .all(req.params.id).map(r => [r.ingredient_id, r.in_yield])
+      );
       db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
-      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
-      ingredients.forEach((ing, i) => insertIng.run(req.params.id, ing.ingredient_id||null, ing.name_en||'', ing.name_cn||null, ing.sku||null, ing.qty||0, ing.unit||'g', ing.notes||null, ing.substitutes||null, i));
+      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+      ingredients.forEach((ing, i) => {
+        const kept = prevYield.has(ing.ingredient_id) ? prevYield.get(ing.ingredient_id) : 1;
+        insertIng.run(req.params.id, ing.ingredient_id||null, ing.name_en||'', ing.name_cn||null, ing.sku||null, ing.qty||0, ing.unit||'g', kept == null ? 1 : kept, ing.notes||null, ing.substitutes||null, i);
+      });
     }
+    // Before the recompute below — the rollup divides by batch_size.
+    applyAutoYield(db, req.params.id);
     if (steps) {
       db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
@@ -555,8 +598,8 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
 
   const tx = db.transaction(() => {
     const r = db.prepare(`INSERT INTO recipes
-      (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, recipe_type)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      (name_en, name_cn, sku, category, batch_size, servings, serving_size, batch_size_auto, servings_auto, shelf_life, storage, notes, image_data, recipe_type)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       nameEn, nameCn,
       null, // SKU is UNIQUE — let user assign a new one
       src.category,
@@ -565,6 +608,15 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
       // Per-serving size doesn't change when you scale the batch — same portions, just more of them.
       // (v1 scaled it too, but that's a bug. Leaving it unchanged here.)
       src.serving_size,
+      // A copy derives its yield if the original did. The two scaled figures
+      // written above are then simply what the derivation would arrive at
+      // anyway — every line was multiplied by the same scale — so a copy of an
+      // auto recipe cannot come out saying something its own lines contradict.
+      // A copy of a recipe that STATES its yield keeps that statement: the
+      // stated figure is the one thing scaling must not quietly replace with a
+      // sum of inputs.
+      src.batch_size_auto == null ? 1 : src.batch_size_auto,
+      src.servings_auto == null ? 1 : src.servings_auto,
       src.shelf_life, src.storage, src.notes, src.image_data,
       // A copy of a repack is a repack. Carried over rather than left to the
       // column default, which would silently refile it as made.
@@ -572,12 +624,14 @@ router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipe
     );
     const newId = r.lastInsertRowid;
     const insIng = db.prepare(`INSERT INTO recipe_ingredients
-      (recipe_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, substitutes, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`);
+      (recipe_id, ingredient_id, name_en, name_cn, sku, qty, unit, in_yield, notes, substitutes, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
     ings.forEach(i => insIng.run(
       newId, i.ingredient_id, i.name_en, i.name_cn, i.sku,
       isScaled ? round2Qty((parseFloat(i.qty) || 0) * scale) : i.qty,
-      i.unit, i.notes, i.substitutes, i.sort_order
+      // An ingredient that was brewed and thrown away in the original is still
+      // brewed and thrown away at twice the size.
+      i.unit, i.in_yield == null ? 1 : i.in_yield, i.notes, i.substitutes, i.sort_order
     ));
     const insStep = db.prepare(`INSERT INTO recipe_steps (recipe_id, step_number, name, instructions) VALUES (?,?,?,?)`);
     steps.forEach(s => insStep.run(newId, s.step_number, s.name, s.instructions));
@@ -611,8 +665,8 @@ router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), bloc
   if (!Array.isArray(recipes) || !recipes.length) return res.status(400).json({ error: 'recipes array required' });
 
   const insertRecipe = db.prepare(`INSERT INTO recipes
-    (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    (name_en, name_cn, sku, category, batch_size, servings, serving_size, batch_size_auto, servings_auto, shelf_life, storage, notes)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insertIng = db.prepare(`INSERT INTO recipe_ingredients
     (recipe_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, substitutes, sort_order)
     VALUES (?,?,?,?,?,?,?,?,?,?)`);
@@ -632,7 +686,11 @@ router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), bloc
         const r = insertRecipe.run(
           rec.name_en, rec.name_cn || null, rec.sku || null, rec.category || null,
           parseFloat(rec.batch_size) || null, parseFloat(rec.servings) || null,
-          parseFloat(rec.serving_size) || null, rec.shelf_life || null,
+          parseFloat(rec.serving_size) || null,
+          // An imported figure is a stated figure; a row that carries none gets
+          // the derivation instead of nothing at all.
+          parseFloat(rec.batch_size) ? 0 : 1, parseFloat(rec.servings) ? 0 : 1,
+          rec.shelf_life || null,
           rec.storage || null, rec.notes || null
         );
         const recipeId = r.lastInsertRowid;
@@ -647,6 +705,10 @@ router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), bloc
         (rec.steps || []).forEach((s, i) => {
           insertStep.run(recipeId, i+1, s.name || null, s.instructions || null);
         });
+        // Rows that brought no batch size derive one from the lines just
+        // inserted — the import is the largest single source of recipes with
+        // nothing for the cost cascade to divide by.
+        applyAutoYield(db, recipeId);
         stats.imported++;
       } catch (e) {
         stats.skipped++;
