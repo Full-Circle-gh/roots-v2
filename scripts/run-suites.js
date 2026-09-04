@@ -121,6 +121,27 @@ const NOT_A_SUITE = new Set([
   // then production. Its own header says a fixture passing is not evidence
   // about production, which is exactly why it does not belong in a fixture run.
   'verify_made_material_links.js',
+
+  /* THE OPS CHECKS. These read a LIVE database — `--db <path>`, a copy or
+     production — and answer questions about the data in it: do the money and
+     points ledgers explain the balances they are supposed to, is the sync log
+     fresh. There is no fixture that makes them meaningful, and running them
+     against an empty checkout asks nothing.
+
+     THEY ARE RIGHT TO REFUSE, and that is why they are here rather than in
+     QUARANTINE. check_sync_freshness says it plainly — "REFUSED — freshness is
+     unmeasurable, which is NOT the same as fresh" — and exits non-zero rather
+     than reporting health it cannot see. Quarantining that would file a correct
+     refusal as a defect.
+
+     THEY PASSED IN THE LOCAL SURVEY BY LUCK. database.js creates data/roots.db
+     on require, so a developer's checkout has one and CI does not: the first
+     real CI run failed all three. That is the same class of green-over-nothing
+     as a render suite skipping for want of a browser, caught the same way —
+     by running it somewhere that did not already have what it needed. */
+  'check_ledger_invariants.js',
+  'check_points_invariants.js',
+  'check_sync_freshness.js',
 ]);
 
 /* Does this suite need a browser? Asked of the source rather than of a list, so
