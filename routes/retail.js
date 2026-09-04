@@ -16411,8 +16411,10 @@ function customerSearchWhere(q) {
   if (!term) return null;
 
   const like = '%' + term + '%';
-  const ors = ['nickname LIKE ?', 'phone LIKE ?', 'openid LIKE ?'];
-  const params = [like, like, like];
+  // note and tags join the search because the whole point of writing "wholesale
+  // — invoice monthly" on a record is being able to find it again (audit E-02).
+  const ors = ['nickname LIKE ?', 'phone LIKE ?', 'openid LIKE ?', 'note LIKE ?', 'tags LIKE ?'];
+  const params = [like, like, like, like, like];
 
   if (/^\d+$/.test(term)) {
     // numeric → the CUSTOMER's own id FIRST. An account with no nickname is
@@ -16524,6 +16526,17 @@ function buildCustomerFilter(query) {
   if (!includeBlocked) where.push('is_blocked = 0');
   if (tiers.length)    { where.push(`tier_key IN (${tiers.map(() => '?').join(',')})`); params.push(...tiers); }
   if (channels.length) { where.push(`${CHANNEL_SQL} IN (${channels.map(() => '?').join(',')})`); params.push(...channels); }
+  // Tag facet (audit E-02). Stored comma-separated, so matching wraps BOTH
+  // sides in commas: ',vip,wholesale,' LIKE '%,vip,%' is true and
+  // '%,vip,%' can never match 'vip-trial' the way a bare '%vip%' would.
+  // Several tags are an OR — an operator asking for "vip, wholesale" wants
+  // everyone in either group, which is what a facet chip row means everywhere
+  // else on this screen.
+  const tags = String(query.tags || '').trim().split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (tags.length) {
+    where.push('(' + tags.map(() => "',' || COALESCE(tags,'') || ',' LIKE ?").join(' OR ') + ')');
+    params.push(...tags.map(t => `%,${t},%`));
+  }
 
   // Roster segments — the cuts an operator actually reaches for. Timestamps are
   // UTC text, so SQLite's datetime() comparisons work on them directly.
@@ -16577,7 +16590,7 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
   try {
     const { whereSql, params, CHANNEL_SQL } = buildCustomerFilter(req.query);
     const rows = tdb().prepare(
-      `SELECT id, nickname, phone, email, openid, tier_key,
+      `SELECT id, nickname, phone, email, openid, tier_key, tags, note,
               lifetime_spend, points_balance, balance, is_blocked,
               ${CHANNEL_SQL} AS channel,
               (SELECT COUNT(*) FROM retail_orders o WHERE o.customer_id = retail_customers.id) AS orders_count,
@@ -16591,17 +16604,17 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
 
     const yn = v => (Number(v) ? 'Yes' : 'No');
     const head = [
-      'ID', 'Name', 'Phone', 'Email', 'Tier', 'Signed up via',
+      'ID', 'Name', 'Phone', 'Email', 'Tier', 'Signed up via', 'Tags',
       'Orders', 'Lifetime spend', 'Points', 'Wallet balance',
-      'Blocked', 'Joined (UTC+8)', 'Last order (UTC+8)', 'Last seen (UTC+8)',
+      'Blocked', 'Joined (UTC+8)', 'Last order (UTC+8)', 'Last seen (UTC+8)', 'Note',
     ];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
     for (const r of rows) {
       lines.push([
-        r.id, r.nickname, r.phone, r.email, r.tier_key, r.channel,
+        r.id, r.nickname, r.phone, r.email, r.tier_key, r.channel, r.tags,
         r.orders_count, r.lifetime_spend, r.points_balance, r.balance,
-        yn(r.is_blocked), r.joined_local, r.last_order_at, r.last_seen_local,
+        yn(r.is_blocked), r.joined_local, r.last_order_at, r.last_seen_local, r.note,
       ].map(cell).join(','));
     }
     const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -16686,6 +16699,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
             points_balance, balance, is_blocked, created_at, last_login_at, seen_at,
+            note, tags,
             (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count,
             ${CHANNEL_SQL} AS channel
        FROM retail_customers
@@ -16729,8 +16743,27 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     segments = { all: seg.all_count, new_week: seg.new_week, sleeping: seg.sleeping, blocked: seg.blocked };
   }
 
+  // Every tag anybody on this account has actually used, so the filter offers
+  // real groups rather than a list somebody has to remember. Built from the
+  // stored comma-separated column with no schema of its own: a separate tag
+  // table would be a second source of truth for the same fact, and the day it
+  // disagreed with the column nobody could say which was right.
+  const tagRows = tdb().prepare(
+    "SELECT tags FROM retail_customers WHERE tags IS NOT NULL AND tags != ''"
+  ).all();
+  const tagCounts = new Map();
+  for (const r of tagRows) {
+    for (const t of String(r.tags).split(',')) {
+      const k = t.trim();
+      if (k) tagCounts.set(k, (tagCounts.get(k) || 0) + 1);
+    }
+  }
+  const tagVocabulary = [...tagCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, n]) => ({ tag, count: n }));
+
   res.json({ success: true, data: rows, page, pageSize, total, customers_on_file: customersOnFile,
-             hidden_by_filters: hidden, returning, segments });
+             hidden_by_filters: hidden, returning, segments, tag_vocabulary: tagVocabulary });
 });
 
 // Would a "save as a customer" tick attach this order to somebody already on
@@ -17280,6 +17313,40 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
     }
     updates.push('birthday = ?'); params.push(v); changed.birthday = v;
   }
+  // ── The note and the tags (audit E-02) ───────────────────────────────────
+  // A note is free text the operator types about a person — "allergic to nuts",
+  // "always calls before collecting", "wholesale, invoice monthly". 2000
+  // characters, the same ceiling an order's staff note takes. An empty string
+  // clears it, which is a legitimate edit.
+  if (b.note !== undefined) {
+    if (b.note !== null && typeof b.note !== 'string') {
+      return res.status(400).json({ success: false, error: 'note_invalid', message: 'A note must be text.' });
+    }
+    const v = (b.note == null || String(b.note).trim() === '') ? null : String(b.note).slice(0, 2000);
+    updates.push('note = ?'); params.push(v); changed.note = v;
+  }
+  // Tags arrive as either an array or a comma-separated string; both are
+  // normalised to ONE stored shape — comma-separated, trimmed, lowercased,
+  // de-duplicated, no empties. Lowercased because "VIP" and "vip" are the same
+  // mark to the person typing them and two different rows to a LIKE, and the
+  // whole value of a tag is that it finds the group again.
+  if (b.tags !== undefined) {
+    const raw = Array.isArray(b.tags) ? b.tags : String(b.tags == null ? '' : b.tags).split(',');
+    const seen = new Set();
+    const list = [];
+    for (const t of raw) {
+      // Commas are the separator, so a tag cannot contain one — stripped rather
+      // than rejected, because the operator typing "vip, wholesale" meant two
+      // tags and an error there would be pedantry.
+      const clean = String(t == null ? '' : t).replace(/,/g, ' ').trim().toLowerCase().slice(0, 40);
+      if (!clean || seen.has(clean)) continue;
+      seen.add(clean); list.push(clean);
+      if (list.length >= 20) break;     // a bounded list stays a list
+    }
+    const v = list.length ? list.join(',') : null;
+    updates.push('tags = ?'); params.push(v); changed.tags = v;
+  }
+
   // tier_key is intentionally not editable here — it's auto-derived from
   // lifetime_spend (see tierFromSpend / reconcileTier). Any tier_key in the
   // payload is silently ignored so older admin builds don't error.

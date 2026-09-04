@@ -3420,6 +3420,20 @@
       }
       #tab-customers .cul-menu button:hover { background: var(--bg-elev-1); }
       #tab-customers .cul-menu button.sel { font-weight: 500; }
+      /* Tag menu: the name left, its count right, so the list reads as "how
+         many people are in this group" and not just a list of words. */
+      #tab-customers #cu-tag-menu button { justify-content: space-between; gap: 12px; }
+      #tab-customers #cu-tag-menu button.sel { background: var(--bg-elev-1); }
+      /* Tag chips on a roster row — under the phone, small and quiet. They are
+         a mark, not a column: three at most, then a "+N" so a heavily tagged
+         customer cannot push the row taller than its neighbours. */
+      #tab-customers .cul-tags { display: flex; gap: 4px; flex-wrap: nowrap; overflow: hidden; margin-top: 3px; }
+      #tab-customers .cul-tag {
+        font: 400 10.5px/1.5 var(--f-sans); color: var(--text-2);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 999px; padding: 0 7px; white-space: nowrap;
+      }
+      #tab-customers .cul-tag.more { color: var(--text-3); }
       /* Channel options carry their glyph, matching the Orders dropdown. */
       #tab-customers .cul-menu button.cul-menu-chan { align-items: center; gap: 9px; }
       #tab-customers .cul-menu-ico { display: inline-flex; align-items: center; color: var(--text-2); flex: none; }
@@ -3865,6 +3879,33 @@
          their NATURAL height and top-align — neither stretches to match its
          neighbour, so an uneven bottom edge is correct. */
       #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; align-items: start; }
+      /* ── Notes & tags card (audit E-02) ──────────────────────────────────
+         The tag row, the add field and the note share the card. The Save/Reset
+         foot is hidden until something has actually changed, so the card is
+         silent while it is only being read. */
+      #cu-drawer .cu-tagrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 10px; min-height: 24px; }
+      #cu-drawer .cu-tagchip {
+        display: inline-flex; align-items: center; gap: 5px;
+        font: 400 12px/1.6 var(--f-sans); color: var(--text-1);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 999px; padding: 1px 4px 1px 10px;
+      }
+      #cu-drawer .cu-tagchip .x {
+        background: none; border: 0; cursor: pointer; color: var(--text-3);
+        font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 999px;
+      }
+      #cu-drawer .cu-tagchip .x:hover { color: var(--danger); }
+      #cu-drawer .cu-tagadd { display: flex; gap: 6px; margin-bottom: 10px; }
+      #cu-drawer .cu-tagadd input { flex: 1; min-width: 0; }
+      #cu-drawer .cu-note-in {
+        width: 100%; box-sizing: border-box; resize: vertical; min-height: 62px;
+        font: 400 13.5px/1.6 var(--f-sans); color: var(--text-1);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 10px; padding: 9px 11px;
+      }
+      #cu-drawer .cu-note-in:focus { outline: none; border-color: var(--accent); }
+      #cu-drawer .cu-note-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
       #cu-drawer .cux-card {
         background: var(--bg-pane); border: 1px solid var(--td-border); border-radius: 14px;
         padding: 24px; min-width: 0; align-self: start;
@@ -4053,6 +4094,14 @@
         <span class="cul-selwrap">
           <button type="button" class="cul-sel" id="cu-chan-btn" onclick="cuMenuToggle('chan', event)" aria-haspopup="true"></button>
           <div class="cul-menu" id="cu-chan-menu" hidden></div>
+        </span>
+        <!-- Tags. Hidden by cuPaintFilterBar until the account has tagged
+             somebody: a facet with nothing behind it can only disappoint.
+             Several tags are an OR, unlike Tier and Channel — a person carries
+             one tier and one signup channel but any number of tags. -->
+        <span class="cul-selwrap" hidden>
+          <button type="button" class="cul-sel" id="cu-tag-btn" onclick="cuMenuToggle('tag', event)" aria-haspopup="true"></button>
+          <div class="cul-menu" id="cu-tag-menu" hidden></div>
         </span>
         <span class="cul-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>

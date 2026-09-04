@@ -4407,6 +4407,19 @@ addColumn('retail_customers', 'created_by',               'INTEGER');
 // "you haven't". Chosen 2026-07-25 to match Orders rather than build a
 // per-operator seen table — do not "correct" this into per-operator.
 addColumn('retail_customers', 'seen_at',                  'DATETIME');
+// ── A note and tags on the customer record (audit E-02) ────────────────────
+// A customer held a name, a phone, addresses, orders, points and a wallet, and
+// there was nowhere to write "allergic to nuts", "always calls before
+// collecting" or "wholesale — invoice monthly", and no way to mark a group so
+// they could be found again. Reviews had tags; the people did not.
+//
+// `note` is free text the operator types, shown in the drawer and searchable.
+// `tags` is a COMMA-SEPARATED list, the same shape store_products.tags already
+// uses on this database rather than a second convention — one storage idea per
+// codebase is worth more than the cleaner one nobody remembers. Matching is
+// done on ','||tags||',' LIKE '%,x,%' so 'vip' never matches 'vip-trial'.
+addColumn('retail_customers', 'note',                     'TEXT');
+addColumn('retail_customers', 'tags',                     'TEXT');
 // One-shot backfill: stamp every customer that existed when the column
 // landed as already seen, so only records created from this point on read
 // as unopened. Decided 2026-07-25, same call the Orders backfill made.
