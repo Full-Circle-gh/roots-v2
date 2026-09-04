@@ -3921,6 +3921,63 @@ try {
   }
 } catch (e) { console.error('[migration backfill_all_products_to_default_store_v1]', e); }
 
+// Pin the warehouse location explicitly — decisions §39 Ruling 3.
+//
+// `routes/restock.js:_resolveWarehouseStoreId` prefers a configured id, then a
+// warehouse-role user's bound store, then the active store carrying the most
+// stock. Tier 1 read a `settings` table that does not exist anywhere in this
+// schema, so it threw on every call and resolution silently landed on tier 3 —
+// a guess. At Roots that guess happens to be right (Tianhe, store 1, is the
+// warehouse: there is no separate warehouse row), which is exactly why it went
+// unnoticed. It stops being right the moment Yuexiu out-stocks Tianhe.
+//
+// So write down what the app is already doing rather than leaving it inferred.
+// The value is RESOLVED, not hardcoded: this reproduces tiers 2 and 3 and pins
+// whatever they currently return, which keeps the migration correct on any
+// deployment instead of only on Roots. An operator's existing value is never
+// overwritten, and an unresolvable database (no stores, no stock) writes
+// nothing and is left unstamped so a later boot can pin it once there is
+// something to pin.
+//
+// mainDb only, and deliberately: this file runs against roots.db, and
+// lib/tenant-db.js clones schema without rows, so no other tenant inherits
+// Roots' store id. Each tenant sets its own key.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('pin_warehouse_store_id_v1');
+  if (!ran) {
+    const already = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    if (already) {
+      console.log(`[migration] pin_warehouse_store_id_v1: already set to ${already.value_json} — left alone`);
+      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('pin_warehouse_store_id_v1');
+    } else {
+      // Tier 2 — the store a warehouse-role user is bound to.
+      const wu = db.prepare(`
+        SELECT retail_store_id FROM users
+         WHERE role = 'warehouse' AND retail_store_id IS NOT NULL
+         ORDER BY id LIMIT 1`).get();
+      // Tier 3 — the active store holding the most stock.
+      const top = db.prepare(`
+        SELECT rss.store_id AS id, SUM(rss.physical_qty) AS q
+          FROM retail_store_stock rss
+          JOIN retail_stores s ON s.id = rss.store_id AND COALESCE(s.is_active,1) = 1
+         GROUP BY rss.store_id ORDER BY q DESC LIMIT 1`).get();
+      const id = wu?.retail_store_id || top?.id || null;
+      if (id) {
+        const store = db.prepare('SELECT code, name_en FROM retail_stores WHERE id = ?').get(id);
+        db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', ?)")
+          .run(JSON.stringify(id));
+        console.log(`[migration] pin_warehouse_store_id_v1: warehouse pinned to store id=${id}` +
+                    `${store ? ` (${store.code} · ${store.name_en})` : ''}` +
+                    `, resolved via ${wu?.retail_store_id ? 'a warehouse-role user' : 'highest stock on hand'}`);
+        db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('pin_warehouse_store_id_v1');
+      } else {
+        // No stores and no stock yet — a fresh database. Leave it unstamped.
+        console.log('[migration] pin_warehouse_store_id_v1: no store to pin yet — will retry on a later boot');
+      }
+    }
+  }
+} catch (e) { console.error('[migration pin_warehouse_store_id_v1]', e); }
+
 // Seed default reservation TTL config — minutes before an unpaid order's
 // stock reservations expire and stock returns to the available pool.
 try {

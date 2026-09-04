@@ -158,16 +158,44 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 //   • Idempotent via restock_orders.stock_applied_at — 'prepared' applies
 //     it; a later 'delivered' is a no-op safety net.
 
+// `stock.warehouseStoreId` off `storefront_config`, on the tenant handle.
+// The four-line twin of cfgValue() in routes/retail.js, which is not exported.
+// value_json is JSON, so the id may arrive as a number or as a quoted string;
+// both are accepted and anything that is not a positive integer is treated as
+// unset so a malformed value falls through rather than resolving to 0/NaN.
+function _cfgWarehouseStoreId() {
+  try {
+    const row = tdb().prepare(
+      "SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    if (!row) return null;
+    const id = parseInt(JSON.parse(row.value_json), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
 // Resolve the warehouse (source) retail_stores.id — the location goods
 // ship OUT of. Preference: explicit setting → a warehouse-role user's
 // bound store → the store holding the most stock. null if undeterminable.
 function _resolveWarehouseStoreId() {
-  // (1) optional explicit override, for a future multi-warehouse world.
-  try {
-    const s = db.prepare("SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'").get();
-    const id = s && parseInt(s.value, 10);
-    if (id) return id;
-  } catch { /* no settings table / row — fall through */ }
+  // (1) the configured warehouse, per tenant. Decisions §39 Ruling 3 names
+  //     `stock.warehouseStoreId` on `storefront_config` — the table's name is
+  //     a poor fit and that is recorded, deliberate debt; it works, it is
+  //     already per-tenant, and renaming a live config store mid-build was
+  //     rejected as gratuitous risk.
+  //
+  //     This used to read `SELECT value FROM settings`, and there is no
+  //     `settings` table in schema.sql, in database.js, or in the live
+  //     database. The lookup threw on every call, the bare catch swallowed it,
+  //     and resolution silently fell through to (3) — the highest-stock store,
+  //     a guess that happened to land on the right row at Roots. Setting the
+  //     old key had no effect and never has.
+  //
+  //     Read on the TENANT handle, not the shared one, per the same ruling: a
+  //     read on `db` here would hand every tenant Roots' warehouse. Tiers (2)
+  //     and (3) below still read `db` — pre-existing, out of scope for this
+  //     change, and moot for Roots where tdb() IS db.
+  const cfgId = _cfgWarehouseStoreId();
+  if (cfgId) return cfgId;
   // (2) the store a warehouse-role user is assigned to.
   const wu = db.prepare(`
     SELECT retail_store_id FROM users
@@ -756,3 +784,7 @@ router.delete('/api/restock/:id', requireAuth, requireDelete, requirePermission(
 });
 
 module.exports = router;
+// Exported for scripts/test_warehouse_store_pin.js — the tier order in
+// _resolveWarehouseStoreId is the whole point of the configured key, and it is
+// not observable through any endpoint without moving real stock.
+module.exports._resolveWarehouseStoreId = _resolveWarehouseStoreId;
