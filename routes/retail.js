@@ -4818,7 +4818,7 @@ function markOrderPaid(orderId) {
           _push.sendPushByPermission('retail', {
             title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
             body: `${o.order_no} · ¥${Number(o.total || 0).toFixed(2)}`,
-            url: '/retail-admin?tab=orders',
+            url: '/?tab=orders',
             tag: 'retail-order-' + orderId,
           });
         }
@@ -4834,7 +4834,7 @@ function markOrderPaid(orderId) {
         if (op) _push.sendPushToTenantOperators(currentTenantId(), {
           title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
           body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
-          url: '/retail-admin?tab=orders',
+          url: '/?tab=orders',
           tag: 'retail-order-' + orderId,
         });
       }
@@ -28418,7 +28418,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
           if (op) _push.sendPushToTenantOperators(currentTenantId(), {
             title: '🌿 New paid order · 新订单已付款',
             body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
-            url: '/retail-admin?tab=orders',
+            url: '/?tab=orders',
             tag: 'retail-order-' + id,
           });
         }

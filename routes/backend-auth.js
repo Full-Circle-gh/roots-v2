@@ -1160,7 +1160,7 @@ router.post('/api/backend/push/test', async (req, res) => {
   const r = await _push.sendPushToOperator(req.session.backendUserId, {
     title: '🌿 Test notification · 测试通知',
     body: 'Push is working on this device. · 此设备的推送已生效。',
-    url: '/retail-admin',
+    url: '/',
     tag: 'operator-test',
   });
   res.json({ success: true, sent: (r && r.sent) || 0 });
