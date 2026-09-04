@@ -497,6 +497,17 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
   // computing it inline, so both functions have to be sliced out together —
   // extracting lineRow alone leaves lineCostText undefined in the sandbox.
   const LINE_COST_TEXT_FN = extractFunction(RECIPES_JS, 'function lineCostText(l)');
+  // Since the batch size learned to derive itself (§ recipe yield, 2026-09-04)
+  // the row also carries the in-yield checkbox, so lineInYield() and the title
+  // it hangs on come out with it. Sliced from the shipped file for the same
+  // reason lineCostText is rather than stubbed: a stub would let the row under
+  // test drift from the one that ships.
+  const LINE_IN_YIELD_FN = extractFunction(RECIPES_JS, 'function lineInYield(l)');
+  const YIELD_TITLE_FN = (() => {
+    const at = RECIPES_JS.indexOf('const YIELD_TITLE = () => T(');
+    assert.notStrictEqual(at, -1, 'YIELD_TITLE not found in the shipped file');
+    return RECIPES_JS.slice(at, RECIPES_JS.indexOf(';', RECIPES_JS.indexOf("无论是否勾选", at)) + 1);
+  })();
   function runLineRow(l, idx) {
     const sb = {
       esc: (s) => String(s == null ? '' : s),
@@ -504,11 +515,13 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
       moneyU: (n) => String(n),
       money: (n) => String(n),
       RECIPE_UNITS: () => ['g', 'ml', 'pcs'],
+      COST: () => require('../lib/recipe-cost'),
       I: { x: 'x' },
       Number, String,
     };
     vm.createContext(sb);
-    vm.runInContext(LINE_COST_TEXT_FN + '\n' + LINE_ROW_FN + '\nthis.__row = lineRow;', sb, { filename: '19-recipes.js#lineRow' });
+    vm.runInContext([YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_ROW_FN,
+      'this.__row = lineRow;'].join('\n'), sb, { filename: '19-recipes.js#lineRow' });
     return sb.__row(l, idx);
   }
 
