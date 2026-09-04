@@ -4763,8 +4763,19 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pa-inspector-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-  .pa-inspector-actions { display: flex; gap: 4px; flex-shrink: 0; }
-  .pa-inspector-actions .btn { padding: 5px 9px; font-size: 11px; }
+  .pa-inspector-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  /* A real target (audit R-04). These were padding: 5px 9px at 11px — about 26
+     pixels tall against a 44-pixel guideline, the smallest controls anywhere in
+     the admin. This is a mouse-driven desktop surface, so it was a comfort
+     problem rather than a blocker, but "comfortable for a mouse" still means a
+     target somebody can hit without aiming.
+     36px is the height the rest of the admin's small buttons use; the inspector
+     header has room for it, and min-height rather than more padding keeps the
+     label centred without the button growing wider. */
+  .pa-inspector-actions .btn {
+    min-height: 36px; padding: 6px 12px; font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
   .pa-inspector-actions .btn.danger {
     color: var(--danger); border-color: rgba(232, 85, 106, .35);
   }
@@ -14412,3 +14423,22 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
   border-radius: 10px;
 }
+
+/* Skip link (audit R-05). Off-screen until focused, then a real, visible target
+   at the top-left — the only way a keyboard operator gets past ~30 rail and tab
+   controls to the screen they opened. `top` rather than `display` so it can be
+   focused at all: a display:none link is not in the tab order.
+   <main> carries tabindex="-1" so the jump actually moves focus, not just the
+   scroll position — without it several browsers scroll and leave focus in the
+   rail, and the next Tab walks the rail again. */
+.skip-link {
+  position: fixed; left: 8px; top: -60px; z-index: 9999;
+  padding: 10px 16px; border-radius: 10px;
+  background: var(--bg-pane, #fff); color: var(--text-1, #16161a);
+  border: 1px solid var(--line, #d9d3c6);
+  font: 500 14px/1.2 var(--f-sans); text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  transition: top 120ms ease;
+}
+.skip-link:focus { top: 8px; outline: 2px solid var(--accent, #365329); outline-offset: 2px; }
+main:focus { outline: none; }

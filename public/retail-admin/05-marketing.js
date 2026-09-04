@@ -2163,14 +2163,22 @@ function bxMonthLabel(d) {
   if (!d) return cuT('Earlier', '更早');
   return cuT(BX_MON_FULL[d.getMonth()] + ' ' + d.getFullYear(), d.getFullYear() + '年' + (d.getMonth() + 1) + '月');
 }
+// The shared formatter, not a third one (audit C-02). These built dates from a
+// hand-written month table and read the BROWSER's clock for the time; tdWhen
+// renders in the shop's own timezone and in the product's one date shape.
+// bxParseDate stays: its UTC-vs-local rule is real (see its comment) and it is
+// what hands tdWhen a Date it can trust.
 function bxFmtDate(str) {
   const d = bxParseDate(str);
   if (!d) return escapeHtml(str || '');
-  return cuT(BX_MON_ABBR[d.getMonth()] + ' ' + d.getDate(), (d.getMonth() + 1) + '月' + d.getDate() + '日');
+  return (typeof tdWhen === 'function')
+    ? tdWhen(d, 'date')
+    : cuT(BX_MON_ABBR[d.getMonth()] + ' ' + d.getDate(), (d.getMonth() + 1) + '月' + d.getDate() + '日');
 }
 function bxFmtDateTime(str) {
   const d = bxParseDate(str);
   if (!d) return escapeHtml(str || '');
+  if (typeof tdWhen === 'function') return tdWhen(d, 'dateTime');
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return bxFmtDate(str) + ', ' + hh + ':' + mm;

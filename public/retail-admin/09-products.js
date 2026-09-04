@@ -3264,20 +3264,29 @@ async function pdRevert() {
 // roll back to any of them. Replaces the old single-step "revert to last save".
 // Format a server UTC timestamp ('YYYY-MM-DD HH:MM:SS') as GZ-local "Today
 // 14:32" / "Yesterday 09:10" / "Jun 14, 18:05".
+// The shared formatter, not a fourth one (audit C-02). This built "Jan 5, 14:30"
+// by hand out of UTC arithmetic against a hardcoded +8, so a version list read
+// in a different shape from every other timestamp in the product AND on
+// Guangzhou's clock for a shop in any other zone — which is exactly what
+// tdWhen's TD_TZ exists to fix.
+//
+// The Today / Yesterday shortcut is KEPT, because it is the point of this
+// particular list: a version history is read as "how long ago", and "Today
+// 14:30" answers that where "Sep 4, 14:30" makes the reader do the subtraction.
+// It is asked of tdWhen rather than derived: tdWhen('date') on today's date and
+// on this row's date agreeing is the same comparison, in the shop's timezone
+// rather than in a constant.
 function pdFmtVersionTime(s) {
   if (!s) return '';
   const d = new Date(String(s).replace(' ', 'T') + 'Z');
   if (isNaN(d.getTime())) return String(s);
-  const gz = new Date(d.getTime() + 8 * 3600 * 1000);
-  const now = new Date(Date.now() + 8 * 3600 * 1000);
-  const key = x => x.toISOString().slice(0, 10);
-  const hh = String(gz.getUTCHours()).padStart(2, '0'), mm = String(gz.getUTCMinutes()).padStart(2, '0');
-  const t = hh + ':' + mm;
-  const k = key(gz);
-  if (k === key(now)) return cuT('Today ', '今天 ') + t;
-  if (k === key(new Date(now.getTime() - 86400000))) return cuT('Yesterday ', '昨天 ') + t;
-  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][gz.getUTCMonth()];
-  return cuT(mon + ' ' + gz.getUTCDate() + ', ' + t, (gz.getUTCMonth() + 1) + '月' + gz.getUTCDate() + '日 ' + t);
+  if (typeof tdWhen !== 'function') return String(s);
+  const t = tdWhen(d, 'time');
+  const day = tdWhen(d, 'date');
+  const now = new Date();
+  if (day === tdWhen(now, 'date')) return cuT('Today ', '今天 ') + t;
+  if (day === tdWhen(new Date(now.getTime() - 86400000), 'date')) return cuT('Yesterday ', '昨天 ') + t;
+  return tdWhen(d, 'dateTime');
 }
 async function pdOpenVersions() {
   const id = document.getElementById('pd-id').value;

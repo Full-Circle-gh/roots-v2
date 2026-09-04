@@ -449,7 +449,7 @@ async function loadShippingIntegrations() {
       : cuT('paste app_secret', '粘贴 app_secret');
     if (jAt) jAt.placeholder = d.access_token_masked
       ? cuT(d.access_token_masked + ' — leave blank to keep', d.access_token_masked + ' — 留空保持不变')
-      : cuT('paste access_token', '粘贴 access_token');
+      : cuT('Paste the token JD issued · 粘贴京东签发的令牌', '粘贴京东签发的令牌');
     if (jCc) jCc.value = d.customer_code || '';
     if (jEv) jEv.value = d.env || 'production';
     const jChip = document.getElementById('jd-chip');
@@ -3255,12 +3255,13 @@ function tmdRelTime(s) {
   var d = Math.round(h / 24); if (d < 30) return cuT(d + (d > 1 ? ' days ago' : ' day ago'), d + ' 天前');
   return cuT('over a month ago', '一个月前');
 }
+// The shared formatter, not a fourth one (audit C-02). This built its own with
+// toLocaleDateString('en-US'/'zh-CN'), so a device's "last seen" read in a
+// different shape from every other date in the product — and, worse, on the
+// BROWSER's clock rather than the shop's, which tdWhen exists to fix.
 function tmdDateFmt(s) {
   if (!s) return '';
-  var t = tmdToDate(s);
-  var opts = { month: 'short', day: 'numeric' };
-  if (t.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-  return t.toLocaleDateString((window.cuLang && cuLang() === 'cn') ? 'zh-CN' : 'en-US', opts);
+  return (typeof tdWhen === 'function') ? tdWhen(tmdToDate(s), 'date') : String(s);
 }
 function tmdInitials(name) {
   var s = String(name || '').trim(); if (!s) return '?';

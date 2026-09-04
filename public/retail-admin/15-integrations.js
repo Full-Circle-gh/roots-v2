@@ -323,7 +323,7 @@
         <span class="muted" style="font-size:12px">${cuT('A “link this store” to-do was added to its card below · 已在下方卡片添加“关联门店”待办', '已在下方卡片添加“关联门店”待办')}</span></div>
         <span style="color:var(--brass);font-size:12px;font-weight:600">⚑ ${cuT('To-do · 待办', '待办')}</span></div>`);
     }
-    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Stock & quotas · 库存与配额', '库存与配额')}</b><br>
+    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Stock, and how much of it each channel may sell · 库存,以及各渠道可售数量', '库存,以及各渠道可售数量')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('New stores start un-counted; set stock when ready · 新门店初始未盘点,可随时录入库存', '新门店初始未盘点,可随时录入库存')}</span></div>
       <button class="btn btn-sm" onclick="goTab('products')">${cuT('Open products · 打开产品', '打开产品')}</button></div>`);
     rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Delivery zones · 配送区域', '配送区域')}</b><br>
@@ -795,7 +795,7 @@
       setTimeout(igMiniappConfigFull, 1600);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
-      if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('AppID must look like wx + 16 chars.', 'AppID 格式应为 wx + 16 位。') : cuT('Save failed', '保存失败')); }
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('That does not look like a Mini Program AppID. Copy it from mp.weixin.qq.com → 开发管理 → 开发设置; it starts with “wx” and is 18 characters long.', '这不像是小程序 AppID。请在 mp.weixin.qq.com →「开发管理」→「开发设置」中复制;它以 wx 开头,共 18 位。') : cuT('Save failed', '保存失败')); }
     }
   };
 

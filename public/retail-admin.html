@@ -886,6 +886,13 @@
      applyFeatureGates() then removes the class for any feature an operator (or
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
+<!-- Skip link (audit R-05). The rail and the tab strip are ~30 focusable
+     controls before the page's own content, and a keyboard operator had to walk
+     every one of them on every screen. FIRST element in the body so it is the
+     first thing Tab reaches; visually hidden until it takes focus, which is the
+     whole convention — a skip link that is always visible is furniture, and one
+     that never appears is not a link. -->
+<a href="#main" class="skip-link">Skip to content · 跳到内容</a>
 <!-- Restore the rail collapse state before first paint so the icon-only strip
      doesn't flash open on load. Full wiring lives in 01-core.js. -->
 <script>try{if(localStorage.getItem('ra:navCollapsed')==='1')document.body.classList.add('nav-collapsed');}catch(e){}</script>
@@ -1561,7 +1568,7 @@
   </div>
 </div>
 
-<main>
+<main id="main" tabindex="-1">
 
   <!-- ─── SETUP GUIDE (new tenant) ─── -->
   <!-- Filled by part 17 (suRenderGuide). A router-style checklist that opens the
@@ -7493,6 +7500,17 @@
       <div class="card" style="margin-bottom: var(--s4);" id="logpanel-jd">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>App keys · 应用密钥</strong> <span id="jd-chip"></span></div>
         <div class="muted" style="margin-bottom:14px">Request LOP API access from your JD account manager. · 请向您的京东客户经理申请 LOP API 权限。</div>
+        <!-- Where each of these four comes from (audit G-01). The names are JD's
+             own words and cannot be renamed without making them un-findable on
+             JD's site; what was missing was a sentence saying where to look.
+             Same shape as the WeChat payment wizard's own credential help. -->
+        <div class="helper" style="margin-bottom:14px;line-height:1.6">
+          <b>Where to find these · 在哪里找到这些</b><br>
+          <b>app_key</b> and <b>app_secret</b> — on your app's page at lop.jd.com, under 应用管理. · 在 lop.jd.com 的「应用管理」中查看你的应用。<br>
+          <b>access_token</b> — issued when you authorise the app against your merchant account; JD's account manager runs this with you once. · 授权应用绑定商家账号时签发,由京东客户经理协助完成一次。<br>
+          <b>customer_code</b> — your merchant code, in the JD Logistics merchant back office at jdl.com. · 商家编码,在 jdl.com 商家后台可见。<br>
+          Keep <b>API environment</b> on <b>production</b> unless JD has given you sandbox credentials to test with. · 除非京东给了沙箱凭证用于测试,否则保持 production。
+        </div>
         <div class="ops-grid">
           <div>
             <label for="jd-app_key" class="field-label">app_key</label>
