@@ -2186,6 +2186,24 @@ function bxFmtDateTime(str) {
   const mm = String(d.getMinutes()).padStart(2, '0');
   return bxFmtDate(str) + ', ' + hh + ':' + mm;
 }
+// ── A value the OPERATOR JUST TYPED, echoed back ──────────────────────────
+// The composer's two datetime-local inputs are a different kind of value from
+// everything else this file formats. A stored timestamp is UTC and has to be
+// projected into the shop's clock; a typed one is ALREADY on the shop's clock,
+// and projecting it again shifts it — the "until Jun 8, 10:00" preview came
+// back as "6:00 PM" the moment these formatters started honouring TD_TZ.
+//
+// tdFromShopLocal (public/td-datetime.js) inverts the zone for exactly this, so
+// the echo is the operator's own time in the product's one date shape, rather
+// than a second formatter kept beside the input.
+function bxFmtTyped(raw) {
+  if (!raw) return '';
+  if (typeof tdFromShopLocal === 'function' && typeof tdWhen === 'function') {
+    const d = tdFromShopLocal(raw);
+    if (d) return tdWhen(d, 'dateTime');
+  }
+  return bxFmtDateTime(raw);
+}
 
 // ── compose open / close ──────────────────────────────────────────
 function bxOpenCompose() {
@@ -2308,7 +2326,7 @@ function bxWhenChanged() {
   const sum = $('#bx-when-sum');
   if (sum) {
     const start = (mode === 'later' && at)
-      ? bxFmtDateTime(at)
+      ? bxFmtTyped(at)
       : (mode === 'later' ? cuT('Pick a time', '选择时间') : cuT('Now', '立即'));
     sum.textContent = start + bxUntilSuffix();
   }
@@ -2321,7 +2339,7 @@ function bxUntilSuffix() {
   if (!sel || sel.value !== 'at') return '';
   const raw = $('#bc-expire-at').value;
   if (!raw) return ' · ' + cuT('pick an end time', '选择结束时间');
-  return ' → ' + cuT('until ', '至 ') + bxFmtDateTime(raw);
+  return ' → ' + cuT('until ', '至 ') + bxFmtTyped(raw);
 }
 
 // ── composer reset ────────────────────────────────────────────────
@@ -2404,7 +2422,7 @@ function bxUpdateAudChip() {
   const who = bcAudienceLabel(bcAudienceObj());
   const mode = $('#bc-schedule-mode').value;
   const at = $('#bc-schedule-at').value;
-  const when = (mode === 'later' && at) ? bxFmtDateTime(at) : (mode === 'later' ? cuT('scheduled', '定时') : cuT('now', '立即'));
+  const when = (mode === 'later' && at) ? bxFmtTyped(at) : (mode === 'later' ? cuT('scheduled', '定时') : cuT('now', '立即'));
   chip.textContent = who + ' · ' + when + bxUntilSuffix();
 }
 async function loadBroadcastAudienceCount() {
@@ -2687,7 +2705,7 @@ async function sendBroadcast() {
   const audCount = bxAudCount();
   const verb = mode === 'later' ? 'Schedule' : 'Send';
   const until = expiresRaw
-    ? ` It stops showing on ${bxFmtDateTime(expiresRaw)}. · 将于 ${bxFmtDateTime(expiresRaw)} 停止显示。`
+    ? ` It stops showing on ${bxFmtTyped(expiresRaw)}. · 将于 ${bxFmtTyped(expiresRaw)} 停止显示。`
     : '';
   if (!(await askConfirm({ title: `${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？` + until, confirmLabel: `${verb} · ${verb === 'Schedule' ? '排期' : '发送'}` }))) return;
 

@@ -545,7 +545,13 @@ section('7. Autosave and its history ship together');
 // confirm. The behaviour of the filing itself is scripts/test_recipe_versions.js.
 
 check('every save route files the state it displaces', () => {
-  assert.match(ROUTES_JS, /snapshotRecipe\(db, req\.params\.id, \{ source: saveSourceOf\(req\)/,
+  // The HANDLE is deliberately not part of this assertion. It named `db`
+  // literally, and the multi-tenant fix (audit D-01) moved this file onto the
+  // signed-in account's connection — so the grep failed for the change it was
+  // supposed to be indifferent to. What matters here is that a version is
+  // filed, with the right source and actor, before the write; which connection
+  // files it is retail-recipes.js's business and scripts/check-tenant-als.js's.
+  assert.match(ROUTES_JS, /snapshotRecipe\((?:db|tdb\(\)), req\.params\.id, \{ source: saveSourceOf\(req\)/,
     'the recipe update route must file a version before it writes');
   const costRoute = ROUTES_JS.slice(ROUTES_JS.indexOf("router.put('/api/retail-admin/recipes/:id/cost'"));
   assert.match(costRoute.slice(0, 1400), /snapshotRecipe\(/,

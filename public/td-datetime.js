@@ -324,6 +324,40 @@
     return h12(pa) + ' ' + mer(pa) + ' – ' + h12(pb) + ' ' + mer(pb);
   }
 
+  /* ── A value the OPERATOR TYPED, not one the server stored ───────────
+     `<input type="datetime-local">` yields "2026-06-08T10:00" with no zone,
+     and parse() above reads a zoneless string as UTC — which is right for the
+     server's timestamps (SQLite writes UTC) and wrong for this one. The
+     operator typing 10:00 into a form means 10:00 on the SHOP's clock.
+
+     Handing a typed value straight to tdWhen therefore shifted it by the
+     store's offset: "until Jun 8, 10:00" echoed back as "6:00 PM". This
+     converts the typed wall-clock into the instant it denotes in the store's
+     zone, so tdWhen renders back exactly what was typed — in the product's one
+     date shape rather than in a second formatter kept beside the input.
+
+     Two passes, which is the standard way to invert a zone without a table:
+     guess the instant as if the fields were UTC, measure what that guess
+     actually reads as in the store's zone, and correct by the difference. The
+     second pass catches the case where the correction itself crosses a DST
+     boundary. China has no DST; a store that does is why the second pass is
+     here. */
+  function tdFromShopLocal(value) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(value || ''));
+    if (!m) return null;
+    var want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    var guess = want;
+    for (var i = 0; i < 2; i++) {
+      var p = parts(new Date(guess), false);
+      var got = Date.UTC(p.y, p.mo, p.da, p.h, p.mi);
+      if (got === want) break;
+      guess += (want - got);
+    }
+    var d = new Date(guess);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  root.tdFromShopLocal = tdFromShopLocal;
   root.tdWhen = tdWhen;
   root.tdRange = tdRange;
   root.tdTimeWindow = tdTimeWindow;
@@ -334,6 +368,7 @@
      the narrow declaration rather than a blanket eslint-disable header. */
   /* global module */
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { tdWhen: tdWhen, tdRange: tdRange, tdTimeWindow: tdTimeWindow, NAMES: NAMES };
+    module.exports = { tdWhen: tdWhen, tdRange: tdRange, tdTimeWindow: tdTimeWindow,
+                      tdFromShopLocal: tdFromShopLocal, NAMES: NAMES };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
