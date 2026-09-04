@@ -58,6 +58,10 @@ const { planRematch, applyRematch } = require('../lib/po-rematch');
 // return.
 const { planReturns, billableQtySql, billableQty, onHandQty } = require('../lib/po-returns');
 const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
+// The one unit-spelling normaliser — shared with firePriceAlertsForPO's own
+// guard (routes/purchases.js), so 'pc' vs 'pcs' cannot pass on one cost path
+// and fail on the other. See the unit-mismatch guard in applyReceivedToStock.
+const { normaliseUnit } = require('../lib/ingredient-cost');
 // The no-invoice mark and the receive row's invoice_status are one fact stored
 // in two columns; every write of either goes through here so a later re-derive
 // cannot reverse a buyer's decision. See lib/invoice-mark.js.
@@ -193,7 +197,9 @@ function postRetailPOExpensesWithSource(poId) {
 function applyReceivedToStock(poId, req, storeId) {
   const po = getRetailPO(poId);
   const targetStore = storeId ?? po?.store_id ?? null;
-  if (!po || !targetStore) return { applied: 0, costed: 0, costSkippedRecipe: 0, landedSkipped: [] };
+  if (!po || !targetStore) {
+    return { applied: 0, costed: 0, costSkippedRecipe: 0, costSkippedUnitMismatch: 0, landedSkipped: [] };
+  }
   // The PO's freight/tax/handling, split over its lines by goods value — the
   // SAME allocation firePriceAlertsForPO uses for materials (routes/purchases.js
   // allocateLandedExtras). A product's stored cost is what it cost to get onto
@@ -212,12 +218,12 @@ function applyReceivedToStock(poId, req, storeId) {
   // through one connection and stamped Roots' unit_cost through another.
   const lines = tdb().prepare(`
     SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, returned_qty,
-           stock_applied_qty, name_en, cost_per_unit
+           stock_applied_qty, name_en, unit, cost_per_unit
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
   const readCost   = tdb().prepare('SELECT unit_cost FROM store_products WHERE id = ?');
   const writeCost  = tdb().prepare('UPDATE store_products SET unit_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-  let applied = 0, costed = 0, costSkippedRecipe = 0;
+  let applied = 0, costed = 0, costSkippedRecipe = 0, costSkippedUnitMismatch = 0;
   for (const l of lines) {
     // Materials have no stock table (§28) — a material line's "receiving" is
     // the price write-back firePriceAlertsForPO does on the Ordered/Delivered
@@ -263,7 +269,29 @@ function applyReceivedToStock(poId, req, storeId) {
     const cost = Number.isFinite(invoiced) && invoiced > 0
       ? invoiced + (landed.perUnit.get(l.id) || 0)
       : invoiced;
+    // THE SAME UNIT-MISMATCH GUARD THE MATERIAL PATH ALREADY HAS. A material
+    // line only prices back when its unit matches ingredients.buy_unit, because
+    // buy_price is a per-package price that cannot be compared to, or divided
+    // by, some other unit (firePriceAlertsForPO, routes/purchases.js). This
+    // write-back had no equivalent: it stamped po_line_items.cost_per_unit onto
+    // store_products.unit_cost whatever the line's unit said, so a case or kg
+    // price landed as if it were per-piece — a product costed at a carton's
+    // price reports a margin that is wrong by the carton size.
+    //
+    // A store_product has no buy_unit column because it needs none: every
+    // product is bought and sold in whole pieces, so 'pcs' IS its stocking
+    // unit. Lines are 'pcs' by construction — every insert in this file writes
+    // `unit || 'pcs'` — but the field is client-supplied, so a bad import or a
+    // future caller could still hand this a case/kg/box price.
+    //
+    // A MISSING UNIT IS 'pcs', NOT A MISMATCH. normaliseUnit('') is '', and a
+    // bare `!== 'pcs'` would newly refuse every legacy row written before that
+    // insert default — throwing away good prices to guard against a bad one.
+    // Absent means the implicit unit; only a unit that is PRESENT and says
+    // something else is a mismatch.
+    const lineUnit = normaliseUnit(l.unit) || 'pcs';
     if (recipeOwnsProductCost(tdb(), l.store_product_id)) { costSkippedRecipe++; }
+    else if (lineUnit !== 'pcs') { costSkippedUnitMismatch++; }
     else if (Number.isFinite(cost) && cost > 0) {
       const before = readCost.get(l.store_product_id)?.unit_cost ?? null;
       // Only write on an actual change, so re-saving a received PO does not
@@ -285,7 +313,7 @@ function applyReceivedToStock(poId, req, storeId) {
   // Lines that took no share because they had no goods value — surfaced to the
   // receive response rather than swallowed, so the operator can see which line
   // is not carrying its part of the freight.
-  return { applied, costed, costSkippedRecipe,
+  return { applied, costed, costSkippedRecipe, costSkippedUnitMismatch,
            landedSkipped: landed.extras > 0 ? landed.skipped : [] };
 }
 
@@ -2700,6 +2728,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
                 return_receipt_id: returnReceipt?.receiptId ?? null }, req.ip);
   res.json({ success: true, missing_lines, damaged_lines, stock_lines_adjusted: stock.applied,
              cost_lines_updated: stock.costed, cost_lines_owned_by_recipe: stock.costSkippedRecipe,
+             cost_lines_unit_mismatch: stock.costSkippedUnitMismatch,
              landed_lines_skipped: stock.landedSkipped,
              store_id: storeId,
              receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0,
