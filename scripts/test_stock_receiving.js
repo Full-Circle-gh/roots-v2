@@ -134,7 +134,10 @@ const HELPERS =
   'window.__click(s,function(){n(i+1)})})(0)};' +
   'window.__done=function(){setTimeout(function(){window.__ready=1},320)};';
 
-const OPEN = "'[data-rcopen]'";
+// The app now opens on the Stock home for anyone the restock API answers, so
+// every case enters through the launcher's Receive tile — which is the real
+// route a shop takes, and was the point of adding it.
+const OPEN = "'[data-rcenter]'";
 const key = (d) => "'#rcGrid [data-k=\"" + d + "\"]'";
 const line = (id) => "'[data-count=\"" + id + "\"]'";
 const digits = (s) => s.split('').map(key).join(',');
@@ -143,9 +146,16 @@ const countLine = (id, ds) => [line(id), digits(ds), "'#rcSave'", '300'].join(',
 const seq = (items) => 'window.__seq([' + items + '],window.__done);';
 
 const CASES = {
-  // The way in, on the counting list.
+  // THE WAY IN, AND IT IS VISIBLE BEFORE THE WORK IS. The launcher names the job
+  // whether or not anything is due; the count beside it is what is due now.
   'entry': { js: 'window.__done();',
-    expect: ['A delivery is waiting to be counted', 'RS-260902-004', '4 lines from the warehouse'] },
+    expect: ['Receive', 'Count a delivery in', '1 delivery waiting'] },
+
+  // And with nothing inbound the tile stays — greyed by its own words, not
+  // removed. A door you can only see when you are already through it is not a
+  // door, which is the whole reason this screen exists.
+  'entry-when-idle': { orderPatch: { goods_state: 'settled' }, js: 'window.__done();',
+    expect: ['Receive', 'Nothing on its way'], absent: ['delivery waiting'] },
 
   // Not arrived yet. One Dusk card and a read-only manifest — nothing countable
   // on the screen itself, and no confirm, because nothing has been counted.

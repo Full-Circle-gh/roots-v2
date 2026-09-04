@@ -500,6 +500,38 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .pk-hold[disabled]{border-color:var(--line);background:var(--raised);}
 .pk-hold[disabled] .lbl{color:var(--text2);}
 
+
+/* ── Stock home ─────────────────────────────────────────────────────────────
+   The door. Counting, picking and receiving are three different jobs that
+   happen to share one app, and until this existed the last two were reachable
+   only by a card that appeared when work was due — so on a quiet day the
+   features were invisible, nobody learned they existed, and nobody thought to
+   look on the morning it mattered.
+   The shape is the launcher the deleted /restock shell carried (a8064237, gone
+   2026-08-04): greeting, then a tile per tool with a live count. The palette is
+   not — that one was the retired lime brand. */
+.sh-wrap{display:flex;flex-direction:column;min-height:calc(100vh - var(--sa-top));padding:8px 16px calc(var(--sa-bot) + 20px);}
+.sh-greet{margin:4px 2px 18px;}
+.sh-greet .g1{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.25;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sh-greet .g2{font-size:13px;color:var(--text2);margin-top:4px;font-variant-numeric:tabular-nums;}
+.sh-grid{display:flex;flex-direction:column;gap:10px;}
+.sh-tile{display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+         background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;}
+.sh-tile:active{background:var(--raised);}
+.sh-ico{width:44px;height:44px;flex:none;border-radius:12px;background:var(--raised);
+        display:flex;align-items:center;justify-content:center;color:var(--text2);}
+.sh-ico svg{width:24px;height:24px;}
+.sh-text{flex:1;min-width:0;}
+.sh-name{font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-.01em;}
+.sh-desc{font-size:13px;color:var(--text2);line-height:1.4;margin-top:2px;}
+/* The count is the only thing on a tile that can hold full Ink, and it holds it
+   only when there is work. "Nothing due" stays Graphite — a quiet tile is a
+   finished one, and a zero dressed up as a badge is noise. */
+.sh-n{font-size:13px;font-weight:600;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums;}
+.sh-chev{flex:none;color:var(--text2);display:flex;}
+.sh-chev svg{width:20px;height:20px;}
+
 /* The entry into all of this, on the counting list. Cream, not Dusk: an arrival
    she can see through the door is not something Tacet did for her. */
 /* Cream in BOTH states, and the in-transit one too. The flow's whole Dusk
@@ -1653,11 +1685,24 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     return rcFetch('/api/restock?tab=active&to_role=store').then(function (j) {
       rc.on = true;
       rc.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) { return o.goods_state === 'in_transit' && rcForStore(o); });
-      if (state.view === 'list') render(); else rcRender();
+      homeLand();
+      if (state.view === 'home') homeRender();
+      else if (state.view === 'list') render();
+      else rcRender();
     }).catch(function (e) {
       if (e.message === 'norealm') { rc.list = []; return; }
       rc.err = e.message; if (state.view === 'receiving') rcRender();
     });
+  }
+
+  /* The Receive tile's destination. One inbound delivery is the Roots case and
+     opens straight into the count — a chooser with one row in it is a tap that
+     asks a question with one answer. Several offer the choice; none says so. */
+  function rcEnter() {
+    var list = rc.list || [];
+    if (list.length === 1) return rcOpen(list[0].id);
+    state.view = 'receiving'; rc.order = null; rc.step = 'list'; rc.err = ''; rc.held = null;
+    rcRender();
   }
 
   function rcOpen(id) {
@@ -1675,11 +1720,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function rcExit() {
-    state.view = 'list'; rc.order = null; rc.step = 'list'; rc.held = null; rc.err = '';
-    $('#pageHead').hidden = false; $('#band').hidden = false;
-    measureHead();
-    render();
+    rc.order = null; rc.step = 'list'; rc.held = null; rc.err = '';
     rcLoad();
+    homeBack();
   }
 
   /* ── Saving a count ───────────────────────────────────────────────────────
@@ -1836,6 +1879,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      the work; when they differ, the count and the gap are the only things left
      holding Ink. */
   var RC_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+  var RC_CHEV_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
   var RC_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
 
   function rcGapText(got, sent) {
@@ -2053,6 +2097,15 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         '<button class="rc-big" data-rcback>' + t('Done', '完成') + '</button></div></div></div>';
   }
 
+  function rcChooseHtml() {
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head"><button class="rc-back" data-rcback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+      '<div class="rc-h1">' + t('Receiving', '收货') + '</div>' +
+      '<div class="rc-sub">' + t(rc.list.length + ' deliveries are on their way', '共 ' + rc.list.length + ' 批在途配送') + '</div></div>' +
+      '<div style="padding:12px 16px 0">' + rcEntryHtml() + '</div>' +
+      '<div class="rc-body"></div></div>';
+  }
+
   function rcEmptyHtml() {
     return '<div class="rc-wrap">' + rcHeadHtml(t('Receiving', '收货'), '', false) +
       '<div class="rc-empty">' +
@@ -2071,7 +2124,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var html;
     if (rc.busy && !rc.order) html = '<div class="rc-wrap">' + rcHeadHtml(t('Receiving', '收货'), '', false) +
       '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div></div>';
-    else if (!rc.order) html = rcEmptyHtml();
+    else if (!rc.order) html = (rc.list && rc.list.length > 1) ? rcChooseHtml() : rcEmptyHtml();
     else if (rc.step === 'transit') html = rcTransitHtml();
     else if (rc.step === 'confirm') html = rcConfirmHtml();
     else if (rc.step === 'done') html = rcDoneHtml();
@@ -2242,7 +2295,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         return rcFetch('/api/restock/' + o.id).then(function (d) { return d.data; });
       })).then(function (full) {
         pk.list = full;
-        if (state.view === 'picking') pkRender(); else render();
+        homeLand();
+        if (state.view === 'home') homeRender();
+        else if (state.view === 'picking') pkRender();
+        else render();
       });
     }).catch(function (e) {
       if (e.message === 'norealm') { pk.list = []; return; }
@@ -2252,9 +2308,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   function pkEnter() { state.view = 'picking'; pk.step = 'list'; pk.err = ''; pkRender(); }
   function pkExit() {
-    state.view = 'list'; pk.step = 'list'; pk.err = '';
-    $('#pageHead').hidden = false; $('#band').hidden = false;
-    measureHead(); render(); pkLoad();
+    pk.step = 'list'; pk.err = '';
+    pkLoad();
+    homeBack();
   }
 
   /* Writing a picked line. One PUT per contributing request, because a combined
@@ -2671,6 +2727,128 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function pkWireEntry() {
     var b = document.querySelector('[data-pkopen]');
     if (b) b.onclick = pkEnter;
+  }
+
+
+  /* ══ THE STOCK HOME ════════════════════════════════════════════════════════
+     Three jobs share this app — counting your own shelf, picking a run for the
+     stores, and counting a delivery in. Until this screen existed the last two
+     were reachable only by a card that appeared at the top of the counting list
+     WHEN WORK WAS DUE, which meant that on a quiet day they did not exist: no
+     menu, no tab, nothing saying the feature was there. A door you can only see
+     when you are already through it is not a door.
+
+     WHO SEES IT. Only someone the restock API actually answers. /api/restock is
+     the kitchen `users` realm, and /stock is served to two realms, so a Mini App
+     Backend operator gets a 403 — for them there is one job, and one job does
+     not need a launcher. They land straight on the counting list exactly as
+     before. Nothing changes for shop or kitchen staff who only count.
+
+     THE TILES DO NOT HIDE WHEN EMPTY. That is the entire point: "Nothing to
+     pick" is information, and it is what teaches someone the screen exists
+     before the morning they need it. */
+
+  var HOME_ICO = {
+    count: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M3 11h18"/><path d="M9 7V4h6v3"/></svg>',
+    pick:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
+    recv:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v12H3V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
+  };
+
+  // The launcher is for someone with more than one job. rc.on is the probe's
+  // answer — true only once /api/restock has actually replied.
+  function homeAvailable() { return rc.on === true; }
+
+  function homeGreeting() {
+    var d = new Date();
+    var wd = t(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()],
+               ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][d.getDay()]);
+    var ds = t(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()] + ' ' + d.getDate(),
+               (d.getMonth() + 1) + '月' + d.getDate() + '日');
+    return { hi: state.userName ? t('Hi ' + state.userName, state.userName + '，你好') : t('Welcome', '欢迎'),
+             when: wd + ' · ' + ds };
+  }
+
+  function homeTileHtml(key, name, desc, count, attr) {
+    return '<button class="sh-tile" ' + attr + '>' +
+      '<span class="sh-ico">' + HOME_ICO[key] + '</span>' +
+      '<span class="sh-text"><span class="sh-name">' + esc(name) + '</span>' +
+      '<span class="sh-desc">' + esc(desc) + '</span>' +
+      (count ? '<span class="sh-n">' + esc(count) + '</span>' : '') + '</span>' +
+      '<span class="sh-chev">' + RC_CHEV_R + '</span></button>';
+  }
+
+  function homeHtml() {
+    var g = homeGreeting();
+    // Counts are the live figures the two loaders already hold, so a tile is
+    // never a guess and never a second query.
+    var picks = pkLines();
+    var toPull = picks.filter(function (L) { return !L.done; }).length;
+    var inbound = (rc.list || []).length;
+    var pickCount = !picks.length ? '' : t(toPull + ' of ' + picks.length + ' lines still to pull',
+                                           '还有 ' + toPull + '/' + picks.length + ' 项待拣');
+    var recvCount = !inbound ? '' : (inbound === 1
+      ? t('1 delivery waiting', '1 批待收货')
+      : t(inbound + ' deliveries waiting', inbound + ' 批待收货'));
+    return '<div class="sh-wrap">' +
+      '<div class="sh-greet"><div class="g1">' + esc(g.hi) + '</div>' +
+      '<div class="g2">' + esc(g.when) + '</div></div>' +
+      '<div class="sh-grid">' +
+        homeTileHtml('count', state.mode === 'add' ? t('Add stock', '加库存') : t('Count', '盘点'),
+          state.mode === 'add' ? t('Log what you made', '记录制作数量')
+                               : t('Set what is on your shelf', '设置本店库存数量'),
+          '', 'data-hcount') +
+        homeTileHtml('pick', t('Pick', '拣货'),
+          picks.length ? t('Pull a run for the stores', '为门店拣货')
+                       : t('Nothing to pick', '暂无待拣货'),
+          pickCount, 'data-pkopen') +
+        homeTileHtml('recv', t('Receive', '收货'),
+          inbound ? t('Count a delivery in', '点数入库')
+                  : t('Nothing on its way', '暂无在途配送'),
+          recvCount, 'data-rcenter') +
+      '</div><div style="flex:1"></div></div>';
+  }
+
+  function homeRender() {
+    if (state.view !== 'home') return;
+    // The head carries the account button and the store name, both of which
+    // belong on the launcher; the search band and its chips do not.
+    $('#pageHead').hidden = false; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = homeHtml();
+    var m = $('#main');
+    var c = m.querySelector('[data-hcount]');
+    if (c) c.onclick = function () { homeGoCount(); };
+    var p = m.querySelector('[data-pkopen]');
+    if (p) p.onclick = pkEnter;
+    var r = m.querySelector('[data-rcenter]');
+    if (r) r.onclick = rcEnter;
+  }
+
+  function homeGoCount() {
+    state.view = 'list';
+    $('#pageHead').hidden = false; $('#band').hidden = false;
+    measureHead();
+    render();
+  }
+
+  // Every section's back control returns here when the launcher exists, and
+  // leaves the app where it was when it does not.
+  function homeBack() {
+    if (!homeAvailable()) { homeGoCount(); return; }
+    state.view = 'home'; homeRender();
+  }
+
+  /* Where the app opens. Decided ONCE, after the restock probe has answered, so
+     the launcher cannot flash up and vanish — or worse, appear a second after
+     someone has already started counting. */
+  var _landed = false;
+  function homeLand() {
+    if (_landed || state.view === 'off' || state.view === 'nostore') return;
+    _landed = true;
+    if (!homeAvailable()) return;          // one job — stay on the list
+    state.view = 'home';
+    homeRender();
   }
 
   boot();
