@@ -370,7 +370,7 @@ section('6. The pinned block condenses, and publishes its height');
 // it publishes for the ingredient list's column header to park on. The summary
 // card rides inside the pinned block, so there is no miniature to show or hide
 // and no rect comparison to get wrong. These stubs hand it what it reads.
-function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight, sumHtml }) {
+function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight, sumHtml }, then = []) {
   // offsetHeight as well as the rect: the PINNED BLOCK's height is what the
   // ingredient list's column header parks on, and onRecScroll publishes it as a
   // custom property on the scroller. Stubbed to the bar's own bottom edge by
@@ -382,8 +382,11 @@ function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight
   // purpose — onRecScroll falls back to the head, so a DOM without it still
   // publishes a usable offset rather than throwing.
   const pin = pinHeight === undefined ? null : { offsetHeight: pinHeight };
+  // contains() as well as toggle(): the condense reads its OWN state back, so
+  // that it takes less scroll to stay condensed than it took to become it.
   const sc = { scrollTop, _vars: {}, _cls: new Set(),
-    classList: { toggle: (c, on) => { if (on) sc._cls.add(c); else sc._cls.delete(c); } },
+    classList: { toggle: (c, on) => { if (on) sc._cls.add(c); else sc._cls.delete(c); },
+      contains: (c) => sc._cls.has(c) },
     style: { setProperty: (k, v) => { sc._vars[k] = v; } } };
   const sum = { getBoundingClientRect: () => ({ bottom: sumBottom }),
     innerHTML: sumHtml === undefined ? '<div/>' : sumHtml };
@@ -393,8 +396,18 @@ function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight
     head, sc, console,
   };
   vm.createContext(sandbox);
+  // The at-rest height the handler remembers between calls lives outside the
+  // function, so the sandbox has to hold it the way the module does.
+  vm.runInContext('let _pinTall = 0;', sandbox);
   vm.runInContext(extractFunction(RECIPES_JS, 'function onRecScroll('), sandbox);
   vm.runInContext('onRecScroll()', sandbox);
+  // Later scroll positions on the SAME sandbox — a gesture, not a fresh page.
+  for (const step of then) {
+    sc.scrollTop = step.scrollTop;
+    if (pin && step.pinHeight !== undefined) pin.offsetHeight = step.pinHeight;
+    if (step.headBottom !== undefined) headBottom = step.headBottom;
+    vm.runInContext('onRecScroll()', sandbox);
+  }
   return sandbox;
 }
 
@@ -423,6 +436,49 @@ check('the block condenses only once something has gone under it', () => {
     .sc._cls.has('is-stuck'), 'a resting hand\'s few pixels do not condense it');
   assert.ok(scrollSandbox({ scrollTop: 40, sumBottom: 360, headBottom: 126, pinHeight: 132 })
     .sc._cls.has('is-stuck'), 'scrolled, it is condensed');
+});
+
+// THE FLICKER, and why it was one. The block is the first thing in the
+// document, so the ~130px it drops on condensing came out of the document: the
+// rows below leapt up mid-gesture and, on a short tab, the scroll range went
+// with them — the scroller clamped back to the top, the block expanded, the
+// wheel crossed the threshold again, and the two states alternated for as long
+// as the wheel moved. The give-back is what stops it, and it is MEASURED: a
+// constant would be wrong for every recipe whose card carries a warning.
+check('the condense hands back exactly what it takes, so the rows below hold still', () => {
+  const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 },
+    [{ scrollTop: 40, pinHeight: 132 }]);
+  assert.strictEqual(s.sc._vars['--rcp-pinshrink'], '136px', '268 - 132 is what the document lost');
+  assert.strictEqual(s.sc._vars['--rcp-headh'], '132px',
+    'the column header parks on the bar the operator SEES, not on the space it holds');
+});
+check('back at the top, nothing is reserved for a state the block is not in', () => {
+  const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 },
+    [{ scrollTop: 40, pinHeight: 132 }, { scrollTop: 0, pinHeight: 268 }]);
+  assert.strictEqual(s.sc._vars['--rcp-pinshrink'], '0px');
+  assert.ok(!s.sc._cls.has('is-stuck'));
+});
+// Mid-transition the block is between its two heights, and the give-back is
+// measured on the same event — so it tracks the shrink instead of jumping
+// ahead of it and shoving the rows the other way for 180ms.
+check('the give-back follows the height mid-transition, not the end of it', () => {
+  const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 },
+    [{ scrollTop: 40, pinHeight: 200 }]);
+  assert.strictEqual(s.sc._vars['--rcp-pinshrink'], '68px');
+});
+// One threshold with a resting hand on it is a switch asked to be in two states
+// at once. It takes 8px to condense and only 4 to stay condensed.
+check('a hand resting just under the threshold does not flap the block', () => {
+  const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 },
+    [{ scrollTop: 40, pinHeight: 132 }, { scrollTop: 6, pinHeight: 132 }]);
+  assert.ok(s.sc._cls.has('is-stuck'), 'condensed, six pixels do not expand it again');
+});
+// The give-back is margin BELOW the block, never height added back to it: a
+// height fed from the height it is measured from is the loop this replaced.
+check('the space is held in the stylesheet, on margin, from the measured value', () => {
+  assert.match(ADMIN_CSS,
+    /#tab-recipes-record \.rcp-pin \{ margin-bottom: var\(--rcp-pinshrink, 0px\); \}/);
+  assert.doesNotMatch(ADMIN_CSS, /rcp-pin[^}]*\b(height|min-height):\s*var\(--rcp-pinshrink/);
 });
 
 check('at the top of the page there is no hairline under the bar', () => {
