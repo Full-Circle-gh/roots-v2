@@ -12,7 +12,7 @@ const inventory = require('../lib/inventory');
 // is a seam wrapper (lib/db-seam.js) over the SAME connection as `db`, so this
 // is a behavioural no-op today; it closes the cross-tenant split before data
 // isolation is switched on.
-const { tdb } = require('../lib/tenant-db');
+const { tdb, currentTenantId } = require('../lib/tenant-db');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 // Lazily, and deliberately: routes/retail.js requires this file's siblings, so
 // a top-level require here would close a cycle at load time.
@@ -98,10 +98,73 @@ function _broadcastRestock(orderId, kind, actorUserId) {
     _events.broadcast('restock', payload, { perms: [targetPerm], excludeUserId: actorUserId });
   } catch (e) { console.warn('[broadcastRestock]', e.message); }
 }
-function _fireRestockPush(orderId, kind) {
+/* WHO IS TOLD, AND ABOUT WHAT — the Tacet half of it, which did not exist.
+ *
+ * THE DEFECT. Every push on this route went through sendPushByPermission, which
+ * reads `permissions` rows on the kitchen `users` table. That was the only realm
+ * these endpoints had when the notifications were written. The screens moved to
+ * Tacet (#261): the people who now raise a request, pick a run, dispatch it,
+ * count it in and work the kitchen queue are `tenant_users` with CAPABILITIES,
+ * subscribed in a different table (tenant_operator_push_subs). Not one of them
+ * could be reached by a permission lookup in the other realm, so the kitchen was
+ * never told a request had arrived, and neither end of a transfer was ever told
+ * the goods were ready, gone, or counted. The pushes fired; nobody held the
+ * permission they were addressed to.
+ *
+ * So the kitchen realm keeps exactly what it had — public/kitchen.html is still
+ * a client of these endpoints — and the same event now also fans out by
+ * capability to the tenant's operators.
+ *
+ * THE AUDIENCE IS THE SIDE THAT MUST ACT NEXT, at the location the work is at.
+ * from_store_id is where the goods come FROM and to_store_id where they go, in
+ * every shape — a store asking the warehouse, the warehouse pushing a store, one
+ * shop asking another (#264). So the map is keyed on the order's own direction
+ * and reads its ends off the row rather than off who happened to press the
+ * button. A kitchen request has no locations at all and is scoped by capability
+ * alone.
+ */
+const PUSH_AUDIENCE = {
+  'store->warehouse': {
+    // Somebody asked. The location that HAS the stock picks it.
+    sent:      { caps: 'restock:pick',    at: 'from', go: 'pick' },
+    // Picked and dispatched — it is on its way to whoever asked.
+    prepared:  { caps: 'restock:receive', at: 'to',   go: 'receive' },
+    delivered: { caps: 'restock:pick',    at: 'from', go: '' },
+    // Counted in at the far end. This is the close-out the sender waits for, and
+    // it fired no push at all before — PUT /:id/receive told nobody.
+    received:  { caps: 'restock:pick',    at: 'from', go: '' },
+  },
+  'warehouse->store': {
+    // The warehouse pushes stock out: it raised this itself, so 'sent' is news
+    // for the destination, not a job for the picker who just created it.
+    sent:      { caps: 'restock:receive', at: 'to',   go: '' },
+    prepared:  { caps: 'restock:receive', at: 'to',   go: 'receive' },
+    delivered: { caps: 'restock:pick',    at: 'from', go: '' },
+    received:  { caps: 'restock:pick',    at: 'from', go: '' },
+  },
+  'warehouse->kitchen': {
+    // Ask the kitchen. The people who work the queue are the ones who make it.
+    sent:      { caps: 'restock:fulfil',  at: null, go: 'queue' },
+    // And 'prepared' IS the closure here — the food is made, and the person who
+    // asked for it is the one waiting to hear so.
+    prepared:  { caps: ['restock:request', 'restock:pick'], at: null, go: '' },
+  },
+};
+
+// The actor, as the id the operator subscription store is keyed on. A Tacet
+// session's req.user IS the tenant_users row (requireRetailAdmin shims it), and
+// a kitchen session's is a different table entirely — so only one of the two
+// realms can be excluded from an operator fan-out, and the other must not be
+// excluded by id collision.
+function _actorOperatorId(req) {
+  return req && req.restockRealm === 'tacet' && req.user ? req.user.id : null;
+}
+
+function _fireRestockPush(orderId, kind, actorTenantUserId) {
   if (!_push || !_push.ENABLED) return;
   try {
     const o = tdb().prepare(`SELECT id, rs_number, store_name, store_cn, status,
+      from_store_id, to_store_id,
       COALESCE(from_role,'store')   AS from_role,
       COALESCE(to_role,'warehouse') AS to_role
       FROM restock_orders WHERE id = ?`).get(orderId);
@@ -122,6 +185,19 @@ function _fireRestockPush(orderId, kind) {
       ? ''
       : `${count} item${count === 1 ? '' : 's'} · ${Math.round(totalQty)} units${top ? ': ' + top + (count > 3 ? '…' : '') : ''}`;
     const compose = (lead) => [lead, summary].filter(Boolean).join(' · ');
+    // THE ENDS BY NAME. store_name is free text a caller may not have set at all,
+    // and on a store→store ask it names neither end usefully. The ids are the
+    // order's own, so where they are set the notification says which shelf.
+    const nameOf = (id) => {
+      if (!id) return '';
+      try {
+        const r = tdb().prepare('SELECT name_en, name_cn FROM retail_stores WHERE id = ?').get(id);
+        return r ? (r.name_en || r.name_cn || '') : '';
+      } catch (e) { return ''; }
+    };
+    const fromName = nameOf(o.from_store_id) || (o.from_role === 'warehouse' ? 'the warehouse' : store);
+    const toName   = nameOf(o.to_store_id)   || (o.to_role === 'kitchen' ? 'the kitchen' : store);
+
     let title, body, perm;
     // Each event targets the side that NEEDS to act — store sends a new
     // request → warehouse_inbox needs to know; warehouse marks prepared
@@ -132,23 +208,58 @@ function _fireRestockPush(orderId, kind) {
     const isToKitchen = o.to_role === 'kitchen';
     if (kind === 'sent') {
       title = isToKitchen ? `🔔 New kitchen request · 厨房新请求 ${label}` : `🔔 New restock · 新补货请求 ${label}`;
-      body  = compose(store ? `From ${store}` : (isToKitchen ? 'From warehouse' : 'From store'));
+      // WHICH END IS WORTH NAMING IS THE END THE READER IS NOT AT. A picker
+      // being asked for a run needs to know who it is for; a store being told
+      // stock is coming needs to know where from. store_name is free text a
+      // caller may never have set — on a store→store ask it names neither end —
+      // so the order's own locations answer first and it is the fallback.
+      const pushedOut = o.from_role === 'warehouse' && o.to_role === 'store';
+      body  = compose(isToKitchen ? (store ? `From ${store}` : 'From warehouse')
+                    : pushedOut   ? (fromName ? `From ${fromName}` : 'From warehouse')
+                    : toName      ? `For ${toName}`
+                    : (store ? `From ${store}` : 'From store'));
       perm  = isToKitchen ? 'kitchen_inbox' : 'warehouse_inbox';
     } else if (kind === 'prepared') {
-      title = `📦 ${label} ready to receive · 待收货`;
-      body  = compose(store ? `Ready for ${store}` : 'Ready');
+      title = isToKitchen
+        ? `👩‍🍳 ${label} is made · 制作完成`
+        : `📦 ${label} ready to receive · 待收货`;
+      body  = compose(isToKitchen ? 'The kitchen has finished it' : (toName ? `On its way to ${toName}` : 'Ready'));
       perm  = isToKitchen ? 'warehouse_inbox' : 'restock';
     } else if (kind === 'delivered') {
       title = `✓ ${label} delivered · 已送达`;
       body  = compose(isToKitchen ? 'Confirmed by warehouse' : (store ? `Confirmed by ${store}` : 'Confirmed by store'));
       perm  = isToKitchen ? 'kitchen_inbox' : 'warehouse_inbox';
+    } else if (kind === 'received') {
+      // NO KITCHEN-REALM SEND FOR THIS ONE. Counting a delivery in is Tacet's
+      // (tacetOnly on PUT /:id/receive), and the kitchen app has no screen that
+      // shows it — a push into that realm would open on nothing.
+      title = `✓ ${label} counted in · 已点收`;
+      body  = compose(toName ? `Counted at ${toName}` : 'Counted in');
+      perm  = null;
     } else { return; }
     // Opens the kitchen SPA, which carries the restock module. This pointed at
     // '/restock?order=N' until 2026-08-04; that page is gone, so the old URL
     // would 404 on a staff phone the moment the notification was tapped.
-    _push.sendPushByPermission(perm, {
-      title, body, url: '/', tag: 'rs-' + orderId + '-' + kind,
-    });
+    if (perm) {
+      _push.sendPushByPermission(perm, {
+        title, body, url: '/', tag: 'rs-' + orderId + '-' + kind,
+      });
+    }
+
+    // ── The same event, to the operators who actually run this now ──────────
+    const audience = (PUSH_AUDIENCE[`${o.from_role}->${o.to_role}`] || {})[kind];
+    if (!audience || !_push.sendPushToOperatorsWithCaps) return;
+    const storeId = audience.at === 'from' ? o.from_store_id
+                  : audience.at === 'to'   ? o.to_store_id
+                  : null;
+    // A door onto the screen the work is on, not onto the app's front page.
+    // /stock reads ?go= itself and refuses one the operator was not answered
+    // for, so a link can never grant access to a screen a capability does not.
+    const url = audience.go ? '/stock?go=' + audience.go : '/stock';
+    Promise.resolve(_push.sendPushToOperatorsWithCaps(currentTenantId(), audience.caps, {
+      title, body, url, tag: 'rs-' + orderId + '-' + kind,
+    }, { storeId, excludeTenantUserId: actorTenantUserId || null }))
+      .catch(e => console.warn('[fireRestockPush operators]', e.message));
   } catch (e) { console.warn('[fireRestockPush]', e.message); }
 }
 
@@ -932,7 +1043,7 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
     const id = tx();
     logActivity(req.user.id, req.user.username, 'create', 'restock', id, { rs_number, status: initialStatus }, req.ip);
     if (initialStatus === 'sent') {
-      _fireRestockPush(id, 'sent');
+      _fireRestockPush(id, 'sent', _actorOperatorId(req));
       _broadcastRestock(id, 'sent', req.user.id);
     }
     res.json({ success: true, id, rs_number });
@@ -1028,7 +1139,7 @@ router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, 
   // Push fan-out — only for the cross-side transitions the other party
   // actually needs to act on. `received` is internal warehouse state.
   if (status === 'sent' || status === 'prepared' || status === 'delivered') {
-    _fireRestockPush(order.id, status);
+    _fireRestockPush(order.id, status, _actorOperatorId(req));
     _broadcastRestock(order.id, status, req.user.id);
   }
   // The status change itself succeeded. When the stock movement did not, say so
@@ -1114,6 +1225,10 @@ router.post('/api/restock/:id/retry-dispatch', requireRestockAccess, tacetOnly, 
     return res.status(409).json({ error: 'retry_failed', stock_moved: false, message: result.error });
   }
 
+  // THE GOODS LEFT ON THIS CALL, so the far end is told on this call. The first
+  // attempt rolled back and fired nothing; without this the retry that actually
+  // dispatched was the one transition nobody downstream ever heard about.
+  _fireRestockPush(order.id, 'prepared', _actorOperatorId(req));
   _broadcastRestock(order.id, 'prepared', req.user.id);
   res.json({
     success: true, retried: true, stock_moved: true, moved: result.moved || 0,
@@ -1241,6 +1356,10 @@ router.put('/api/restock/:id/receive', requireRestockAccess, tacetOnly, (req, re
   // ends that act on it, and front-end work is out of scope this round. Sending
   // 'delivered' reaches the warehouse_inbox audience, which is exactly who wants
   // to know a transfer was counted. Rename it when the receipt screens ship.
+  // THE PUSH IS ITS OWN KIND, and it is not the broadcast's compromise above:
+  // the sender is waiting to hear the boxes were counted, and until now this
+  // endpoint sent them nothing at all.
+  _fireRestockPush(order.id, 'received', _actorOperatorId(req));
   _broadcastRestock(order.id, 'delivered', req.user.id);
   res.json({ success: true, settled: true, counts_written: written, moved: receipt.moved || 0 });
 });

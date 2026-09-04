@@ -666,6 +666,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       <button data-theme="dark" id="thDark"></button>
     </div>
   </div>
+  <!-- NOTIFICATIONS, AND THIS IS THE ONLY PLACE SOME OPERATORS CAN REACH THEM.
+       The switch lived in Tacet Mobile alone (Profile → Notifications), and the
+       two roles whose whole product is THIS app — the kitchen, and the shelf
+       clerk — are stock-app-only: server.js bounces them out of /m, so they
+       could not enrol a device at all. Every push addressed to them landed on
+       nobody, which is one of the two reasons "ask the kitchen" never rang. -->
+  <div class="srow" id="pushRow" hidden>
+    <span class="lbl" id="acctPushLbl"></span>
+    <div class="seg" id="pushSeg">
+      <button data-push="on" id="pushOn"></button>
+      <button data-push="off" id="pushOff"></button>
+    </div>
+    <span class="lbl" id="pushNote" style="flex:none;font-size:13px;color:var(--text2)" hidden></span>
+  </div>
   <div class="sheet-cap" id="acctSync"></div>
   <div class="sheet-foot">
     <button class="btn btn-danger" id="signOutBtn"></button>
@@ -821,6 +835,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     sheet: null,          // 'store' | 'account' | 'keypad' — the poller stands down while one is open
     view: 'list',         // list | off | nostore | error
     errMsg: '',
+    // 'on' | 'off' | 'blocked' | 'needs-install' | 'unsupported' — the one word
+    // three disagreeing sources reduce to. See NOTIFICATIONS below.
+    push: 'unsupported', pushBusy: false,
   };
   var kp = { id: null, entry: null };
 
@@ -943,6 +960,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     $('#backHomeLbl').textContent = hl ? t(hl.en || hl.cn, hl.cn || hl.en) : t('Back', '返回');
     $('#acctLangLbl').textContent = t('Language', '语言');
     $('#acctThemeLbl').textContent = t('Appearance', '外观');
+    $('#acctPushLbl').textContent = t('Notifications', '通知');
+    $('#pushOn').textContent = t('On', '开');
+    $('#pushOff').textContent = t('Off', '关');
+    paintPush();
     $('#thLight').textContent = t('Light', '浅色');
     $('#thDark').textContent = t('Dark', '深色');
     $('#signOutBtn').textContent = t('Sign out', '退出登录');
@@ -993,6 +1014,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       var btn = e.target.closest('[data-theme]'); if (!btn) return;
       setTheme(btn.getAttribute('data-theme'));
     });
+    $('#pushSeg').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-push]'); if (!btn) return;
+      pushToggle(btn.getAttribute('data-push') === 'on');
+    });
+    // Read, never asked: this settles the switch's position from what the
+    // browser and the server already know, and raises no permission sheet.
+    pushRefresh();
     $('#signOutBtn').onclick = function () { $('#signOutBtn').hidden = true; $('#signOutStep2').hidden = false; };
     $('#signOutNo').onclick = function () { $('#signOutStep2').hidden = true; $('#signOutBtn').hidden = false; };
     $('#signOutYes').onclick = logout;
@@ -1132,6 +1160,169 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var m = $('#meta-theme-color'); if (m) m.setAttribute('content', next === 'light' ? '#FBF9F4' : '#111A2B');
     paintSeg();
   }
+  /* ══ NOTIFICATIONS ═════════════════════════════════════════════════════════
+     A pick waiting, a delivery on its way, a request the kitchen has to make —
+     the server addresses all three to the operators who hold the capability
+     (routes/restock.js PUSH_AUDIENCE). It can only reach a device that ENROLLED,
+     and enrolment lived in one place: Tacet Mobile, Profile → Notifications.
+     The kitchen role and the shelf clerk are stock-app-only — server.js refuses
+     them /m outright — so the two roles this app exists for were the two that
+     could never switch alerts on. They were not muted; they were unreachable.
+
+     TWO REALMS, ONE SWITCH. /stock is served to Tacet operators (tenant_users,
+     /api/backend/push/*) and to the kitchen realm (users, /api/push/*), and a
+     subscription is keyed to whichever login enrolled it. The realm is not
+     guessed from the screen: the backend pref endpoint 401s a session that is
+     not one, and that answer chooses the endpoint set for everything after.
+
+     NOTHING HAPPENS UNPROMPTED. No permission sheet on boot — browsers punish
+     that, and an operator who never asked for alerts should not meet one. The
+     switch is the ask. */
+  var PUSH_OK = ('serviceWorker' in navigator) && ('PushManager' in window)
+             && ('Notification' in window) && window.isSecureContext;
+  // iOS gives Web Push to INSTALLED apps only — no PushManager in Safari until
+  // the app is on the home screen (16.4+). Worth its own words: the operator is
+  // three taps from being able to, not permanently locked out.
+  var PUSH_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+              || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  var PUSH_STANDALONE = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+                     || window.navigator.standalone === true;
+  var PUSH_API = null;              // resolved once: the realm's endpoint set
+  var BACKEND_PUSH = { vapid: '/api/backend/push/vapid', sub: '/api/backend/push/subscribe',
+                       unsub: '/api/backend/push/unsubscribe', pref: '/api/backend/push/pref' };
+  var KITCHEN_PUSH = { vapid: '/api/push/vapid-key', sub: '/api/push/subscribe',
+                       unsub: '/api/push/unsubscribe', pref: '/api/push/pref' };
+
+  // Its own fetch, for the reason the context one has its own: this runs at boot
+  // and a background call must never throw a signed-in phone at a login page.
+  function pushFetch(path, body) {
+    var o = { credentials: 'same-origin' };
+    if (body !== undefined) {
+      o.method = 'POST'; o.headers = { 'Content-Type': 'application/json' }; o.body = JSON.stringify(body);
+    }
+    return fetch(path, o).then(function (r) {
+      if (!r.ok) return null;
+      return r.json().catch(function () { return {}; });
+    }).catch(function () { return null; });
+  }
+  function pushReg() {
+    if (!PUSH_OK) return Promise.resolve(null);
+    return navigator.serviceWorker.getRegistration()
+      .then(function (r) {
+        return r ? navigator.serviceWorker.ready
+                 : navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                     .then(function () { return navigator.serviceWorker.ready; });
+      }).catch(function () { return null; });
+  }
+  function pushSub() {
+    return pushReg().then(function (r) {
+      return (r && r.pushManager) ? r.pushManager.getSubscription() : null;
+    }).catch(function () { return null; });
+  }
+  function b64ToU8(b64) {
+    var pad = new Array((4 - b64.length % 4) % 4 + 1).join('=');
+    var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    var arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  // The realm probe. A 200 from the operator pref endpoint means this session is
+  // a Tacet operator; a 401 means it is the kitchen login, which has its own set.
+  function pushRealm() {
+    if (PUSH_API) return Promise.resolve(PUSH_API);
+    return fetch(BACKEND_PUSH.pref, { credentials: 'same-origin' })
+      .then(function (r) { PUSH_API = r.ok ? BACKEND_PUSH : KITCHEN_PUSH; return PUSH_API; })
+      .catch(function () { PUSH_API = KITCHEN_PUSH; return PUSH_API; });
+  }
+  /* Three sources that can disagree, reduced to one word — and the STORED intent
+     wins. A live subscription reads back as "on" for an operator who switched it
+     off on another page, because one service worker at scope '/' serves every
+     login on this device. */
+  function pushRefresh() {
+    if (!PUSH_OK) { state.push = PUSH_IOS && !PUSH_STANDALONE ? 'needs-install' : 'unsupported'; paintPush(); return Promise.resolve(); }
+    if (Notification.permission === 'denied') { state.push = 'blocked'; paintPush(); return Promise.resolve(); }
+    return pushRealm().then(function (api) {
+      return Promise.all([pushSub(), pushFetch(api.pref)]);
+    }).then(function (res) {
+      var sub = res[0], pref = res[1];
+      var wanted = !pref || pref.enabled !== false;
+      state.push = (wanted && sub && Notification.permission === 'granted') ? 'on' : 'off';
+      // Permission granted, alerts wanted, no live subscription: endpoints
+      // rotate and browsers drop them. Re-enrol silently — asking again for an
+      // answer already given is asking twice.
+      if (state.push === 'off' && wanted && Notification.permission === 'granted' && !sub) {
+        return pushEnrol(true).then(function () { state.push = 'on'; paintPush(); },
+                                    function () { paintPush(); });
+      }
+      paintPush();
+    }).catch(function () {});
+  }
+  // `silent` is that re-enrolment: it must never raise a permission sheet.
+  function pushEnrol(silent) {
+    return pushRealm().then(function (api) {
+      return pushFetch(api.vapid).then(function (v) {
+        if (!v || !v.enabled || !v.publicKey) return Promise.reject(new Error('disabled'));
+        return (Notification.permission === 'granted'
+                  ? Promise.resolve('granted')
+                  : (silent ? Promise.reject(new Error('denied')) : Notification.requestPermission()))
+          .then(function (perm) {
+            if (perm !== 'granted') return Promise.reject(new Error('denied'));
+            return pushReg().then(function (reg) {
+              if (!reg || !reg.pushManager) return Promise.reject(new Error('nosw'));
+              return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(v.publicKey) });
+            });
+          })
+          .then(function (sub) {
+            var j = sub.toJSON();
+            return pushFetch(api.sub, { endpoint: j.endpoint, keys: j.keys }).then(function (r) {
+              if (!r) return Promise.reject(new Error('save'));
+              // An explicit yes lifts the stored mute, including the one taken
+              // out alongside it on this same device.
+              return pushFetch(api.pref, { enabled: true, endpoint: j.endpoint });
+            });
+          });
+      });
+    });
+  }
+  function pushDrop() {
+    // The intent is recorded FIRST and independently of the browser: if the
+    // subscription has gone missing the switch must still mean off.
+    return pushRealm().then(function (api) {
+      return pushSub().then(function (sub) {
+        var ep = sub ? sub.endpoint : null;
+        return pushFetch(api.pref, { enabled: false, endpoint: ep }).then(function () {
+          if (!sub) return null;
+          return sub.unsubscribe().catch(function () {})
+            .then(function () { return pushFetch(api.unsub, { endpoint: ep }); });
+        });
+      });
+    });
+  }
+  function pushToggle(next) {
+    if (state.pushBusy) return;
+    if (next === (state.push === 'on')) return;
+    state.pushBusy = true; paintPush();
+    var work = next ? pushEnrol(false) : pushDrop();
+    work.then(function () { state.push = next ? 'on' : 'off'; },
+              function () { if (PUSH_OK && Notification.permission === 'denied') state.push = 'blocked'; })
+        .then(function () { state.pushBusy = false; pushRefresh(); });
+  }
+  function paintPush() {
+    var row = $('#pushRow'); if (!row) return;
+    row.hidden = false;
+    var usable = state.push === 'on' || state.push === 'off';
+    $('#pushSeg').hidden = !usable;
+    var note = $('#pushNote');
+    note.hidden = usable;
+    note.textContent = state.push === 'needs-install' ? t('Add to home screen', '请先添加到主屏幕')
+                     : state.push === 'blocked'       ? t('Blocked in the browser', '浏览器已禁止')
+                     : t('Unavailable', '不可用');
+    Array.prototype.forEach.call(document.querySelectorAll('#pushSeg button'), function (b) {
+      b.classList.toggle('on', (b.getAttribute('data-push') === 'on') === (state.push === 'on'));
+      if (state.pushBusy) b.setAttribute('disabled', ''); else b.removeAttribute('disabled');
+    });
+  }
+
   function paintSeg() {
     var th = document.documentElement.getAttribute('data-theme');
     Array.prototype.forEach.call(document.querySelectorAll('#langSeg button'), function (b) {
@@ -1140,6 +1331,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     Array.prototype.forEach.call(document.querySelectorAll('#themeSeg button'), function (b) {
       b.classList.toggle('on', b.getAttribute('data-theme') === th);
     });
+    paintPush();
   }
 
   function selectStore(id) {
@@ -2998,14 +3190,22 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      offers the same two tiles makes each of those rows a signpost rather than a
      door, and makes the tile a second copy of a row they just used.
 
-       ?go=queue  the kitchen's queue
-       ?go=add    the counting list, which is where the app opens anyway
+       ?go=queue    the kitchen's queue
+       ?go=add      the counting list, which is where the app opens anyway
+       ?go=pick     the run waiting to be pulled
+       ?go=receive  the delivery waiting to be counted in
+
+     THE LAST TWO ARE FOR THE NOTIFICATIONS, and they are the same argument one
+     step on. A push that says "RS-260904-002 ready to receive" and opens a menu
+     has told somebody about a job and then asked them to go and find it; the
+     row in /m earns a launcher because a person browsing tools is choosing, and
+     a person answering an alert is not.
 
      Honoured only if the screen actually answered: a link cannot grant access,
      and a deep link that lands on a refusal is worse than no link. */
   function homeWanted() {
     try {
-      var m = /(?:^|[?&])go=(queue|add)(?:&|$)/.exec(location.search || '');
+      var m = /(?:^|[?&])go=(queue|add|pick|receive)(?:&|$)/.exec(location.search || '');
       return m ? m[1] : '';
     } catch (e) { return ''; }
   }
@@ -3023,6 +3223,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (want === 'add') { _deep = true; return; }
     if (!homeAvailable()) return;          // one job — stay on the list
     if (want === 'queue' && kq.on === true) { _deep = true; kqEnter(); return; }
+    // Both transfer screens sit behind the one probe — rcLoad and pkLoad set the
+    // same rc.on — so a refusal on that realm drops both links, together.
+    if (want === 'pick' && rc.on === true) { _deep = true; pkEnter(); return; }
+    if (want === 'receive' && rc.on === true) { _deep = true; rcEnter(); return; }
     state.view = 'home';
     homeRender();
   }

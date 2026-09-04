@@ -196,10 +196,18 @@ await it('an ordinary click still opens the order, and mutes nothing', async () 
   assert.strictEqual(rec.unsubscribed, 0);
 });
 
-await it('the shell cache is bumped, or no browser ever loads this worker', async () => {
-  assert.match(SRC, /const CACHE = 'roots-v2-shell-v(\d+)/);
-  const v = Number(SRC.match(/roots-v2-shell-v(\d+)/)[1]);
-  assert.ok(v >= 735, 'CACHE is still v' + v + ' — the activate handler evicts by name');
+// THE CACHE NAME IS STAMPED AT DEPLOY, NOT HAND-INCREMENTED. This asserted a
+// `vNNN` number until deploy-apply.sh took the job over — the hand-edited number
+// was forgotten, collided across parallel branches six times in one day, and
+// never reached a browser because the installer overwrote it anyway. So the rule
+// this keeps is the one that still has to hold: the name in the repo is the
+// sentinel the stamp replaces, and the activate handler evicts by name — a
+// worker that kept a constant name would serve the previous build's assets on
+// the first load after every deploy.
+await it('the shell cache name is the deploy sentinel, and eviction is by name', async () => {
+  assert.match(SRC, /const CACHE = 'roots-v2-shell-(?:unstamped|[\w.-]+)'/,
+    'CACHE is not the sentinel deploy-apply.sh rewrites');
+  assert.match(SRC, /caches\.delete\(/, 'the activate handler no longer evicts old caches');
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

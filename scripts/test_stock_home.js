@@ -395,6 +395,23 @@ const CASES = {
     expect: ['Quick stock', 'Hummus Asli'],
     check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
 
+  /* ── The doors a notification opens ───────────────────────────────────────
+     A push that says "RS-260904-002 ready to receive" and lands on a menu has
+     told somebody about a job and then asked them to go and find it. Both
+     screens sit behind the one transfer probe, so a refusal drops both links. */
+  'go-pick-opens-the-run': { stores: TWO, search: '?go=pick', js: 'window.__done();',
+    expect: ['Pick list', 'Frozen dumplings 500g'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  'go-receive-opens-the-delivery': { stores: TWO, search: '?go=receive', js: 'window.__done();',
+    expect: ['Receiving'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  // A LINK CANNOT GRANT ACCESS — the same rule ?go=queue already keeps.
+  'go-pick-is-ignored-when-the-run-was-refused': { deny: true, search: '?go=pick',
+    js: 'window.__done();',
+    expect: ['Quick stock', 'Hummus Asli'], absent: ['Pick list'] },
+
   // And a bare /stock — the Transfers row in that same list — still opens on the
   // launcher, which is the only screen Pick, Receive and Ask the kitchen have.
   // It just does not offer counting a second time.

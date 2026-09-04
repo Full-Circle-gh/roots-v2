@@ -103,9 +103,21 @@ function harness() {
 function captureNotifications(h, { pushEnabled = true } = {}) {
   const sse  = [];
   const push = [];
+  // The operator fan-out is its own array because it is its own AUDIENCE: `push`
+  // is the kitchen `users` realm (permission rows), `operator` is tenant_users
+  // (capabilities). A suite that asserted only the first would have gone green
+  // through the entire period when no Tacet operator was told anything.
+  const operator = [];
   h.stub('routes/events.js', { broadcast: (chan, payload, opts) => sse.push({ chan, payload, opts }) });
-  h.stub('routes/push.js',   { ENABLED: pushEnabled, sendPushByPermission: (perm, msg) => push.push({ perm, msg }) });
-  return { sse, push };
+  h.stub('routes/push.js',   {
+    ENABLED: pushEnabled,
+    sendPushByPermission: (perm, msg) => push.push({ perm, msg }),
+    sendPushToOperatorsWithCaps: (tenantId, caps, msg, opts) => {
+      operator.push({ tenantId, caps, msg, opts: opts || {} });
+      return Promise.resolve({ sent: 0 });
+    },
+  });
+  return { sse, push, operator };
 }
 
 // ── auth ────────────────────────────────────────────────────────────────────

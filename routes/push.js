@@ -310,6 +310,63 @@ async function sendPushToOperator(tenantUserId, payload) {
   const subs = db.prepare('SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id FROM tenant_operator_push_subs WHERE tenant_user_id = ?').all(tenantUserId);
   return _sendMany(subs, payload, 'operator');
 }
+// FAN OUT TO THE OPERATORS WHO CAN ACT ON THIS, AND ONLY THEM.
+//
+// sendPushToTenantOperators (below) tells EVERYONE in the tenant, which is right
+// for a new customer order and wrong for everything with an audience. The other
+// sender, sendPushByPermission, reads `permissions` on the kitchen `users`
+// table — a different realm entirely, and the one the transfer notifications
+// were written against before the screens moved to Tacet. A tenant operator is
+// a tenant_users row with CAPABILITIES, so neither sender could reach the
+// warehouse clerk who has to pick a run or the kitchen hand who has to make what
+// was asked for. They got nothing, on every event.
+//
+//   needCaps : capability key or list — an operator holding ANY of them is told.
+//   opts.storeId : the location the work is at. An operator pinned to a set of
+//                  stores (scope_all = 0) is not told about work at a store they
+//                  cannot act on; an unscoped operator hears about all of it.
+//   opts.excludeTenantUserId : the person who just pressed the button. They know.
+//
+// Caps are resolved per operator through lib/operator-caps — the same read the
+// request middleware does — and memoised for the call, so a fan-out costs one
+// resolution per distinct operator rather than one per device.
+async function sendPushToOperatorsWithCaps(tenantId, needCaps, payload, opts = {}) {
+  if (!ENABLED || !tenantId) return { sent: 0, pruned: 0, skipped: 'disabled' };
+  const need = (Array.isArray(needCaps) ? needCaps : [needCaps]).filter(Boolean);
+  if (!need.length) return { sent: 0, pruned: 0, total: 0 };
+  let subs = [];
+  try {
+    subs = db.prepare(`SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id
+                         FROM tenant_operator_push_subs WHERE tenant_id = ?`).all(tenantId);
+  } catch (e) { return { sent: 0, pruned: 0, error: e.message }; }
+  if (!subs.length) return { sent: 0, pruned: 0, total: 0 };
+
+  let tenant = null;
+  try { tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId); } catch { tenant = null; }
+  const exclude = opts.excludeTenantUserId == null ? null : Number(opts.excludeTenantUserId);
+  const storeId = opts.storeId == null ? null : Number(opts.storeId);
+  const seen = new Map();
+  const eligible = (tenantUserId) => {
+    if (seen.has(tenantUserId)) return seen.get(tenantUserId);
+    let ok = false;
+    try {
+      const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(tenantUserId);
+      if (u) {
+        const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
+        const held = new Set(r.caps || []);
+        ok = need.some(k => held.has(k));
+        // null scopeStores = unscoped = every location.
+        if (ok && storeId && Array.isArray(r.scopeStores) && r.scopeStores.indexOf(storeId) === -1) ok = false;
+      }
+    } catch (e) { ok = false; }
+    seen.set(tenantUserId, ok);
+    return ok;
+  };
+  const live = subs.filter(s => s.subject_id != null && s.subject_id !== exclude && eligible(s.subject_id));
+  if (!live.length) return { sent: 0, pruned: 0, total: subs.length };
+  return _sendMany(live, payload, 'operator');
+}
+
 // Fan out to every operator of a tenant (used for new-order alerts). Failed
 // endpoints are pruned by _send. Best-effort; callers wrap in try/catch.
 async function sendPushToTenantOperators(tenantId, payload) {
@@ -327,6 +384,7 @@ module.exports.operatorSetPref    = operatorSetPref;
 module.exports.isMuted            = isMuted;
 module.exports.sendPushToOperator = sendPushToOperator;
 module.exports.sendPushToTenantOperators = sendPushToTenantOperators;
+module.exports.sendPushToOperatorsWithCaps = sendPushToOperatorsWithCaps;
 module.exports.sendPushToUser     = sendPushToUser;
 module.exports.sendPushToUsers    = sendPushToUsers;
 module.exports.sendPushToAll      = sendPushToAll;
