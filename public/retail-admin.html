@@ -11544,20 +11544,15 @@
              recipe this is, the way back, and the save state. A recipe with
              thirty ingredient lines used to lose all three within one flick of
              the wheel, and the operator had to scroll back up to find out
-             whether his work was recorded.
-             Once the summary card has scrolled under it, the bar grows a second
-             line carrying that card's figures in miniature (rcp-recfigs) — the
-             one thing this screen must never let a scroll position hide is
-             whether the recipe looks free. Painted by paintStickyFigs(). -->
+             whether his work was recorded. -->
         <!-- ONE PINNED BLOCK — head, summary card and sub-tabs held together at
              the top of the scroller. The head alone used to pin, and grew a
              miniature of the summary's figures once the card had gone past it;
              the card itself now stays, condensed (see .rcp-pin in the CSS), so
              the figures are the real ones at every scroll position rather than
-             a copy of them. paintStickyFigs()'s own test — is the card's bottom
-             edge above the bar's? — is never true with the card inside the bar,
-             so the miniature retires itself and nothing had to be deleted to
-             make room for this. -->
+             a copy of them. The miniature is GONE, not merely hidden: with the
+             card inside the pinned block the two were on screen together, one
+             above the other, printing the same figures twice. -->
         <div class="rcp-pin" id="rcp-pin">
         <div class="rcp-rechead" id="rcp-rechead">
           <div class="rcp-rechead-main">
@@ -11587,7 +11582,6 @@
             <button type="button" class="rcp-btn primary" id="rcp-rec-save" data-cap="recipes:edit" onclick="rcpSave()"></button>
           </div>
           </div>
-          <div class="rcp-recfigs" id="rcp-rec-stickyfigs" hidden></div>
         </div>
         <div class="rcp-summary" id="rcp-rec-summary"></div>
         <div class="rcp-subtabs" id="rcp-subtabs"></div>
