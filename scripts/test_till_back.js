@@ -63,7 +63,10 @@ for (const d of ['window.confirm(', 'window.alert(', 'window.prompt(']) {
 
 const STORES = [{ id: 1, code: 'TIANHE', name_en: 'Tianhe', name_cn: '天河', is_active: 1 }];
 const PRODUCTS = [{ id: 7, sku: '2-450', name_en: 'Hazelnut Spread', name_cn: '榛子酱', sell_price: 98, category_en: 'Dry', category_cn: '干货' }];
-const STOCK = [{ product_id: 7, qty: 5 }];
+// available_wechat is the field the till actually reads (it nets off the safety
+// buffer and live holds); a row without it counts as an empty shelf, and an
+// empty shelf refuses the tap that would add the line.
+const STOCK = [{ product_id: 7, available_wechat: 5, physical_qty: 5 }];
 
 const ME_HOME = { user: { id: 1, username: 'a', role: 'manager', caps: null,
   home: '/m', homeLabel: { en: 'Manager', cn: '经理' } } };
@@ -192,6 +195,12 @@ function serve() {
     let out = '';
     try {
       out = await runChrome(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox',
+        // The page under test is served from this process on 127.0.0.1, and a
+        // browser that honours the machine's proxy sends that request away to
+        // it and waits forever. Background networking goes for the same reason:
+        // nothing here needs the network, and everything it tries costs a
+        // timeout.
+        '--no-proxy-server', '--disable-background-networking', '--no-first-run',
         '--user-data-dir=' + profile, '--window-size=500,940',
         '--virtual-time-budget=2500', '--dump-dom', base + '/case/' + i]);
     } catch (e) { fail(`${name} — chrome failed: ${e.message}`); console.log(`  ✗ ${name}`); continue; }
