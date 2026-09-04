@@ -125,6 +125,43 @@ run('mobile nav', [
        "moreRowsFlat().some(function(r){return r.key==='kitchenq' && r.href==='/stock?go=queue'})"],
     ]],
 
+  // And so does the row beside it, for the same reason. /stock's launcher
+  // offers "Add stock" and "Kitchen queue" as tiles — the two rows in this very
+  // list. A row that lands there answers a tap on itself with a menu offering
+  // itself again, so it names the screen it is for.
+  // Only the operator whose row LEAVES this app, of course: an add-only role
+  // keeps its counting screen in here (stockAppInApp) and never sees /stock.
+  ['the Add stock row leaves for the shelf itself, not the launcher',
+    "state.caps=['quickstock:recount','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['it carries the deep link',
+       "moreRowsFlat().some(function(r){return r.key==='stockapp' && r.href==='/stock?go=add'})"],
+    ]],
+
+  /* ── Transfers, the row that still wants the launcher ─────────────────────
+     Pick, Receive, Ask the kitchen and Ask for stock have no rows of their own
+     here and no home anywhere else — /stock's launcher is the screen that holds
+     them. Everyone enters every tool from THIS app now, so without this row
+     that launcher is a screen nothing reaches and four tools go dark. */
+  ['a picker gets the transfer launcher, on a bare /stock',
+    "state.caps=['restock:pick'];landOnSomethingReachable();render();", [
+      ['the row is there', `${body}.indexOf('Transfers')>-1`],
+      ['and it goes to the launcher, not past it',
+       "moreRowsFlat().some(function(r){return r.key==='transfers' && r.href==='/stock'})"],
+    ]],
+
+  // A kitchen account holds restock:fulfil and NOTHING else in that family:
+  // /stock refuses it every tile behind this row, and the launcher it would
+  // land on carries only the queue — which is the row above this one.
+  ['a kitchen account is not offered the transfer launcher',
+    "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['no Transfers row', `${body}.indexOf('Transfers')===-1`],
+      ['the queue row is still there', `${body}.indexOf('Kitchen queue')>-1`],
+    ]],
+
+  ['Transfers in Chinese', "LANG='cn';state.caps=['restock:receive'];landOnSomethingReachable();render();", [
+    ['调拨', `${body}.indexOf('调拨')>-1`],
+  ]],
+
   ['a store stocker, whose only tool leaves this app',
     "state.caps=['quickstock:recount'];landOnSomethingReachable();render();", [
       ['no bar', "!document.querySelector('.tabbar')"],

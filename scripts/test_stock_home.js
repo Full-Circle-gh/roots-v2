@@ -144,12 +144,16 @@ const HELPERS =
 const seq = (items) => 'window.__seq([' + items + '],window.__done);';
 
 const CASES = {
-  // Three jobs, named, with the two that carry work counting it.
+  // Every transfer job, named, with the two that carry work counting it.
   'home-is-the-landing': { js: 'window.__done();',
-    expect: ['Hi Asher', 'Count', 'Set what is on your shelf',
+    expect: ['Hi Asher',
              'Pick', 'Pull a run for the stores', '1 of 1 lines still to pull',
              'Receive', 'Count a delivery in', '1 delivery waiting',
              'Ask the kitchen', 'Have something made', 'Kitchen queue'],
+    // AND NOT COUNTING. It has its own row in the Tacet app, which is where
+    // every operator enters every tool from — the standalone PWAs are gone — so
+    // a tile here was the copy of that row you met by tapping that row.
+    absent: ['Set what is on your shelf', 'Log what you made'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the app did not open on the launcher' },
 
   // THE ORIGINAL DEFECT, ASSERTED. A quiet day must still show both doors.
@@ -169,8 +173,6 @@ const CASES = {
     } },
 
   // Each tile reaches its screen, and comes back.
-  'count-tile-opens-the-shelf': { js: seq(["'[data-hcount]'"]),
-    expect: ['Quick stock', 'Hummus Asli', 'All', 'Low', 'Out'] },
   'pick-tile-opens-the-run': { js: seq(["'[data-pkopen]'", '250']),
     expect: ['Pick list', 'Frozen dumplings 500g', 'Short', '0 of 1'] },
   'receive-tile-opens-the-count': { js: seq(["'[data-rcenter]'", '250']),
@@ -205,7 +207,8 @@ const CASES = {
     } },
 
   'home-cn': { pre: "localStorage.setItem('roots-admin-lang','cn');", js: 'window.__done();',
-    expect: ['你好', '盘点', '拣货', '收货', '向厨房下单', '厨房制作队列', '待拣', '批待收货'] },
+    expect: ['你好', '拣货', '收货', '向厨房下单', '厨房制作队列', '待拣', '批待收货'],
+    absent: ['设置本店库存数量', '记录制作数量'] },
 
   // ── Ask the kitchen ──────────────────────────────────────────────────────
   // Nothing has raised a kitchen request since 16 May, because the only screen
@@ -340,7 +343,7 @@ const CASES = {
   // refused; Count is theirs because counting is not restock at all.
   'kitchen-only-operator-is-shown-no-transfer-tiles': { kitchenOnly: true, stores: TWO,
     js: 'window.__done();',
-    expect: ['Kitchen queue', 'Count'],
+    expect: ['Kitchen queue'],
     absent: ['Pull a run for the stores', 'Nothing to pick', 'Count a delivery in',
              'Nothing on its way', 'Ask for stock'] },
 
@@ -359,6 +362,39 @@ const CASES = {
   'go-queue-is-ignored-when-the-queue-was-refused': { deny: true, search: '?go=queue',
     js: 'window.__done();',
     expect: ['Quick stock', 'Hummus Asli'], absent: ['To make'] },
+
+  /* ── The other row in that same /m list ───────────────────────────────────
+     "Add stock" is a row there too, and it pointed at a bare /stock — so a tap
+     on a door named "Add stock" opened a menu offering "Add stock". The row
+     carries ?go=add now, and it lands on the counting list with the launcher
+     skipped, for an operator who has one. */
+  'go-add-opens-the-shelf-not-the-launcher': { stores: TWO, search: '?go=add',
+    js: 'window.__done();',
+    expect: ['Quick stock', 'Hummus Asli'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  // And a bare /stock — the Transfers row in that same list — still opens on the
+  // launcher, which is the only screen Pick, Receive and Ask the kitchen have.
+  // It just does not offer counting a second time.
+  'a-bare-open-still-gets-the-transfer-launcher': { stores: TWO, js: 'window.__done();',
+    expect: ['Pick', 'Receive', 'Ask the kitchen', 'Ask for stock'],
+    absent: ['Set what is on your shelf', 'Log what you made'],
+    check: (out) => /data-view="home"/.test(out) ? null : 'the launcher did not appear' },
+
+  /* ── The two lines of a row are two lines ─────────────────────────────────
+     Both stacks used to set on one line, so a tile read "Add stockLog what you
+     made" and a queue row ran its status out past the chevron. Asserted as
+     geometry rather than as text, because the words are identical either way —
+     it is where they sit that was wrong. */
+  'a-tile-stacks-its-name-over-its-description': { stores: TWO, js: 'window.__done();',
+    check: (out) => /data-tiletext="stacked"/.test(out) ? null
+      : 'the tile set its name and description on one line' },
+
+  'a-queue-row-stacks-its-number-over-its-caption': { kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250']),
+    expect: ['RS-260904-002'],
+    check: (out) => /data-rowtext="stacked"/.test(out) ? null
+      : 'the queue row set its number and caption on one line' },
 
   'ask-cn': { stores: TWO, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-asopen]'", '250']),
@@ -388,6 +424,18 @@ function main() {
       // Which screen is actually on, read from the DOM rather than inferred
       // from words: the launcher and the counting list share a header.
       'document.body.setAttribute("data-view",document.querySelector(".sh-wrap")?"home":"other");' +
+      /* WHETHER THE TWO LINES OF A ROW ARE TWO LINES. Both stacks are spans
+         inside a flex item, and a span with no display of its own is inline —
+         so the name, the caption and the count set on ONE line, the tile read
+         "Add stockLog what you made", and the nowrap/ellipsis on the caption
+         did nothing at all because there is no box to clip. Geometry is the
+         only honest way to ask: the second line must start at or below the
+         bottom of the first. */
+      'function _stack(a,b){a=document.querySelector(a);b=document.querySelector(b);' +
+      '  if(!a||!b) return "none";' +
+      '  return b.getBoundingClientRect().top >= a.getBoundingClientRect().bottom - 1 ? "stacked" : "inline";}' +
+      'document.body.setAttribute("data-tiletext",_stack(".sh-name",".sh-desc"));' +
+      'document.body.setAttribute("data-rowtext",_stack(".rc-nm",".rc-cap"));' +
       'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
