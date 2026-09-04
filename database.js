@@ -6344,10 +6344,29 @@ db.exec(`
 // one here would put a wrong-looking code on their catalogue while they are
 // still deciding. Nothing else is seeded — a shipped guess at somebody's
 // category scheme is the same mistake the empty income list documents.
+//
+// The prefix goes in `code` and renders through {CAT} rather than sitting in
+// the pattern as the literal "GEN". Same output either way; the difference is
+// that the settings screen's plain controls can describe this rule, so editing
+// the fallback never puts a formula in front of an operator.
 try {
   db.prepare(`INSERT OR IGNORE INTO sku_rules (entity_type, category, subcategory, code, pattern)
-              VALUES ('material', '', '', '', 'GEN-{SEQ:4}')`).run();
+              VALUES ('material', '', '', 'GEN', '{CAT}-{SEQ:4}')`).run();
 } catch (e) { console.error('[sku] default rule seed', e); }
+
+// The first cut of that seed wrote the prefix as a literal ('GEN-{SEQ:4}', no
+// code), which the plain controls can only show as a custom format. Rewrite it
+// — but ONLY where it is still untouched, so an operator who has since edited
+// their fallback keeps what they chose. Guarded so it runs once.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('sku_default_rule_code_v1');
+  if (!done) {
+    db.prepare(`UPDATE sku_rules SET code = 'GEN', pattern = '{CAT}-{SEQ:4}'
+                 WHERE entity_type = 'material' AND category = '' AND subcategory = ''
+                   AND pattern = 'GEN-{SEQ:4}' AND code = ''`).run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('sku_default_rule_code_v1');
+  }
+} catch (e) { console.error('[sku] default rule code migration', e); }
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

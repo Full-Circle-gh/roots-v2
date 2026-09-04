@@ -98,9 +98,15 @@ router.get('/api/retail-admin/sku/:entity', requireRetailAdmin, (req, res) => {
     rules: list.map(r => {
       const cat = String(r.category || '').toLowerCase();
       const sub = String(r.subcategory || '').toLowerCase();
+      const scope = sub ? 'subcategory' : (cat ? 'category' : 'default');
       return {
         ...r,
-        scope: sub ? 'subcategory' : (cat ? 'category' : 'default'),
+        scope,
+        // The four plain controls this pattern corresponds to, or null when it
+        // is richer than they can describe. The screen words it — the labels
+        // and their translations belong with cuT(), not here — and falls back
+        // to its Advanced field when this is null.
+        simple: fmt.toSimple(r.pattern),
         // Next code this rule would issue, so the screen shows the real thing
         // rather than a hypothetical one.
         next_seq: rules.peekSeq(db, entity, r),

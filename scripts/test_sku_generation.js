@@ -82,6 +82,59 @@ ok('a pattern with no {SEQ} is a warning, not an error',
 eq('a code is uppercased', fmt.validateCode(' b ').value, 'B');
 ok('an unsafe code is refused', !fmt.validateCode('b b').ok);
 
+console.log('\n── the plain builder (no formula on screen) ─────────────────────');
+// The settings screen shows four controls; these two functions are the seam
+// between them and the stored pattern. A round-trip that does not reproduce the
+// pattern exactly must report CUSTOM rather than quietly rewrite it.
+eq('a letter and four digits', fmt.fromSimple({ useCode: true, digits: 4, sep: '', year: 0 }, 'subcategory'), '{SUB}{SEQ:4}');
+eq('a category-level rule uses the category token',
+  fmt.fromSimple({ useCode: true, digits: 4, sep: '', year: 0 }, 'category'), '{CAT}{SEQ:4}');
+eq('a separator goes between the parts',
+  fmt.fromSimple({ useCode: true, digits: 4, sep: '-', year: 0 }, 'subcategory'), '{SUB}-{SEQ:4}');
+eq('the year sits between the code and the number',
+  fmt.fromSimple({ useCode: true, digits: 4, sep: '-', year: 2 }, 'subcategory'), '{SUB}-{YY}-{SEQ:4}');
+eq('no prefix means no leading separator',
+  fmt.fromSimple({ useCode: false, digits: 5, sep: '-', year: 0 }, 'subcategory'), '{SEQ:5}');
+
+ok('a simple pattern reads back', (() => {
+  const s = fmt.toSimple('{SUB}{SEQ:4}');
+  return s && s.useCode === true && s.digits === 4 && s.sep === '' && s.year === 0;
+})());
+ok('a literal prefix reads back as prefix + separator', (() => {
+  const s = fmt.toSimple('GEN-{SEQ:4}');
+  return s && s.text === 'GEN' && s.sep === '-' && s.digits === 4;
+})());
+ok('a year reads back', (() => {
+  const s = fmt.toSimple('{SUB}-{YY}-{SEQ:4}');
+  return s && s.year === 2 && s.sep === '-';
+})());
+ok('a name fragment is CUSTOM, not flattened', fmt.toSimple('{NAME:3}{SEQ:4}') === null);
+ok('a token after the number is CUSTOM', fmt.toSimple('X{SEQ:4}Y') === null);
+ok('mixed separators are CUSTOM', fmt.toSimple('{SUB}-{YY}.{SEQ:4}') === null);
+
+ok('every builder output reads back to what built it', [
+  { useCode: true,  digits: 4, sep: '',  year: 0 },
+  { useCode: true,  digits: 3, sep: '-', year: 0 },
+  { useCode: true,  digits: 6, sep: '.', year: 4 },
+  { useCode: false, digits: 5, sep: '',  year: 0 },
+  { text: 'PK-', useCode: true, digits: 3, sep: '', year: 0 },
+].every(simple => {
+  const pattern = fmt.fromSimple(simple, 'subcategory');
+  const back = fmt.toSimple(pattern);
+  return back && fmt.fromSimple(back, 'subcategory') === pattern;
+}));
+
+ok('saving from the builder stores the composed pattern', (() => {
+  rules.saveRule(db, 'material', {
+    category: 'retail', subcategory: 'Gift boxes', code: 'G',
+    simple: { useCode: true, digits: 3, sep: '-', year: 0 },
+  });
+  const r = rules.listRules(db, 'material').find(x => x.subcategory === 'Gift boxes');
+  return r && r.pattern === '{SUB}-{SEQ:3}';
+})());
+eq('and it numbers with it',
+  addMaterial({ name: 'Gift Box Small', kind: 'retail', category: 'Gift boxes' }), 'G-001');
+
 console.log('\n── which rule applies ───────────────────────────────────────────');
 rules.saveRule(db, 'material', { category: '', subcategory: '', pattern: 'GEN-{SEQ:4}' });
 rules.saveRule(db, 'material', { category: 'food', subcategory: '', code: 'F', pattern: '{CAT}{SEQ:4}' });

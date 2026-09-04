@@ -23,6 +23,17 @@
    per…" setting to get wrong — the shape of the rule list IS the answer, and
    the screen says so on every row.
 
+   NO FORMULAS ON THIS SCREEN (Ash, 2026-09-04: "those kind of formula make it
+   look very complicated for a regular user"). The engine underneath still runs
+   a token template — that is what lets any tenant's scheme fit — but an
+   operator sees four ordinary controls: the letters a code starts with, how
+   many digits, a separator, and whether to include the year. The screen sends
+   those four fields; lib/sku-format.js's fromSimple() composes the pattern
+   server-side, and toSimple() reads one back so an existing rule opens in the
+   same controls that made it. A pattern too rich for them (a name fragment, a
+   month, a token mid-word) reads back as null — that rule says "Custom format"
+   and opens in the Advanced field, which is the ONE place braces appear.
+
    Prefix is sku-*. Painted into #sku-root inside <div class="sub-panel"
    id="sub-sku">, which is data-no-i18n: every string here is baked by cuT(),
    so the i18n walker must not touch it. */
@@ -108,8 +119,6 @@
           '自动编号已关闭。新物料按手动填写的编码保存,未填写则留空 —— 与以前一致。'))}</div>`}
       </div>
 
-      ${tokenCard()}
-
       <div class="group-card">
         <div class="group-card-head">
           <h3>${esc(T('Your rules', '您的规则'))}</h3>
@@ -139,33 +148,38 @@
     if (_draft) paintDraft();
   }
 
-  // The token palette. Built from the server's catalogue (lib/sku-format.js's
+  // The token palette — Advanced only, and the one place in this screen where a
+  // brace is shown at all. Built from the server's catalogue (lib/sku-format.js
   // TOKENS), so a token added to the engine appears here without this file
-  // being touched — and one that is removed cannot be advertised any more.
-  function tokenCard() {
+  // being touched, and one that is removed cannot be advertised any more.
+  function tokenPalette() {
     const toks = _data.tokens || [];
     return `
-      <div class="group-card">
-        <div class="group-card-head">
-          <h3>${esc(T('How a code is built', '编码由什么组成'))}</h3>
-          <div class="muted">${esc(T(
-            'Type the code you want and drop in a piece wherever the value changes. Everything else — letters, dashes, slashes — appears exactly as you type it.',
-            '直接输入想要的编码,在需要变化的位置插入下列组件。其余字符(字母、连字符、斜杠)将原样出现。'))}</div>
-        </div>
-        <div class="sku-toks">
-          ${toks.map(t => `
-            <button type="button" class="sku-tok" onclick="skuInsert('${esc(t.insert)}')" title="${esc(T(t.hint_en, t.hint_cn))}">
-              <code>${esc(t.insert)}</code>
-              <span>${esc(T(t.label_en, t.label_cn))}</span>
-            </button>`).join('')}
-        </div>
-        <div class="sku-eg">
-          <span class="muted">${esc(T('For example', '示例'))}:</span>
-          <code>B-{SEQ:4}</code> <span class="sku-arrow">→</span> <b>B-0001</b>, <b>B-0002</b>
-          <span class="sku-sep">·</span>
-          <code>{CAT}{SUB}{SEQ:3}</code> <span class="sku-arrow">→</span> <b>FDF001</b>
-        </div>
+      <div class="sku-toks">
+        ${toks.map(t => `
+          <button type="button" class="sku-tok" onclick="skuInsert('${esc(t.insert)}')" title="${esc(T(t.hint_en, t.hint_cn))}">
+            <code>${esc(t.insert)}</code>
+            <span>${esc(T(t.label_en, t.label_cn))}</span>
+          </button>`).join('')}
       </div>`;
+  }
+
+  // ── plain wording for a stored rule ───────────────────────────────────────
+  // A rule row must never show its pattern. `simple` is the server's reading of
+  // it (lib/sku-format.js toSimple); null means the pattern is richer than the
+  // four controls, and that rule is honestly labelled rather than mis-described.
+  const DIGIT_LABEL = n => (n > 0
+    ? T(`${n}-digit number`, `${n} 位数字`)
+    : T('a number', '数字'));
+
+  function summaryOf(r) {
+    if (!r.simple) return T('Custom format', '自定义格式');
+    const bits = [];
+    if (r.simple.text) bits.push('“' + r.simple.text + '”');
+    if (r.simple.useCode && r.code) bits.push(r.code);
+    if (r.simple.year) bits.push(T('the year', '年份'));
+    bits.push(DIGIT_LABEL(r.simple.digits));
+    return bits.join(' + ');
   }
 
   // One rule. It states what it governs, what it produces next, and how many
@@ -193,9 +207,11 @@
           <div class="sku-rule-scope">${esc(scopeNote)}</div>
         </div>
         <div class="sku-rule-fmt">
-          <code>${esc(r.pattern)}</code>
-          <div class="sku-rule-next">
+          <div class="sku-rule-eg">
             ${esc(T('next', '下一个'))}: <b>${esc(previewOf(r))}</b>
+          </div>
+          <div class="sku-rule-next">
+            ${esc(summaryOf(r))}
             ${r.in_use != null ? `<span class="sku-sep">·</span>${esc(String(r.in_use))} ${esc(T('materials', '个物料'))}` : ''}
           </div>
         </div>
@@ -251,16 +267,34 @@
   }
 
   // ── the add / edit form ───────────────────────────────────────────────────
+  // A new rule starts on the plain controls with the shape almost everybody
+  // wants — a letter and four digits — so the common case is two fields and a
+  // Save. `simple` carries the four controls; `pattern` is only read in
+  // Advanced mode.
   window.skuAdd = function () {
     const kinds = (_data.levels && _data.levels.kinds) || [];
-    _draft = { id: null, category: kinds[0] || 'food', subcategory: '', code: '', pattern: '{SUB}{SEQ:4}' };
+    _draft = {
+      id: null, category: kinds[0] || 'food', subcategory: '', code: '',
+      simple: { digits: 4, sep: '', year: 0 },
+      pattern: '{SUB}{SEQ:4}', advanced: false,
+    };
     paintDraft(true);
   };
 
+  // Editing opens in whichever mode the stored rule can be shown in. A pattern
+  // the four controls cannot describe (r.simple === null) opens in Advanced
+  // rather than being silently flattened into something they CAN describe —
+  // that would rewrite a scheme its author chose deliberately.
   window.skuEdit = function (id) {
     const r = (_data.rules || []).find(x => x.id === id);
     if (!r) return;
-    _draft = { id: r.id, category: r.category, subcategory: r.subcategory, code: r.code, pattern: r.pattern, locked: r.scope === 'default' };
+    _draft = {
+      id: r.id, category: r.category, subcategory: r.subcategory, code: r.code,
+      simple: r.simple ? { digits: r.simple.digits, sep: r.simple.sep, year: r.simple.year } : { digits: 4, sep: '', year: 0 },
+      pattern: r.pattern,
+      advanced: !r.simple,
+      locked: r.scope === 'default',
+    };
     paintDraft(true);
   };
 
@@ -274,6 +308,19 @@
     const levels = _data.levels || { kinds: [], byKind: {} };
     const kinds = levels.kinds.length ? levels.kinds : ['food'];
     const subs = (levels.byKind && levels.byKind[d.category]) || [];
+
+    const sim = d.simple || {};
+    const digitOpts = [3, 4, 5, 6].map(n =>
+      `<option value="${n}"${Number(sim.digits) === n ? ' selected' : ''}>${esc(T(`${n} digits`, `${n} 位`))} · ${'0'.repeat(n - 1)}1</option>`).join('');
+    // Shown by what they LOOK like, not by their names — "Dash" means nothing
+    // next to a code, whereas B-0001 is the decision itself.
+    const sepOpts = [
+      ['',  T('None', '无'),     'B0001'],
+      ['-', T('Dash', '连字符'),  'B-0001'],
+      ['.', T('Dot', '点'),      'B.0001'],
+      ['/', T('Slash', '斜杠'),   'B/0001'],
+    ].map(([v, label, eg]) =>
+      `<option value="${esc(v)}"${(sim.sep || '') === v ? ' selected' : ''}>${esc(label)} · ${esc(eg)}</option>`).join('');
 
     host.innerHTML = `
       <div class="sku-form">
@@ -298,22 +345,57 @@
             </select>
             <em>${esc(T('The categories your materials are actually filed under.', '此处列出物料实际使用的分类。'))}</em>
           </label>
-          <label>
-            <span>${esc(T('Code', '代码'))}</span>
-            <input id="sku-d-code" maxlength="8" value="${esc(d.code || '')}"
-                   placeholder="B" oninput="skuDraftField('code', this.value)">
-            <em>${esc(T('What {CAT} or {SUB} stands for here — e.g. B for dried fruits.', '此处 {CAT} 或 {SUB} 代表的字符 —— 例如干果为 B。'))}</em>
-          </label>
         </div>`}
+
+        ${d.advanced ? `
         <label class="sku-wide">
           <span>${esc(T('Format', '格式'))}</span>
           <input id="sku-d-pattern" maxlength="60" value="${esc(d.pattern || '')}"
                  spellcheck="false" oninput="skuDraftField('pattern', this.value)">
+          <em>${esc(T('Drop in a piece wherever the value changes. Everything else appears exactly as typed.',
+                      '在需要变化的位置插入组件,其余字符原样出现。'))}</em>
         </label>
+        ${tokenPalette()}
+        <label class="sku-wide" style="max-width:220px">
+          <span>${esc(T('Codes start with', '编码开头'))}</span>
+          <input id="sku-d-code" maxlength="8" value="${esc(d.code || '')}" placeholder="B"
+                 oninput="skuDraftField('code', this.value)">
+        </label>` : `
+        <div class="sku-form-grid">
+          <label>
+            <span>${esc(T('Codes start with', '编码开头'))}</span>
+            <input id="sku-d-code" maxlength="8" value="${esc(d.code || '')}"
+                   placeholder="B" oninput="skuDraftField('code', this.value)">
+            <em>${esc(T('A letter or two of your choosing. Leave it blank for numbers only.',
+                        '由您自定的一到两个字母。留空则只用数字。'))}</em>
+          </label>
+          <label>
+            <span>${esc(T('Followed by', '后接'))}</span>
+            <select id="sku-d-digits" onchange="skuSimpleField('digits', this.value)">${digitOpts}</select>
+            <em>${esc(T('The number counts up on its own, one series per rule.',
+                        '序号自动递增,每条规则各自计数。'))}</em>
+          </label>
+          <label>
+            <span>${esc(T('Separator', '分隔符'))}</span>
+            <select id="sku-d-sep" onchange="skuSimpleField('sep', this.value)">${sepOpts}</select>
+          </label>
+        </div>
+        <label class="sku-check">
+          <input type="checkbox" id="sku-d-year" ${sim.year ? 'checked' : ''} onchange="skuSimpleField('year', this.checked ? 2 : 0)">
+          <span>${esc(T('Include the year', '包含年份'))}</span>
+        </label>`}
+
         <div class="sku-live" id="sku-live"></div>
         <div class="sku-form-act">
           <button class="btn btn-primary" onclick="skuSaveDraft()">${esc(T('Save rule', '保存规则'))}</button>
           <button class="btn" onclick="skuCancel()">${esc(T('Cancel', '取消'))}</button>
+          ${/* The escape hatch, and the ONLY door to a formula. Deliberately a
+                plain text button at the end of the row rather than a control
+                with any visual weight — an operator who does not need it should
+                not have to decide whether they do. */''}
+          <button class="btn sku-adv" onclick="skuToggleAdvanced()">${esc(d.advanced
+            ? T('← Back to the simple form', '← 返回简易设置')
+            : T('Write the format myself', '自定义格式'))}</button>
         </div>
       </div>`;
     paintLive();
@@ -334,6 +416,38 @@
     paintLive();
   };
 
+  // One of the four plain controls. `digits` and `year` arrive from a <select>
+  // and a checkbox, so both are coerced here rather than trusted as typed.
+  window.skuSimpleField = function (k, v) {
+    if (!_draft.simple) _draft.simple = { digits: 4, sep: '', year: 0 };
+    _draft.simple[k] = (k === 'sep') ? String(v) : Number(v);
+    paintLive();
+  };
+
+  // Between the four controls and the raw format field. Going INTO Advanced
+  // carries the simple settings across as a starting pattern, so nothing is
+  // lost; coming back out reads the pattern in the same way the server does,
+  // and refuses when it cannot — silently flattening a custom format into the
+  // nearest simple one would rewrite a scheme somebody chose.
+  window.skuToggleAdvanced = function () {
+    if (!_draft) return;
+    if (!_draft.advanced) {
+      _draft.pattern = composePattern(_draft);
+      _draft.advanced = true;
+      paintDraft();
+      return;
+    }
+    const back = readPattern(_draft.pattern, scopeOf(_draft));
+    if (!back) {
+      toast(T('This format uses pieces the simple form cannot show. Clear it first to go back.',
+              '此格式包含简易设置无法显示的组件,请先清除后再返回。'));
+      return;
+    }
+    _draft.simple = { digits: back.digits, sep: back.sep, year: back.year };
+    _draft.advanced = false;
+    paintDraft();
+  };
+
   window.skuInsert = function (token) {
     const el = document.getElementById('sku-d-pattern');
     if (!el || !_draft) {
@@ -351,40 +465,82 @@
     paintLive();
   };
 
-  // The line under the Format field: three consecutive codes this pattern would
-  // produce, and any complaint about it. Rendered locally on every keystroke —
-  // the server validates again on save, and that answer is the one that counts.
+  function scopeOf(d) { return d.locked ? 'default' : (d.subcategory ? 'subcategory' : 'category'); }
+  function codeToken(scope) { return scope === 'subcategory' ? '{SUB}' : '{CAT}'; }
+
+  // Browser-side twins of lib/sku-format.js's fromSimple / toSimple, used ONLY
+  // to move between the two modes and to preview. The server composes the
+  // pattern it actually stores from the same four fields, so a drift here can
+  // show a wrong sample but never store a wrong rule.
+  function composePattern(d) {
+    const sim = d.simple || {};
+    const head = d.code ? codeToken(scopeOf(d)) : '';
+    const year = Number(sim.year) === 4 ? '{YYYY}' : Number(sim.year) === 2 ? '{YY}' : '';
+    const digits = Number(sim.digits === undefined ? 4 : sim.digits);
+    return [head, year, '{SEQ:' + digits + '}'].filter(x => x !== '').join(sim.sep || '');
+  }
+
+  // The strict subset the four controls can describe: an optional code token,
+  // an optional year, then the number, joined by one repeated separator.
+  function readPattern(pattern, scope) {
+    const m = String(pattern || '').match(
+      new RegExp('^(' + codeToken(scope).replace(/[{}]/g, '\\$&') + ')?([-._/]?)(\\{YYYY\\}|\\{YY\\})?([-._/]?)\\{SEQ:(\\d)\\}$'));
+    if (!m) return null;
+    const seps = [m[2], m[4]].filter(Boolean);
+    if (seps.length && seps.some(x => x !== seps[0])) return null;
+    return {
+      digits: Number(m[5]),
+      sep: seps[0] || '',
+      year: m[3] === '{YYYY}' ? 4 : m[3] === '{YY}' ? 2 : 0,
+    };
+  }
+
+  // Three consecutive codes this rule would produce. In the simple form there
+  // is no format to be wrong, so this is the whole feedback surface — it is
+  // what the operator reads instead of a pattern.
   function paintLive() {
     const box = document.getElementById('sku-live');
     if (!box || !_draft) return;
     const d = _draft;
-    const bad = (d.pattern || '').match(/\{[^}]*\}/g) || [];
-    const known = (_data.tokens || []).map(t => t.name);
-    const unknown = bad.filter(b => !known.some(n => new RegExp('^\\{' + n + '(:\\d)?\\}$').test(b)));
-    const hasSeq = /\{SEQ(:\d)?\}/.test(d.pattern || '');
-    const unsafe = /[^A-Za-z0-9._/{}:-]/.test(d.pattern || '');
+    const pattern = d.advanced ? (d.pattern || '') : composePattern(d);
 
-    const samples = [1, 2, 3].map(seq => renderPattern(d.pattern, {
+    const problems = [];
+    if (d.advanced) {
+      const known = (_data.tokens || []).map(t => t.name);
+      const unknown = (pattern.match(/\{[^}]*\}/g) || [])
+        .filter(b => !known.some(n => new RegExp('^\\{' + n + '(:\\d)?\\}$').test(b)));
+      if (!pattern.trim()) problems.push(T('A format is required.', '必须填写格式。'));
+      if (unknown.length) problems.push(T(`${unknown.join(', ')} is not one of the pieces above.`, `${unknown.join('、')} 不是上方可用的组件。`));
+      if (/[^A-Za-z0-9._/{}:-]/.test(pattern)) {
+        problems.push(T('A code may only contain letters, digits and . _ / - — remove any spaces.',
+                        '编码只能包含字母、数字与 . _ / -,请删除空格。'));
+      }
+    } else if (/[^A-Za-z0-9._/-]/.test(d.code || '')) {
+      problems.push(T('A code may only contain letters, digits and . _ / - — remove any spaces.',
+                      '编码只能包含字母、数字与 . _ / -,请删除空格。'));
+    }
+
+    if (problems.length) {
+      box.innerHTML = `<div class="sku-bad">${problems.map(p => esc(p)).join('<br>')}</div>`;
+      return;
+    }
+
+    const samples = [1, 2, 3].map(seq => renderPattern(pattern, {
       seq,
       categoryCode: d.subcategory ? catCodeFor(d.category) : d.code,
       subcategoryCode: d.subcategory ? d.code : '',
       name: 'Dried Mango',
     }));
+    const hasSeq = /\{SEQ(:\d)?\}/.test(pattern);
 
-    const problems = [];
-    if (!String(d.pattern || '').trim()) problems.push(T('A format is required.', '必须填写格式。'));
-    if (unknown.length) problems.push(T(`${unknown.join(', ')} is not one of the pieces above.`, `${unknown.join('、')} 不是上方可用的组件。`));
-    if (unsafe) problems.push(T('A code may only contain letters, digits and . _ / - — remove any spaces.', '编码只能包含字母、数字与 . _ / -,请删除空格。'));
-
-    box.innerHTML = problems.length
-      ? `<div class="sku-bad">${problems.map(p => esc(p)).join('<br>')}</div>`
-      : `<div class="sku-samples">
-           <span class="muted">${esc(T('Produces', '生成'))}</span>
-           ${samples.map(s => `<b>${esc(s)}</b>`).join('<span class="sku-arrow">→</span>')}
-         </div>
-         ${hasSeq ? '' : `<div class="sku-warn">${esc(T(
-           'Without a Number, every material here would get the same code — the system will add one to keep them apart.',
-           '缺少“流水号”时,此范围内的物料编码将完全相同,系统会自动追加数字加以区分。'))}</div>`}`;
+    box.innerHTML = `
+      <div class="sku-samples">
+        <span class="muted">${esc(T('Codes will look like', '编码效果'))}</span>
+        ${samples.map(x => `<b>${esc(x)}</b>`).join('<span class="sku-arrow">·</span>')}
+      </div>
+      ${hasSeq ? '' : `<div class="sku-warn">${esc(T(
+        'Without a number, every material here would get the same code — the system will add one to keep them apart.',
+        '缺少序号时,此范围内的物料编码将完全相同,系统会自动追加数字加以区分。'))}</div>`}`;
   }
 
   // ── writes ────────────────────────────────────────────────────────────────
@@ -405,12 +561,28 @@
     try {
       const j = await api('/api/retail-admin/sku/' + ENTITY + '/rules', {
         method: 'POST',
-        body: {
-          category: d.locked ? '' : (d.category || ''),
-          subcategory: d.locked ? '' : (d.subcategory || ''),
-          code: d.locked ? '' : (d.code || ''),
-          pattern: d.pattern || '',
-        },
+        // The simple form sends its four FIELDS and lets lib/sku-format.js
+        // compose the pattern; Advanced sends the pattern it was given. One
+        // stored form either way — see lib/sku-rules.js saveRule.
+        body: d.advanced
+          ? {
+            category: d.locked ? '' : (d.category || ''),
+            subcategory: d.locked ? '' : (d.subcategory || ''),
+            code: d.code || '',
+            pattern: d.pattern || '',
+          }
+          : {
+            category: d.locked ? '' : (d.category || ''),
+            subcategory: d.locked ? '' : (d.subcategory || ''),
+            code: d.code || '',
+            simple: {
+              text: '',
+              useCode: !!d.code,
+              year: Number((d.simple || {}).year) || 0,
+              sep: (d.simple || {}).sep || '',
+              digits: Number((d.simple || {}).digits === undefined ? 4 : d.simple.digits),
+            },
+          },
       });
       _draft = null;
       // A warning is not a refusal — the rule saved. Say what is odd about it
@@ -496,9 +668,18 @@
     #sku-root .sku-form input, #sku-root .sku-form select { width:100%; }
     #sku-root .sku-wide input { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.02em; }
     #sku-root .sku-live { min-height:22px; margin:10px 0 14px; font-size:13px; }
-    #sku-root .sku-samples b { font-size:14px; color:var(--text-1); margin:0 2px; }
+    #sku-root .sku-samples { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+    #sku-root .sku-samples b { font-size:15px; color:var(--text-1); font-variant-numeric:tabular-nums; }
     #sku-root .sku-bad { color:var(--danger); font-size:12px; line-height:1.6; }
     #sku-root .sku-warn { margin-top:6px; font-size:11px; color:var(--text-3); line-height:1.5; }
-    #sku-root .sku-form-act { display:flex; gap:8px; }
+    #sku-root .sku-form-act { display:flex; gap:8px; align-items:center; }
+    #sku-root .sku-check { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text-1); margin-top:14px; cursor:pointer; }
+    #sku-root .sku-check input { width:16px; height:16px; cursor:pointer; }
+    /* The escape hatch to a raw format. No border, no fill, pushed to the end:
+       an operator who does not need it should not have to decide whether they do. */
+    #sku-root .sku-adv { margin-left:auto; border-color:transparent; background:transparent; color:var(--text-3); font-size:12px; }
+    #sku-root .sku-adv:hover { color:var(--text-1); }
+    #sku-root .sku-rule-eg { font-size:12px; color:var(--text-3); }
+    #sku-root .sku-rule-eg b { font-size:14px; color:var(--text-1); font-weight:600; }
   </style>`;
 })();

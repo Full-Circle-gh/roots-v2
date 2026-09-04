@@ -1059,10 +1059,13 @@
     let fits = true;
     try { fits = new RegExp(_skuRule.match_re).test(typed.toUpperCase()); } catch (_) { return; }
     note.className = 'mat-skunote' + (fits ? ' is-auto' : ' is-warn');
+    // The message names an EXAMPLE, never the pattern behind it — `{SUB}{SEQ:4}`
+    // means nothing to the person holding the sack, and this line exists to be
+    // understood at a glance rather than decoded.
     note.textContent = fits
-      ? T('Matches this category\'s format.', '符合此分类的编码格式。')
-      : T(`Saved as typed. It does not match this category's format (${_skuRule.rule.pattern}).`,
-          `将按输入内容保存。该编码不符合此分类的格式(${_skuRule.rule.pattern})。`);
+      ? T('Matches this category\'s codes.', '符合此分类的编码规则。')
+      : T(`Saved as typed. Codes in this category normally look like ${_skuRule.sku}.`,
+          `将按输入内容保存。此分类的编码通常形如 ${_skuRule.sku}。`);
   };
 
   function histHtml() {
