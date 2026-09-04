@@ -389,29 +389,43 @@ function requireRestockOrInbox(req, res, next) {
 //   store      → warehouse  (store user requests stock)
 //   warehouse  → kitchen    (warehouse asks kitchen for items)
 //   warehouse  → store      (warehouse pushes stock to a store)
-// Warehouse users can explicitly target either kitchen or store via
-// req.body.to_role; the kitchen path is the default for back-compat.
+// Warehouse users target kitchen or store explicitly via req.body.to_role.
+//
+// A REQUEST WITH NO DESTINATION GOES TO THE WAREHOUSE, whoever sends it.
+//
+// It used to default a warehouse or admin user to the kitchen, "for
+// back-compat" with public/restock.html — the warehouse PWA, which was the
+// only client that ever sent `to_role`, and which asked for a destination and
+// a purpose in a modal before posting. That page was deleted on 2026-08-04
+// (488806ce, after Ash confirmed the flow was unused) and its create path was
+// not ported anywhere. Nothing has sent `to_role` since.
+//
+// What the default did after that was create a trap. The one surviving client,
+// app.html's in-SPA Restock screen, sends neither field, so a warehouse or
+// admin user pressing its "Send to Warehouse" button was inferred into the
+// kitchen branch and then rejected by the purpose gate below with a 400 — on
+// every submission, with no way to satisfy it from that screen. Store users
+// were unaffected, which is why it survived. The default now matches both the
+// button's label and the only flow the UI can actually express.
+//
+// This does NOT revive kitchen requests, and does not decide whether they
+// should come back: an explicit to_role:'kitchen' with a purpose still creates
+// one exactly as before. It only stops an absent choice from being read as a
+// choice of the kitchen.
 function _inferDirection(req) {
   // ORIGIN is decided by ROLE, not by the `warehouse_inbox` perm — a
   // store user (e.g. Retail Yuexiu) may have the perm so they can see
   // the Fulfill tab, but their own outgoing requests still flow
   // store→warehouse. Only `warehouse` and `admin` originate from the
-  // warehouse side and need a kitchen/store destination chooser.
+  // warehouse side and can name a destination.
   const role = req.user?.role || '';
   const isWarehouseOrigin = (role === 'warehouse' || role === 'admin');
   const explicit = (req.body && req.body.to_role) ? String(req.body.to_role) : null;
   if (isWarehouseOrigin) {
     if (explicit === 'store')   return { from_role: 'warehouse', to_role: 'store'   };
     if (explicit === 'kitchen') return { from_role: 'warehouse', to_role: 'kitchen' };
-    if (explicit === 'warehouse' && role === 'admin') {
-      // Admin acting on behalf of a store — rare but supported.
-      return { from_role: 'store', to_role: 'warehouse' };
-    }
-    // No explicit choice → default to kitchen (warehouse's daily flow).
-    return { from_role: 'warehouse', to_role: 'kitchen' };
+    // 'warehouse', anything unrecognised, or nothing at all falls through.
   }
-  // Everyone else (including store users with warehouse_inbox perm)
-  // sends requests to the warehouse.
   return { from_role: 'store', to_role: 'warehouse' };
 }
 
