@@ -16338,25 +16338,26 @@ function customerSearchWhere(q) {
 // Customers admin tab (paginated, filterable). Backward compatible: same URL,
 // same `data` field shape (plus extra columns), older callers ignore the new
 // `page/pageSize/total` fields.
-router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
-  const q              = String(req.query.q || '').trim();
+// The Customers filter clause, built in ONE place because THREE readers need
+// to agree about it: the roster page, the COUNT that feeds its pager, and the
+// CSV export. The export must return exactly the customers on screen — the
+// operator picked those filters, and a file that quietly widened or narrowed
+// them is a file nobody can check. Pagination and sort stay with the page
+// reader below; an export has neither.
+function buildCustomerFilter(query) {
+  const q              = String(query.q || '').trim();
   // Comma-separated so the Tier column header can filter by several tiers at
   // once (e.g. "root,tree"); a single value still works the same as before.
-  const tiers          = String(req.query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+  const tiers          = String(query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
   // Same pattern for the Channel filter. Values are SIGNUP channels —
   // 'wechat' | 'web' | 'manual' | 'unknown' — derived from openid by
   // CHANNEL_SQL below, which the SELECT and this WHERE both read so the icon
   // on a row and the filter that returns it can never disagree.
-  const channels       = String(req.query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
-  const segment        = String(req.query.segment || '').trim();
+  const channels       = String(query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+  const segment        = String(query.segment || '').trim();
   // The roster asks for one segment at a time; the stat strip still calls this
   // with includeBlocked=1 (pageSize=1) purely to count every account.
-  const includeBlocked = req.query.includeBlocked === '1' || segment === 'blocked';
-  const sort           = String(req.query.sort || 'recent_login');
-  const dir            = req.query.dir === 'asc' ? 'ASC' : (req.query.dir === 'desc' ? 'DESC' : null);
-  const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
-  const offset         = (page - 1) * pageSize;
+  const includeBlocked = query.includeBlocked === '1' || segment === 'blocked';
 
   // ── Signup channel — WHERE THEY SIGNED UP, not where they last ordered ──
   //
@@ -16434,6 +16435,73 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const search = customerSearchWhere(q);
   if (search) { where.push(search.sql); params.push(...search.params); }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  return { whereSql, params, CHANNEL_SQL, search, SEG_PAID_EXISTS };
+}
+
+
+// ── CSV: the customers the roster is showing, all of them ──────────────────
+// Registered ABOVE /customers/:id on purpose: Express matches in order and
+// `export.csv` would otherwise be parsed as a customer id.
+//
+// Same filters as the roster (buildCustomerFilter), no page window. This is the
+// merchant's own contact list — the thing they need to mail a promotion, hand
+// to an accountant, or take with them if they leave. BOM-prefixed UTF-8 so
+// Excel renders the Chinese names correctly.
+//
+// Blocked customers follow the roster's rule exactly: absent unless the caller
+// asked for them (?includeBlocked=1 or ?segment=blocked), because that is what
+// the screen was showing when the button was pressed.
+router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params, CHANNEL_SQL } = buildCustomerFilter(req.query);
+    const rows = tdb().prepare(
+      `SELECT id, nickname, phone, email, openid, tier_key,
+              lifetime_spend, points_balance, balance, is_blocked,
+              ${CHANNEL_SQL} AS channel,
+              (SELECT COUNT(*) FROM retail_orders o WHERE o.customer_id = retail_customers.id) AS orders_count,
+              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '+8 hours') AS last_order_at,
+              datetime(created_at,     '+8 hours') AS joined_local,
+              datetime(last_login_at,  '+8 hours') AS last_seen_local
+         FROM retail_customers
+         ${whereSql}
+        ORDER BY id ASC`
+    ).all(...params);
+
+    const yn = v => (Number(v) ? 'Yes' : 'No');
+    const head = [
+      'ID', 'Name', 'Phone', 'Email', 'Tier', 'Signed up via',
+      'Orders', 'Lifetime spend', 'Points', 'Wallet balance',
+      'Blocked', 'Joined (UTC+8)', 'Last order (UTC+8)', 'Last seen (UTC+8)',
+    ];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([
+        r.id, r.nickname, r.phone, r.email, r.tier_key, r.channel,
+        r.orders_count, r.lifetime_spend, r.points_balance, r.balance,
+        yn(r.is_blocked), r.joined_local, r.last_order_at, r.last_seen_local,
+      ].map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="customers_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[customers csv]', e);
+    res.status(500).json({ success: false, error: 'customers_csv_failed', message: e.message });
+  }
+});
+
+router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
+  // Sort and paging belong to the page reader; the filter itself is shared with
+  // the CSV export (see buildCustomerFilter).
+  const sort           = String(req.query.sort || 'recent_login');
+  const dir            = req.query.dir === 'asc' ? 'ASC' : (req.query.dir === 'desc' ? 'DESC' : null);
+  const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
+  const offset         = (page - 1) * pageSize;
+  const { whereSql, params, CHANNEL_SQL, search, SEG_PAID_EXISTS } = buildCustomerFilter(req.query);
+
 
   // Column-header sort: one column at a time, either direction. `orders_count`
   // and `balance` (Orders / Wallet columns) aren't sortable columns on the
@@ -23623,13 +23691,184 @@ router.delete('/api/retail-admin/order-drafts/:id', requireRetailAdmin, (req, re
   res.json({ success: true });
 });
 
-router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
-  const { status, q, from, to, store_id, customer_id } = req.query;
+// The Orders filter clause, built in ONE place because THREE readers need to
+// agree about it: the list page, the COUNT that feeds the list's pager, and the
+// CSV export. An export that quietly returned a different set of orders from
+// the screen it was taken from is worse than no export — the spreadsheet is
+// what gets mailed to the accountant, long after anyone can check it against
+// the list. Anything appended here must be expressible against
+// `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all the
+// COUNT and the export join.
+function buildOrderFilter(query) {
+  const { status, q, from, to, store_id, customer_id } = query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(req.query.channel || '').toLowerCase())
-    ? String(req.query.channel).toLowerCase() : '';
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(query.channel || '').toLowerCase())
+    ? String(query.channel).toLowerCase() : '';
+  let filterSql = 'WHERE 1=1';
+  const params = [];
+  // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
+  // this combined list read-only instead of being excluded; an explicit
+  // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
+  if (channel) { filterSql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
+  // `refunds_open` is a pseudo-status that pulls every order currently in
+  // the refund pipeline regardless of primary status — so open requests
+  // are reachable from the main orders table, not only the chip view.
+  if (status === 'refunds_open') {
+    filterSql += " AND o.refund_status IN ('pending','reviewing','approved')";
+  } else if (status === 'needs_invoice') {
+    // Pseudo-status: every order carrying a fapiao request, whatever its
+    // primary status. Dead orders drop out (a cancelled order owes no fapiao);
+    // issued ones stay browsable in this view but sort below the open work.
+    filterSql += ` AND o.needs_invoice = 1
+             AND o.status NOT IN ('cancelled','pending_payment')`;
+  } else if (status === 'paid') {
+    // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
+    // multi-parcel order that's had only SOME parcels shipped flips to
+    // 'dispatched' as a whole, yet still owes the customer an unshipped parcel.
+    // Keep it in this tab (alongside the real `paid` orders) until every parcel
+    // is out, so the leftover parcel can't be forgotten. It still appears in the
+    // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
+    // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
+    filterSql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
+               SELECT 1 FROM retail_shipments shx
+                WHERE shx.order_id = o.id
+                  AND shx.delivered_at IS NULL
+                  AND COALESCE(shx.tracking_status,'') != 'delivered'
+                  AND shx.dispatched_at IS NULL
+                  AND COALESCE(shx.tracking_number,'') = '')))`;
+  } else if (status) {
+    filterSql += ' AND o.status = ?'; params.push(status);
+  }
+  if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (q) {
+    filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
+    const s = `%${q}%`; params.push(s, s, s, s);
+  }
+  if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
+  if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
+  // Scope to a single customer — an exact FK match (the "View all N orders"
+  // path from a customer's drawer), NOT the free-text q search. Rides
+  // o.customer_id (already selected) and the retail_customers c join the COUNT
+  // below shares, so the pager total stays exact for the scoped list.
+  if (customer_id) {
+    const cid = parseInt(customer_id, 10);
+    if (Number.isFinite(cid)) { filterSql += ' AND o.customer_id = ?'; params.push(cid); }
+  }
+  return { filterSql, params, channel };
+}
+
+// ── CSV: the orders the screen is showing, all of them ─────────────────────
+// Registered ABOVE /orders/:id on purpose: Express matches in order and
+// `export.csv` would otherwise be parsed as an order id.
+//
+// Same filters as the list (buildOrderFilter), no LIMIT. The merchant's
+// bookkeeper wants last quarter's sales and the merchant wants to be able to
+// leave with their own data; both needed a spreadsheet and there was no door.
+// BOM-prefixed UTF-8 so Excel renders the Chinese names correctly (same as the
+// products and activity exports).
+//
+// ONE ROW PER ORDER, not per line item. A per-item file is the right shape for
+// a product-sales report and the wrong shape for reconciling takings against a
+// bank statement, which is what this is for; the item detail is summarised in
+// two columns (how many lines, and what they were) so the row is still legible
+// without a second file.
+router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { filterSql, params } = buildOrderFilter(req.query);
+    const rows = tdb().prepare(
+      `SELECT o.id, o.order_no, o.status, o.channel, o.fulfillment_type,
+              o.payment_method, o.subtotal, o.shipping_fee, o.same_day_surcharge_fee, o.total,
+              o.refund_status, o.refund_amount_approved, o.refund_amount_paid,
+              o.recipient_name, o.recipient_phone, o.address_full,
+              o.customer_id, c.nickname AS customer_name, c.phone AS customer_phone,
+              o.store_id, s.code AS store_code,
+              COALESCE(NULLIF(s.name_en,''), NULLIF(s.name_cn,''), s.code) AS store_label,
+              o.scheduled_for, o.delivery_slot_label, o.delivery_mode,
+              o.tracking_carrier, o.tracking_number, o.tracking_status,
+              o.needs_invoice, o.invoice_status, o.invoice_number, o.invoice_title,
+              o.staff_note,
+              datetime(o.placed_at,     '+8 hours') AS placed_local,
+              datetime(o.paid_at,       '+8 hours') AS paid_local,
+              datetime(o.dispatched_at, '+8 hours') AS dispatched_local,
+              datetime(o.delivered_at,  '+8 hours') AS delivered_local
+         FROM retail_orders o
+    LEFT JOIN retail_customers c ON c.id = o.customer_id
+    LEFT JOIN retail_stores    s ON s.id = o.store_id
+        ${filterSql}
+     ORDER BY o.placed_at DESC`
+    ).all(...params);
+
+    // The line items for every exported order in ONE query keyed by order —
+    // never one query per row. An unfiltered export is the largest read in the
+    // admin and a per-row lookup is where it would stop finishing.
+    const itemsBy = new Map();
+    if (rows.length) {
+      const ids = rows.map(r => r.id);
+      // SQLite's parameter ceiling is 999; chunk rather than assume the export
+      // is small, because the whole point of this endpoint is that it isn't.
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        const ph = chunk.map(() => '?').join(',');
+        const its = tdb().prepare(
+          `SELECT order_id, qty,
+                  COALESCE(NULLIF(name_en,''), NULLIF(name_cn,''), sku, '') AS label
+             FROM retail_order_items WHERE order_id IN (${ph})
+            ORDER BY id ASC`
+        ).all(...chunk);
+        for (const it of its) {
+          if (!itemsBy.has(it.order_id)) itemsBy.set(it.order_id, []);
+          itemsBy.get(it.order_id).push(it);
+        }
+      }
+    }
+
+    const yn = v => (Number(v) ? 'Yes' : 'No');
+    const head = [
+      'Order no', 'Status', 'Channel', 'Fulfilment',
+      'Placed (UTC+8)', 'Paid (UTC+8)', 'Dispatched (UTC+8)', 'Delivered (UTC+8)',
+      'Payment method', 'Subtotal', 'Delivery fee', 'Same-day surcharge', 'Total',
+      'Refund status', 'Refund approved', 'Refund paid',
+      'Customer', 'Customer phone', 'Recipient', 'Recipient phone', 'Address',
+      'Location', 'Scheduled for', 'Delivery window', 'Delivery mode',
+      'Carrier', 'Tracking number', 'Tracking status',
+      'Invoice requested', 'Invoice status', 'Invoice number', 'Invoice title',
+      'Items', 'What was ordered', 'Staff note',
+    ];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      const its = itemsBy.get(r.id) || [];
+      lines.push([
+        r.order_no, r.status, r.channel || 'wechat', r.fulfillment_type,
+        r.placed_local, r.paid_local, r.dispatched_local, r.delivered_local,
+        r.payment_method, r.subtotal, r.shipping_fee, r.same_day_surcharge_fee, r.total,
+        r.refund_status, r.refund_amount_approved, r.refund_amount_paid,
+        r.customer_name, r.customer_phone, r.recipient_name, r.recipient_phone, r.address_full,
+        r.store_label, r.scheduled_for, r.delivery_slot_label, r.delivery_mode,
+        r.tracking_carrier, r.tracking_number, r.tracking_status,
+        yn(r.needs_invoice), r.invoice_status, r.invoice_number, r.invoice_title,
+        its.reduce((n, it) => n + Number(it.qty || 0), 0),
+        its.map(it => `${it.qty} × ${it.label}`).join('; '),
+        r.staff_note,
+      ].map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="orders_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[orders csv]', e);
+    res.status(500).json({ success: false, error: 'orders_csv_failed', message: e.message });
+  }
+});
+
+router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
+  // Only the ORDER BY below still reads a filter value directly (the
+  // needs-invoice worklist sorts differently); everything else that narrows the
+  // list now lives in buildOrderFilter.
+  const status = req.query.status;
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
 
@@ -23714,61 +23953,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_stores    s ON s.id = o.store_id
           LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
               `;
-  // The filter clause is built once and reused by BOTH the page query and the
-  // COUNT that feeds the list's pager, so the two can never disagree about
-  // which orders match. Anything appended here must be expressible against
-  // `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all
-  // the COUNT below joins.
-  let filterSql = 'WHERE 1=1';
-  const params = [];
-  // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
-  // this combined list read-only instead of being excluded; an explicit
-  // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
-  if (channel) { filterSql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
-  // `refunds_open` is a pseudo-status that pulls every order currently in
-  // the refund pipeline regardless of primary status — so open requests
-  // are reachable from the main orders table, not only the chip view.
-  if (status === 'refunds_open') {
-    filterSql += " AND o.refund_status IN ('pending','reviewing','approved')";
-  } else if (status === 'needs_invoice') {
-    // Pseudo-status: every order carrying a fapiao request, whatever its
-    // primary status. Dead orders drop out (a cancelled order owes no fapiao);
-    // issued ones stay browsable in this view but sort below the open work.
-    filterSql += ` AND o.needs_invoice = 1
-             AND o.status NOT IN ('cancelled','pending_payment')`;
-  } else if (status === 'paid') {
-    // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
-    // multi-parcel order that's had only SOME parcels shipped flips to
-    // 'dispatched' as a whole, yet still owes the customer an unshipped parcel.
-    // Keep it in this tab (alongside the real `paid` orders) until every parcel
-    // is out, so the leftover parcel can't be forgotten. It still appears in the
-    // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
-    // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
-    filterSql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
-               SELECT 1 FROM retail_shipments shx
-                WHERE shx.order_id = o.id
-                  AND shx.delivered_at IS NULL
-                  AND COALESCE(shx.tracking_status,'') != 'delivered'
-                  AND shx.dispatched_at IS NULL
-                  AND COALESCE(shx.tracking_number,'') = '')))`;
-  } else if (status) {
-    filterSql += ' AND o.status = ?'; params.push(status);
-  }
-  if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
-  if (q) {
-    filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
-    const s = `%${q}%`; params.push(s, s, s, s);
-  }
-  if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
-  if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
-  // Scope to a single customer — an exact FK match (the "View all N orders"
-  // path from a customer's drawer), NOT the free-text q search. Rides
-  // o.customer_id (already selected) and the retail_customers c join the COUNT
-  // below shares, so the pager total stays exact for the scoped list.
-  if (customer_id) {
-    const cid = parseInt(customer_id, 10);
-    if (Number.isFinite(cid)) { filterSql += ' AND o.customer_id = ?'; params.push(cid); }
-  }
+  // Built by buildOrderFilter so the page, the pager COUNT and the CSV export
+  // are answering the same question.
+  let { filterSql, params } = buildOrderFilter(req.query);
 
   // How many orders match, ignoring the page window. Without this the list
   // silently truncated at `limit` with nothing on screen saying so — orders

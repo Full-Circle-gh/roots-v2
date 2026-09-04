@@ -234,154 +234,202 @@ router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailA
 });
 
 // ── GET /api/retail-admin/finance/transactions?from=&to= ───────────────────
-router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, res) => {
-  const win = resolveWindow(req.query);
+// The ledger read, in ONE place, because two readers need it: the screen and
+// the CSV export. The export is the file the bookkeeper works from; if it and
+// the screen answered the same window differently, whichever one was wrong
+// would not be found until the books did not balance.
+function readTransactions(query) {
+  const win = resolveWindow(query);
   const { from, to } = win;
-  if (win.inverted) {
+  const db = tdb();
+
+  // ── Money in ──
+  // Typed non-sale income only: sublet space, sold equipment, grants, supplier
+  // rebates (§36's own examples). Sales are not here and must not be added.
+  const income = db.prepare(`
+    SELECT id, ${LEDGER_DATE} AS date, amount, category, description
+      FROM income_entries
+     WHERE ${LEDGER_DATE} BETWEEN ? AND ?
+     ORDER BY date DESC, id DESC`).all(from, to);
+
+  // ── Money out · hand-entered ──
+  // Everything with no `po_id`. These are editable in principle — the write
+  // half is unbuilt — so they carry `source: 'manual'`.
+  const manual = db.prepare(`
+    SELECT id, ${LEDGER_DATE} AS date, amount, category, description
+      FROM expense_entries
+     WHERE po_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
+     ORDER BY date DESC, id DESC`).all(from, to);
+
+  // ── Money out · posted by Purchasing ──
+  // COLLAPSED TO ONE ROW PER PURCHASE ORDER, per §36: "PO-derived expenses DO
+  // appear in the Transactions list, collapsed to ONE row per purchase order,
+  // not editable there, and linking through to the purchase order." Storage is
+  // untouched — `postPOExpenses()` still writes one row per category and two
+  // rows still exist for PO-0050; one row is drawn. That is a display decision
+  // and this GROUP BY is the whole of it.
+  //
+  // THE DATE IS THE PURCHASE ORDER'S OWN, NEVER `created_at`. These rows are
+  // delete-and-reinsert projections: both posters delete every row for a PO and
+  // re-insert them on each status change, so `created_at` records the last
+  // re-post rather than when the purchase happened — a PO flipped back and
+  // forward in April carries April rows stamped with today. §36: "It must never
+  // be presented as a purchase date, and never used as evidence of when
+  // anything occurred." `created_at` is not selected here at all, so no later
+  // edit can reach for it by accident.
+  //
+  // The window filters on the PO's date for the same reason: filtering on the
+  // row's own date would move a purchase into whichever window it was last
+  // re-posted in.
+  //
+  // `categories` counts the DISTINCT category subtotals behind the figure. §36:
+  // the note it drives "vanishes entirely at n = 1 — it does not read '1
+  // category'", because at one nothing was collapsed and a note would assert a
+  // breakdown that does not exist. The client applies that rule; the count is
+  // reported honestly either way.
+  //
+  // `scope` IS SELECTED BECAUSE NOT EVERY PO ON THIS ROW CAN BE OPENED. The
+  // kitchen and retail realms SHARE the `purchase_orders` table and are told
+  // apart only by this column — `COALESCE(scope,'kitchen')`, the same
+  // expression `getRetailPO` filters on. Both realms' posters write
+  // `expense_entries.po_id`, so a kitchen order (PO-0050) lands in this ledger
+  // exactly as a retail one (RPO-0003) does, and it belongs here: it is real
+  // money out. But Purchasing's own opener serves retail scope only and
+  // answers `not_found` for the rest, so the row must not offer an action that
+  // cannot complete — §36: "the row explains its own constraint instead of
+  // merely enforcing it", and a link that fails is the fault that rule names.
+  // The row still renders, still counts, and still says Posted by Purchasing.
+  const posted = db.prepare(`
+    SELECT e.po_id                       AS po_id,
+           po.po_number                  AS po_number,
+           po.date                       AS date,
+           COALESCE(SUM(e.amount), 0)    AS amount,
+           COUNT(DISTINCT e.category)    AS categories,
+           COUNT(*)                      AS rows_collapsed,
+           COALESCE(po.scope, 'kitchen') AS po_scope
+      FROM expense_entries e
+      JOIN purchase_orders po ON po.id = e.po_id
+     WHERE e.po_id IS NOT NULL AND po.date BETWEEN ? AND ?
+     GROUP BY e.po_id, po.po_number, po.date, COALESCE(po.scope, 'kitchen')
+     ORDER BY po.date DESC, e.po_id DESC`).all(from, to);
+
+  // ── The income category list ──
+  // §36, *Income categories move server-side, and the list ships empty*: the
+  // tenant's own list, hydrated from the server on load, on the same mechanism
+  // as expense. It rides the ledger payload rather than a second endpoint
+  // because the screen needs it at exactly the moment it already has this —
+  // the form reads its suggestions off this same object.
+  //
+  // **IT IS EMPTY ON EVERY TENANT TODAY, AND THAT IS THE DECISION, NOT A GAP.**
+  // "The list ships empty. No defaults." Nothing seeds it: the boot seed in
+  // database.js covers 'recipe' and 'product' only. An empty list is what makes
+  // the form's category field ABSENT for money in — §36's own rule for the
+  // screen — and "an empty list cannot offer a wrong option".
+  //
+  // Same ORDER BY as `routes/lookups.js` reads it with, so the one list does not
+  // come back in two orders depending on which endpoint asked.
+  const incomeCategories = db.prepare(
+    "SELECT name FROM categories WHERE kind = 'income' ORDER BY sort_order, name"
+  ).all().map(r => r.name);
+
+  // ── One list, both directions ──
+  // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
+  // tie so the order is stable across reloads rather than left to the engine.
+  const rows = [
+    ...income.map(r => ({
+      kind: 'in', id: r.id, date: r.date,
+      subject: r.description || r.category || null,
+      category: r.category || null,
+      amount: fen(r.amount),
+      source: 'manual', po_id: null, po_number: null, categories: null,
+    })),
+    ...manual.map(r => ({
+      kind: 'out', id: r.id, date: r.date,
+      subject: r.category || r.description || null,
+      category: r.category || null,
+      amount: fen(r.amount),
+      source: 'manual', po_id: null, po_number: null, categories: null,
+    })),
+    ...posted.map(r => ({
+      kind: 'out', id: `po-${r.po_id}`, date: r.date,
+      subject: r.po_number || `PO-${r.po_id}`,
+      category: null,
+      amount: fen(r.amount),
+      source: 'po', po_id: r.po_id, po_number: r.po_number,
+      categories: r.categories || 0,
+      // Whether THIS screen's link can reach it, not a fact about the order.
+      po_open: r.po_scope === 'retail',
+    })),
+  ].sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0)
+                || String(b.id).localeCompare(String(a.id)));
+
+  const sum = (k) => fen(rows.filter(r => r.kind === k).reduce((t, r) => t + r.amount, 0));
+  return {
+    window: { from, to, span_days: win.span_days },
+    income_categories: incomeCategories,
+    totals: { in: sum('in'), out: sum('out') },
+    counts: {
+      all: rows.length,
+      in: rows.filter(r => r.kind === 'in').length,
+      out: rows.filter(r => r.kind === 'out').length,
+    },
+    rows,
+  };
+}
+
+router.get('/api/retail-admin/finance/transactions', requireRetailAdmin, (req, res) => {
+  if (resolveWindow(req.query).inverted) {
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
   }
-
   try {
-    const db = tdb();
-
-    // ── Money in ──
-    // Typed non-sale income only: sublet space, sold equipment, grants, supplier
-    // rebates (§36's own examples). Sales are not here and must not be added.
-    const income = db.prepare(`
-      SELECT id, ${LEDGER_DATE} AS date, amount, category, description
-        FROM income_entries
-       WHERE ${LEDGER_DATE} BETWEEN ? AND ?
-       ORDER BY date DESC, id DESC`).all(from, to);
-
-    // ── Money out · hand-entered ──
-    // Everything with no `po_id`. These are editable in principle — the write
-    // half is unbuilt — so they carry `source: 'manual'`.
-    const manual = db.prepare(`
-      SELECT id, ${LEDGER_DATE} AS date, amount, category, description
-        FROM expense_entries
-       WHERE po_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
-       ORDER BY date DESC, id DESC`).all(from, to);
-
-    // ── Money out · posted by Purchasing ──
-    // COLLAPSED TO ONE ROW PER PURCHASE ORDER, per §36: "PO-derived expenses DO
-    // appear in the Transactions list, collapsed to ONE row per purchase order,
-    // not editable there, and linking through to the purchase order." Storage is
-    // untouched — `postPOExpenses()` still writes one row per category and two
-    // rows still exist for PO-0050; one row is drawn. That is a display decision
-    // and this GROUP BY is the whole of it.
-    //
-    // THE DATE IS THE PURCHASE ORDER'S OWN, NEVER `created_at`. These rows are
-    // delete-and-reinsert projections: both posters delete every row for a PO and
-    // re-insert them on each status change, so `created_at` records the last
-    // re-post rather than when the purchase happened — a PO flipped back and
-    // forward in April carries April rows stamped with today. §36: "It must never
-    // be presented as a purchase date, and never used as evidence of when
-    // anything occurred." `created_at` is not selected here at all, so no later
-    // edit can reach for it by accident.
-    //
-    // The window filters on the PO's date for the same reason: filtering on the
-    // row's own date would move a purchase into whichever window it was last
-    // re-posted in.
-    //
-    // `categories` counts the DISTINCT category subtotals behind the figure. §36:
-    // the note it drives "vanishes entirely at n = 1 — it does not read '1
-    // category'", because at one nothing was collapsed and a note would assert a
-    // breakdown that does not exist. The client applies that rule; the count is
-    // reported honestly either way.
-    //
-    // `scope` IS SELECTED BECAUSE NOT EVERY PO ON THIS ROW CAN BE OPENED. The
-    // kitchen and retail realms SHARE the `purchase_orders` table and are told
-    // apart only by this column — `COALESCE(scope,'kitchen')`, the same
-    // expression `getRetailPO` filters on. Both realms' posters write
-    // `expense_entries.po_id`, so a kitchen order (PO-0050) lands in this ledger
-    // exactly as a retail one (RPO-0003) does, and it belongs here: it is real
-    // money out. But Purchasing's own opener serves retail scope only and
-    // answers `not_found` for the rest, so the row must not offer an action that
-    // cannot complete — §36: "the row explains its own constraint instead of
-    // merely enforcing it", and a link that fails is the fault that rule names.
-    // The row still renders, still counts, and still says Posted by Purchasing.
-    const posted = db.prepare(`
-      SELECT e.po_id                       AS po_id,
-             po.po_number                  AS po_number,
-             po.date                       AS date,
-             COALESCE(SUM(e.amount), 0)    AS amount,
-             COUNT(DISTINCT e.category)    AS categories,
-             COUNT(*)                      AS rows_collapsed,
-             COALESCE(po.scope, 'kitchen') AS po_scope
-        FROM expense_entries e
-        JOIN purchase_orders po ON po.id = e.po_id
-       WHERE e.po_id IS NOT NULL AND po.date BETWEEN ? AND ?
-       GROUP BY e.po_id, po.po_number, po.date, COALESCE(po.scope, 'kitchen')
-       ORDER BY po.date DESC, e.po_id DESC`).all(from, to);
-
-    // ── The income category list ──
-    // §36, *Income categories move server-side, and the list ships empty*: the
-    // tenant's own list, hydrated from the server on load, on the same mechanism
-    // as expense. It rides the ledger payload rather than a second endpoint
-    // because the screen needs it at exactly the moment it already has this —
-    // the form reads its suggestions off this same object.
-    //
-    // **IT IS EMPTY ON EVERY TENANT TODAY, AND THAT IS THE DECISION, NOT A GAP.**
-    // "The list ships empty. No defaults." Nothing seeds it: the boot seed in
-    // database.js covers 'recipe' and 'product' only. An empty list is what makes
-    // the form's category field ABSENT for money in — §36's own rule for the
-    // screen — and "an empty list cannot offer a wrong option".
-    //
-    // Same ORDER BY as `routes/lookups.js` reads it with, so the one list does not
-    // come back in two orders depending on which endpoint asked.
-    const incomeCategories = db.prepare(
-      "SELECT name FROM categories WHERE kind = 'income' ORDER BY sort_order, name"
-    ).all().map(r => r.name);
-
-    // ── One list, both directions ──
-    // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
-    // tie so the order is stable across reloads rather than left to the engine.
-    const rows = [
-      ...income.map(r => ({
-        kind: 'in', id: r.id, date: r.date,
-        subject: r.description || r.category || null,
-        category: r.category || null,
-        amount: fen(r.amount),
-        source: 'manual', po_id: null, po_number: null, categories: null,
-      })),
-      ...manual.map(r => ({
-        kind: 'out', id: r.id, date: r.date,
-        subject: r.category || r.description || null,
-        category: r.category || null,
-        amount: fen(r.amount),
-        source: 'manual', po_id: null, po_number: null, categories: null,
-      })),
-      ...posted.map(r => ({
-        kind: 'out', id: `po-${r.po_id}`, date: r.date,
-        subject: r.po_number || `PO-${r.po_id}`,
-        category: null,
-        amount: fen(r.amount),
-        source: 'po', po_id: r.po_id, po_number: r.po_number,
-        categories: r.categories || 0,
-        // Whether THIS screen's link can reach it, not a fact about the order.
-        po_open: r.po_scope === 'retail',
-      })),
-    ].sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0)
-                  || String(b.id).localeCompare(String(a.id)));
-
-    const sum = (k) => fen(rows.filter(r => r.kind === k).reduce((t, r) => t + r.amount, 0));
-
-    res.json({
-      success: true,
-      data: {
-        window: { from, to, span_days: win.span_days },
-        income_categories: incomeCategories,
-        totals: { in: sum('in'), out: sum('out') },
-        counts: {
-          all: rows.length,
-          in: rows.filter(r => r.kind === 'in').length,
-          out: rows.filter(r => r.kind === 'out').length,
-        },
-        rows,
-      },
-    });
+    res.json({ success: true, data: readTransactions(req.query) });
   } catch (e) {
     console.error('[finance/transactions]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/retail-admin/finance/transactions/export.csv?from=&to= ────────
+// The same ledger the screen shows, for the same window, as a spreadsheet.
+// This is the file the bookkeeper actually works from, so it carries the two
+// facts the screen renders as styling rather than data: which direction the
+// money went, and whether the row was typed by a person or posted by
+// Purchasing (which is what makes it not editable). Amounts are one signed
+// column — money out negative — because that is the shape every accounting
+// package imports, and a second "direction" column is kept beside it so a
+// human reading the file does not have to infer it from a minus sign.
+// BOM-prefixed UTF-8 so Excel renders the Chinese categories correctly.
+router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdmin, (req, res) => {
+  if (resolveWindow(req.query).inverted) {
+    return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
+  }
+  try {
+    const data = readTransactions(req.query);
+    const head = ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order'];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of data.rows) {
+      lines.push([
+        r.date,
+        r.kind === 'in' ? 'Money in' : 'Money out',
+        r.subject,
+        // A PO row has no single category — it is the collapse of several — so
+        // it says how many rather than naming one it does not have.
+        r.category || (r.categories > 1 ? `${r.categories} categories` : ''),
+        r.amount,
+        r.kind === 'in' ? r.amount : fen(-r.amount),
+        r.source === 'po' ? 'Purchasing' : 'Entered by hand',
+        r.po_number || '',
+      ].map(cell).join(','));
+    }
+    // The window is in the filename, not a row: a total row inside a CSV is the
+    // classic way a spreadsheet ends up double-counting itself when somebody
+    // sums the column.
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="transactions_${data.window.from}_to_${data.window.to}.csv"`);
+    res.send('\ufeff' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[finance/transactions csv]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

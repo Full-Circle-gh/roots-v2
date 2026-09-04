@@ -616,6 +616,25 @@ function _cuFilterKey() {
           CU_SEGMENT, CU_PAGE, CU_PAGE_SIZE].join('|');
 }
 
+// Download the customers the roster is showing — every one of them, not just
+// the page on screen. Filtered exactly as the roster is: an operator looking at
+// the Sleeping segment who presses Export wants the sleepers. Blocked records
+// follow the roster's own rule, so the file matches what was on screen.
+//
+// Sort and paging are deliberately not sent: an export has no pages, and a
+// spreadsheet is sorted in the spreadsheet.
+function cuExportCsv() {
+  const params = new URLSearchParams({
+    q: ($('#cu-q') || {}).value ? $('#cu-q').value.trim() : '',
+    tier: [...CU_TIER_FILTERS].join(','),
+    channel: CU_CHAN_FILTER,
+    segment: CU_SEGMENT,
+  });
+  for (const k of [...params.keys()]) if (!params.get(k)) params.delete(k);
+  const qs = params.toString();
+  window.location.href = '/api/retail-admin/customers/export.csv' + (qs ? '?' + qs : '');
+}
+
 // opts.silent — see the note above. Split in two so the page-clamp below can
 // recurse without tripping the in-flight guard it is already holding.
 async function cuLoad(opts = {}) {

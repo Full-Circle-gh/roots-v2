@@ -599,6 +599,17 @@ window.finTxClear = function finTxClear() {
   finTxRender();
 };
 
+// Download the ledger for the window the range bar is showing. Deliberately
+// the WINDOW, not the client-side search box above the list: that box narrows
+// rows already in the browser, and a file that silently obeyed it would be a
+// different answer from the one the range bar names on screen.
+window.finTxExportCsv = function finTxExportCsv() {
+  const from = (document.getElementById('fin-from') || {}).value || '';
+  const to = (document.getElementById('fin-to') || {}).value || '';
+  window.location.href = '/api/retail-admin/finance/transactions/export.csv'
+    + `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+};
+
 async function finTxLoad() {
   const host = document.getElementById('fin-tx-list');
   if (!host) return;

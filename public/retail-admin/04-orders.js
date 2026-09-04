@@ -1139,6 +1139,64 @@ function ordRepaintKpiLabels() {
     money, cuT('order', '单'));
 }
 
+// ── The Orders filter, read from the controls in ONE place ─────────────────
+// Three callers need the same answer: the list, the CSV export and the
+// clear-filters control. Returns the filter half of the query string only —
+// paging belongs to whoever is paging, and an export has no pages.
+function ordFilterQuery() {
+  const qs = new URLSearchParams();
+  const status  = ($('#orders-status') || {}).value || '';
+  const channel = (document.getElementById('orders-channel') || {}).value || '';
+  const q       = (($('#orders-q') || {}).value || '').trim();
+  const storeSel = document.getElementById('orders-store');
+  const storeId  = storeSel ? storeSel.value : '';
+  if (status)  qs.set('status', status);
+  if (channel) qs.set('channel', channel);
+  if (q)       qs.set('q', q);
+  if (storeId) qs.set('store_id', storeId);
+  if (ORD_CUSTOMER_FILTER) qs.set('customer_id', ORD_CUSTOMER_FILTER.id);
+  return qs;
+}
+
+// Is anything narrowing the list right now? Drives the Clear button's presence:
+// a control that is always there but does nothing four times out of five is
+// noise, and one that appears when there is something to clear is a status
+// line as well as a button.
+function ordFiltersActive() {
+  return [...ordFilterQuery().keys()].length > 0;
+}
+
+// Show or hide the Clear button to match. Called on every load, so it tracks
+// the controls however they were changed — chip, menu, typing, or a customer
+// drawer's "View all N orders".
+function ordSyncClearBtn() {
+  const b = document.getElementById('ord-clear-btn');
+  if (b) b.hidden = !ordFiltersActive();
+}
+
+// Put every Orders control back to "everything", in one click. Before this the
+// operator had to find and undo each one — the status chip, the channel menu,
+// the store select, the search box, the customer chip — and the commonest way
+// out was reloading the page.
+function ordClearFilters() {
+  // ordResetFacetsUI already puts the chips, the channel menu (tick, label,
+  // icon and fill), the store select and the search box back to their defaults
+  // without reloading — it was written for the "View all N orders" path and is
+  // the one place that knows every control on this row.
+  ordResetFacetsUI();
+  ORD_CUSTOMER_FILTER = null;
+  ordFilterChanged();          // page → 1 + one reload
+}
+
+// Download the orders the list is showing — every one of them, not just the
+// page on screen. Deliberately filtered, unlike the catalogue export: an
+// operator on the Refunds chip who presses Export wants the refunds, and a
+// file that silently held the whole year would be worse than none.
+function ordExportCsv() {
+  const qs = ordFilterQuery().toString();
+  window.location.href = '/api/retail-admin/orders/export.csv' + (qs ? '?' + qs : '');
+}
+
 async function loadOrders(opts = {}) {
   const silent = !!opts.silent;
 
@@ -1165,14 +1223,13 @@ async function loadOrders(opts = {}) {
     // tracking, total). The backend treats `status=refunds_open` as the
     // pseudo-filter `refund_status IN ('pending','reviewing','approved')`.
 
-    const qs = new URLSearchParams();
-    if (status)  qs.set('status', status);
-    if (channel) qs.set('channel', channel);
-    if (q)       qs.set('q', q);
-    if (storeId) qs.set('store_id', storeId);
-    if (ORD_CUSTOMER_FILTER) qs.set('customer_id', ORD_CUSTOMER_FILTER.id);
+    // Built by ordFilterQuery so this list, the CSV export and the
+    // clear-filters control all read the same set of controls. The four consts
+    // above stay for the log lines and the render below that still name them.
+    const qs = ordFilterQuery();
     // Reflect the customer scope as a removable chip above the list.
     ordRenderCustChip();
+    ordSyncClearBtn();
     // The page window. Sending these is what makes orders past the first 100
     // reachable at all — the server was already honouring limit/offset, the
     // list just never asked for a second page.

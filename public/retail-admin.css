@@ -14304,7 +14304,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500;
 }
 #tab-finance .fin-tx-n { font-variant-numeric: tabular-nums; opacity: .7; }
-#tab-finance .fin-tx-filter { margin-top: 16px; }
+/* Search box and the Export button share one line; the search still owns the
+   slack, so the button sits at its right-hand end rather than the page's. */
+#tab-finance .fin-tx-filter { margin-top: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 #tab-finance .fin-tx-search {
   width: 100%; max-width: 420px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
   background: var(--td-surface); border: 1px solid var(--td-border);

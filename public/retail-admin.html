@@ -2330,6 +2330,18 @@
       <!-- The Dusk "New order" CTA moved to the page header 2026-07-27 (§1.7:
            the primary action sits top-right, level with the title). Brief 3
            rebuilds this row onto one line; the gap it leaves is expected. -->
+      <!-- Clear filters — present only while something is actually narrowing
+           the list (ordSyncClearBtn). Before this the only way back to the
+           whole list was to undo the status chip, the channel menu, the store
+           select, the search box and the customer chip one at a time. -->
+      <button class="btn btn-sm ord-clear-btn" id="ord-clear-btn" type="button" hidden
+              onclick="ordClearFilters()"
+              title="Show every order again · 显示全部订单">Clear filters · 清除筛选</button>
+      <!-- Download the orders currently listed — all of them, not just this
+           page. Filtered on purpose: the file should match the screen it was
+           taken from. -->
+      <button class="btn btn-sm" id="ord-export-btn" type="button" onclick="ordExportCsv()"
+              title="Download these orders as a spreadsheet · 下载当前订单表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
       <!-- Bulk attach tracking — hidden by default; a tenant turns it on from
            Settings → Delivery (delivery.bulkTracking → body.ord-bulk-tracking).
            Kept as a secondary button so it never competes with the one Dusk CTA. -->
@@ -4024,6 +4036,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
           <input type="text" id="cu-q" data-ph-en="Search name or phone" data-ph-cn="搜索姓名或电话" placeholder="Search name or phone" oninput="cuSearchDebounced()">
         </span>
+        <!-- Download the customers currently listed — all of them, not just this
+             page, and filtered exactly as the roster is. -->
+        <button class="btn btn-sm" id="cu-export-btn" type="button" onclick="cuExportCsv()"
+                title="Download these customers as a spreadsheet · 下载当前顾客表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -11060,6 +11076,12 @@
       <div class="fin-tx-filter">
         <input class="fin-tx-search" id="fin-tx-search" type="text"
                oninput="finTxRender()" aria-label="Filter these transactions">
+        <!-- Download the ledger for the range bar's window. The search box above
+             is a client-side narrowing of rows already fetched, so it is NOT in
+             the file: the export is the window, which is what a bookkeeper asks
+             for and the only thing the server can be asked for exactly. -->
+        <button class="fin-btn-sec" id="fin-tx-export" type="button" onclick="finTxExportCsv()"
+                title="Download this window as a spreadsheet · 下载该时间段表格">Export CSV · 导出</button>
       </div>
       <div id="fin-tx-list"></div>
     </div>
