@@ -158,16 +158,44 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 //   • Idempotent via restock_orders.stock_applied_at — 'prepared' applies
 //     it; a later 'delivered' is a no-op safety net.
 
+// `stock.warehouseStoreId` off `storefront_config`, on the tenant handle.
+// The four-line twin of cfgValue() in routes/retail.js, which is not exported.
+// value_json is JSON, so the id may arrive as a number or as a quoted string;
+// both are accepted and anything that is not a positive integer is treated as
+// unset so a malformed value falls through rather than resolving to 0/NaN.
+function _cfgWarehouseStoreId() {
+  try {
+    const row = tdb().prepare(
+      "SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    if (!row) return null;
+    const id = parseInt(JSON.parse(row.value_json), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
 // Resolve the warehouse (source) retail_stores.id — the location goods
 // ship OUT of. Preference: explicit setting → a warehouse-role user's
 // bound store → the store holding the most stock. null if undeterminable.
 function _resolveWarehouseStoreId() {
-  // (1) optional explicit override, for a future multi-warehouse world.
-  try {
-    const s = db.prepare("SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'").get();
-    const id = s && parseInt(s.value, 10);
-    if (id) return id;
-  } catch { /* no settings table / row — fall through */ }
+  // (1) the configured warehouse, per tenant. Decisions §39 Ruling 3 names
+  //     `stock.warehouseStoreId` on `storefront_config` — the table's name is
+  //     a poor fit and that is recorded, deliberate debt; it works, it is
+  //     already per-tenant, and renaming a live config store mid-build was
+  //     rejected as gratuitous risk.
+  //
+  //     This used to read `SELECT value FROM settings`, and there is no
+  //     `settings` table in schema.sql, in database.js, or in the live
+  //     database. The lookup threw on every call, the bare catch swallowed it,
+  //     and resolution silently fell through to (3) — the highest-stock store,
+  //     a guess that happened to land on the right row at Roots. Setting the
+  //     old key had no effect and never has.
+  //
+  //     Read on the TENANT handle, not the shared one, per the same ruling: a
+  //     read on `db` here would hand every tenant Roots' warehouse. Tiers (2)
+  //     and (3) below still read `db` — pre-existing, out of scope for this
+  //     change, and moot for Roots where tdb() IS db.
+  const cfgId = _cfgWarehouseStoreId();
+  if (cfgId) return cfgId;
   // (2) the store a warehouse-role user is assigned to.
   const wu = db.prepare(`
     SELECT retail_store_id FROM users
@@ -361,29 +389,43 @@ function requireRestockOrInbox(req, res, next) {
 //   store      → warehouse  (store user requests stock)
 //   warehouse  → kitchen    (warehouse asks kitchen for items)
 //   warehouse  → store      (warehouse pushes stock to a store)
-// Warehouse users can explicitly target either kitchen or store via
-// req.body.to_role; the kitchen path is the default for back-compat.
+// Warehouse users target kitchen or store explicitly via req.body.to_role.
+//
+// A REQUEST WITH NO DESTINATION GOES TO THE WAREHOUSE, whoever sends it.
+//
+// It used to default a warehouse or admin user to the kitchen, "for
+// back-compat" with public/restock.html — the warehouse PWA, which was the
+// only client that ever sent `to_role`, and which asked for a destination and
+// a purpose in a modal before posting. That page was deleted on 2026-08-04
+// (488806ce, after Ash confirmed the flow was unused) and its create path was
+// not ported anywhere. Nothing has sent `to_role` since.
+//
+// What the default did after that was create a trap. The one surviving client,
+// app.html's in-SPA Restock screen, sends neither field, so a warehouse or
+// admin user pressing its "Send to Warehouse" button was inferred into the
+// kitchen branch and then rejected by the purpose gate below with a 400 — on
+// every submission, with no way to satisfy it from that screen. Store users
+// were unaffected, which is why it survived. The default now matches both the
+// button's label and the only flow the UI can actually express.
+//
+// This does NOT revive kitchen requests, and does not decide whether they
+// should come back: an explicit to_role:'kitchen' with a purpose still creates
+// one exactly as before. It only stops an absent choice from being read as a
+// choice of the kitchen.
 function _inferDirection(req) {
   // ORIGIN is decided by ROLE, not by the `warehouse_inbox` perm — a
   // store user (e.g. Retail Yuexiu) may have the perm so they can see
   // the Fulfill tab, but their own outgoing requests still flow
   // store→warehouse. Only `warehouse` and `admin` originate from the
-  // warehouse side and need a kitchen/store destination chooser.
+  // warehouse side and can name a destination.
   const role = req.user?.role || '';
   const isWarehouseOrigin = (role === 'warehouse' || role === 'admin');
   const explicit = (req.body && req.body.to_role) ? String(req.body.to_role) : null;
   if (isWarehouseOrigin) {
     if (explicit === 'store')   return { from_role: 'warehouse', to_role: 'store'   };
     if (explicit === 'kitchen') return { from_role: 'warehouse', to_role: 'kitchen' };
-    if (explicit === 'warehouse' && role === 'admin') {
-      // Admin acting on behalf of a store — rare but supported.
-      return { from_role: 'store', to_role: 'warehouse' };
-    }
-    // No explicit choice → default to kitchen (warehouse's daily flow).
-    return { from_role: 'warehouse', to_role: 'kitchen' };
+    // 'warehouse', anything unrecognised, or nothing at all falls through.
   }
-  // Everyone else (including store users with warehouse_inbox perm)
-  // sends requests to the warehouse.
   return { from_role: 'store', to_role: 'warehouse' };
 }
 
@@ -756,3 +798,7 @@ router.delete('/api/restock/:id', requireAuth, requireDelete, requirePermission(
 });
 
 module.exports = router;
+// Exported for scripts/test_warehouse_store_pin.js — the tier order in
+// _resolveWarehouseStoreId is the whole point of the configured key, and it is
+// not observable through any endpoint without moving real stock.
+module.exports._resolveWarehouseStoreId = _resolveWarehouseStoreId;
