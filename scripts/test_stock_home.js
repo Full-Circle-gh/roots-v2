@@ -65,6 +65,14 @@ const KITCHEN_REQ = {
 };
 const ROWS = [{ product_id: 7, name_en: 'Hummus Asli', name_cn: '鹰嘴豆泥', sku: '1-10', physical_qty: 11, restock_target: 5 }];
 
+// TWO LOCATIONS, which is the whole subject of the "Ask for stock" cases below.
+// Roots really has these two, and the second one is what makes the screen mean
+// anything: with one store there is nobody to ask.
+const TWO = [
+  { id: 1, name_en: 'Tianhe', name_cn: '天河店', code: 'TH' },
+  { id: 2, name_en: 'Yuexiu', name_cn: '越秀店', code: 'YX' },
+];
+
 // One run waiting to be picked, one delivery in transit — so both tiles can
 // carry a live count, and the pair can be switched off independently.
 const RUN = {
@@ -87,7 +95,8 @@ function stub(o) {
     'window.__e=[];window.__calls=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
-    'var CTX=' + JSON.stringify(CTX) + ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
+    'var CTX=' + JSON.stringify(o.stores ? Object.assign({}, CTX, { stores: o.stores }) : CTX) +
+      ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
     'var KITCHEN=' + JSON.stringify(o.noQueue ? [] : [KITCHEN_REQ]) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
@@ -219,6 +228,85 @@ const CASES = {
       if (!p.items[0].product_name) return 'the line carried no name, which is all a kitchen request has';
       return null;
     } },
+
+  /* ── Ask for stock ────────────────────────────────────────────────────────
+     One location asking another to send it something. The direction is not a
+     mode: it is which two ids go in which field, so the SAME screen has to
+     produce Yuexiu→Tianhe and Tianhe→Yuexiu, and both are asserted below.
+
+     This also stands in for a door that was shut without anyone noticing.
+     app.html's "Send to Warehouse" was the only thing that could raise a store
+     request; it is kitchen-realm, and #261 made POST /api/restock tacetOnly, so
+     it has 403'd since. Between then and here, nothing could raise a
+     store-to-store request at all. */
+
+  // No second location, no tile. A door onto "there is nowhere else to ask" is
+  // worse than no door — this is the one place the empty-tiles rule above bends,
+  // and it bends because the emptiness is permanent, not a quiet day.
+  'ask-tile-hidden-when-there-is-nowhere-to-ask': { js: 'window.__done();',
+    expect: ['Ask the kitchen'], absent: ['Ask for stock', 'Have another location send it'] },
+
+  'ask-tile-appears-with-a-second-location': { stores: TWO, js: 'window.__done();',
+    expect: ['Ask for stock', 'Have another location send it'] },
+
+  // Who supplies has NO DEFAULT. Choosing it for him is choosing whose shelf
+  // empties, and the two locations here are different people.
+  'ask-has-no-default-supplier': { stores: TWO, js: seq(["'[data-asopen]'", '250']),
+    expect: ['Ask for stock', 'Who should send it?', 'Yuexiu'],
+    check: (out) => {
+      if (!/data-send="disabled"/.test(out)) return 'Send was live before a supplier was chosen';
+      return /class="ak-opt on"/.test(out) ? 'a supplier was pre-selected' : null;
+    } },
+
+  // You cannot ask yourself. The store on screen is the receiver, so offering it
+  // as the sender would offer a transfer the server refuses as same-location.
+  'ask-never-offers-the-store-you-are-standing-in': { stores: TWO,
+    js: seq(["'[data-asopen]'", '250']),
+    expect: ['Yuexiu'],
+    check: (out) => /data-asfrom="1"/.test(out) ? 'the receiving store was offered as its own supplier' : null },
+
+  'ask-needs-a-supplier-AND-a-product': { stores: TWO,
+    js: seq(["'[data-asopen]'", '250', "'[data-asinc=\"7\"]'"]),
+    expect: ['1 items'],
+    check: (out) => /data-send="disabled"/.test(out) ? null : 'Send was live with a product but no supplier' },
+
+  // THE REQUEST THE OLD MODEL COULD NOT EXPRESS. Standing at Tianhe, asking
+  // Yuexiu: from_store_id is the supplier, to_store_id the shelf on screen.
+  'ask-sends-tianhe-to-yuexiu': { stores: TWO,
+    js: seq(["'[data-asopen]'", '250', "'[data-asfrom=\"2\"]'", "'[data-asinc=\"7\"]'",
+             "'[data-asinc=\"7\"]'", "'[data-assend]'", '350']),
+    expect: ['Sent to Yuexiu', '1 item · 2 units', 'It is on their pick list now'],
+    checkPost: (p) => {
+      if (!p) return 'nothing was posted';
+      if (p.from_store_id !== 2) return `from_store_id ${p.from_store_id}, expected Yuexiu (2)`;
+      if (p.to_store_id !== 1) return `to_store_id ${p.to_store_id}, expected Tianhe (1)`;
+      if (p.to_role === 'kitchen') return 'a store request was addressed to the kitchen';
+      if (p.status !== 'sent') return `posted status ${p.status}, expected sent`;
+      if (!p.items || p.items.length !== 1 || p.items[0].qty_requested !== 2) {
+        return 'the line did not carry the quantity that was set';
+      }
+      // Same trap as the kitchen screen: store and kitchen catalogues are
+      // separate counters over one integer space, and this field is read as a
+      // kitchen id. The name is what a picker reads off the row.
+      if (p.items[0].product_id != null) return 'a product_id was sent from the wrong catalogue';
+      return null;
+    } },
+
+  // THE SAME SCREEN, THE OTHER WAY ROUND, with nothing switched but where the
+  // person is standing. If these two ever need different code the model is wrong.
+  'ask-sends-yuexiu-to-tianhe': { stores: TWO, pre: "localStorage.setItem('qs_store','2');",
+    js: seq(["'[data-asopen]'", '250', "'[data-asfrom=\"1\"]'", "'[data-asinc=\"7\"]'", "'[data-assend]'", '350']),
+    expect: ['Sent to Tianhe'],
+    checkPost: (p) => {
+      if (!p) return 'nothing was posted';
+      if (p.from_store_id !== 1) return `from_store_id ${p.from_store_id}, expected Tianhe (1)`;
+      if (p.to_store_id !== 2) return `to_store_id ${p.to_store_id}, expected Yuexiu (2)`;
+      return null;
+    } },
+
+  'ask-cn': { stores: TWO, pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: seq(["'[data-asopen]'", '250']),
+    expect: ['申请补货', '由哪个地点发货?', '越秀店'] },
 
 };
 

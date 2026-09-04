@@ -105,6 +105,13 @@ F.setShelf(t2, 1, 501, 60); F.setShelf(t2, 2, 501, 0);
 h.db.prepare(`INSERT INTO users (id, username, password, role, retail_store_id, is_active)
               VALUES (7,'t2wh','x','warehouse',1,1)`).run();
 
+// THE ORDERS BELOW NAME BOTH ENDS, and they have to. These are raw inserts —
+// they never pass the create route, and they land after the migrations have
+// run, so restock_explicit_locations_v1 never sees them either. Since #259 the
+// transfer refuses an order with no recorded pair rather than guessing one, so
+// a fixture that omits it is asserting a shape nothing in production has: the
+// route stamps it, and the backfill stamped the rows that predate the column.
+// 1 is tenant 2's pinned warehouse, 2 its shop.
 (() => {
   section('Case D — restock_orders inserts on a tenant connection, foreign_keys = ON');
   // Before drop_created_by_user_fk_v1 this threw "no such table: main.users":
@@ -112,8 +119,9 @@ h.db.prepare(`INSERT INTO users (id, username, password, role, retail_store_id, 
   // is never cloned into a tenant database.
   let inserted = true, why = '';
   try {
-    t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-                VALUES (77,'T2-RS-001','2026-09-02','received','T2 Shop', 7, 'warehouse','store')`).run();
+    t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role,
+                 from_store_id, to_store_id)
+                VALUES (77,'T2-RS-001','2026-09-02','received','T2 Shop', 7, 'warehouse','store', 1, 2)`).run();
   } catch (e) { inserted = false; why = e.message; }
   ok(inserted, 'INSERT with a non-null created_by succeeds' + (inserted ? '' : ` — ${why}`));
   eq(t2.prepare('SELECT created_by FROM restock_orders WHERE id = 77').get().created_by, 7,
@@ -164,8 +172,9 @@ t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku
   eq(goodsOf(77), 'in_transit', 'delivered leaves the goods in transit — it is not a receipt')
 
   section('Case C — a mid-transfer failure rolls back the stamp too, in tenant 2');
-  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-              VALUES (78,'T2-RS-002','2026-09-02','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role,
+               from_store_id, to_store_id)
+              VALUES (78,'T2-RS-002','2026-09-02','received','T2 Shop', 7, 'warehouse','store', 1, 2)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested)
               VALUES (78,501,'T2 Tortilla','T2-501',5)`).run();
   // Retargeted to the OUT reason: the dispatch writes only OUT rows now.
