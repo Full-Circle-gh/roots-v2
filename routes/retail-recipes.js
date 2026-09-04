@@ -28,12 +28,13 @@
 // it is not a third door.
 
 const express = require('express');
-const db = require('../database');
-// Per-tenant connection, for the COST writes below. `recipe_cost_data`,
-// `recipes` and `ingredients` are data-plane tables with no tenant_id column,
-// so under data isolation they live in the tenant's own DB and the global
-// handle is Roots'. Roots itself resolves tdb() to that same global handle, so
-// the live install is unchanged.
+// Per-tenant connection, for EVERY read and write in this file. `recipes`,
+// `recipe_ingredients`, `recipe_steps`, `recipe_cost_data` and `ingredients`
+// are data-plane tables with no tenant_id column, so under data isolation they
+// live in the account's own DB and the global handle is account #1's. Only the
+// cost writes used tdb() before; creating and editing a recipe went to the
+// global handle. Account #1 resolves tdb() to that same global handle, so the
+// live install is unchanged.
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const { computeRecipeCost } = require('../lib/recipe-cost');
@@ -66,10 +67,10 @@ function cycleRefusal(recipeId, lines) {
   const rid = Number(recipeId);
   for (const ing of (lines || [])) {
     if (!ing || !ing.ingredient_id) continue;
-    const verdict = checkCycle(db, { recipeId: rid, ingredientId: ing.ingredient_id });
+    const verdict = checkCycle(tdb(), { recipeId: rid, ingredientId: ing.ingredient_id });
     if (verdict.ok) continue;
     const names = verdict.chain.map(id => {
-      const r = db.prepare('SELECT name_en FROM recipes WHERE id = ?').get(id);
+      const r = tdb().prepare('SELECT name_en FROM recipes WHERE id = ?').get(id);
       return (r && r.name_en) || `recipe #${id}`;
     });
     const lineName = ing.name_en || `item #${ing.ingredient_id}`;
@@ -85,8 +86,8 @@ function cycleRefusal(recipeId, lines) {
 function skuClash(sku, excludeId) {
   if (!sku) return { error: 'sku_taken', message: 'SKU already exists' };
   const owner = excludeId
-    ? db.prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE sku = ? AND id != ?').get(sku, excludeId)
-    : db.prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE sku = ?').get(sku);
+    ? tdb().prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE sku = ? AND id != ?').get(sku, excludeId)
+    : tdb().prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE sku = ?').get(sku);
   if (!owner) return { error: 'sku_taken', message: 'SKU already exists' };
   return {
     error: 'sku_taken',
@@ -155,7 +156,7 @@ function readLineYield(ing) {
 // materials this recipe's lines might consume, which is planRollup's job,
 // not a per-recipe status read's.
 function materialBlockState(recipeId) {
-  const r = costOneRecipe(db, recipeId, new Map());
+  const r = costOneRecipe(tdb(), recipeId, new Map());
   return { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
 }
 
@@ -188,7 +189,7 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
   if (search)   { where += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; p.push(s, s, s); }
   if (category) { where += ' AND category = ?'; p.push(category); }
 
-  const recipes = db.prepare(`SELECT * FROM recipes${where} ORDER BY is_favorite DESC, name_en COLLATE NOCASE`).all(...p);
+  const recipes = tdb().prepare(`SELECT * FROM recipes${where} ORDER BY is_favorite DESC, name_en COLLATE NOCASE`).all(...p);
 
   // Bulk-load lines + cost data in three queries total rather than one round
   // trip per row — same technique the Excel export uses (routes/recipes.js,
@@ -198,7 +199,7 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
   let linesByRecipe = new Map(), costByRecipe = new Map(), materialByRecipe = new Map();
   if (ids.length) {
     const qs = ids.map(() => '?').join(',');
-    const allLines = db.prepare(`
+    const allLines = tdb().prepare(`
       SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
              i.free_by_design AS master_free, i.name_en AS master_name_en
         FROM recipe_ingredients ri
@@ -210,9 +211,9 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       if (!linesByRecipe.has(l.recipe_id)) linesByRecipe.set(l.recipe_id, []);
       linesByRecipe.get(l.recipe_id).push(l);
     }
-    const allCost = db.prepare(`SELECT * FROM recipe_cost_data WHERE recipe_id IN (${qs})`).all(...ids);
+    const allCost = tdb().prepare(`SELECT * FROM recipe_cost_data WHERE recipe_id IN (${qs})`).all(...ids);
     costByRecipe = new Map(allCost.map(c => [c.recipe_id, c]));
-    const allMaterials = db.prepare(`SELECT id, name_en, cost_per_unit, unit, source_recipe_id FROM ingredients WHERE source_recipe_id IN (${qs})`).all(...ids);
+    const allMaterials = tdb().prepare(`SELECT id, name_en, cost_per_unit, unit, source_recipe_id FROM ingredients WHERE source_recipe_id IN (${qs})`).all(...ids);
     materialByRecipe = new Map(allMaterials.map(m => [m.source_recipe_id, m]));
   }
 
@@ -264,7 +265,7 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
 });
 
 router.get('/api/retail-admin/recipes/meta/categories', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(
+  const rows = tdb().prepare(
     "SELECT DISTINCT category FROM recipes WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category COLLATE NOCASE"
   ).all();
   res.json({ success: true, data: rows.map(r => r.category) });
@@ -279,7 +280,7 @@ router.get('/api/retail-admin/recipes/meta/categories', requireRetailAdmin, (req
 // docs/tacet-product-build-lines-design.md, is a separate PR), but the rows
 // are real from the moment auto-materialize first refuses to guess.
 router.get('/api/retail-admin/recipes/materialize-collisions', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT c.id, c.recipe_id, c.candidate_ingredient_id, c.reason, c.created_at,
            r.name_en AS recipe_name_en, r.name_cn AS recipe_name_cn, r.sku AS recipe_sku,
            i.name_en AS candidate_name_en, i.name_cn AS candidate_name_cn, i.sku AS candidate_sku
@@ -294,19 +295,19 @@ router.get('/api/retail-admin/recipes/materialize-collisions', requireRetailAdmi
 
 // ═══ One recipe ════════════════════════════════════════════════════════════
 router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
-  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
+  const recipe = tdb().prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
   if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
-  const ingredients = db.prepare(`
+  const ingredients = tdb().prepare(`
     SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
            i.free_by_design AS master_free, i.name_en AS master_name_en, i.item_kind AS master_item_kind
       FROM recipe_ingredients ri
       LEFT JOIN ingredients i ON ri.ingredient_id = i.id
      WHERE ri.recipe_id = ? ORDER BY ri.sort_order
   `).all(recipe.id);
-  const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
-  const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
+  const steps = tdb().prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
+  const costData = tdb().prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   const cost = computeRecipeCost({ recipe, ingredients, costData });
-  const material = linkedMaterialFor(db, recipe.id);
+  const material = linkedMaterialFor(tdb(), recipe.id);
   // Which retail products this recipe makes — the reverse of the product
   // editor's "From recipe" link (that one names the recipe from the product;
   // this names the products from the recipe). Read-only: the link itself is
@@ -330,7 +331,7 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   // answer there — not a 500 that takes the whole recipe record down with it.
   let products = [];
   try {
-    products = db.prepare(`
+    products = tdb().prepare(`
       SELECT sp.id, sp.name_en, sp.name_cn, sp.weight AS size, sp.sell_price, sp.unit_cost,
              -- DOES THIS RECIPE STILL OWN THAT unit_cost? Since §31's addendum
              -- a product with a build list takes its cost from the list and
@@ -353,7 +354,7 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   // actual consequence rather than a generic confirm.
   res.json({ success: true, data: {
     ...recipe, ingredients, steps, costData, cost,
-    backsMaterial: material ? { ...material, consumers: materialConsumers(db, material.id) } : null,
+    backsMaterial: material ? { ...material, consumers: materialConsumers(tdb(), material.id) } : null,
     materialBlock: material ? materialBlockState(recipe.id) : null,
     products,
   } });
@@ -373,7 +374,7 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
     // does today.
     const batchAuto = b.batch_size_auto === undefined ? (b.batch_size == null ? 1 : 0) : b.batch_size_auto;
     const servAuto  = b.servings_auto   === undefined ? (b.servings   == null ? 1 : 0) : b.servings_auto;
-    const result = db.prepare(`INSERT INTO recipes
+    const result = tdb().prepare(`INSERT INTO recipes
       (name_en,name_cn,sku,category,batch_size,servings,serving_size,batch_size_auto,servings_auto,shelf_life,storage,notes,recipe_type)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, batchAuto, servAuto,
@@ -381,22 +382,22 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
            b.recipe_type || 'made');
     const recipeId = result.lastInsertRowid;
     if (lines.length) {
-      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+      const insertIng = tdb().prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
       lines.forEach((ing, i) => {
         const iy = readLineYield(ing);
         insertIng.run(recipeId, ing.ingredient_id || null, ing.name_en || '', ing.name_cn || null, ing.sku || null, ing.qty || 0, ing.unit || 'g', iy === undefined ? 1 : iy, ing.notes || null, ing.substitutes || null, i);
       });
     }
     // The lines are in; the derived figures follow them.
-    applyAutoYield(db, recipeId);
+    applyAutoYield(tdb(), recipeId);
     const steps = Array.isArray(req.body.steps) ? req.body.steps : [];
     if (steps.length) {
-      const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
+      const insertStep = tdb().prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(recipeId, i + 1, s.name || null, s.instructions || null));
     }
     // §29's third addendum: a recipe's output always has a materials row,
     // whether or not anything uses it yet. Never blocks the save.
-    const materialize = ensureMaterialized(db, recipeId);
+    const materialize = ensureMaterialized(tdb(), recipeId);
     res.json({ success: true, id: recipeId, materialize });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, null) });
@@ -406,7 +407,7 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
 
 // ═══ Update ════════════════════════════════════════════════════════════════
 router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
-  const existing = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  const existing = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const b = readBody(req.body || {});
   if (!b.name_en) return res.status(400).json({ success: false, error: 'name_required' });
@@ -422,9 +423,9 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   // UPDATE writes to, so the filed state is genuinely the one being displaced.
   // Never throws: snapshotRecipe returns a reason instead, because a save that
   // succeeded must not report failure over its history entry.
-  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
+  snapshotRecipe(tdb(), req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   try {
-    db.prepare(`UPDATE recipes SET
+    tdb().prepare(`UPDATE recipes SET
       name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,
       recipe_type=COALESCE(?,recipe_type),
       batch_size_auto=COALESCE(?,batch_size_auto), servings_auto=COALESCE(?,servings_auto),
@@ -443,11 +444,11 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
       // across a delete-and-reinsert; a line with none (a deleted material)
       // falls back to counting, as it always did.
       const prevYield = new Map(
-        db.prepare('SELECT ingredient_id, in_yield FROM recipe_ingredients WHERE recipe_id = ? AND ingredient_id IS NOT NULL')
+        tdb().prepare('SELECT ingredient_id, in_yield FROM recipe_ingredients WHERE recipe_id = ? AND ingredient_id IS NOT NULL')
           .all(req.params.id).map(r => [r.ingredient_id, r.in_yield])
       );
-      db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
-      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+      tdb().prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
+      const insertIng = tdb().prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
       lines.forEach((ing, i) => {
         const said = readLineYield(ing);
         const kept = prevYield.has(ing.ingredient_id) ? prevYield.get(ing.ingredient_id) : 1;
@@ -457,10 +458,10 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     // BEFORE the recompute below, not after: fireRecompute divides a linked
     // material's cost by batch_size, and it must divide by the one these lines
     // just produced.
-    applyAutoYield(db, req.params.id);
+    applyAutoYield(tdb(), req.params.id);
     if (steps) {
-      db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
-      const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
+      tdb().prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
+      const insertStep = tdb().prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
       steps.forEach((s, i) => insertStep.run(req.params.id, i + 1, s.name || null, s.instructions || null));
     }
     // Recompute trigger (§29 step 3) — same condition the kitchen door checks
@@ -475,7 +476,7 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     }
     // §29's third addendum — after the name/SKU write and the recompute, so
     // a rename that clears a collision is picked up this same request.
-    const materialize = ensureMaterialized(db, req.params.id);
+    const materialize = ensureMaterialized(tdb(), req.params.id);
     res.json({ success: true, materialize });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, req.params.id) });
@@ -495,7 +496,7 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
   // this call into it — see lib/recipe-versions.js. Called anyway rather than
   // skipped, because a cost-only save (nothing touched on the other three tabs)
   // is a real change to what this recipe costs and deserves its own point.
-  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
+  snapshotRecipe(tdb(), req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   // THIS SCREEN HAS NO PACKAGING-TYPE PICKER, so its payload never carries
   // `packaging_type_id` — and the write underneath keeps the stored one rather
   // than coalescing the missing key to NULL. That is the whole of finding 11:
@@ -516,10 +517,10 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
 // kitchen door's permanent-delete is a kitchen-only affordance not mirrored
 // onto this one, same as Materials never got one either.
 router.put('/api/retail-admin/recipes/:id/archive', requireRetailAdmin, (req, res) => {
-  const row = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  const row = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   const active = req.body && req.body.restore ? 1 : 0;
-  db.prepare('UPDATE recipes SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(active, req.params.id);
+  tdb().prepare('UPDATE recipes SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(active, req.params.id);
   res.json({ success: true, is_active: active });
 });
 
@@ -539,19 +540,19 @@ router.put('/api/retail-admin/recipes/:id/archive', requireRetailAdmin, (req, re
 // save does not.
 
 router.get('/api/retail-admin/recipes/:id/versions', requireRetailAdmin, (req, res) => {
-  const recipe = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  const recipe = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
-  res.json({ success: true, data: listVersions(db, req.params.id, req.query.limit) });
+  res.json({ success: true, data: listVersions(tdb(), req.params.id, req.query.limit) });
 });
 
 router.get('/api/retail-admin/recipes/:id/versions/:versionId', requireRetailAdmin, (req, res) => {
-  const v = getVersion(db, req.params.id, req.params.versionId);
+  const v = getVersion(tdb(), req.params.id, req.params.versionId);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: v });
 });
 
 router.post('/api/retail-admin/recipes/:id/versions/:versionId/restore', requireRetailAdmin, (req, res) => {
-  const result = restoreVersion(db, req.params.id, req.params.versionId, {
+  const result = restoreVersion(tdb(), req.params.id, req.params.versionId, {
     actor: actorOf(req),
     // The cost inputs go back through the SAME writer and the SAME handle the
     // cost route uses, so a restore obeys the absent-vs-cleared rule
@@ -567,7 +568,7 @@ router.post('/api/retail-admin/recipes/:id/versions/:versionId/restore', require
   if (backsAnyCostedRow(tdb(), req.params.id)) {
     fireRecompute(tdb(), { source: 'retail-recipes.restore', recipe_id: Number(req.params.id) });
   }
-  const materialize = ensureMaterialized(db, req.params.id);
+  const materialize = ensureMaterialized(tdb(), req.params.id);
   res.json({ success: true, version_id: result.version_id, held: result.held, materialize });
 });
 
@@ -599,13 +600,13 @@ function requireMaterialsEditToo(req, res) {
 // than through an HTTP layer.
 router.post('/api/retail-admin/recipes/:id/materialize', requireRetailAdmin, (req, res) => {
   if (!requireMaterialsEditToo(req, res)) return;
-  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
+  const recipe = tdb().prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
   if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
 
   const b = req.body || {};
   const result = b.mode === 'link'
-    ? materializeLink(db, { recipeId: recipe.id, materialId: Number(b.material_id) })
-    : materializeNew(db, { recipeId: recipe.id, name_en: b.name_en || recipe.name_en, name_cn: b.name_cn, sku: b.sku, item_kind: b.item_kind });
+    ? materializeLink(tdb(), { recipeId: recipe.id, materialId: Number(b.material_id) })
+    : materializeNew(tdb(), { recipeId: recipe.id, name_en: b.name_en || recipe.name_en, name_cn: b.name_cn, sku: b.sku, item_kind: b.item_kind });
 
   if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
   res.json({ success: true, material_id: result.material_id, warning: result.warning || null, rollup: result.rollup });
@@ -613,9 +614,9 @@ router.post('/api/retail-admin/recipes/:id/materialize', requireRetailAdmin, (re
 
 router.delete('/api/retail-admin/recipes/:id/materialize', requireRetailAdmin, (req, res) => {
   if (!requireMaterialsEditToo(req, res)) return;
-  const recipe = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  const recipe = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
-  const result = unlinkMaterial(db, { recipeId: recipe.id });
+  const result = unlinkMaterial(tdb(), { recipeId: recipe.id });
   if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
   res.json({ success: true, material_id: result.material_id });
 });

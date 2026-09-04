@@ -22,13 +22,20 @@
 //     in tenant_users (separate id space; FK enforcement is ON). The actor is
 //     recorded in the activity log + stock ledger instead.
 //
-// NOTE (multi-tenant): the purchasing tables live on the shared control-plane
-// db today. When a second tenant needs purchasing, these tables need a
-// tenant_id column + scoping — flagged in the roadmap, not built here.
+// NOTE (multi-tenant): every read and write in this file goes through tdb(),
+// the signed-in account's own connection. It used to run on the shared handle,
+// which is account #1's database — so under data isolation a second account's
+// purchase orders, suppliers and invoices were written into the first
+// account's data. For account #1 tdb() IS that shared handle, so the live
+// install is byte-for-byte unchanged.
 
 const express = require('express');
-const db = require('../database');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
+// The shared control-plane handle. Used for EXACTLY ONE statement in this file
+// — the activity_log read in planPOReversal — because activity_log is never
+// cloned into an account's database. Every other read and write here is account
+// data and goes through tdb().
+const sharedDb = require('../database');
 const inventory = require('../lib/inventory');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
@@ -76,14 +83,14 @@ const VALID_INVOICE = new Set(['not_received', 'received', 'no_invoice']);
 // Next RPO number from the highest existing suffix (not a row count, so a
 // deleted PO can never cause a UNIQUE collision on po_number).
 function nextRetailPONumber() {
-  const row = db.prepare(
+  const row = tdb().prepare(
     "SELECT MAX(CAST(SUBSTR(po_number, 5) AS INTEGER)) AS n FROM purchase_orders WHERE po_number LIKE 'RPO-%'"
   ).get();
   return 'RPO-' + String((row?.n || 0) + 1).padStart(4, '0');
 }
 
 function getRetailPO(id) {
-  return db.prepare(
+  return tdb().prepare(
     "SELECT * FROM purchase_orders WHERE id = ? AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ?"
   ).get(id, currentTenantId());
 }
@@ -119,11 +126,11 @@ function actorFor(req) {
 // different accounting policy, not a bug fix, and it is not one this file may
 // choose on a tenant's behalf.
 function postRetailPOExpenses(poId) {
-  const po = db.prepare('SELECT id, date, supplier, po_number, status, extra_freight, extra_tax, extra_handling FROM purchase_orders WHERE id = ?').get(poId);
+  const po = tdb().prepare('SELECT id, date, supplier, po_number, status, extra_freight, extra_tax, extra_handling FROM purchase_orders WHERE id = ?').get(poId);
   if (!po) return { skipped: 'po-missing' };
-  db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(poId);
+  tdb().prepare('DELETE FROM expense_entries WHERE po_id = ?').run(poId);
   if (!['Ordered', 'Delivered'].includes(po.status)) return { skipped: 'not-postable' };
-  const groups = db.prepare(`
+  const groups = tdb().prepare(`
     SELECT COALESCE(NULLIF(TRIM(expense_category),''),'门店进货 Retail stock') AS category,
            SUM(${billableQtySql()} * COALESCE(cost_per_unit, 0))               AS amount,
            COUNT(*)                                                            AS line_count
@@ -131,7 +138,7 @@ function postRetailPOExpenses(poId) {
      WHERE po_id = ? AND ${billableQtySql()} > 0
      GROUP BY 1
   `).all(poId);
-  const insert = db.prepare('INSERT INTO expense_entries (date, amount, category, description, po_id) VALUES (?,?,?,?,?)');
+  const insert = tdb().prepare('INSERT INTO expense_entries (date, amount, category, description, po_id) VALUES (?,?,?,?,?)');
   let inserted = 0, total = 0;
   for (const g of groups) {
     if (!g.amount || g.amount <= 0) continue;
@@ -163,7 +170,7 @@ function postRetailPOExpenses(poId) {
 // for free.
 function postRetailPOExpensesWithSource(poId) {
   const posted = postRetailPOExpenses(poId);
-  const src = db.prepare('SELECT copied_from_po_id FROM purchase_orders WHERE id = ?').get(poId);
+  const src = tdb().prepare('SELECT copied_from_po_id FROM purchase_orders WHERE id = ?').get(poId);
   if (src && src.copied_from_po_id) postPOExpenses(src.copied_from_po_id);
   return posted;
 }
@@ -566,10 +573,11 @@ function planMaterialCostRollback(po) {
   if (!materialIds.length) return { restorable: [], unrecoverable: [] };
   const placeholders = materialIds.map(() => '?').join(',');
   // activity_log stays on the GLOBAL handle deliberately — it is a control-plane
-  // table (lib/tenant-db.js CONTROL_PLANE_TABLES) and is never cloned into a
-  // tenant DB, so tdb() would look for it where it does not exist. Everything
-  // around it here is tenant data and moves to tdb().
-  const logs = db.prepare(`
+  // table (lib/tenant-db.js CONTROL_PLANE_TABLES) and is never cloned into an
+  // account's DB, so tdb() would look for it where it does not exist. This is
+  // the ONE statement in this file that must not move; everything around it is
+  // account data and runs on tdb(). `sharedDb` is imported for this line alone.
+  const logs = sharedDb.prepare(`
     SELECT entity_id, details FROM activity_log
      WHERE action = 'cost_update' AND entity_type = 'ingredient' AND entity_id IN (${placeholders})
      ORDER BY id ASC
@@ -647,7 +655,7 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
   // line-level supplier_name) but as 0 on this list. Mirror that same
   // fallback so the two never disagree again.
   const SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = s.name";
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT s.id, s.name, s.name_cn, s.contact_name, s.contact_phone, s.contact_wechat,
            s.payment_terms, s.payment_method, s.rating, s.notes, s.is_active,
            s.channel_type, s.channel_link, s.products_supplied, s.price_info,
@@ -665,17 +673,17 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
 });
 
 router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
-  const s = db.prepare('SELECT * FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
+  const s = tdb().prepare('SELECT * FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   // Base64 payloads stay out of the detail read — documents fetch individually.
   delete s.channel_qr_data; delete s.business_license_data;
   delete s.permits_data; delete s.payment_qr_data;
   const tid = Number(currentTenantId()) || 1;   // integer — safe to inline in SQL
-  const documents = db.prepare(`
+  const documents = tdb().prepare(`
     SELECT id, kind, label, filename, mime_type, size_bytes, uploaded_at
       FROM supplier_documents WHERE supplier_id = ? ORDER BY uploaded_at DESC
   `).all(s.id);
-  const recentPOs = db.prepare(`
+  const recentPOs = tdb().prepare(`
     SELECT id, po_number, date, status,
            (SELECT SUM(COALESCE(total_cost,0)) FROM po_line_items WHERE po_id = purchase_orders.id) AS total
       FROM purchase_orders
@@ -686,7 +694,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   // fill without the data to back them). Lines match this supplier whether the
   // supplier sits on the line or only on the PO header.
   const SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = ?";
-  const stat = db.prepare(`
+  const stat = tdb().prepare(`
     SELECT COUNT(DISTINCT po.id) AS order_count,
            COALESCE(SUM(pli.total_cost),0) AS spend,
            MAX(po.date) AS last_date
@@ -699,7 +707,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   // from the same computation the Invoices tab uses, so the two screens cannot
   // disagree about one supplier.
   const paper = awaitingForSupplier(tid, s.name);
-  const priceList = db.prepare(`
+  const priceList = tdb().prepare(`
     SELECT pli.store_product_id,
            MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku,
            COUNT(*) AS times, AVG(pli.cost_per_unit) AS avg_cost, SUM(pli.qty) AS total_qty
@@ -707,7 +715,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
      WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH} AND pli.store_product_id IS NOT NULL
      GROUP BY pli.store_product_id
      ORDER BY times DESC, name_en LIMIT 50`).all(s.name);
-  const lastStmt = db.prepare(`
+  const lastStmt = tdb().prepare(`
     SELECT pli.cost_per_unit AS cost, po.date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id=? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}
@@ -735,10 +743,10 @@ router.post('/api/retail-admin/suppliers', requireRetailAdmin, express.json(), (
   // Scoped: without the tenant predicate one tenant's supplier name blocked
   // every other tenant from creating the same name (§0). The UNIQUE index on
   // suppliers.name is still global — see the PR, it needs a table rebuild.
-  if (db.prepare('SELECT id FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?').get(name, currentTenantId())) {
+  if (tdb().prepare('SELECT id FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?').get(name, currentTenantId())) {
     return res.status(409).json({ success: false, error: 'name_taken' });
   }
-  const info = db.prepare(`
+  const info = tdb().prepare(`
     INSERT INTO suppliers (name, name_cn, contact_name, contact_phone, contact_wechat,
                            payment_terms, payment_method, rating, notes, channel_type,
                            channel_link, products_supplied, price_info, is_active, tenant_id)
@@ -755,13 +763,13 @@ router.post('/api/retail-admin/suppliers', requireRetailAdmin, express.json(), (
 });
 
 router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json(), (req, res) => {
-  const s = db.prepare('SELECT id, name FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
+  const s = tdb().prepare('SELECT id, name FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   const b = req.body || {};
   if ('name' in b) {
     const name = (b.name || '').trim();
     if (!name) return res.status(400).json({ success: false, error: 'name_required' });
-    const dup = db.prepare('SELECT id FROM suppliers WHERE name = ? AND id != ? AND COALESCE(tenant_id,1) = ?').get(name, s.id, currentTenantId());
+    const dup = tdb().prepare('SELECT id FROM suppliers WHERE name = ? AND id != ? AND COALESCE(tenant_id,1) = ?').get(name, s.id, currentTenantId());
     if (dup) return res.status(409).json({ success: false, error: 'name_taken' });
     b.name = name;
   }
@@ -775,7 +783,7 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
   if ('is_active' in b) { sets.push('is_active = ?'); vals.push(b.is_active ? 1 : 0); }
   if (!sets.length) return res.json({ success: true });
   vals.push(s.id);
-  db.prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?`).run(...vals, currentTenantId());
+  tdb().prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?`).run(...vals, currentTenantId());
   // Historical POs keep the old supplier name on purpose — they're a snapshot
   // of what was ordered from whom at the time (same rule as the kitchen side).
   logActivity(req.user.id, req.user.username, 'update', 'supplier', s.id, b, req.ip);
@@ -784,22 +792,22 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
 
 // Soft-delete: keep the row (and its name) so historical POs stay attributable.
 router.delete('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
-  const s = db.prepare('SELECT id FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
+  const s = tdb().prepare('SELECT id FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
-  db.prepare('UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(s.id, currentTenantId());
+  tdb().prepare('UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(s.id, currentTenantId());
   logActivity(req.user.id, req.user.username, 'delete', 'supplier', s.id, {}, req.ip);
   res.json({ success: true });
 });
 
 // Documents — base64 data URI payloads (images / PDFs), 10MB per file.
 router.post('/api/retail-admin/suppliers/:id/documents', requireRetailAdmin, express.json({ limit: '15mb' }), (req, res) => {
-  const s = db.prepare('SELECT id FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, currentTenantId());
+  const s = tdb().prepare('SELECT id FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   const b = req.body || {};
   if (!b.data || typeof b.data !== 'string') return res.status(400).json({ success: false, error: 'data_required' });
   if (b.data.length > 14 * 1024 * 1024) return res.status(413).json({ success: false, error: 'too_large' });
   const kind = ['license', 'permit', 'payment_qr', 'other'].includes(b.kind) ? b.kind : 'other';
-  const info = db.prepare(`
+  const info = tdb().prepare(`
     INSERT INTO supplier_documents (supplier_id, kind, label, filename, mime_type, size_bytes, data)
     VALUES (?,?,?,?,?,?,?)
   `).run(s.id, kind, b.label || null, b.filename || null, b.mime_type || null,
@@ -810,14 +818,14 @@ router.post('/api/retail-admin/suppliers/:id/documents', requireRetailAdmin, exp
 });
 
 router.get('/api/retail-admin/suppliers/:id/documents/:docId', requireRetailAdmin, (req, res) => {
-  const doc = db.prepare('SELECT * FROM supplier_documents WHERE id = ? AND supplier_id = ?')
+  const doc = tdb().prepare('SELECT * FROM supplier_documents WHERE id = ? AND supplier_id = ?')
     .get(req.params.docId, req.params.id);
   if (!doc) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: doc });
 });
 
 router.delete('/api/retail-admin/suppliers/:id/documents/:docId', requireRetailAdmin, (req, res) => {
-  const info = db.prepare('DELETE FROM supplier_documents WHERE id = ? AND supplier_id = ?')
+  const info = tdb().prepare('DELETE FROM supplier_documents WHERE id = ? AND supplier_id = ?')
     .run(req.params.docId, req.params.id);
   if (!info.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'supplier_document', +req.params.docId,
@@ -855,7 +863,7 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
     params.push(s, s, s, s, s, s);
   }
   q += ' ORDER BY po.date DESC, po.id DESC';
-  const pos = db.prepare(q).all(...params);
+  const pos = tdb().prepare(q).all(...params);
   // Store names come from the tenant connection (retail_stores is data-plane).
   const stores = new Map(inventory.listStores({ activeOnly: false }).map(s => [s.id, s]));
   for (const po of pos) {
@@ -870,7 +878,7 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
   // there is a search; an unsearched list pays nothing.
   if (search) {
     const like = `%${search}%`;
-    const lines = db.prepare(`SELECT name_en, name_cn, sku FROM po_line_items
+    const lines = tdb().prepare(`SELECT name_en, name_cn, sku FROM po_line_items
        WHERE po_id = ? AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)
        ORDER BY sort_order, id LIMIT 4`);
     for (const po of pos) po.matched_lines = lines.all(po.id, like, like, like);
@@ -923,7 +931,7 @@ const DELIVERY_SQL = `
 // The lines of one receipt, each with what its PO line ORDERED — which is the
 // only way "4 of 5" can be said at all, and the only way short/over is known.
 function receiptLines(receiptId) {
-  return db.prepare(`
+  return tdb().prepare(`
     SELECT l.id, l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
            l.returned_qty,
            pli.name_en, pli.name_cn, pli.sku, pli.unit, pli.qty AS ordered,
@@ -967,7 +975,7 @@ function deliverySuppliers(lines, poSupplier) {
 // Lines already received where no receipt covers them: the deliveries that
 // happened before this history existed. Counted, never invented.
 function untrackedLines(poId) {
-  return db.prepare(`
+  return tdb().prepare(`
     SELECT COUNT(*) AS c FROM po_line_items pli
      WHERE pli.po_id = ? AND pli.qty_received IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM po_receipt_lines l WHERE l.line_id = pli.id)`).get(poId).c;
@@ -1003,7 +1011,7 @@ function decorateDelivery(row) {
 // render as a delivery of goods that were leaving.
 const isJournalRow = r => (r.kind === 'return' ? true : r.new_lines > 0);
 router.get('/api/retail-admin/receiving/deliveries', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(DELIVERY_SQL + ' ORDER BY r.received_at DESC, r.id DESC LIMIT 200')
+  const rows = tdb().prepare(DELIVERY_SQL + ' ORDER BY r.received_at DESC, r.id DESC LIMIT 200')
     .all(currentTenantId())
     .filter(isJournalRow);
   const out = rows.map(decorateDelivery);
@@ -1041,7 +1049,7 @@ router.get('/api/retail-admin/receiving/deliveries', requireRetailAdmin, (req, r
 // GET /api/retail-admin/receiving/deliveries/:id — one delivery, with every
 // later revision of its lines nested under the line it corrects.
 router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (req, res) => {
-  const row = db.prepare(DELIVERY_SQL + ' AND r.id = ?').all(currentTenantId(), req.params.id)[0];
+  const row = tdb().prepare(DELIVERY_SQL + ' AND r.id = ?').all(currentTenantId(), req.params.id)[0];
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   const d = decorateDelivery(row);
   // Every later receipt row for these lines, on this PO. Ordered, so the
@@ -1050,7 +1058,7 @@ router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (re
   // revision of what this delivery says arrived — it is its own event with its
   // own row in the list above, and nesting it here would show the same return
   // twice while reading as "recorded 15, changed to 15".
-  const corr = db.prepare(`
+  const corr = tdb().prepare(`
     SELECT l.line_id, l.qty_received, l.damaged_qty, l.receipt_reason, l.note,
            r.id AS receipt_id, r.received_at, r.actor_label
       FROM po_receipt_lines l
@@ -1067,7 +1075,7 @@ router.get('/api/retail-admin/receiving/deliveries/:id', requireRetailAdmin, (re
 router.get('/api/retail-admin/purchases/:id/receipts', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
-  const rows = db.prepare(DELIVERY_SQL + ' AND r.po_id = ? ORDER BY r.received_at, r.id')
+  const rows = tdb().prepare(DELIVERY_SQL + ' AND r.po_id = ? ORDER BY r.received_at, r.id')
     .all(currentTenantId(), po.id)
     .filter(isJournalRow)
     .map(decorateDelivery);
@@ -1143,7 +1151,7 @@ router.get('/api/retail-admin/purchases/kitchen-source', requireRetailAdmin, (re
     params.push(s, s, s, s, s, s);
   }
   q += ' ORDER BY po.date DESC, po.id DESC';
-  res.json({ success: true, data: db.prepare(q).all(...params) });
+  res.json({ success: true, data: tdb().prepare(q).all(...params) });
 });
 
 // Copy the named kitchen orders in as retail drafts. All-or-nothing per batch:
@@ -1158,7 +1166,7 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
     return res.status(400).json({ success: false, error: 'store_required' });
   }
   const marks = ids.map(() => '?').join(',');
-  const sources = db.prepare(
+  const sources = tdb().prepare(
     `SELECT * FROM purchase_orders
       WHERE id IN (${marks}) AND COALESCE(scope,'kitchen') = 'kitchen'
         AND COALESCE(tenant_id,1) = ?`).all(...ids, currentTenantId());
@@ -1169,7 +1177,7 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
     return res.status(404).json({ success: false, error: 'not_found',
                                   missing: ids.filter(id => !found.has(id)) });
   }
-  const already = db.prepare(
+  const already = tdb().prepare(
     `SELECT copied_from_po_id AS src, po_number FROM purchase_orders
       WHERE copied_from_po_id IN (${marks})
         AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ?`
@@ -1180,15 +1188,15 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
       copies: already.map(a => ({ po_id: a.src, po_number: bySrc.get(a.src) || null,
                                   copy_po_number: a.po_number })) });
   }
-  const lineStmt = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id');
+  const lineStmt = tdb().prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id');
   try {
-    const tx = db.transaction(() => {
+    const tx = tdb().transaction(() => {
       const made = [];
       // Newest kitchen order last, so the RPO numbers run in the same order the
       // kitchen numbers do rather than in reverse.
       for (const src of [...sources].sort((a, b) => a.id - b.id)) {
         const po_number = nextRetailPONumber();
-        const poId = db.prepare(`
+        const poId = tdb().prepare(`
           INSERT INTO purchase_orders
             (po_number, date, delivery_date, status, supplier, notes, source, scope,
              store_id, created_by, tenant_id, copied_from_po_id)
@@ -1226,7 +1234,7 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
 router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
-  const items = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id').all(po.id);
+  const items = tdb().prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order, id').all(po.id);
   // Current shelf qty at the PO's store for context next to each line.
   if (po.store_id) {
     const ids = items.map(i => i.store_product_id).filter(Boolean);
@@ -1262,7 +1270,7 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
       for (const i of items) i.channel_listed = i.store_product_id ? listed.has(i.store_product_id) : false;
     }
   }
-  const expenses = db.prepare('SELECT id, date, amount, category, description FROM expense_entries WHERE po_id = ? ORDER BY id').all(po.id);
+  const expenses = tdb().prepare('SELECT id, date, amount, category, description FROM expense_entries WHERE po_id = ? ORDER BY id').all(po.id);
   const store = po.store_id ? inventory.getStore(po.store_id) : null;
   // ── Where this order may still be received into ──────────────────────────
   // The receive screen must never offer a destination the receive route will
@@ -1270,8 +1278,8 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
   // shelf its stock is on, whether that is now fixed, and the list to choose
   // from while it is not. A screen that has to POST to discover it cannot
   // change the store has already shown the operator a choice that was a lie.
-  const receivingStoreId = appliedReceiptStore(db, po);
-  const locked = !!db.prepare(
+  const receivingStoreId = appliedReceiptStore(tdb(), po);
+  const locked = !!tdb().prepare(
     'SELECT 1 FROM po_line_items WHERE po_id = ? AND COALESCE(stock_applied_qty, 0) <> 0 LIMIT 1'
   ).get(po.id);
   const rStore = receivingStoreId ? inventory.getStore(receivingStoreId) : null;
@@ -1293,16 +1301,16 @@ router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => 
 router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
-  const items = db.prepare('SELECT id, store_product_id FROM po_line_items WHERE po_id = ?').all(po.id);
+  const items = tdb().prepare('SELECT id, store_product_id FROM po_line_items WHERE po_id = ?').all(po.id);
   const tid = Number(currentTenantId()) || 1;
-  const prevStmt = db.prepare(`
+  const prevStmt = tdb().prepare(`
     SELECT pli.qty, pli.unit, pli.cost_per_unit, pli.total_cost,
            po.id AS po_id, po.po_number, po.date, po.supplier
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND po.id != ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
-  const statsStmt = db.prepare(`
+  const statsStmt = tdb().prepare(`
     SELECT COUNT(*) AS total_orders, AVG(pli.cost_per_unit) AS avg_price,
            MIN(pli.cost_per_unit) AS min_price, MAX(pli.cost_per_unit) AS max_price,
            SUM(pli.qty) AS total_qty
@@ -1332,7 +1340,7 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
   const tid = Number(currentTenantId()) || 1;   // integer — safe to inline
   // Group by the resolved supplier (line supplier wins, else the PO's supplier).
   // Positional GROUP BY 1 so the alias never shadows a real column.
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') AS supplier,
            COUNT(*)               AS order_count,
            SUM(pli.qty)           AS total_qty,
@@ -1344,7 +1352,7 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      GROUP BY 1
      ORDER BY order_count DESC, MAX(po.date) DESC`).all(spid);
-  const lastStmt = db.prepare(`
+  const lastStmt = tdb().prepare(`
     SELECT pli.cost_per_unit AS cost, po.date, po.po_number
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
@@ -1361,7 +1369,7 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
       last_date: last.date || null, last_po_number: last.po_number || null,
     };
   });
-  const overall = db.prepare(`
+  const overall = tdb().prepare(`
     SELECT pli.cost_per_unit AS cost, po.date, po.po_number,
            COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier) AS supplier
       FROM po_line_items pli
@@ -1370,18 +1378,18 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`).get(spid) || null;
   // Cost-over-time series + overall stats + product identity, for the
   // standalone Price-history screen (sparkline + metric tiles).
-  const series = db.prepare(`
+  const series = tdb().prepare(`
     SELECT po.date AS date, pli.cost_per_unit AS cost
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND COALESCE(pli.cost_per_unit,0) > 0
      ORDER BY po.date, pli.id`).all(spid);
-  const stats = db.prepare(`
+  const stats = tdb().prepare(`
     SELECT COUNT(*) AS order_count, SUM(pli.qty) AS total_qty,
            AVG(pli.cost_per_unit) AS avg_cost, MIN(pli.cost_per_unit) AS min_cost, MAX(pli.cost_per_unit) AS max_cost,
            MIN(po.date) AS first_date, MAX(po.date) AS last_date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND COALESCE(pli.cost_per_unit,0) > 0`).get(spid) || {};
-  const prod = db.prepare(`
+  const prod = tdb().prepare(`
     SELECT MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid}`).get(spid) || {};
@@ -1450,7 +1458,7 @@ const allocatedByLine = (lineIds) => {
   const out = new Map();
   for (let i = 0; i < lineIds.length; i += 400) {
     const chunk = lineIds.slice(i, i + 400);
-    const rows = db.prepare(`SELECT line_id, allocated_amount FROM invoice_lines
+    const rows = tdb().prepare(`SELECT line_id, allocated_amount FROM invoice_lines
                               WHERE line_id IN (${chunk.map(() => '?').join(',')})
                               ORDER BY id`).all(...chunk);
     for (const a of rows) out.set(a.line_id, (out.get(a.line_id) || 0) + (a.allocated_amount || 0));
@@ -1482,7 +1490,7 @@ function lineStatus(row) {
 // stored one and let the screen show whichever language it is currently in.
 function supplierCnByName(tid) {
   const m = new Map();
-  for (const r of db.prepare(
+  for (const r of tdb().prepare(
     'SELECT name, name_cn FROM suppliers WHERE COALESCE(tenant_id,1) = ?').all(tid)) {
     if (r.name_cn && r.name_cn.trim()) m.set(r.name, r.name_cn.trim());
   }
@@ -1490,7 +1498,7 @@ function supplierCnByName(tid) {
 }
 
 function reachByName(tid) {
-  const rows = db.prepare(
+  const rows = tdb().prepare(
     'SELECT id, name, channel_type, channel_link, channel_qr_data IS NOT NULL AS has_qr FROM suppliers WHERE COALESCE(tenant_id,1) = ?'
   ).all(tid);
   const m = new Map();
@@ -1510,7 +1518,7 @@ function reachByName(tid) {
 // 'awaiting' is the same status the tab's group total counts, so the two agree
 // line for line.
 function awaitingForSupplier(tid, name) {
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT pli.id AS line_id, pli.qty, pli.qty_received, pli.returned_qty, pli.cost_per_unit,
            pli.no_invoice_expected AS line_no_invoice,
            po.no_invoice_expected  AS po_no_invoice
@@ -1562,7 +1570,7 @@ function awaitingForSupplier(tid, name) {
 //   not_placed    the order is a draft or was cancelled after the 发票 landed
 //   other_tenant  the allocation sits on another tenant's order
 function recordedOffChase(tid) {
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT il.allocated_amount AS amount, po.id AS po_id, po.po_number, po.status,
            COALESCE(po.tenant_id,1) AS po_tenant,
            ${supersededByCopySql('po')} AS superseded,
@@ -1620,7 +1628,7 @@ function recordedOffChase(tid) {
 // po_number the strip shows. Tenant-scoped on the order, as every read here is.
 function rematchTarget(req, res) {
   const tid = Number(currentTenantId()) || 1;
-  const po = db.prepare(
+  const po = tdb().prepare(
     'SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) { res.status(404).json({ success: false, error: 'not_found' }); return null; }
   return po;
@@ -1629,7 +1637,7 @@ function rematchTarget(req, res) {
 router.get('/api/retail-admin/purchasing/invoices/rematch/:id', requireRetailAdmin, (req, res) => {
   const po = rematchTarget(req, res);
   if (!po) return;
-  const plan = planRematch(db, po.id, { supersedingCopy });
+  const plan = planRematch(tdb(), po.id, { supersedingCopy });
   if (!plan) return res.status(404).json({ success: false, error: 'not_found' });
   if (!plan.copy) return res.status(409).json({ success: false, error: 'not_superseded' });
   res.json({ success: true, data: plan });
@@ -1642,7 +1650,7 @@ router.post('/api/retail-admin/purchasing/invoices/rematch/:id', requireRetailAd
     // applyRematch recomputes the plan itself rather than trusting one posted
     // from a page that may have been drawn minutes ago: the ledger is the
     // authority on what is actually there to move.
-    const r = applyRematch(db, po.id, { supersedingCopy });
+    const r = applyRematch(tdb(), po.id, { supersedingCopy });
     if (!r.plan || !r.plan.copy) return res.status(409).json({ success: false, error: 'not_superseded' });
     logActivity(req.user.id, req.user.username, 'invoice_rematch', 'purchase_order', po.id,
                 { from_po: r.plan.source.po_number, to_po: r.plan.copy.po_number,
@@ -1695,7 +1703,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
      OR LOWER(COALESCE(po.po_number,''))   LIKE LOWER(?))`;
     params.push(t, t, t, t, t);
   }
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
            pli.qty_received, pli.returned_qty, pli.return_reason, pli.returned_at,
            pli.no_invoice_expected AS line_no_invoice,
@@ -1723,7 +1731,7 @@ router.get('/api/retail-admin/purchasing/invoices/outstanding', requireRetailAdm
   // lib/po-supersede.js on why it is reported rather than re-attributed.
   const supersededInvoiced = new Map();
   for (const srcId of new Set(rows.map(r => r.copied_from_po_id).filter(Boolean))) {
-    supersededInvoiced.set(srcId, invoicedOnSuperseded(db, srcId));
+    supersededInvoiced.set(srcId, invoicedOnSuperseded(tdb(), srcId));
   }
   const reach = reachByName(tid);
   const supCn = supplierCnByName(tid);
@@ -1804,8 +1812,8 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
     where += " AND (LOWER(supplier) LIKE LOWER(?) OR LOWER(COALESCE(invoice_number,'')) LIKE LOWER(?))";
     const t = '%' + search + '%'; params.push(t, t);
   }
-  const invs = db.prepare(`SELECT * FROM invoices WHERE ${where} ORDER BY date DESC, id DESC`).all(...params);
-  const linkStmt = db.prepare(`
+  const invs = tdb().prepare(`SELECT * FROM invoices WHERE ${where} ORDER BY date DESC, id DESC`).all(...params);
+  const linkStmt = tdb().prepare(`
     SELECT il.id AS link_id, il.allocated_amount, pli.id AS line_id,
            pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
            po.id AS po_id, po.po_number, po.date AS po_date, po.status
@@ -1833,9 +1841,9 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
 
 router.get('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  const inv = tdb().prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
-  const lines = db.prepare(`
+  const lines = tdb().prepare(`
     SELECT il.id AS link_id, il.allocated_amount, pli.id AS line_id,
            pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
            po.id AS po_id, po.po_number, po.date AS po_date, po.status
@@ -1848,7 +1856,7 @@ router.get('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req
 });
 
 // What this same request has already written for this invoice/line pair.
-const allocatedForThisRequest = (invoiceId, lineId) => db
+const allocatedForThisRequest = (invoiceId, lineId) => tdb()
   .prepare('SELECT allocated_amount FROM invoice_lines WHERE invoice_id = ? AND line_id = ?')
   .all(invoiceId, lineId)
   .reduce((s, r) => s + (r.allocated_amount || 0), 0);
@@ -1859,9 +1867,9 @@ const allocatedForThisRequest = (invoiceId, lineId) => db
 // line has to ignore this invoice's own previous allocation, or re-saving an
 // unchanged invoice would refuse itself as over-allocated. Create passes null.
 function writeLinks(invoiceId, links, skipInvoiceId) {
-  const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
-  const lineInfo = db.prepare('SELECT id, qty, cost_per_unit FROM po_line_items WHERE id = ?');
-  const priorFor = (lineId) => db
+  const insertLink = tdb().prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
+  const lineInfo = tdb().prepare('SELECT id, qty, cost_per_unit FROM po_line_items WHERE id = ?');
+  const priorFor = (lineId) => tdb()
     .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id = ? AND invoice_id != ? ORDER BY id')
     .all(lineId, skipInvoiceId || -1)
     .reduce((s, r) => s + (r.allocated_amount || 0), 0);
@@ -1888,10 +1896,10 @@ router.post('/api/retail-admin/purchasing/invoices', requireRetailAdmin, express
   const tid = Number(currentTenantId()) || 1;
   try {
     let id;
-    db.transaction(() => {
+    tdb().transaction(() => {
       // scope is stamped here and never read back as a filter. Its one job is
       // to keep this invoice out of the kitchen screen's reach.
-      const r = db.prepare(`INSERT INTO invoices
+      const r = tdb().prepare(`INSERT INTO invoices
         (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date, tenant_id)
         VALUES (?,?,?,?,?,?,'retail',?,?,?)`).run(
         String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
@@ -1912,15 +1920,15 @@ router.post('/api/retail-admin/purchasing/invoices', requireRetailAdmin, express
 // at all — a wrong amount or a mis-picked line meant delete and re-enter.
 router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, express.json(), (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  const inv = tdb().prepare('SELECT * FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
   const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
   if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
   try {
-    db.transaction(() => {
-      db.prepare(`UPDATE invoices SET supplier=?, invoice_number=?, amount=?, date=?, due_date=?, store_id=?, notes=?,
+    tdb().transaction(() => {
+      tdb().prepare(`UPDATE invoices SET supplier=?, invoice_number=?, amount=?, date=?, due_date=?, store_id=?, notes=?,
                   updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
         String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
         parseFloat(amount), date, due_date || null,
@@ -1928,7 +1936,7 @@ router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, expr
       // Replace-then-rewrite, with the headroom check ignoring this invoice's
       // own rows (skipInvoiceId), so an unchanged re-save is always accepted.
       if (links !== undefined) {
-        db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
+        tdb().prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
         writeLinks(inv.id, links, inv.id);
       }
     })();
@@ -1942,7 +1950,7 @@ router.put('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, expr
 
 router.delete('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const r = db.prepare('DELETE FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(req.params.id, tid);
+  const r = tdb().prepare('DELETE FROM invoices WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(req.params.id, tid);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'supplier_invoice', req.params.id, null, req.ip);
   res.json({ success: true });
@@ -1956,7 +1964,7 @@ router.delete('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (
 // carry one cash line among invoiced ones. A toggle, never destructive.
 router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const po = db.prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  const po = tdb().prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const flag = !!(req.body && req.body.no_invoice_expected);
   // The order's own column, and nothing else — lib/invoice-mark.js holds the
@@ -1964,7 +1972,7 @@ router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin,
   // sitting under two suppliers at once, and a 恢复 pressed under one of them
   // must not unmake the other's decision. Lines carrying their own mark are
   // COUNTED and reported, so the screen can say why they did not move.
-  const { lines_still_marked } = setPONoInvoiceMark(db, po.id, flag);
+  const { lines_still_marked } = setPONoInvoiceMark(tdb(), po.id, flag);
   logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id,
               { no_invoice_expected: flag, lines_still_marked }, req.ip);
   res.json({ success: true, no_invoice_expected: flag, lines_still_marked });
@@ -1972,7 +1980,7 @@ router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin,
 
 router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requireRetailAdmin, express.json(), (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const line = db.prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+  const line = tdb().prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
                             WHERE pli.id = ? AND pli.po_id = ? AND COALESCE(po.tenant_id,1) = ?`)
     .get(req.params.lineId, req.params.id, tid);
   if (!line) return res.status(404).json({ success: false, error: 'not_found' });
@@ -1980,7 +1988,7 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requir
   // Writes invoice_status alongside the mark. Writing the mark alone is what
   // let database.js's boot-time reconciliation — and any later save that
   // carried the stale status — put a 恢复'd line straight back to 不开发票.
-  setNoInvoiceMark(db, line.id, flag);
+  setNoInvoiceMark(tdb(), line.id, flag);
   logActivity(req.user.id, req.user.username, 'line_no_invoice_toggle', 'po_line_item', line.id, { no_invoice_expected: flag }, req.ip);
   res.json({ success: true, no_invoice_expected: flag });
 });
@@ -2014,7 +2022,7 @@ router.put('/api/retail-admin/purchasing/lines/supplier', requireRetailAdmin, ex
   if (!ids.length) return res.status(400).json({ success: false, error: 'lines_required' });
   if (ids.length > 400) return res.status(400).json({ success: false, error: 'too_many_lines' });
 
-  const known = db.prepare(
+  const known = tdb().prepare(
     `SELECT 1 FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?
       UNION ALL
      SELECT 1 FROM purchase_orders WHERE TRIM(supplier) = ? AND COALESCE(tenant_id,1) = ?
@@ -2024,10 +2032,10 @@ router.put('/api/retail-admin/purchasing/lines/supplier', requireRetailAdmin, ex
      LIMIT 1`).get(supplier, tid, supplier, tid, supplier, tid);
   if (!known) return res.status(400).json({ success: false, error: 'unknown_supplier' });
 
-  const upd = db.prepare(`UPDATE po_line_items SET supplier_name = ?
+  const upd = tdb().prepare(`UPDATE po_line_items SET supplier_name = ?
                            WHERE id = ? AND po_id IN (SELECT id FROM purchase_orders
                                                        WHERE COALESCE(tenant_id,1) = ?)`);
-  const updated = db.transaction(() => {
+  const updated = tdb().transaction(() => {
     let n = 0;
     for (const id of ids) n += upd.run(supplier, id, tid).changes;
     return n;
@@ -2049,14 +2057,14 @@ router.put('/api/retail-admin/purchasing/lines/supplier', requireRetailAdmin, ex
 // the same reason the bulk route does: only the mark is ever read.
 router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/invoice-status', requireRetailAdmin, express.json(), (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const line = db.prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+  const line = tdb().prepare(`SELECT pli.id FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
                             WHERE pli.id = ? AND pli.po_id = ? AND COALESCE(po.tenant_id,1) = ?`)
     .get(req.params.lineId, req.params.id, tid);
   if (!line) return res.status(404).json({ success: false, error: 'not_found' });
   const status = req.body && req.body.invoice_status;
   if (!VALID_INVOICE.has(status)) return res.status(400).json({ success: false, error: 'invalid_invoice_status' });
   const mark = status === 'no_invoice' ? 1 : 0;
-  setLineInvoiceStatus(db, line.id, status);
+  setLineInvoiceStatus(tdb(), line.id, status);
   logActivity(req.user.id, req.user.username, 'line_invoice_status', 'po_line_item', line.id,
               { invoice_status: status, no_invoice_expected: !!mark }, req.ip);
   res.json({ success: true, invoice_status: status, no_invoice_expected: !!mark });
@@ -2066,7 +2074,7 @@ router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/invoice-status', re
 // blob and has no business riding along in every supplier list read.
 router.get('/api/retail-admin/suppliers/:id/channel-qr', requireRetailAdmin, (req, res) => {
   const tid = Number(currentTenantId()) || 1;
-  const s = db.prepare('SELECT name, channel_qr_data FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
+  const s = tdb().prepare('SELECT name, channel_qr_data FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!s || !s.channel_qr_data) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: { name: s.name, qr: s.channel_qr_data } });
 });
@@ -2104,7 +2112,7 @@ router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
       }
     }
   }
-  const prefStmt = db.prepare(`
+  const prefStmt = tdb().prepare(`
     SELECT COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') AS supplier, COUNT(*) AS c
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
@@ -2128,27 +2136,27 @@ router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
 router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (req, res) => {
   const src = getRetailPO(req.params.id);
   if (!src) return res.status(404).json({ success: false, error: 'not_found' });
-  const lines = db.prepare(`
+  const lines = tdb().prepare(`
     SELECT * FROM po_line_items WHERE po_id = ? AND (COALESCE(qty_received, qty) < qty) ORDER BY sort_order, id
   `).all(src.id);
   if (!lines.length) return res.status(400).json({ success: false, error: 'nothing_outstanding' });
   try {
     const po_number = nextRetailPONumber();
-    const tx = db.transaction(() => {
-      const r = db.prepare(`INSERT INTO purchase_orders
+    const tx = tdb().transaction(() => {
+      const r = tdb().prepare(`INSERT INTO purchase_orders
         (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, backorder_of, tenant_id)
         VALUES (?,?,?,'Requested',?,?,'backorder','retail',?,NULL,?,?)`).run(
         po_number, gzToday(), null, src.supplier || null,
         `Back-order from ${src.po_number}`, src.store_id, src.id, currentTenantId());
       const newId = r.lastInsertRowid;
-      const ins = db.prepare(`INSERT INTO po_line_items
+      const ins = tdb().prepare(`INSERT INTO po_line_items
         (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
          expense_category, supplier_name, purchase_channel, note, sort_order)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       lines.forEach((l, i) => {
         const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
         ins.run(newId, l.store_product_id, l.ingredient_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
-          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), storeCategory(db, l.expense_category),
+          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), storeCategory(tdb(), l.expense_category),
           l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
       });
       return newId;
@@ -2169,7 +2177,7 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const num = v => Math.max(0, parseFloat(v) || 0);
   const { freight, tax, handling } = req.body || {};
-  db.prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
+  tdb().prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
     .run(num(freight), num(tax), num(handling), po.id);
   const posted = postRetailPOExpensesWithSource(po.id);
   // The extras now feed per-unit cost (allocateLandedExtras), and on this screen
@@ -2189,7 +2197,7 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   // history row, which is a pricing decision, not a code one.
   // Same shelf the receipts used — see appliedReceiptStore. Identical to
   // po.store_id for every order received before receipts existed.
-  const recosted = po.status === 'Delivered' ? applyReceivedToStock(po.id, req, appliedReceiptStore(db, po)) : null;
+  const recosted = po.status === 'Delivered' ? applyReceivedToStock(po.id, req, appliedReceiptStore(tdb(), po)) : null;
   logActivity(req.user.id, req.user.username, 'landed_cost', 'purchase_order', po.id, { freight: num(freight), tax: num(tax), handling: num(handling) }, req.ip);
   res.json({ success: true, posted,
              cost_lines_updated: recosted ? recosted.costed : 0,
@@ -2204,7 +2212,7 @@ function lineConflict(items) {
 }
 
 function insertLineItems(poId, items, headerSupplier, reuseExisting) {
-  const insertItem = db.prepare(`INSERT INTO po_line_items
+  const insertItem = tdb().prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
      expense_category, supplier_name, purchase_channel, invoice_status, no_invoice_expected, note, sort_order)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
@@ -2214,7 +2222,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   // allocations with it — the kitchen twin of this path (routes/purchases.js)
   // lost a live ¥848.24 link exactly that way, and nothing on either screen
   // said so afterwards.
-  const updateItem = db.prepare(`UPDATE po_line_items SET
+  const updateItem = tdb().prepare(`UPDATE po_line_items SET
      store_product_id=?, ingredient_id=?, name_en=?, name_cn=?, sku=?, qty=?, unit=?, cost_per_unit=?,
      total_cost=?, expense_category=?, supplier_name=?, purchase_channel=?, invoice_status=?,
      no_invoice_expected=?, note=?, sort_order=?
@@ -2225,7 +2233,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   // stored 不开发票 quietly became 'not_received' again the next time anyone
   // touched the order's lines.
   const existing = new Map(reuseExisting
-    ? db.prepare('SELECT id, invoice_status, no_invoice_expected FROM po_line_items WHERE po_id = ?')
+    ? tdb().prepare('SELECT id, invoice_status, no_invoice_expected FROM po_line_items WHERE po_id = ?')
         .all(poId).map(r => [r.id, r])
     : []);
   const kept = new Set();
@@ -2235,7 +2243,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   // whose line unit doesn't match ingredients.buy_unit, so defaulting a
   // material line to the generic 'pcs' product default would silently make
   // every material price alert impossible.
-  const ingStmt = db.prepare('SELECT supplier, buy_unit FROM ingredients WHERE id = ?');
+  const ingStmt = tdb().prepare('SELECT supplier, buy_unit FROM ingredients WHERE id = ?');
   items.forEach((item, i) => {
     const qty = parseFloat(item.qty) || 0;
     const cpu = parseFloat(item.cost_per_unit) || 0;
@@ -2261,7 +2269,7 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
     const cols = [
       item.store_product_id || null, item.ingredient_id || null,
       item.name_en || '', item.name_cn || null, item.sku || null,
-      qty, unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
+      qty, unit || 'pcs', cpu, qty * cpu, storeCategory(tdb(), item.expense_category),
       supplierName, item.purchase_channel || null, status, mark,
       (item.note || '').trim() || null, i,
     ];
@@ -2279,10 +2287,10 @@ function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   const dropped = [...existing.keys()].filter(id => !kept.has(id));
   if (!dropped.length) return { dropped: 0, orphaned_links: 0, orphaned_amount: 0 };
   const marks = dropped.map(() => '?').join(',');
-  const orphaned = db.prepare(
+  const orphaned = tdb().prepare(
     `SELECT COUNT(*) AS n, COALESCE(SUM(allocated_amount),0) AS amount
        FROM invoice_lines WHERE line_id IN (${marks})`).get(...dropped);
-  db.prepare(`DELETE FROM po_line_items WHERE po_id = ? AND id IN (${marks})`).run(poId, ...dropped);
+  tdb().prepare(`DELETE FROM po_line_items WHERE po_id = ? AND id IN (${marks})`).run(poId, ...dropped);
   return { dropped: dropped.length, orphaned_links: orphaned.n, orphaned_amount: orphaned.amount };
 }
 
@@ -2296,8 +2304,8 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   try {
     const po_number = nextRetailPONumber();
-    const tx = db.transaction(() => {
-      const result = db.prepare(`
+    const tx = tdb().transaction(() => {
+      const result = tdb().prepare(`
         INSERT INTO purchase_orders (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, tenant_id)
         VALUES (?,?,?,'Requested',?,?,'manual','retail',?,NULL,?)
       `).run(po_number, date, delivery_date || null, supplier || null, notes || null, storeId, currentTenantId());
@@ -2320,7 +2328,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   const { date, delivery_date, supplier, store_id, notes, items } = req.body || {};
   // Once receiving has touched stock, the store + lines are frozen — a moved
   // PO would strand its applied quantities at the old store.
-  const applied = db.prepare(
+  const applied = tdb().prepare(
     'SELECT COUNT(*) AS c FROM po_line_items WHERE po_id = ? AND COALESCE(stock_applied_qty,0) > 0'
   ).get(po.id).c;
   if (applied && (Array.isArray(items) || (store_id && parseInt(store_id, 10) !== po.store_id))) {
@@ -2332,8 +2340,8 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   }
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   let lineDiff = null;
-  const tx = db.transaction(() => {
-    db.prepare(`
+  const tx = tdb().transaction(() => {
+    tdb().prepare(`
       UPDATE purchase_orders SET date = ?, delivery_date = ?, supplier = ?, notes = ?, store_id = ?,
              updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `).run(date || po.date, delivery_date || null, supplier || null, notes || null, storeId, po.id);
@@ -2364,8 +2372,8 @@ router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) 
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   if (po.status !== 'Requested') return res.status(409).json({ success: false, error: 'not_draft' });
-  db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
-  db.prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
+  tdb().prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
+  tdb().prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
   logActivity(req.user.id, req.user.username, 'delete', 'purchase_order', po.id, { po_number: po.po_number, scope: 'retail' }, req.ip);
   res.json({ success: true });
 });
@@ -2397,7 +2405,7 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
     if (costPlan.unrecoverable.length) {
       return res.status(409).json({ success: false, error: 'cost_not_recoverable', ingredients: costPlan.unrecoverable });
     }
-    const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
+    const rev = reversePOStock(po, req, appliedReceiptStore(tdb(), po));
     if (rev.blocked) return blockedResponse(res, rev.blocked);
     if (rev.reversed_units) {
       logActivity(req.user.id, req.user.username, 'stock_reversed', 'purchase_order', po.id,
@@ -2416,12 +2424,12 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
                   { scope: 'retail', to: status, materials_restored: costRollback.restored }, req.ip);
     }
   }
-  db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, po.id);
+  tdb().prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, po.id);
   // First-time delivery seeds qty_received = qty (the common "everything
   // arrived" case); receive-route edits refine it afterwards.
   if (status === 'Delivered') {
-    db.prepare('UPDATE po_line_items SET qty_received = COALESCE(qty_received, qty) WHERE po_id = ?').run(po.id);
-    applyReceivedToStock(po.id, req, appliedReceiptStore(db, po));
+    tdb().prepare('UPDATE po_line_items SET qty_received = COALESCE(qty_received, qty) WHERE po_id = ?').run(po.id);
+    applyReceivedToStock(po.id, req, appliedReceiptStore(tdb(), po));
   }
   // Price write-back + ±5% alert for material lines on this PO. Fires on
   // Ordered too, not just Delivered — mirrors routes/purchases.js exactly:
@@ -2491,7 +2499,7 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   if (po.status !== 'Delivered') return res.status(409).json({ success: false, error: 'not_delivered' });
   // Reverse off the shelf the goods actually landed on. Identical to
   // po.store_id for every order received before receipts existed.
-  const rev = reversePOStock(po, req, appliedReceiptStore(db, po));
+  const rev = reversePOStock(po, req, appliedReceiptStore(tdb(), po));
   if (rev.blocked) return blockedResponse(res, rev.blocked);
   // AFTER the refusal, never before it. A blocked reversal writes nothing at
   // all — that is the promise undoBlocked makes in so many words
@@ -2508,11 +2516,11 @@ router.put('/api/retail-admin/purchases/:id/undo-receive', requireRetailAdmin, e
   // The RETURN EVENTS survive, exactly as the delivery does — po_receipts /
   // po_receipt_lines are append-only and keep their own numbers, so what went
   // back is still readable in Receiving after the undo.
-  db.prepare(`UPDATE po_line_items
+  tdb().prepare(`UPDATE po_line_items
                  SET qty_received = NULL, damaged_qty = 0,
                      returned_qty = 0, return_reason = NULL, returned_at = NULL
                WHERE po_id = ?`).run(po.id);
-  db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
+  tdb().prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('Ordered', po.id);
   postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
               { from: 'Delivered', to: 'Ordered', scope: 'retail', undo_receive: true,
@@ -2534,14 +2542,14 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   // code cannot leave half a delivery saved, and no stock moves on a payload
   // that was never going to be accepted. The rule itself lives in
   // routes/purchases.js — one definition for both receive endpoints.
-  const planned = planReceiptReasons(db, po.id, receipts);
+  const planned = planReceiptReasons(tdb(), po.id, receipts);
   if (planned.error) return res.status(400).json({ success: false, error: planned.error, line_id: planned.line_id });
   // Returns are resolved and refused in the same breath and for the same
   // reason. lib/po-returns.js holds every rule this enforces — how much may go
   // back, that it needs a reason, and that a payload lowering an arrived count
   // may not strand a return above it — so nothing about what a return IS is
   // decided in this route.
-  const returns = planReturns(db, po.id, receipts);
+  const returns = planReturns(tdb(), po.id, receipts);
   if (returns.error) return res.status(400).json({ success: false, error: returns.error, line_id: returns.line_id });
 
   // ── Where this delivery is going ──────────────────────────────────────────
@@ -2561,13 +2569,13 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   const rawStore = req.body?.store_id;
   const wantStore = rawStore === undefined || rawStore === null || rawStore === ''
     ? null : parseInt(rawStore, 10);
-  const appliedStore = appliedReceiptStore(db, po);
+  const appliedStore = appliedReceiptStore(tdb(), po);
   if (wantStore != null) {
     if (!Number.isFinite(wantStore) || !inventory.getStore(wantStore)) {
       return res.status(400).json({ success: false, error: 'store_not_found' });
     }
     if (wantStore !== appliedStore) {
-      const booked = db.prepare(
+      const booked = tdb().prepare(
         'SELECT 1 FROM po_line_items WHERE po_id = ? AND COALESCE(stock_applied_qty, 0) <> 0 LIMIT 1'
       ).get(po.id);
       if (booked) {
@@ -2588,11 +2596,11 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   let missing_lines = 0, damaged_lines = 0, any_qty = false, receipt = null;
   let returned_lines = 0, returned_units = 0, returnReceipt = null;
   const returnMoves = new Map();
-  const tx = db.transaction(() => {
+  const tx = tdb().transaction(() => {
     for (const r of receipts) {
       const lineId = parseInt(r.line_id, 10);
       if (!lineId) continue;
-      const line = db.prepare('SELECT id, qty FROM po_line_items WHERE id = ? AND po_id = ?').get(lineId, po.id);
+      const line = tdb().prepare('SELECT id, qty FROM po_line_items WHERE id = ? AND po_id = ?').get(lineId, po.id);
       if (!line) continue;
       const sets = [], vals = [];
       if (r.qty_received !== undefined) {
@@ -2648,7 +2656,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       }
       if (!sets.length) continue;
       vals.push(lineId, po.id);
-      db.prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
+      tdb().prepare(`UPDATE po_line_items SET ${sets.join(', ')} WHERE id = ? AND po_id = ?`).run(...vals);
     }
     // The delivery record, appended last so it reads the lines back as stored.
     // Gated on any_qty for the same reason postRetailPOExpenses below is: a
@@ -2661,7 +2669,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     // writes no return row at all — returnMoves holds only lines whose returned
     // figure actually grew.
     if (returnMoves.size) {
-      returnReceipt = recordReceipt(db, {
+      returnReceipt = recordReceipt(tdb(), {
         poId: po.id, storeId, scope: 'retail', kind: 'return', returns: returnMoves,
         actor: {
           userId: req.user?.id || null,
@@ -2672,7 +2680,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
       });
     }
     if (any_qty) {
-      receipt = recordReceipt(db, {
+      receipt = recordReceipt(tdb(), {
         poId: po.id, storeId, scope: 'retail',
         actor: {
           userId: req.user?.id || null,
@@ -2716,7 +2724,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
   const anyReturnChange = returns.increased > 0 || returns.decreased > 0;
   const delivered = any_qty && po.status === 'Ordered';
   if (delivered) {
-    db.prepare("UPDATE purchase_orders SET status = 'Delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
+    tdb().prepare("UPDATE purchase_orders SET status = 'Delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
     logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
                 { from: po.status, to: 'Delivered', scope: 'retail', via: 'receive' }, req.ip);
   }
