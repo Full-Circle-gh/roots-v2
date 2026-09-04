@@ -20,6 +20,14 @@
 //     opts also accepts sub|subEn+subCn (a one-line note under the title)
 // Both askPrompt/askReason resolve '' if submitted empty (value is optional
 // unless opts.required is set), null if dismissed (Escape / backdrop / Cancel).
+//   askChoice(opts) -> Promise<string|null>   -- pick one from a list
+//     opts: { title|titleEn+titleCn, sub|subEn+subCn, label|labelEn+labelCn,
+//            options: [{ value, label }], value (preselected — omit for none,
+//            which disables submit until a pick is made),
+//            submitLabel|submitEn+submitCn, cancelLabel|cancelEn+cancelCn, danger }
+//     Resolves the chosen value, or null if dismissed. Added for the Team
+//     screen's "delete this role — where do its people go?", which used to be
+//     window.prompt() with a numbered list and "Type a number:".
 //   askCustom(kindClass, bodyHtml, footHtml, focusSel) -> { scrim, closer, ready }
 //     The shell the three functions above build on, for a caller whose
 //     content is more than a title/message/one field. kindClass is appended
@@ -80,12 +88,13 @@
       .tdlg-msg { font-size: 13.5px; color: var(--text-2, #58606E); margin: 8px 0 0; line-height: 1.55; }
       .tdlg-field { margin-top: 16px; }
       .tdlg-field label { display: block; font-size: 12px; font-weight: 500; color: var(--text-2, #58606E); margin-bottom: 5px; }
-      .tdlg-field input, .tdlg-field textarea {
+      .tdlg-field input, .tdlg-field textarea, .tdlg-field select {
         width: 100%; box-sizing: border-box; font: 400 13.5px inherit; color: var(--text-1, #111A2B);
         background: var(--bg-app, #FBF9F4); border: 1px solid var(--line, #E4E0D5); border-radius: 8px; padding: 9px 11px;
       }
       .tdlg-field textarea { resize: vertical; min-height: 64px; font-family: inherit; }
-      .tdlg-field input:focus, .tdlg-field textarea:focus {
+      .tdlg-field select { appearance: none; cursor: pointer; font-family: inherit; }
+      .tdlg-field input:focus, .tdlg-field textarea:focus, .tdlg-field select:focus {
         outline: none; border-color: var(--tacet-dusk, #6E67AF); box-shadow: 0 0 0 3px var(--tacet-dusk-tint, #EEEDF6);
       }
       .tdlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px; border-top: 1px solid var(--line, #E4E0D5); }
@@ -229,9 +238,51 @@
   function askPrompt(opts) { return askInput(opts, false); }
   function askReason(opts) { return askInput(opts, true); }
 
+  // PICK ONE OF THESE. The missing member of the family: askConfirm answers
+  // yes/no, askPrompt and askReason take typed text, and anything that needed a
+  // CHOICE had to fall back to the browser's own prompt() with a numbered list
+  // and "Type a number:" — which is how deleting a staff role who somebody
+  // holds used to ask where those people should go.
+  //
+  //   options — [{ value, label }], drawn in the order given.
+  //   value   — preselected value; omit for "nothing chosen yet", which
+  //             disables the submit until the operator picks. There is
+  //             deliberately no default: picking is the point.
+  // Resolves with the chosen value, or null if cancelled.
+  function askChoice(opts) {
+    opts = opts || {};
+    const danger = !!opts.danger;
+    const title = pick(opts, 'title');
+    const sub = pick(opts, 'sub');
+    const label = pick(opts, 'label');
+    const submitLabel = pick(opts, ['submit', 'submitLabel']) || 'Continue';
+    const cancelLabel = pick(opts, ['cancel', 'cancelLabel']) || 'Cancel';
+    const list = Array.isArray(opts.options) ? opts.options : [];
+    const has = opts.value != null && list.some((o) => String(o.value) === String(opts.value));
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const optionsHtml = (has ? '' : '<option value="" selected disabled></option>')
+      + list.map((o) => `<option value="${esc(o.value)}"${has && String(o.value) === String(opts.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+    const bodyHtml = `
+      <h3 class="tdlg-title">${title}</h3>
+      ${sub ? `<p class="tdlg-sub">${sub}</p>` : ''}
+      <div class="tdlg-field">${label ? `<label for="tdlg-pick">${label}</label>` : ''}
+        <select id="tdlg-pick">${optionsHtml}</select></div>`;
+    const footHtml = `
+      <button class="tdlg-btn tdlg-btn--ghost" data-cancel>${cancelLabel}</button>
+      <button class="tdlg-btn ${danger ? 'tdlg-btn--danger' : 'tdlg-btn--primary'}" data-submit${has ? '' : ' disabled'}>${submitLabel}</button>`;
+    const { scrim, closer, ready } = openScrim(danger ? 'tdlg-danger' : 'tdlg-neutral', bodyHtml, footHtml, '#tdlg-pick');
+    const sel = scrim.querySelector('#tdlg-pick');
+    const submitBtn = scrim.querySelector('[data-submit]');
+    sel.addEventListener('change', () => { submitBtn.disabled = !sel.value; });
+    scrim.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => closer(null)));
+    submitBtn.addEventListener('click', () => { if (sel.value) closer(sel.value); });
+    return ready;
+  }
+
   window.askConfirm = askConfirm;
   window.askPrompt = askPrompt;
   window.askReason = askReason;
+  window.askChoice = askChoice;
   // The shell askConfirm/askPrompt/askReason all build on, exposed directly
   // for a caller whose content is more than a title/message/one field —
   // search-and-pick, tabs, several fields (public/retail-admin/19-recipes.js's

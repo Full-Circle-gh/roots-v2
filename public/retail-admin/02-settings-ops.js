@@ -2169,9 +2169,13 @@ function tmPaintEnforce() {
 async function tmToggleEnforce() {
   const btn = $('#tmEnforceBtn');
   const turningOn = !TM_RBAC_ENFORCE;
-  if (turningOn && !window.confirm(cuT(
-    'Turn on enforcement? Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
-    '开启强制权限？成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。'))) return;
+  if (turningOn && !(await askConfirm({
+    titleEn: 'Turn on enforcement?', titleCn: '开启强制权限？',
+    bodyEn: 'Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
+    bodyCn: '成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。',
+    confirmEn: 'Turn it on', confirmCn: '开启',
+    cancelEn: 'Not yet', cancelCn: '暂不',
+  }))) return;
   btn.disabled = true;
   try {
     const res = await api('/api/backend/rbac-enforce', { method: 'PUT', body: { enforce: turningOn ? 1 : 0 } });
@@ -3052,11 +3056,19 @@ function rlBindPane() {
   const del = $('#rlDelete'); if (del) del.addEventListener('click', rlDeleteRole);
 }
 
-function rlSelect(key, force) {
+// async ONLY for the unsaved-changes question below. Both internal callers pass
+// force=true, which skips it, so their bodies still run to completion
+// synchronously before the promise is returned — the click handler is
+// fire-and-forget either way.
+async function rlSelect(key, force) {
   if (!force && RL_SEL === key && RL_DRAFT) { rlRenderPane(); return; }
-  if (!force && rlDirty() && !window.confirm(cuT(
-    'Leave this role without saving? Your changes will be lost.',
-    '未保存就离开该角色？更改将丢失。'))) return;
+  if (!force && rlDirty() && !(await askConfirm({
+    titleEn: 'Leave this role without saving?', titleCn: '未保存就离开该角色？',
+    bodyEn: 'Your changes to it will be lost.', bodyCn: '对该角色的更改将丢失。',
+    confirmEn: 'Discard changes', confirmCn: '放弃更改',
+    cancelEn: 'Keep editing', cancelCn: '继续编辑',
+    danger: true,
+  }))) return;
   RL_SEL = key;
   const r = rlRole(key);
   RL_DRAFT = r && !r.isFixed
@@ -3118,7 +3130,12 @@ async function rlSave() {
 }
 
 async function rlAddRole() {
-  const name = window.prompt(cuT('Name the new role', '新角色的名称'), '');
+  const name = await askPrompt({
+    titleEn: 'Name the new role', titleCn: '新角色的名称',
+    labelEn: 'Role name', labelCn: '角色名称',
+    phEn: 'Bookkeeper, Weekend staff…', phCn: '会计、周末店员…',
+    submitEn: 'Create role', submitCn: '创建角色',
+  });
   if (name === null) return;
   if (!String(name).trim()) { toast(cuT('Give the role a name', '请为角色命名'), 'err'); return; }
   try {
@@ -3139,8 +3156,13 @@ async function rlDeleteRole() {
   const r = rlRole(RL_SEL);
   if (!r || r.isFixed) return;
   if (!r.people) {
-    if (!window.confirm(cuT('Delete “' + cuT(r.nameEn, r.nameCn) + '”? Nobody holds it.',
-                           '删除“' + cuT(r.nameEn, r.nameCn) + '”？当前无人使用。'))) return;
+    if (!(await askConfirm({
+      titleEn: 'Delete “' + r.nameEn + '”?', titleCn: '删除“' + r.nameCn + '”？',
+      bodyEn: 'Nobody holds this role, so nothing changes for anyone.',
+      bodyCn: '当前无人使用该角色，删除不会影响任何人。',
+      confirmEn: 'Delete role', confirmCn: '删除角色',
+      danger: true,
+    }))) return;
     try {
       await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: {} });
       RL_SEL = null; await rlLoad(); tmLoad();
@@ -3150,22 +3172,38 @@ async function rlDeleteRole() {
   }
   const others = RL_ROLES.filter(x => x.key !== r.key);
   if (!others.length) { toast(cuT('There is nowhere to move them', '没有可迁移的角色'), 'err'); return; }
-  const menu = others.map((x, i) => (i + 1) + ') ' + cuT(x.nameEn, x.nameCn)).join('\n');
   const who = r.people === 1 ? cuT('1 person holds this role', '1 人使用此角色')
                              : cuT(r.people + ' people hold this role', r.people + ' 人使用此角色');
   const exc = r.exceptions
-    ? '\n' + cuT(r.exceptions + (r.exceptions === 1 ? ' of them has an exception; it stays, on top of the new role.'
-                                                   : ' of them have exceptions; they stay, on top of the new role.'),
-                 '其中 ' + r.exceptions + ' 人设有例外权限，迁移后仍保留。')
+    ? ' ' + cuT(r.exceptions + (r.exceptions === 1 ? ' of them has an exception; it stays, on top of the new role.'
+                                                  : ' of them have exceptions; they stay, on top of the new role.'),
+                '其中 ' + r.exceptions + ' 人设有例外权限，迁移后仍保留。')
     : '';
-  const pick = window.prompt(who + '. ' + cuT('Where do they go? Type a number:', '他们迁移到哪个角色？请输入编号：')
-    + '\n\n' + menu + exc, '');
-  if (pick === null) return;
-  const dest = others[parseInt(pick, 10) - 1];
-  if (!dest) { toast(cuT('Pick one of the numbers listed', '请输入列表中的编号'), 'err'); return; }
-  if (!window.confirm(cuT(
-    'Delete “' + cuT(r.nameEn, r.nameCn) + '” and move ' + r.people + ' to “' + cuT(dest.nameEn, dest.nameCn) + '”? They get its permissions on their next screen.',
-    '删除“' + cuT(r.nameEn, r.nameCn) + '”并将 ' + r.people + ' 人迁移到“' + cuT(dest.nameEn, dest.nameCn) + '”？他们下次打开页面即按新角色权限生效。'))) return;
+  // A PICKER, NOT A NUMBER TYPED INTO A BROWSER POP-UP. This used to be
+  // window.prompt() carrying a hand-numbered list and the instruction "Type a
+  // number:" — the merchant reading their own staff list off a grey system
+  // dialog and answering it with an index. askChoice is the same question with
+  // the roles as choices, and no default: picking is the point.
+  const destKey = await askChoice({
+    titleEn: 'Delete “' + r.nameEn + '” — where do its people go?',
+    titleCn: '删除“' + r.nameCn + '” — 这些成员迁移到哪里？',
+    sub: who + '.' + exc,
+    labelEn: 'Move them to', labelCn: '迁移到',
+    options: others.map(x => ({ value: x.key, label: cuT(x.nameEn, x.nameCn) })),
+    submitEn: 'Continue', submitCn: '继续',
+    danger: true,
+  });
+  if (destKey === null) return;
+  const dest = others.find(x => x.key === destKey);
+  if (!dest) return;
+  if (!(await askConfirm({
+    titleEn: 'Delete “' + r.nameEn + '” and move ' + r.people + ' to “' + dest.nameEn + '”?',
+    titleCn: '删除“' + r.nameCn + '”并将 ' + r.people + ' 人迁移到“' + dest.nameCn + '”？',
+    bodyEn: 'They get its permissions on their next screen.',
+    bodyCn: '他们下次打开页面即按新角色权限生效。',
+    confirmEn: 'Delete and move', confirmCn: '删除并迁移',
+    danger: true,
+  }))) return;
   try {
     await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: { move_to: dest.key } });
     RL_SEL = dest.key; await rlLoad(dest.key); tmLoad();
@@ -3285,7 +3323,12 @@ function tmdLoad() {
     .catch(function () { box.innerHTML = '<div class="tm-dev-empty">' + cuT('Couldn’t load devices.', '无法加载设备。') + '</div>'; });
 }
 async function tmdRevoke(sid, isCurrent, btn) {
-  if (isCurrent && !window.confirm(cuT('Sign out of this device? You’ll be returned to the login page.', '登出此设备？您将返回登录页面。'))) return;
+  if (isCurrent && !(await askConfirm({
+    titleEn: 'Sign out of this device?', titleCn: '登出此设备？',
+    bodyEn: 'You’ll be returned to the login page.', bodyCn: '您将返回登录页面。',
+    confirmEn: 'Sign out', confirmCn: '登出',
+    danger: true,
+  }))) return;
   if (btn) { btn.disabled = true; btn.textContent = cuT('Signing out…', '正在登出…'); }
   try {
     var res = await api('/api/backend/sessions/revoke', { method: 'POST', body: { sid: sid } });
