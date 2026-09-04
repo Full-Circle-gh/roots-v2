@@ -124,7 +124,17 @@ function internalStatusForChannel(desc) {
   if (/已完成|交易完成|已送达|已收货|已收餐|订单完成|已签收|妥投/.test(d)) return 'delivered';
   // Rider now HOLDS the order and is en route to the customer. Before the rider
   // bucket below, because 骑手已取餐 matches both and this is the truer one.
-  if (/已取货|已取餐|已揽收|配送中|派送中|运输中/.test(d))            return 'dispatched';
+  //
+  // 送出 is Eleme's own word for it and it is not optional: MEASURED on the live
+  // archive (scripts/diagnose_eleme_stage_replay.js, 2026-09-04), the stage this
+  // shop's orders actually carry is "订单商家已自行送出" at header.orderLatestStatus,
+  // with "商家已送出" saying the same thing in the delivery trace — 自配送, the
+  // merchant delivering it themselves rather than a platform rider. Without this
+  // arm the fixed parser reads that stage correctly and then maps it to nothing,
+  // which leaves the order on Paid exactly as before: the right field, read well,
+  // and still no movement. 已送达 (delivered) is matched by the arm above and is
+  // reached first, so this cannot swallow it.
+  if (/已取货|已取餐|已揽收|配送中|派送中|运输中|送出/.test(d))       return 'dispatched';
   // Rider assigned and heading to the store to COLLECT — its own bucket so the
   // floor knows "someone is coming, have it ready".
   if (/骑手|到店|待取货|待取餐/.test(d))                             return 'rider_pickup';

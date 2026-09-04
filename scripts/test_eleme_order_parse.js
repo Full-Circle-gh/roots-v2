@@ -610,21 +610,25 @@ section('N · the lifecycle stage, not the validity flag');
     o1.statusKeyPath === 'header.orderLatestStatus', o1.statusKeyPath);
   ok('...and that the field names a stage', o1.statusIsStage === true, o1.statusIsStage);
 
-  const o2 = stage({ printDataInfo: { statusForPrint: '骑手已取餐' } });
-  ok('the printed label is a stage too', o2.statusDesc === '骑手已取餐', o2.statusDesc);
-
   const o3 = stage({ deliveryInfo: { distTraceView: { traceView: { status: '配送中' } } } });
-  ok('the delivery trace is read when nothing else carries a stage',
+  ok('the delivery trace is read when the header carries nothing',
     o3.statusDesc === '配送中', o3.statusDesc);
 
-  // Priority, not position: the order's own latest status wins over the ticket.
-  const o4 = stage({ printDataInfo: { statusForPrint: '已完成' }, header: { orderLatestStatus: 'DELIVERING' } });
-  ok('the order-level stage beats the ticket label', o4.statusDesc === 'DELIVERING', o4.statusDesc);
+  // Priority, not position: the order's own latest status wins over the trace.
+  const o4 = stage({ deliveryInfo: { distTraceView: { traceView: { status: '商家已送出' } } },
+                     header: { orderLatestStatus: 'DELIVERING' } });
+  ok('the order-level stage beats the delivery trace', o4.statusDesc === 'DELIVERING', o4.statusDesc);
 
-  // A numeric trace code is not a label — step over it and keep looking.
-  const o5 = stage({ deliveryInfo: { distTraceView: { traceView: { status: 4 } } },
-                     printDataInfo: { statusForPrint: '商家已接单' } });
+  // A numeric code is not a label — step over it and keep looking.
+  const o5 = stage({ header: { orderLatestStatus: 5 },
+                     deliveryInfo: { distTraceView: { traceView: { status: '商家已接单' } } } });
   ok('a numeric code is not a stage', o5.statusDesc === '商家已接单', o5.statusDesc);
+
+  // The ticket's payment line sits in a field that is NOT consulted for a stage,
+  // on the measurement that it reads 已在线支付 on a delivered order.
+  const o6b = stage({ printDataInfo: { statusForPrint: '已在线支付' } });
+  ok('the printed payment line is never taken for a stage',
+    o6b.statusDesc !== '已在线支付', o6b.statusDesc);
 
   // Nothing but the flag: the label still rides through (the daemon's refresh,
   // its backfills and the void check all key off having ONE), flagged as not a
@@ -687,6 +691,58 @@ section('O · stage → internal status (routes/eleme-internal.js)');
   // The Chinese vocabulary is untouched by the ASCII arms.
   ok('配送中 still → dispatched', statusOf('配送中') === 'dispatched', statusOf('配送中'));
   ok('已完成 still → delivered', statusOf('已完成') === 'delivered', statusOf('已完成'));
+
+  // ── The vocabulary this shop's orders ACTUALLY carry ──────────────────────
+  // Measured on the live archive, 2026-09-04, by
+  // scripts/diagnose_eleme_stage_replay.js: header.orderLatestStatus reads
+  // "订单商家已自行送出" and the delivery trace says "商家已送出" — 自配送, the
+  // merchant delivering it themselves. Both mapped to NOTHING until now, which
+  // is the second half of the always-Paid bug: the right field, read correctly,
+  // and the order still not moving.
+  ok('订单商家已自行送出 → dispatched (the live label)',
+    statusOf('订单商家已自行送出') === 'dispatched', statusOf('订单商家已自行送出'));
+  ok('商家已送出 → dispatched (the same stage in the trace)',
+    statusOf('商家已送出') === 'dispatched', statusOf('商家已送出'));
+  // 送出 must not swallow 送达: delivered is checked first and stays delivered.
+  ok('已送达 is still delivered, not dispatched', statusOf('已送达') === 'delivered', statusOf('已送达'));
+  ok('商家已送达 is delivered too', statusOf('商家已送达') === 'delivered', statusOf('商家已送达'));
+  // The ticket's payment line is not a stage and must move nothing.
+  ok('已在线支付 → null (a payment line, not a stage)',
+    statusOf('已在线支付') === null, statusOf('已在线支付'));
+}
+
+// ── P · the real payload's stage and ETA, as measured on the box ────────────
+// Built from scripts/diagnose_eleme_stage_replay.js's output for
+// EL20260831339491 — the field names, the label and the epoch ETA are the ones
+// the live archive actually carries, not invented shapes.
+section('P · the live payload: stage from the header, ETA from planDeliverTime');
+{
+  const row = {
+    orderId: '8090566204376752619',
+    status: 'VALID',                                   // the flag that used to win
+    header: {
+      orderLatestStatus: '订单商家已自行送出',            // the stage
+      planDeliverTime: 1788154414000,                  // epoch ms → 2026-08-31T05:33:34Z
+    },
+    printDataInfo: { statusForPrint: '已在线支付' },      // a payment line, NOT a stage
+    deliveryInfo: { distTraceView: { traceView: { status: '商家已送出' } } },
+    activeTime: '2026-08-31T12:01:34',                 // Beijing → 04:01:34 UTC
+    items: [{ name: '素食卷饼', quantity: 1, price: 135, totalPrice: 135 }],
+  };
+  const o = b.parseOrderPayload({ orders: [row] })[0];
+  ok('the stage comes from the order header', o.statusDesc === '订单商家已自行送出', o.statusDesc);
+  ok('...named as such', o.statusKeyPath === 'header.orderLatestStatus', o.statusKeyPath);
+  ok('the payment line does NOT win', o.statusDesc !== '已在线支付', o.statusDesc);
+  ok('the validity flag does NOT win', o.statusDesc !== 'VALID', o.statusDesc);
+  ok('the ETA is read at last — planDeliverTime', o.eta === '2026-08-31 05:33:34', o.eta);
+  ok('the order time is still Beijing → UTC', o.placedAt === '2026-08-31 04:01:34', o.placedAt);
+
+  // With the header absent, the delivery trace carries the same stage — and the
+  // payment line still must not be mistaken for one.
+  const noHeader = Object.assign({}, row); delete noHeader.header;
+  const o2 = b.parseOrderPayload({ orders: [noHeader] })[0];
+  ok('the trace carries the stage when the header does not', o2.statusDesc === '商家已送出', o2.statusDesc);
+  ok('...and the ETA falls back to nothing rather than a wrong field', o2.eta === null, o2.eta);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
