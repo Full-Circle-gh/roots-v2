@@ -583,15 +583,35 @@ function requireRestockAccess(req, res, next) {
   });
 }
 
-// A kitchen-realm session may only touch KITCHEN-DIRECTION orders. Applied to
-// the routes that name one; the list route narrows itself instead (below).
-function kitchenRealmOwnsOrder(req, res, next) {
-  if (req.restockRealm !== 'kitchen') return next();
+/* KITCHEN-ONLY OPERATORS ARE CONFINED TO KITCHEN REQUESTS, and the confinement
+ * is enforced here rather than by hiding a button.
+ *
+ * Two kinds of session land in it. The dying kitchen app is one — it is a
+ * kitchen-realm client of these endpoints and has no business in a transfer.
+ * The other is a Tacet operator who holds `restock:fulfil` and NOT
+ * `restock:pick`: the person who MAKES what was asked for. Marking a kitchen
+ * request prepared says the food is ready; marking a TRANSFER prepared sends a
+ * van and moves stock. Same route, same verb, and only the row says which — so
+ * the row is read.
+ *
+ * `req.caps` is null when the tenant has not switched RBAC on, and an owner
+ * bypasses everything: in both cases there is no fulfil-only operator to
+ * confine, and this correctly does nothing. Policy stays where the tenant set
+ * it rather than being second-guessed here.
+ */
+function _kitchenScopedSession(req) {
+  if (req.restockRealm === 'kitchen') return true;
+  if (!req.caps) return false;
+  return req.caps.has('restock:fulfil') && !req.caps.has('restock:pick');
+}
+
+function kitchenScopedOrder(req, res, next) {
+  if (!_kitchenScopedSession(req)) return next();
   const o = tdb().prepare('SELECT from_role, to_role FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Not found · 未找到' });
   if ((o.to_role || 'warehouse') !== 'kitchen' && (o.from_role || 'store') !== 'kitchen') {
     return res.status(403).json({
-      error: 'This is a transfer between locations, not a kitchen request. Open it in Tacet · 这是门店之间的调拨,请在 Tacet 中处理。',
+      error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',
     });
   }
   next();
@@ -753,7 +773,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   // Without this the probe would succeed, the launcher would paint on the wrong
   // host, and every tile on it would fail at the first write — a door that opens
   // onto a wall. public/kitchen.html always asks for to_role=kitchen.
-  if (req.restockRealm === 'kitchen' && req.query.to_role !== 'kitchen') {
+  if (_kitchenScopedSession(req) && req.query.to_role !== 'kitchen') {
     return res.status(403).json({
       error: 'Transfers are managed in Tacet · 调拨请在 Tacet 中处理。',
     });
@@ -815,7 +835,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
 });
 
 // ── Single order with items ─────────────────────────────────────────────────
-router.get('/api/restock/:id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
+router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const items = tdb().prepare('SELECT * FROM restock_items WHERE restock_id = ? ORDER BY id').all(order.id);
@@ -920,7 +940,7 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
 });
 
 // ── Update order (store can edit drafts; both sides can edit notes) ────────
-router.put('/api/restock/:id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
+router.put('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const conn = tdb();
   const order = conn.prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
@@ -973,7 +993,7 @@ router.put('/api/restock/:id', requireRestockAccess, kitchenRealmOwnsOrder, (req
 });
 
 // ── Status transition (sent / received / prepared / delivered) ─────────────
-router.put('/api/restock/:id/status', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
+router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const { status } = req.body;
@@ -1103,7 +1123,7 @@ router.post('/api/restock/:id/retry-dispatch', requireRestockAccess, tacetOnly, 
 });
 
 // ── Mark item prepared (warehouse side) ────────────────────────────────────
-router.put('/api/restock/:id/item/:item_id', requireRestockAccess, kitchenRealmOwnsOrder, (req, res) => {
+router.put('/api/restock/:id/item/:item_id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found · 项目未找到' });
   // ONCE THE GOODS HAVE LEFT, THE LINES ARE FROZEN.

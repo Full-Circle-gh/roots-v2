@@ -57,6 +57,12 @@ const CTX = {
   user: { name: 'Asher', full_access: true },
   stores: [{ id: 1, name_en: 'Tianhe', name_cn: '天河店', code: 'TH' }],
 };
+// A request already sent to the kitchen — the other end of "Ask the kitchen".
+const KITCHEN_REQ = {
+  id: 91, rs_number: 'RS-260904-002', status: 'sent', from_role: 'warehouse', to_role: 'kitchen',
+  purpose: 'shelf', goods_state: 'none', item_count: 1,
+  items: [{ id: 911, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 6 }],
+};
 const ROWS = [{ product_id: 7, name_en: 'Hummus Asli', name_cn: '鹰嘴豆泥', sku: '1-10', physical_qty: 11, restock_target: 5 }];
 
 // One run waiting to be picked, one delivery in transit — so both tiles can
@@ -83,6 +89,7 @@ function stub(o) {
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(CTX) + ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
+    'var KITCHEN=' + JSON.stringify(o.noQueue ? [] : [KITCHEN_REQ]) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
@@ -96,7 +103,9 @@ function stub(o) {
     '    else\n' +
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    var m=url.match(/restock\\/(\\d+)$/);\n' +
-    '    if(m) body={success:true,data:ORDERS.filter(function(o){return o.id===Number(m[1])})[0]};\n' +
+    '    if(/\\/status$/.test(url)){ window.__status=JSON.parse(opts.body||"{}"); body={success:true}; }\n' +
+    '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
+    '    else if(url.indexOf("to_role=kitchen")>-1) body={success:true,data:KITCHEN};\n' +
     '    else body={success:true,data:ORDERS};\n' +
     '  }\n' +
     '  else body={success:true,data:{}};\n' +
@@ -120,19 +129,20 @@ const CASES = {
     expect: ['Hi Asher', 'Count', 'Set what is on your shelf',
              'Pick', 'Pull a run for the stores', '1 of 1 lines still to pull',
              'Receive', 'Count a delivery in', '1 delivery waiting',
-             'Ask the kitchen', 'Have something made'],
+             'Ask the kitchen', 'Have something made', 'Kitchen queue'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the app did not open on the launcher' },
 
   // THE ORIGINAL DEFECT, ASSERTED. A quiet day must still show both doors.
   'tiles-stay-when-there-is-no-work': { noRun: true, noInbound: true, js: 'window.__done();',
-    expect: ['Pick', 'Nothing to pick', 'Receive', 'Nothing on its way', 'Ask the kitchen'],
+    expect: ['Pick', 'Nothing to pick', 'Receive', 'Nothing on its way', 'Ask the kitchen', 'Kitchen queue'],
     absent: ['still to pull', 'delivery waiting'] },
 
   // THE OTHER HALF. One job needs no launcher, and the people who only count
   // are the ones who use this app every day.
   'no-launcher-for-one-job': { deny: true, js: 'window.__done();',
     expect: ['Quick stock', 'Hummus Asli'],
-    absent: ['Pull a run for the stores', 'Count a delivery in', 'Have something made', 'Hi Asher'],
+    absent: ['Pull a run for the stores', 'Count a delivery in', 'Have something made',
+             'Make what was asked for', 'Hi Asher'],
     check: (out) => {
       if (/data-view="home"/.test(out)) return 'a refused realm was shown the launcher';
       return /data-href="[^"]*stock-login/.test(out) ? 'a 403 bounced the operator to the login page' : null;
@@ -149,8 +159,33 @@ const CASES = {
     expect: ['Hi Asher', 'Pick', 'Receive'],
     check: (out) => /data-view="home"/.test(out) ? null : 'back did not return to the launcher' },
 
+  // ── The kitchen queue, in Tacet ──────────────────────────────────────────
+  // It used to live in public/kitchen.html on the kitchen host: separate app,
+  // separate login, separate permissions. That app is dead.
+  'queue-tile-carries-its-own-count': { js: 'window.__done();',
+    expect: ['Kitchen queue', 'Make what was asked for', '1 waiting'] },
+
+  'queue-tile-stays-when-idle': { noQueue: true, js: 'window.__done();',
+    expect: ['Kitchen queue', 'Nothing to make'], absent: ['Make what was asked for'] },
+
+  'queue-opens-and-shows-the-ask': { js: seq(["'[data-kqopen-home]'", '250']),
+    expect: ['Kitchen queue', 'To make', 'Done', 'RS-260904-002', 'For the shelf'] },
+
+  'queue-detail-says-stock-does-not-move': {
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250']),
+    expect: ['RS-260904-002', 'Hummus Asli', 'Start making',
+             'Stock changes when the batch is logged, not here'] },
+
+  'queue-advances-sent-to-received': {
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250', "'[data-kqnext]'", '300']),
+    checkStatus: (st) => {
+      if (!st) return 'nothing was written';
+      if (st.status !== 'received') return `wrote status ${st.status}, expected received`;
+      return null;
+    } },
+
   'home-cn': { pre: "localStorage.setItem('roots-admin-lang','cn');", js: 'window.__done();',
-    expect: ['你好', '盘点', '拣货', '收货', '向厨房下单', '待拣', '批待收货'] },
+    expect: ['你好', '盘点', '拣货', '收货', '向厨房下单', '厨房制作队列', '待拣', '批待收货'] },
 
   // ── Ask the kitchen ──────────────────────────────────────────────────────
   // Nothing has raised a kitchen request since 16 May, because the only screen
@@ -210,6 +245,7 @@ function main() {
       // from words: the launcher and the counting list share a header.
       'document.body.setAttribute("data-view",document.querySelector(".sh-wrap")?"home":"other");' +
       'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
+      'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
@@ -232,13 +268,18 @@ function main() {
     for (const want of (c.expect || [])) if (!seen.includes(want)) failures.push([name, `missing “${want}”`]);
     for (const no of (c.absent || [])) if (seen.includes(no)) failures.push([name, `should not say “${no}”`]);
     if (c.check) { const p = c.check(out); if (p) failures.push([name, p]); }
+    if (c.checkStatus) {
+      const st = JSON.parse(dec((out.match(/data-status="([^"]*)"/) || [])[1] || 'null'));
+      const p = c.checkStatus(st); if (p) failures.push([name, p]);
+    }
     if (c.checkPost) {
       const posted = JSON.parse(dec((out.match(/data-post="([^"]*)"/) || [])[1] || 'null'));
       const p = c.checkPost(posted); if (p) failures.push([name, p]);
     }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
-      /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/retail-admin\/products$/];
+      /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/restock\/\d+\/status$/,
+      /^\/api\/retail-admin\/products$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
   }
