@@ -60,6 +60,18 @@ function addMaterial({ name, kind, category, sku }) {
   return write();
 }
 
+// Numbering is OPT-IN (lib/sku-rules.js getSettings): a database with no
+// sku_settings row generates nothing. Assert that first, then switch it on for
+// everything below — a test that relied on an implicit default would not notice
+// the day the default changed.
+console.log('\n── numbering is off until a tenant turns it on ──────────────────');
+ok('a fresh database generates nothing',
+  addMaterial({ name: 'Before Opt-in', kind: 'food', category: 'Dried fruits' }) === null);
+ok('and peek says why',
+  rules.peek(db, 'material', { category: 'food', subcategory: 'Dried fruits' }).reason === 'disabled');
+rules.setSettings(db, 'material', { enabled: true });
+ok('turning it on is what starts it', rules.getSettings(db, 'material').enabled === true);
+
 console.log('\n── the token template ───────────────────────────────────────────');
 eq('a bare pattern passes through', fmt.render('ABC', { seq: 1 }), 'ABC');
 eq('{SEQ} pads to 4 by default', fmt.render('B{SEQ}', { seq: 7 }), 'B0007');
@@ -180,7 +192,7 @@ rules.saveRule(db, 'material', { category: 'packaging', subcategory: 'Jars', cod
 eq('the first one is the pattern itself', addMaterial({ name: 'Jar 200ml', kind: 'packaging', category: 'Jars' }), 'JAR');
 eq('the second is suffixed rather than refused', addMaterial({ name: 'Jar 400ml', kind: 'packaging', category: 'Jars' }), 'JAR-2');
 
-console.log('\n── the master switch ────────────────────────────────────────────');
+console.log('\n── the master switch, once on, can be turned back off ───────────');
 rules.setSettings(db, 'material', { enabled: false });
 eq('nothing is generated while numbering is off',
   addMaterial({ name: 'Unnumbered', kind: 'food', category: 'Dried fruits' }), null);

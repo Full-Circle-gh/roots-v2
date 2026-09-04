@@ -527,9 +527,11 @@ CREATE TABLE IF NOT EXISTS sku_counters (
   UNIQUE(entity_type, scope_key)
 );
 
--- The master switch, one row per entity. An ABSENT row means on — a fresh
--- tenant should not have to find a settings screen before its first material
--- gets a code, and a blank SKU is what this feature exists to remove.
+-- The master switch, one row per entity. An ABSENT row means OFF: a generated
+-- code is permanent (nothing renumbers it, archiving keeps it, no counter goes
+-- backwards), so numbering is opt-in per tenant rather than something a tenant
+-- discovers already written onto its catalogue. See lib/sku-rules.js
+-- getSettings for the full argument.
 CREATE TABLE IF NOT EXISTS sku_settings (
   entity_type   TEXT PRIMARY KEY,
   enabled       INTEGER NOT NULL DEFAULT 1,
