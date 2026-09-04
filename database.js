@@ -46,6 +46,22 @@ addColumn('products', 'image_data',     'TEXT');
 addColumn('products', 'label_data',     'TEXT');
 addColumn('purchase_orders', 'source',  "TEXT DEFAULT 'manual'");
 addColumn('ingredient_cost_skips', 'resolved_at', 'DATETIME');
+// production_batches gains a PRODUCT shape beside its recipe one, so the Tacet
+// kitchen can record what it made. See the block comment in schema.sql for why
+// the two shapes share a table rather than getting one each. Every column is
+// nullable: existing rows are recipe-shaped and stay exactly as they are.
+addColumn('production_batches', 'store_id',    'INTEGER');
+addColumn('production_batches', 'product_id',  'INTEGER');
+addColumn('production_batches', 'qty_made',    'REAL');
+addColumn('production_batches', 'qty_shelved', 'REAL');
+addColumn('production_batches', 'gap_reason',  'TEXT');
+addColumn('production_batches', 'request_id',  'INTEGER');
+// Created HERE and not in schema.sql: that file runs before these ALTERs, so on
+// an existing database the index would name a column that does not exist yet
+// and refuse — taking the boot with it. Asked of the store and the day, which
+// is the only question the Production screen puts to this table.
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_production_store ON production_batches(store_id, date)'); }
+catch (e) { console.error('[migration] idx_production_store', e); }
 addColumn('ingredients', 'free_by_design',    'INTEGER DEFAULT 0');
 addColumn('ingredients', 'supplier_platform', 'TEXT');
 addColumn('ingredients', 'supplier_link',     'TEXT');
@@ -4258,6 +4274,52 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('kitchen_role_can_fulfil_v1');
   }
 } catch (e) { console.error('[migration kitchen_role_can_fulfil_v1]', e); }
+
+/* The same grant, one capability later: the kitchen may record what it made.
+ *
+ * WHY IT IS A MIGRATION AND NOT JUST A PRESET EDIT — the lesson of #262, which
+ * this is the second application of. tenant_roles is seeded INSERT OR IGNORE,
+ * so a tenant that already has a kitchen role keeps whatever was written the day
+ * it was seeded; editing PRESETS.kitchen reaches new tenants and nobody else.
+ * Without this, Roots' own kitchen role would hold `production:log` in the code
+ * and not in the database, and the Production screen would be invisible to
+ * exactly the people it was built for — which is the defect, verbatim, that
+ * shipped last time.
+ *
+ * ONLY AN UNEDITED ROLE IS TOUCHED. A caps list somebody has shaped by hand is
+ * their decision; the rule is the same one kitchen_role_can_fulfil_v1 used, one
+ * shape further along — the pair this preset shipped with, and nothing else.
+ * Anything edited, unreadable, or already granted is left exactly as it is and
+ * counted as kept.
+ */
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('kitchen_role_can_log_production_v1');
+  if (!ran) {
+    let done = 0, kept = 0;
+    try {
+      const rows = db.prepare("SELECT rowid AS rid, tenant_id, caps_json FROM tenant_roles WHERE role_key = 'kitchen'").all();
+      const put = db.prepare('UPDATE tenant_roles SET caps_json = ? WHERE rowid = ?');
+      const bump = db.prepare('UPDATE tenants SET roles_version = COALESCE(roles_version, 0) + 1 WHERE id = ?');
+      const WAS = ['quickstock:add', 'restock:fulfil'];
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          let list = null;
+          try { const p = JSON.parse(r.caps_json || 'null'); if (Array.isArray(p)) list = p; } catch (e) { list = null; }
+          if (!list) { kept++; continue; }
+          if (list.indexOf('production:log') >= 0) { kept++; continue; }
+          const same = list.length === WAS.length && WAS.every(k => list.indexOf(k) >= 0);
+          if (!same) { kept++; continue; }
+          put.run(JSON.stringify(WAS.concat(['production:log'])), r.rid);
+          bump.run(r.tenant_id);
+          done++;
+        }
+      });
+      tx();
+    } catch (e) { console.error('[migration kitchen_role_can_log_production_v1] scan', e); }
+    console.log(`[migration] kitchen_role_can_log_production_v1: granted production:log to ${done} kitchen role(s), left ${kept} edited or already-granted`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('kitchen_role_can_log_production_v1');
+  }
+} catch (e) { console.error('[migration kitchen_role_can_log_production_v1]', e); }
 
 // Seed default reservation TTL config — minutes before an unpaid order's
 // stock reservations expire and stock returns to the available pool.
