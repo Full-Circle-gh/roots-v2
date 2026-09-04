@@ -2607,8 +2607,14 @@ const MORE_GROUPS=[
   /* A row is [key, icon, en, zh] and, for a destination that LEAVES this app,
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
-     tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+     tools had no route between them in either direction.
+
+     BOTH /stock ROWS CARRY ?go=, and that is what keeps them doors rather than
+     signposts. /stock opens on a launcher whose tiles are "Add stock" and
+     "Kitchen queue" — the two rows right here. Landing on it would answer a tap
+     on either row with a menu offering both again, so each row names the screen
+     it is for and goes straight there. */
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['stockapp','package-plus','Add stock','加库存','/stock?go=add']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},

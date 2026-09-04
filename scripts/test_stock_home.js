@@ -360,6 +360,38 @@ const CASES = {
     js: 'window.__done();',
     expect: ['Quick stock', 'Hummus Asli'], absent: ['To make'] },
 
+  /* ── The other row in that same /m list ───────────────────────────────────
+     "Add stock" is a row there too, and it pointed at a bare /stock — so a tap
+     on a door named "Add stock" opened a menu offering "Add stock". The row
+     carries ?go=add now, and it lands on the counting list with the launcher
+     skipped, for an operator who has one. */
+  'go-add-opens-the-shelf-not-the-launcher': { stores: TWO, search: '?go=add',
+    js: 'window.__done();',
+    expect: ['Quick stock', 'Hummus Asli'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  // The launcher is still whole for anyone who arrives without one — the
+  // installed PWA starts on a bare /stock, and that tile is the only shelf door
+  // it has.
+  'the-count-tile-stays-for-a-bare-open': { stores: TWO, js: 'window.__done();',
+    expect: ['Count', 'Set what is on your shelf'],
+    check: (out) => /data-view="home"/.test(out) ? null : 'the launcher did not appear' },
+
+  /* ── The two lines of a row are two lines ─────────────────────────────────
+     Both stacks used to set on one line, so a tile read "Add stockLog what you
+     made" and a queue row ran its status out past the chevron. Asserted as
+     geometry rather than as text, because the words are identical either way —
+     it is where they sit that was wrong. */
+  'a-tile-stacks-its-name-over-its-description': { stores: TWO, js: 'window.__done();',
+    check: (out) => /data-tiletext="stacked"/.test(out) ? null
+      : 'the tile set its name and description on one line' },
+
+  'a-queue-row-stacks-its-number-over-its-caption': { kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250']),
+    expect: ['RS-260904-002'],
+    check: (out) => /data-rowtext="stacked"/.test(out) ? null
+      : 'the queue row set its number and caption on one line' },
+
   'ask-cn': { stores: TWO, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-asopen]'", '250']),
     expect: ['申请补货', '由哪个地点发货?', '越秀店'] },
@@ -388,6 +420,18 @@ function main() {
       // Which screen is actually on, read from the DOM rather than inferred
       // from words: the launcher and the counting list share a header.
       'document.body.setAttribute("data-view",document.querySelector(".sh-wrap")?"home":"other");' +
+      /* WHETHER THE TWO LINES OF A ROW ARE TWO LINES. Both stacks are spans
+         inside a flex item, and a span with no display of its own is inline —
+         so the name, the caption and the count set on ONE line, the tile read
+         "Add stockLog what you made", and the nowrap/ellipsis on the caption
+         did nothing at all because there is no box to clip. Geometry is the
+         only honest way to ask: the second line must start at or below the
+         bottom of the first. */
+      'function _stack(a,b){a=document.querySelector(a);b=document.querySelector(b);' +
+      '  if(!a||!b) return "none";' +
+      '  return b.getBoundingClientRect().top >= a.getBoundingClientRect().bottom - 1 ? "stacked" : "inline";}' +
+      'document.body.setAttribute("data-tiletext",_stack(".sh-name",".sh-desc"));' +
+      'document.body.setAttribute("data-rowtext",_stack(".rc-nm",".rc-cap"));' +
       'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +

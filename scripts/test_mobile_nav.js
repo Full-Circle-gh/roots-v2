@@ -125,6 +125,18 @@ run('mobile nav', [
        "moreRowsFlat().some(function(r){return r.key==='kitchenq' && r.href==='/stock?go=queue'})"],
     ]],
 
+  // And so does the row beside it, for the same reason. /stock's launcher
+  // offers "Add stock" and "Kitchen queue" as tiles — the two rows in this very
+  // list. A row that lands there answers a tap on itself with a menu offering
+  // itself again, so it names the screen it is for.
+  // Only the operator whose row LEAVES this app, of course: an add-only role
+  // keeps its counting screen in here (stockAppInApp) and never sees /stock.
+  ['the Add stock row leaves for the shelf itself, not the launcher',
+    "state.caps=['quickstock:recount','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['it carries the deep link',
+       "moreRowsFlat().some(function(r){return r.key==='stockapp' && r.href==='/stock?go=add'})"],
+    ]],
+
   ['a store stocker, whose only tool leaves this app',
     "state.caps=['quickstock:recount'];landOnSomethingReachable();render();", [
       ['no bar', "!document.querySelector('.tabbar')"],

@@ -414,9 +414,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .rc-qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
         letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--text);}
 .rc-mid{flex:1;min-width:0;}
-.rc-nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-.01em;
+.rc-nm{display:block;font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-.01em;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.rc-cap{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;
+.rc-cap{display:block;font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
 /* The gap is the only thing on a settled row that keeps full Ink. */
 .rc-gap{color:var(--text);font-weight:600;}
@@ -544,12 +544,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         display:flex;align-items:center;justify-content:center;color:var(--text2);}
 .sh-ico svg{width:24px;height:24px;}
 .sh-text{flex:1;min-width:0;}
-.sh-name{font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-.01em;}
-.sh-desc{font-size:13px;color:var(--text2);line-height:1.4;margin-top:2px;}
+.sh-name{display:block;font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-.01em;}
+.sh-desc{display:block;font-size:13px;color:var(--text2);line-height:1.4;margin-top:2px;}
 /* The count is the only thing on a tile that can hold full Ink, and it holds it
    only when there is work. "Nothing due" stays Graphite — a quiet tile is a
    finished one, and a zero dressed up as a badge is noise. */
-.sh-n{font-size:13px;font-weight:600;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums;}
+.sh-n{display:block;font-size:13px;font-weight:600;color:var(--text);margin-top:4px;font-variant-numeric:tabular-nums;}
 .sh-chev{flex:none;color:var(--text2);display:flex;}
 .sh-chev svg{width:20px;height:20px;}
 
@@ -2934,7 +2934,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   // Every section's back control returns here when the launcher exists, and
   // leaves the app where it was when it does not.
+  //
+  // UNLESS THEY CAME THROUGH A NAMED DOOR. Someone who tapped "Kitchen queue"
+  // in /m never passed through this launcher on the way in, and dropping them
+  // onto it on the way out would hand them a menu whose tiles are the rows they
+  // just came from — "Add stock" included, which has its own row there. Back
+  // means /m for them, because /m is where they were.
   function homeBack() {
+    if (_deep && state.home) { window.location.href = state.home; return; }
     if (!homeAvailable()) { homeGoCount(); return; }
     state.view = 'home'; homeRender();
   }
@@ -2955,24 +2962,43 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      boot arms the landing on a timer regardless. Late is survivable here in a
      way that never is not. */
   var _landed = false, _probes = 0, _armed = false;
+  // Set when a ?go= link was honoured, so the launcher is never entered on the
+  // way back out of a screen it was never entered from.
+  var _deep = false;
   var PROBE_COUNT = 3;                      // rcLoad, pkLoad, kqLoad
   function probeAnswered() { _probes++; homeLand(); }
-  /* ?go=queue — the one deep link, and it exists because the kitchen's queue is
-     reached from a DIFFERENT app. A kitchen operator whose role puts them in /m
-     gets a "Kitchen queue" row there, and landing them on this launcher to hunt
-     for a second tile would make that row a signpost rather than a door. It is
-     honoured only if the queue actually answered: a link cannot grant access,
+  /* ?go= — the deep links, and they exist because every one of these jobs is
+     also a ROW IN A DIFFERENT APP. A kitchen operator whose role puts them in
+     /m reaches this app from More → Operations, where "Kitchen queue" and
+     "Add stock" are already two named doors; landing them on a launcher that
+     offers the same two tiles makes each of those rows a signpost rather than a
+     door, and makes the tile a second copy of a row they just used.
+
+       ?go=queue  the kitchen's queue
+       ?go=add    the counting list, which is where the app opens anyway
+
+     Honoured only if the screen actually answered: a link cannot grant access,
      and a deep link that lands on a refusal is worse than no link. */
   function homeWanted() {
-    try { return /(?:^|[?&])go=queue(?:&|$)/.test(location.search || ''); } catch (e) { return false; }
+    try {
+      var m = /(?:^|[?&])go=(queue|add)(?:&|$)/.exec(location.search || '');
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
   }
 
   function homeLand() {
     if (_landed || state.view === 'off' || state.view === 'nostore') return;
     if (_probes < PROBE_COUNT && !_armed) return;
     _landed = true;
+    var want = homeWanted();
+    /* ?go=add is answered BEFORE the launcher is considered, and needs no probe
+       at all: the counting list is what this app already opens on, so honouring
+       it is a matter of not putting a menu in front of it. The tile for it stays
+       on the launcher regardless — for the installed PWA, whose start_url is a
+       bare /stock, that tile is the only way to the shelf. */
+    if (want === 'add') { _deep = true; return; }
     if (!homeAvailable()) return;          // one job — stay on the list
-    if (homeWanted() && kq.on === true) { kqEnter(); return; }
+    if (want === 'queue' && kq.on === true) { _deep = true; kqEnter(); return; }
     state.view = 'home';
     homeRender();
   }
