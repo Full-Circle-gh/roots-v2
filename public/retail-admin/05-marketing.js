@@ -1420,6 +1420,10 @@ async function loadConfig() {
     // nothing about an unconfigured install changes.
     if (c && c.timezone) window.TD_TZ = c.timezone;
     syncFeatureToggles();
+    // The low-stock digest switch and hour (audit E-06) — painted from the
+    // stored value, not the markup default, so the control agrees with what
+    // the sweeper is actually doing.
+    if (typeof paSyncLowStockDigestUi === 'function') paSyncLowStockDigestUi(c);
     // Bulk attach tracking is an opt-in Orders tool — the toolbar button only
     // shows when the operator enabled it under Settings → Delivery.
     document.body.classList.toggle('ord-bulk-tracking', !!c.delivery?.bulkTracking);

@@ -1013,6 +1013,18 @@ app.listen(PORT, () => {
       getTenantDb: tenantDb.getTenantDb,
     });
   } catch (e) { console.warn('[ship.reminder] start failed:', e.message); }
+  // Daily low-stock digest (audit E-06). A low-stock threshold has existed per
+  // merchant and per shop all along and fed a dashboard card only — so a
+  // merchant who did not open the admin never found out they were running out.
+  // ONE message a day naming the shortest lines, at the hour the account chose
+  // (09:00 by default), on by default. Runs every 10 min; the day-claim makes a
+  // missed tick free. No-op when push is off.
+  try {
+    require('./lib/low-stock-digest').startLowStockDigestSweeper({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+    });
+  } catch (e) { console.warn('[lowstock.digest] start failed:', e.message); }
   // Seeded-review top-up sweeper. Holds every published product at the review
   // floor the operator set on Inbox → Reviews. OFF unless they turned it on, and
   // a no-op once the catalogue sits at the floor, so it costs nothing when idle.

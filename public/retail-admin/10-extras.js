@@ -2844,12 +2844,26 @@ window.onLangChange(function () {
 // lazy-loaded; it also kept a cross-file hoisting dependency alive).
 // Deep-link: /retail-admin?tab=orders opens that tab directly. Used by the
 // new-order push notification so clicking it lands the operator on Orders.
+//
+// `&filter=` narrows the tab it opened, so a push can land on the WORK rather
+// than on a page the operator then has to filter themselves. Only Products
+// carries one today (the daily low-stock digest sends filter=low); the guard is
+// an allow-list, so a filter this build does not know about opens the plain tab
+// instead of throwing or, worse, silently showing the wrong set.
 (function () {
   try {
-    const want = new URLSearchParams(location.search).get('tab');
+    const qs = new URLSearchParams(location.search);
+    const want = qs.get('tab');
     if (!want || !/^[a-z_]+$/.test(want)) return;
     const b = document.querySelector('.tabs [data-tab="' + want + '"]');
-    if (b) b.click();
+    if (!b) return;
+    b.click();
+    const filter = qs.get('filter');
+    if (want === 'products' && ['low', 'oos', 'restock', 'drafts', 'live'].includes(filter)
+        && typeof paSetStatus === 'function') {
+      // After the tab's own first load, or paRender would repaint over it.
+      setTimeout(() => { try { paSetStatus(filter, false); } catch (e) {} }, 350);
+    }
   } catch (e) {}
 })();
 

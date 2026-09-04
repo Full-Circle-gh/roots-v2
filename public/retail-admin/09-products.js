@@ -99,6 +99,50 @@ async function paSaveLowStockDefault(val) {
     if (st) st.textContent = cuT('Save failed', '保存失败');
   }
 }
+// ── The daily low-stock digest (audit E-06) ────────────────────────────────
+// The threshold above has always fed a dashboard card and nothing else, so a
+// merchant who did not open the admin never found out they were running out.
+// This is the switch and the hour; lib/low-stock-digest.js is the sweeper.
+//
+// Saves itself on change, like the threshold beside it — the Operations panel
+// has no shared Save bar, and a setting that needs a second click to take
+// effect is a setting people believe they have set when they have not.
+async function saveLowStockDigest() {
+  const on   = document.getElementById('cfg-lowstock-digest');
+  const time = document.getElementById('cfg-lowstock-hour');
+  const st   = document.getElementById('cfg-lowstock-status');
+  if (!on) return;
+  // <input type="time"> gives "HH:MM"; the digest is a once-a-day message, so
+  // only the hour is kept. Storing a minute we then ignore would be a promise
+  // the sweeper does not keep.
+  const hour = Math.min(23, Math.max(0, parseInt(String((time && time.value) || '09:00').slice(0, 2), 10) || 9));
+  const value = { enabled: !!on.checked, hour };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockDigest': value } });
+    if (typeof _cfgCache !== 'undefined' && _cfgCache) {
+      _cfgCache.inventory = _cfgCache.inventory || {};
+      _cfgCache.inventory.lowStockDigest = value;
+    }
+    if (st) { st.textContent = cuT('Saved ✓', '已保存 ✓'); setTimeout(() => { if (st) st.textContent = ''; }, 2000); }
+  } catch (e) {
+    if (st) st.textContent = cuT('Save failed', '保存失败');
+  }
+}
+
+// Paint the two controls from the loaded config. Called by loadConfig, so the
+// switch shows what is actually stored rather than the markup's default — the
+// digest is ON unless the account turned it off, and a checkbox that renders
+// unticked while the sweeper is sending would be the worst of both.
+function paSyncLowStockDigestUi(cfg) {
+  const on   = document.getElementById('cfg-lowstock-digest');
+  const time = document.getElementById('cfg-lowstock-hour');
+  const d = (cfg && cfg.inventory && cfg.inventory.lowStockDigest) || null;
+  const enabled = (d && d.enabled !== undefined) ? !!d.enabled : true;
+  const hour = (d && Number.isInteger(d.hour) && d.hour >= 0 && d.hour <= 23) ? d.hour : 9;
+  if (on) on.checked = enabled;
+  if (time && document.activeElement !== time) time.value = String(hour).padStart(2, '0') + ':00';
+}
+
 // Product layout: 'grid' (rich cards) | 'list' (the table). Separate from the
 // "View" display-tweaks popover; persisted per-browser. 'compact' is retired —
 // its button was hidden, so the mode could only be reached by an old stored

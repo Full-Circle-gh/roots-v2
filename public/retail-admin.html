@@ -10463,6 +10463,27 @@
                 <span style="color:var(--text-3);font-size:13px">units · 件</span>
                 <span id="cfg-low-stock-status" style="color:var(--accent);font-size:12px"></span>
               </div>
+              <!-- The daily digest (audit E-06). The threshold above fed a
+                   dashboard card and nothing else, so a merchant who did not
+                   open the admin never found out they were running out. Sits
+                   here, under the number that drives it, rather than in Push
+                   notifications — a setting belongs beside the thing it acts on.
+                   Saves itself; the Operations panel has no shared Save bar. -->
+              <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+                <input type="checkbox" id="cfg-lowstock-digest" style="width:18px;height:18px"
+                       onchange="saveLowStockDigest()">
+                <label for="cfg-lowstock-digest" style="font-size:13px;color:var(--text-1)">
+                  Send me a daily list of what is running low · 每天发送库存偏低清单
+                </label>
+                <span style="color:var(--text-3);font-size:13px">at · 时间</span>
+                <input type="time" id="cfg-lowstock-hour" step="3600" value="09:00"
+                       aria-label="Hour to send the daily low-stock list"
+                       onchange="saveLowStockDigest()" style="width:110px">
+                <span id="cfg-lowstock-status" style="color:var(--accent);font-size:12px"></span>
+              </div>
+              <div class="helper" style="margin-top:6px;line-height:1.55">
+                One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。
+              </div>
             </div>
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
             <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
