@@ -2957,11 +2957,22 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   var _landed = false, _probes = 0, _armed = false;
   var PROBE_COUNT = 3;                      // rcLoad, pkLoad, kqLoad
   function probeAnswered() { _probes++; homeLand(); }
+  /* ?go=queue — the one deep link, and it exists because the kitchen's queue is
+     reached from a DIFFERENT app. A kitchen operator whose role puts them in /m
+     gets a "Kitchen queue" row there, and landing them on this launcher to hunt
+     for a second tile would make that row a signpost rather than a door. It is
+     honoured only if the queue actually answered: a link cannot grant access,
+     and a deep link that lands on a refusal is worse than no link. */
+  function homeWanted() {
+    try { return /(?:^|[?&])go=queue(?:&|$)/.test(location.search || ''); } catch (e) { return false; }
+  }
+
   function homeLand() {
     if (_landed || state.view === 'off' || state.view === 'nostore') return;
     if (_probes < PROBE_COUNT && !_armed) return;
     _landed = true;
     if (!homeAvailable()) return;          // one job — stay on the list
+    if (homeWanted() && kq.on === true) { kqEnter(); return; }
     state.view = 'home';
     homeRender();
   }

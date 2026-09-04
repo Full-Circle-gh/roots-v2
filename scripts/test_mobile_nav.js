@@ -92,6 +92,39 @@ run('mobile nav', [
       ['the back link names the home', `${body}.indexOf('Kitchen')>-1`],
       ['not More', `${body}.indexOf('More')===-1`],
     ]],
+  /* ── The kitchen queue's row ───────────────────────────────────────────
+     The queue shipped as a tile on /stock's Stock home. A kitchen operator
+     whose role puts them in THIS app never sees that home — they see the list
+     above, where "Add stock" is not a name anybody reads as "the orders waiting
+     for you". Ash, on a phone, with an order sitting unseen: "this all i see in
+     the kitchen role on mobile."
+
+     The row is gated on `restock:fulfil`, the capability the queue's own writes
+     are gated on, so it cannot appear for somebody whose first tap 403s — which
+     is also why the two caps above do NOT get it. */
+  ['the queue is not offered to a role that cannot fulfil',
+    KITCHEN + "landOnSomethingReachable();render();", [
+      ['no queue row', `${body}.indexOf('Kitchen queue')===-1`],
+      ['the two tools they do hold are untouched',
+       `${body}.indexOf('Receiving')>-1 && ${body}.indexOf('Add stock')>-1`],
+    ]],
+  ['a kitchen role that CAN fulfil gets the queue',
+    "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['the row is there', `${body}.indexOf('Kitchen queue')>-1`],
+      ['and Add stock beside it', `${body}.indexOf('Add stock')>-1`],
+      ['still no board', `${body}.indexOf('Revenue')===-1`],
+    ]],
+  ['in Chinese', "LANG='cn';state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
+    ['厨房制作队列', `${body}.indexOf('厨房制作队列')>-1`],
+  ]],
+  // It leaves this app for /stock, where the queue lives, and says which screen
+  // it wants — a row that lands on a launcher is a signpost, not a door.
+  ['the row leaves for the queue itself, not the launcher',
+    "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['it carries the deep link',
+       "moreRowsFlat().some(function(r){return r.key==='kitchenq' && r.href==='/stock?go=queue'})"],
+    ]],
+
   ['a store stocker, whose only tool leaves this app',
     "state.caps=['quickstock:recount'];landOnSomethingReachable();render();", [
       ['no bar', "!document.querySelector('.tabbar')"],
