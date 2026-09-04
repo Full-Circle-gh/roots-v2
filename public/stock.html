@@ -1126,6 +1126,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     // Which transfers are inbound, and which run is waiting, both depend on
     // which shelf is on screen.
     setTimeout(function () { rcLoad(); pkLoad(); kqLoad(); }, 0);
+    // See homeLand: a probe that never answers must not hold the app on a
+    // decision it has not made.
+    setTimeout(armLanding, 3500);
     state.storeId = id;
     localStorage.setItem('qs_store', String(id));
     var s = state.stores.filter(function (x) { return x.id === id; })[0];
@@ -1630,7 +1633,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      ever sends counts and renders what comes back.  */
 
   var rc = {
-    on: null,        // null = not probed yet, false = this session cannot reach /api/restock
+    /* null = not probed yet, false = this session cannot do TRANSFER work.
+       It is not "cannot reach /api/restock" any more, and the difference is the
+       whole of #264: a kitchen operator is refused the transfer lists and
+       ANSWERED on the kitchen queue, so one flag for both jobs read their
+       refusal as a refusal of everything and took the launcher away with it. */
+    on: null,
     list: null,      // inbound transfers for the selected store
     order: null,     // the open one, with items
     step: 'list',    // list | transit | count | confirm | done
@@ -1652,7 +1660,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var o = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
     if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
     return fetch(path, o).then(function (r) {
-      if (r.status === 401 || r.status === 403) { rc.on = false; throw new Error('norealm'); }
+      // A REFUSAL IS REPORTED, NOT ATTRIBUTED. Which job was refused is known
+      // to the caller and not to this function, and it used to switch off the
+      // whole feature from here — so the kitchen's 403 on a transfer list took
+      // the kitchen's own queue down with it. Each loader now records its own.
+      if (r.status === 401 || r.status === 403) throw new Error('norealm');
       return r.json().then(function (j) {
         if (!j.success) { var e = new Error(j.error || 'error'); e.body = j; throw e; }
         return j;
@@ -1723,12 +1735,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         return (o.to_role || 'warehouse') !== 'kitchen'
           && o.goods_state === 'in_transit' && rcForStore(o);
       });
-      homeLand();
+      probeAnswered();
       if (state.view === 'home') homeRender();
       else if (state.view === 'list') render();
       else rcRender();
     }).catch(function (e) {
-      if (e.message === 'norealm') { rc.list = []; return; }
+      if (e.message === 'norealm') { rc.on = false; rc.list = []; probeAnswered(); return; }
       rc.err = e.message; if (state.view === 'receiving') rcRender();
     });
   }
@@ -2342,13 +2354,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         return rcFetch('/api/restock/' + o.id).then(function (d) { return d.data; });
       })).then(function (full) {
         pk.list = full;
-        homeLand();
+        probeAnswered();
         if (state.view === 'home') homeRender();
         else if (state.view === 'picking') pkRender();
         else render();
       });
     }).catch(function (e) {
-      if (e.message === 'norealm') { pk.list = []; return; }
+      if (e.message === 'norealm') { rc.on = false; pk.list = []; probeAnswered(); return; }
       pk.err = e.message; if (state.view === 'picking') pkRender();
     });
   }
@@ -2804,9 +2816,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     ask:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h8v12H3z"/><path d="M21 6h-8v12h8z"/><path d="M11 12h2"/><path d="M15 9l-2 3 2 3"/></svg>',
   };
 
-  // The launcher is for someone with more than one job. rc.on is the probe's
-  // answer — true only once /api/restock has actually replied.
-  function homeAvailable() { return rc.on === true; }
+  /* The launcher is for someone with more than one job, and BEING REFUSED ONE
+     JOB IS NOT BEING REFUSED ALL OF THEM. This is the OR of what answered, never
+     whatever answered first: a kitchen operator is 403'd on both transfer lists
+     and answered on the queue, and reading only rc.on left them on the counting
+     list with no way to the thing they were sent there to do. */
+  function homeAvailable() { return rc.on === true || kq.on === true; }
 
   function homeGreeting() {
     var d = new Date();
@@ -2848,6 +2863,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           state.mode === 'add' ? t('Log what you made', '记录制作数量')
                                : t('Set what is on your shelf', '设置本店库存数量'),
           '', 'data-hcount') +
+        // EVERY TILE BELOW IS TRANSFER WORK, and it is shown only to a session
+        // the transfer lists actually answered. A kitchen operator is refused
+        // all of it at the route, so drawing these for them would be five doors
+        // onto a wall — the exact defect the launcher was built to end, arrived
+        // from the other side. Count stays above unconditionally because
+        // counting is not restock and is gated by nothing here.
+        (rc.on !== true ? '' :
         homeTileHtml('pick', t('Pick', '拣货'),
           picks.length ? t('Pull a run for the stores', '为门店拣货')
                        : t('Nothing to pick', '暂无待拣货'),
@@ -2860,17 +2882,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // kitchen's queue, not this shelf's, and a badge here would be a number
         // about somebody else's work sitting on a door marked with a job.
         homeTileHtml('kit', t('Ask the kitchen', '向厨房下单'),
-          t('Have something made', '请厨房制作'), '', 'data-akopen') +
-        // The other end of the same request, for the people who make it. The
-        // count IS theirs here — unlike the tile above, this is their own queue.
+          t('Have something made', '请厨房制作'), '', 'data-akopen')) +
+        // The other end of the same request, for the people who make it, and on
+        // its OWN probe: this is the one tile a kitchen operator gets, and the
+        // one an ordinary picker does not. The count IS theirs here — unlike the
+        // tile above, this is their own queue.
+        (kq.on !== true ? '' :
         homeTileHtml('queue', t('Kitchen queue', '厨房制作队列'),
           toMake ? t('Make what was asked for', '制作已申请的商品')
                  : t('Nothing to make', '暂无待制作'),
-          toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home') +
+          toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home')) +
         // Only where there IS somewhere to ask. On a one-location tenant the
         // screen has nothing to offer, and a tile that opens onto "there is
         // nowhere else" is a door into a wall.
-        (asSuppliers().length
+        (rc.on === true && asSuppliers().length
           ? homeTileHtml('ask', t('Ask for stock', '申请补货'),
               t('Have another location send it', '请其他地点发货'), '', 'data-asopen')
           : '') +
@@ -2914,17 +2939,33 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     state.view = 'home'; homeRender();
   }
 
-  /* Where the app opens. Decided ONCE, after the restock probe has answered, so
-     the launcher cannot flash up and vanish — or worse, appear a second after
-     someone has already started counting. */
-  var _landed = false;
+  /* Where the app opens. Decided ONCE, so the launcher cannot flash up and
+     vanish — or worse, appear a second after someone has already started
+     counting.
+
+     IT WAITS FOR ALL THREE PROBES, and landing on the first answer is what hid
+     the kitchen queue. A 403 is a rejection with no query behind it, so the
+     kitchen operator's refusal on the two transfer lists came back before the
+     one list they ARE allowed — and the latch below had already decided they
+     had one job. Whoever answers first is not the answer; the OR of all three
+     is, so the decision waits for all three to be in.
+
+     _armed is the safety net: a probe that never answers at all (a dropped
+     connection, not a refusal) must not strand someone on a blank decision, so
+     boot arms the landing on a timer regardless. Late is survivable here in a
+     way that never is not. */
+  var _landed = false, _probes = 0, _armed = false;
+  var PROBE_COUNT = 3;                      // rcLoad, pkLoad, kqLoad
+  function probeAnswered() { _probes++; homeLand(); }
   function homeLand() {
     if (_landed || state.view === 'off' || state.view === 'nostore') return;
+    if (_probes < PROBE_COUNT && !_armed) return;
     _landed = true;
     if (!homeAvailable()) return;          // one job — stay on the list
     state.view = 'home';
     homeRender();
   }
+  function armLanding() { _armed = true; homeLand(); }
 
 
   /* ══ ASK THE KITCHEN ═══════════════════════════════════════════════════════
@@ -3172,6 +3213,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      a shelf. */
 
   var kq = {
+    // The queue's OWN probe. Kept apart from rc.on for the reason written there:
+    // these are two jobs and two answers, and a session may hold either, both or
+    // neither. rc.on = false must never decide this one.
+    on: null,
     list: null,     // requests addressed to the kitchen
     tab: 'active',  // active | history
     order: null,    // the open one, with lines
@@ -3185,15 +3230,15 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function kqExit() { kq.order = null; kq.err = ''; homeBack(); }
 
   function kqLoad() {
-    if (rc.on === false) return Promise.resolve();
+    if (kq.on === false) return Promise.resolve();
     return rcFetch('/api/restock?to_role=kitchen&tab=' + kq.tab).then(function (j) {
-      rc.on = true;
+      kq.on = true;
       kq.list = Array.isArray(j.data) ? j.data : [];
-      homeLand();
+      probeAnswered();
       if (state.view === 'home') homeRender();
       else if (state.view === 'kitchenq') kqRender();
     }).catch(function (e) {
-      if (e.message === 'norealm') { kq.list = []; return; }
+      if (e.message === 'norealm') { kq.on = false; kq.list = []; probeAnswered(); return; }
       kq.err = e.message; if (state.view === 'kitchenq') kqRender();
     });
   }

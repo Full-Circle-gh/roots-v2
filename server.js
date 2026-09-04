@@ -344,10 +344,11 @@ app.use((req, res, next) => {
   if (!restricted) return next();
   const p = req.path;
   if (p.startsWith('/api/')) {
-    const ok = p === '/api/retail-admin/quick-stock/context'
-      || /^\/api\/retail-admin\/stores\/\d+\/stock(\/\d+)?$/.test(p)
-      || p === '/api/backend/logout';
-    return ok ? next() : res.status(403).json({ error: 'kitchen_add_only' });
+    // The list lives in lib/stock-app-only.js, with the reasoning for what is on
+    // it — including why the kitchen queue's three calls had to be added, and
+    // why they are scoped by METHOD rather than path.
+    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p)
+      ? next() : res.status(403).json({ error: 'kitchen_add_only' });
   }
   // Pages/assets: let the Add Stock app + its static assets through; bounce any
   // backend page (shell, login, team, billing…) to the app.
