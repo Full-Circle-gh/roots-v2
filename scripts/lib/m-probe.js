@@ -45,7 +45,16 @@ function findChrome() {
   return null;
 }
 
-function run(label, cases) {
+/* opts.settle — milliseconds to let the page breathe between the setup and the
+   checks. Default 0, which runs them in the SAME task, and that is deliberate
+   for every probe that only paints: it is the fastest and the least flaky.
+   But a setup that starts asynchronous work (a fetch, an SDK load, anything
+   that resolves in a microtask) cannot be asserted on in the task that started
+   it — the continuation has not run yet, so the check sees the state before
+   any of it happened and reads as a stone-cold failure. Those probes pass a
+   settle. */
+function run(label, cases, opts) {
+  const settle = (opts && opts.settle) || 0;
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found. Set CHROME_BIN to run this check.'); process.exit(0); }
   const src = fs.readFileSync(APP, 'utf8')
@@ -65,12 +74,15 @@ function run(label, cases) {
       try{ ${setup} }catch(e){ document.title='BAD setup threw: '+e.message; return; }
       var names=${JSON.stringify(checks.map((c) => c[0]))};
       var fns=[${checks.map((c) => `function(){return (${c[1]})}`).join(',')}];
-      for(var i=0;i<fns.length;i++){
-        var ok=false, why='';
-        try{ ok=!!fns[i](); }catch(e){ why=' ('+e.message+')'; }
-        if(!ok) out.push(names[i]+why);
+      function finish(){
+        for(var i=0;i<fns.length;i++){
+          var ok=false, why='';
+          try{ ok=!!fns[i](); }catch(e){ why=' ('+e.message+')'; }
+          if(!ok) out.push(names[i]+why);
+        }
+        document.title = out.length ? ('BAD '+out.join(' ¦ ')) : 'GOOD';
       }
-      document.title = out.length ? ('BAD '+out.join(' ¦ ')) : 'GOOD';
+      if(${settle}) setTimeout(finish,${settle}); else finish();
     },250)});</script>`;
     const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
     fs.writeFileSync(file, src.replace('</body>', harness + '</body>'));

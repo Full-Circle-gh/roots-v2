@@ -1190,6 +1190,21 @@ async function loadIntegrationsStatus() {
                    ordNew: true,
                    kw: 'new order create order manual order counter sale walk-in draft 新建订单 手工下单 代客下单 前台' });
     }
+    // 1f) Counter till. Hand-indexed for the same reason as New order: the walk
+    // above only sees `.tabs [data-tab]` buttons and the till's rail row
+    // deliberately has no data-tab (it opens its own PWA in a new tab, so there
+    // is no section here to switch to). The launcher pass at (2) below would
+    // not catch it either — that one only scans `.tabs-popover`, and this row
+    // sits at the rail's top level beside Sales.
+    // Gated on the pair the till actually needs: the cap that opens the screen
+    // and the cap its Confirm button posts under (lib/cap-routes.js maps
+    // POST /api/retail-admin/orders → orders:edit).
+    if (typeof can !== 'function' || (can('till:use') && can('orders:edit'))) {
+      items.push({ type: 'page', title: cuT('Counter till', '前台收银'),
+                   crumb: '', tab: null, sub: null, anchor: null,
+                   openUrl: '/till',
+                   kw: 'till counter pos cashier checkout register point of sale walk-in 收银 前台 收银台 收款 pos' });
+    }
     // 2) External editor launchers in the Content group (open in a new tab)
     document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
       if (gatedOff(btn)) return;

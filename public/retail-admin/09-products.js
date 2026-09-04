@@ -896,6 +896,23 @@ function pdApplyCostSource(p) {
   const owned = hasBundle || hasBuild || recipeOwned;
   inp.readOnly = owned;
   inp.classList.toggle('is-derived', owned);
+  // ROUNDED FOR DISPLAY, AND ONLY WHEN THE FIGURE IS NOT THE OPERATOR'S.
+  // A derived cost is the server's arithmetic handed back whole — 330 g of a
+  // material at ¥0.009531…/g arrived in the box as `3.145229999999999`, which
+  // is not a price anybody can read and overflowed the input on the way to
+  // being unreadable. Two decimals is the shape every other money figure on
+  // this screen already has (paMoney). Safe because the field is read-only in
+  // exactly this branch: pdSaveCore skips unit_cost on a read-only field, so
+  // the rounded number is never written back — the server keeps the full one.
+  // A HAND-TYPED cost is left exactly as typed; rewriting what someone is in
+  // the middle of entering is the one thing this must not do.
+  if (owned && inp.value !== '') {
+    const n = Number(inp.value);
+    if (Number.isFinite(n)) {
+      const r = n.toFixed(2);
+      if (r !== inp.value) inp.value = r;
+    }
+  }
   // Whatever Recipes would be warning about this recipe, said here too. Hung
   // off this function rather than pdOpen because EVERY repaint of the cost
   // source is also a moment the warning can have changed — opening a product,
@@ -920,10 +937,10 @@ function pdApplyCostSource(p) {
   // component they can go and fix.
   if (hasBundle) {
     note.style.display = '';
-    note.innerHTML = escapeHtml(inp.value.trim()
+    note.innerHTML = '<div class="pd-cost-src-row">' + escapeHtml(inp.value.trim()
       ? cuT('Added up from what’s inside', '由套装内商品成本合计得出')
       : cuT('Added up from what’s inside — blank until every product inside has a cost',
-            '由套装内商品成本合计得出 — 内含商品成本齐全后显示'));
+            '由套装内商品成本合计得出 — 内含商品成本齐全后显示')) + '</div>';
     return;
   }
   // A BUILD LIST OUTRANKS THE RECIPE LINE, and says so plainly. A product can
@@ -938,7 +955,9 @@ function pdApplyCostSource(p) {
     // deliberately. Gluing sourced 来自 to sourced 物料 would invent a phrase
     // no Chinese reader has approved, and 物料 alone means MATERIALS — the
     // masterlist, not this product's list of them.
-    let h = escapeHtml(cuT('From the build list', 'From the build list'));
+    let h = '<div class="pd-cost-src-row">'
+          + escapeHtml(cuT('From the build list', 'From the build list'))
+          + '</div>';
     // THE RECIPE LINK SURVIVES A BUILD LIST AND MUST STAY REACHABLE.
     //
     // An earlier pass returned here, which hid the recipe's name, Change and
@@ -955,16 +974,26 @@ function pdApplyCostSource(p) {
     if (recipeOwned && p && p.recipe_id != null) {
       const rn = cuT(p.recipe_name_en || p.recipe_name_cn || '', p.recipe_name_cn || p.recipe_name_en || '')
                  || (cuT('Recipe', '配方') + ' #' + p.recipe_id);
-      h += ' · ' + escapeHtml(cuT('Recipe', '配方')) + ' '
+      // ITS OWN ROW, not a clause glued onto the sentence above with a middot.
+      // Run together they read as one wrapping phrase — "From the build list ·
+      // Recipe Roasted Pumpkin Soup Change Unlink" — in which two of the words
+      // are controls that detach a product's cost source. Two facts, two rows:
+      // the build list owns the money, and this is the recipe the product is
+      // linked to.
+      h += '<div class="pd-cost-src-row">'
+        + escapeHtml(cuT('Recipe', '配方')) + ' '
         + '<a href="#" onclick="event.preventDefault();event.stopPropagation();paOpenRecipe(' + Number(p.recipe_id) + ')">'
         + escapeHtml(rn) + '</a>'
-        + ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+        + '<span class="pd-cost-acts">'
+        + '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
         + escapeHtml(cuT('Change', '更换')) + '</button>'
-        + ' <button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
-        + escapeHtml(cuT('Unlink', '取消关联')) + '</button>';
+        + '<button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
+        + escapeHtml(cuT('Unlink', '取消关联')) + '</button>'
+        + '</span></div>';
     } else if (_pdCanLinkRecipe() && p && p.id) {
-      h += ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
-        + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button>';
+      h += '<div class="pd-cost-src-row">'
+        + '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+        + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button></div>';
     }
     note.innerHTML = h;
     return;
@@ -980,8 +1009,9 @@ function pdApplyCostSource(p) {
     // be connected — the one-time backfill (database.js) links only where two
     // of {SKU, name_en, name_cn} match exactly, and the "confirm the rest by
     // hand" path it assumed was never built. This is it.
-    note.innerHTML = '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
-      + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button>';
+    note.innerHTML = '<div class="pd-cost-src-row">'
+      + '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+      + escapeHtml(cuT('Link a recipe', '关联配方')) + '</button></div>';
     return;
   }
   const rname = cuT(p.recipe_name_en || p.recipe_name_cn || '', p.recipe_name_cn || p.recipe_name_en || '')
@@ -990,13 +1020,16 @@ function pdApplyCostSource(p) {
   // is what it is instead of taking it on trust. Change/Unlink sit beside it
   // because a wrong link is exactly as likely as a missing one, and the field
   // itself is read-only now: without these there is no way back out.
-  note.innerHTML = escapeHtml(cuT('From recipe', '来自配方')) + ' '
+  note.innerHTML = '<div class="pd-cost-src-row">'
+    + escapeHtml(cuT('From recipe', '来自配方')) + ' '
     + '<a href="#" onclick="event.preventDefault();event.stopPropagation();paOpenRecipe(' + Number(p.recipe_id) + ')">'
     + escapeHtml(rname) + '</a>'
-    + ' <button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
+    + '<span class="pd-cost-acts">'
+    + '<button type="button" class="pd-cost-act" onclick="pdRecipeLinkOpen()">'
     + escapeHtml(cuT('Change', '更换')) + '</button>'
-    + ' <button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
-    + escapeHtml(cuT('Unlink', '取消关联')) + '</button>';
+    + '<button type="button" class="pd-cost-act" onclick="pdRecipeUnlink()">'
+    + escapeHtml(cuT('Unlink', '取消关联')) + '</button>'
+    + '</span></div>';
 }
 // ── Is the recipe behind this cost healthy? ─────────────────────────────────
 //
@@ -1068,7 +1101,7 @@ function pdRecipeHealthPaint(id) {
                    + `so ${um === 1 ? 'its' : 'their'} cost is left out. The cost shown is incomplete.`;
         const tailCn = ` —— 本配方中有 ${um} 项原料所用单位与物料的库存单位计量的不是同一类量,`
                      + `其成本不计入。显示成本不完整。`;
-        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符') + cuT(tail, tailCn)));
+        pills.push(pdCostPill(cuT('UNIT MISMATCH', '单位不符'), cuT(tail, tailCn)));
       }
       // NO COST AT ALL — the cascade writes nothing, so whatever sits in the
       // field is stale or blank. The same sentence the link modal shows at link
@@ -1087,15 +1120,35 @@ function pdRecipeHealthPaint(id) {
       // A check that could not run must say so. Silence here would read as
       // "the recipe is fine", which is the one thing this line exists to stop
       // the screen from implying.
-      host.innerHTML = '<div class="pd-cost-warn is-quiet">' + escapeHtml(cuT('Couldn’t load the recipe', '无法加载配方')) + '</div>';
+      // No triangle on this one, deliberately — it is not a finding about the
+      // recipe, it is this line admitting it could not check. The .is-quiet
+      // ground already carries that.
+      host.innerHTML = '<div class="pd-cost-warn is-quiet"><span class="pd-cost-warn-t">'
+        + escapeHtml(cuT('Couldn’t load the recipe', '无法加载配方')) + '</span></div>';
       host.style.display = '';
     });
 }
 // One warning, as a pill — the shape Recipes uses (retail-admin.css .rcp-warn):
 // a tinted pill that says its piece and stops, never a panel that floods the
 // field it is explaining.
-function pdCostPill(text) {
-  return '<div class="pd-cost-warn">' + PD_ICON_WARN + '<span>' + escapeHtml(text) + '</span></div>';
+//
+// TWO ARGUMENTS, AND THE SECOND IS OPTIONAL. One of the pills this box carries
+// opens with a NAME for its condition — UNIT MISMATCH · 单位不符, the locked
+// pair — and then spends four lines explaining it. As one flat string that name
+// read as the first two words of the paragraph, so a card carrying two pills
+// made the operator read both to find out which was which. Passed separately it
+// can be set in the pill's own weight and found at a glance. The copy is
+// untouched either way: `text` and `body` are concatenated exactly as they were
+// when they arrived as one string, em dash and all — that dash belongs to the
+// locked wording (docs/tacet-delivery-vocabulary.md, `unitMismatchPill`) and
+// stays inside `body` where it was minted. The other three pills pass one
+// argument and render exactly as before.
+function pdCostPill(text, body) {
+  const lead = body
+    ? '<b class="pd-cost-warn-k">' + escapeHtml(text) + '</b>' + escapeHtml(body)
+    : escapeHtml(text);
+  return '<div class="pd-cost-warn">' + PD_ICON_WARN
+    + '<span class="pd-cost-warn-t">' + lead + '</span></div>';
 }
 // Can a recipe be linked here at all? Recipes only exist as a screen when
 // Production is on, so offering the action with it off would point the operator

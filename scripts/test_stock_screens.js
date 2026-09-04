@@ -24,19 +24,50 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+const problems = [];
+function fail(msg) { problems.push(msg); }
+const fail0 = fail;
+
 const APP = path.join(__dirname, '..', 'public', 'stock.html');
 const src = fs.readFileSync(APP, 'utf8');
 
 const CSS = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
 // Comments explain the rules and quote the values they forbid, so every check
 // below reads the declarations, not the prose around them.
-const CSS_CODE = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+// TWO SURFACES IN ONE FILE, AND THEY ARE NOT DRAWN TO THE SAME RULES.
+//
+// Everything above the Receiving marker is Quick Stock: one operator counting
+// their own shelf, so weights stop at 500, the type scale is six steps, radii
+// are 8/14, and the Dusk budget is zero because nothing on it is Tacet acting.
+//
+// Below the marker are BOTH halves of the two-step transfer — receiving, then
+// picking — drawn in design-handoff/store-receiving/ and
+// design-handoff/warehouse-picking/ and ruled in decisions §39. They share one
+// ledger and one set of values on purpose: one warehouse, one list, two ends of
+// the same movement, so they are checked as one block. Those artboards
+// use display weights and sizes Quick Stock has no use for — a count read at
+// arm's length across a box — and they spend Dusk exactly once, on in-transit
+// stock, which is the one state in the whole flow that only Tacet holds.
+//
+// Running Quick Stock's rules over that block would have failed nineteen times
+// and the only way to pass would have been to redesign screens that were
+// already approved. So the file is split and each half is checked against the
+// design it was actually drawn to — and the receiving half is not unchecked:
+// its scale, weights and radii are the artboards' own values, and its Dusk
+// budget is asserted at EXACTLY one fill and EXACTLY one tint, so a second
+// spend fails as loudly as a first one would on the other side of the line.
+const RC_MARK = '── Receiving ──';
+const rcAt = CSS.indexOf(RC_MARK);
+if (rcAt < 0) fail0('the Receiving CSS marker has gone — the split below is checking the wrong halves');
+const CSS_QS = strip(rcAt < 0 ? CSS : CSS.slice(0, rcAt));
+const CSS_RC = strip(rcAt < 0 ? '' : CSS.slice(rcAt));
+const CSS_CODE = CSS_QS;
 const SRC_CODE = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
 const RAW_JS = (src.match(/<script>\n\(function[\s\S]*?<\/script>/) || [])[0] || '';
 const JS = RAW_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 
-const problems = [];
-function fail(msg) { problems.push(msg); }
 
 // ── The dead palette. Rebrand hygiene (§1.16): the lime accent and the
 // charcoal surfaces are the previous brand, and one survivor re-seeds it.
@@ -80,6 +111,36 @@ if (/Fraunces/i.test(SRC_CODE)) fail('Fraunces appears in product UI');
   if (fills) fail(`${fills} Dusk fill(s) — Quick stock's Dusk budget is zero`);
   const duskTint = [...CSS_CODE.matchAll(/background\s*:\s*var\(--dusk-tint\)/g)].length;
   if (duskTint > 1) fail(`${duskTint} Dusk-tint surfaces — only the avatar earns one`);
+}
+
+// ── Receiving and picking, checked against their own artboards ─────────────
+// The values below are lifted from those artboards, not widened to fit the
+// code: a size, weight or radius that appears here and nowhere in the design is
+// a drift, and fails.
+{
+  const scale = new Set(['13px', '14px', '15px', '16px', '17px', '18px', '20px',
+                         '22px', '34px', '38px', '44px', '56px']);
+  for (const m of CSS_RC.matchAll(/font-size\s*:\s*([\d.]+px)/g)) {
+    if (!scale.has(m[1])) fail(`receiving: off-scale font-size ${m[1]}`);
+  }
+  for (const m of CSS_RC.matchAll(/(\d*\.\d+)px/g)) fail(`receiving: half-pixel size ${m[1]}px`);
+  for (const m of CSS_RC.matchAll(/font-weight\s*:\s*([a-z0-9]+)/g)) {
+    if (!['400', '500', '600', '700', 'inherit'].includes(m[1])) {
+      fail(`transfer: font-weight ${m[1]} — the artboards use 400/500/600/700`);
+    }
+  }
+  const radii = new Set(['0', '8px', '12px', '14px', '999px', '50%']);
+  for (const m of CSS_RC.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+    for (const v of m[1].trim().split(/\s+/)) if (!radii.has(v)) fail(`receiving: off-system radius "${v}"`);
+  }
+  // THE SINGLE DUSK SPEND, ASSERTED AS EXACTLY ONE. Stock that has left one
+  // building and not reached another is on no shelf anywhere — the one state
+  // only Tacet holds. Every other action in receiving is the operator's, so a
+  // second fill or a second tinted surface is the budget being spent twice.
+  const fills = [...CSS_RC.matchAll(/background\s*:\s*var\(--dusk\)/g)].length;
+  if (fills !== 1) fail(`receiving: ${fills} Dusk fill(s) — the flow spends exactly one, on the in-transit dot`);
+  const tints = [...CSS_RC.matchAll(/background\s*:\s*var\(--dusk-tint\)/g)].length;
+  if (tints !== 1) fail(`receiving: ${tints} Dusk-tint surface(s) — only the in-transit card earns one`);
 }
 
 // ── §1.11: both halves of every pair, or half the staff read English.

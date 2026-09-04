@@ -47,6 +47,13 @@ const { materializeNew, materializeLink, unlink: unlinkMaterial, linkedMaterialF
 // correct no matter which door saved it.
 const { fireRecompute, backsAnyCostedRow, costOneRecipe } = require('../lib/recipe-rollup');
 const { saveRecipeCostData } = require('../lib/recipe-cost-data-write');
+// The derived batch size / serving count, stamped onto the row after the
+// lines are written and before the rollup divides by it. See its header.
+const { applyAutoYield } = require('../lib/recipe-yield');
+// Version history (the undo behind the record's autosave) — every save through
+// this door files the state it displaced, and the History panel puts one back.
+// See lib/recipe-versions.js for why the snapshot is whole-record JSON.
+const { snapshotRecipe, listVersions, getVersion, restoreVersion } = require('../lib/recipe-versions');
 
 const router = express.Router();
 
@@ -107,14 +114,36 @@ function readRecipeType(b) {
 
 // The body fields a recipe carries, listed once so create and update read the
 // same set — matches retail-materials.js's readBody() convention.
+// A 0/1 flag as the client sent it, or `undefined` when the client said
+// nothing. The distinction is the same one readRecipeType keeps: a caller that
+// predates the field must never be read as having turned it off — the update
+// below leaves the stored value alone in that case.
+function readFlag(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  return (v === 1 || v === true || v === '1') ? 1 : 0;
+}
+
 function readBody(b) {
   return {
     name_en: b.name_en, name_cn: b.name_cn || null, sku: (b.sku || '').trim() || null,
     category: b.category || null,
     batch_size: b.batch_size || null, servings: b.servings || null, serving_size: b.serving_size || null,
+    // Whether either of those two is derived rather than typed. The figures
+    // themselves are still sent and still stored — a derived batch size that
+    // stopped being derivable falls back to the last one written, and clearing
+    // the column on the way past would leave nothing to fall back to.
+    batch_size_auto: readFlag(b.batch_size_auto), servings_auto: readFlag(b.servings_auto),
     shelf_life: b.shelf_life || null, storage: b.storage || null, notes: b.notes || null,
     recipe_type: readRecipeType(b),
   };
+}
+
+// One ingredient line's yield flag. Same absent-vs-stated rule as readFlag, and
+// the caller decides what absent means: on create it is 1 (a new line counts),
+// on update it is whatever the line already carried, so a save from a door that
+// has no such control cannot silently re-count a discarded ingredient.
+function readLineYield(ing) {
+  return readFlag(ing && ing.in_yield);
 }
 
 // Whether this recipe's OWN rollup would succeed right now, and why not if
@@ -128,6 +157,27 @@ function readBody(b) {
 function materialBlockState(recipeId) {
   const r = costOneRecipe(db, recipeId, new Map());
   return { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
+}
+
+// Who to name beside a filed version. The operator, as requireRetailAdmin
+// already resolved him (routes/retail.js sets req.user for the backend realm
+// precisely so handlers like this don't have to know which realm they're in).
+// A display name reads better in the History list than a login, but the login
+// is the identifier that is always there.
+function actorOf(req) {
+  const u = req.user || {};
+  return u.display_name || u.username || (u.id ? 'user #' + u.id : null);
+}
+
+// How this save was made, as the client declares it: 'auto' is the record's
+// debounced background save, 'manual' is someone pressing Save. It changes ONLY
+// how aggressively versions coalesce (lib/recipe-versions.js COALESCE_MS) and
+// what the History list labels the row — never what is written to the recipe.
+// Anything unrecognised is treated as a manual save, which is the safer of the
+// two: it files a restore point rather than folding into an existing one.
+function saveSourceOf(req) {
+  const v = String((req.body && req.body.save_source) || '').toLowerCase();
+  return v === 'auto' ? 'auto' : 'manual';
 }
 
 // ═══ List ══════════════════════════════════════════════════════════════════
@@ -174,7 +224,12 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
     // for the other ~110 rows on every list paint.
     return {
       id: r.id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, category: r.category,
-      batch_size: r.batch_size, servings: r.servings, is_active: r.is_active, is_favorite: !!r.is_favorite,
+      // The RESOLVED figures, not the raw columns. lib/recipe-yield.js keeps the
+      // two in step on every save, so they agree today; taking them off the
+      // breakdown means the list cannot be the screen that disagrees if a row is
+      // ever written by a path that does not stamp them.
+      batch_size: c.batchSize || null, servings: c.servings || null,
+      is_active: r.is_active, is_favorite: !!r.is_favorite,
       // Filing only — the list's Made/Repacked filter is the only thing that
       // reads it. Deliberately NOT a server-side WHERE: the filter chips show
       // a count each, and a count of what the server just filtered out is not
@@ -310,16 +365,30 @@ router.post('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
   if (!b.name_en) return res.status(400).json({ success: false, error: 'name_required' });
   const lines = Array.isArray(req.body.ingredients) ? req.body.ingredients : [];
   try {
+    // A CREATE THAT CARRIES A FIGURE IS A CREATE THAT MEANT IT. The column
+    // defaults to derived, which is right for the editor (it sends the flags
+    // explicitly anyway) and wrong for any caller that types a batch size and
+    // says nothing about deriving — an import, a fork, a script. Falling back on
+    // "did they send a number" keeps every one of those behaving exactly as it
+    // does today.
+    const batchAuto = b.batch_size_auto === undefined ? (b.batch_size == null ? 1 : 0) : b.batch_size_auto;
+    const servAuto  = b.servings_auto   === undefined ? (b.servings   == null ? 1 : 0) : b.servings_auto;
     const result = db.prepare(`INSERT INTO recipes
-      (name_en,name_cn,sku,category,batch_size,servings,serving_size,shelf_life,storage,notes,recipe_type)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes,
+      (name_en,name_cn,sku,category,batch_size,servings,serving_size,batch_size_auto,servings_auto,shelf_life,storage,notes,recipe_type)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, batchAuto, servAuto,
+           b.shelf_life, b.storage, b.notes,
            b.recipe_type || 'made');
     const recipeId = result.lastInsertRowid;
     if (lines.length) {
-      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
-      lines.forEach((ing, i) => insertIng.run(recipeId, ing.ingredient_id || null, ing.name_en || '', ing.name_cn || null, ing.sku || null, ing.qty || 0, ing.unit || 'g', ing.notes || null, ing.substitutes || null, i));
+      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+      lines.forEach((ing, i) => {
+        const iy = readLineYield(ing);
+        insertIng.run(recipeId, ing.ingredient_id || null, ing.name_en || '', ing.name_cn || null, ing.sku || null, ing.qty || 0, ing.unit || 'g', iy === undefined ? 1 : iy, ing.notes || null, ing.substitutes || null, i);
+      });
     }
+    // The lines are in; the derived figures follow them.
+    applyAutoYield(db, recipeId);
     const steps = Array.isArray(req.body.steps) ? req.body.steps : [];
     if (steps.length) {
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
@@ -347,18 +416,48 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
     const refusal = cycleRefusal(req.params.id, lines);
     if (refusal) return res.status(400).json({ success: false, error: 'cycle', message: refusal });
   }
+  // File the state this save is about to overwrite, BEFORE the writes below and
+  // AFTER the cycle guard — a refused save changed nothing and must not leave a
+  // version behind claiming it did. Reads through the same `db` handle the
+  // UPDATE writes to, so the filed state is genuinely the one being displaced.
+  // Never throws: snapshotRecipe returns a reason instead, because a save that
+  // succeeded must not report failure over its history entry.
+  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   try {
     db.prepare(`UPDATE recipes SET
       name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,
       recipe_type=COALESCE(?,recipe_type),
+      batch_size_auto=COALESCE(?,batch_size_auto), servings_auto=COALESCE(?,servings_auto),
       updated_at=CURRENT_TIMESTAMP WHERE id=?`)
       .run(b.name_en, b.name_cn, b.sku, b.category, b.batch_size, b.servings, b.serving_size, b.shelf_life, b.storage, b.notes,
-           b.recipe_type === undefined ? null : b.recipe_type, req.params.id);
+           b.recipe_type === undefined ? null : b.recipe_type,
+           b.batch_size_auto === undefined ? null : b.batch_size_auto,
+           b.servings_auto === undefined ? null : b.servings_auto,
+           req.params.id);
     if (lines) {
+      // WHAT THE INCOMING LINES DO NOT SAY, THE OLD ONES DO. The update replaces
+      // recipe_ingredients wholesale, so a client that knows nothing about
+      // in_yield would re-count an ingredient somebody deliberately excluded
+      // from the batch weight — silently, and in the number every per-gram cost
+      // divides by. Keyed on ingredient_id, which is what identifies a line
+      // across a delete-and-reinsert; a line with none (a deleted material)
+      // falls back to counting, as it always did.
+      const prevYield = new Map(
+        db.prepare('SELECT ingredient_id, in_yield FROM recipe_ingredients WHERE recipe_id = ? AND ingredient_id IS NOT NULL')
+          .all(req.params.id).map(r => [r.ingredient_id, r.in_yield])
+      );
       db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
-      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
-      lines.forEach((ing, i) => insertIng.run(req.params.id, ing.ingredient_id || null, ing.name_en || '', ing.name_cn || null, ing.sku || null, ing.qty || 0, ing.unit || 'g', ing.notes || null, ing.substitutes || null, i));
+      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,in_yield,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+      lines.forEach((ing, i) => {
+        const said = readLineYield(ing);
+        const kept = prevYield.has(ing.ingredient_id) ? prevYield.get(ing.ingredient_id) : 1;
+        insertIng.run(req.params.id, ing.ingredient_id || null, ing.name_en || '', ing.name_cn || null, ing.sku || null, ing.qty || 0, ing.unit || 'g', said === undefined ? (kept == null ? 1 : kept) : said, ing.notes || null, ing.substitutes || null, i);
+      });
     }
+    // BEFORE the recompute below, not after: fireRecompute divides a linked
+    // material's cost by batch_size, and it must divide by the one these lines
+    // just produced.
+    applyAutoYield(db, req.params.id);
     if (steps) {
       db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
       const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
@@ -390,6 +489,13 @@ router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) 
   // otherwise a tenant's save is admitted or refused on Roots' recipe list.
   const existing = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
+  // One logical save from the record is TWO requests (the recipe PUT above and
+  // this one), and they must not file two versions of nearly the same state.
+  // They don't: the recipe PUT files its point first, and COALESCE_MS folds
+  // this call into it — see lib/recipe-versions.js. Called anyway rather than
+  // skipped, because a cost-only save (nothing touched on the other three tabs)
+  // is a real change to what this recipe costs and deserves its own point.
+  snapshotRecipe(db, req.params.id, { source: saveSourceOf(req), actor: actorOf(req) });
   // THIS SCREEN HAS NO PACKAGING-TYPE PICKER, so its payload never carries
   // `packaging_type_id` — and the write underneath keeps the stored one rather
   // than coalescing the missing key to NULL. That is the whole of finding 11:
@@ -415,6 +521,54 @@ router.put('/api/retail-admin/recipes/:id/archive', requireRetailAdmin, (req, re
   const active = req.body && req.body.restore ? 1 : 0;
   db.prepare('UPDATE recipes SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(active, req.params.id);
   res.json({ success: true, is_active: active });
+});
+
+// ═══ Version history ═══════════════════════════════════════════════════════
+// The record autosaves, so these three routes are not a nicety — they are the
+// half of autosave that lets a change be taken back. Every save above files the
+// state it displaced (lib/recipe-versions.js); this lists those states, reads
+// one back, and puts one on the live recipe.
+//
+// Registered under :id/versions, which cannot shadow GET /:id (that route
+// matches a single segment) and cannot be shadowed by it.
+//
+// The two reads are open, as every GET under this prefix is (lib/cap-routes.js
+// gates write verbs only). The restore is a POST and so carries recipes:edit,
+// the same capability a save carries — which is the right gate, since it can
+// only ever write a state this very recipe was already in. It opens nothing a
+// save does not.
+
+router.get('/api/retail-admin/recipes/:id/versions', requireRetailAdmin, (req, res) => {
+  const recipe = db.prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: listVersions(db, req.params.id, req.query.limit) });
+});
+
+router.get('/api/retail-admin/recipes/:id/versions/:versionId', requireRetailAdmin, (req, res) => {
+  const v = getVersion(db, req.params.id, req.params.versionId);
+  if (!v) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: v });
+});
+
+router.post('/api/retail-admin/recipes/:id/versions/:versionId/restore', requireRetailAdmin, (req, res) => {
+  const result = restoreVersion(db, req.params.id, req.params.versionId, {
+    actor: actorOf(req),
+    // The cost inputs go back through the SAME writer and the SAME handle the
+    // cost route uses, so a restore obeys the absent-vs-cleared rule
+    // (lib/recipe-cost-data-write.js) rather than carrying a second copy of it.
+    costDb: tdb(),
+    saveCostData: saveRecipeCostData,
+  });
+  if (!result.ok) return res.status(result.status || 400).json({ success: false, error: result.error, message: result.message });
+  // The same two things every other successful write here does. A restore can
+  // move a linked material's cost exactly as a save can — it IS a save, of an
+  // older state — and a restored name can clear or cause a materialize
+  // collision just as a typed one can.
+  if (backsAnyCostedRow(tdb(), req.params.id)) {
+    fireRecompute(tdb(), { source: 'retail-recipes.restore', recipe_id: Number(req.params.id) });
+  }
+  const materialize = ensureMaterialized(db, req.params.id);
+  res.json({ success: true, version_id: result.version_id, held: result.held, materialize });
 });
 
 // ═══ Materialize (§29 step 5) ═══════════════════════════════════════════════

@@ -21,14 +21,27 @@
  * asserts the panel calls it incomplete anyway, because subtotal + packing +
  * shipping - discount does not add up to the order's own total.
  *
- * Eleme never gets a channel_discount write at all (routes/eleme-internal.js
- * has no such column in its INSERT or UPDATE — the discount is baked into
- * Eleme's own `total` with nothing separating it out). So an Eleme order
- * carrying a real merchant discount reconciles to nothing: the panel is
- * supposed to show what it has (subtotal/packing/delivery) plus the
- * "breakdown incomplete" note, never a fabricated discount figure standing in
- * for the missing column. Section 3 is that order, verified honest rather than
- * silently wrong.
+ * Eleme HAS written channel_discount since PR #209, but every row mirrored
+ * before it still holds NULL, and either channel leaves the column NULL when the
+ * platform named no promotion. So an order carrying a real merchant discount we
+ * never captured reconciles to nothing: the panel is supposed to show what it
+ * has (subtotal/packing/delivery) plus a note, never a fabricated discount
+ * figure standing in for the missing column. Section 3 is that order, verified
+ * honest rather than silently wrong.
+ *
+ * WHAT THE NOTE HAS TO SAY, and why it is asserted this hard. One flag and one
+ * message — "Breakdown incomplete" — used to cover two unrelated states: an
+ * order whose components disagree with its own total, and one that adds up
+ * perfectly and is merely waiting for the platform to publish its commission.
+ * The first is worth a phone call and the second is worth nothing, and an
+ * operator could not tell which they were looking at. EL20260903163199 is the
+ * order that proved it: its components overshoot its total by exactly the
+ * delivery fee (§4b), and the drawer's only comment on that was the same three
+ * words it showed over every unsettled Meituan order in the table (§4). The two
+ * are separated now, the gap is named on screen, and §4c pins the panel's
+ * arithmetic to lib/channel-settlement.js — the copy routes/eleme-internal.js
+ * logs from at ingest — so the drawer and the log cannot come to different
+ * conclusions about the same order.
  */
 'use strict';
 
@@ -141,7 +154,10 @@ it('Eleme, pre-#200 phantom-zero fees: flagged incomplete by the arithmetic, not
   const g = sb.channelMoneyBreakdown(o);
   assert.strictEqual(g.complete, false, 'the real check must catch what column presence misses');
   const html = sb.renderChannelMoneyPanel(o);
-  assert.ok(html.includes('Breakdown incomplete'), 'the incomplete note must show');
+  assert.ok(html.includes('unaccounted for'), 'the note must show, and must name the gap');
+  assert.ok(html.includes('£135.00') && html.includes('£141.00'),
+    'both sides of the failed sum are printed — the components and the order total');
+  assert.ok(html.includes('£6.00'), 'and the size of the gap itself');
   assert.ok(html.includes('subtotal'), 'the one row we do have still renders');
   assert.ok(!html.includes('Commission') && !html.includes('Estimated income'),
     'step two never renders over an unreconciled step one');
@@ -166,12 +182,20 @@ it('Eleme, real discount not captured in any column: honest incomplete, no fabri
   assert.ok(!html.includes('Merchant discount'), 'no discount figure is invented to force a reconcile');
   assert.ok(!html.includes('240.49') && !html.includes('Estimated income'),
     'estimated income never prints over an unreconciled total — no silent low number');
-  assert.ok(html.includes('Breakdown incomplete'));
+  assert.ok(html.includes('unaccounted for') && html.includes('£17.50'),
+    'the note names the gap, which here is exactly the discount nobody captured');
 });
 
 // ── 4. The majority Meituan case — pre-24 Aug orders with NULL commission/
 // discount/settle_amount. Must be a clean state, not a crash or a broken row.
-it('Meituan, pre-24-Aug order (commission/discount/settle all NULL): clean not-recorded state', () => {
+//
+// AND it must not be called a broken one. 98 + 3 + 17 - 0 = 118 reconciles to
+// the cent: every component this order holds agrees with its total, and the only
+// thing absent is what the platform kept, which Meituan had not published for
+// these rows. The panel used to print "Breakdown incomplete" here — the same
+// words it printed over an order whose columns genuinely disagreed — so the
+// state worth a phone call and the state worth nothing at all were indistinguishable.
+it('Meituan, pre-24-Aug order (commission/settle NULL) reads as awaiting settlement, not as broken', () => {
   const sb = makeSandbox('en');
   const o = {
     channel: 'meituan', subtotal: 98.00, packing_fee: 3.00, shipping_fee: 17.00,
@@ -179,13 +203,81 @@ it('Meituan, pre-24-Aug order (commission/discount/settle all NULL): clean not-r
     channel_commission: null, channel_settle_amount: null,
   };
   const g = sb.channelMoneyBreakdown(o);
-  assert.strictEqual(g.complete, false);
+  assert.strictEqual(g.complete, false, 'step two still cannot be shown');
+  assert.strictEqual(g.reconciled, true, 'but the arithmetic itself is sound');
+  assert.strictEqual(g.awaitingSettlement, true);
   const html = sb.renderChannelMoneyPanel(o);
-  assert.ok(html.includes('Breakdown incomplete'));
+  assert.ok(html.includes('not published by the channel yet'),
+    'the note says what is actually missing');
+  assert.ok(!html.includes('unaccounted for'),
+    'and never accuses a reconciling order of not adding up');
   assert.ok(html.includes('subtotal') && html.includes('packing') && html.includes('Customer delivery fee'),
     'the components this order DOES carry still render');
-  assert.ok(!html.includes('Commission') && !html.includes('Estimated income'),
-    'no commission rate, no invented income — nothing to show for step two');
+  // On the ROW markup, not on the word: the note this order now carries says
+  // "Commission and income not published by the channel yet", and naming the
+  // missing figure is the point of it. What must not appear is a cmp-deduct /
+  // cmp-net row, which is what "step two rendered" actually means.
+  assert.ok(!html.includes('cmp-deduct') && !html.includes('cmp-net'),
+    'no commission row, no invented income — nothing to show for step two');
+  assert.ok(!html.includes('Estimated income'), 'and no income label either');
+});
+
+// ── 4b. EL20260903163199, the order that prompted all of this. Its components
+// overshoot its total by EXACTLY the delivery fee: 45 + 1.50 + 5 - 5.50 = 46
+// against a recorded 41, and 45 + 1.50 - 5.50 = 41 to the cent. The drawer used
+// to say "Breakdown incomplete" and nothing else, so answering "why?" needed the
+// archived payload weeks after the fact.
+it('EL20260903163199: the gap is named on screen, not left for an archive dig', () => {
+  const sb = makeSandbox('en');
+  const o = {
+    channel: 'eleme', subtotal: 45.00, packing_fee: 1.50, shipping_fee: 5.00,
+    channel_discount: 5.50, total: 41.00,
+    channel_commission: null, channel_settle_amount: null,
+  };
+  const g = sb.channelMoneyBreakdown(o);
+  assert.strictEqual(g.reconciled, false);
+  assert.strictEqual(g.expected, 46.00, 'the components add up to 46.00');
+  assert.strictEqual(g.gap, 5.00, 'which overshoots the recorded total by the delivery fee');
+  assert.strictEqual(g.awaitingSettlement, false,
+    'a row that does not add up is never merely "awaiting" anything');
+  const html = sb.renderChannelMoneyPanel(o);
+  assert.ok(html.includes('£46.00') && html.includes('£41.00') && html.includes('£5.00'),
+    'both sides of the sum and the gap are all on screen');
+  assert.ok(html.includes('Check the channel before refunding'),
+    'and the consequence is stated: total is the refund ceiling');
+});
+
+// ── 4c. The panel and the server-side identity must not drift. The browser
+// keeps its own copy of the arithmetic because retail-admin loads plain <script>
+// tags with no module system, so the guard against the two diverging is this
+// test, run over the same table of orders. lib/channel-settlement.js is what
+// routes/eleme-internal.js logs from at ingest; if it and the drawer ever
+// disagreed about whether an order reconciles, one of the two would be lying to
+// somebody.
+it('the ingest-side identity and the panel agree on every case, order for order', () => {
+  const { settlementGap } = require(path.join(ROOT, 'lib', 'channel-settlement.js'));
+  const sb = makeSandbox('en');
+  const CASES = [
+    { subtotal: 228.50, packing_fee: 1.50, shipping_fee: 15.00, channel_discount: 12.00, total: 233.00 },
+    { subtotal: 135.00, packing_fee: 0,    shipping_fee: 0,     channel_discount: null,  total: 141.00 },
+    { subtotal: 267.00, packing_fee: 1.50, shipping_fee: 18.00, channel_discount: null,  total: 269.00 },
+    { subtotal: 98.00,  packing_fee: 3.00, shipping_fee: 17.00, channel_discount: null,  total: 118.00 },
+    { subtotal: 45.00,  packing_fee: 1.50, shipping_fee: 5.00,  channel_discount: 5.50,  total: 41.00 },
+    { subtotal: 100.00, packing_fee: 0,    shipping_fee: 15.00, channel_discount: 0,     total: 115.00 },
+    { subtotal: 50.00,  packing_fee: 1.00, shipping_fee: 4.00,  channel_discount: 0,     total: 60.00 },
+  ];
+  for (const c of CASES) {
+    const panel  = sb.channelMoneyBreakdown({ channel: 'eleme', ...c });
+    const server = settlementGap(c);
+    assert.strictEqual(panel.reconciled, server === null,
+      `panel and lib disagree on whether this reconciles: ${JSON.stringify(c)}`);
+    if (server) {
+      assert.strictEqual(panel.gap, server.gap,
+        `panel and lib disagree on the size of the gap: ${JSON.stringify(c)}`);
+      assert.strictEqual(panel.expected, server.expected,
+        `panel and lib disagree on the component sum: ${JSON.stringify(c)}`);
+    }
+  }
 });
 
 // ── 5. Zero rows hide; no ¥0.00 anywhere ───────────────────────────────────
@@ -317,6 +409,29 @@ it('never prints a commission rate or a second "estimated" marker', () => {
 
     const shippedBox = await cmpBox(shippedHtml);
     const preFixBox = await cmpBox(preFixHtml);
+
+    // The note is the whole of what an operator gets on an order that doesn't
+    // add up, so it gets mounted too rather than trusted as a string. Same
+    // reasoning as the panel itself: .cmp-note is styled at
+    // retail-admin.css:7349 inside the same nested block, and a note that
+    // computes to nothing is a warning nobody receives.
+    const noteEl = async (fragment) => {
+      const page = await browser.newPage();
+      await page.setContent(shell(fragment));
+      const out = await page.evaluate(() => {
+        const el = document.querySelector('.cmp-note');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height, display: getComputedStyle(el).display, text: el.textContent };
+      });
+      await page.close();
+      return out;
+    };
+    const gapNote = await noteEl(sb.renderChannelMoneyPanel({
+      channel: 'eleme', subtotal: 45.00, packing_fee: 1.50, shipping_fee: 5.00,
+      channel_discount: 5.50, total: 41.00,
+      channel_commission: null, channel_settle_amount: null,
+    }));
     await browser.close();
 
     it('mounted in the real .drawer-body > .order-card chain, the shipped panel (<div class="cmp">) occupies a real box', () => {
@@ -324,6 +439,15 @@ it('never prints a commission rate or a second "estimated" marker', () => {
       assert.notStrictEqual(shippedBox.display, 'none', '.cmp must not compute display:none under the real stylesheet');
       assert.ok(shippedBox.w > 0 && shippedBox.h > 0,
         `.cmp must occupy real pixels — got ${shippedBox.w}x${shippedBox.h}`);
+    });
+
+    it('the unreconciled note mounts, occupies real pixels, and carries the numbers', () => {
+      assert.ok(gapNote, '.cmp-note did not render into the DOM at all');
+      assert.notStrictEqual(gapNote.display, 'none', 'the note must not compute display:none');
+      assert.ok(gapNote.w > 0 && gapNote.h > 0,
+        `the note must occupy real pixels — got ${gapNote.w}x${gapNote.h}`);
+      assert.ok(gapNote.text.includes('46.00') && gapNote.text.includes('41.00') && gapNote.text.includes('5.00'),
+        `the mounted note must show both sides of the sum and the gap — got: ${gapNote.text}`);
     });
 
     it('PROOF the check bites: the identical fragment tagged <section class="cmp"> (what PR #206 shipped) computes a zero box', () => {

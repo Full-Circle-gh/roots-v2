@@ -92,6 +92,15 @@ CREATE TABLE IF NOT EXISTS recipes (
   batch_size    REAL,                  -- total grams per batch
   servings      INTEGER,
   serving_size  REAL,                  -- grams per serving
+  -- Is the figure above DERIVED or STATED? 1 = derived (batch_size is the sum
+  -- of the ingredient lines that end up in the product; servings is
+  -- batch_size / serving_size, floored). 0 = the stored number stands, which is
+  -- what a recipe that reduces on the stove or fills to a stated pack weight
+  -- needs. See lib/recipe-cost.js resolveYield — the one place either question
+  -- is answered — and lib/recipe-yield.js, which stamps the result back here so
+  -- the dozen readers of the raw column never see a stale figure.
+  batch_size_auto INTEGER DEFAULT 1,
+  servings_auto   INTEGER DEFAULT 1,
   shelf_life    TEXT,
   storage       TEXT,
   notes         TEXT,
@@ -117,6 +126,12 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
   sku           TEXT,
   qty           REAL NOT NULL,
   unit          TEXT DEFAULT 'g',
+  -- Does this ingredient end up in the finished batch? Almost always yes, which
+  -- is why it defaults to 1. A vegetable stock brewed for its flavour and then
+  -- poured away is the case it exists for: a real cost with no share of the
+  -- yield. Read ONLY by the batch-size derivation (lib/recipe-cost.js
+  -- computeYield) — a line left out of the yield is still fully costed.
+  in_yield      INTEGER DEFAULT 1,
   notes         TEXT,
   sort_order    INTEGER DEFAULT 0,
   FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
@@ -131,6 +146,34 @@ CREATE TABLE IF NOT EXISTS recipe_steps (
   instructions  TEXT,
   FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 );
+
+-- Version history for a recipe (lib/recipe-versions.js). One row per SAVE,
+-- holding the state that save DISPLACED -- recipe fields, ingredient lines,
+-- steps and the manual cost inputs, as one JSON blob. It exists because the
+-- Recipes record autosaves: without a filed previous state there is no moment
+-- at which an operator could decline a change, so every change would be final
+-- the instant it was typed.
+--
+-- JSON rather than mirrored tables on purpose: nothing ever queries INTO a
+-- version, it is only read back whole, and a mirrored schema would need every
+-- later ALTER TABLE applied twice. content_hash lets an unchanged save be
+-- recognised and skipped; the summary columns (name/line_count/step_count) are
+-- there so the History panel can list 60 versions without reading 60 blobs.
+CREATE TABLE IF NOT EXISTS recipe_versions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id     INTEGER NOT NULL,
+  source        TEXT DEFAULT 'manual',   -- 'manual' | 'auto' | 'restore'
+  actor         TEXT,                    -- who saved over it, for the list
+  name_en       TEXT,                    -- summary, so the list needs no blob
+  name_cn       TEXT,
+  line_count    INTEGER DEFAULT 0,
+  step_count    INTEGER DEFAULT 0,
+  content_hash  TEXT,
+  snapshot      TEXT NOT NULL,           -- JSON {recipe, ingredients, steps, costData}
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_recipe_versions_recipe ON recipe_versions(recipe_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS recipe_cost_data (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

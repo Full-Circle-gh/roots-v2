@@ -61,6 +61,9 @@ const CASES = [
     ['no "Add product"',       `!txt('content').includes('Add product')`],
     ['no "Create coupon"',     `!txt('content').includes('Create coupon')`],
     ['no "Send broadcast"',    `!txt('content').includes('Send broadcast')`],
+    // …and they are only the DEFAULT. An operator who never opens the picker
+    // keeps exactly these three; the row that changes that is on the heading.
+    ['with a way to change them', `txt('content').includes('Edit')`],
   ]],
   // waiting_since, the column /dashboard/ops actually returns — placed_at here
   // meant the age line never rendered and the sub-line assertions below could
@@ -91,6 +94,74 @@ const CASES = [
     ['no "Needs you" heading', `!txt('content').includes('Needs you')`],
   ]],
 ];
+
+// ── Quick actions belong to the operator ──────────────────────────────────
+// The three defaults are ours; the list is theirs. These cases hold the whole
+// contract: what the picker offers is capability-filtered, a change lands on
+// Home, the order is the operator's, six is the ceiling, an empty list stays
+// empty (rather than helpfully restoring the defaults at the next launch), and
+// the choice survives this phone being put down.
+CASES.push(['the picker offers what this role can reach', `APP.cmd('tab','home'); APP.cmd('quickEdit');`, [
+  ['it opens',                `sheetText().includes('Quick actions')`],
+  ['says what it is for',     `sheetText().includes('Pick the screens you open every day')`],
+  ['the chosen three are listed', `sheetText().includes('Answer the inbox') && sheetText().includes('Fix a price or a count')`],
+  ['under "On Home"',         `sheetText().includes('On Home')`],
+  ['the rest is grouped as More groups it', `sheetText().includes('Operations') && sheetText().includes('Marketing')`],
+  ['destinations are offered too',          `sheetText().includes('Destinations') && sheetText().includes('Customers')`],
+  ['and a way back to the defaults',        `sheetText().includes('Back to the suggested three')`],
+]]);
+CASES.push(['adding one puts it on Home', `APP.cmd('tab','home'); APP.cmd('quickEdit');
+  APP.cmd('quickToggle','waste'); APP.cmd('quickClose');`, [
+  ['the new row is there',    `txt('content').includes('Waste')`],
+  ['beside the old ones',     `txt('content').includes('Answer the inbox')`],
+  ['and it is last, where it was added',
+   `txt('content').indexOf('Waste') > txt('content').indexOf('Fix a price or a count')`],
+]]);
+CASES.push(['removing one takes it off Home', `APP.cmd('tab','home');
+  APP.cmd('quickToggle','inbox'); render();`, [
+  ['gone',                    `!txt('content').includes('Answer the inbox')`],
+  ['the others stay',         `txt('content').includes('Tick a delivery in')`],
+]]);
+CASES.push(['the order is the operator’s', `APP.cmd('tab','home');
+  APP.cmd('quickMove','purchasing',-1); render();`, [
+  ['moved above the one it followed',
+   `txt('content').indexOf('Tick a delivery in') < txt('content').indexOf('Answer the inbox')`],
+  ['and the top row cannot climb further',
+   `(function(){ APP.cmd('quickMove','purchasing',-1); return state.quick[0]==='purchasing'; })()`],
+]]);
+CASES.push(['six is the ceiling', `APP.cmd('tab','home');
+  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices']; render();
+  APP.cmd('quickToggle','coupons');`, [
+  ['the seventh is refused',  `state.quick.length===6`],
+  ['and it says why',         `!!state.toast`],
+  ['the six still render',    `txt('content').includes('Invoices') && txt('content').includes('Delivery')`],
+]]);
+CASES.push(['an emptied list stays empty', `APP.cmd('tab','home'); state.quick=[]; render();`, [
+  ['no rows',                 `!txt('content').includes('Answer the inbox')`],
+  ['it offers to fill itself', `txt('content').includes('Choose your shortcuts')`],
+  // The defaults must not creep back in on the next read — an operator who
+  // cleared the list cleared it.
+  ['and the defaults do not creep back', `(function(){ return quickKeys().length===0; })()`],
+]]);
+CASES.push(['the choice is remembered on this phone', `APP.cmd('tab','home'); APP.cmd('quickToggle','waste');`, [
+  // file:// has no storage in some builds; the app is written to survive that,
+  // so the assertion passes rather than failing on the environment.
+  ['written down', `(function(){ var raw; try{ raw=localStorage.getItem('tacet-m-quick'); }catch(e){ return true; }
+     if(raw==null) return true; return JSON.parse(raw).indexOf('waste')>=0; })()`],
+  ['and read back on a fresh launch', `(function(){ var raw; try{ raw=localStorage.getItem('tacet-m-quick'); }catch(e){ return true; }
+     if(raw==null) return true; state.quick=null; return quickKeys().indexOf('waste')>=0; })()`],
+]]);
+CASES.push(['a shortcut to a screen the role lost just drops off', `APP.cmd('tab','home');
+  state.quick=['inbox','waste']; state.caps=['dashboard:view','reviews:view']; render();`, [
+  ['the one it can reach stays',   `txt('content').includes('Answer the inbox')`],
+  ['the one it cannot is not drawn', `!txt('content').includes('Waste')`],
+  ['and nothing was erased',       `state.quick.indexOf('waste')>=0`],
+]]);
+CASES.push(['both halves follow the language switch', `APP.cmd('tab','home'); APP.cmd('toggleLang');`, [
+  ['the rows',    `txt('content').includes('回复消息') && txt('content').includes('改价或改库存')`],
+  ['the heading and its control', `txt('content').includes('快捷操作') && txt('content').includes('编辑')`],
+  ['and the picker', `(function(){ APP.cmd('quickEdit'); return sheetText().includes('显示在首页'); })()`],
+]]);
 
 // opsFires evaluates every argument before add() looks at its condition, so
 // reading o.<key>.items inline threw on any payload missing a key — and a

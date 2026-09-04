@@ -171,18 +171,34 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 //   • Idempotent via restock_orders.stock_applied_at — 'prepared' applies
 //     it; a later 'delivered' is a no-op safety net.
 
-// Resolve the warehouse (source) retail_stores.id — the location goods
-// ship OUT of. Preference: explicit setting → a warehouse-role user's
-// bound store → the store holding the most stock. null if undeterminable.
-// ONE READ OF ONE SETTING. The three-tier guess this replaces is recorded in
+// `stock.warehouseStoreId` off `storefront_config`, on the tenant handle.
+// The four-line twin of cfgValue() in routes/retail.js, which is not exported.
+// value_json is JSON, so the id may arrive as a number or as a quoted string;
+// both are accepted and anything that is not a positive integer is treated as
+// unset so a malformed value falls through rather than resolving to 0/NaN.
+function _cfgWarehouseStoreId() {
+  try {
+    const row = tdb().prepare(
+      "SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    if (!row) return null;
+    const id = parseInt(JSON.parse(row.value_json), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
+// Resolve the warehouse (source) retail_stores.id — the location goods ship
+// OUT of. ONE READ OF ONE SETTING; unset returns null and the caller refuses,
+// naming the setting.
+//
+// The three-tier guess this replaces is recorded in
 // docs/tacet-stock-movement-schema.md A4/B7, and each tier is dropped for its
 // own reason:
 //
 //   Tier 1 read `SELECT value FROM settings` — a table that does not exist in
 //   this schema, is created by nothing, and had no writer anywhere in the
 //   repository. The read always threw and always fell through, so the "explicit
-//   override" never overrode anything. This IS that tier, on a table that is
-//   real and a key something can write.
+//   override" never overrode anything. _cfgWarehouseStoreId IS that tier, on a
+//   table that is real and a key something can write.
 //
 //   Tier 2 took a warehouse-role user's bound store off control-plane `users`
 //   and used it as a tenant `retail_stores.id` — a cross-plane reference the
@@ -191,31 +207,16 @@ const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 //   Tier 3 picked whichever active store held the most stock. The day a second
 //   warehouse exists it silently picks whichever happens to be fuller, and
 //   nothing on any screen says a guess was made. It is also wrong BEFORE that
-//   day: a store that has just taken a large delivery can outweigh the warehouse.
-//   Guessing the source of a stock movement is worse than refusing to move it.
+//   day: a store that has just taken a large delivery can outweigh the
+//   warehouse. Guessing the source of a stock movement is worse than refusing
+//   to move it.
 //
-// UNSET RETURNS NULL AND THE CALLER REFUSES, naming the setting. That is the
-// intended behaviour, not a gap: no guess is better than a wrong one.
-//
-// THE READ IS ON tdb(), THE TENANT HANDLE, AND THAT IS THE WHOLE POINT.
-// `storefront_config` is data-plane (absent from lib/tenant-db.js's
-// CONTROL_PLANE_TABLES), so it is cloned per tenant and each tenant carries its
-// own warehouse. A read on the shared handle would hand EVERY tenant Roots'
-// warehouse and move their stock at a location they do not own — the same class
-// of bug as the :333 stamp, which is why assertion 19 of the test plan exists.
-//
-// `cfgValue` in routes/retail.js is not exported, so this is its four-line twin
-// rather than a require that would close a cycle (retail.js requires this file's
-// siblings). Same table, same tdb(), same JSON shape.
-function _cfgWarehouseStoreId() {
-  try {
-    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
-    if (!row) return null;
-    const id = parseInt(JSON.parse(row.value_json), 10);
-    return Number.isFinite(id) && id > 0 ? id : null;
-  } catch { return null; }   // table absent on an older tenant file, or bad JSON
-}
-
+// REFUSING IS SAFE HERE ONLY BECAUSE THE KEY IS WRITTEN. #254's
+// pin_warehouse_store_id_v1 pins it on first boot, resolving the id the way
+// tiers 2 and 3 used to rather than hardcoding one, so an existing deployment
+// carries a value before this file ever asks for it. That migration landing
+// first is why deleting the fallbacks does not stop a single live dispatch —
+// and it is why the two changes were sequenced rather than merged in parallel.
 function _resolveWarehouseStoreId() {
   return _cfgWarehouseStoreId();
 }
@@ -535,29 +536,43 @@ function requireRestockOrInbox(req, res, next) {
 //   store      → warehouse  (store user requests stock)
 //   warehouse  → kitchen    (warehouse asks kitchen for items)
 //   warehouse  → store      (warehouse pushes stock to a store)
-// Warehouse users can explicitly target either kitchen or store via
-// req.body.to_role; the kitchen path is the default for back-compat.
+// Warehouse users target kitchen or store explicitly via req.body.to_role.
+//
+// A REQUEST WITH NO DESTINATION GOES TO THE WAREHOUSE, whoever sends it.
+//
+// It used to default a warehouse or admin user to the kitchen, "for
+// back-compat" with public/restock.html — the warehouse PWA, which was the
+// only client that ever sent `to_role`, and which asked for a destination and
+// a purpose in a modal before posting. That page was deleted on 2026-08-04
+// (488806ce, after Ash confirmed the flow was unused) and its create path was
+// not ported anywhere. Nothing has sent `to_role` since.
+//
+// What the default did after that was create a trap. The one surviving client,
+// app.html's in-SPA Restock screen, sends neither field, so a warehouse or
+// admin user pressing its "Send to Warehouse" button was inferred into the
+// kitchen branch and then rejected by the purpose gate below with a 400 — on
+// every submission, with no way to satisfy it from that screen. Store users
+// were unaffected, which is why it survived. The default now matches both the
+// button's label and the only flow the UI can actually express.
+//
+// This does NOT revive kitchen requests, and does not decide whether they
+// should come back: an explicit to_role:'kitchen' with a purpose still creates
+// one exactly as before. It only stops an absent choice from being read as a
+// choice of the kitchen.
 function _inferDirection(req) {
   // ORIGIN is decided by ROLE, not by the `warehouse_inbox` perm — a
   // store user (e.g. Retail Yuexiu) may have the perm so they can see
   // the Fulfill tab, but their own outgoing requests still flow
   // store→warehouse. Only `warehouse` and `admin` originate from the
-  // warehouse side and need a kitchen/store destination chooser.
+  // warehouse side and can name a destination.
   const role = req.user?.role || '';
   const isWarehouseOrigin = (role === 'warehouse' || role === 'admin');
   const explicit = (req.body && req.body.to_role) ? String(req.body.to_role) : null;
   if (isWarehouseOrigin) {
     if (explicit === 'store')   return { from_role: 'warehouse', to_role: 'store'   };
     if (explicit === 'kitchen') return { from_role: 'warehouse', to_role: 'kitchen' };
-    if (explicit === 'warehouse' && role === 'admin') {
-      // Admin acting on behalf of a store — rare but supported.
-      return { from_role: 'store', to_role: 'warehouse' };
-    }
-    // No explicit choice → default to kitchen (warehouse's daily flow).
-    return { from_role: 'warehouse', to_role: 'kitchen' };
+    // 'warehouse', anything unrecognised, or nothing at all falls through.
   }
-  // Everyone else (including store users with warehouse_inbox perm)
-  // sends requests to the warehouse.
   return { from_role: 'store', to_role: 'warehouse' };
 }
 
@@ -876,6 +891,87 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
   res.json({ success: true });
 });
 
+// ── Retry a dispatch that failed ───────────────────────────────────────────
+//
+// THE GAP THIS FILLS. Under the old one-step model a failed transfer was
+// retried by the 'delivered' transition, which re-ran the whole thing as a
+// safety net. 'delivered' now moves no stock, and STATUS_FLOW refuses a
+// backward move, so an order whose dispatch rolled back sits at status
+// 'prepared' with goods_state 'none' and NOTHING REACHES _applyDispatch AGAIN.
+// The function was always retryable — its guards rolled back with the stock —
+// what was missing is a door, and this is the door.
+//
+// THE PICKER OPENS IT HIMSELF. Same permission as the dispatch he already had
+// (requireRestockOrInbox — the identical middleware the status endpoint uses),
+// no manager, no unlock, no second person. The transaction rolled back cleanly
+// and nothing is half-done, so the alternative is a warehouse worker standing
+// with cold boxes hunting for someone with a password.
+//
+// ONLY WHERE A DISPATCH GENUINELY DID NOT HAPPEN. _applyDispatch's three guards
+// — goods_state, dispatched_at, and the old stock_applied_at — are the same
+// three that protect it everywhere else, and they are what makes a retry
+// incapable of moving stock twice. They are NOT re-implemented here: this
+// endpoint delegates, so the two paths can never drift apart on what "already
+// dispatched" means.
+//
+// AND IT IS ITSELF IDEMPOTENT. Two taps on a bad connection is one dispatch:
+// the second call meets dispatched_at and reports that the goods already left,
+// as a success rather than an error — because from the picker's side it IS one,
+// and an error would send him looking for a problem that does not exist.
+router.post('/api/restock/:id/retry-dispatch', requireAuth, requireRestockOrInbox, (req, res) => {
+  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+
+  // A RETRY IMPLIES AN ATTEMPT. An order still at draft/sent/received has never
+  // been packed, so there is nothing to retry and dispatching it here would
+  // bypass the request lifecycle — the warehouse would not have picked it yet.
+  // Refused rather than silently dispatching, which would make this endpoint a
+  // second, quieter way to send goods.
+  if (STATUS_FLOW.indexOf(order.status) < STATUS_FLOW.indexOf('prepared')) {
+    return res.status(409).json({
+      error: 'not_dispatched_yet',
+      message: 'This order has not been packed yet, so there is nothing to retry. Mark it prepared when the goods are ready to leave.',
+    });
+  }
+
+  const result = _applyDispatch(order.id, req.user);
+
+  // Already gone. The common second-tap case, and a success from where the
+  // picker is standing.
+  if (result.ok && (result.skipped === 'already_dispatched' || result.skipped === 'already_applied_old_model')) {
+    return res.json({
+      success: true, retried: false, already: true, stock_moved: false,
+      goods_state: order.goods_state,
+      message: 'These goods have already left the warehouse. Nothing was moved again.',
+    });
+  }
+  if (result.ok && result.skipped === 'kitchen_direction') {
+    return res.json({
+      success: true, retried: false, stock_moved: false,
+      message: 'This is a kitchen order, which does not move store stock.',
+    });
+  }
+  if (result.ok && result.skipped === 'no_lines') {
+    return res.status(409).json({
+      error: 'no_lines',
+      message: 'There is nothing on this order to send. Add a quantity to at least one line first.',
+    });
+  }
+  // Failed again — the cause is still there. The message from _applyDispatch
+  // already names it in plain words, so it is passed through rather than
+  // replaced by a code the picker would have to look up.
+  if (result.ok === false) {
+    return res.status(409).json({ error: 'retry_failed', stock_moved: false, message: result.error });
+  }
+
+  _broadcastRestock(order.id, 'prepared', req.user.id);
+  res.json({
+    success: true, retried: true, stock_moved: true, moved: result.moved || 0,
+    goods_state: 'in_transit',
+    message: `Sent. ${result.moved || 0} line${result.moved === 1 ? '' : 's'} left the warehouse.`,
+  });
+});
+
 // ── Mark item prepared (warehouse side) ────────────────────────────────────
 router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox, (req, res) => {
   const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);
@@ -1080,3 +1176,7 @@ router.delete('/api/restock/:id', requireAuth, requireDelete, requirePermission(
 });
 
 module.exports = router;
+// Exported for scripts/test_warehouse_store_pin.js — the tier order in
+// _resolveWarehouseStoreId is the whole point of the configured key, and it is
+// not observable through any endpoint without moving real stock.
+module.exports._resolveWarehouseStoreId = _resolveWarehouseStoreId;

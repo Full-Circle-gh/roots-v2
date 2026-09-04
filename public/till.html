@@ -121,6 +121,25 @@ button{font:inherit;color:inherit;margin:0}
   height:56px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;
   background:var(--td-surface);border-bottom:1px solid var(--td-border);
 }
+/* THE WAY BACK. This screen is a separate page, not one of the phone's pushed
+   ones, so nothing here draws the control every pushed screen has — and in an
+   installed app there is no browser chrome to press Back in either. An operator
+   who took the Counter till shortcut out of Tacet had no route home at all.
+   A chevron at the head of the row, where every pushed screen on the phone puts
+   it, and the title reads as that screen's title beside it. Icon only: this row
+   already carries the store picker and the language, and the word is on the
+   control's label for anyone who cannot see the arrow. Hidden unless the server
+   says there is a home to return to — see `home` in /api/backend/me. */
+.t-back{
+  /* 44 square, the same floor the store button and the language button keep:
+     the row's own padding is pulled back so the arrow still sits at the edge
+     the title would have started from. */
+  width:44px;height:44px;flex:none;margin-left:-12px;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  border:0;background:transparent;color:var(--td-text2);
+}
+.t-back:active{color:var(--td-text)}
+.t-back svg{width:22px;height:22px}
 .t-brand{font-size:15px;font-weight:500;letter-spacing:-.01em}
 .t-dot{width:4px;height:4px;border-radius:50%;background:var(--td-border);flex:none}
 /* The store is a CONTROL, not a caption. It was a <span>, and the saved-store
@@ -616,7 +635,7 @@ button{font:inherit;color:inherit;margin:0}
   /* Above the sheet, always — the takeover's whole point is that nothing of
      the till stays readable behind it. */
   .settle{z-index:30}
-  #storepick,#custpick{z-index:40}
+  #storepick,#custpick,#leavepick{z-index:40}
 
   /* The settle takeover is amount-beside-wallets at 56px apart, which does not
      fit a phone either. Stack it, and let the two fixed 340px blocks be as wide
@@ -633,6 +652,9 @@ button{font:inherit;color:inherit;margin:0}
 <body>
 <div class="till" id="app" hidden>
   <div class="t-head">
+    <button class="t-back" id="hd-back" type="button" data-back hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
     <span class="t-brand" id="hd-title"></span>
     <span class="t-dot"></span>
     <button class="t-store" id="hd-store" type="button" data-store></button>
@@ -673,6 +695,7 @@ button{font:inherit;color:inherit;margin:0}
   <div class="settle" id="settle" hidden></div>
   <div class="sscrim" id="storepick" hidden></div>
   <div class="sscrim" id="custpick" hidden></div>
+  <div class="sscrim" id="leavepick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -710,6 +733,12 @@ button{font:inherit;color:inherit;margin:0}
   var STRINGS = {
     // header + chrome
     counterSale:  ['Counter sale', '前台销售'],        // admin: retail-admin.html:2785
+    // Quoted whole from the record screens' own leave guard, which asks the
+    // same question about the same kind of loss — a draft that exists only on
+    // screen, and answers it with the same word. The body half is not taken
+    // with it: theirs names a material.
+    leaveSale:    ['Leave without saving?', '未保存就离开?'], // admin: 18-materials.js:417
+    leave:        ['Leave', '离开'],                   // admin: 18-materials.js:419
     // entry
     searchAdd:    ['Search a product to add…', '搜索商品以添加…'], // admin: 04-orders/products picker
     all:          ['All', '全部'],                     // admin: i18n EN_ONLY_MAP
@@ -743,7 +772,14 @@ button{font:inherit;color:inherit;margin:0}
     printReceipt: ['Print receipt', '打印小票'],       // admin: 04-orders.js
     newOrder:     ['New order', '新建订单'],           // admin: retail-admin.html:2218
     // failure — the generic locked sentence, reused rather than re-minted
-    didNotSave:   ['That did not save. Nothing was created.', '未能保存,未创建任何内容。'] // admin: 04-orders.js
+    didNotSave:   ['That did not save. Nothing was created.', '未能保存,未创建任何内容。'], // admin: 04-orders.js
+    // Permission. BOTH halves are lifted from ONE existing string in this
+    // repository — routes/pos.js:29, `'forbidden — POS permission required ·
+    // 无收银权限'` — so this row is quoted, not composed. The only edit is
+    // dropping the leading "forbidden — ", which is an API word: the cashier is
+    // reading a screen, not a status code. Nothing else is touched, and the
+    // Chinese half is byte-for-byte the one already shipped.
+    noPermission: ['POS permission required', '无收银权限']
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -797,6 +833,8 @@ button{font:inherit;color:inherit;margin:0}
     lines: [], sel: null,
     customer: null, custBusy: false,
     view: 'till',              // till | settle | done
+    home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
+    leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
     wallet: null, moreOpen: false, busy: false, err: '',
     done: null, printState: 'idle'
@@ -836,7 +874,7 @@ button{font:inherit;color:inherit;margin:0}
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.lang = _lang === 'cn' ? 'zh-CN' : 'en';
     $('boot-msg').textContent = '·';
-    // TWO READS, because a till may only open where the counter is OPEN.
+    // THE SECOND READ, because a till may only open where the counter is OPEN.
     // POS is a sales channel on the Sales page exactly like Meituan, and the
     // location master closes every channel at a store at once — so a shop that
     // has been marked shut must not have a till that still rings up sales and
@@ -848,12 +886,47 @@ button{font:inherit;color:inherit;margin:0}
     // FAILS OPEN, matching the server helper: if channel-status cannot be read
     // the till behaves exactly as it did before this existed. A status endpoint
     // having a bad minute must not shut a shop's counter.
+    //
+    // THE THIRD READ is this operator's capabilities, because the
+    // till became a rail row and a More row in the same commit as this check —
+    // and a nav entry that is merely hidden is not a permission. Anyone who
+    // knows the URL (an installed tablet whose operator was moved to another
+    // role, a bookmark, a shared device) still arrives here.
+    //
+    // THE PAIR, not one cap: `till:use` opens this screen, and `orders:edit` is
+    // what lib/cap-routes.js requires of the POST this screen's Confirm makes.
+    // Holding only the first is a till that builds a basket and then refuses to
+    // take the money once the tenant turns rbac_enforce on, which is the worst
+    // moment to find out.
+    //
+    // FAILS OPEN, matching channel-status beside it and the whole cap layer:
+    // caps is null on a resolution hiccup or a stale session, and null means
+    // allowed. This is a view gate over an already-authenticated operator, not
+    // the security boundary — that is cap-routes.js on the write itself.
+    // NOT A REDIRECT. Nothing in this file redirects on 401/403 and this must
+    // not be the exception: a till that redirects itself mid-shift is the loop
+    // this product has already been bitten by (see the route comment in
+    // server.js). It stops at the boot screen and says why.
     Promise.all([
       api('/api/retail-admin/stores'),
-      api('/api/retail-admin/channel-status').catch(function () { return null; })
+      api('/api/retail-admin/channel-status').catch(function () { return null; }),
+      api('/api/backend/me').catch(function () { return null; })
     ])
       .then(function (r) {
-        var j = r[0], cs = r[1];
+        var j = r[0], cs = r[1], me = r[2];
+        var caps = me && me.user && Array.isArray(me.user.caps) ? me.user.caps : null;
+        // The way back, from the same read as the permission above. Null on any
+        // hiccup, which simply means no control is drawn — the till itself is
+        // unaffected either way.
+        if (me && me.user && typeof me.user.home === 'string') {
+          S.home = me.user.home;
+          var hl = me.user.homeLabel;
+          S.homeLabel = (hl && (hl.en || hl.cn)) ? hl : null;
+        }
+        if (caps && (caps.indexOf('till:use') === -1 || caps.indexOf('orders:edit') === -1)) {
+          boot('<p>' + esc(T('noPermission')) + '</p>');
+          return;
+        }
         var list = (j.data || []).filter(function (s) { return s.is_active !== 0; });
         var posOpen = null;
         if (cs && cs.channels) {
@@ -987,10 +1060,32 @@ button{font:inherit;color:inherit;margin:0}
     el.innerHTML = h;
   }
 
+  /* The leave question — the store picker's own pop-up, with two answers
+     instead of a list. A decision belongs in the page: a system dialog cannot
+     be styled, quieted or translated, and this one has to be readable in
+     Chinese behind a counter. */
+  function renderLeave() {
+    var el = $('leavepick');
+    el.hidden = !S.leaveOpen;
+    if (!S.leaveOpen) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="ssheet"><div class="hd">' + esc(T('leaveSale')) + '</div>'
+      + '<button class="srow" type="button" data-leave="go"><span>' + esc(T('leave')) + '</span></button>'
+      + '<button class="srow" type="button" data-leave="stay"><span>' + esc(T('cancel')) + '</span></button>'
+      + '</div>';
+  }
+
   /* ---- render ---------------------------------------------------------- */
   function render() {
     if (!S.storeId) return;
     $('hd-title').textContent = T('counterSale');
+    // The label names the destination — the operator's own home screen, titled
+    // with their role's name, exactly as the phone titles it. 'Back' alone when
+    // the role has no name to give.
+    var bk = $('hd-back');
+    bk.hidden = !S.home;
+    bk.setAttribute('aria-label', S.homeLabel
+      ? cuT(S.homeLabel.en || S.homeLabel.cn, S.homeLabel.cn || S.homeLabel.en)
+      : T('back'));
     // A basket is built against ONE store's shelf, so the store cannot change
     // underneath it — the control goes quiet until the sale is cleared or rung
     // up, rather than silently revaluing lines against different stock.
@@ -1005,6 +1100,7 @@ button{font:inherit;color:inherit;margin:0}
     }
     renderPicker();
     renderCustPicker();
+    renderLeave();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     var qi = $('q');
     qi.placeholder = T('searchAdd');
@@ -1434,8 +1530,23 @@ button{font:inherit;color:inherit;margin:0}
       // expected way out, and it is the only dismissal this pop-up needs.
       if (S.pickOpen && ev.target.id === 'storepick') { S.pickOpen = false; return render(); }
       if (S.custOpen && ev.target.id === 'custpick') return closeCustPicker();
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet]');
+      // Tapping away from the leave question is staying, the same dismissal the
+      // store picker takes — and the safe answer is the one a stray tap gives.
+      if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave]');
       if (!t) return;
+      // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
+      // is a sale in progress that nothing has saved yet, so it asks first — in
+      // the page, the way every other decision on this screen is made.
+      if (t.hasAttribute('data-back')) {
+        if (!S.home) return;
+        if (S.lines.length) { S.leaveOpen = true; return render(); }
+        window.location.href = S.home; return;
+      }
+      if (t.hasAttribute('data-leave')) {
+        if (t.getAttribute('data-leave') === 'go') { window.location.href = S.home; return; }
+        S.leaveOpen = false; return render();
+      }
       if (t.hasAttribute('data-store')) { S.pickOpen = !S.pickOpen; return render(); }
       if (t.hasAttribute('data-sheet'))  {
         S.sheetOpen = t.getAttribute('data-sheet') === 'open';
