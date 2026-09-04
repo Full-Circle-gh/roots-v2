@@ -83,10 +83,17 @@ function stub(o) {
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(CTX) + ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
-    'window.fetch=function(url,opts){url=String(url);window.__calls.push(url.split("?")[0]);var body;\n' +
+    'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
+    '  else if(url.indexOf("/api/products")===0){\n' +
+    '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
+    '    body={success:true,data:[{id:7,name_en:"Hummus Asli",name_cn:"鹰嘴豆泥",sku:"1-10",status:"Active"}]};\n' +
+    '  }\n' +
     '  else if(url.indexOf("/api/restock")===0){\n' +
+    '    if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
+    '      body={success:true,id:99,rs_number:"RS-260904-001"}; }\n' +
+    '    else\n' +
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    var m=url.match(/restock\\/(\\d+)$/);\n' +
     '    if(m) body={success:true,data:ORDERS.filter(function(o){return o.id===Number(m[1])})[0]};\n' +
@@ -112,19 +119,20 @@ const CASES = {
   'home-is-the-landing': { js: 'window.__done();',
     expect: ['Hi Asher', 'Count', 'Set what is on your shelf',
              'Pick', 'Pull a run for the stores', '1 of 1 lines still to pull',
-             'Receive', 'Count a delivery in', '1 delivery waiting'],
+             'Receive', 'Count a delivery in', '1 delivery waiting',
+             'Ask the kitchen', 'Have something made'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the app did not open on the launcher' },
 
   // THE ORIGINAL DEFECT, ASSERTED. A quiet day must still show both doors.
   'tiles-stay-when-there-is-no-work': { noRun: true, noInbound: true, js: 'window.__done();',
-    expect: ['Pick', 'Nothing to pick', 'Receive', 'Nothing on its way'],
+    expect: ['Pick', 'Nothing to pick', 'Receive', 'Nothing on its way', 'Ask the kitchen'],
     absent: ['still to pull', 'delivery waiting'] },
 
   // THE OTHER HALF. One job needs no launcher, and the people who only count
   // are the ones who use this app every day.
   'no-launcher-for-one-job': { deny: true, js: 'window.__done();',
     expect: ['Quick stock', 'Hummus Asli'],
-    absent: ['Pull a run for the stores', 'Count a delivery in', 'Hi Asher'],
+    absent: ['Pull a run for the stores', 'Count a delivery in', 'Have something made', 'Hi Asher'],
     check: (out) => {
       if (/data-view="home"/.test(out)) return 'a refused realm was shown the launcher';
       return /data-href="[^"]*stock-login/.test(out) ? 'a 403 bounced the operator to the login page' : null;
@@ -142,7 +150,37 @@ const CASES = {
     check: (out) => /data-view="home"/.test(out) ? null : 'back did not return to the launcher' },
 
   'home-cn': { pre: "localStorage.setItem('roots-admin-lang','cn');", js: 'window.__done();',
-    expect: ['你好', '盘点', '拣货', '收货', '待拣', '批待收货'] },
+    expect: ['你好', '盘点', '拣货', '收货', '向厨房下单', '待拣', '批待收货'] },
+
+  // ── Ask the kitchen ──────────────────────────────────────────────────────
+  // Nothing has raised a kitchen request since 16 May, because the only screen
+  // that could was deleted in August. This is that door.
+  'kitchen-asks-why-first': { js: seq(["'[data-akopen]'", '250']),
+    expect: ['Ask the kitchen', 'What is it for?', 'For an order', 'For the shelf',
+             'They make it — nothing moves until it is made'],
+    // The purpose has no default: the server refuses a kitchen request without
+    // one, and a reason picked for him is a reason he did not give.
+    check: (out) => /data-send="disabled"/.test(out) ? null : 'Send was live before a purpose was chosen' },
+
+  'kitchen-needs-a-purpose-AND-a-product': {
+    js: seq(["'[data-akopen]'", '250', "'[data-akinc=\"7\"]'"]),
+    expect: ['1 items'],
+    check: (out) => /data-send="disabled"/.test(out) ? null : 'Send was live with a product but no purpose' },
+
+  'kitchen-sends': {
+    js: seq(["'[data-akopen]'", '250', "'[data-akpurpose=\"shelf\"]'", "'[data-akinc=\"7\"]'",
+             "'[data-akinc=\"7\"]'", "'[data-aksend]'", '350']),
+    expect: ['Sent to the kitchen', '1 item · 2 units', 'The kitchen sees it now'],
+    checkPost: (p) => {
+      if (!p) return 'nothing was posted';
+      if (p.to_role !== 'kitchen') return `posted to_role ${p.to_role}, expected kitchen`;
+      if (p.purpose !== 'shelf') return `posted purpose ${p.purpose}, expected shelf`;
+      if (!p.items || p.items.length !== 1 || p.items[0].qty_requested !== 2) {
+        return 'the line did not carry the quantity that was set';
+      }
+      return null;
+    } },
+
 };
 
 function main() {
@@ -167,6 +205,9 @@ function main() {
       // Which screen is actually on, read from the DOM rather than inferred
       // from words: the launcher and the counting list share a header.
       'document.body.setAttribute("data-view",document.querySelector(".sh-wrap")?"home":"other");' +
+      'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
+      'var sb=document.querySelector(".rc-foot .rc-cta");' +
+      'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
       '});</scr' + 'ipt>';
     const pre = c.pre ? '<script>' + c.pre + '</scr' + 'ipt>' : '';
@@ -187,9 +228,13 @@ function main() {
     for (const want of (c.expect || [])) if (!seen.includes(want)) failures.push([name, `missing “${want}”`]);
     for (const no of (c.absent || [])) if (seen.includes(no)) failures.push([name, `should not say “${no}”`]);
     if (c.check) { const p = c.check(out); if (p) failures.push([name, p]); }
+    if (c.checkPost) {
+      const posted = JSON.parse(dec((out.match(/data-post="([^"]*)"/) || [])[1] || 'null'));
+      const p = c.checkPost(posted); if (p) failures.push([name, p]);
+    }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
-      /^\/api\/restock$/, /^\/api\/restock\/\d+$/];
+      /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/products$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
   }

@@ -501,6 +501,27 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .pk-hold[disabled] .lbl{color:var(--text2);}
 
 
+
+/* ── Ask the kitchen ────────────────────────────────────────────────────────
+   Tianhe asking the kitchen to MAKE something. No artboard was drawn for this
+   one — the picking and receiving canvases cover the van, not the pot — so it
+   borrows their ledger wholesale rather than inventing a third look. */
+.ak-purpose{display:flex;gap:8px;padding:0 16px 12px;flex:none;}
+.ak-opt{flex:1;min-height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--line);
+        padding:10px 12px;text-align:left;color:var(--text2);}
+.ak-opt.on{background:var(--text);border-color:var(--text);color:var(--bg);}
+.ak-opt b{display:block;font-size:15px;font-weight:600;line-height:1.3;}
+.ak-opt i{display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75;line-height:1.35;}
+.ak-step{display:flex;align-items:center;gap:2px;flex:none;}
+.ak-step button{width:44px;height:44px;border-radius:12px;background:var(--raised);border:1px solid var(--line);
+                display:flex;align-items:center;justify-content:center;color:var(--text);}
+.ak-step button:disabled{opacity:.4;}
+.ak-step button svg{width:18px;height:18px;}
+.ak-step .n{width:48px;text-align:center;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;}
+.ak-search{padding:0 16px 10px;flex:none;}
+.ak-search input{width:100%;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);
+                 color:var(--text);padding:0 14px;font-size:15px;}
+
 /* ── Stock home ─────────────────────────────────────────────────────────────
    The door. Counting, picking and receiving are three different jobs that
    happen to share one app, and until this existed the last two were reachable
@@ -2752,6 +2773,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     count: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M3 11h18"/><path d="M9 7V4h6v3"/></svg>',
     pick:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
     recv:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v12H3V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
+    kit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 6V3M12 6V3M15 6V3"/><path d="M8 9h8"/></svg>',
   };
 
   // The launcher is for someone with more than one job. rc.on is the probe's
@@ -2805,6 +2827,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           inbound ? t('Count a delivery in', '点数入库')
                   : t('Nothing on its way', '暂无在途配送'),
           recvCount, 'data-rcenter') +
+        // No count on this one, deliberately. What the kitchen owes back is the
+        // kitchen's queue, not this shelf's, and a badge here would be a number
+        // about somebody else's work sitting on a door marked with a job.
+        homeTileHtml('kit', t('Ask the kitchen', '向厨房下单'),
+          t('Have something made', '请厨房制作'), '', 'data-akopen') +
       '</div><div style="flex:1"></div></div>';
   }
 
@@ -2823,6 +2850,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (p) p.onclick = pkEnter;
     var r = m.querySelector('[data-rcenter]');
     if (r) r.onclick = rcEnter;
+    var k = m.querySelector('[data-akopen]');
+    if (k) k.onclick = akEnter;
   }
 
   function homeGoCount() {
@@ -2849,6 +2878,221 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (!homeAvailable()) return;          // one job — stay on the list
     state.view = 'home';
     homeRender();
+  }
+
+
+  /* ══ ASK THE KITCHEN ═══════════════════════════════════════════════════════
+     Tianhe asking the kitchen to MAKE something. §39: this moves no stock and
+     is not supposed to — it asks for production, and stock changes when the
+     kitchen makes it, not when someone asks. So there is no dispatch, no
+     receipt and no location pair; the request lands in the kitchen's inbox
+     (public/kitchen.html) and closes when they mark it prepared.
+
+     WHY IT NEEDED BUILDING AT ALL. The direction has always existed and the
+     kitchen's inbox has always worked, but the only screen that could RAISE one
+     was public/restock.html, deleted 2026-08-04. Nothing has created a kitchen
+     request since 16 May. This is that door, reopened.
+
+     THE PURPOSE IS MANDATORY, and the server has always enforced it — a request
+     without `order` or `shelf` is refused by name. It is asked for first, before
+     any product, because it is the thing the kitchen reads first: making
+     something for a customer order due today is different work from refilling a
+     shelf, and the old page asked for it in a modal after the fact. */
+
+  var ak = {
+    purpose: null,      // 'order' | 'shelf' — no default; §39's no-prefill rule
+    qty: {},            // product id -> how many are being asked for
+    products: null,     // the catalogue, once fetched
+    fromShelf: false,   // true when we fell back to the shelf list
+    q: '',
+    busy: false, err: '', sent: null,
+  };
+
+  var AK_MINUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+  var AK_PLUS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+
+  /* THE KITCHEN'S OWN CATALOGUE, because that is what is being asked for — you
+     are asking them to make one of THEIR products, so /api/products carries the
+     right ids and the right names.
+
+     IF THAT IS REFUSED, the shelf already loaded stands in, and the request goes
+     WITHOUT a product_id. That is deliberate, not a shortcut: `products` and
+     `store_products` are separate AUTOINCREMENT counters over one integer space
+     (see _checkTransferIds), so a store id written into a field the kitchen
+     reads as a kitchen id is a number that points at the wrong thing. A kitchen
+     request needs the NAME — nothing in this direction ever moves stock by id —
+     so the honest answer is to send the name and leave the id empty rather than
+     fill it with one from the wrong catalogue. */
+  function akLoad() {
+    if (ak.products) return Promise.resolve();
+    return rcFetch('/api/products').then(function (j) {
+      ak.products = (Array.isArray(j.data) ? j.data : [])
+        .filter(function (p) { return p.status !== 'Inactive' && p.is_active !== 0; })
+        .map(function (p) { return { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku }; });
+      ak.fromShelf = false;
+      akRender();
+    }).catch(function () {
+      ak.products = (state.items || []).map(function (p) {
+        return { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku };
+      });
+      ak.fromShelf = true;
+      akRender();
+    });
+  }
+
+  function akEnter() {
+    state.view = 'kitchen';
+    ak.purpose = null; ak.qty = {}; ak.q = ''; ak.err = ''; ak.sent = null; ak.busy = false;
+    akRender();
+    akLoad();
+  }
+  function akExit() { ak.sent = null; homeBack(); }
+
+  function akName(p) {
+    var n = lang === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
+    return n || ('#' + p.id);
+  }
+  function akLines() {
+    var all = ak.products || [];
+    var q = ak.q.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(function (p) {
+      return (p.name_en || '').toLowerCase().indexOf(q) >= 0
+          || (p.name_cn || '').indexOf(ak.q.trim()) >= 0
+          || (p.sku || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function akChosen() {
+    return (ak.products || []).filter(function (p) { return (ak.qty[p.id] || 0) > 0; });
+  }
+  function akBump(id, d) {
+    var n = (ak.qty[id] || 0) + d;
+    ak.qty[id] = n > 0 ? n : 0;
+    akRender();
+  }
+
+  function akSend() {
+    if (ak.busy) return;
+    var chosen = akChosen();
+    if (!ak.purpose || !chosen.length) return;
+    ak.busy = true; ak.err = ''; akRender();
+    rcFetch('/api/restock', { method: 'POST', body: {
+      // to_role and purpose are what make this a kitchen request; without both
+      // the server refuses, and since #254 an absent to_role means the warehouse.
+      to_role: 'kitchen',
+      purpose: ak.purpose,
+      status: 'sent',
+      items: chosen.map(function (p) {
+        return {
+          product_id: ak.fromShelf ? null : p.id,
+          product_name: p.name_en || p.name_cn || ('#' + p.id),
+          product_cn: p.name_cn || null,
+          sku: p.sku || null,
+          qty_requested: ak.qty[p.id],
+          unit: 'pcs',
+        };
+      }),
+    } }).then(function (j) {
+      ak.busy = false;
+      ak.sent = { rs: j.rs_number || ('#' + j.id), lines: chosen.length,
+                  units: chosen.reduce(function (a, p) { return a + ak.qty[p.id]; }, 0) };
+      akRender();
+    }).catch(function (e) {
+      ak.busy = false;
+      // The numbers stay on screen. Losing a list somebody just built is the one
+      // failure that makes people stop using a screen.
+      ak.err = e.message === 'norealm'
+        ? t('This account cannot raise kitchen requests.', '此账号无法向厨房下单。')
+        : (e.message || t('That did not send. Nothing has changed — try again.', '未发送,数据未变 — 请重试。'));
+      akRender();
+    });
+  }
+
+  function akHtml() {
+    if (ak.sent) {
+      return '<div class="rc-wrap">' +
+        rcHeadHtml(t('Sent to the kitchen', '已发送至厨房'),
+                   ak.sent.rs + ' · ' + clock(new Date()), false) +
+        '<div style="padding:0 16px"><div class="rc-card">' +
+          '<div style="font-size:15px;font-weight:600;line-height:1.35">' +
+            t(ak.sent.lines + ' item' + (ak.sent.lines > 1 ? 's' : '') + ' · ' + ak.sent.units + ' units',
+              '共 ' + ak.sent.lines + ' 项 · ' + ak.sent.units + ' 件') + '</div>' +
+          '<div class="rc-sub" style="margin-top:6px">' +
+            t('The kitchen sees it now. Nothing moves until they make it.',
+              '厨房已收到。制作完成后库存才会变动。') + '</div></div></div>' +
+        '<div class="rc-body"></div>' +
+        '<div class="rc-foot" style="background:transparent;border:none">' +
+          '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+          '<button class="rc-big" data-akback>' + t('Done', '完成') + '</button></div></div></div>';
+    }
+    var chosen = akChosen();
+    var units = chosen.reduce(function (a, p) { return a + ak.qty[p.id]; }, 0);
+    var ready = !!ak.purpose && chosen.length > 0;
+    var rows = ak.products === null
+      ? '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div>'
+      : akLines().map(function (p) {
+          var n = ak.qty[p.id] || 0;
+          return '<div class="rc-hr"></div><div class="rc-row">' +
+            '<span class="rc-mid"><span class="rc-nm">' + esc(akName(p)) + '</span>' +
+            '<span class="rc-cap">' + esc(p.sku || ('#' + p.id)) + '</span></span>' +
+            '<span class="ak-step">' +
+              '<button data-akdec="' + p.id + '"' + (n <= 0 ? ' disabled' : '') + '>' + AK_MINUS + '</button>' +
+              '<span class="n num">' + n + '</span>' +
+              '<button data-akinc="' + p.id + '">' + AK_PLUS + '</button>' +
+            '</span></div>';
+        }).join('') + '<div class="rc-hr"></div>';
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-akback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Ask the kitchen', '向厨房下单') + '</div>' +
+        '<div class="rc-sub">' + t('They make it — nothing moves until it is made.',
+                                   '由厨房制作 — 制作完成后库存才会变动。') + '</div>' +
+      '</div>' +
+      (ak.err ? '<div class="rc-err">' + esc(ak.err) + '</div>' : '') +
+      (ak.fromShelf ? '<div class="rc-flat rc-note" style="margin:0 16px 12px">' +
+        t('Showing this shelf’s products — the kitchen’s own list is not available to this account.',
+          '显示本店商品 — 此账号无法读取厨房商品列表。') + '</div>' : '') +
+      // Asked FIRST, because it is what the kitchen reads first. No default:
+      // a purpose picked for him is a reason he did not give.
+      '<div class="rc-lbl">' + t('What is it for?', '用途') + '</div>' +
+      '<div class="ak-purpose">' +
+        '<button class="ak-opt' + (ak.purpose === 'order' ? ' on' : '') + '" data-akpurpose="order">' +
+          '<b>' + t('For an order', '用于发货') + '</b><i>' + t('A customer is waiting on it', '有客户订单等待') + '</i></button>' +
+        '<button class="ak-opt' + (ak.purpose === 'shelf' ? ' on' : '') + '" data-akpurpose="shelf">' +
+          '<b>' + t('For the shelf', '货架补货') + '</b><i>' + t('Restocking what we hold', '补充本店库存') + '</i></button>' +
+      '</div>' +
+      '<div class="ak-search"><input id="akQ" inputmode="search" enterkeyhint="search" ' +
+        'placeholder="' + t('Search products', '搜索商品') + '" value="' + esc(ak.q) + '"></div>' +
+      '<div class="rc-body">' + rows + '</div>' +
+      '<div class="rc-foot"><div class="rc-footrow">' +
+        '<div class="rc-tally"><b>' + chosen.length + ' <span>' + t('items', '项') + '</span></b>' +
+        '<i>' + t(units + ' units', units + ' 件') + '</i></div>' +
+        '<button class="rc-cta' + (ready && !ak.busy ? ' on' : '') + '"' +
+          (ready && !ak.busy ? ' data-aksend' : ' disabled') + '>' +
+          (ak.busy ? t('Sending…', '发送中…') : t('Send', '发送')) + '</button>' +
+      '</div></div></div>';
+  }
+
+  function akRender() {
+    if (state.view !== 'kitchen') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = akHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-akback]', function (b) { b.onclick = akExit; });
+    each('[data-akpurpose]', function (b) {
+      b.onclick = function () { ak.purpose = b.getAttribute('data-akpurpose'); akRender(); };
+    });
+    each('[data-akinc]', function (b) { b.onclick = function () { akBump(parseInt(b.getAttribute('data-akinc'), 10), 1); }; });
+    each('[data-akdec]', function (b) { b.onclick = function () { akBump(parseInt(b.getAttribute('data-akdec'), 10), -1); }; });
+    each('[data-aksend]', function (b) { b.onclick = akSend; });
+    var q = $('#akQ');
+    if (q) {
+      q.oninput = function () { ak.q = q.value; akRender(); var f = $('#akQ'); if (f) { f.focus(); } };
+    }
   }
 
   boot();
