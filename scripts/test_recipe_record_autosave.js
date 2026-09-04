@@ -109,10 +109,21 @@ check('the hairline under the bar only appears once something has scrolled', () 
   assert.match(ADMIN_CSS, /#tab-recipes-record \.rcp-rechead\.stuck \{[^}]*border-bottom-color:\s*var\(--td-border\)/);
 });
 
-check('the bar carries the save state, the history button and the figure strip', () => {
+check('the bar carries the save state and the history button', () => {
   assert.match(ADMIN_HTML, /id="rcp-rec-savestate"/);
   assert.match(ADMIN_HTML, /id="rcp-rec-history"[^>]*onclick="rcpHistory\(\)"/);
-  assert.match(ADMIN_HTML, /id="rcp-rec-stickyfigs"/);
+});
+
+// The pinned block carries the summary CARD itself, condensed. A second copy
+// of its figures in the bar directly above it printed the same numbers twice,
+// one line apart — which is what the miniature became once the card started
+// pinning too. It is gone from the markup, the stylesheet and the painter, and
+// this check is what stops it coming back.
+check('there is no miniature of the summary card in the bar', () => {
+  assert.doesNotMatch(ADMIN_HTML, /rcp-rec-stickyfigs|rcp-recfigs/);
+  assert.doesNotMatch(ADMIN_CSS, /rcp-recfigs/);
+  assert.doesNotMatch(RECIPES_JS, /paintStickyFigs|rcp-rec-stickyfigs/);
+  assert.match(ADMIN_HTML, /class="rcp-summary" id="rcp-rec-summary"/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -352,15 +363,14 @@ check('an operator who cannot edit is told that, not "unsaved"', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-section('6. The miniature appears only once the real figures have gone');
+section('6. The pinned block condenses, and publishes its height');
 // ═══════════════════════════════════════════════════════════════════════════
 
-// The record's offsetParent is not the scroller, so onRecScroll works in
-// VIEWPORT coordinates: the miniature belongs on screen exactly when the
-// summary card's bottom edge has passed above the bar's bottom edge. These
-// stubs hand it rects, which is what it actually reads.
+// onRecScroll has two jobs left: the hairline and the condense, plus the height
+// it publishes for the ingredient list's column header to park on. The summary
+// card rides inside the pinned block, so there is no miniature to show or hide
+// and no rect comparison to get wrong. These stubs hand it what it reads.
 function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight, sumHtml }) {
-  const figs = { hidden: true };
   // offsetHeight as well as the rect: the PINNED BLOCK's height is what the
   // ingredient list's column header parks on, and onRecScroll publishes it as a
   // custom property on the scroller. Stubbed to the bar's own bottom edge by
@@ -378,9 +388,9 @@ function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight
   const sum = { getBoundingClientRect: () => ({ bottom: sumBottom }),
     innerHTML: sumHtml === undefined ? '<div/>' : sumHtml };
   const sandbox = {
-    document: { getElementById: (id) => ({ 'rcp-rec-scroll': sc, 'rcp-rechead': head, 'rcp-rec-stickyfigs': figs, 'rcp-pin': pin }[id] || null) },
+    document: { getElementById: (id) => ({ 'rcp-rec-scroll': sc, 'rcp-rechead': head, 'rcp-pin': pin }[id] || null) },
     sumRoot: () => sum,
-    figs, head, sc, console,
+    head, sc, console,
   };
   vm.createContext(sandbox);
   vm.runInContext(extractFunction(RECIPES_JS, 'function onRecScroll('), sandbox);
@@ -389,8 +399,8 @@ function scrollSandbox({ scrollTop, sumBottom, headBottom, headHeight, pinHeight
 }
 
 // The column header of the ingredient list is sticky and parks at the bottom
-// edge of this bar. It cannot know that offset for itself — the bar grows a
-// line when the miniature appears — so onRecScroll has to publish it on every
+// edge of the pinned block. It cannot know that offset for itself — the block
+// changes height as it condenses — so onRecScroll has to publish it on every
 // scroll, in both states.
 check('the pinned block publishes its height for the column header to park on', () => {
   const rest = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126, pinHeight: 268 });
@@ -415,32 +425,20 @@ check('the block condenses only once something has gone under it', () => {
     .sc._cls.has('is-stuck'), 'scrolled, it is condensed');
 });
 
-check('at the top of the page: no hairline, no miniature', () => {
+check('at the top of the page there is no hairline under the bar', () => {
   const s = scrollSandbox({ scrollTop: 0, sumBottom: 400, headBottom: 126 });
   assert.strictEqual(s.head._cls.has('stuck'), false);
-  assert.strictEqual(s.figs.hidden, true);
 });
-check('scrolled a little: the hairline is there, the miniature is not', () => {
+check('scrolled a little, the hairline is there', () => {
   const s = scrollSandbox({ scrollTop: 40, sumBottom: 360, headBottom: 126 });
   assert.strictEqual(s.head._cls.has('stuck'), true);
-  assert.strictEqual(s.figs.hidden, true, 'the real card is still on screen — two copies of it is noise');
 });
-check('once the summary card has passed under the bar, the miniature takes over', () => {
-  const s = scrollSandbox({ scrollTop: 320, sumBottom: 80, headBottom: 126 });
-  assert.strictEqual(s.figs.hidden, false);
-});
-// Showing the strip grows the bar downward by its own height AND pushes the
-// (already scrolled-past) summary down the document by the same amount, so
-// both bottom edges move together and the comparison is invariant. That is
-// what stops the strip flickering on and off at the boundary.
-check('showing the miniature cannot re-trigger the test that hid it', () => {
-  const STRIP = 28;
-  const hidden = scrollSandbox({ scrollTop: 320, sumBottom: 126, headBottom: 126 });
-  const shown  = scrollSandbox({ scrollTop: 320, sumBottom: 126 + STRIP, headBottom: 126 + STRIP });
-  assert.strictEqual(hidden.figs.hidden, shown.figs.hidden);
-});
-check('a record with no summary painted yet shows no miniature', () => {
-  assert.strictEqual(scrollSandbox({ scrollTop: 900, sumBottom: 0, headBottom: 126, sumHtml: '' }).figs.hidden, true);
+// A record whose summary has not been painted yet is the state onRecScroll used
+// to have a branch for. It has none now, and must still publish the height
+// rather than throw on the way past.
+check('a record with no summary painted yet still publishes the height', () => {
+  const s = scrollSandbox({ scrollTop: 900, sumBottom: 0, headBottom: 126, pinHeight: 132, sumHtml: '' });
+  assert.strictEqual(s.sc._vars['--rcp-headh'], '132px');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -715,11 +715,10 @@
   }
 
   // ── the sticky bar's two states ──────────────────────────────────────────
-  // A hairline once anything has scrolled under it, and the miniature of the
-  // summary card once THAT has. The threshold is measured in the scroller's
-  // own coordinates, and `sum.offsetTop - head.offsetHeight` is invariant under
-  // the miniature appearing (it grows the header and pushes the summary down by
-  // the same amount), so showing it can never re-trigger the test that hid it.
+  // A hairline once anything has scrolled under it, and the pinned block
+  // condensed once it has gone a little further. There is no miniature of the
+  // summary card any more: the card itself is inside the pinned block, so a
+  // copy of its figures directly above it was the same numbers printed twice.
   function onRecScroll() {
     const sc = document.getElementById('rcp-rec-scroll');
     const head = document.getElementById('rcp-rechead');
@@ -736,16 +735,6 @@
     // measured here, on the same events, rather than written as a constant that
     // would be wrong in one of the two states.
     sc.style.setProperty('--rcp-headh', (pin || head).offsetHeight + 'px');
-    const figs = document.getElementById('rcp-rec-stickyfigs');
-    const sum = sumRoot();
-    if (!figs) return;
-    if (!sum || !sum.innerHTML) { figs.hidden = true; return; }
-    // VIEWPORT coordinates, not offsetTop: the record's offsetParent is not the
-    // scroller (nothing between them is positioned), so an offsetTop compared
-    // against scrollTop would be out by the topbar and main's padding — the
-    // strip would appear at the wrong point rather than not at all, which is
-    // the kind of wrong nobody chases down.
-    figs.hidden = sum.getBoundingClientRect().bottom > head.getBoundingClientRect().bottom;
   }
   function bindRecScroll() {
     if (_scrollBound) return;
@@ -1405,12 +1394,12 @@
 
   // ── the persistent summary — must read correctly no matter which sub-tab
   //    is open, and must never let a partly-priced recipe look free. ───────
-  // THE ONE DERIVATION, read by BOTH the summary card and the sticky bar's
-  // miniature of it. Extracted the day the bar was added, and extracted rather
-  // than copied for the reason every comment in this function already gives:
+  // THE ONE DERIVATION behind the card. It was extracted the day the bar grew a
+  // miniature of the card, so the two could not disagree; the miniature is gone
+  // (the card itself pins now), but the derivation stays here rather than being
+  // folded back into the painter, because the reason it was worth naming holds:
   // two places deriving "which margin is a fact about this recipe" is exactly
-  // how one screen ends up printing two different margins for one recipe. The
-  // rules it encodes are unchanged — read them below, they were only moved.
+  // how one screen ends up printing two different margins for one recipe.
   function summaryFacts() {
     const c = liveCost();
     const primary = c.costPerServing != null
@@ -1515,39 +1504,6 @@
     const outputs = productsHtml() + materialHtml();
     if (outputs) html += `<div class="rcp-hr"></div><div class="rcp-outputs">${outputs}</div>`;
 
-    host.innerHTML = html;
-    // The bar's miniature is repainted from the SAME facts in the same breath,
-    // so the two can never disagree about what this recipe costs.
-    paintStickyFigs(f);
-  }
-
-  // ── the sticky bar's miniature of the card above ─────────────────────────
-  // Only the figures, one type step down, in the same order: what it costs,
-  // then what it earns. The warning comes with them and is not optional — the
-  // rule this screen exists to keep ("never let a recipe look free") is a rule
-  // about every place a cost is shown, and a scrolled-past warning is a hidden
-  // one. Visibility is the scroll handler's business, not this function's.
-  function paintStickyFigs(facts) {
-    const host = document.getElementById('rcp-rec-stickyfigs');
-    if (!host || !_rec) return;
-    const f = facts || summaryFacts();
-    const c = f.c;
-    const fig = (lbl, v, cls) => `<span class="f${cls ? ' ' + cls : ''}">${esc(lbl)} <b>${v}</b></span>`;
-    let html = fig(T('Batch cost', '整批成本'), money(c.batchCost));
-    if (f.primary) html += fig(f.primary.lbl, f.primary.v);
-    if (f.solo) {
-      html += fig(T('Sells for', '售价'), esc(Number(f.solo.sell_price) > 0 ? money(f.solo.sell_price) : '—'));
-      html += fig(f.mLbl,
-        esc(f.showM ? (f.showM.money < 0 ? '−' : '') + money(Math.abs(f.showM.money)) : '—'),
-        f.showM && f.showM.money < 0 ? 'neg' : '');
-    }
-    if (f.missing) {
-      html += `<span class="warn">${I.warn}${esc(T(
-        `${c.zeroCostIngredientLines} missing cost`, `${c.zeroCostIngredientLines} 项缺少成本`))}</span>`;
-    }
-    if (c.unreconciledUnitLines > 0) {
-      html += `<span class="warn">${I.warn}${esc(T('UNIT MISMATCH', '单位不符'))}</span>`;
-    }
     host.innerHTML = html;
   }
 

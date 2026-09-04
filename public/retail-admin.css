@@ -13176,21 +13176,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-savestate { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
   #tab-recipes-record .rcp-savestate.err { color: var(--td-brick-ink); }
 
-  /* The miniature of the summary card, shown only once the real one has
-     scrolled under the bar. Same figures, same order, one type step down —
-     it is the same fact seen from further away, not a second opinion. */
-  #tab-recipes-record .rcp-recfigs { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; }
-  #tab-recipes-record .rcp-recfigs .f { display: inline-flex; align-items: baseline; gap: 8px;
-    font-size: 13px; color: var(--td-text2); }
-  #tab-recipes-record .rcp-recfigs .f b { font-weight: 500; font-size: 15px; color: var(--td-text);
-    font-variant-numeric: tabular-nums; }
-  #tab-recipes-record .rcp-recfigs .f.neg b, #tab-recipes-record .rcp-recfigs .f.neg { color: var(--td-brick-ink); }
-  #tab-recipes-record .rcp-recfigs .rcp-warnic svg { width: 15px; height: 15px; display: block; }
-  #tab-recipes-record .rcp-recfigs .warn { display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12.5px; color: var(--td-amber-ink); background: var(--td-amber-tint);
-    border-radius: 12px; padding: 3px 12px; }
-  #tab-recipes-record .rcp-recfigs .warn svg { width: 14px; height: 14px; flex: none; }
-
   /* ── History panel (rcp-hist-*) ────────────────────────────────────────
      Scoped under .rcp-hist-modal like the materialize modal's own classes,
      NOT under #tab-recipes-record: the dialog shell appends to <body>, so an
