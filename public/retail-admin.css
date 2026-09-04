@@ -12870,6 +12870,18 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 600; color: var(--td-text); margin-left: 6px; }
   #tab-materials-record .mat-costwhy { color: var(--td-amber-ink); }
 
+  /* Under the SKU field: the code the tenant's numbering rules would issue, or
+     — once something is typed — whether what was typed fits that category's
+     format. ADVISORY, both of them: the save is never blocked, so neither line
+     may read as an error. .is-auto is the quiet, informative state; .is-warn is
+     the same amber the supplier and cost lines use for "saved, but look at
+     this". :empty collapses so an unnumbered field costs no vertical space. */
+  #tab-materials-record .mat-skunote:empty { display: none; }
+  #tab-materials-record .mat-skunote { display: block; margin-top: 6px;
+    font-size: 12px; line-height: 1.5; color: var(--td-text2); }
+  #tab-materials-record .mat-skunote.is-auto { color: var(--td-text2); }
+  #tab-materials-record .mat-skunote.is-warn { color: var(--td-amber-ink); }
+
   /* §29 step 6 — a made material's "cost comes from a recipe" made visible,
      not just correct in ingredients.source_recipe_id. Quiet by default;
      .blocked switches to the same amber the recipe record's own frozen-cost

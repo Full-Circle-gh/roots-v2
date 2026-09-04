@@ -48,6 +48,10 @@ const { fireRecompute, costOneRecipe } = require('../lib/recipe-rollup');
 // archive-warning; shared with routes/retail-recipes.js's own use of the
 // same query on the other side of this relationship.
 const { materialConsumers } = require('../lib/recipe-materialize');
+// Automatic SKUs (Settings → SKU codes). The create below asks it for a code
+// when the operator left the field blank; routes/sku.js is the settings door
+// onto the same two libraries.
+const skuRules = require('../lib/sku-rules');
 
 const router = express.Router();
 
@@ -338,21 +342,52 @@ router.post('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   // somebody who can fills it in.
   if (!canSeeCosts(req)) b.buy_price = 0;
   try {
-    const r = tdb().prepare(`INSERT INTO ingredients
-      (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,
-       cost_per_unit,buy_price,supplier,allergens,notes,accounting_category,item_kind,free_by_design)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(b.name_en, b.name_cn, b.sku, b.category, b.unit, b.buy_unit, b.buy_pack_size,
-           b.pack_contents_qty, b.pack_contents_unit,
-           costFor(b, 0), b.buy_price, b.supplier, b.allergens, b.notes,
-           b.accounting_category, b.item_kind, b.free_by_design);
-    // A starting price is a price. The kitchen create logs one the same way, so
-    // a material added from either door has the same first history row.
-    if (b.buy_price > 0) {
-      tdb().prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
-        .run(r.lastInsertRowid, b.buy_price, b.buy_unit, 'manual', (req.user && req.user.username) || 'backend');
-    }
-    res.json({ success: true, id: r.lastInsertRowid });
+    // ── The automatic SKU (Ash, 2026-09-04) ─────────────────────────────────
+    //
+    // ONLY WHEN THE FIELD IS BLANK. A typed code always wins: a supplier's own
+    // article number, a code carried over from a spreadsheet, or a scheme the
+    // tenant runs by hand are all reasons to override, and the form flags a
+    // mismatch rather than refusing one. Existing materials are never
+    // renumbered — this runs on create, and on nothing else.
+    //
+    // CLAIMED INSIDE THE TRANSACTION BELOW, not before it. The counter advance
+    // and the row insert have to commit together: claim outside and a save that
+    // fails its UNIQUE check (or throws for any other reason) would leave a
+    // number burned and a gap in the series that nobody can explain.
+    //
+    // A refusal is not an error. peek/claim answer {ok:false} when the tenant
+    // has switched numbering off or no rule matches, and the material is then
+    // saved with the blank SKU it arrived with — exactly as it was before this
+    // existed.
+    let autoSku = null;
+    const write = tdb().transaction(() => {
+      if (!b.sku) {
+        const claimed = skuRules.claim(tdb(), 'material', {
+          category: b.item_kind, subcategory: b.category, name: b.name_en,
+        });
+        if (claimed.ok) { b.sku = claimed.sku; autoSku = claimed.sku; }
+      }
+      const r = tdb().prepare(`INSERT INTO ingredients
+        (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,
+         cost_per_unit,buy_price,supplier,allergens,notes,accounting_category,item_kind,free_by_design)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(b.name_en, b.name_cn, b.sku, b.category, b.unit, b.buy_unit, b.buy_pack_size,
+             b.pack_contents_qty, b.pack_contents_unit,
+             costFor(b, 0), b.buy_price, b.supplier, b.allergens, b.notes,
+             b.accounting_category, b.item_kind, b.free_by_design);
+      // A starting price is a price. The kitchen create logs one the same way, so
+      // a material added from either door has the same first history row.
+      if (b.buy_price > 0) {
+        tdb().prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)')
+          .run(r.lastInsertRowid, b.buy_price, b.buy_unit, 'manual', (req.user && req.user.username) || 'backend');
+      }
+      return r;
+    });
+    const r = write();
+    // `sku` goes back so the form can show the code the server actually issued
+    // — the preview it displayed was a peek, and a concurrent save may have
+    // taken that number in between.
+    res.json({ success: true, id: r.lastInsertRowid, sku: b.sku || null, sku_auto: autoSku });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(400).json({ success: false, ...skuClash(b.sku, null) });
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });

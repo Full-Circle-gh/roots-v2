@@ -414,6 +414,7 @@ app.use(require('./routes/retail-product-build')); // Product build lines — St
 app.use(require('./routes/finance-summary')); // Finance Summary (§36) — Tacet's own staircase, on tdb() from the first commit. NOT routes/finance.js, which is the kitchen Finance API and is blocked-and-left-to-die under §36
 app.use(require('./routes/finance-transactions')); // Finance Transactions (§36 v4.121) — the ledger of typed rows; reads income_entries + expense_entries, never the order record
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)
+app.use(require('./routes/sku')); // Settings → SKU codes: the tenant's automatic-numbering rules (lib/sku-format.js + lib/sku-rules.js)
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost
 app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
