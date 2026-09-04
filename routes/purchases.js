@@ -204,9 +204,9 @@ function appliedReceiptStore(h, po) {
 // own shape (a bare code the screen translates), matching each file's existing
 // error convention rather than inventing a third.
 const RECEIPT_REASON_ERRORS = {
-  reason_required:       'A short line needs a reason · 短缺行需要填写原因',
+  reason_required:       'A short line needs a reason · 短少行需要填写原因',
   reason_invalid:        'Unknown reason code · 收货原因无效',
-  reason_not_applicable: 'A reason belongs only on a short line · 仅短缺行可填写原因',
+  reason_not_applicable: 'A reason belongs only on a short line · 仅短少行可填写原因',
 };
 
 // The return refusals, in the same shape and for the same callers. The retail

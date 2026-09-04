@@ -1,0 +1,166 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Receive flow"
+    },
+    {
+      "id": "page-2",
+      "name": "Row directions"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Transit.dc.html",
+      "page": "page-1",
+      "title": "1 · On the way",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Main.dc.html",
+      "page": "page-1",
+      "title": "2 · Receiving list (EN)",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "MainZH.dc.html",
+      "page": "page-1",
+      "title": "2 · Receiving list (中文)",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Count.dc.html",
+      "page": "page-1",
+      "title": "3 · Counting a line",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Resume.dc.html",
+      "page": "page-1",
+      "title": "4 · Back after a break",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Confirm.dc.html",
+      "page": "page-1",
+      "title": "5 · Confirm receipt",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Received.dc.html",
+      "page": "page-1",
+      "title": "6 · Received, with gaps",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "ReceivedZH.dc.html",
+      "page": "page-1",
+      "title": "6 · Received, with gaps (中文)",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Empty.dc.html",
+      "page": "page-1",
+      "title": "7 · Nothing to receive",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "RowStates.dc.html",
+      "page": "page-2",
+      "title": "One line, four states",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 1000
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-noglobal",
+      "page": "page-1",
+      "x": 470,
+      "y": -280,
+      "w": 860,
+      "text": "Every line is confirmed, and there is still no wall of taps\n\nThe constraint held: no global accept, anywhere. What makes fourteen confirmations bearable is that thirteen of them are one tap on a tick that means \"this many arrived\" — the number is already on the row, so agreeing with it costs nothing. Only a line that disagrees costs a keypad.\n\nThe alternative considered and rejected was a \"mark the rest as sent\" action once most lines were done. It is a global accept wearing a smaller hat: the moment it exists, the fast path through the screen is to count two boxes and wave the other twelve through, and the shelf and the record start to drift on exactly the days the store is busiest.\n\nThe inactive Confirm receipt carries \"4 of 14 lines counted\" and nothing else — the same remainder pattern as the picker's allocation sheet. No error, no red, no nagging. It simply is not finished yet, and the sentence says how far off it is."
+    },
+    {
+      "id": "note-dusk",
+      "page": "page-1",
+      "x": 0,
+      "y": -280,
+      "w": 400,
+      "text": "The one Dusk spend in receiving\n\nIn transit is the only state on any of these screens that neither building can see. The goods left the warehouse and have not reached the shelf; they exist in no room, and only Tacet is holding the fact.\n\nEverything else in receiving is her own work — counting, correcting, confirming — so every other screen is Ink and cream. This card is the exception and stays the exception.\n\nNo button here. The box is not in the room, and a disabled \"start receiving\" would be a control whose only message is that it does not work yet."
+    },
+    {
+      "id": "note-noblame",
+      "page": "page-1",
+      "x": 1410,
+      "y": -280,
+      "w": 860,
+      "text": "A short box is a fact she reports, not a mistake she confesses\n\nThe keypad asks \"How many arrived?\" — not \"is this right?\", not \"confirm the quantity\". She is describing a box, not defending herself.\n\nNo reason field. No \"are you sure\". No confirmation step on the discrepancy. \"Recorded as it is. Nothing else needed.\" is the whole of it, and the closing screen repeats the shape: \"Nothing else is needed from you.\"\n\nOne shortcut back: All 30 arrived returns the line to the sent figure in a tap, for a miscount she wants to undo. It reads as a correction of her own typing, not a retraction of a claim.\n\nThe interruption case is the picker's resume card unchanged, and it earns its place harder here — a customer walking in mid-count is more likely than anything that stops a picker. Cream, not Dusk: the progress is hers, and nothing was done for her while she was away."
+    },
+    {
+      "id": "note-twogaps",
+      "page": "page-1",
+      "x": 0,
+      "y": 1900,
+      "w": 860,
+      "text": "Two gaps, and they appear together only at the end\n\nGap A is the warehouse: Tianhe asked for 18 chilli oil, only 14 were found, and 14 is what the van carried. Gap B is the road: 14 left, 10 arrived. The receiving row showed gap B alone, which left her 8 short of her order with nothing on screen saying so — and that is the number that decides whether she reorders today.\n\nThe Received screen now carries all three quantities on one line: asked 18 · sent 14 · counted 10. The counted figure leads at 34px because it is what the store now holds; asked and sent sit behind it in Graphite, in the order the goods moved, so no subtraction is left to her.\n\nThe heading changed with them. \"What differed\" meant differed FROM WHAT WAS SENT — so a line the warehouse cut before loading could arrive exactly as sent and never appear at all. Frozen bao is that line: asked 20, sent 16, counted 16, four short of the order and previously invisible on every screen in this flow.\n\nNeither gap appears before the count. Knowing which lines are short would bias the count, and the count is the entire value of the screen. The in-transit warning that named a number without naming the items is gone for the same reason, plus one of its own: on that screen she can do nothing either way."
+    },
+    {
+      "id": "note-yardsticks",
+      "page": "page-1",
+      "x": 940,
+      "y": 1900,
+      "w": 860,
+      "text": "Two counts, two yardsticks, and the headings now say which\n\nConfirm says 2 lines differ and Received then says 3, one screen later. Both are right, and the number is not what changed — the question is. Confirm can only measure her count against the VAN, because that is all that exists before she confirms. Received measures it against the ORDER, which brings in the lines the warehouse cut before loading.\n\nSo each heading names its own yardstick: \"Against what the van carried, 2 lines differ\" and \"Against what you asked for\". A reader who blinks at 2 becoming 3 now has the answer in the same glance that raised the question, and neither screen had to be restructured to give it.\n\nThe Chinese carries the same widening rather than a translation of the old English. 与申请对比 names 申请 outright — a word for discrepancy would have kept the narrower meaning that hid Frozen bao."
+    },
+    {
+      "id": "note-zh",
+      "page": "page-1",
+      "x": 1880,
+      "y": -280,
+      "w": 400,
+      "text": "The Chinese Received screen\n\nIt was blocked, deliberately, until the pairs existed. 申请, 实收 and 与申请对比 had no locked source and were not live anywhere in the product, so drawing it would have meant composing Chinese — which Rule 4 forbids. Ash authorised the translation and the screen follows the same day.\n\n申请 matches the already-locked 补货申请, so one word carries from the request through to the receipt. 实收 is the standard term for the quantity actually received and shares 收 with 多收.\n\n实收 is the OUTCOME quantity and never collapses onto 点数 or 项已点: 收 is the outcome, 点 is the act of counting. 点数 stays the control that opens the keypad; 项已点 stays the progress tally while she works."
+    },
+    {
+      "id": "note-count-leads",
+      "page": "page-2",
+      "x": 0,
+      "y": -280,
+      "w": 400,
+      "text": "Short and over are the same event\n\nIdentical treatment: same cream fill, same Sage edge, same quiet tick, count and gap in full Ink. A gap is a gap whichever way it runs, and finding two extra is no more an error than finding four fewer. Giving over its own colour would make one direction a fault and the other an accident.\n\nWhat she counted leads at 34px. The sent figure survives only as a Graphite caption, because the count is what becomes the shelf — if the record ever prefers the warehouse's number to hers, the shelf and the record part company and the store is the one that finds out.\n\nBoth controls leave a resolved row, generalising the picker's tick decision: on a settled line the only Ink left is the gap, so the gap wins the glance."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

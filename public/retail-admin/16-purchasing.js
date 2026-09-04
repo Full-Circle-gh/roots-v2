@@ -2003,7 +2003,7 @@
       const r = await api('/api/retail-admin/purchases/' + _po.id + '/receive', { method: 'PUT', body: { receipts } });
       const bits = [];
       if (r.stock_lines_adjusted) bits.push(T(`stock updated ×${r.stock_lines_adjusted}`, `库存已更新 ×${r.stock_lines_adjusted}`));
-      if (r.missing_lines) bits.push(T(`${r.missing_lines} short`, `${r.missing_lines} 短缺`));
+      if (r.missing_lines) bits.push(T(`${r.missing_lines} short`, `${r.missing_lines} 短少`));
       if (r.damaged_lines) bits.push(T(`${r.damaged_lines} damaged`, `${r.damaged_lines} 破损`));
       if (r.returned_lines) bits.push(T(`${r.returned_lines} returned`, `${r.returned_lines} 退货`));
       toast(T('Received ✓', '已收货 ✓') + (bits.length ? ' — ' + bits.join(' · ') : ''), 'ok', 4000);
@@ -2081,7 +2081,7 @@
   // Cancel order). They report the same fact and the document says they must
   // not diverge, so they share this function rather than each writing their own.
   //
-  // Per-product lines reuse the `${n} short · ${n} 短缺` pair already live in
+  // Per-product lines reuse the `${n} short · ${n} 短少` pair already live in
   // this file's receive toast; it is deliberately not re-minted.
   // askCustom is the blessed path for a body that is more than one message —
   // building .tdlg-scrim markup by hand skips injectStyle() and paints
@@ -2115,7 +2115,7 @@
       const nm = (b.name_en || b.name_cn)
         ? nameLabel({ name_en: b.name_en, name_cn: b.name_cn })
         : esc('#' + b.product_id);
-      return `<div class="lc-row"><span class="g">${nm}</span><span class="pu2-num">${esc(T(`${b.short} short`, `${b.short} 短缺`))}</span></div>`;
+      return `<div class="lc-row"><span class="g">${nm}</span><span class="pu2-num">${esc(T(`${b.short} short`, `${b.short} 短少`))}</span></div>`;
     }).join('');
     const body = `
       <h3 class="tdlg-title">${esc(words.title)}</h3>

@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    .num{font-variant-numeric:tabular-nums;}
+
+    /* THE LEDGER ROW. The total is locked to one x-position so the quantities
+       form a column you read straight down, not a value you hunt for per card.
+       76px tall — set by the 56px controls, not by the type. */
+    .row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);}
+    .row.done{background:var(--raised);box-shadow:inset 4px 0 0 var(--sage);}
+    .qty{width:62px;flex:none;text-align:right;font-size:34px;font-weight:700;line-height:1.05;
+         letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
+    .mid{flex:1;min-width:0;}
+    .nm{font-size:14px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cap{font-size:13px;color:var(--graphite);font-variant-numeric:tabular-nums;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+    /* Short stays a visible, labelled control. A long-press would buy one more
+       line a screen and cost a new hire the ability to find it at all. */
+    .short{width:48px;height:56px;flex:none;border-radius:12px;background:var(--surface);
+           border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+           font-size:13px;font-weight:500;color:var(--graphite);}
+    .tick{width:52px;height:56px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+    .todo{background:var(--raised);border:1px solid var(--line);}
+    .hr{height:1px;background:var(--line);}
+    @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
+    .dot{animation:breathe 2.4s ease-in-out infinite;}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column">
+
+  <!-- The OS status bar owns this strip. Nothing is painted into it. -->
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 12px;flex:none">
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Pick list</div>
+    <!-- The ONE Dusk element: merging several stores' requests into a single walk is
+         Tacet acting, not the picker. The run number rides the same line so the
+         header costs three rows of type, not four. -->
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <span class="dot" style="width:7px;height:7px;border-radius:999px;background:var(--dusk);flex:none"></span>
+      <span style="font-size:13px;color:var(--dusk-ink);flex:1;min-width:0">Combined from 2 store requests</span>
+      <span class="num" style="font-size:13px;color:var(--graphite);flex:none">RS-260902-004</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;padding:0 16px 12px;flex:none">
+    <div style="flex:1;height:44px;border-radius:999px;background:var(--ink);border:1px solid var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:500">
+      All stores <span class="num" style="opacity:.7">14</span>
+    </div>
+    <div style="flex:1;height:44px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--graphite);display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px">
+      Tianhe <span class="num">8</span>
+    </div>
+    <div style="flex:1;height:44px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--graphite);display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px">
+      Yuexiu <span class="num">9</span>
+    </div>
+  </div>
+
+  <!-- Eight lines on a screen against four, and the short line still sits
+       between two completed ones: the only settled row that has not gone quiet. -->
+  <div style="flex:1;overflow:hidden">
+
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">65</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">Frozen dumplings 500g</div>
+        <div class="cap">Tianhe 40 · Yuexiu 25</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <!-- Short: same cream, same Sage edge, same quiet tick — it is done. Only
+         the quantity and the shortfall keep full Ink, and the split is what HE
+         assigned, not a default. -->
+    <div class="row done">
+      <div class="qty">14</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">Chilli oil 250ml</div>
+        <div class="cap"><span style="color:var(--ink);font-weight:600">4 short</span> · Tianhe 8 · Yuexiu 6</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row done">
+      <div class="qty" style="color:var(--graphite)">24</div>
+      <div class="mid">
+        <div class="nm" style="color:var(--graphite)">Pork &amp; chive buns 6pk</div>
+        <div class="cap">Tianhe 12 · Yuexiu 12</div>
+      </div>
+      <div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">30</div>
+      <div class="mid">
+        <div class="nm">Sesame paste 400g</div>
+        <div class="cap">Tianhe 18 · Yuexiu 12</div>
+      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">16</div>
+      <div class="mid">
+        <div class="nm">Frozen bao 12pk</div>
+        <div class="cap">Tianhe 16</div>
+      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">22</div>
+      <div class="mid">
+        <div class="nm">Black vinegar 500ml</div>
+        <div class="cap">Tianhe 12 · Yuexiu 10</div>
+      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="row">
+      <div class="qty">9</div>
+      <div class="mid">
+        <div class="nm">Soy paste 300g</div>
+        <div class="cap">Tianhe 5 · Yuexiu 4</div>
+      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="hr"></div>
+
+    <!-- The eighth clips at the frame edge, which is what tells you the list runs on. -->
+    <div class="row">
+      <div class="qty">18</div>
+      <div class="mid">
+        <div class="nm">Rice noodles 400g</div>
+        <div class="cap">Tianhe 10 · Yuexiu 8</div>
+      </div>
+      <div class="short">Short</div>
+      <div class="tick todo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+
+  </div>
+
+  <div style="flex:none;background:var(--surface);border-top:1px solid var(--line)">
+    <div style="height:3px;background:var(--line);display:flex">
+      <div style="width:21.4%;background:var(--sage)"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px 18px">
+      <div style="flex:1;min-width:0">
+        <div class="num" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">3 <span style="font-weight:400;font-size:15px;color:var(--graphite)">of</span> 14</div>
+        <div style="font-size:13px;color:var(--graphite);margin-top:-2px">lines picked</div>
+      </div>
+      <div style="height:52px;padding:0 20px;border-radius:12px;background:var(--surface);border:1px solid var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;flex:none;font-size:15px;font-weight:500">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
+        Scan
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

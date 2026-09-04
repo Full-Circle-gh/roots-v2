@@ -143,6 +143,26 @@
     ['room_temp', () => T('Room temperature', '常温')],
   ];
 
+  const SHELF_LIFE_UNITS = [
+    ['days',   () => T('Days', '天')],
+    ['months', () => T('Months', '个月')],
+    ['years',  () => T('Years', '年')],
+  ];
+  // Reads a stored "6 months" / "30 days" string back into {n, unit} for the
+  // number+unit controls. Anything that doesn't match that shape (older free
+  // text, e.g. "best before date on pack") is left unparsed — ok:false — so
+  // the raw text can be carried through untouched until the operator actually
+  // edits shelf life themselves. See readShelfLife() below.
+  function parseShelfLife(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    const m = /^(\d+(?:\.\d+)?)\s*(day|days|month|months|year|years)$/i.exec(s);
+    if (!m) return { n: '', unit: 'months', ok: false };
+    const n = m[1];
+    const u = m[2].toLowerCase();
+    const unit = u.startsWith('day') ? 'days' : u.startsWith('month') ? 'months' : 'years';
+    return { n, unit, ok: true };
+  }
+
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
   let _rows = [];
@@ -161,6 +181,10 @@
   let _subtab = 'details'; // details | ingredients | steps | cost
   let _pickTimer = null;
   let _pickResults = [];
+  // Did the operator actually touch the shelf-life number/unit controls this
+  // time the record is open? Reset on load/reload — see setRecord() and
+  // readShelfLife().
+  let _shelfTouched = false;
 
   const listRoot = () => document.getElementById('rcp-root');
   const recRoot  = () => document.getElementById('rcp-rec-body');
@@ -432,6 +456,7 @@
     _lines = (row.ingredients || []).map(l => ({ ...l }));
     _steps = (row.steps || []).map(s => ({ ...s }));
     if (!keepTab) _subtab = 'details';
+    _shelfTouched = false;
   }
 
   function openTakeover() {
@@ -869,6 +894,17 @@
     const o = opts.map(([v, l]) => `<option value="${esc(v)}"${String(val == null ? '' : val) === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('');
     return `<select class="rcp-input" id="rcp-f-${key}" onchange="rcpDirty();${extra || ''}">${o}</select>`;
   }
+  function shelfLifeField(raw) {
+    const sl = parseShelfLife(raw);
+    const opts = SHELF_LIFE_UNITS.map(([v, plural]) => `<option value="${esc(v)}"${sl.unit === v ? ' selected' : ''}>${esc(plural())}</option>`).join('');
+    return `<div class="rcp-shelf-life">`
+      + `<input class="rcp-input" id="rcp-f-shelf_life_n" type="number" min="0" step="1" value="${esc(sl.n)}"`
+      + ` oninput="rcpDirty();rcpShelfTouch()">`
+      + `<select class="rcp-input" id="rcp-f-shelf_life_u" onchange="rcpDirty();rcpShelfTouch()">${opts}</select>`
+      + `</div>`
+      + `<input type="hidden" id="rcp-f-shelf_life_raw" value="${esc(raw || '')}">`;
+  }
+  window.rcpShelfTouch = function () { _shelfTouched = true; };
 
   // Everything in the sticky bar EXCEPT the inputs — extracted from
   // paintRecord() so an autosave can refresh it (a renamed recipe, a material
@@ -987,7 +1023,7 @@
           ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
                    T('How much one serving weighs. With this filled in, the serving count works itself out.',
                      '每份的克数。填写后,份数会自动算出。'))}
-          ${field(T('Shelf life', '保质期'), input('shelf_life', m.shelf_life, 'maxlength="60"'))}
+          ${field(T('Shelf life', '保质期'), shelfLifeField(m.shelf_life))}
         </div>
       </div>
       <div class="rcp-card rcp-blk">
@@ -1949,6 +1985,24 @@
     const el = document.getElementById('rcp-f-' + key);
     return el ? el.value : (_rec ? _rec[key] : undefined);
   }
+  // Composes the number+unit controls back into a "6 months" string. If the
+  // number is blank and the operator never touched these controls, the
+  // record's original shelf_life text is carried through unchanged — this is
+  // how older free-text values (that don't parse as "N unit") survive a save
+  // triggered by editing some other field.
+  function readShelfLife() {
+    const n = val('shelf_life_n');
+    if (n === '' || n == null) {
+      return _shelfTouched ? '' : String(val('shelf_life_raw') || '');
+    }
+    const num = Number(n);
+    const unit = val('shelf_life_u') || 'months';
+    // Always composed with English unit words, whatever the UI language —
+    // this is what parseShelfLife() reads back on the next load, so a value
+    // saved while the UI is set to Chinese must still round-trip.
+    const word = unit === 'days' ? 'day' : unit === 'years' ? 'year' : 'month';
+    return `${num} ${word}${num === 1 ? '' : 's'}`;
+  }
   function readDetails() {
     return {
       name_en: String(val('name_en') || '').trim(),
@@ -1964,7 +2018,7 @@
       // these are what it falls back to when a derivation is refused.
       batch_size_auto: autoBatch() ? 1 : 0,
       servings_auto: autoServings() ? 1 : 0,
-      shelf_life: val('shelf_life') || '',
+      shelf_life: readShelfLife(),
       storage: val('storage') || '',
       notes: val('notes') || '',
     };

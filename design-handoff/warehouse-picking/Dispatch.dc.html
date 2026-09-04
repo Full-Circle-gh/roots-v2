@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+      --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5; --dusk-ink:#524C8F;
+    }
+    body{margin:0;font-family:'Inter','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+         font-size:15px;line-height:1.6;color:var(--ink);-webkit-font-smoothing:antialiased;}
+    *{box-sizing:border-box;}
+    a{color:var(--dusk-ink);} a:hover{color:var(--dusk);}
+    .num{font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div style="width:390px;height:844px;background:var(--paper);position:relative;overflow:hidden;display:flex;flex-direction:column">
+
+  <div style="height:44px;flex:none"></div>
+
+  <div style="padding:8px 16px 16px;flex:none">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--graphite);font-size:15px;margin-bottom:10px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      Pick list
+    </div>
+    <div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25">Ready to dispatch</div>
+    <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">RS-260902-004 · all 14 lines picked</div>
+  </div>
+
+  <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:8px">
+
+    <!-- Per store, because that is how the boxes are stacked on the van. -->
+    <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:17px;font-weight:600;line-height:1.3">Tianhe</div>
+          <div class="num" style="font-size:13px;color:var(--graphite)">8 lines</div>
+        </div>
+        <div style="text-align:right">
+          <div class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-0.02em">142</div>
+          <div style="font-size:13px;color:var(--graphite);margin-top:2px">units</div>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--line)"></div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:17px;font-weight:600;line-height:1.3">Yuexiu</div>
+          <div class="num" style="font-size:13px;color:var(--graphite)">9 lines</div>
+        </div>
+        <div style="text-align:right">
+          <div class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-0.02em">118</div>
+          <div style="font-size:13px;color:var(--graphite);margin-top:2px">units</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--raised);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>
+      <div style="font-size:13px;color:var(--graphite);line-height:1.45">Stock leaves the warehouse the moment you dispatch. The van run is 1–2 hours.</div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <!-- Short lines are stated, never blocked on. It stops the eye by SITTING IN
+         THE WAY — last thing before the button, on Paper against the cream and
+         white above it, with the count at full Ink. No tint does any work here. -->
+    <div style="background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111A2B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.5v.01"/></svg>
+      <div style="min-width:0">
+        <div style="font-size:15px;font-weight:600;line-height:1.35">2 lines are going out short</div>
+        <div class="num" style="font-size:13px;color:var(--graphite);margin-top:2px">Chilli oil 250ml −4 · Black vinegar 500ml −6</div>
+        <div style="font-size:13px;color:var(--graphite);margin-top:6px">Each store sees the shortfall when it receives.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- The weighty bit. A press-and-hold, not a tap: a cold thumb brushing the
+       screen cannot move stock, and a hold works in gloves where a slider does not. -->
+  <div style="flex:none;padding:16px 16px 24px">
+    <div style="font-size:13px;color:var(--graphite);text-align:center;margin-bottom:10px">Press and hold to confirm</div>
+    <div style="position:relative;width:100%;height:72px;border-radius:14px;overflow:hidden;border:1px solid var(--ink);background:var(--surface)">
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;letter-spacing:-0.01em;color:var(--ink)">
+        Hold to dispatch · 260 units
+      </div>
+      <div style="position:absolute;left:0;top:0;bottom:0;width:56%;background:var(--ink);overflow:hidden">
+        <div style="width:356px;height:100%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;letter-spacing:-0.01em;color:var(--paper)">
+          Hold to dispatch · 260 units
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
