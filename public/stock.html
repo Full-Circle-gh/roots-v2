@@ -1125,7 +1125,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function selectStore(id) {
     // Which transfers are inbound, and which run is waiting, both depend on
     // which shelf is on screen.
-    setTimeout(function () { rcLoad(); pkLoad(); }, 0);
+    setTimeout(function () { rcLoad(); pkLoad(); kqLoad(); }, 0);
     state.storeId = id;
     localStorage.setItem('qs_store', String(id));
     var s = state.stores.filter(function (x) { return x.id === id; })[0];
@@ -2773,6 +2773,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     count: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M3 11h18"/><path d="M9 7V4h6v3"/></svg>',
     pick:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
     recv:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v12H3V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
+    queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/></svg>',
     kit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 6V3M12 6V3M15 6V3"/><path d="M8 9h8"/></svg>',
   };
 
@@ -2806,6 +2807,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var picks = pkLines();
     var toPull = picks.filter(function (L) { return !L.done; }).length;
     var inbound = (rc.list || []).length;
+    var toMake = (kq.list || []).length;
     var pickCount = !picks.length ? '' : t(toPull + ' of ' + picks.length + ' lines still to pull',
                                            '还有 ' + toPull + '/' + picks.length + ' 项待拣');
     var recvCount = !inbound ? '' : (inbound === 1
@@ -2832,6 +2834,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // about somebody else's work sitting on a door marked with a job.
         homeTileHtml('kit', t('Ask the kitchen', '向厨房下单'),
           t('Have something made', '请厨房制作'), '', 'data-akopen') +
+        // The other end of the same request, for the people who make it. The
+        // count IS theirs here — unlike the tile above, this is their own queue.
+        homeTileHtml('queue', t('Kitchen queue', '厨房制作队列'),
+          toMake ? t('Make what was asked for', '制作已申请的商品')
+                 : t('Nothing to make', '暂无待制作'),
+          toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home') +
       '</div><div style="flex:1"></div></div>';
   }
 
@@ -2852,6 +2860,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (r) r.onclick = rcEnter;
     var k = m.querySelector('[data-akopen]');
     if (k) k.onclick = akEnter;
+    var kqb = m.querySelector('[data-kqopen-home]');
+    if (kqb) kqb.onclick = kqEnter;
   }
 
   function homeGoCount() {
@@ -3101,6 +3111,182 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (q) {
       q.oninput = function () { ak.q = q.value; akRender(); var f = $('#akQ'); if (f) { f.focus(); } };
     }
+  }
+
+
+  /* ══ THE KITCHEN QUEUE ═════════════════════════════════════════════════════
+     What was asked for, seen by the people who make it — in Tacet, on the same
+     launcher as every other stock job.
+
+     It used to live in public/kitchen.html on the kitchen host: a separate app,
+     a separate login, and a separate permission system, so a request raised in
+     Tacet landed somewhere Tacet could not show. Ash: the kitchen app is dead
+     and nothing more goes into it. This is its inbox, rebuilt here.
+
+     WHAT THE KITCHEN CAN DO, AND WHAT IT CANNOT. It marks a request received
+     (we have seen it) and then prepared (it is made), which is the whole
+     lifecycle for this direction — there is no `delivered` for a kitchen
+     request, because nothing travels. It may correct a line's quantity, because
+     the person making it is the one who knows how many actually came out.
+
+     NO STOCK MOVES WHEN IT IS MARKED PREPARED, and that is §39 rather than an
+     omission: the request asked the kitchen to MAKE something, and stock changes
+     when a production batch is logged against it. That wiring is its own brief.
+     The screen says so rather than letting anyone infer that ticking this fills
+     a shelf. */
+
+  var kq = {
+    list: null,     // requests addressed to the kitchen
+    tab: 'active',  // active | history
+    order: null,    // the open one, with lines
+    busy: false, err: '',
+  };
+
+  function kqEnter() {
+    state.view = 'kitchenq'; kq.order = null; kq.err = '';
+    kqRender(); kqLoad();
+  }
+  function kqExit() { kq.order = null; kq.err = ''; homeBack(); }
+
+  function kqLoad() {
+    if (rc.on === false) return Promise.resolve();
+    return rcFetch('/api/restock?to_role=kitchen&tab=' + kq.tab).then(function (j) {
+      rc.on = true;
+      kq.list = Array.isArray(j.data) ? j.data : [];
+      homeLand();
+      if (state.view === 'home') homeRender();
+      else if (state.view === 'kitchenq') kqRender();
+    }).catch(function (e) {
+      if (e.message === 'norealm') { kq.list = []; return; }
+      kq.err = e.message; if (state.view === 'kitchenq') kqRender();
+    });
+  }
+
+  function kqOpen(id) {
+    kq.busy = true; kq.err = ''; kqRender();
+    rcFetch('/api/restock/' + id).then(function (j) {
+      kq.order = j.data; kq.busy = false; kqRender();
+    }).catch(function (e) {
+      kq.busy = false; kq.err = e.message === 'norealm' ? '' : e.message; kqRender();
+    });
+  }
+
+  // received → we have seen it. prepared → it is made, and that closes it.
+  function kqAdvance(to) {
+    if (kq.busy || !kq.order) return;
+    kq.busy = true; kq.err = ''; kqRender();
+    rcFetch('/api/restock/' + kq.order.id + '/status', { method: 'PUT', body: { status: to } })
+      .then(function () {
+        kq.busy = false; kq.order.status = to;
+        if (to === 'prepared') { kq.order = null; kqLoad(); }
+        kqRender();
+      })
+      .catch(function (e) {
+        kq.busy = false;
+        kq.err = e.message === 'norealm'
+          ? t('This account cannot work the kitchen queue.', '此账号无法处理厨房队列。')
+          : (e.message || t('That did not go through. Nothing has changed — try again.', '没有成功。数据没有变化 — 请重试。'));
+        kqRender();
+      });
+  }
+
+  function kqPurpose(o) {
+    return o.purpose === 'order' ? t('For an order', '用于发货')
+         : o.purpose === 'shelf' ? t('For the shelf', '货架补货') : '';
+  }
+  function kqItemName(it) {
+    var n = lang === 'cn' ? (it.product_cn || it.product_name) : (it.product_name || it.product_cn);
+    return n || ('#' + it.id);
+  }
+
+  function kqListHtml() {
+    var rows = kq.list || [];
+    var seg = function (k, label) {
+      return '<button class="pk-chip' + (kq.tab === k ? ' on' : '') + '" data-kqtab="' + k + '">' + label + '</button>';
+    };
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-kqback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Kitchen queue', '厨房制作队列') + '</div>' +
+        '<div class="rc-sub">' + t('What has been asked for', '待制作的申请') + '</div>' +
+      '</div>' +
+      (kq.err ? '<div class="rc-err">' + esc(kq.err) + '</div>' : '') +
+      '<div class="pk-chips">' + seg('active', t('To make', '待制作')) + seg('history', t('Done', '已完成')) + '</div>' +
+      '<div class="rc-body">' + (
+        kq.list === null
+          ? '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div>'
+        : !rows.length
+          ? '<div class="rc-empty"><div style="font-size:20px;font-weight:600;letter-spacing:-.02em">' +
+            (kq.tab === 'active' ? t('Nothing to make', '暂无待制作') : t('Nothing yet', '暂无记录')) + '</div>' +
+            '<div style="font-size:15px;color:var(--text2);margin-top:6px">' +
+            (kq.tab === 'active' ? t('Nobody has asked for anything.', '目前没有制作申请。') : '') + '</div></div>'
+        : rows.map(function (o) {
+            var p = kqPurpose(o);
+            return '<div class="rc-hr"></div>' +
+              '<button class="rc-row" data-kqopen="' + o.id + '">' +
+              '<span class="rc-qty num">' + (o.item_count || 0) + '</span>' +
+              '<span class="rc-mid"><span class="rc-nm">' + esc(o.rs_number || ('#' + o.id)) + '</span>' +
+              '<span class="rc-cap">' + t((o.item_count || 0) + ' items', (o.item_count || 0) + ' 项') +
+              (p ? ' · ' + esc(p) : '') + ' · ' + esc(o.status) + '</span></span>' +
+              '<span class="sh-chev">' + RC_CHEV_R + '</span></button>';
+          }).join('') + '<div class="rc-hr"></div>'
+      ) + '</div></div>';
+  }
+
+  function kqDetailHtml() {
+    var o = kq.order;
+    var items = (o.items || []).filter(function (it) { return rcNum(it.qty_requested) > 0; });
+    var p = kqPurpose(o);
+    var next = o.status === 'sent' ? 'received' : o.status === 'received' ? 'prepared' : null;
+    var label = next === 'received' ? t('Start making', '开始制作')
+              : next === 'prepared' ? t('Mark as made', '标记已完成') : '';
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-kqlist>' + RC_CHEV + t('Kitchen queue', '厨房制作队列') + '</button>' +
+        '<div class="rc-h1">' + esc(o.rs_number || ('#' + o.id)) + '</div>' +
+        '<div class="rc-sub">' + t(items.length + ' items', items.length + ' 项') + (p ? ' · ' + esc(p) : '') + '</div>' +
+      '</div>' +
+      (kq.err ? '<div class="rc-err">' + esc(kq.err) + '</div>' : '') +
+      '<div class="rc-body">' + items.map(function (it) {
+        return '<div class="rc-hr"></div><div class="rc-row">' +
+          '<span class="rc-qty num">' + rcNum(it.qty_requested) + '</span>' +
+          '<span class="rc-mid"><span class="rc-nm">' + esc(kqItemName(it)) + '</span>' +
+          '<span class="rc-cap">' + esc(it.sku || '') + '</span></span></div>';
+      }).join('') + '<div class="rc-hr"></div></div>' +
+      // Said out loud, because a tick that closes a request looks like a tick
+      // that fills a shelf, and it is not one.
+      '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+        t('Marking this made closes the request. Stock changes when the batch is logged, not here.',
+          '标记完成即关闭该申请。库存在登记生产批次时才会变动。') + '</div></div>' +
+      '<div class="rc-foot" style="background:transparent;border:none">' +
+        '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        (next
+          ? '<button class="rc-big"' + (kq.busy ? ' disabled' : ' data-kqnext="' + next + '"') + '>' +
+              (kq.busy ? t('Saving…', '保存中…') : label) + '</button>'
+          : '<button class="rc-big" data-kqlist>' + t('Done', '完成') + '</button>') +
+        '</div></div></div>';
+  }
+
+  function kqRender() {
+    if (state.view !== 'kitchenq') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = kq.order ? kqDetailHtml() : kqListHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-kqback]', function (b) { b.onclick = kqExit; });
+    each('[data-kqlist]', function (b) { b.onclick = function () { kq.order = null; kqRender(); }; });
+    each('[data-kqtab]', function (b) {
+      b.onclick = function () { kq.tab = b.getAttribute('data-kqtab'); kq.list = null; kqRender(); kqLoad(); };
+    });
+    each('[data-kqopen]', function (b) {
+      b.onclick = function () { kqOpen(parseInt(b.getAttribute('data-kqopen'), 10)); };
+    });
+    each('[data-kqnext]', function (b) {
+      b.onclick = function () { kqAdvance(b.getAttribute('data-kqnext')); };
+    });
   }
 
   boot();
