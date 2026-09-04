@@ -13320,6 +13320,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-f.span2 { grid-column: 1 / -1; }
   #tab-recipes-record .rcp-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
   #tab-recipes-record .rcp-f .hint { font-size: 12px; color: var(--td-text2); margin-top: 5px; }
+  #tab-recipes-record .rcp-shelf-life { display: flex; gap: 8px; }
+  #tab-recipes-record .rcp-shelf-life .rcp-input:first-child { flex: 1 1 0; min-width: 0; }
+  #tab-recipes-record .rcp-shelf-life select.rcp-input { flex: 1 1 0; min-width: 0; }
 
   /* ── ingredient / step lines ── */
   #tab-recipes-record .rcp-lines { display: flex; flex-direction: column; }
