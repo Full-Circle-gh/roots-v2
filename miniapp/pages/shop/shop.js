@@ -100,9 +100,13 @@ function pickBadge(tags) {
 const LIST_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col'];
 const VALID_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col', 'gallery', 'grid'];
 
+// Order mirrors the website's shop switcher (SL_VIEWS in public/shop.html):
+// ☰ list · ⊞ grid-2col · ≡ list-compact · ⊟ grid-3col. Grid-2col is the
+// default view, so the second chip is the lit one on a first visit — exactly
+// what the website shows.
 const LAYOUT_OPTIONS = [
-  { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
   { key: 'list',         icon: '☰',  en: 'List with sidebar',  cn: '列表（侧栏）' },
+  { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
   { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
   { key: 'grid-3col',    icon: '⊟',  en: 'Grid 3-col',          cn: '网格 3 列' },
 ];
@@ -591,6 +595,12 @@ Page({
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
         preorder,
+        // Band text for a reservable (out-but-orderable) row. The website
+        // names the promise instead of the mechanism — a meal we cook in runs
+        // says NEXT BATCH, anything else SHIPS SOON — so say the same here.
+        preText: p.is_batch_made
+          ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+          : (L === 'cn' ? '现订现发' : 'SHIPS SOON'),
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.
