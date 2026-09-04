@@ -732,9 +732,28 @@
   // recipe's — its warnings, its blocked-material sentence — never a constant.
   // Margin cannot feed back into the height it is measured from, so there is no
   // loop; the document keeps its height, and the rows keep their place.
-  let _pinTall = 0;   // the block's height at rest. Re-measured every time the
-                      // operator is back at the top, so a repaint that changes
-                      // the card (a warning appearing) cannot leave it stale.
+  // WHAT THE BLOCK WOULD BE AT REST, measured, never remembered. The condensed
+  // class comes off for exactly one synchronous layout read and goes straight
+  // back on; the browser paints only once this returns, so nothing flashes.
+  // Remembering it instead was the second flicker: a window dragged from wide
+  // to narrow rewraps the header row and the card, so the height taken down at
+  // one width was the wrong one to give back at the next, and every scroll
+  // afterwards handed back a figure that no longer matched — the rows below
+  // sat too high or too low and jumped as soon as anything re-measured.
+  // _pinTall is only a cache of THIS, cleared whenever the block can have
+  // changed shape underneath it (a resize, a repaint of the card).
+  let _pinTall = 0;
+  function tallPinHeight(sc, pin) {
+    if (_pinTall) return _pinTall;
+    if (!sc.classList.contains('is-stuck')) return (_pinTall = pin.offsetHeight);
+    sc.classList.remove('is-stuck');
+    _pinTall = pin.offsetHeight;
+    sc.classList.add('is-stuck');
+    return _pinTall;
+  }
+  // Anything that can change the block's shape invalidates the measurement
+  // rather than trying to correct it: the next scroll takes a fresh one.
+  function forgetPinHeight() { _pinTall = 0; }
   function onRecScroll() {
     const sc = document.getElementById('rcp-rec-scroll');
     const head = document.getElementById('rcp-rechead');
@@ -749,12 +768,12 @@
     const pin = document.getElementById('rcp-pin');
     const stuck = sc.classList.contains('is-stuck') ? sc.scrollTop > 4 : sc.scrollTop > 8;
     sc.classList.toggle('is-stuck', stuck);
-    // MEASURED AFTER the class, so it is the height the block actually has now
-    // — mid-transition included, which is what keeps the give-back in step with
-    // the shrink while the padding is still tweening.
+    // MEASURED AFTER the class, so both figures are the ones the block has now.
+    // Nothing tweens (see .rcp-pin in the CSS), so "now" is the whole story —
+    // there is no in-between height for the give-back to be wrong about.
     const h = (pin || head).offsetHeight;
-    if (!stuck) _pinTall = h;
-    sc.style.setProperty('--rcp-pinshrink', (stuck ? Math.max(0, _pinTall - h) : 0) + 'px');
+    const tall = pin ? tallPinHeight(sc, pin) : h;
+    sc.style.setProperty('--rcp-pinshrink', (stuck ? Math.max(0, tall - h) : 0) + 'px');
     // The ingredient list's column header parks on the pinned block's bottom
     // edge, and the block changes height as it condenses — so the offset is
     // measured here, on the same events, rather than written as a constant that
@@ -767,13 +786,11 @@
     const sc = document.getElementById('rcp-rec-scroll');
     if (!sc) return;
     sc.addEventListener('scroll', onRecScroll, { passive: true });
-    window.addEventListener('resize', onRecScroll);
-    // The condense is a transition, so the block's height is only true once it
-    // lands — measuring on the scroll that STARTED it parks the ingredient
-    // list's column header at the height the block is leaving, not the one it
-    // is arriving at, and rows show through the gap for a frame.
-    const pin = document.getElementById('rcp-pin');
-    if (pin) pin.addEventListener('transitionend', onRecScroll);
+    // A resize rewraps the header row and the card, so every height taken at
+    // the old width is void — forget it first, then re-measure at the new one.
+    // No transitionend listener any more: nothing about the block tweens, so
+    // the scroll that toggles the state is also the one that lands it.
+    window.addEventListener('resize', () => { forgetPinHeight(); onRecScroll(); });
     _scrollBound = true;
   }
 
@@ -1531,6 +1548,11 @@
     if (outputs) html += `<div class="rcp-hr"></div><div class="rcp-outputs">${outputs}</div>`;
 
     host.innerHTML = html;
+    // The card is inside the pinned block, so its height IS the block's. A
+    // warning appearing or a product row landing changes it, which voids the
+    // at-rest measurement the condense gives back from.
+    forgetPinHeight();
+    onRecScroll();
   }
 
   // Margin for one product row, via the SHARED helper (_paMargin, part 09) —
