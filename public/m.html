@@ -6036,7 +6036,21 @@ async function saveProductEdits(){
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(!p||p._id==null||state.prodBusy) return;
   const priceRaw=(document.getElementById('mPrice')||{}).value;
-  const price=Math.max(0,parseFloat(String(priceRaw).replace(/[^0-9.]/g,''))||0);
+  /* AN UNREADABLE PRICE IS NOT ZERO. This was
+     `parseFloat(stripped)||0`, so clearing the box — or leaving anything the
+     strip could not parse — saved the product at nothing and put it on sale at
+     nothing. A price typed as 0 is still honoured; a price that cannot be read
+     stops the save and says so, because the alternative is selling stock for
+     free and finding out from the orders. */
+  const priceTxt=String(priceRaw==null?'':priceRaw).replace(/[^0-9.]/g,'').trim();
+  const price=priceTxt===''?NaN:Number(priceTxt);
+  if(!Number.isFinite(price)||price<0){
+    /* A toast, not state.prodErr: prodErr paints on the products LIST and this
+       runs with the product sheet open over it, where the save's own "Saved"
+       toast is what the operator is already watching for. */
+    showToast(T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'));
+    return;
+  }
   const stores=state.prodStores||[];
   state.prodBusy=true; state.prodErr=null; render();
   try{

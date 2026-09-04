@@ -370,7 +370,31 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
       });
     }
   } else if ('physical_qty' in b) {
-    const newQty = parseInt(b.physical_qty, 10) || 0;
+    // A RECOUNT IS A NUMBER SOMEBODY TYPED, AND `|| 0` READ EVERY MISTAKE AS
+    // ZERO. An empty box, a stray letter, a pasted value with a stray character
+    // — all of them parsed to NaN and then fell to 0, which wrote "this shelf
+    // is empty" and answered success. The shelf count is the one figure in the
+    // product that decides whether a customer can buy something, so a value
+    // this route cannot read is refused rather than guessed at.
+    //
+    // Deliberately NOT accepting a negative count either: the delta path a few
+    // lines up already refuses one and says why, and a shelf holding minus
+    // forty is not a count anybody meant to record. Both refusals name the
+    // field so the operator can see which box to fix.
+    const rawQty = typeof b.physical_qty === 'string' ? b.physical_qty.trim() : b.physical_qty;
+    const newQty = (rawQty === '' || rawQty === null || rawQty === undefined) ? NaN : Number(rawQty);
+    if (!Number.isFinite(newQty) || !Number.isInteger(newQty)) {
+      return res.status(400).json({
+        success: false, error: 'physical_qty_invalid',
+        message: 'Enter the number of units on the shelf — a whole number, 0 or more.',
+      });
+    }
+    if (newQty < 0) {
+      return res.status(400).json({
+        success: false, error: 'physical_qty_negative',
+        message: 'A shelf count cannot be less than zero. Enter what is there, or 0 if it is empty.',
+      });
+    }
     out.adjust = inventory.adjustStock({
       storeId, productId, newPhysicalQty: newQty,
       // actor_user_id is just an audit integer (no FK) — but it can't be

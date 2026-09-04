@@ -582,7 +582,23 @@ function _paStockMirror(productId, storeId, qty) {
 // records a ledger row), then keeps the local maps + effective_stock in sync so
 // the KPI tiles and grid badges stay honest without a full reload.
 async function paSaveStoreStock(productId, storeId, raw, el) {
-  const qty = Math.max(0, parseInt(raw, 10) || 0);
+  // A COUNT THIS BOX CANNOT READ IS NOT ZERO. `parseInt(raw) || 0` turned an
+  // emptied box, a stray letter and a bad paste all into 0 and saved it — the
+  // shelf was emptied by a slip of the hand, with a green tick to say so. Now
+  // an unreadable value puts the previous count back and says what is wrong;
+  // nothing is sent. The server refuses the same shapes (retail-inventory.js),
+  // so neither side can write a guess.
+  const txt = String(raw == null ? '' : raw).trim();
+  const qty = txt === '' ? NaN : Number(txt);
+  if (!Number.isInteger(qty) || qty < 0) {
+    el.value = _paStoreQty(productId, storeId);   // put back what was there
+    el.classList.remove('is-saved');
+    el.classList.add('is-err');
+    setTimeout(() => el.classList.remove('is-err'), 2000);
+    toast(cuT('Enter the number on the shelf — a whole number, 0 or more.',
+              '请输入货架上的数量 — 0 或以上的整数。'), 'err');
+    return;
+  }
   el.classList.remove('is-saved', 'is-err');
   el.disabled = true;
   try {
