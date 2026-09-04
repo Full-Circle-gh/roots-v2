@@ -4176,7 +4176,7 @@ async function qpPickPlace(orderId, idx, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT(`Picked ${j.name || label} — the daemon will push it within a minute`,
+        : cuT(`Picked ${j.name || label} — sending it to the channel, about a minute`,
               `已选择 ${j.name || label} — 约一分钟内发单`), 'success');
       openOrder(orderId, { instant: true });
       return;
@@ -4504,7 +4504,7 @@ async function qpConfirmPoint(orderId, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT('Point confirmed — the daemon will push it within a minute', '配送点已确认 — 约一分钟内发单'), 'success');
+        : cuT('Point confirmed — sending it to the channel, about a minute', '配送点已确认 — 约一分钟内发单'), 'success');
       delete qpPlaced[orderId];
       // The map and its search go with the point that has just been sent — the
       // drawer re-renders below onto a fresh element, and a stale handle would
@@ -4715,7 +4715,7 @@ async function qyRetryPush(orderId, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT('Queued — the daemon will push it within a minute', '已排队 — 约一分钟内发单'), 'success');
+        : cuT('Queued — sending it to the channel, about a minute', '已排队 — 约一分钟内发单'), 'success');
       openOrder(orderId, { instant: true });
       return;
     }

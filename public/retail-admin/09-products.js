@@ -5961,12 +5961,42 @@ function pwClose() {
   const bg = document.getElementById('pw-bg'); if (bg) bg.classList.remove('show');
   _pw = null;
 }
-// Esc closes (parity with the coupon wizard); backdrop click does NOT, so an
-// in-progress product is never discarded by a stray click.
+// Has the operator actually put anything into this wizard? Compared against the
+// shape pwOpen() starts from, so "opened it and pressed Escape" closes without
+// a question while "typed a name, three sizes and a photo" does not.
+function pwHasWork() {
+  if (!_pw) return false;
+  if (_pw.step !== 'front' && _pw.source) {
+    const t = ['name_en', 'name_cn', 'sku', 'top', 'sub', 'photo', 'price', 'compare', 'stock', 'weight', 'descEn', 'descCn'];
+    if (t.some(k => String(_pw[k] || '').trim())) return true;
+    if (_pw.hasSizes || (_pw.options || []).length) return true;
+    if (Object.keys(_pw.facts || {}).length || Object.keys(_pw.freeOf || {}).length) return true;
+    // Past the first question with a route chosen but nothing typed yet still
+    // counts as work in progress — the operator is mid-task either way.
+    return _pw.step !== 'front-paste' && _pw.step !== 'front-copy';
+  }
+  return false;
+}
+// Esc closes; backdrop click does NOT, so an in-progress product is never
+// discarded by a stray click. Escape used to discard it with no question at all,
+// which is the same loss by a different key — five steps of typing gone, and no
+// draft behind it the way the order form has one. It asks first now, and only
+// when there is something to lose.
+async function pwTryClose() {
+  if (pwHasWork() && !(await askConfirm({
+    titleEn: 'Discard this product?', titleCn: '放弃这件产品？',
+    bodyEn: 'What you have filled in will be lost. Nothing has been saved yet.',
+    bodyCn: '已填写的内容将会丢失，目前尚未保存。',
+    confirmEn: 'Discard it', confirmCn: '放弃',
+    cancelEn: 'Keep editing', cancelCn: '继续编辑',
+    danger: true,
+  }))) return;
+  pwClose();
+}
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !_pw) return;
   const bg = document.getElementById('pw-bg');
-  if (bg && bg.classList.contains('show')) pwClose();
+  if (bg && bg.classList.contains('show')) pwTryClose();
 });
 function pwGoto(step) {
   if (!_pw) return;

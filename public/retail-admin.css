@@ -32,8 +32,14 @@
 
     --text-1:     #E8E5DC;   /* Deeper Paper */
     --text-2:     #AEABA2;
-    --text-3:     #7d7a72;
-    --text-4:     #56544f;
+    /* --text-3 was #7d7a72, which reads at 3.61:1 on --bg-elev-1 and 3.21:1 on
+       --bg-elev-2 — below the 4.5:1 the standard asks of normal-sized text, and
+       this token dresses 192 rules, several of them at 10 and 11 pixels. #9a978f
+       clears 4.5 on every dark surface in the palette (4.72:1 at the worst, the
+       most-raised one) and stays a step quieter than --text-2 above it, so the
+       hierarchy the two were drawn for survives. */
+    --text-3:     #9a978f;
+    --text-4:     #56544f;   /* decorative only — see the note below */
 
     /* Tacet remap of the two Full Circle brand colours. Tea Green → Tacet
        sage (same "active / live / positive" role); Aged Brass → graphite
