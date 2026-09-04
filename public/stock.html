@@ -3086,11 +3086,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // onto a wall — the exact defect the launcher was built to end, arrived
         // from the other side.
         (rc.on !== true ? '' :
-        homeTileHtml('pick', t('Pick', '拣货'),
+        homeTileHtml('pick', t('Pick for stores', '拣货给门店'),
           picks.length ? t('Pull a run for the stores', '为门店拣货')
                        : t('Nothing to pick', '暂无待拣货'),
           pickCount, 'data-pkopen') +
-        homeTileHtml('recv', t('Receive', '收货'),
+        homeTileHtml('recv', t('Receive delivery', '收货入库'),
           inbound ? t('Count a delivery in', '点数入库')
                   : t('Nothing on its way', '暂无在途配送'),
           recvCount, 'data-rcenter') +
