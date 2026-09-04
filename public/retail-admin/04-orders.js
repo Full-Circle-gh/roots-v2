@@ -452,7 +452,7 @@ function refundBadge(o) {
     // rows that predate the accumulation fix.
     const paid = [o.refund_amount_paid, o.refund_amount_approved, o.refund_amount_requested]
       .map(Number).find(n => Number.isFinite(n) && n > 0);
-    const amt = paid ? ` ¥${fmt(paid)}` : '';
+    const amt = paid ? ` ${acMoney(paid)}` : '';
     return `<span class="pill refund-partial" title="Partial refund · 部分退款${amt}">↩ part refund${amt} · 部分退款</span>`;
   }
   const labels = {
@@ -561,8 +561,8 @@ function drawerRefundBanner(o) {
   };
   const l = labels[rs] || { en: `Refund · ${rs}`, cn: '' };
   const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
-    ? cuT(`¥${fmt(o.refund_amount_requested)} of ¥${fmt(o.total)}`, `¥${fmt(o.refund_amount_requested)} / 共 ¥${fmt(o.total)}`)
-    : cuT(`full ¥${fmt(o.total)}`, `全额 ¥${fmt(o.total)}`);
+    ? cuT(`${acMoney(o.refund_amount_requested)} of ${acMoney(o.total)}`, `${acMoney(o.refund_amount_requested)} / 共 ${acMoney(o.total)}`)
+    : cuT(`full ${acMoney(o.total)}`, `全额 ${acMoney(o.total)}`);
   const when = o.refund_requested_at ? ` · ${cuT('requested', '申请于')} ${formatDate(o.refund_requested_at)}` : '';
   return `
     <div class="drawer-refund-banner" data-state="${rs}" role="status">
@@ -598,7 +598,7 @@ function renderAlipayProof(o) {
 
   // What the AI read, one row each — only the fields it actually found.
   const facts = [];
-  if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">¥${Number(d.amount).toFixed(2)}</span></li>`);
+  if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">${acMoney(d.amount)}</span></li>`);
   // Two names can come off one 收钱码: the shop's display name on the success
   // screen and the registered 收款方全称 on the 账单详情 page. Show both when the
   // screenshot carried both, so staff can see at a glance it's the same code.
@@ -718,9 +718,9 @@ function splitSuggestionBanner(o) {
       <div class="ss-bucket ${cls}">
         <div class="bk-head">
           <span>${icon} ${labelEn} · ${labelCn}</span>
-          <span class="bk-cost">¥${fmt(b.cost)}</span>
+          <span class="bk-cost">${acMoney(b.cost)}</span>
         </div>
-        <div class="bk-meta">${b.item_ids.length} items · ¥${fmt(b.value)} · ${grams(b.grams)}</div>
+        <div class="bk-meta">${b.item_ids.length} items · ${acMoney(b.value)} · ${grams(b.grams)}</div>
       </div>`;
   };
   const detail = sug.suggested.plan.map(bucket).join('');
@@ -729,14 +729,14 @@ function splitSuggestionBanner(o) {
       <div class="ss-head">
         <div class="ss-title">
           <span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Suggested: split into 2 packages · 拆分为 2 个包裹</span>
-          <span class="save">save ¥${fmt(sug.savings)} · 节省 ¥${fmt(sug.savings)}</span>
+          <span class="save">save ${acMoney(sug.savings)} · 节省 ${acMoney(sug.savings)}</span>
         </div>
         <div class="ss-actions">
           <button class="btn btn-primary btn-sm" onclick="applySplitSuggestion(${o.id})">Apply · 拆分</button>
           <button class="btn btn-sm" onclick="dismissSplitSuggestion(${o.id})">Dismiss · 忽略</button>
         </div>
       </div>
-      <div class="ss-subtitle">Current freight ¥${fmt(sug.current.cost)} → split freight ¥${fmt(sug.suggested.cost)} · 当前 ¥${fmt(sug.current.cost)} → 拆后 ¥${fmt(sug.suggested.cost)}</div>
+      <div class="ss-subtitle">Current freight ${acMoney(sug.current.cost)} → split freight ${acMoney(sug.suggested.cost)} · 当前 ${acMoney(sug.current.cost)} → 拆后 ${acMoney(sug.suggested.cost)}</div>
       <div class="ss-detail">${detail}</div>
     </div>`;
 }
@@ -1062,10 +1062,10 @@ function ordRenderKpis() {
   const k = data.kpis || {};
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
-  dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
+  dashCountUp($('#ord-kpi-rev'), revenue, n => acWrap(Math.round(n).toLocaleString()));
   // No orders means no average — which is ¥0, not an unreadable dash. A money
   // tile carries a number.
-  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '¥0';
+  $('#ord-kpi-aov').textContent = orders ? acWrap(Math.round(revenue / orders).toLocaleString()) : acWrap('0');
   ordRepaintKpiLabels();   // deltas (language-aware)
 }
 // The Orders strip's own delta badge. Same states, same arithmetic and the same
@@ -1125,7 +1125,7 @@ function ordRepaintKpiLabels() {
   const count   = (cur, avg) => Math.round(cur - avg);
   // One decimal, matching what the server already computes for baseline.delta.
   const pct     = (cur, avg) => Math.round(((cur - avg) / avg) * 1000) / 10;
-  const money   = v => '¥' + Math.round(v).toLocaleString();
+  const money   = v => acWrap(Math.round(v).toLocaleString());
   const perDay  = cuT('day', '日');
   ordSetDelta('#ord-kpi-orders-d', orders,  ordAvg, days, count, '',
     v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), perDay);
@@ -1556,7 +1556,7 @@ async function loadOrders(opts = {}) {
         </td>
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
-        <td class="numeric oc-total">¥${fmt(o.total)}</td>
+        <td class="numeric oc-total">${acMoney(o.total)}</td>
         <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${paymentCheckLine(o)}${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
@@ -2302,7 +2302,7 @@ function renderShipByCell(o) {
     : (p.subEn != null) ? cuT(p.subEn, p.subCn) : '';
   const icon = p.icon === 'pickup' ? `${pickupIcon(12)} ` : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
-    ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
+    ? ` <span style="font-size: 10px; color: var(--warn);">+${acMoney(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
   // The column header reads "Ship by", which is correct for true ship deadlines
   // (out-of-city express, fresh-batch make-by, ship-now). But scheduled-delivery
   // and pickup orders carry a DIFFERENT meaning — the date is when the customer
@@ -2523,7 +2523,7 @@ function renderAddonTimeline(o) {
         <div style="font-weight:700; color:var(--text-1);">${names || cuT('Items added','已加单')}</div>
         <div class="sub" style="color:var(--text-3); margin-top:2px;">${cuT('Added','加单于')} · ${formatDate(a.paid_at)}</div>
       </div>
-      <div style="font-weight:800; white-space:nowrap; color:var(--text-1);">+¥${Number(a.amount || 0).toFixed(2)}</div>
+      <div style="font-weight:800; white-space:nowrap; color:var(--text-1);">+${acMoney(a.amount)}</div>
     </div>`;
   }).join('');
   return `<div class="order-items" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
@@ -2796,7 +2796,7 @@ function renderShipByTile(o) {
   const mode = deliveryModeNote(o.delivery_mode);
   const paidSameDay = (Number(o.same_day_surcharge_fee) || 0) > 0;
   const surcharge = paidSameDay
-    ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
+    ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+${acMoney(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
   // Right-away ASAP orders: the customer DID ask for as-soon-as-possible, so
   // surface that plainly. For the plain no-date case the headline already reads
   // "Courier — ship when ready", so the old "no same-day paid · ship by courier"
@@ -3416,12 +3416,12 @@ function renderItemRow(it, opts = {}) {
       <div class="mf-body">
         <div class="mf-top">
           ${nameCell}
-          <span class="mf-total">¥${fmt(it.line_total)}</span>
+          <span class="mf-total">${acMoney(it.line_total)}</span>
         </div>
         <div class="mf-meta" data-no-i18n>
           ${itemSkuHtml(it)}
           ${itemQtyHtml(it)}
-          <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
+          <span class="item-unit">@ ${acMoney(it.unit_price)}</span>
           ${refundPill ? `<span class="mf-packs">${refundPill}</span>` : ''}
           ${waitPill}
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
@@ -5100,7 +5100,7 @@ async function qyLoadCarriers(orderId, btn) {
           <span class="qy-name"><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? `<span class="qy-cheap">${cuT('cheapest', '最便宜')}</span>` : ''}</span>
           <span class="qy-meta">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</span>
         </span>
-        <span class="qy-fee">¥${c.feeYuan}</span>
+        <span class="qy-fee">${acWrap(c.feeYuan)}</span>
       </label>`).join('');
     box.innerHTML =
       rows +
@@ -5137,7 +5137,7 @@ async function qyDispatch(orderId, btn) {
       const done = (j.carriers && j.carriers.length) ? j.carriers : (j.carrier ? [j.carrier] : []);
       const names = done.length > 1
         ? `${done.map(c => escapeHtml(c.name || '')).join(', ')} — ${cuT('first to accept wins', '谁先接单谁配送')}`
-        : `${escapeHtml(done[0]?.name || '')} ¥${done[0]?.fee_yuan ?? ''}`;
+        : `${escapeHtml(done[0]?.name || '')} ${acWrap(done[0]?.fee_yuan ?? '')}`;
       if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${names}</div>`;
       loadOrders();
     } else {
@@ -5630,25 +5630,25 @@ function orderMoneyGapBand(o) {
   const chan = ordChannelLabel(o);
   return `
     <div style="margin: 0 0 var(--s5); padding: 10px 14px; border-radius: var(--r-lg); background: #FBF0DC; color: #8A6516; font-size: 12px; line-height: 1.5; font-weight: 600;">
-      ${cuT(`Items add up to ¥${fmt(g.items)}, but this order records ¥${fmt(g.total)}.`,
-            `商品合计 ¥${fmt(g.items)}，但订单金额为 ¥${fmt(g.total)}。`)}
-      ${cuT(`Refunds on this order are capped at ¥${fmt(g.total)} — check ${escapeHtml(chan)} before refunding.`,
-            `本单退款上限为 ¥${fmt(g.total)}，退款前请先核对 ${escapeHtml(chan)}。`)}
+      ${cuT(`Items add up to ${acMoney(g.items)}, but this order records ${acMoney(g.total)}.`,
+            `商品合计 ${acMoney(g.items)}，但订单金额为 ${acMoney(g.total)}。`)}
+      ${cuT(`Refunds on this order are capped at ${acMoney(g.total)} — check ${escapeHtml(chan)} before refunding.`,
+            `本单退款上限为 ${acMoney(g.total)}，退款前请先核对 ${escapeHtml(chan)}。`)}
     </div>`;
 }
 // Money breakdown under the order total: subtotal · shipping · (packing) · (voucher).
 // Packing fee only renders when one was actually charged (zero on most delivery
 // orders), mirroring how the voucher segment is conditional.
 function orderTotalSubline(o) {
-  let s = `${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}`;
-  if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ¥${fmt(o.packing_fee)}`;
+  let s = `${cuT('subtotal','小计')} ${acMoney(o.subtotal)} · ${cuT('shipping','运费')} ${acMoney(o.shipping_fee)}`;
+  if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ${acMoney(o.packing_fee)}`;
   // Deductions last, grouped. Points and wallet were missing entirely, so an
   // order paid partly from either showed charges that read like a total and
   // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is
   // what the Customers page calls balance_used, so the two surfaces agree.
-  if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −¥${fmt(o.voucher_amount)}`;
-  if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −¥${fmt(o.points_amount)}`;
-  if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −¥${fmt(o.balance_used)}`;
+  if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −${acMoney(o.voucher_amount)}`;
+  if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −${acMoney(o.points_amount)}`;
+  if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −${acMoney(o.balance_used)}`;
   return s;
 }
 function renderOrderTotalBanner(o) {
@@ -5658,7 +5658,7 @@ function renderOrderTotalBanner(o) {
         <div class="otb-label">Order total · 订单总额</div>
         <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
-      <div class="otb-amount">¥${fmt(o.total)}</div>
+      <div class="otb-amount">${acMoney(o.total)}</div>
     </div>
     ${orderMoneyGapBand(o)}
     ${renderChannelMoneyPanel(o)}`;
@@ -5953,7 +5953,7 @@ function renderReadonlyOrder(o) {
         </div>` : ''}
         <div>
           <div class="kicker">Total · 合计</div>
-          <div class="val"><b>¥${fmt(o.total)}</b></div>
+          <div class="val"><b>${acMoney(o.total)}</b></div>
           <div class="sub">${cuT(`${items.length} line${items.length === 1 ? '' : 's'}`, `${items.length} 项`)}</div>
         </div>
         ${(() => {
@@ -5964,8 +5964,8 @@ function renderReadonlyOrder(o) {
           if (!g) return '';
           return `<div class="full" style="color:#8A6516;">
             <div class="kicker">${cuT('Total disagrees with the items', '金额与商品不符')}</div>
-            <div class="sub">${cuT(`Items add up to ¥${fmt(g.items)} — check ${escapeHtml(chan)}.`,
-                                   `商品合计 ¥${fmt(g.items)}，请核对 ${escapeHtml(chan)}。`)}</div>
+            <div class="sub">${cuT(`Items add up to ${acMoney(g.items)} — check ${escapeHtml(chan)}.`,
+                                   `商品合计 ${acMoney(g.items)}，请核对 ${escapeHtml(chan)}。`)}</div>
           </div>`;
         })()}
       </div>
@@ -6427,7 +6427,7 @@ function orderHeadMarks(o) {
     marks.push(`<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>`);
   }
   if (o.addons && o.addons.length) {
-    marks.push(`<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>`);
+    marks.push(`<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+${acMoney(o.addon_total)})</span>`);
   }
   const refund = refundBadge(o);
   if (refund) marks.push(refund);
@@ -7928,21 +7928,21 @@ function renderRefundPanel(o) {
          ${lines.map(l => {
            const it = lineMap.get(l.item_id);
            const label = it ? (it.name_en || it.name_cn || ('item #' + l.item_id)) : ('item #' + l.item_id);
-           return `<div style="display:flex; justify-content: space-between;"><span>${escapeHtml(label)} × ${l.qty}</span><b>¥${fmt(l.amount)}</b></div>`;
+           return `<div style="display:flex; justify-content: space-between;"><span>${escapeHtml(label)} × ${l.qty}</span><b>${acMoney(l.amount)}</b></div>`;
          }).join('')}
        </div>` : '';
 
   const amountSummary = isApproved || state === 'paying' || state === 'paid'
     ? `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 10px; font-size: 12px;">
-        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>¥${fmt(total)}</b></div>
-        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
-        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
-        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
-        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>¥${fmt(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>¥${fmt(creditAmt)}</b></div>` : ''}
+        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>${acMoney(total)}</b></div>
+        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>${acMoney(reqAmt)}</b></div>` : ''}
+        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>${acMoney(apvAmt)}</b></div>` : ''}
+        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>${acMoney(paidAmt)}</b></div>` : ''}
+        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>${acMoney(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>${acMoney(creditAmt)}</b></div>` : ''}
         ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method · 方式</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
       </div>` : reqAmt != null
-        ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b>`, `顾客申请退 <b>¥${fmt(reqAmt)}</b> / 共 <b>¥${fmt(total)}</b>`)}</div>`
+        ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>${acMoney(reqAmt)}</b> of <b>${acMoney(total)}</b>`, `顾客申请退 <b>${acMoney(reqAmt)}</b> / 共 <b>${acMoney(total)}</b>`)}</div>`
         : '';
 
   return `
@@ -8040,15 +8040,15 @@ function openDirectRefundDialog(orderId) {
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">${cuT('How much', '退款方式')}</label>
           <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="full" checked> ${cuT('Full', '全额')} ¥${fmt(total)}</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="full" checked> ${cuT('Full', '全额')} ${acMoney(total)}</label>
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="amount"> ${cuT('Part — by amount', '部分 — 按金额')}</label>
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="lines"> ${cuT('Part — by items', '部分 — 按商品')}</label>
           </div>
         </div>
         <div class="field" id="drf-amt-wrap" style="margin-bottom: 14px; display: none;">
-          <label class="stacked">${cuT('Amount', '金额')} (¥)</label>
+          <label class="stacked">${cuT('Amount', '金额')} (${acCurrencySymbol()})</label>
           <input type="number" id="drf-amt" step="0.01" min="0" max="${total}" value="${total.toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ${acMoney(total)}</div>
         </div>
         <div class="field" id="drf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">${cuT('Items to refund', '退款商品')}</label>
@@ -8069,12 +8069,12 @@ function openDirectRefundDialog(orderId) {
                   <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}${already > 0 ? ` <span class="muted" style="font-size:10px;">(${already} ${cuT('already refunded', '已退')})</span>` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${remain}" value="${remain}" style="width: 80px;">
-                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * remain)}</b></span>
+                <span class="muted" style="font-size: 11px;">× ${acMoney(it.unit)} = <b id="drf-line-amt-${it.id}">${acMoney(it.unit * remain)}</b></span>
               </div>`;
               }).join('');
             })()}
           </div>
-          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">¥0.00</b></div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">${acMoney(0)}</b></div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">${cuT('Reason / note', '原因 / 备注')}</label>
@@ -8095,10 +8095,10 @@ function openDirectRefundDialog(orderId) {
       const unit = Number(chk.dataset.unit) || 0;
       const qty = Number(bg.querySelector(`.drf-line-qty[data-item="${it}"]`).value) || 0;
       const amt = chk.checked ? +(unit * qty).toFixed(2) : 0;
-      bg.querySelector(`#drf-line-amt-${it}`).textContent = '¥' + fmt(amt);
+      bg.querySelector(`#drf-line-amt-${it}`).textContent = acMoney(amt);
       sum += amt;
     });
-    bg.querySelector('#drf-lines-total').textContent = '¥' + fmt(sum);
+    bg.querySelector('#drf-lines-total').textContent = acMoney(sum);
   };
   bg.querySelectorAll('.drf-line-chk, .drf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
@@ -8159,10 +8159,10 @@ function openDirectRefundDialog(orderId) {
       // Saying only "Refunded" there reads as "done", and the customer waits.
       if (j.method === 'manual') {
         toast(cuT(
-          `Recorded ¥${fmt(j.amount || 0)} — pay the customer back by hand (paid off-app)`,
-          `已记录 ¥${fmt(j.amount || 0)} — 该订单为线下支付,请手动退款给顾客`), 'warn', 7000);
+          `Recorded ${acMoney(j.amount || 0)} — pay the customer back by hand (paid off-app)`,
+          `已记录 ${acMoney(j.amount || 0)} — 该订单为线下支付,请手动退款给顾客`), 'warn', 7000);
       } else {
-        toast(cuT('Refunded', '已退款') + ` ¥${fmt(j.amount || 0)}`);
+        toast(cuT('Refunded', '已退款') + ` ${acMoney(j.amount || 0)}`);
       }
       bg.remove();
       openOrder(orderId, { instant: true });
@@ -8214,9 +8214,9 @@ function openRefundApproveDialog(orderId) {
           </div>
         </div>
         <div class="field" id="rf-amt-wrap" style="margin-bottom: 14px;">
-          <label class="stacked">Amount · 金额 (¥)</label>
+          <label class="stacked">Amount · 金额 (${acCurrencySymbol()})</label>
           <input type="number" id="rf-amt" step="0.01" min="0" max="${total}" value="${(initialMode === 'amount' ? defaultAmount : total).toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ¥' + fmt(o.refund_amount_requested) : ''}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ${acMoney(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ' + acMoney(o.refund_amount_requested) : ''}</div>
         </div>
         <div class="field" id="rf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">Lines · 商品</label>
@@ -8229,10 +8229,10 @@ function openRefundApproveDialog(orderId) {
                   <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="rf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${preMap.get(it.id) ?? it.qty}" style="width: 80px;">
-                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="rf-line-amt-${it.id}">¥${fmt(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
+                <span class="muted" style="font-size: 11px;">× ${acMoney(it.unit)} = <b id="rf-line-amt-${it.id}">${acMoney(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
               </div>`).join('') : `<div class="muted" style="padding: 8px;">${cuT('No items', '无商品')}</div>`}
           </div>
-          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Lines total', '商品合计')}: <b id="rf-lines-total">¥0.00</b></div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Lines total', '商品合计')}: <b id="rf-lines-total">${acMoney(0)}</b></div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Staff note (shown to customer) · 客服备注(顾客可见)</label>
@@ -8259,10 +8259,10 @@ function openRefundApproveDialog(orderId) {
       const unit = Number(chk.dataset.unit) || 0;
       const qty = Number(bg.querySelector(`.rf-line-qty[data-item="${it}"]`).value) || 0;
       const amt = chk.checked ? +(unit * qty).toFixed(2) : 0;
-      bg.querySelector(`#rf-line-amt-${it}`).textContent = '¥' + fmt(amt);
+      bg.querySelector(`#rf-line-amt-${it}`).textContent = acMoney(amt);
       sum += amt;
     });
-    bg.querySelector('#rf-lines-total').textContent = '¥' + fmt(sum);
+    bg.querySelector('#rf-lines-total').textContent = acMoney(sum);
   };
   bg.querySelectorAll('.rf-line-chk, .rf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
@@ -8305,7 +8305,7 @@ function openRefundApproveDialog(orderId) {
         btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/refund/approve`,
         method: 'POST', body, errLabelEn: 'Approve failed', errLabelCn: '批准失败',
       });
-      toast(`Approved · 已批准 ¥${fmt(j.amount || 0)}`);
+      toast(`Approved · 已批准 ${acMoney(j.amount || 0)}`);
       bg.remove();
       openOrder(orderId);
       loadOrders();
@@ -8373,9 +8373,9 @@ function openRefundPayoutDialog(orderId) {
           <input type="text" id="rfp-ref" data-ph-en="Provider txn id, bank ref, etc." data-ph-cn="第三方交易号、银行参考号等" placeholder="Provider txn id, bank ref, etc." style="width: 100%;">
         </div>
         <div class="field" style="margin-bottom: 14px;">
-          <label class="stacked">Amount · 金额 (¥)</label>
+          <label class="stacked">Amount · 金额 (${acCurrencySymbol()})</label>
           <input type="number" id="rfp-amt" step="0.01" min="0" max="${apv}" value="${apv.toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Approved ¥${fmt(apv)} — usually paid in full · 已批准金额,通常一次性退还</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Approved ${acMoney(apv)} — usually paid in full · 已批准金额,通常一次性退还</div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Note (optional) · 备注(可选)</label>
@@ -8413,7 +8413,7 @@ function openRefundPayoutDialog(orderId) {
         btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/refund/payout`,
         method: 'POST', body, errLabelEn: 'Payout failed', errLabelCn: '记录失败',
       });
-      toast(`Payout recorded · 退款已记录 ¥${fmt(j.amount || 0)}`);
+      toast(`Payout recorded · 退款已记录 ${acMoney(j.amount || 0)}`);
       bg.remove();
       openOrder(orderId);
       loadOrders();
@@ -8433,7 +8433,7 @@ function formatRefundMeta(meta) {
       const name = item ? (item.name_en || item.name_cn || ('item#' + l.item_id))
                         : ('item#' + (l.item_id ?? l.product_id ?? '?'));
       const qty = l.qty != null ? ` × ${l.qty}` : '';
-      const amt = l.amount != null ? ` — ¥${fmt(l.amount)}` : '';
+      const amt = l.amount != null ? ` — ${acMoney(l.amount)}` : '';
       return `<div>· ${escapeHtml(name)}${qty}${amt}</div>`;
     }).join('');
     bits.push(`<div style="margin-top: 4px;"><div class="muted" style="font-size:10px; letter-spacing:.08em; text-transform:uppercase;">Lines · 退款明细</div>${lineHtml}</div>`);
@@ -8478,7 +8478,7 @@ async function openRefundEvents(orderId) {
       <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-soft);">
         <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-3); min-width: 120px;">${formatDate(ev.created_at)}</div>
         <div style="flex: 1;">
-          <div><b>${escapeHtml(ev.event)}</b>${ev.amount != null ? ` <span class="muted">¥${fmt(ev.amount)}</span>` : ''}</div>
+          <div><b>${escapeHtml(ev.event)}</b>${ev.amount != null ? ` <span class="muted">${acMoney(ev.amount)}</span>` : ''}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px;">${cuT('by', '操作人')} ${escapeHtml(ev.user_username || ev.customer_nickname || (ev.user_id ? 'staff#' + ev.user_id : cuT('customer', '顾客')))}</div>
           ${ev.note ? `<div style="font-size: 12px; margin-top: 4px;">${escapeHtml(ev.note)}</div>` : ''}
           ${formatRefundMeta(ev.meta)}
@@ -8657,7 +8657,7 @@ const ONW_ICONS = {
 function onwMoney(n) {
   const v = Number(n) || 0;
   const s = Math.abs(v).toFixed(2).split('.');
-  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+  return (v < 0 ? '-' : '') + acWrap(s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1]);
 }
 
 // Reset to frame A — nothing entered — and paint every dynamic region.
@@ -9466,7 +9466,7 @@ function ordRenderDrafts() {
 function ordMoney(n) {
   const v = Number(n) || 0;
   const s = Math.abs(v).toFixed(2).split('.');
-  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+  return (v < 0 ? '-' : '') + acWrap(s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1]);
 }
 // Open restores everything — the header is identical and the commit is still
 // "Create order", because a draft becomes an order the same way any other

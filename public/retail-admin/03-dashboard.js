@@ -18,7 +18,7 @@ let DASH_METRIC = 'revenue';
 // dramatic entrance) rather than drifting in place — cleared after one render.
 let DASH_FORCE_ROLLUP = false;
 
-function dashMoney(n, dp) { return '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: dp || 0, maximumFractionDigits: dp || 0 }); }
+function dashMoney(n, dp) { return acWrap(Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: dp || 0, maximumFractionDigits: dp || 0 })); }
 function dashNum(n) { return Number(n || 0).toLocaleString(); }
 function dashDelta(pct) {
   if (pct == null) return '<span class="db-delta flat">—</span>';
@@ -610,7 +610,7 @@ async function dashHeroLoadToday(opts) {
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
     const k = data.kpis || {};
-    dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString(), dur);
+    dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => acWrap(Math.round(n).toLocaleString()), dur);
     dashCountUp($('#db-today-ord'), Number(k.orders || 0), undefined, dur);
     dashCountUp($('#db-today-new'), Number(k.new_customers || 0), undefined, dur);
     // The Today card is status, not a report: revenue + delta arrow, orders,
@@ -630,7 +630,7 @@ async function dashHeroLoadToday(opts) {
 function dashHeroTodayRepaint() {
   const data = DASH_HERO.todayData; if (!data) return;
   const k = data.kpis || {}, b = data.baseline || null;
-  dashSetDelta('#db-today-rev-d', b && b.revenue, Number(k.revenue || 0), b, v => '¥' + Math.round(v).toLocaleString());
+  dashSetDelta('#db-today-rev-d', b && b.revenue, Number(k.revenue || 0), b, v => acWrap(Math.round(v).toLocaleString()));
   dashSetDelta('#db-today-ord-d', b && b.orders,  Number(k.orders || 0),  b, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
   dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
   // The Customers card's vitals come from this same payload and are
@@ -1048,7 +1048,7 @@ function dashReadyRender() {
 // no bold type-label prefix. Drives the "Show the work" fold rows.
 function tdFeedMeta(e) {
   const p = e.payload || {};
-  const yuan = n => '¥' + Number(n || 0).toLocaleString();
+  const yuan = n => acWrap(Number(n || 0).toLocaleString());
   const buyer = (p.buyer || '').trim();
   const chan = String(p.channel || '').toLowerCase();
   const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'Gzgrocery' }[chan];
@@ -1963,7 +1963,7 @@ function tdRecapRender() {
   const ev = TD.recapEvents;
   const of = type => ev.filter(e => e.type === type);
   const sumAmt = (rows, k) => rows.reduce((s, e) => s + (Number(e.payload && e.payload[k]) || 0), 0);
-  const money = n => '¥' + Math.round(n).toLocaleString();
+  const money = n => acWrap(Math.round(n).toLocaleString());
 
   const paid       = of('paid_order');
   const dispatched = of('order_dispatched');
@@ -2337,7 +2337,7 @@ function tdSecPaint() {
   if (today) {
     const k = today.kpis || {};
     const aov = Number(k.aov || 0);
-    set('td-sec-aov', aov ? '¥' + (Math.round(aov * 100) / 100).toLocaleString() : '¥—');
+    set('td-sec-aov', aov ? acWrap((Math.round(aov * 100) / 100).toLocaleString()) : acWrap('—'));
     // Sessions is the ONLY denominator this card shows. It used to carry three
     // side by side — "of 58 visitors", "93 visits", "46 sessions" — which asked
     // the operator to hold three definitions of the same idea in their head to
@@ -3378,7 +3378,7 @@ function cuBarTip(e) {
   // to the amount reads as filler) — the tooltip carries only the figure.
   tip.innerHTML =
     `<div class="b">${escapeHtml(m)}</div>` +
-    `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>¥${escapeHtml(rev)}</b></div>`;
+    `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>${escapeHtml(acWrap(rev))}</b></div>`;
   tip.style.display = 'block';
   fcPlaceTip(tip, col.getBoundingClientRect());
   // On touch devices onmouseleave never fires, so the tooltip would stick to

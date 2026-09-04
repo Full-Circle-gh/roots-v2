@@ -372,9 +372,9 @@ function cuNum(v) { return Number(v || 0).toLocaleString('en-US'); }
 function cuMoneyPlain(v) {
   const n = Number(v || 0);
   const whole = Math.round(n * 100) % 100 === 0;
-  return '¥' + n.toLocaleString('en-US', whole
+  return acWrap(n.toLocaleString('en-US', whole
     ? { maximumFractionDigits: 0 }
-    : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 }
 
 // Order status, spelled the way the whole product spells it. humanStatus()
@@ -433,7 +433,7 @@ function cuMoney(v) {
   const s = n.toLocaleString('en-US', whole
     ? { maximumFractionDigits: 0 }
     : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return '<span class="cur">¥</span>' + s;
+  return '<span class="cur">' + acCurrencySymbol() + '</span>' + s;
 }
 
 // The Channel cell — glyph on the left, the channel's name on the right.
@@ -1146,13 +1146,23 @@ function cuRenderDetail() {
   const yuan = v => {
     const n = Number(v || 0);
     const whole = Math.round(n * 100) % 100 === 0;
-    return '¥' + n.toLocaleString('en-US', whole
+    return acWrap(n.toLocaleString('en-US', whole
+      ? { maximumFractionDigits: 0 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  };
+  // Money WITHOUT the symbol, for attribute values (the chart tooltip prints
+  // its own). Same .00-dropping, comma-grouping rule as yuan().
+  //
+  // Formats the number directly rather than slicing the symbol back off what
+  // yuan() just added: .slice(1) assumed a one-character symbol in front, so a
+  // tenant on 'CHF' or on a symbol-after currency had a digit eaten instead.
+  const yuanBare = v => {
+    const n = Number(v || 0);
+    const whole = Math.round(n * 100) % 100 === 0;
+    return n.toLocaleString('en-US', whole
       ? { maximumFractionDigits: 0 }
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
-  // Money WITHOUT the symbol, for attribute values (the chart tooltip prints
-  // its own ¥). Same .00-dropping, comma-grouping rule as yuan().
-  const yuanBare = v => yuan(v).slice(1);
 
   // Drawer action bar — two everyday buttons (Message, Edit profile). The
   // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
@@ -1622,7 +1632,7 @@ function renderAffiliateBlock(aff) {
         <tr>
           <td><a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || cuT('No name', '未填姓名'))}</a><div class="muted" data-no-i18n style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
           <td>${afStatusPill(i.status)}</td>
-          <td class="numeric">¥${fmt(i.reward_amount || 0)}</td>
+          <td class="numeric">${acMoney(i.reward_amount || 0)}</td>
           <td>${escapeHtml(cuFmtDate(i.joined_at) || '')}</td>
           <td>${i.first_paid_order_id ? '#' + i.first_paid_order_id : ''}</td>
         </tr>`).join('')
@@ -1643,14 +1653,14 @@ function renderAffiliateBlock(aff) {
       </div>
       <div class="field" style="margin: 0;">
         <label class="stacked">Conversions · 转化数</label>
-        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned · 已赚</span></div>
+        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ${acMoney(sum.earned || 0)} earned · 已赚</span></div>
       </div>
       ${renderAffiliateBlockToggle(aff)}
       ${renderLifetimeEligibility(aff)}
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ¥ · 奖励</th><th>Joined · 加入时间</th><th>First order · 首单</th></tr></thead>
+        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ${acCurrencySymbol()} · 奖励</th><th>Joined · 加入时间</th><th>First order · 首单</th></tr></thead>
         <tbody>${invRows}</tbody>
       </table>
     </div>

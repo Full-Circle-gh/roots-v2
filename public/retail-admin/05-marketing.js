@@ -29,7 +29,7 @@ function vchLive(v) {
 function vchGives(v) {
   if (v.type === 'free_shipping') return cuT('Free shipping', '免运费');
   if (v.type === 'percent') return cuT((Number(v.value) || 0) + '% off', (Number(v.value) || 0) + '% 折扣');
-  return cuT('¥' + fmt(v.value) + ' off', '立减 ¥' + fmt(v.value));
+  return cuT(acMoney(v.value) + ' off', '立减 ' + acMoney(v.value));
 }
 function vchLabel(v) {
   return (typeof cuLang === 'function' && cuLang() === 'cn')
@@ -38,7 +38,7 @@ function vchLabel(v) {
 }
 function vchRules(v) {
   const parts = [];
-  if (Number(v.min_subtotal) > 0) parts.push(cuT('Orders over ¥' + fmt(v.min_subtotal), '满 ¥' + fmt(v.min_subtotal)));
+  if (Number(v.min_subtotal) > 0) parts.push(cuT('Orders over ' + acMoney(v.min_subtotal), '满 ' + acMoney(v.min_subtotal)));
   const per = Number(v.per_customer_limit || 0);
   if (per === 1) parts.push(cuT('once each', '每人一次'));
   else if (per > 1) parts.push(cuT(per + ' each', '每人 ' + per + ' 次'));
@@ -236,7 +236,7 @@ function vchDrawerRender() {
     + (expired && v.is_active ? '<div class="vch-note amber">' + cuT('This coupon ended. Set a new end date below to run it again.', '优惠券已到期。在下方设置新的截止日期即可重新生效。') + '</div>' : '')
     + '<div class="vch-facts">'
     + '<div class="vch-fact"><span class="k">' + cuT('Gives', '优惠') + '</span><span class="v">' + vchGives(v) + '</span></div>'
-    + '<div class="vch-fact"><span class="k">' + cuT('On orders over', '最低订单金额') + '</span><span class="v">' + (Number(v.min_subtotal) > 0 ? '¥' + fmt(v.min_subtotal) : cuT('Any order', '无门槛')) + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('On orders over', '最低订单金额') + '</span><span class="v">' + (Number(v.min_subtotal) > 0 ? acMoney(v.min_subtotal) : cuT('Any order', '无门槛')) + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Used', '已使用') + '</span><span class="v">' + v.used_count + (v.max_uses != null ? ' / ' + v.max_uses : '') + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Per customer', '每人限用') + '</span><span class="v">' + perSel + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Ends', '截止') + '</span><span class="v"><input type="date" class="vch-date" value="' + dateVal + '" onchange="vchSetExpiry(' + v.id + ', this.value)"></span></div>'
@@ -253,8 +253,8 @@ function vchDrawerRender() {
     + '<div class="vch-kicker">' + cuT('What customers see', '顾客看到的文字') + '</div>'
     + (v.is_public && !(v.title_en || v.title_cn) ? '<div class="vch-note amber" style="margin: 0 0 8px;">' + cuT('Public coupons need a label customers can read.', '公开优惠券需要顾客能看懂的标签。') + '</div>' : '')
     + '<div class="vch-labels">'
-    + '<input type="text" id="vch-lbl-en" value="' + escapeAttr(v.title_en || '') + '" placeholder="' + escapeAttr(cuT('English — e.g. ¥20 off your first order', '英文标签')) + '">'
-    + '<input type="text" id="vch-lbl-cn" value="' + escapeAttr(v.title_cn || '') + '" placeholder="' + escapeAttr(cuT('Chinese — e.g. 首单立减 ¥20', '中文标签,如 首单立减 ¥20')) + '">'
+    + '<input type="text" id="vch-lbl-en" value="' + escapeAttr(v.title_en || '') + '" placeholder="' + escapeAttr(cuT('English — e.g. ' + acCurrencySymbol() + '20 off your first order', '英文标签')) + '">'
+    + '<input type="text" id="vch-lbl-cn" value="' + escapeAttr(v.title_cn || '') + '" placeholder="' + escapeAttr(cuT('Chinese — e.g. 首单立减 ' + acCurrencySymbol() + '20', '中文标签,如 首单立减 ' + acCurrencySymbol() + '20')) + '">'
     + '<button type="button" class="btn btn-sm" onclick="vchSaveLabel(' + v.id + ')">' + cuT('Save label', '保存标签') + '</button>'
     + '</div>'
     + '<div class="vch-kicker">' + cuT('Give it out', '发放') + '</div>'
@@ -673,7 +673,7 @@ function vwBack() {
 function vwBigValue() {
   if (_vw.type === 'free_shipping') return 'FREE';
   if (_vw.type === 'percent') return (Number(_vw.value) || 0) + '%';
-  return '¥' + (Number(_vw.value) || 0);
+  return acWrap(Number(_vw.value) || 0);
 }
 function vwBigUnit() { return _vw.type === 'free_shipping' ? 'shipping · 免运' : 'off · 立减'; }
 function vwGenCode() {
@@ -685,12 +685,12 @@ function vwGenCode() {
 }
 function vwGenLabelEn() {
   if (_vw.type === 'free_shipping') return 'Free shipping';
-  const amt = _vw.type === 'percent' ? (Number(_vw.value) || 0) + '% off' : '¥' + (Number(_vw.value) || 0) + ' off';
+  const amt = _vw.type === 'percent' ? (Number(_vw.value) || 0) + '% off' : acWrap(Number(_vw.value) || 0) + ' off';
   return _vw.path === 'welcome' ? amt + ' your first order' : amt;
 }
 function vwGenLabelCn() {
   if (_vw.type === 'free_shipping') return '免运费';
-  const amt = _vw.type === 'percent' ? (Number(_vw.value) || 0) + '% 折扣' : '立减 ¥' + (Number(_vw.value) || 0);
+  const amt = _vw.type === 'percent' ? (Number(_vw.value) || 0) + '% 折扣' : '立减 ' + acWrap(Number(_vw.value) || 0);
   return _vw.path === 'welcome' ? '首单' + amt : amt;
 }
 function vwFlags() {
@@ -705,8 +705,8 @@ function vwFlags() {
 // ── the living ticket (right pane) ──
 function vwCondPlain() {
   const min = Number(_vw.min) || 0;
-  if (_vw.path === 'welcome') return min > 0 ? ('first order over ¥' + min + ' · 首单满 ¥' + min) : 'their first order · 首单';
-  return min > 0 ? ('orders ¥' + min + '+ · 满 ¥' + min) : 'any order · 任意订单';
+  if (_vw.path === 'welcome') return min > 0 ? ('first order over ' + acWrap(min) + ' · 首单满 ' + acWrap(min)) : 'their first order · 首单';
+  return min > 0 ? ('orders ' + acWrap(min) + '+ · 满 ' + acWrap(min)) : 'any order · 任意订单';
 }
 function vwTicketWho() {
   const who = _vw.path === 'welcome' ? 'New customers · 新顾客'
@@ -776,11 +776,17 @@ function vwFootHtml() {
 
 // ── screen 1: the door ──
 function vwFrontHtml() {
+  // The four starting points quote a MONEY amount, so they carry the tenant's
+  // own symbol — a merchant selling in dollars was being offered "¥20 off" on
+  // the first screen of the first coupon they ever made (audit D-03). The
+  // NUMBERS stay as they are: 20 and 10 are sensible starting points in most
+  // currencies, and this is a starting point the next screen lets them change.
+  const cur = (typeof acCurrencySymbol === 'function') ? acCurrencySymbol() : '¥';
   const goals = [
-    ['welcome', 'gift', 'Welcome gift · 新人礼', 'Lands in every new customer\'s coupons. · 自动进入新顾客账户。', '¥20 off · 立减', 'their first order · 首单'],
+    ['welcome', 'gift', 'Welcome gift · 新人礼', 'Lands in every new customer\'s coupons. · 自动进入新顾客账户。', cur + '20 off · 立减', 'their first order · 首单'],
     ['sale', 'tag', 'Store sale · 店铺促销', 'Applied for them at checkout — no code. · 结账自动,无需编码。', '10% off · 折扣', 'everything · 全场'],
-    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'Shows in the app; people tap to save. · 顾客自行领取。', '¥10 off · 立减', 'any order · 任意订单'],
-    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off. · 减免运费。', '¥0 delivery · 免运', 'every order · 每单'],
+    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'Shows in the app; people tap to save. · 顾客自行领取。', cur + '10 off · 立减', 'any order · 任意订单'],
+    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off. · 减免运费。', cur + '0 delivery · 免运', 'every order · 每单'],
   ];
   const cards = goals.map(g => '<button class="vw-door" onclick="vwApplyGoal(\'' + g[0] + '\')">'
     + '<span class="vico">' + vwIcon(g[1], 24) + '</span>'
@@ -804,7 +810,7 @@ function vwWhoPlain() {
 }
 function vwDealHtml() {
   const types = [
-    ['fixed_amount', 'coin', 'Money off · 立减', 'a set ¥ amount · 固定金额'],
+    ['fixed_amount', 'coin', 'Money off · 立减', 'a set ' + ((typeof acCurrencySymbol === 'function') ? acCurrencySymbol() : '¥') + ' amount · 固定金额'],
     ['percent', 'percent', 'Percent off · 折扣', 'a % of the order · 按比例'],
     ['free_shipping', 'truck', 'Free shipping · 免运费', 'no delivery fee · 不收运费'],
   ];
@@ -812,7 +818,7 @@ function vwDealHtml() {
     + '<span class="vico">' + vwIcon(t[1], 26) + '</span><div class="tt">' + t[2] + '</div><div class="ts">' + t[3] + '</div></div>').join('');
   let amt = '';
   if (_vw.type !== 'free_shipping') {
-    const unit = _vw.type === 'percent' ? '%' : '¥';
+    const unit = _vw.type === 'percent' ? '%' : acCurrencySymbol();
     const presets = _vw.type === 'percent' ? [5, 10, 20] : [10, 20, 50];
     const chips = presets.map(p => '<button class="vw-chip' + (Number(_vw.value) === p ? ' on' : '') + '" onclick="vwPickAmt(' + p + ')">' + p + '</button>').join('');
     amt = '<div class="vw-lab" style="margin-top:22px;">How much do they save? · 优惠多少?</div>'
@@ -877,7 +883,7 @@ function vwEndPlain() {
 }
 function vwRulesHtml() {
   const minRow = _vw.setMin
-    ? '<div class="vw-sent"><div class="row"><span class="txt">Works on orders ¥<input id="vw-min" class="vw-inl" type="text" inputmode="numeric" value="' + escapeAttr(String(_vw.min || '')) + '" oninput="vwLiveMin(this.value)"> and up. · 满额可用。</span>'
+    ? '<div class="vw-sent"><div class="row"><span class="txt">Works on orders ' + acCurrencySymbol() + '<input id="vw-min" class="vw-inl" type="text" inputmode="numeric" value="' + escapeAttr(String(_vw.min || '')) + '" oninput="vwLiveMin(this.value)"> and up. · 满额可用。</span>'
       + '<button class="btn btn-ghost vw-chg" onclick="vwUnsetMin()">Any order · 任意</button></div></div>'
     : '<div class="vw-sent"><div class="row"><span class="txt">Works on <b>any order size</b>. · 任意订单金额可用。</span>'
       + '<button class="btn btn-ghost vw-chg" onclick="vwSetMinOn()">Set a minimum · 设最低金额</button></div></div>';
@@ -952,7 +958,7 @@ function vwRecapSentence() {
             : _vw.path === 'auto'    ? 'Everyone · 所有人'
             : _vw.path === 'pick'    ? 'Customers you pick · 你指定的顾客'
             : 'Anyone in the app · 小程序内任何人';
-  const min = Number(_vw.min) > 0 ? (' on orders ¥' + Number(_vw.min) + '+ · 满 ¥' + Number(_vw.min)) : '';
+  const min = Number(_vw.min) > 0 ? (' on orders ' + acWrap(Number(_vw.min)) + '+ · 满 ' + acWrap(Number(_vw.min))) : '';
   const how = _vw.path === 'auto'    ? ' — applied automatically · 自动应用'
             : _vw.path === 'welcome' ? ' — placed in their coupons · 自动进入账户'
             : _vw.path === 'pick'    ? ' — after you pick them · 保存后挑选'
@@ -1018,9 +1024,9 @@ function vwHeadsUp() {
         const ref = 200, mine = vwDiscAt(_vw, ref);
         const bigger = others.filter(v => v.type !== 'free_shipping' && vwDiscAt(v, ref) >= mine);
         if (bigger.length) {
-          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ¥200 order, <b>' + escapeHtml(bigger[0].code) + '</b> gives more — your new deal may rarely be used. · 以 ¥200 订单为例,<b>' + escapeHtml(bigger[0].code) + '</b> 更划算,你的新优惠可能很少被用到。' });
+          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ' + acWrap(200) + ' order, <b>' + escapeHtml(bigger[0].code) + '</b> gives more — your new deal may rarely be used. · 以 ' + acWrap(200) + ' 订单为例,<b>' + escapeHtml(bigger[0].code) + '</b> 更划算,你的新优惠可能很少被用到。' });
         } else {
-          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ¥200 order, your new deal gives the most — it will usually win. · 以 ¥200 订单为例,你的新优惠最划算,通常会胜出。' });
+          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ' + acWrap(200) + ' order, your new deal gives the most — it will usually win. · 以 ' + acWrap(200) + ' 订单为例,你的新优惠最划算,通常会胜出。' });
         }
       }
     }

@@ -78,7 +78,7 @@ const afT = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
 function afxWhy(e) {
   const code = (e && (e.code || e.message)) || '';
   const map = {
-    bad_reward:          () => afT('A reward has to be between ¥0 and ¥10,000.', '奖励金额需在 ¥0 到 ¥10,000 之间。'),
+    bad_reward:          () => afT('A reward has to be between ' + acWrap(0) + ' and ' + acWrap('10,000') + '.', '奖励金额需在 ' + acWrap(0) + ' 到 ' + acWrap('10,000') + ' 之间。'),
     bad_lifetime_rate:   () => afT('The repeat-order share has to be between 0% and 50%.', '复购分成比例需在 0% 到 50% 之间。'),
     bad_lifetime_months: () => afT('The share can last up to 120 months. Use 0 for no end date.', '分成最长 120 个月。设为 0 表示不设期限。'),
     bad_lifetime_mode:   () => afT('Who earns the repeat-order share could not be saved. Reload the page and set it again.', '复购分成的可获得范围保存失败。请刷新页面后重新设置。'),
@@ -296,19 +296,19 @@ function afxRenderVerdict() {
   const paid = Number(o.money.paidOut);
   const spend = Number(o.money.friendSpend);
   const figs =
-    afxFig(afT('You have paid out', '已发出奖励'), '¥' + afxMoney(paid),
+    afxFig(afT('You have paid out', '已发出奖励'), acWrap(afxMoney(paid)),
            paid > 0
              ? (o.money.lifetimePaid > 0
-                 ? afT('incl. ¥' + afxMoney(o.money.lifetimePaid) + ' from repeat orders', '含复购分成 ¥' + afxMoney(o.money.lifetimePaid))
+                 ? afT('incl. ' + acWrap(afxMoney(o.money.lifetimePaid)) + ' from repeat orders', '含复购分成 ' + acWrap(afxMoney(o.money.lifetimePaid)))
                  : afT('to referrer and friend wallets', '进入推荐人与好友钱包'))
              : afT('no referral has converted', '尚无推荐达成')) +
-    afxFig(afT('Referred friends have spent', '被推荐好友消费'), '¥' + afxMoney(spend),
+    afxFig(afT('Referred friends have spent', '被推荐好友消费'), acWrap(afxMoney(spend)),
            spend > 0
              ? afT('since they joined', '自加入起')
              : afT('nothing to weigh it against', '暂无可对比的数字')) +
-    afxFig(afT('Each referral costs', '每次推荐成本'), '¥' + afxMoney(cost),
-           afT('¥' + afxMoney(o.offer.referrer) + ' to them, ¥' + afxMoney(o.offer.friend) + ' to the friend',
-               '推荐人 ¥' + afxMoney(o.offer.referrer) + ',好友 ¥' + afxMoney(o.offer.friend)));
+    afxFig(afT('Each referral costs', '每次推荐成本'), acWrap(afxMoney(cost)),
+           afT(acWrap(afxMoney(o.offer.referrer)) + ' to them, ' + acWrap(afxMoney(o.offer.friend)) + ' to the friend',
+               '推荐人 ' + acWrap(afxMoney(o.offer.referrer)) + ',好友 ' + acWrap(afxMoney(o.offer.friend))));
 
   host.innerHTML = `<div class="afx-verdict">
       <div class="lead">${lead}</div>
@@ -387,8 +387,8 @@ function afxRenderOffer() {
       <div class="afx-offerline">
         <div class="ot">
           <div class="afx-card-lbl" style="margin-bottom: 0">${afT('The offer', '奖励方案')}</div>
-          <div class="h">${afT('Give ¥' + afxMoney(c.rewardReferee) + ', get ¥' + afxMoney(c.rewardPerOrder) + tail + qualEn + '.',
-                               '给出 ¥' + afxMoney(c.rewardReferee) + ',获得 ¥' + afxMoney(c.rewardPerOrder) + tail + qualCn + '。')}</div>
+          <div class="h">${afT('Give ' + acWrap(afxMoney(c.rewardReferee)) + ', get ' + acWrap(afxMoney(c.rewardPerOrder)) + tail + qualEn + '.',
+                               '给出 ' + acWrap(afxMoney(c.rewardReferee)) + ',获得 ' + acWrap(afxMoney(c.rewardPerOrder)) + tail + qualCn + '。')}</div>
           <div class="s">${afT('Paid into the referrer’s wallet the moment a friend’s first order is marked paid.',
                                '好友首单标记为已付款时,奖励即刻进入推荐人钱包。')}</div>
         </div>
@@ -432,9 +432,9 @@ function afxRenderSettings() {
       <div class="afx-card-lbl">${afT('The offer', '奖励方案')}</div>
       <div class="afx-lead">${afT('When a friend places their first paid order:', '当好友完成首笔付费订单时:')}</div>
       <div class="afx-sent">
-        <span class="who">${afT('the friend gets', '好友获得')}</span>${afxField('rewardReferee', c.rewardReferee, { prefix: '¥', label: afT('Reward for the friend', '好友奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
+        <span class="who">${afT('the friend gets', '好友获得')}</span>${afxField('rewardReferee', c.rewardReferee, { prefix: acCurrencySymbol(), label: afT('Reward for the friend', '好友奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
         <span class="who"> · </span>
-        <span class="who">${afT('the referrer gets', '推荐人获得')}</span>${afxField('rewardPerOrder', c.rewardPerOrder, { prefix: '¥', label: afT('Reward for the referrer', '推荐人奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
+        <span class="who">${afT('the referrer gets', '推荐人获得')}</span>${afxField('rewardPerOrder', c.rewardPerOrder, { prefix: acCurrencySymbol(), label: afT('Reward for the referrer', '推荐人奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
       </div>
       <div class="afx-restate" id="afx-restate">${afxRestate()}</div>
       <div class="afx-note">${afT(
@@ -684,8 +684,8 @@ async function afxOpenEligible() {
 
 function afxRestate() {
   const c = AFX.cfg || {};
-  return afT('Give <b>¥' + afxMoney(c.rewardReferee) + '</b>, get <b>¥' + afxMoney(c.rewardPerOrder) + '</b>.',
-             '给出 <b>¥' + afxMoney(c.rewardReferee) + '</b>,获得 <b>¥' + afxMoney(c.rewardPerOrder) + '</b>。');
+  return afT('Give <b>' + acWrap(afxMoney(c.rewardReferee)) + '</b>, get <b>' + acWrap(afxMoney(c.rewardPerOrder)) + '</b>.',
+             '给出 <b>' + acWrap(afxMoney(c.rewardReferee)) + '</b>,获得 <b>' + acWrap(afxMoney(c.rewardPerOrder)) + '</b>。');
 }
 // 0 months is a real setting, not an empty field — say what it does (the dash
 // and the silent "reloads as 12" flip are both banned).
@@ -805,8 +805,8 @@ function afxRow(r) {
   // page claiming a payment that never happened.
   const paid = r.status === 'ordered' ? (Number(r.reward_amount) || 0) : 0;
   const earned = paid > 0
-    ? `<span class="afx-num">¥${afxMoney(paid)}</span>`
-    : `<span class="afx-dim afx-num">¥0</span>`;
+    ? `<span class="afx-num">${acWrap(afxMoney(paid))}</span>`
+    : `<span class="afx-dim afx-num">${acWrap(afxMoney(0))}</span>`;
   return `<tr>
       <td><a data-afx="cust:${r.referrer_id}">${referrer}</a></td>
       <td><a data-afx="cust:${r.invitee_id}">${friend}</a></td>
@@ -1876,8 +1876,8 @@ function lbUpdateSeedSummary() {
   if (!LB_SEED_ENTRIES.length) { el.textContent = cuT('No placeholder members yet.', '尚未生成占位会员。'); return; }
   const top = LB_SEED_ENTRIES[0], bottom = LB_SEED_ENTRIES[LB_SEED_ENTRIES.length - 1];
   el.textContent = cuT(
-    LB_SEED_ENTRIES.length + ' members · ¥' + top.value + ' → ¥' + bottom.value,
-    LB_SEED_ENTRIES.length + ' 位会员 · ¥' + top.value + ' → ¥' + bottom.value
+    LB_SEED_ENTRIES.length + ' members · ' + acWrap(top.value) + ' → ' + acWrap(bottom.value),
+    LB_SEED_ENTRIES.length + ' 位会员 · ' + acWrap(top.value) + ' → ' + acWrap(bottom.value)
   );
 }
 // Build a believable descending spend distribution from the top value down,
@@ -1991,7 +1991,7 @@ async function lbLoadPreview() {
   }
 }
 function lbFormatValue(value, metric) {
-  if (metric === 'lifetime_spend') return '¥' + Number(value || 0).toFixed(0);
+  if (metric === 'lifetime_spend') return acWrap(Number(value || 0).toFixed(0));
   if (metric === 'points_balance') return Number(value || 0).toLocaleString() + ' pts';
   if (metric === 'orders_count')   return Number(value || 0).toLocaleString() + ' orders';
   return String(value || 0);

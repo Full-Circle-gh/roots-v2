@@ -54,7 +54,7 @@ let FIN_SEEN = false;
 // that is a surface-wide sweep, and inventing a mechanism here that nothing
 // else honours would leave two conventions instead of one.
 function finMoney(n) {
-  return '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return acWrap(Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
 }
 
 // ── The range bar ──────────────────────────────────────────────────────────

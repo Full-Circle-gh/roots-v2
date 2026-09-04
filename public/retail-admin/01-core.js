@@ -170,6 +170,21 @@ function acCurrency() {
 // Just the symbol — for the input adornments that sit beside a number field
 // rather than formatting one.
 function acCurrencySymbol() { return acCurrency().symbol; }
+// Put the tenant's symbol on an ALREADY-FORMATTED number, on the correct side.
+//
+// acMoney() formats the number too, with toFixed and no thousands separator.
+// That is right for a price field and wrong for the Dashboard's "¥1,240", for
+// a rounded chart axis, or for a range like "20–50" — screens that do their own
+// number formatting and only ever needed the symbol placed. Before this they
+// each wrote '¥' + theirOwnFormat(n), which is why a tenant selling in dollars
+// was shown dollars on eight screens and yuan on the rest (audit D-03).
+//
+// Takes a STRING because that is the point: the caller has already decided how
+// the digits look, and this must not second-guess it.
+function acWrap(formatted) {
+  const c = acCurrency();
+  return c.position === 'after' ? String(formatted) + c.symbol : c.symbol + String(formatted);
+}
 // Format an amount in the tenant's display currency. `dp` overrides the
 // currency's own decimal places, for the sub-cent per-unit figures on the
 // Recipes screen; everything else takes the tenant's setting.
@@ -456,7 +471,7 @@ document.addEventListener('click', (ev) => {
 // (part 03) is loaded by the time a tab can be clicked.
 async function salesInit() {
   const set   = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  const money = (n) => (typeof dashMoney === 'function' ? dashMoney(n) : '¥' + Number(n || 0));
+  const money = (n) => (typeof dashMoney === 'function' ? dashMoney(n) : acWrap(Number(n || 0)));
   const num   = (n) => Number(n || 0).toLocaleString();
   try {
     const j = await api('/api/retail-admin/sales/summary');

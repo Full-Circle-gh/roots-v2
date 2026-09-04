@@ -1507,7 +1507,7 @@ function _paPriceCell(u) {
   // Single price keeps the cents (¥89.00); a range drops trailing .00 so it
   // reads compact (¥57–89), matching the catalogue mockup.
   const short = n => fmt(n).replace(/\.00$/, '');
-  const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${short(pr.min)}–${short(pr.max)}`;
+  const body = pr.min === pr.max ? `${acMoney(pr.min)}` : `${acWrap(short(pr.min))}–${short(pr.max)}`;
   return `<span class="pa-col-price">${body}</span>`;
 }
 // ── The "cost is not complete" mark ──────────────────────────────────────────
@@ -3095,7 +3095,7 @@ async function pdLoadSales(id) {
   }
   const d = j.data;
   setText('pd-sales-units', Number(d.units || 0).toLocaleString());
-  setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
+  setText('pd-sales-revenue', acWrap(Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })));
   setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
   setText('pd-sales-context', pdSalesContext(d));
 }
@@ -3601,7 +3601,7 @@ function pdSyncPageHead() {
     const bits = [];
     if (sku) bits.push(cuT('SKU ', '货号 ') + sku);
     if (where) bits.push(where);
-    if (price) bits.push('¥' + price);
+    if (price) bits.push(acWrap(price));
     sub.textContent = bits.join(' · ');
   }
 }
@@ -3813,7 +3813,7 @@ function vaRender() {
   const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span>` +
     `<span>${cuT('Name', '名称')}</span><span>${cuT('Label', '规格标签')}</span>` +
     `<span>${cuT('SKU', '货号')}</span><span>${cuT('Weight', '规格')}</span>` +
-    `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
+    `<span class="va-num">${acCurrencySymbol()}</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map((v, i) => {
     const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
@@ -4180,7 +4180,7 @@ function buRender() {
     `</div>` +
     `<div class="bu-chips">${chips}</div>` +
     `<div class="bu-row2">` +
-      `<div class="field"><label class="stacked">${cuT('Set price ¥ (optional)', '搭配价 ¥(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Set price ' + acCurrencySymbol() + ' (optional)', '搭配价 ' + acCurrencySymbol() + '(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
       `<div class="field"><label class="stacked">${cuT('Auto voucher (optional)', '自动优惠券(可选)')}</label><input type="text" value="${escapeAttr(BU.voucher)}" placeholder="${cuT('code', '券码')}" oninput="buField('voucher', this.value)"></div>` +
     `</div>` +
     `<div class="va-actions">` +
@@ -4561,7 +4561,7 @@ function _optChoiceRow(o, oi, c, ci) {
     def +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
-    (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
+    (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+${acCurrencySymbol()}<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
     link +
     `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
   `</div>` + picker;
@@ -6172,10 +6172,10 @@ function pwPriceHtml() {
   let core;
   if (!_pw.hasSizes) {
     core = '<div class="pw-row2">'
-      + '<div class="field"><label class="vw-lab">' + cuT('Price', '价格') + ' ¥</label><input type="number" min="0" step="0.01" value="' + (_pw.price === '' ? '' : _pw.price) + '" oninput="pwSet(\'price\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
+      + '<div class="field"><label class="vw-lab">' + cuT('Price', '价格') + ' ' + acCurrencySymbol() + '</label><input type="number" min="0" step="0.01" value="' + (_pw.price === '' ? '' : _pw.price) + '" oninput="pwSet(\'price\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
       + '<div class="field"><label class="vw-lab">' + cuT('In stock', '库存') + '</label><input type="number" min="0" step="1" value="' + (_pw.stock === '' ? '' : _pw.stock) + '" oninput="pwSet(\'stock\', this.value)" style="width:100%;box-sizing:border-box;"></div></div>'
       + '<label class="pw-check"><input type="checkbox"' + (_pw.compare !== '' ? ' checked' : '') + ' onchange="pwToggleSale(this.checked)"> ' + cuT('It’s on sale', '正在促销') + '</label>'
-      + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ¥</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
+      + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ' + acCurrencySymbol() + '</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
   } else {
     core = '<div class="vw-help" style="margin-bottom:8px;">' + cuT('Give each option a name (a size or a flavor). Weight is optional.', '为每个选项起个名字(规格或口味)。重量可选。') + '</div>'
       + '<div class="pw-vars">'
@@ -6188,7 +6188,7 @@ function pwPriceHtml() {
         + '</div>'
         + '<div class="pw-var-line">'
         + '<input type="text" class="pw-var-wt" placeholder="' + cuT('Weight — e.g. 250g', '重量 — 如 250克') + '" value="' + escapeAttr(s.weight) + '" oninput="pwSizeField(' + i + ', \'weight\', this.value)">'
-        + '<span class="pw-size-cur">¥<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
+        + '<span class="pw-size-cur">' + acCurrencySymbol() + '<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
         + '<input type="number" min="0" step="1" class="pw-var-stk" placeholder="' + cuT('stock', '库存') + '" value="' + (s.stock === '' ? '' : s.stock) + '" oninput="pwSizeField(' + i + ', \'stock\', this.value)">'
         + '</div>'
         + '</div>').join('')
@@ -6292,7 +6292,7 @@ function pwChoiceRow(o, oi, c, ci) {
     ? '<input type="radio" name="pw-def-' + oi + '" title="' + cuT('Show one as the usual pick', '设为默认选项') + '"' + (c.is_default ? ' checked' : '') + ' onchange="pwOptDefault(' + oi + ', ' + ci + ')">'
     : '<span class="pw-radio-spacer"></span>';
   const lab = '<input type="text" class="pw-clab" placeholder="' + (paid ? cuT('e.g. Extra pickles', '如 加酸黄瓜') : cuT('e.g. Ranch', '如 牧场酱')) + '" value="' + escapeAttr(c[labKey] || '') + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'' + labKey + '\', this.value)">';
-  const price = paid ? '<span class="pw-cur">+¥<input type="number" min="0" step="0.01" value="' + (c.price_delta || 0) + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'price_delta\', this.value)"></span>' : '';
+  const price = paid ? '<span class="pw-cur">+' + acCurrencySymbol() + '<input type="number" min="0" step="0.01" value="' + (c.price_delta || 0) + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'price_delta\', this.value)"></span>' : '';
   let link = '';
   if (paid) {
     if (c.stock_product_id) {
@@ -6340,9 +6340,9 @@ function pwReviewHtml() {
   const priceTxt = _pw.hasSizes
     ? _pw.sizes.filter(s => s.name_en || s.name_cn || s.price !== '').map(s => {
       const nm = cuT(s.name_en || s.name_cn || '—', s.name_cn || s.name_en || '—');
-      return escapeHtml(nm + (s.weight ? ' (' + s.weight + ')' : '')) + ' ¥' + (s.price || '?');
+      return escapeHtml(nm + (s.weight ? ' (' + s.weight + ')' : '')) + ' ' + acWrap(s.price || '?');
     }).join(' · ')
-    : ('¥' + (_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">¥' + _pw.compare + '</span>' : ''));
+    : (acWrap(_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">' + acWrap(_pw.compare) + '</span>' : ''));
   const cat = _pw.sub ? (_pw.top + ' › ' + _pw.sub) : (_pw.top || cuT('No category yet', '尚未分类'));
   const factCount = Object.values(_pw.facts).filter(v => (v || '').trim()).length;
   const freeOf = PW_FREE_OF.filter(([id]) => _pw.freeOf[id]).map(([, en, cn]) => cuT(en, cn));
@@ -6355,7 +6355,7 @@ function pwReviewHtml() {
   _pw.options.forEach(o => {
     const paid = o.type === 'multi';
     const q = (pwPrimaryLang() === 'cn' ? o.question_cn : o.question_en) || (paid ? cuT('Extras', '加项') : cuT('Pick', '选择'));
-    const items = o.choices.filter(c => c.label_en || c.label_cn).map(c => (pwPrimaryLang() === 'cn' ? c.label_cn : c.label_en) + (paid && c.price_delta ? ' +¥' + c.price_delta : '')).join(', ');
+    const items = o.choices.filter(c => c.label_en || c.label_cn).map(c => (pwPrimaryLang() === 'cn' ? c.label_cn : c.label_en) + (paid && c.price_delta ? ' +' + acWrap(c.price_delta) : '')).join(', ');
     lines.push([paid ? 'They can add' : 'They can pick', paid ? '可添加' : '可选择', escapeHtml(q + (items ? ' — ' + items : ''))]);
   });
   const photo = _pw.photo ? '<div class="pw-rev-photo" style="background-image:url(' + escapeAttr(_pw.photo) + ')"></div>' : '<div class="pw-rev-photo pw-rev-photo-empty">🛍</div>';
