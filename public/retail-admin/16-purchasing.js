@@ -1651,7 +1651,12 @@
   // only when the two differ, so Confirm delivery on a tab left open cannot
   // restate a stale value over a mark set on the Invoices screen since.
   function invoiceCell(it, poNoInvoice, dis) {
-    if (poNoInvoice) return `<span class="sub">${esc(T('None', '无发票'))}</span>`;
+    // A line reading 无发票 because of a mark ONE LEVEL UP, with no picker and
+    // no way back, is the other half of what the floor reported as "it set
+    // 不开发票 by itself". Nothing here says the mark belongs to the ORDER, so
+    // the buyer looks for the way out on this row and there is none. Say whose
+    // mark it is, and where 恢复 lives.
+    if (poNoInvoice) return `<span class="sub" title="${esc(T('The whole order is marked no-invoice — restore it on the Invoices tab', '整单已标记不开发票 —— 请在“发票”页恢复待开票'))}">${esc(T('None · whole order', '无发票 · 整单'))}</span>`;
     const sel = it.no_invoice_expected ? 'no_invoice' : (it.invoice_status || 'not_received');
     const opt = (v, en, cn) => `<option value="${v}"${sel === v ? ' selected' : ''}>${esc(T(en, cn))}</option>`;
     return `<select class="pu2-input pu2-ri" data-saved="${sel}" onchange="puSaveLineInvoice(this, ${it.id})" ${dis}>
@@ -2658,6 +2663,21 @@
 
   // The lines inside one supplier, grouped by the buying order they sit on so
   // the PO-level "no invoice" mark has somewhere honest to live.
+  // THE OTHER SUPPLIERS ON THE SAME BUYING ORDER. A line is attributed by its
+  // OWN supplier_name before the order header's (routes/retail-purchasing.js
+  // SUPPLIER_EXPR), so one order routinely has lines under two suppliers and
+  // this drill shows the buyer only the ones under the group they opened. The
+  // two controls in the row below are ORDER-level: 整单标记不开发票 covers every
+  // line on the order, including the ones on screens they are not looking at.
+  // That is what the umbrella means, and it is worth saying before the press
+  // rather than after — a supplier changing state on its own was reported from
+  // the floor as the screen acting by itself.
+  function poOtherSuppliers(poNumber, thisSupplier) {
+    return ((_invOut && _invOut.groups) || [])
+      .filter(x => x.supplier !== thisSupplier && x.lines.some(l => l.po_number === poNumber))
+      .map(x => supName(x.supplier, x.supplier_cn));
+  }
+
   function invLinesHtml(g) {
     // Only the Unspecified bucket gets the "set supplier" affordances — a line
     // already grouped under a real vendor is attributed, and re-pointing it is
@@ -2687,12 +2707,35 @@
           // it is named here so nobody chases it a second time.
           po.supersedes_invoiced > 0.005
             ? ` · ${T('already invoiced', '已登记发票')} ${money(po.supersedes_invoiced)}` : ''}</span>` : ''}
+        ${(() => {
+          const others = poOtherSuppliers(po.po_number, g.supplier);
+          return others.length
+            ? `<span class="pu2-mut" title="${esc(T('The two order-level buttons on this row cover every line on ' + po.po_number + ', including these: ', '本行的“整单”按钮作用于 ' + po.po_number + ' 的全部明细,包括以下供应商的明细:') + others.join('、'))}">${esc(T(`also ${others.length} other supplier${others.length === 1 ? '' : 's'} on this order`, `本单还含 ${others.length} 个其他供应商的明细`))}</span>`
+            : '';
+        })()}
         <span class="spacer"></span>
         ${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${po.lines.map(l => l.line_id).join(',')}])">${esc(T('Set supplier for this order', '为整单设置供应商'))}</button>` : ''}
         ${po.po_no_invoice
+          // A STATE AND A COMMAND MUST NOT SAY THE SAME WORDS IN THE SAME SLOT.
+          //
+          // Both branches used to put 不开发票 in this one place, in the same
+          // muted grey: the marked order got a pill reading 不开发票, and the
+          // UNMARKED one got a borderless ghost button reading 整单不开发票 —
+          // which is not a statement about this order at all, it is the offer to
+          // make one. Nothing distinguished them. So an order nobody had marked
+          // read as marked ("它自动设置不开发票"), and pressing 恢复 on one that
+          // WAS marked left 不开发票 sitting on the row afterwards — the button
+          // that now offers to re-mark it. The press worked; the row said it had
+          // not ("恢复不起作用"). That is this defect, and it survived the fix
+          // that made 恢复 actually reach both levels of the mark.
+          //
+          // The rule now: the pill states, the button acts. Every label on a
+          // control starts with its verb, names what it will do rather than what
+          // is true, and carries a resting border so it reads as a control at a
+          // glance instead of as a caption beside the figures.
           ? `<span class="pu2-pill grey">${esc(T('No invoice', '不开发票'))}</span>
-             <button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore', '恢复'))}</button>`
-          : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This whole order will never have an invoice — cash or market', '整单不会开发票 —— 现金或市场采购'))}" onclick="puInvNoInvoicePO(${po.po_id}, true)">${esc(T('No invoice for this order', '整单不开发票'))}</button>`}
+             <button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Put the whole order back on the chase — the supplier should issue an invoice', '整单恢复待开票 —— 供应商应开发票'))}" onclick="puInvNoInvoicePO(${po.po_id}, false)">${esc(T('Restore whole order to awaiting', '整单恢复待开票'))}</button>`
+          : `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('This whole order will never have an invoice — cash or market', '整单不会开发票 —— 现金或市场采购'))}" onclick="puInvNoInvoicePO(${po.po_id}, true)">${esc(T('Mark whole order as no-invoice', '整单标记不开发票'))}</button>`}
       </div>
       ${po.lines.map(l => {
         const m = INV_META[l.status]();
@@ -2711,10 +2754,24 @@
             // overshoots its own header.
             ? `<span class="pu2-pill amber" title="${esc(T('More has been invoiced than this line is now worth — goods went back after it was recorded', '该明细已开票金额高于当前应付金额 —— 开票后有退货'))}"><span class="dot"></span>${esc(T('credit due', '应退'))} ${money(l.credit_due)}</span>`
             : ''}
-          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice ? ''
+          <span class="act">${unspec ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvAssign([${l.line_id}])">${esc(T('Set supplier', '设置供应商'))}</button>` : ''}${l.po_no_invoice
+            // AN EMPTY CELL IS NOT AN ANSWER. While the ORDER carries the mark
+            // the line has no toggle of its own to offer — the state is the OR
+            // of the two levels, so a line-level 恢复 pressed here would change
+            // a column nobody reads and leave the row saying 不开发票. Correct,
+            // and it left this cell blank beside a grey 不开发票 pill, which
+            // reads as a control that failed to render rather than as a
+            // decision made one row up. Say where the mark comes from and where
+            // it comes off; the line's own toggle returns the moment the
+            // order's umbrella lifts (the branch below).
+            ? `<span class="pu2-mut" title="${esc(T('This line is covered by the order-level no-invoice mark — restore the whole order on the row above to give this line its own control back', '该明细由整单“不开发票”标记覆盖 —— 请在上方该订单行点击“整单恢复待开票”,该明细才会恢复单独操作'))}">${esc(T('by whole-order mark', '由整单标记'))}</span>`
+            // Same rule as the order row above. The pill one column to the left
+            // already says 不开发票 when this line is marked; a button here that
+            // says it too — for a line that is NOT marked — is the screen
+            // stating a fact it does not hold. Verb first, and a border.
             : l.line_no_invoice
-              ? `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore', '恢复'))}</button>`
-              : `<button class="pu2-btn ghost sm" data-cap="purchasing:invoices" title="${esc(T('This line will never have an invoice', '该明细不会开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},true)">${esc(T('No invoice', '不开发票'))}</button>`}</span>
+              ? `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('Put this line back on the chase — the supplier should issue an invoice', '该明细恢复待开票 —— 供应商应开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},false)">${esc(T('Restore to awaiting', '恢复待开票'))}</button>`
+              : `<button class="pu2-btn sm" data-cap="purchasing:invoices" title="${esc(T('This line will never have an invoice', '该明细不会开发票'))}" onclick="puInvNoInvoiceLine(${l.po_id},${l.line_id},true)">${esc(T('Mark as no-invoice', '标记不开发票'))}</button>`}</span>
         </div>`;
       }).join('')}`).join('')}</div>`;
   }
@@ -2766,16 +2823,40 @@
   };
 
   // ── the no-invoice mark, both levels ──────────────────────────────────────
+  // Both toggles SAY SO when they land. They used to repaint the table and
+  // nothing else, which is fine while the row moves and useless when it does
+  // not — and 恢复 on an order whose lines carried their own mark did not move
+  // it at all: the state is an OR of the two levels (routes/retail-purchasing
+  // lineStatus), so the row went on reading 不开发票 with nothing on screen to
+  // say why. The server now lifts both levels together (lib/invoice-mark.js)
+  // and returns how many lines went with the order, and that count is said out
+  // loud here, because a press that quietly changes more than the row it was
+  // aimed at should not be silent either.
   window.puInvNoInvoicePO = async function (poId, flag) {
     try {
-      await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
+      const r = await api(`/api/retail-admin/purchasing/po/${poId}/no-invoice`,
+                          { method: 'PUT', body: { no_invoice_expected: !!flag } });
       await invReload();
+      // WHAT THE PRESS DID NOT DO, SAID OUT LOUD. 恢复 lifts the ORDER's
+      // umbrella and leaves every line that carries its own mark exactly where
+      // it is (lib/invoice-mark.js). Those rows go on reading 不开发票 — the
+      // state is the OR of the two levels — and each now offers its own 恢复 in
+      // the drill. Naming the count here is what keeps that from reading as a
+      // press that half-worked.
+      const n = Number(r && r.lines_still_marked) || 0;
+      toast(flag ? T('Whole order marked as no-invoice ✓', '整单已标记不开发票 ✓')
+                 : (n ? T(n === 1 ? 'Order restored — 1 line keeps its own no-invoice mark'
+                                  : `Order restored — ${n} lines keep their own no-invoice mark`,
+                          `整单已恢复待开票 —— ${n} 条明细仍自行标记不开发票`)
+                      : T('Order restored to awaiting ✓', '整单已恢复待开票 ✓')), 'ok');
     } catch (e) { toast(e.message, 'err'); }
   };
   window.puInvNoInvoiceLine = async function (poId, lineId, flag) {
     try {
       await api(`/api/retail-admin/purchasing/po/${poId}/line/${lineId}/no-invoice`, { method: 'PUT', body: { no_invoice_expected: !!flag } });
       await invReload();
+      toast(flag ? T('Line marked as no-invoice ✓', '该明细已标记不开发票 ✓')
+                 : T('Line restored to awaiting ✓', '该明细已恢复待开票 ✓'), 'ok');
     } catch (e) { toast(e.message, 'err'); }
   };
 

@@ -1,6 +1,6 @@
 # eleme — Findings
 
-Nine findings. The first four come from a read-only survey on 2026-08-25, opened
+Ten findings. The first four come from a read-only survey on 2026-08-25, opened
 by a dashboard row ("Eleme not syncing · 1") and ending in a wrong number on a
 live listing. Findings 5 and 6 were added on 2026-08-26, from the mapping screen
 that survey sent someone to. Most are not Eleme-specific: findings 1 and 4 hold
@@ -9,7 +9,10 @@ external system, finding 5 holds on any screen that counts work, and finding 7
 holds anywhere a cached read is consulted by something that returns a verdict,
 finding 8 holds anywhere one screen owns both the reversible and the
 destructive way to end the same thing, and finding 9 holds anywhere a system
-resolves a target by name and does not record which one it chose.
+resolves a target by name and does not record which one it chose. Finding 10
+was added on 2026-09-04 from a report that Eleme orders never leave "Paid"; it
+holds anywhere a field is read by candidate name and no one checks that the
+value which answered is the kind of thing being asked for.
 
 The rules these produced are in `docs/tacet-consolidation-decisions.md` §30. This
 document is the evidence; that one is the intent. Where they disagree about what
@@ -952,6 +955,135 @@ And independently of both: **record the target.** A `target_name` on the
 `stock_push` log line would have made this finding a query rather than an
 argument. — **DONE, `0a66800d`**: `eleme_product_map.item_id` plus `target_name`
 and `target_item_id` on the log line.
+
+---
+
+## 10. Every Eleme order sat on "Paid" for its whole life, because a validity flag answered a question about the lifecycle (found 2026-09-04)
+
+Status: FIXED 2026-09-04 in `lib/eleme-browser.js`, `routes/eleme-internal.js`
+and `scripts/eleme-daemon.js`. History unchanged — see the last paragraph.
+
+Reported as "eleme order doesn't change status, they always under 'paid'". It is
+one read, wrong in a way that could not be seen from the value it produced.
+
+`lib/eleme-browser.js` reads every field by candidate name. `STATUS_KEYS` is
+`['statusDesc', 'orderStatusDesc', 'statusText', 'statusName',
+'statusDescription', 'status']` — five specific names and then the bare
+`'status'`. **None of the five appears anywhere in Eleme's real order payload**,
+so every order fell through to the sixth, which holds `"VALID"`: an
+order-VALIDITY flag that reads the same on an order being cooked and on one
+delivered an hour ago. `routes/eleme-internal.js internalStatusForChannel`
+matches it against nothing, and the caller ends
+`internalStatusForChannel(channelStatus) || 'paid'` — so the order was created as
+Paid, and every later poll wrote the same `"VALID"` back and moved nothing. The
+label churned in `channel_status` and our own `status` never left `paid` however
+far Eleme had taken the order.
+
+**The value could not give the read away, and that is the point.** "VALID" is a
+plausible-looking string in a status column. Measured at 3 of 3 live orders by
+`scripts/diagnose_eleme_courier_status.js` and again by
+`diagnose_eleme_status_survey.js` — every one of them delivered, and every one of
+them reading `channel_status = "VALID"`. The first visible symptom was a UI one:
+the drawer's platform-status cell rendered "In progress" on delivered orders,
+which `6b8cda0` fixed by removing the cell (Ash, 2026-09-02) — correctly, on the
+evidence then available, because the field it displayed was junk. The status the
+operator actually watches went on being wrong for two more days.
+
+This is finding 9's shape and the ¥17.50 total's shape (`67fc00a`) a third time:
+**a resolve-by-name stops at the first thing that answers, and nothing checks
+that the answer is the kind of thing being asked for.** The money fix had already built the antidote — named paths first, then a
+priority-first search, with the sub-trees that hold not-the-total excluded — and
+the status read never got it.
+
+The fix is that same shape, applied to the same question:
+
+- `STATUS_PATHS` names the three fields the courier/status capture found carrying
+  a real per-order stage (`header.orderLatestStatus`,
+  `printDataInfo.statusForPrint`, `deliveryInfo.distTraceView.traceView.status`),
+  tried in order before any name search.
+- `NOT_A_STAGE` refuses `VALID`/`INVALID`, placeholders and bare numeric codes
+  **as values**, wherever they turn up, so the search steps over them and keeps
+  looking instead of stopping on one. `pickByPriority` gained the value filter
+  that makes that possible; money passes none, so it is unchanged.
+- `internalStatusForChannel` refuses the same flags a second time, on the server,
+  and gained the ASCII enum arms (`ORDER_COMPLETED`, `DELIVERING`, …) the
+  stage-bearing fields use — a Chinese-only reader would have left exactly these
+  orders on Paid. `INVALID` is refused rather than read as a cancel: a cancel
+  skips the stock deduction at ingest, and "flagged invalid" is not that claim.
+- An unreadable label now writes an `order_status_unmapped` row to
+  `eleme_sync_log`, with the payload path it came out of and whether that field
+  names a stage at all — logged once per CHANGE of label, not once per poll.
+  **This is the instrument the whole finding did without.** Nothing anywhere said
+  that the label we were storing meant nothing to us; if it had, this was a day's
+  work in August.
+- `retail_orders.preparing_at` / `dispatched_at` / `delivered_at` are stamped
+  (fill-a-blank) as our status advances. Eleme sends no rider section, so unlike
+  the Meituan twin nothing else ever wrote them.
+- `POST /api/internal/eleme/auto-deliver-past-eta`, the twin of Meituan's, closes
+  the other end. Our order read is the IN-PROGRESS tab, so an order that
+  completes drops off the list before any 已完成 label is seen and nothing after
+  that can advance it — without this, orders would now stall on Dispatched
+  instead of Paid. An order an hour past Eleme's own promised ETA is treated as
+  delivered; `delivered_at` is deliberately left NULL, because a timer's
+  inference must not be presented as an observation.
+
+### The measurement, 2026-09-04, and the two things it corrected
+
+Shipped at 11:42 +08, the screen still showed two Eleme orders on Paid. Two
+read-only captures on the live box settled why, and neither answer was a guess:
+
+- `diagnose_eleme_status_now.js` — **nothing had been re-read.** The last
+  `order_import` and the last `channel_status` write were both `2026-09-03
+  09:37:16`, and every poll since the deploy returned no order rows, which is
+  what an empty in-progress tab looks like. Five Eleme orders exist in total; all
+  five still read `channel_status = "VALID"`, and **all five have `channel_eta`
+  NULL**.
+- `diagnose_eleme_stage_replay.js` — the fixed parser, run over the archived
+  payloads **on the box**, against the checkout's `lib/` rather than the deployed
+  one. It read `statusDesc = "订单商家已自行送出"` from
+  `header.orderLatestStatus`, `isStage = true`. The named path works.
+
+And then: **`→ internal status: null (order would stay where it is)`.**
+
+**THE RIGHT FIELD, READ CORRECTLY, AND THE ORDER STILL DID NOT MOVE.** 送出 —
+this shop delivers its own Eleme orders (自配送), so the stage says the merchant
+sent it out, and `internalStatusForChannel` had no arm for that word. The stage
+vocabulary was written from Meituan's rider flow; the live one is a self-delivery
+flow. Fixed by adding 送出 to the dispatch arm, below 已送达 so a delivered order
+is still delivered.
+
+The same capture named two more things:
+
+- **`printDataInfo.statusForPrint` is NOT a stage** — it reads `已在线支付` on a
+  delivered order, because it is what the ticket prints about payment. It was
+  second in `STATUS_PATHS` on the strength of its name and is now removed: a
+  payment label winning over a real stage is this same bug wearing a hat.
+- **The ETA lives at `header.planDeliverTime`**, an epoch in milliseconds, and
+  none of the six guessed `ETA_KEYS` names appears in the payload at all — which
+  is why `channel_eta` is NULL on all five. That is not a blank cell:
+  `auto-deliver-past-eta` compares against it, so **the half of the fix meant to
+  land an order after it drops off the in-progress tab was inert by
+  construction**. `ETA_PATHS` now names the field.
+
+Two guessed key lists, two silent misses, one shared root cause — and the
+`order_status_unmapped` log row added above is what would have said so on the
+first order rather than on the fifth.
+
+**History is not touched, and cannot be honestly.** The archived payload on an
+old order is the LIST envelope as it looked at import, so replaying it through
+the fixed reader would stamp an order with the stage it had when first seen, not
+the one it ended at — a delivered order rewritten to "preparing" is worse than
+one left on Paid. Orders still on the in-progress list heal themselves on the
+next poll; ones that have aged off it would need a re-read from the platform, and
+`auto-deliver-past-eta` will land the ones that carry an ETA.
+
+The two that predate the ETA fix carry none, so nothing would ever land them.
+`scripts/repair_eleme_missing_eta.js` restores exactly that one column from each
+order's own archived `header.planDeliverTime` — and **writes nothing else**. A
+promised delivery time does not go stale, so it is a fact about that payload; the
+STAGE in the same archive is only the stage the order had at import, which is why
+the repair restores the sweep's INPUT and lets the one shipped rule decide,
+rather than adding a second rule that guesses outcomes. Dry run by default.
 
 ---
 

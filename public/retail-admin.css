@@ -2840,6 +2840,22 @@
   /* The Meituan line under the editor's Cost field, matching the list cell:
      same measure, one step quieter than the list margin above it. */
   #pd-margin .pd-margin-ch { color: var(--td-text2); margin-top: 2px; }
+  /* The margin is the ANSWER the card produces, and it was sitting flush
+     against the warnings above it as one more grey line. A hairline separates
+     what the cost IS from what it MEANS, the same way the rail's figures card
+     rules off its own total. */
+  #pd-editor .pd-cost-card .pd-cost-margin {
+    border-top: 1px solid var(--td-border);
+    padding-top: 9px; margin-top: 11px; font-size: 12.5px; line-height: 1.5;
+  }
+  /* Both warning hosts stack their pills the way #pd-cost-alert already did —
+     the same shape for the same content, so a recipe warning and a below-cost
+     warning cannot land differently. The inline `display:none` the renderers
+     set still wins over this, which is how they hide when they have nothing to
+     say and take their margin with them. */
+  #pd-editor .pd-cost-card .pd-cost-alerts {
+    display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  }
   /* A cost the recipe owns. Reads as a stated figure rather than an empty box
      waiting for input — same type and size, just not on a typing surface. The
      source line beneath it names the recipe, so this only has to say "not
@@ -2847,26 +2863,75 @@
   #pd-cost.is-derived {
     background: var(--td-raised); border-style: dashed; cursor: default;
   }
-  /* Link / Change / Unlink, on the source line under the Cost field. A text
-     button, not a filled one: it sits inside a field's helper line, where a
-     real button would out-weigh the field it explains. Underlined on hover
-     only, so the resting line still reads as a sentence rather than a row of
-     controls. */
-  .pd-cost-act {
-    appearance: none; background: none; border: 0; padding: 0; margin: 0 0 0 8px;
-    font: 400 12px var(--f-sans); color: var(--td-text2);
-    text-decoration: underline; text-decoration-color: transparent;
-    text-underline-offset: 2px; cursor: pointer;
+  /* ── The Cost card in the Cost & Pricing rail ──────────────────────────
+     ONE FIELD, SO ONE COLUMN. `.pdb-fields` is a two-up grid, and on the full
+     page it is pinned to exactly two columns (`.pd-pp-mount #pd-editor
+     .pu-editor-body .pdb-fields`) so forms do not spread to three across. That
+     rule is right for a form and wrong here: this card holds a single field
+     whose helper content — the source line, the recipe warnings, the margin,
+     the not-complete tag — all sits INSIDE it, so pinning it to column one
+     halved the measure to ~126px in a 300px rail and left column two empty.
+     The unit-mismatch sentence came out one and two words to a line, six
+     inches tall, beside a column of nothing. A field with no partner has
+     nothing to sit beside; it takes the card. */
+  #pd-editor .pd-cost-card .pdb-fields,
+  .pd-pp-mount #pd-editor .pu-editor-body .pd-cost-card .pdb-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .pd-cost-act:hover { color: var(--td-text); text-decoration-color: currentColor; }
-  /* First one on an unlinked product carries the line on its own — no leading
-     text to sit beside, so it starts at the margin. */
-  #pd-cost-source > .pd-cost-act:first-child { margin-left: 0; }
+  /* The explanations under the field are a stack. They used to carry their
+     spacing as inline margin-tops of 4px and 6px on individual nodes, which
+     read as an uneven drift rather than a rhythm; it lives here now. */
+  #pd-editor .pd-cost-card #pd-cost { width: 100%; }
+  #pd-editor .pd-cost-card .pd-cost-src { margin-top: 8px; }
+  #pd-editor .pd-cost-card .pd-cost-alerts { margin-top: 9px; }
+  /* Where the figure came from. Two lines at most — the provenance sentence,
+     then the recipe it names with its actions — and each is its own row rather
+     than one run of text that wraps mid-phrase. */
+  .pd-cost-src { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+  .pd-cost-src-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    min-width: 0; line-height: 1.45;
+  }
+  /* THE RECIPE'S NAME WAS RENDERING IN BROWSER-DEFAULT BLUE. Nothing in this
+     stylesheet had ever styled a bare <a>, and this is the only one inside the
+     product editor, so #0000EE landed on a cream-and-sage card — the loudest
+     thing in the panel, and a colour the palette does not contain. Ink and an
+     underline instead: still unmistakably a link, in the screen's own voice.
+     Not sage or dusk — "colour is status, never decoration" is the system's
+     rule and a link is neither status nor the system having acted. */
+  .pd-cost-src-row a {
+    color: var(--td-text); font-weight: 500; text-decoration: underline;
+    text-decoration-color: var(--td-border); text-underline-offset: 2px;
+  }
+  .pd-cost-src-row a:hover { text-decoration-color: currentColor; }
+  /* Change and Unlink travel together. Left to wrap independently, a long
+     recipe name pushed Unlink onto a line of its own — one control orphaned
+     under another, reading as two unrelated things. The pair drops as a pair. */
+  .pd-cost-acts { display: inline-flex; gap: 6px; flex: none; }
+  /* Link / Change / Unlink, on the source line under the Cost field.
+     A CHIP, NOT A RUN OF UNDERLINED WORDS. As plain text buttons at the end of
+     a wrapping sentence they read as part of it — "Recipe Roasted Pumpkin Soup
+     Change Unlink" is what the operator saw, four words of which two are
+     controls that unlink a cost source. An outline says "this is a control"
+     at rest, which is when it matters, instead of only on hover. Still quiet:
+     no fill, text2 ink, smaller than the line it sits on — it explains a
+     field, it does not compete with the Save button. */
+  .pd-cost-act {
+    appearance: none; background: none; border: 1px solid var(--td-border);
+    border-radius: 999px; padding: 2px 9px; margin: 0;
+    font: 500 11.5px var(--f-sans); color: var(--td-text2);
+    cursor: pointer; white-space: nowrap;
+  }
+  .pd-cost-act:hover { color: var(--td-text); border-color: var(--td-text2); }
   /* What the recipe behind this cost is not telling you. Same pill as the
      recipe record's warning (.rcp-warn) — one warning shape across both
      screens, because it is the same warning about the same recipe. Amber, not
      Brick: the number is not wrong to exist, it is wrong to trust. */
-  #pd-cost-alert { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  /* The stacking of these pills is on .pd-cost-alerts above — one rule for both
+     hosts (#pd-cost-alert and #pd-cost-sanity), which is what stops a recipe
+     warning and a below-cost warning laying out differently. This id rule used
+     to carry it, with align-items:flex-start; it is gone rather than left to be
+     overridden, so there is one place to read the answer. */
   /* STRETCH, not flex-start: every message this box ever carries is a full
      sentence (unit mismatch, no cost yet, archived, missing cost), never a
      short one-liner, so hugging its own content width just means the
@@ -2882,9 +2947,18 @@
   .pd-cost-warn {
     display: flex; align-items: flex-start; gap: 8px; align-self: stretch;
     font: 400 12px var(--f-sans); color: var(--td-amber-ink);
-    background: var(--td-amber-tint); border-radius: 12px; padding: 6px 14px;
+    background: var(--td-amber-tint); border-radius: 12px; padding: 8px 11px;
   }
-  .pd-cost-warn svg { width: 14px; height: 14px; flex: none; }
+  /* The triangle sits on the first line of the sentence, not floating above
+     it: 1.5 line-height on 12px puts that line's optical centre 9px down. */
+  .pd-cost-warn svg { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+  .pd-cost-warn-t { min-width: 0; line-height: 1.5; }
+  /* The locked pair (UNIT MISMATCH · 单位不符) leads its own sentence. Bold,
+     not a separate line: the em dash after it is part of the locked copy
+     (docs/tacet-delivery-vocabulary.md `unitMismatchPill`) and breaking the
+     line there would leave it dangling. Weight alone is enough to let the
+     operator find WHICH warning this is without reading the paragraph. */
+  .pd-cost-warn-k { font-weight: 600; letter-spacing: .01em; }
   /* "Couldn't load the recipe" is not a warning about the recipe — it is this
      line admitting it could not check. It must be visible (silence would read
      as all-clear) without wearing the colour of a real finding. */
@@ -10744,6 +10818,12 @@
   #prod-view-purchasing .pu2-invlines .lrow .sub { font-size: 11px; color: var(--td-text2); }
   #prod-view-purchasing .pu2-invlines .lrow .pu2-num { text-align: right; }
   #prod-view-purchasing .pu2-invlines .lrow .act { text-align: right; white-space: nowrap; }
+  /* THE STATE NEEDS A SHAPE OF ITS OWN. .pu2-pill.grey is --td-raised on
+     --td-raised inside this drill — the chip has the row's own colour, so the
+     不开发票 state rendered as loose grey text, the same weight and the same
+     grey as the label on the toggle beside it. A hairline is what separates
+     "this order IS marked" from "press here to mark it". */
+  #prod-view-purchasing .pu2-invlines .pu2-pill.grey { box-shadow: inset 0 0 0 1px var(--td-border); }
 
   #prod-view-purchasing .pu2-reach { display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: pointer;
@@ -12983,12 +13063,156 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     height: calc(100vh - 56px); min-height: 0; overflow: hidden;
   }
   body.rcp-viewing #tab-recipes-record .rcp-scroll { flex: 1; min-height: 0; overflow: auto; }
-  #tab-recipes-record .rcp-page { padding: 22px var(--s6) var(--s6); }
+  /* No padding-top: the sticky header carries its own, so nothing shows above
+     it when the page is scrolled (a gap of page padding sliding past a bar
+     pinned at top:0 is the tell that a header was made sticky by accident). */
+  #tab-recipes-record .rcp-page { padding: 0 var(--s6) var(--s6); }
 
-  #tab-recipes-record .rcp-rechead { display: flex; align-items: center; gap: 14px;
-    flex-wrap: wrap; margin-bottom: 16px; }
+  /* ── THE PINNED BLOCK ────────────────────────────────────────────────────
+     Head, summary card and sub-tabs, held at the top of .rcp-scroll together.
+     The head alone pinned before this, carrying a miniature of the summary's
+     figures once the card had scrolled past; the card now stays instead, so
+     what an operator watches while typing a quantity thirty lines down is the
+     REAL cost, not a copy of it that has to be kept in step.
+
+     Held whole this costs ~260px of the scrollport, which is a third of the
+     rows on a laptop — so past the first scroll it CONDENSES (below). The
+     negative side margins put its paper ground across the full scrollport
+     width, so nothing shows through the page gutters as it passes underneath.
+
+     z-index 20: above the record's cards and the ingredient list's own column
+     header (3), below the app's fixed topbar (12 — a different scroller, and
+     it never overlaps this one) and the dialog scrim. */
+  /* NOTHING HERE TWEENS. The block's height is load-bearing — the space it
+     gives back on condensing (below) is measured from it — and a height that
+     animates is a height that is wrong for the 180ms it takes to arrive: the
+     give-back was computed on scroll events, the padding kept easing between
+     them, and the rows below drifted and snapped for the length of the tween.
+     The card's own type and layout switched instantly all along (font-size and
+     flex-direction do not transition here), so the tween was smoothing ~10px
+     of padding onto a change that had already happened. */
+  #tab-recipes-record .rcp-pin {
+    position: sticky; top: 0; z-index: 20; background: var(--td-paper);
+    margin: 0 calc(-1 * var(--s6)); padding: 16px var(--s6) 18px; }
+  /* THE SPACE THE CONDENSE GIVES BACK. The block is the first thing in the
+     document; losing ~130px of its own height took that much out of the
+     document too, so the rows below leapt up mid-scroll and, on a short tab,
+     the scroll range went with them — the scroller clamped to the top, the
+     block expanded, and it flickered for as long as the wheel moved. The exact
+     shrink is measured in onRecScroll() and handed back here as margin, which
+     holds the document's height without touching the block's own. Zero at
+     rest, so nothing is reserved for a state the block is not in. */
+  #tab-recipes-record .rcp-pin { margin-bottom: var(--rcp-pinshrink, 0px); }
+  /* The head is no longer the thing that pins — the block is — so it gives up
+     its own sticky, its own ground and its own edge-to-edge margins here. Its
+     LAYOUT is untouched: the same row, the same gap, the same save-state and
+     buttons in the same places. */
+  #tab-recipes-record .rcp-pin > .rcp-rechead {
+    position: static; margin: 0 0 16px; padding: 0;
+    background: none; border-bottom: none; }
+  #tab-recipes-record .rcp-pin .rcp-subtabs { margin-bottom: 0; }
+  #tab-recipes-record .rcp-pin .rcp-summary { margin-bottom: 16px; }
+
+  /* ── CONDENSED, once you have scrolled past the summary ──────────────────
+     Everything an operator ACTS on stays: all four figures, every warning
+     pill, and the blocked-material sentence — the one that says why a cost is
+     frozen, which is the last thing a strip should go quiet about. They drop
+     to body size and lose their padding, and the card lies down into one row.
+     What goes is the recipe's identity: the title shrinks, and "Makes X" and
+     the product rows go, because that is what the operator already knows and
+     cannot change by typing in the list.
+
+     LOCKED STRINGS ARE UNTOUCHED. The pills shrink; they are never shortened
+     or recomposed (UNIT MISMATCH · 单位不符 is minted and locked in
+     docs/tacet-delivery-vocabulary.md, and a condensed variant of it would be
+     a second string for one condition). The pill radius stays 12px for the
+     reason it is 12px at full size — the missing-cost pill is a sentence that
+     still wraps here, and 999px would draw a stadium round it. */
+  #rcp-rec-scroll.is-stuck .rcp-pin { padding-top: 12px; padding-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-pin > .rcp-rechead { margin-bottom: 10px; }
+  #rcp-rec-scroll.is-stuck .rcp-rectitle { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-summary {
+    flex-direction: row; align-items: center; flex-wrap: wrap;
+    gap: 8px 24px; padding: 12px 16px; margin-bottom: 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumrow { flex: 1 1 auto; align-items: baseline; gap: 28px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig { flex-direction: row; align-items: baseline; gap: 7px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v { font-size: 17px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumfig .v.dim { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-summarg .pct { font-size: 13px; }
+  #rcp-rec-scroll.is-stuck .rcp-sumdiv { align-self: center; height: 16px; }
+  #rcp-rec-scroll.is-stuck .rcp-warns { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn { font-size: 12px; padding: 3px 12px; }
+  #rcp-rec-scroll.is-stuck .rcp-warn svg { width: 14px; height: 14px; }
+  /* Past the hairline: the blocked sentence survives, the identity does not.
+     .rcp-outputs takes the whole row, so a sentence that wraps never squeezes
+     the figures beside it — and it wraps rather than truncating, because a
+     warning nobody can finish reading is a warning nobody reads. */
+  #rcp-rec-scroll.is-stuck .rcp-hr,
+  #rcp-rec-scroll.is-stuck .rcp-prodline,
+  #rcp-rec-scroll.is-stuck .rcp-prodrow,
+  #rcp-rec-scroll.is-stuck .rcp-prodhead,
+  #rcp-rec-scroll.is-stuck .rcp-matline:not(.blocked) { display: none; }
+  #rcp-rec-scroll.is-stuck .rcp-outputs { flex-basis: 100%; gap: 4px; }
+  #rcp-rec-scroll.is-stuck .rcp-matline.blocked { font-size: 12px; }
+  /* No prefers-reduced-motion block here any more: the two states are arrived
+     at instantly for everyone, so there is no motion left to reduce. */
+
+  /* ── THE STICKY HEADER ──────────────────────────────────────────────────
+     Pinned to the top of .rcp-scroll (the element that actually scrolls —
+     `main` does not; body.rcp-viewing gives it overflow:hidden and the record
+     section a fixed height). Negative side margins + its own padding let it
+     paint edge to edge across the scroll port while its contents stay on the
+     page's column. Ground is --td-paper, the page ground, so lines pass
+     UNDER it rather than showing through.
+     z-index 5: above the record's own cards, below the app's fixed topbar (12)
+     and the dialog scrim. */
+  #tab-recipes-record .rcp-rechead {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-direction: column; gap: 10px;
+    margin: 0 calc(-1 * var(--s6)) 16px; padding: 16px var(--s6) 14px;
+    background: var(--td-paper);
+    /* The hairline appears only once something has scrolled under the bar —
+       at rest the header is part of the page, and a permanent rule under it
+       would draw a box nobody asked for. Transition on colour alone so the
+       layout never shifts by a pixel when it turns on. */
+    border-bottom: 1px solid transparent; transition: border-color .15s ease;
+  }
+  #tab-recipes-record .rcp-rechead.stuck { border-bottom-color: var(--td-border); }
+  #tab-recipes-record .rcp-rechead-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   #tab-recipes-record .rcp-rectitle { font-size: 21px; }
   #tab-recipes-record .rcp-recacts { margin-left: auto; display: flex; gap: 9px; }
+
+  /* Autosave's state line. Quiet by default — "saved" is the normal condition
+     and must not shout; Brick only when something is genuinely unsaved. */
+  #tab-recipes-record .rcp-savestate { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
+  #tab-recipes-record .rcp-savestate.err { color: var(--td-brick-ink); }
+
+  /* ── History panel (rcp-hist-*) ────────────────────────────────────────
+     Scoped under .rcp-hist-modal like the materialize modal's own classes,
+     NOT under #tab-recipes-record: the dialog shell appends to <body>, so an
+     id-scoped rule here would style nothing. */
+  .rcp-hist-modal .rcp-hist-list { display: flex; flex-direction: column; gap: 2px;
+    max-height: 44vh; overflow: auto; margin-top: 4px; }
+  .rcp-hist-modal .rcp-hist-row { display: flex; align-items: baseline; gap: 12px; width: 100%;
+    text-align: left; appearance: none; cursor: pointer; background: transparent;
+    border: none; border-radius: 10px; padding: 9px 12px; font: 400 13.5px var(--f-sans);
+    color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-row:hover { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-row.on { background: var(--td-raised); }
+  .rcp-hist-modal .rcp-hist-when { font-weight: 500; white-space: nowrap; }
+  .rcp-hist-modal .rcp-hist-who { color: var(--td-text2); font-size: 12.5px;
+    margin-left: auto; text-align: right; white-space: nowrap; }
+  /* The live record sits at the top of the same list as the versions, because
+     it is the same axis: "now" is just the newest state. It is never
+     restorable, so it carries no Restore — the footer button disables on it. */
+  .rcp-hist-modal .rcp-hist-row.now .rcp-hist-when { color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-detail { border-top: 1px solid var(--td-border); margin-top: 12px;
+    padding-top: 12px; font-size: 13px; color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dl { display: grid; grid-template-columns: auto 1fr;
+    gap: 4px 16px; margin: 0; }
+  .rcp-hist-modal .rcp-hist-detail dt { color: var(--td-text2); }
+  .rcp-hist-modal .rcp-hist-detail dd { margin: 0; color: var(--td-text); }
+  .rcp-hist-modal .rcp-hist-empty { color: var(--td-text2); font-size: 13px; padding: 18px 4px; }
 
   /* The persistent summary — cost figures + warnings. Sits above the sub-tabs
      on purpose (see the HTML comment on #tab-recipes-record): it must read the
@@ -13096,15 +13320,58 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-f.span2 { grid-column: 1 / -1; }
   #tab-recipes-record .rcp-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
   #tab-recipes-record .rcp-f .hint { font-size: 12px; color: var(--td-text2); margin-top: 5px; }
+  #tab-recipes-record .rcp-shelf-life { display: flex; gap: 8px; }
+  #tab-recipes-record .rcp-shelf-life .rcp-input:first-child { flex: 1 1 0; min-width: 0; }
+  #tab-recipes-record .rcp-shelf-life select.rcp-input { flex: 1 1 0; min-width: 0; }
 
   /* ── ingredient / step lines ── */
   #tab-recipes-record .rcp-lines { display: flex; flex-direction: column; }
+
+  /* ── THE COLUMN HEADER ───────────────────────────────────────────────────
+     Five controls to a row and, until now, nothing naming any of them: a
+     number, a unit, a free-text box and a ¥ figure, left to be inferred from
+     whatever happened to be typed in them. The header names each track.
+
+     It STICKS, parked at the bottom edge of the sticky bar above it
+     (--rcp-headh, measured and written by onRecScroll() — the bar grows a line
+     when its miniature appears, so the offset can never be a constant). A
+     header that scrolls away is one you read once, and it is row 30, not row 1,
+     where you have forgotten which box is the note.
+
+     Same flex tracks as .rcp-line below, declared against the same widths so
+     the two cannot drift; the labels carry the 12px inset of the inputs they
+     sit over rather than aligning to the control's border.
+
+     z-index 3 keeps it UNDER the sticky bar (5) and the picker's result list
+     (.rcp-pick, also 5) — the only two things that may ever cover it — and
+     above the rows, which are static and pass behind its own background. */
+  #tab-recipes-record .rcp-lhead {
+    position: sticky; top: var(--rcp-headh, 0px); z-index: 3;
+    display: flex; align-items: center; gap: 10px; padding: 0 0 8px;
+    background: var(--td-surface, #fff); border-bottom: 1px solid var(--td-border);
+    font: 500 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--td-text2); }
+  /* letter-spacing and uppercase are a Latin small-caps idiom: 原料 uppercased
+     is 原料, and the tracking that suits QTY only loosens Han characters. The
+     labels are one language at a time (cuT), so the whole row switches. */
+  html[data-ui-lang="cn"] #tab-recipes-record .rcp-lhead {
+    letter-spacing: 0; text-transform: none; font-size: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-drag { flex: none; width: 17px; }
+  #tab-recipes-record .rcp-lhead .lh-name { flex: 1 1 auto; min-width: 0; }
+  #tab-recipes-record .rcp-lhead .lh-qty  { width: 90px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-unit { width: 70px;  flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-note { width: 140px; flex: none; padding-left: 12px; }
+  #tab-recipes-record .rcp-lhead .lh-cost { width: 90px;  flex: none; text-align: right; }
+  #tab-recipes-record .rcp-lhead .lh-rm   { flex: none; width: 24px; }
   #tab-recipes-record .rcp-line { display: flex; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--td-border); }
   #tab-recipes-record .rcp-line:last-child { border-bottom: none; }
   #tab-recipes-record .rcp-line.rcp-drop-before { box-shadow: inset 0 2px 0 var(--td-brass, #b08d57); }
   #tab-recipes-record .rcp-line.rcp-drop-after  { box-shadow: inset 0 -2px 0 var(--td-brass, #b08d57); }
-  #tab-recipes-record .rcp-line-drag { flex: none; cursor: grab; color: var(--td-text2);
+  /* Width fixed, not left to the glyph: .rcp-lhead's spacer above holds the
+     same 17px, and a header whose first track is a hair wider than the row's
+     shifts every label after it. */
+  #tab-recipes-record .rcp-line-drag { flex: none; width: 17px; cursor: grab; color: var(--td-text2);
     text-align: center; user-select: none; font-size: 13px; line-height: 1; padding: 4px 2px; }
   #tab-recipes-record .rcp-line-drag:active { cursor: grabbing; }
   #tab-recipes-record .rcp-line-name { flex: 1 1 auto; min-width: 0; }
@@ -13139,9 +13406,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     text-decoration: line-through; opacity: .65;
   }
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
-  #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }
-  #tab-recipes-record .rcp-line-unit { width: 70px; flex: none; }
-  #tab-recipes-record .rcp-line-note { width: 140px; flex: none; }
+  /* .rcp-line prefixed on each, matching the reset above's specificity: without
+     it, "auto" (1 ID + 2 classes) beat these (1 ID + 1 class) regardless of
+     source order, so every qty/unit/note box rendered at its browser-default
+     width instead of the fixed one — and, drifting wider row by row, no
+     longer lined up under .rcp-lhead's fixed-width labels above it. */
+  #tab-recipes-record .rcp-line .rcp-line-qty { width: 90px; flex: none; }
+  #tab-recipes-record .rcp-line .rcp-line-unit { width: 70px; flex: none; }
+  #tab-recipes-record .rcp-line .rcp-line-note { width: 140px; flex: none; }
   #tab-recipes-record .rcp-line-cost { width: 90px; flex: none; text-align: right; font-size: 13px;
     color: var(--td-text2); font-variant-numeric: tabular-nums; }
   #tab-recipes-record .rcp-line-rm { flex: none; cursor: pointer; color: var(--td-text2);
@@ -13190,6 +13462,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
     #tab-recipes-record .rcp-line { flex-wrap: wrap; }
     #tab-recipes-record .rcp-line-note { width: 100%; order: 10; }
+    /* The note field drops to its own line here, so its column label would be
+       naming a track that is no longer there. The field keeps its own
+       placeholder, which is the same word. */
+    #tab-recipes-record .rcp-lhead .lh-note { display: none; }
   }
 
 /* ══════════════════════════════════════════════════════════════════════════

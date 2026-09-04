@@ -322,9 +322,18 @@ const MT_STATUS = {
   '部分退款':   { en: 'Partial refund',   tone: 'refunded' },
   '退货退款':   { en: 'Refund / return',  tone: 'refunded' },
 };
+// A platform value that is not a lifecycle label at all: an order-VALIDITY flag
+// (Eleme sends `status: "VALID"` beside the real stage), a placeholder, or a bare
+// numeric code. Null rather than a tone, so a caller renders NOTHING instead of
+// the confident "In progress" the keyword fallback would otherwise invent — which
+// is exactly what this cell showed on delivered Eleme orders before 6b8cda0
+// removed it. Belt to the parser's braces (lib/eleme-browser.js pickStage now
+// looks past these), because the rows already stored still carry them.
+const NOT_A_STATUS_LABEL = /^(valid|invalid|normal|none|null|unknown|default|true|false|-?\d+(\.\d+)?)$/i;
 function channelStatusMeta(desc) {
   const d = String(desc || '').trim();
   if (!d) return null;
+  if (NOT_A_STATUS_LABEL.test(d)) return null;
   if (MT_STATUS[d]) return { en: MT_STATUS[d].en, cn: d, tone: MT_STATUS[d].tone };
   // Keyword fallback for labels not in the table — colour sensibly AND give a
   // generic English word by tone, so the English view never leaks raw Chinese.
@@ -5367,8 +5376,26 @@ function renderOrderTotalBanner(o) {
 // recorded and cannot reconcile until the backfill runs
 // (scripts/repair_eleme_ingest_backfill.js), and either channel leaves the
 // column NULL when the platform never named a promotion. Neither is a number
-// this read-only panel may invent — it shows the rows it has and says the
-// breakdown is incomplete.
+// this read-only panel may invent — it shows the rows it has and says so.
+//
+// WHAT IT SAYS, though, is now two different things. "Breakdown incomplete"
+// covered both an order that adds up and is only waiting on the platform to
+// publish its commission, and one whose own columns disagree — and the operator
+// had no way to tell which. EL20260903163199 came in at ¥45.00 + ¥1.50 + ¥5.00
+// − ¥5.50 = ¥46.00 against a recorded total of ¥41.00, a gap of exactly its
+// delivery fee, and all the drawer would say about it was the same three words
+// it said over every unsettled Meituan order in the table. So the unreconciled
+// case now prints the sum, the total and the difference: the panel is the place
+// that disagreement is visible, and hiding the figure behind a label made it
+// somebody's archaeology project weeks later.
+//
+// The same identity runs server-side at ingest (lib/channel-settlement.js, via
+// routes/eleme-internal.js), so an order that arrives like this writes an
+// order_settlement_mismatch row in eleme_sync_log with the payload field each
+// figure was read out of — nobody has to open a drawer to find out. The two
+// copies of the arithmetic exist because retail-admin loads plain <script> tags
+// with no module system; scripts/test_channel_money_panel.js §4c runs both over
+// one table of orders so they cannot drift apart unnoticed.
 function channelMoneyBreakdown(o) {
   const items      = Number(o.subtotal) || 0;
   const packaging  = Number(o.packing_fee) || 0;
@@ -5377,11 +5404,25 @@ function channelMoneyBreakdown(o) {
   const total      = Number(o.total) || 0;
   const hasCommission = o.channel_commission != null;
   const hasSettle     = o.channel_settle_amount != null;
-  const reconciled = Math.abs((items + packaging + delivery - discount) - total) < 0.01;
+  const expected   = Math.round((items + packaging + delivery - discount) * 100) / 100;
+  const reconciled = Math.abs(expected - total) < 0.01;
   return {
     items, packaging, delivery, discount,
     commission: hasCommission ? Number(o.channel_commission) : null,
     settle:     hasSettle ? Number(o.channel_settle_amount) : null,
+    // What the components add up to, and by how much that misses the total. Kept
+    // as numbers rather than folded into `complete` because the note below has
+    // to print them: an operator asked to distrust a panel is owed the figure
+    // that made it distrustable.
+    expected, gap: Math.round((expected - total) * 100) / 100, total,
+    // The two reasons a panel can't show step two, separated. They were one flag
+    // and one message, which is why EL20260903163199's drawer could say only
+    // "Breakdown incomplete" over an order whose components missed its total by
+    // exactly the delivery fee.
+    reconciled,
+    // Every component adds up, and the platform simply hasn't published what it
+    // kept yet. Normal on an order still in flight; NOT a data fault.
+    awaitingSettlement: reconciled && !(hasCommission && hasSettle),
     complete:   reconciled && hasCommission && hasSettle,
   };
 }
@@ -5404,7 +5445,24 @@ function renderChannelMoneyPanel(o) {
   const netRow = (g.complete && g.settle)
     ? `<div class="cmp-row cmp-net"><span>${cuT('Estimated income', '预计收入')}</span><span class="cmp-v">${acMoney(g.settle)}</span></div>`
     : '';
-  const note = g.complete ? '' : `<div class="cmp-note">${cuT('Breakdown incomplete', '明细不完整')}</div>`;
+  // Say WHICH of the two it is, and in the unreconciled case say by how much.
+  // "Breakdown incomplete" was true of both states and actionable in neither —
+  // an operator reading it could not tell a settlement Eleme hasn't published
+  // yet from an order whose own columns disagree, and the second is the one
+  // worth a phone call. The gap is named because the sum shown above it is the
+  // evidence: ¥45.00 + ¥1.50 + ¥5.00 − ¥5.50 reads as ¥46.00 on screen while
+  // the banner says ¥41.00, and the panel should be the thing that points that
+  // out rather than the thing that hides it.
+  let note = '';
+  if (!g.reconciled) {
+    note = `<div class="cmp-note">${cuT(
+      `These rows add up to ${acMoney(g.expected)}, but the order records ${acMoney(g.total)} — ${acMoney(Math.abs(g.gap))} unaccounted for. Check the channel before refunding.`,
+      `以上各项合计 ${acMoney(g.expected)}，但订单金额为 ${acMoney(g.total)} — 相差 ${acMoney(Math.abs(g.gap))}。退款前请先核对平台。`)}</div>`;
+  } else if (g.awaitingSettlement) {
+    note = `<div class="cmp-note">${cuT(
+      'Commission and income not published by the channel yet.',
+      '平台尚未公布佣金与预计收入。')}</div>`;
+  }
 
   // A DIV, never a <section>: retail-admin.css:940's `section {display:none}`
   // tab rule is unscoped and hides a nested one at any depth, which is exactly
@@ -5499,10 +5557,18 @@ function renderReadonlyOrder(o) {
           <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
         </div>` : ''}
         ${(() => {
-          // Eleme's own card is gone (Ash, 2026-09-02): channel_status has read
+          // Eleme's own card is gone (Ash, 2026-09-02): channel_status had read
           // "VALID" on 100% of live Eleme orders — an order-validity flag, never
           // a lifecycle stage — so this cell showed "In progress" on every
-          // delivered Eleme order since it shipped. The drawer's own status pill
+          // delivered Eleme order since it shipped.
+          //
+          // The read behind it is fixed since: lib/eleme-browser.js pickStage
+          // now takes the stage from the fields that carry one and steps over
+          // the validity flag, so channel_status on a NEW Eleme order holds a
+          // real label. The card stays out anyway — that is still Ash's call to
+          // reverse, and rows mirrored before the fix keep their "VALID" — but
+          // it is now one line, and channelStatusMeta above refuses a flag on
+          // every channel so nothing can render one as a stage again. The drawer's own status pill
           // above already carries Tacet's real status, and the lifecycle
           // timestamps below are complete on every row, so nothing here was
           // telling staff something they couldn't already see. Meituan and

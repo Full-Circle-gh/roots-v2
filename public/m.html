@@ -499,6 +499,13 @@ const state = {
   trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* The operator's own Quick actions — an array of catalogue keys, null until
+     the first read pulls it back off this phone (see quickKeys()), and
+     quickMounted the house guard against a sheet that re-enters on every tap:
+     same flag, same name, same two lines as poMounted / custMounted, and this
+     picker needs it more than most, since every add, remove and move repaints
+     while .sheet carries `animation:tSheetUp .4s`. */
+  quick:null, quickSheet:false, quickMounted:false,
   /* Installed-app state. canInstall is set by the browser telling us it would
      offer an install (beforeinstallprompt); installBar is the strip that says
      so, dismissible and remembered; installSheet is the iOS walkthrough, which
@@ -651,7 +658,7 @@ function copyText(t){
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return; state.stack.push({route,title:s.title}); render(); }
-function pop(){ state.stack.pop(); render(); }
+function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -693,7 +700,7 @@ reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
-reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; state.stack=[]; state.tab=t; state.detailId=null;
+reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
   /* Opening Orders IS reading them — the same rule the inbox already follows.
      Stamped before the render so the dot goes out on the tap rather than on
      the next poll fifteen seconds later. */
@@ -753,8 +760,8 @@ reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
 reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
-reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
-reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
+reg('ordersGo', f=>{ forgetPushed(); state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
+reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; forgetPushed(); state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
 reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
 reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
@@ -1992,6 +1999,150 @@ function vitalsBlock(){
                   :T('nothing sent back','无退款'))}
     </div></div>`;
 }
+
+/* ==========================================================================
+   Quick actions — the operator's own rows, not ours
+   --------------------------------------------------------------------------
+   Home used to offer "Add product", "Create coupon", "Send broadcast" — three
+   verbs the phone cannot perform, each opening a read-only list. They were
+   replaced by three it genuinely can do in one tap (answer the inbox, tick a
+   delivery in, fix a price or a count), which fixed the lie and left the
+   smaller problem behind it: WE were still choosing. A stocker who never opens
+   the inbox and lives in Receiving got the owner's three rows; a shop with no
+   purchase orders got a row it never taps, sitting where its Waste row should
+   be. The row an operator reaches for every morning is a fact about their
+   shop, and no default knows it.
+
+   So the list is theirs. Everything this app can reach and their role allows
+   is offered; up to six ride Home, in the order they put them in, remembered
+   on this phone the way the theme and the language are — an operator who set
+   their shortcuts has set them, not set them until the next launch.
+
+   The three we picked are still the DEFAULT. Somebody who never opens the
+   picker keeps exactly the Home they had.
+   ========================================================================== */
+const M_QUICK_KEY='tacet-m-quick', QUICK_MAX=6;
+const QUICK_DEFAULT=['inbox','purchasing','tab:products'];
+/* A shortcut is named for the VERB only where there is one worth saying, and
+   the three defaults keep the wording Home has always used for them. Every
+   other row is offered under the name it already wears in More: a verb
+   invented for a screen is exactly how "Add product" happened. */
+const QUICK_VERB={
+  inbox:['Answer the inbox','回复消息'],
+  purchasing:['Tick a delivery in','确认收货'],
+  'tab:products':['Fix a price or a count','改价或改库存'],
+};
+/* Everything reachable, flat: the four destinations that are not Home, then
+   every More row this role can open. The same two sources searchIndex() reads,
+   so a screen can never be findable in search and unpickable here — and both
+   are already capability-filtered, so the picker cannot offer a row whose
+   screen would 403. */
+function quickCatalogue(){
+  const out=Object.keys(TAB_META).filter(k=>k!=='home'&&k!=='more'&&canRoute(k))
+    .map(k=>({key:'tab:'+k, icon:TAB_META[k].icon, en:TAB_META[k].en, zh:TAB_META[k].zh,
+              group:['Destinations','主页面'], cmd:`APP.cmd('tab','${k}')`}));
+  moreGroups().forEach(g=>g.rows.forEach(r=>out.push({
+    key:r.key, icon:r.icon, en:r.en, zh:r.zh, group:g.h||['More','更多'], cmd:r.cmd})));
+  return out;
+}
+function quickLabel(it){ const v=QUICK_VERB[it.key]; return v?T(...v):T(it.en,it.zh); }
+/* Read once, then held in state. An empty ARRAY is a real answer — an operator
+   who cleared the list wanted it cleared, and must not have the defaults handed
+   back at the next launch — so only a missing or unreadable key falls back. */
+function quickKeys(){
+  if(state.quick) return state.quick;
+  let saved=null;
+  try{ const raw=localStorage.getItem(M_QUICK_KEY); if(raw) saved=JSON.parse(raw); }catch(e){}
+  state.quick = Array.isArray(saved)
+    ? saved.filter(k=>typeof k==='string').slice(0,QUICK_MAX)
+    : QUICK_DEFAULT.slice();
+  return state.quick;
+}
+function quickSave(){ try{ localStorage.setItem(M_QUICK_KEY,JSON.stringify(state.quick)); }catch(e){} }
+/* KEYS are stored; the rows are resolved at render. So a shortcut to a screen
+   this operator has since lost — a narrowed role, a route retired — drops off
+   Home quietly instead of 403ing, and comes back if the capability does,
+   because nothing erased it. */
+function quickRows(){
+  const by={}; quickCatalogue().forEach(c=>{ by[c.key]=c; });
+  return quickKeys().map(k=>by[k]).filter(Boolean);
+}
+reg('quickEdit', ()=>{ state.quickSheet=true; state.quickMounted=false; render(); state.quickMounted=true; });
+reg('quickClose', ()=>{ state.quickSheet=false; render(); });
+reg('quickToggle', key=>{
+  const k=String(key), list=quickKeys().slice(), i=list.indexOf(k);
+  if(i>=0) list.splice(i,1);
+  else if(list.length>=QUICK_MAX){
+    // The cap is the phone's, not a rule: past six the list is a second screen
+    // to scroll, which is the thing a shortcut exists to avoid.
+    showToast(T('Six shortcuts is the most that fits','最多只能放 6 个快捷方式')); return;
+  } else list.push(k);
+  state.quick=list; quickSave(); render();
+});
+reg('quickMove', (key,dir)=>{
+  const list=quickKeys().slice(), i=list.indexOf(String(key)), j=i+Number(dir);
+  if(i<0||j<0||j>=list.length) return;
+  list.splice(j,0,list.splice(i,1)[0]);
+  state.quick=list; quickSave(); render();
+});
+reg('quickReset', ()=>{ state.quick=QUICK_DEFAULT.slice(); quickSave(); render(); });
+/* The picker. Chosen rows sit at the top in the order Home draws them, each
+   with the two controls a phone can do this with — move and remove; everything
+   still available is grouped underneath exactly as More groups it, so the
+   operator is picking from the app they already know rather than from a list
+   of keys. Every change saves on the tap: there is no Save button here for the
+   same reason the theme switch has none. */
+function sheetQuick(){
+  const cat=quickCatalogue();
+  const chosen=quickRows();
+  const taken={}; chosen.forEach(c=>{ taken[c.key]=true; });
+  const rest=cat.filter(c=>!taken[c.key]);
+  const groups=[];
+  rest.forEach(c=>{
+    const g=groups.filter(x=>x.h[0]===c.group[0])[0];
+    if(g) g.rows.push(c); else groups.push({h:c.group, rows:[c]});
+  });
+  const full=chosen.length>=QUICK_MAX;
+  const iconbtn=(icon,cmd,label,dis)=>`<button ${dis?'disabled':''} onclick="${cmd}" aria-label="${escAttr(label)}"
+    style="width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;
+    border:none;border-radius:9px;color:var(--text-secondary);cursor:pointer;${dis?'opacity:.3;cursor:default':''}">${ic(icon,20)}</button>`;
+  const noAnim=state.quickMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.scrimClose('quickClose')"></div>
+   <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('quickClose')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T('Quick actions','快捷操作')}</span>
+         <span style="width:36px;flex:none"></span></div>
+       <div style="font-size:13px;color:var(--text-secondary);padding:2px 8px 0">${
+         T('Pick the screens you open every day — up to '+QUICK_MAX+', in your order.',
+           '选择您每天都会打开的页面 — 最多 '+QUICK_MAX+' 个，顺序由您决定。')}</div></div>
+     <div id="mQuickBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
+       <div>
+         <div class="eyebrow" style="padding:2px 4px 8px">${T('On Home','显示在首页')}</div>
+         ${chosen.length?`<div class="list">${chosen.map((c,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+           <div style="display:flex;align-items:center;gap:6px;padding:8px 10px 8px 16px">
+             <span class="rowico">${ic(c.icon)}</span>
+             <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(c)}</span>
+             ${iconbtn('chevron-up',`APP.cmd('quickMove','${escAttr(c.key)}',-1)`,T('Move up','上移'),i===0)}
+             ${iconbtn('chevron-down',`APP.cmd('quickMove','${escAttr(c.key)}',1)`,T('Move down','下移'),i===chosen.length-1)}
+             ${iconbtn('minus',`APP.cmd('quickToggle','${escAttr(c.key)}')`,T('Remove','移除'),false)}
+           </div>`).join('')}</div>`
+         : `<div style="padding:18px 16px;border-radius:14px;background:var(--surface-raised);font-size:14px;color:var(--text-secondary);line-height:1.5">${
+             T('Nothing yet. Home leaves the section out until you add one.','还没有选择。在您添加之前，首页不会显示这一栏。')}</div>`}
+       </div>
+       ${full?`<div style="font-size:13px;color:var(--amber-ink);padding:0 4px">${
+         T('That is all six. Remove one to add another.','已满 6 个。要添加请先移除一个。')}</div>`:''}
+       ${groups.map(g=>`<div>
+         <div class="eyebrow" style="padding:2px 4px 8px">${T(...g.h)}</div>
+         <div class="list">${g.rows.map((c,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+           <button class="row" ${full?'disabled':''} onclick="APP.cmd('quickToggle','${escAttr(c.key)}')" style="${full?'opacity:.45':''}">
+             <span class="rowico">${ic(c.icon)}</span>
+             <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(c)}</span>
+             <span style="color:var(--text-secondary);display:flex;flex:none">${ic('plus')}</span></button>`).join('')}</div></div>`).join('')}
+       <button class="btn2" style="width:100%" onclick="APP.cmd('quickReset')">${T('Back to the suggested three','恢复默认三项')}</button>
+     </div></div>`;
+}
 function screenHome(){
   const fires=opsFires()||[];
   /* This tile used to fall back to ¥12,840 · 37 orders · ¥347 · 1,204 visitors
@@ -1999,16 +2150,12 @@ function screenHome(){
      first screen the app opens. Nothing else in the app was in a worse place
      to be inventing money. A tile with no figure yet says so. */
   const kpis = state.liveKpis;
-  /* "Add product", "Create coupon", "Send broadcast" — three verbs, none of
-     which the phone can do, each opening a read-only list. They are not
-     controls wired to nothing, which is why they survived the noop sweep, but
-     they promise the same thing and break it. These three are what a phone
-     can genuinely do in one tap. */
-  const quick=[
-    {icon:'message-square-text',label:T('Answer the inbox','回复消息'),cmd:"APP.cmd('push','inbox')"},
-    {icon:'shopping-cart',label:T('Tick a delivery in','确认收货'),cmd:"APP.cmd('push','purchasing')"},
-    {icon:'box',label:T('Fix a price or a count','改价或改库存'),cmd:"APP.cmd('tab','products')"},
-  ];
+  /* Whatever this operator put here — see the block above quickCatalogue().
+     Defaults to the three the phone can genuinely do in one tap. */
+  const quick=quickRows();
+  /* A role narrowed to nothing but Home has nothing to shortcut TO, so the
+     section and its Edit button both go rather than offering an empty picker. */
+  const quickAny=quickCatalogue().length>0;
   const today=new Date();
   const dateLine = LANG==='en'
     ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
@@ -2044,12 +2191,18 @@ function screenHome(){
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>
     ${vitalsBlock()}
-    <div class="rise" style="animation-delay:.18s">
-      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
-      <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+    ${quickAny?`<div class="rise" style="animation-delay:.18s">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 4px 8px">
+        <span style="font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</span>
+        <button onclick="APP.cmd('quickEdit')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${T('Edit','编辑')}</button></div>
+      ${quick.length?`<div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${q.cmd}"><span class="rowico">${ic(q.icon)}</span>
-        <span style="flex:1;font-size:15px">${q.label}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>
+        <span style="flex:1;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(q)}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>`
+      : `<div class="list"><button class="row" onclick="APP.cmd('quickEdit')">
+          <span class="rowico">${ic('plus')}</span>
+          <span style="flex:1;font-size:15px;color:var(--text-secondary)">${T('Choose your shortcuts','选择您的快捷方式')}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button></div>`}</div>`:''}
   </div>`;
 }
 
@@ -2455,7 +2608,7 @@ const MORE_GROUPS=[
      a fifth element: its href. Quick Stock is its own PWA on its own manifest,
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['stockapp','package-plus','Add stock','加库存','/stock']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['stockapp','package-plus','Add stock','加库存','/stock']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6500,6 +6653,7 @@ function sheetOrderDetail(){
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
+       ${riderCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -6666,6 +6820,305 @@ function hoistedTracking(o){
     return sp.mode==='local'?localEtaCard(o,sp,label):trackingCard(o,sp,label);
   }).filter(Boolean);
   return cards.join('');
+}
+/* ---- Where the rider actually is ----------------------------------------
+   The desktop drawer has carried this since same-city dispatch went in: the
+   live rider card, and above it a map with the scooter moving between the shop
+   and the door. The phone had the WORD ("On the way") and nothing else — no
+   rider, no number to call them on, no distance, and no map. Which is the wrong
+   way round twice over: the person who needs to know where the rider has got to
+   is the one standing at the counter with a customer asking, and the phone is
+   the device they are holding; and a rider's phone number on a phone is a tap,
+   where on the desktop it is a number to copy out by hand.
+
+   Same feed as the desktop (the Qingyun daemon writes delivery_jobs every ~25s;
+   /orders/:id/delivery-track serves the positions), same stages, same stale
+   rule — so the two screens cannot tell an operator different things about the
+   same rider. */
+const M_COURIER_STALE_MS=10*60*1000;
+const M_COURIER_MOVING=['in_transit','heading_to_pickup'];
+const M_COURIER_STAGE={
+  awaiting_dispatch:{en:'Finding a rider',zh:'正在找骑手',dot:'var(--amber-ink)'},
+  heading_to_pickup:{en:'Rider coming',zh:'骑手前往取货',dot:'var(--dusk-ink)'},
+  in_transit:{en:'On the way',zh:'配送中',dot:'var(--brick-ink)'},
+  delivered:{en:'Delivered',zh:'已送达',dot:'var(--sage-ink)'},
+};
+/* _date already fixes the zoneless-UTC trap this file names at length above —
+   the desktop's courierAgeMs exists for exactly that bug, and reusing _date
+   here means the phone cannot regrow it. */
+function courierAgeMs(v){ const d=_date(v); return d?Date.now()-d.getTime():Infinity; }
+function courierAgo(v){
+  const ms=courierAgeMs(v);
+  if(!isFinite(ms)) return '';
+  if(ms<60000) return T('just now','刚刚');
+  if(ms<3600000) return T(Math.floor(ms/60000)+'m ago',Math.floor(ms/60000)+' 分钟前');
+  if(ms<86400000) return T(Math.floor(ms/3600000)+'h ago',Math.floor(ms/3600000)+' 小时前');
+  return T(Math.floor(ms/86400000)+'d ago',Math.floor(ms/86400000)+' 天前');
+}
+function riderDist(m){
+  return m>=1000 ? T((m/1000).toFixed(1)+' km',(m/1000).toFixed(1)+' 公里')
+                 : T(Math.round(m)+' m',Math.round(m)+' 米');
+}
+/* The ETA leg is not the same leg at both stages: eta_seconds means "to the
+   STORE" while the rider is going to collect and "to the CUSTOMER" once they
+   have. Saying "away" at both would tell the counter the parcel is minutes from
+   the door when the rider has not even reached the shop. */
+function riderEtaBits(c){
+  const bits=[];
+  if(c.eta_seconds!=null){
+    const m=Math.max(1,Math.round(c.eta_seconds/60));
+    bits.push(c.stage==='heading_to_pickup'?T('~'+m+' min to store','约 '+m+' 分钟到店')
+                                           :T('~'+m+' min away','约 '+m+' 分钟送达'));
+  }
+  if(c.rider_to_cust_m!=null) bits.push(riderDist(c.rider_to_cust_m));
+  return bits;
+}
+/* A rider genuinely on the move — which is exactly when there is a position to
+   plot. A frozen row (>10 min with no daemon update) is a likely cancel/drop,
+   so the map stands down and the card warns instead of drawing a scooter at a
+   place the rider left ten minutes ago. */
+function riderLive(o){
+  const c=o&&o.courier;
+  if(!c||!M_COURIER_MOVING.includes(c.stage)) return null;
+  if(['delivered','cancelled','refunded'].includes(o.raw)) return null;
+  if(courierAgeMs(c.updated_at)>M_COURIER_STALE_MS) return null;
+  return c;
+}
+function riderCard(o){
+  const c=o.courier;
+  if(!c||!c.stage) return '';
+  const delivered=o.raw==='delivered'||c.stage==='delivered';
+  const meta=delivered?M_COURIER_STAGE.delivered:M_COURIER_STAGE[c.stage];
+  if(!meta) return '';                      // 'scheduled' — pre-dispatch, nothing live to say
+  const live=!!riderLive(o);
+  const stale=!delivered&&M_COURIER_MOVING.includes(c.stage)&&!live;
+  const bits=(live?riderEtaBits(c):[]);
+  const name=(c.rider&&c.rider.name)||c.rider_name||'';
+  const phone=(c.rider&&c.rider.phone)||'';
+  const ago=courierAgo(c.updated_at);
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="width:8px;height:8px;border-radius:50%;background:${meta.dot};flex:none"></span>
+        <span id="riderStage" style="font-size:14.5px;font-weight:500">${T(meta.en,meta.zh)}</span></span>
+      ${c.carrier?`<span style="font-size:12px;color:var(--text-secondary);flex:none">${escAttr(c.carrier)}</span>`:''}</div>
+    ${live?`<div id="riderMapHost" aria-label="${T('Live rider location','骑手实时位置')}"
+       style="position:relative;height:190px;border-radius:12px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+       <div id="riderMapHold" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary)">${T('Loading map…','正在加载地图…')}</div>
+     </div>`:''}
+    ${name?`<div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('bike',18)}</span>
+      <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
+      ${phone?`<a href="tel:${escAttr(phone)}" class="btn2" style="width:auto;flex:none;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;text-decoration:none">${ic('phone',15)} ${T('Call','拨打')}</a>`:''}
+    </div>`:''}
+    <div id="riderEta" style="font-size:13px;color:var(--text-secondary)${bits.length?'':';display:none'}">${bits.join(' · ')}</div>
+    ${stale?`<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:12.5px;line-height:1.5">
+      <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
+      <span>${T('Not updating — the rider may have cancelled. Check with the courier or call another.','状态未更新 — 骑手可能已取消，请核实或另叫一位。')}</span></div>`:''}
+    ${ago?`<div id="riderAgo" style="font-size:11.5px;color:var(--text-secondary)">${T('Updated','更新于')} ${ago}</div>`:''}
+  </div>`;
+}
+/* ── The map itself (高德 AMap) ─────────────────────────────────────────────
+   Two things make this different from the desktop's copy, and both come from
+   the same fact: this app repaints by rewriting the WHOLE page in one
+   innerHTML. So (1) the map lives in a node this module holds a reference to
+   and re-attaches after each repaint — rebuilding an AMap on every toast would
+   flash the map and lose the operator's pan; and (2) the 25s poll updates the
+   card's text NODES in place rather than calling render(), because a repaint
+   would throw the sheet's scroll position back to the top four times a minute
+   while somebody is reading the item list. */
+let _mMap=null;      // active controller, or null
+let _mAmapP=null;    // memoised SDK load (reset on failure — a network blip must not poison it)
+function mAmapLoadOnce(){
+  return (async()=>{
+    let cfg=null;
+    try{ cfg=await api('/api/retail/maps-config'); }catch(e){ cfg=null; }
+    if(!cfg||cfg.provider!=='amap'||!cfg.key) throw new Error('no_amap');
+    if(window.AMap) return;
+    if(cfg.security) window._AMapSecurityConfig={securityJsCode:cfg.security};
+    await new Promise((resolve,reject)=>{
+      const cb='__mMapReady';
+      window[cb]=()=>resolve();
+      const s=document.createElement('script');
+      s.async=true;
+      s.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(cfg.key)+'&callback='+cb;
+      s.onerror=()=>reject(new Error('sdk_load_failed'));
+      document.head.appendChild(s);
+    });
+  })();
+}
+function mAmapLoad(){
+  if(_mAmapP) return _mAmapP;
+  _mAmapP=mAmapLoadOnce().catch(e=>{ _mAmapP=null; throw e; });
+  return _mAmapP;
+}
+function riderMapTeardown(){
+  if(!_mMap) return;
+  try{ clearInterval(_mMap.timer); }catch(e){}
+  try{ _mMap.map&&_mMap.map.destroy(); }catch(e){}
+  _mMap=null;
+}
+/* The RIDER is the point that matters — it is the one that moves — so it is
+   drawn large, in Brick, with a halo and a solid label; the fixed store and
+   door stay small and quiet so the scooter is unmistakable at arm's length. */
+function riderMarkerHtml(label,opts){
+  opts=opts||{};
+  const color=opts.color||'var(--text-secondary)';
+  const size=opts.size||11;
+  const halo=opts.halo?`<div style="position:absolute;left:50%;top:50%;width:${size*2.6}px;height:${size*2.6}px;transform:translate(-50%,-50%);border-radius:50%;background:${color};opacity:.2"></div>`:'';
+  const dotBg=opts.ring?'var(--surface-card)':color;
+  const dotBorder=opts.ring?('3px solid '+color):'2.5px solid var(--surface-card)';
+  const labelStyle=opts.pill
+    ? `font-size:10.5px;font-weight:600;color:#FBF9F4;background:${color};padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 5px rgba(17,26,43,.35)`
+    : `font-size:10px;font-weight:600;color:${color};white-space:nowrap`;
+  const glyph=opts.glyph?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF9F4">${opts.glyph}</div>`:'';
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+    <div style="${labelStyle}">${label}</div>
+    <div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">${halo}
+      <div style="position:relative;width:${size}px;height:${size}px;border-radius:50%;background:${dotBg};border:${dotBorder};box-shadow:0 1px 3px rgba(17,26,43,.4)">${glyph}</div>
+    </div></div>`;
+}
+/* Its own fetch, for the reason the order poll has one: this ticks on a timer,
+   and a session that lapsed while the phone was in a pocket must not throw the
+   operator at a login screen. On any failure it goes quiet and tries again. */
+function trackFetch(id){
+  return fetch(apiURL('/orders/'+id+'/delivery-track'),{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null).then(j=>(j&&j.data!==undefined)?j.data:null).catch(()=>null);
+}
+function riderNote(st,text){
+  st.node.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px;font-size:12.5px;color:var(--text-secondary)">${text}</div>`;
+}
+async function riderMapMount(o,host){
+  const st={orderId:o._id,node:document.createElement('div'),map:null,timer:null,
+            rider:null,shop:null,cust:null,line:null,hint:null,fitted:false};
+  st.node.style.cssText='position:absolute;inset:0';
+  host.appendChild(st.node);
+  _mMap=st;
+  let ok=true;
+  try{ await mAmapLoad(); }catch(e){ ok=false; }
+  if(_mMap!==st) return;                       // sheet closed / another order opened while loading
+  if(!ok||!window.AMap){
+    // A shop with no map key still gets the rider, the number and the distance
+    // — the card below is the useful part and it is already on screen.
+    riderNote(st,T('Map unavailable — the rider details are below.','地图暂不可用 — 骑手信息见下方'));
+    return;
+  }
+  /* Built on the first payload that carries a coordinate, never up front: an
+     AMap with no centre picks a view of its own, and the desktop's copy of this
+     once showed a Guangzhou order sitting in Hunan. A map with nothing to
+     anchor on stays a placeholder, which is at least true. */
+  const ensureMap=anchor=>{
+    if(st.map||!anchor) return st.map;
+    st.node.innerHTML='';
+    st.map=new AMap.Map(st.node,{zoom:15,resizeEnable:true,jogEnable:false,center:[anchor.lng,anchor.lat]});
+    return st.map;
+  };
+  const setMarker=(cur,pos,opts,label,z)=>{
+    if(!pos||!st.map) return cur;
+    const ll=[pos.lng,pos.lat];
+    if(cur){ cur.setPosition(ll); return cur; }
+    const mk=new AMap.Marker({position:ll,content:riderMarkerHtml(label,opts),anchor:'center',zIndex:z});
+    mk.setMap(st.map);
+    return mk;
+  };
+  const apply=d=>{
+    const anchor=d.rider_position||d.recipient_position||d.shop_position
+      ||((Array.isArray(d.route)&&d.route.length)?d.route[0]:null);
+    const map=ensureMap(anchor);
+    if(!map) return;
+    st.shop =setMarker(st.shop, d.shop_position,     {color:'var(--text-secondary)',size:11},              T('Store','门店'),100);
+    st.cust =setMarker(st.cust, d.recipient_position,{color:'var(--text-primary)',size:11,ring:true},      T('Customer','收货'),100);
+    st.rider=setMarker(st.rider,d.rider_position,    {color:'var(--brick-ink)',size:22,halo:true,pill:true,glyph:ic('bike',13,2)},T('Rider','骑手'),120);
+    if(Array.isArray(d.route)&&d.route.length>1){
+      const path=d.route.map(p=>[p.lng,p.lat]);
+      if(st.line) st.line.setPath(path);
+      else { st.line=new AMap.Polyline({path,strokeColor:'#6E67AF',strokeWeight:4,strokeOpacity:.85,lineJoin:'round',showDir:true}); st.line.setMap(map); }
+    }
+    /* Rider GPS blinks out on some couriers between pings. Say so, rather than
+       leaving a door pin with no scooter and letting it read as "no rider". */
+    if(!d.rider_position&&d.stage!=='delivered'){
+      if(!st.hint){
+        st.hint=document.createElement('div');
+        st.hint.style.cssText='position:absolute;left:10px;top:10px;z-index:5;background:var(--surface-card);border:1px solid var(--border-default);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--amber-ink);display:flex;align-items:center;gap:6px';
+        st.hint.innerHTML='<span style="width:6px;height:6px;border-radius:50%;background:var(--amber-ink)"></span>'+T('Locating rider…','正在定位骑手…');
+        st.node.appendChild(st.hint);
+      }
+    } else if(st.hint){ st.hint.remove(); st.hint=null; }
+    if(!st.fitted){
+      const pts=[st.shop,st.cust,st.rider].filter(Boolean);
+      if(pts.length>1){ try{ map.setFitView(pts,false,[24,24,24,24]); }catch(e){} st.fitted=true; }
+      else if(anchor){ map.setZoomAndCenter(15,[anchor.lng,anchor.lat]); st.fitted=true; }
+    } else if(d.rider_position){
+      map.setCenter([d.rider_position.lng,d.rider_position.lat]);
+    }
+  };
+  /* The card's own words, refreshed from the same payload — in place, not by
+     render(). Distance is the answer to the question this whole block exists
+     for, and a card that still says "1.2 km" twenty minutes later is the same
+     silence with extra confidence. */
+  const applyText=d=>{
+    const stage=document.getElementById('riderStage');
+    const meta=M_COURIER_STAGE[d.stage];
+    if(stage&&meta) stage.textContent=T(meta.en,meta.zh);
+    const eta=document.getElementById('riderEta');
+    if(eta){
+      const bits=(d.stage==='delivered')?[]:riderEtaBits(d);
+      eta.textContent=bits.join(' · ');
+      eta.style.display=bits.length?'':'none';
+    }
+    const ago=document.getElementById('riderAgo');
+    const when=courierAgo(d.updated_at);
+    if(ago&&when) ago.textContent=T('Updated','更新于')+' '+when;
+    // Keep the cached order in step, so closing and reopening the sheet — or the
+    // next repaint — draws what the map is already showing rather than the
+    // figures the detail read came back with.
+    const cur=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:null;
+    if(cur&&cur.courier&&cur._id===st.orderId){
+      cur.courier.stage=d.stage;
+      cur.courier.eta_seconds=d.eta_seconds!=null?d.eta_seconds:null;
+      cur.courier.rider_to_cust_m=d.rider_to_cust_m!=null?d.rider_to_cust_m:null;
+      cur.courier.updated_at=d.updated_at||cur.courier.updated_at;
+      if(d.rider) cur.courier.rider=d.rider;
+    }
+  };
+  const poll=async()=>{
+    if(_mMap!==st) return;
+    const d=await trackFetch(st.orderId);
+    if(_mMap!==st||!d) return;                 // superseded, or a blip — try again next tick
+    if(!d.tracking){ st.done=true; clearInterval(st.timer); st.timer=null; return; }
+    applyText(d);
+    /* A momentarily missing rider_position is NOT a stop signal (see the hint
+       above) — only a finished delivery ends the loop. */
+    if(d.stage==='delivered'){
+      st.done=true; clearInterval(st.timer); st.timer=null;
+      // Destroy the map BEFORE the note overwrites the container it lives in —
+      // an AMap torn out from under itself leaves its listeners behind.
+      try{ st.map&&st.map.destroy(); }catch(e){}
+      st.map=null; st.rider=st.shop=st.cust=st.line=st.hint=null;
+      riderNote(st,T('Delivered — the rider has dropped off.','已送达 — 骑手已完成配送。'));
+      return;
+    }
+    apply(d);
+  };
+  await poll();
+  // `done` is the first poll saying this delivery is over (dropped off, or no
+  // longer tracked). Without it the loop it just stopped would be re-armed here
+  // and go on asking about a finished job every 25 seconds.
+  if(_mMap===st&&!st.timer&&!st.done) st.timer=setInterval(poll,25000);
+}
+/* Called after every repaint. The map node survives the innerHTML rewrite
+   because this module holds it; all that is needed is to put it back. */
+function riderMapSync(){
+  const host=document.getElementById('riderMapHost');
+  const o=state.detailId?currentOrder():null;
+  if(!host||!o||o._id==null||!riderLive(o)){ riderMapTeardown(); return; }
+  if(_mMap&&_mMap.orderId===o._id){
+    if(_mMap.node.parentNode!==host) host.appendChild(_mMap.node);
+    if(_mMap.map){ try{ _mMap.map.resize(); }catch(e){} }
+    return;
+  }
+  riderMapTeardown();
+  riderMapMount(o,host);
 }
 /* The desktop's shipment cards. The mode is the fact the phone was missing
    entirely: an order that leaves as an Air parcel and a Land parcel arrives on
@@ -7844,6 +8297,9 @@ const ROUTE_CAP={
      the page reads correctly with the CTA gone. The record button carries the
      second capability itself — see SUBS.waste's cta. */
   waste:'waste:view',
+  /* `till` is deliberately ABSENT from this table — it is the one route that
+     needs ALL of a pair rather than any of it, and an array here means any-of.
+     Its gate is the named branch in canRoute() below. */
   stockadd:'quickstock:add',
   stockapp:['quickstock:add','quickstock:recount'],
   // More → Marketing.
@@ -7866,7 +8322,19 @@ function mCan(v){
   if(v===undefined) return true;
   return Array.isArray(v) ? v.some(k=>state.caps.indexOf(k)!==-1) : state.caps.indexOf(v)!==-1;
 }
-function canRoute(k){ return mCan(ROUTE_CAP[k]); }
+function canRoute(k){
+  /* THE TILL NEEDS BOTH CAPS, and it is the only route that does. Receiving's
+     note in ROUTE_CAP makes the argument: a screen whose entire purpose is the
+     save at the bottom of it must not be offered to somebody whose save will
+     403. The till's Confirm posts the ordinary manual order, which
+     lib/cap-routes.js gates on `orders:edit` — so `till:use` on its own is a
+     tablet that rings up a basket and then refuses to take the money.
+     Written here as an explicit && rather than as a third array syntax in the
+     table: one route needs this, and a table where an array sometimes means
+     any-of and sometimes all-of is a table nobody can read. */
+  if(k==='till') return mCan('till:use') && mCan('orders:edit');
+  return mCan(ROUTE_CAP[k]);
+}
 /* The Quick Stock app is a separate PWA, so its row LEAVES rather than pushing a
    screen. Its label is the mode the operator will actually land in: /stock picks
    add-vs-recount by role, and recount is what anyone holding both resolves to
@@ -8248,10 +8716,69 @@ function bootHold(){
 }
 /* WHICH SCREEN THIS IS, for the scroll below. The tab plus the pushed stack:
    answering a line, opening a sheet or a toast landing is the SAME screen and
-   must keep its place; a push, a pop or a change of tab is a different one and
-   starts at the top. */
+   holds its place; a push or a change of tab is a DIFFERENT one, which starts
+   at the top the first time it is opened and comes back to where it was left
+   every time after. */
 function screenKey(){ return state.tab+'|'+state.stack.map(f=>f.route).join('>'); }
+/* WHERE EACH SCREEN WAS LEFT, one entry per screenKey — not one position for
+   whichever screen was painted last, which is all this used to hold. Home is
+   where that showed: the Quick actions sit at the BOTTOM of a long board, so
+   reaching one is a scroll to the end of Home, and the tap that opens
+   Receiving or Waste replaced the single remembered position with the pushed
+   screen's own. Back therefore had nothing to return to and Home opened at the
+   top — the operator scrolled the whole board again for every shortcut they
+   took, which is the exact cost the note below was written to remove.
+   A map keeps the position of the screen underneath while the pushed one is
+   open, so Back puts Home back exactly where it was, and the same holds for a
+   tab left and returned to. */
+const _scrollMem=Object.create(null);
 let _scrollKey='';
+/* A screen that is CLOSED forgets where it was. Pushing Receiving a second
+   time is OPENING it, not returning to it, so it starts at the top the way it
+   did the first time; only the screen being returned to keeps its place.
+   NOTED, not deleted, because the render that follows reads the closing
+   screen's position off the DOM one last time and would write it straight back
+   in. The note is spent inside that render, after the read. */
+let _forget=[];
+function forgetScroll(){ _forget.push(screenKey()); }
+/* And everything pushed under this tab, dropped in one go: switching tabs
+   throws the stack away, so the positions inside it go with it. The tab's own
+   root is NOT one of them — that is the screen being returned to. */
+function forgetPushed(){ const p=state.tab+'|', here=screenKey();
+  for(const k in _scrollMem){ if(k.length>p.length&&k.indexOf(p)===0) _forget.push(k); }
+  if(here!==p) _forget.push(here); }
+/* Counter till and Quick Stock are separate pages, so coming back from one is
+   a fresh LOAD of this app — the map above went with the old document, and the
+   operator arrived back at the top of Home for the same reason as before. The
+   one position that matters rides across in sessionStorage: this tab only,
+   gone when the tab is, and read exactly once, here, on the way in.
+   It is spent the moment it lands (or the moment the operator touches the
+   screen, or after the few seconds a boot takes), so it can never yank a list
+   somebody is already reading. */
+const M_SCROLL_KEY='tacet-m-scroll';
+function bootScrollRead(){
+  try{
+    const raw=sessionStorage.getItem(M_SCROLL_KEY);
+    // Taken as it is read: a position is good for ONE return, and a line left
+    // in storage would move a screen the operator opened fresh an hour later.
+    sessionStorage.removeItem(M_SCROLL_KEY);
+    const v=raw?JSON.parse(raw):null;
+    return (v&&typeof v.key==='string'&&v.top>0) ? {key:v.key, top:v.top, until:Date.now()+8000} : null;
+  }catch(e){ return null; }
+}
+let _bootScroll=bootScrollRead();
+document.addEventListener('pointerdown',()=>{ _bootScroll=null; },true);
+/* Written on the way OUT, whatever takes the app out — a shortcut to /till, a
+   mirror link, a reload. pagehide rather than unload: it is the one the phone
+   browsers actually fire. */
+function saveScrollForReturn(){
+  try{
+    const c=document.getElementById('content');
+    if(c&&c.scrollTop>0) sessionStorage.setItem(M_SCROLL_KEY,JSON.stringify({key:screenKey(),top:c.scrollTop}));
+    else sessionStorage.removeItem(M_SCROLL_KEY);
+  }catch(e){}
+}
+window.addEventListener('pagehide',saveScrollForReturn);
 function render(){
   /* THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
      one innerHTML, which destroys the scroller and takes its position with it.
@@ -8260,12 +8787,20 @@ function render(){
      down to where they were. The file already knew the cost — the orders poll
      deliberately does not repaint for exactly this reason — but nothing put the
      position back.
-     Read BEFORE the paint, restored after it, and only when the screen is the
-     same one: a pushed screen that inherited the last screen's scroll would
-     open halfway down itself. */
+     Read BEFORE the paint under the key of the screen that is on it, restored
+     after it under the key of the screen about to be: a pushed screen that
+     inherited the last screen's scroll would open halfway down itself, and a
+     screen returned to that inherited nothing would open at the top. */
   const _sc=document.getElementById('content');
-  const _keep=(_sc&&screenKey()===_scrollKey)?_sc.scrollTop:0;
-  _scrollKey=screenKey();
+  if(_sc&&_scrollKey) _scrollMem[_scrollKey]=_sc.scrollTop;
+  if(_forget.length){ _forget.forEach(k=>{ delete _scrollMem[k]; }); _forget=[]; }
+  const _skey=screenKey();
+  _scrollKey=_skey;
+  let _keep=_scrollMem[_skey]||0;
+  if(_bootScroll){
+    if(_bootScroll.key===_skey&&Date.now()<_bootScroll.until) _keep=Math.max(_keep,_bootScroll.top);
+    else _bootScroll=null;   // a different screen, or too late to be a return
+  }
   /* A SHEET has its own scroller, and #content's position says nothing about
      it. The waste form is the first sheet here tall enough to scroll and busy
      enough to repaint on every tap, so it is the first to need this. Both
@@ -8275,6 +8810,12 @@ function render(){
      exactly as they are. */
   const _wb=document.getElementById('mWstBody');
   const _wkeep=_wb?_wb.scrollTop:0;
+  /* The Quick actions picker, for the same reason and by the same two lines:
+     every add, remove and move repaints it, and a list that jumps back to
+     Operations each time you pick something out of Content is a list nobody
+     finishes setting up. */
+  const _qb=document.getElementById('mQuickBody');
+  const _qkeep=_qb?_qb.scrollTop:0;
   if(!state.capsLoaded){
     app.innerHTML = bootHold();
     return;
@@ -8295,14 +8836,28 @@ function render(){
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
   if(state.chanSheet) html += sheetChannel();
+  if(state.quickSheet) html += sheetQuick();
   if(state.wst.open) html += sheetWaste();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
-  if(_keep){ const c=document.getElementById('content'); if(c) c.scrollTop=_keep; }
+  if(_keep){ const c=document.getElementById('content');
+    if(c){ c.scrollTop=_keep;
+      // What the scroller ACCEPTED, not what was asked of it: a screen still
+      // filling in is shorter than it will be, and remembering the number it
+      // clamped to would lose the position for good.
+      _scrollMem[_skey]=c.scrollTop;
+      // A return that landed is spent; one that fell short waits for the paint
+      // that makes the board tall enough, inside its own few seconds.
+      if(_bootScroll&&c.scrollTop>=_bootScroll.top) _bootScroll=null; } }
   if(_wkeep){ const b=document.getElementById('mWstBody'); if(b) b.scrollTop=_wkeep; }
+  if(_qkeep){ const b=document.getElementById('mQuickBody'); if(b) b.scrollTop=_qkeep; }
   wireDrag();
   wirePull();
+  /* The live rider map is a real map instance, not markup — it is put back into
+     the freshly written DOM rather than rebuilt, and torn down when the sheet
+     it belongs to is no longer on screen. */
+  riderMapSync();
   syncHistory();
   if(state.focus){ const el=document.getElementById(state.focus.id);
     if(el){ el.focus();
@@ -8434,7 +8989,9 @@ function layers(){
   const L=[];
   // state.stack.pop(), not pop(): the helper renders, and the caller here is
   // about to render anyway. One repaint per Back press.
-  for(let i=0;i<state.stack.length;i++) L.push(()=>{ state.stack.pop(); });
+  // forgetScroll() for the same reason pop() calls it: Back CLOSES this screen,
+  // and the one underneath is the one with a place to go back to.
+  for(let i=0;i<state.stack.length;i++) L.push(()=>{ forgetScroll(); state.stack.pop(); });
   // Order first, record second: the record opens ON TOP of the order it was
   // opened from, and Back closes this list in reverse — topmost first. When the
   // record is what opened the ORDER — a Recent orders row — the pair is stacked
@@ -8452,6 +9009,7 @@ function layers(){
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  if(state.quickSheet) L.push(()=>{ state.quickSheet=false; });
   if(state.reply!=null) L.push(()=>{ state.reply=null; });
   if(state.detailActions) L.push(()=>{ state.detailActions=false; });
   if(state.search) L.push(()=>{ state.search=false; });
@@ -9125,7 +9683,16 @@ function courierLine(r){
     : c.stage==='awaiting_dispatch'?T('Finding a rider','正在找骑手') : '';
   if(!label) return null;
   const mins=(c.stage==='in_transit'&&c.eta_seconds!=null)?('~'+Math.max(1,Math.round(c.eta_seconds/60))+T('m','分')):'';
-  return {text:mins?label+' · '+mins:label, tone:'brick'};
+  /* How far off the rider is, which is the half of "where are they" a row can
+     hold. The desktop's list cell has carried it since dispatch went in; here
+     the line said "On the way" and stopped, so the counter had to open the
+     order to learn whether that meant two minutes or two kilometres. It goes on
+     the cell's SECOND line, not appended to the first: this cell is capped at
+     52% of the card and does not wrap, and "On the way · ~5m · 1.2 km" is what
+     that cap eats first — the same clip the ship-by plan was split to avoid.
+     Only while a rider is actually moving, as on the desktop. */
+  const away=(M_COURIER_MOVING.includes(c.stage)&&c.rider_to_cust_m!=null)?riderDist(c.rider_to_cust_m):'';
+  return {text:mins?label+' · '+mins:label, sub:away, tone:'brick'};
 }
 /* deliveryStateInfo, ported: problems first, because those are what the
    operator must act on. */
@@ -9330,6 +9897,12 @@ function mapOrderRow(r){
     // right — one parcel has gone and another has not — and the row was the
     // only place that could say so.
     parcels: parcelRollup(r),
+    /* The live same-city courier block, carried through rather than read once
+       and thrown away. deliveryLine() used to be the only thing that ever
+       touched it, so the drawer — the screen where an operator asks WHERE the
+       rider is — could not see it at all. The list row's copy has the stage,
+       ETA and distance; the detail read adds the rider's name and number. */
+    courier: r.courier||null,
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:r.address_full?[r.address_full,r.address_full]:null,
     pay:payLabel(r.payment_method), payRaw:payIsKnown(r.payment_method)?null:(r.payment_method||''),

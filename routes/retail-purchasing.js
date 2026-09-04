@@ -61,7 +61,8 @@ const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 // The no-invoice mark and the receive row's invoice_status are one fact stored
 // in two columns; every write of either goes through here so a later re-derive
 // cannot reverse a buyer's decision. See lib/invoice-mark.js.
-const { setNoInvoiceMark, setLineInvoiceStatus, invoiceStatusSets } = require('../lib/invoice-mark');
+const { setNoInvoiceMark, setPONoInvoiceMark, setLineInvoiceStatus,
+        invoiceStatusSets } = require('../lib/invoice-mark');
 
 const router = express.Router();
 
@@ -1915,9 +1916,15 @@ router.put('/api/retail-admin/purchasing/po/:id/no-invoice', requireRetailAdmin,
   const po = db.prepare('SELECT id FROM purchase_orders WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, tid);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const flag = !!(req.body && req.body.no_invoice_expected);
-  db.prepare('UPDATE purchase_orders SET no_invoice_expected = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(flag ? 1 : 0, po.id);
-  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id, { no_invoice_expected: flag }, req.ip);
-  res.json({ success: true, no_invoice_expected: flag });
+  // The order's own column, and nothing else — lib/invoice-mark.js holds the
+  // reason. One order's lines are attributed line by line, so this order can be
+  // sitting under two suppliers at once, and a 恢复 pressed under one of them
+  // must not unmake the other's decision. Lines carrying their own mark are
+  // COUNTED and reported, so the screen can say why they did not move.
+  const { lines_still_marked } = setPONoInvoiceMark(db, po.id, flag);
+  logActivity(req.user.id, req.user.username, 'no_invoice_toggle', 'purchase_order', po.id,
+              { no_invoice_expected: flag, lines_still_marked }, req.ip);
+  res.json({ success: true, no_invoice_expected: flag, lines_still_marked });
 });
 
 router.put('/api/retail-admin/purchasing/po/:id/line/:lineId/no-invoice', requireRetailAdmin, express.json(), (req, res) => {

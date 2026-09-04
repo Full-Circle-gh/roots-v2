@@ -26,6 +26,7 @@ const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
 const { productUnitCostYuan } = require('../lib/product-cost');
+const { settlementGap, describeSettlementGap } = require('../lib/channel-settlement');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -104,20 +105,119 @@ function normName(s) {
 // — except a label that says the rider already HAS the order (已取餐), which is
 // checked first and is a real dispatch.
 function internalStatusForChannel(desc) {
-  const d = String(desc || '');
+  const d = String(desc || '').trim();
   if (!d) return null;
+  // An order-VALIDITY flag is not a stage. Eleme's list row carries
+  // `status: "VALID"` on every live order and lib/eleme-browser.js used to read
+  // it as the order's label — which is why every mirrored Eleme order sat on
+  // 'paid' for its whole life. The browser now looks past it, and this refuses
+  // it a second time so a payload that carries nothing else can never be read
+  // as a stage here either.
+  //
+  // INVALID is refused just as firmly: reading it as a cancel would skip the
+  // stock deduction at ingest on an order that may be perfectly live, and
+  // "flagged invalid" and "cancelled" are not the same claim. A flag we cannot
+  // interpret must produce no claim at all.
+  if (/^(valid|invalid|normal|unknown|default)$/i.test(d)) return null;
   if (/退款|退货/.test(d))                                          return 'refunded';
   if (/取消|已关闭|交易关闭/.test(d))                                return 'cancelled';
   if (/已完成|交易完成|已送达|已收货|已收餐|订单完成|已签收|妥投/.test(d)) return 'delivered';
   // Rider now HOLDS the order and is en route to the customer. Before the rider
   // bucket below, because 骑手已取餐 matches both and this is the truer one.
-  if (/已取货|已取餐|已揽收|配送中|派送中|运输中/.test(d))            return 'dispatched';
+  //
+  // 送出 is Eleme's own word for it and it is not optional: MEASURED on the live
+  // archive (scripts/diagnose_eleme_stage_replay.js, 2026-09-04), the stage this
+  // shop's orders actually carry is "订单商家已自行送出" at header.orderLatestStatus,
+  // with "商家已送出" saying the same thing in the delivery trace — 自配送, the
+  // merchant delivering it themselves rather than a platform rider. Without this
+  // arm the fixed parser reads that stage correctly and then maps it to nothing,
+  // which leaves the order on Paid exactly as before: the right field, read well,
+  // and still no movement. 已送达 (delivered) is matched by the arm above and is
+  // reached first, so this cannot swallow it.
+  if (/已取货|已取餐|已揽收|配送中|派送中|运输中|送出/.test(d))       return 'dispatched';
   // Rider assigned and heading to the store to COLLECT — its own bucket so the
   // floor knows "someone is coming, have it ready".
   if (/骑手|到店|待取货|待取餐/.test(d))                             return 'rider_pickup';
   if (/待配送|待接单|已接单|待拣货|拣货|备货|待发货|制作|待出餐/.test(d)) return 'preparing';
   if (/配送|派送|取货/.test(d))                                      return 'dispatched';
+  // The same lifecycle, worded as an ASCII enum. Eleme mixes the two: the fields
+  // that carry a real stage (header.orderLatestStatus in particular) speak
+  // ORDER_COMPLETED where the printed label says 已完成, so a Chinese-only reader
+  // would leave exactly the orders this fix is for still sitting on Paid.
+  //
+  // Matched on the WORD, not against an exhaustive list of Eleme's enum values —
+  // we hold three archived payloads, not a specification, so a closed list would
+  // silently miss the fourth spelling. Only a pure-ASCII token reaches these arms
+  // (a Chinese label has already returned above), and anything unrecognised still
+  // returns null, which leaves the order exactly where it is: an enum we misread
+  // as unknown costs nothing that today's behaviour doesn't already cost.
+  if (/^[A-Za-z][A-Za-z0-9_\- ]*$/.test(d)) {
+    const u = d.toUpperCase();
+    // Unpaid is not a stage we move an order into — it is the one below 'paid',
+    // and our row is only created once Eleme has taken the money.
+    if (/UNPAID|TO_?PAY|PENDING_?PAY|WAIT.*PAY/.test(u))            return null;
+    // A refund IN FLIGHT is not a refunded order — same rule, and the same
+    // consequence if we get it wrong, as 退款中 above.
+    if (/REFUND/.test(u)) {
+      if (/REFUNDING|APPLY|APPLIED|REQUEST|AUDIT|PENDING|PROCESS|PART/.test(u)) return null;
+      return 'refunded';
+    }
+    if (/CANCEL|CLOSE/.test(u))                                     return 'cancelled';
+    // SIGNED and DONE are anchored to a token boundary on purpose: unanchored,
+    // RIDER_AS-SIGNED and ABAN-DONE-D both read as a delivered order.
+    if (/COMPLET|FINISH|DELIVERED|RECEIVED|SETTLED|(^|_)SIGNED(_|$)|(^|_)DONE(_|$)/.test(u)) return 'delivered';
+    // Rider HOLDS it — before the rider bucket, exactly as 骑手已取餐 is above.
+    if (/DELIVERING|SHIPPING|IN_?DELIVERY|ON_?THE_?WAY|TRANSPORT|PICKED|TAKEN/.test(u)) return 'dispatched';
+    if (/RIDER|KNIGHT|COURIER|ASSIGN|GRAB|ARRIV|PICK/.test(u))      return 'rider_pickup';
+    if (/PROCESSING|PREPAR|COOK|MAKING|PACK|ACCEPT|CONFIRM|UNPROCESSED/.test(u)) return 'preparing';
+    return null;
+  }
   return null; // 待支付 / unknown → keep 'paid'
+}
+
+// Labels that map to nothing ON PURPOSE and are therefore not worth a warning:
+// an order still awaiting payment sits below 'paid' in our own lifecycle, and
+// there is nothing to say about it. Everything else that maps to nothing is a
+// label we are storing and cannot read, which is exactly what went unnoticed.
+const UNMAPPED_BY_DESIGN = /待支付|未支付|待付款|UNPAID|TO_?PAY|PENDING_?PAY/i;
+
+// A channel label that mapped to nothing, written to the sync log rather than
+// dropped. This is the instrument the always-Paid bug did not have: "VALID" was
+// read as an order's status for months and nothing anywhere said that the label
+// we were storing meant nothing to us. Now the first order carrying an unreadable
+// label says so, with the payload field it came out of, so the next rename is a
+// log line instead of an archaeology session.
+function logUnmappedStatus(storeCode, ref, desc, keyPath, isStage) {
+  try {
+    db.prepare(`
+      INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+      VALUES (?, 'order_status_unmapped', 'warn', ?, ?)
+    `).run(
+      storeCode || null,
+      JSON.stringify({ ref, channelStatus: desc, statusKeyPath: keyPath || null, isStage: isStage !== false }),
+      `Eleme label "${desc}" maps to no internal status`
+        + (keyPath ? ` (read from ${keyPath}${isStage === false ? ', not a lifecycle field' : ''})` : '')
+        + ' — order left where it was',
+    );
+  } catch (e) { console.error('[eleme-internal] order_status_unmapped log failed:', e.message); }
+}
+
+// Stamp OUR OWN lifecycle clock when the platform's label first moves an order
+// into a stage. Eleme sends no rider section, so unlike the Meituan twin — which
+// fills these from one — nothing else ever writes them for a mirrored order, and
+// without this an Eleme order would read "Dispatched" with an empty time beside
+// it in the drawer that shows both.
+//
+// Fill-a-blank only: a stamped time is never rewritten, so a poll that re-reads
+// the same label, or an operator's own earlier stamp, always wins. Stages with no
+// column of their own (rider_pickup) write nothing.
+const STATUS_STAMP_COL = { preparing: 'preparing_at', dispatched: 'dispatched_at', delivered: 'delivered_at' };
+function stampLifecycle(orderId, status) {
+  const col = STATUS_STAMP_COL[status];
+  if (!col || !orderId) return;
+  try {
+    db.prepare(`UPDATE retail_orders SET ${col} = COALESCE(${col}, CURRENT_TIMESTAMP) WHERE id = ?`).run(orderId);
+  } catch (e) { console.error('[eleme-internal] lifecycle stamp failed:', e.message); }
 }
 
 // Lifecycle order, used only to stop a STALE label from walking an order
@@ -359,7 +459,13 @@ router.post('/ingest-order', (req, res) => {
     const placedAt      = (order.placedAt && String(order.placedAt).trim()) || null;
     const customerNote  = (order.note && String(order.note).trim()) || null;
     const needsCutlery  = order.needsCutlery ? 1 : 0;
-    const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
+    const mappedStatus  = internalStatusForChannel(channelStatus);
+    const internalStatus = mappedStatus || 'paid';
+    // Eleme told us where the order is and we could not read it — say so once,
+    // here, rather than letting the order quietly land on 'paid' and stay there.
+    if (channelStatus && !mappedStatus && !UNMAPPED_BY_DESIGN.test(channelStatus)) {
+      logUnmappedStatus(storeCode, ref, channelStatus, order.statusKeyPath, order.statusIsStage);
+    }
     // An order whose FIRST sighting is already void never had stock deducted here,
     // and this build has no restock path to give it back (see the header). Deducting
     // now would drift the count low permanently and then under-report that number to
@@ -475,6 +581,12 @@ router.post('/ingest-order', (req, res) => {
       return oid;
     })();
 
+    // An order can arrive already under way — the poll runs every ~5 minutes, so
+    // its first sighting is often 配送中 rather than a fresh 待接单. Stamp the
+    // clock for the stage it arrived in, or the drawer shows a Dispatched order
+    // with no dispatch time on it.
+    stampLifecycle(orderId, internalStatus);
+
     const unresolved = [];
     let deducted = 0;
     for (const it of bornVoid ? [] : items) {
@@ -536,6 +648,65 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_total_mismatch log failed:', logErr.message); }
     }
 
+    // The SECOND money question, and a different one from moneyGap above.
+    // moneyGap asks whether the platform's total and our line items tell the same
+    // story; this asks whether the four columns the Settlement panel prints add
+    // up to the total it prints them under:
+    //
+    //     subtotal + packing + delivery - discount = total
+    //
+    // The panel has refused to show a commission or an income figure over an
+    // unreconciled total since PR #206, which is right, but it said so only in
+    // the drawer and only as "Breakdown incomplete" — no components, no gap, no
+    // record anywhere that an order had come in that way. EL20260903163199 sat
+    // like that from ingest until somebody opened it and asked why, by which
+    // point the answer needed the archived payload.
+    //
+    // So the check runs HERE, against exactly what the INSERT above wrote (fees
+    // COALESCEd to 0, discount left NULL), while the payload that produced it is
+    // still in the request. Warn, never reject: an order that doesn't reconcile
+    // is still a real order the customer placed, and refusing it would lose money
+    // we do hold over money we don't.
+    //
+    // This records the order AS IT ARRIVED, and some of these heal: the discount
+    // and the economics are blank-filled by /update-order-status on a later poll
+    // (see the COALESCE group there), so a row logged here can reconcile an hour
+    // later and the log entry stays behind describing a state that no longer
+    // exists. That is the intended division — this log answers "what did the
+    // platform send us", scripts/diagnose_channel_settlement.js reads the live
+    // rows and answers "what is still wrong now". Don't read a warn row here as
+    // a standing fault without checking the order.
+    const settleGap = settlementGap({
+      subtotal, total,
+      packing_fee:      packingFee  != null ? packingFee  : 0,
+      shipping_fee:     shippingFee != null ? shippingFee : 0,
+      channel_discount: shopDiscount,
+    });
+    if (settleGap) {
+      try {
+        db.prepare(`
+          INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_settlement_mismatch', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({
+            ref, orderNo, ...settleGap,
+            // WHICH FIELD each figure was read out of. Without this the three
+            // faults that produce an identical gap — a fee the customer was
+            // never charged, a discount bigger than the term we capture, and a
+            // total read off a delivery-free key — are indistinguishable, which
+            // is the exact position EL20260903163199 left us in. The parser has
+            // always known the paths (lib/eleme-browser.js pickMoney returns
+            // one with every value); until now only the total's survived.
+            keyPaths: order.moneyKeyPaths || { total: order.totalKeyPath || null },
+            moneyDivisor: order.moneyDivisor != null ? order.moneyDivisor : null,
+            commission: commission, settleAmount: settleAmount,
+          }),
+          describeSettlementGap(settleGap)
+        );
+      } catch (logErr) { console.error('[eleme-internal] order_settlement_mismatch log failed:', logErr.message); }
+    }
+
     // Visible in the admin's Eleme log rather than only in the response body —
     // "stock deliberately not deducted" is exactly the kind of silent decision that
     // looks like a bug six weeks later.
@@ -553,7 +724,8 @@ router.post('/ingest-order', (req, res) => {
     }
 
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved, bornVoid,
-                subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null });
+                subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null,
+                settlementGap: settleGap || null });
   } catch (err) {
     console.error('[eleme-internal] ingest-order error:', err);
     res.status(500).json({ error: err.message });
@@ -573,7 +745,8 @@ router.post('/ingest-order', (req, res) => {
 // time, so an earlier platform time is always the truer one and a correct row can
 // never be dragged forward.
 router.post('/update-order-status', (req, res) => {
-  const { elemeOrderId, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt,
+  const { elemeOrderId, statusDesc, statusKeyPath, statusIsStage,
+          eta, preOrderAt, note, needsCutlery, placedAt,
           merchantIncome, commission, shopDiscount } = req.body || {};
   const desc   = (statusDesc && String(statusDesc).trim()) || null;
   const etaVal = (eta && String(eta).trim()) || null;
@@ -588,12 +761,19 @@ router.post('/update-order-status', (req, res) => {
     // Snapshot BEFORE advancing: the restock below keys off the PREVIOUS state,
     // which is what makes it idempotent under a repeating poll.
     const prev = db.prepare(
-      'SELECT status, store_id, channel_stock_restored FROM retail_orders WHERE id = ?'
+      'SELECT status, channel_status, store_id, channel_stock_restored FROM retail_orders WHERE id = ?'
     ).get(imp.retail_order_id);
     const internal = internalStatusForChannel(desc);
     // channel_status is ALWAYS written (the drawer shows Eleme's exact label);
     // only our own status is held back when the label would walk it backwards.
     const statusWrite = isForwardChannelStatus(prev && prev.status, internal) ? internal : null;
+
+    // A label we cannot read, on an order we are already holding. Logged once per
+    // CHANGE of label — never on every poll, or the signal drowns in the repeat
+    // of itself, which is most of why the "VALID" years were quiet.
+    const unreadable = internal === null && !!desc
+                       && String(prev && prev.channel_status || '') !== desc
+                       && !UNMAPPED_BY_DESIGN.test(desc);
 
     const r = db.prepare(`
       UPDATE retail_orders
@@ -605,6 +785,13 @@ router.post('/update-order-status', (req, res) => {
               OR status != COALESCE(?, status)
               OR (? IS NOT NULL AND COALESCE(channel_eta,'') != ?))
     `).run(desc, statusWrite, etaVal, imp.retail_order_id, desc, statusWrite, etaVal, etaVal);
+
+    // Our own clock for the stage the platform just moved it into. Only for a
+    // status that actually got written — a label held back for walking the order
+    // backwards must not stamp a time either — and fill-a-blank inside, so a
+    // repeat poll writes nothing and a row that predates this heals once.
+    if (statusWrite) stampLifecycle(imp.retail_order_id, statusWrite);
+    if (unreadable) logUnmappedStatus(null, String(elemeOrderId), desc, statusKeyPath, statusIsStage);
 
     const noteVal    = (note && String(note).trim()) || null;
     const preVal     = (preOrderAt && String(preOrderAt).trim()) || null;
@@ -717,6 +904,43 @@ router.post('/update-order-status', (req, res) => {
     });
   } catch (err) {
     console.error('[eleme-internal] update-order-status error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/internal/eleme/auto-deliver-past-eta
+// The twin of routes/meituan-internal.js's endpoint of the same name, for the
+// same failure and with the same rule — and Eleme needs it more, not less.
+//
+// Eleme's order poll reads the IN-PROGRESS tab. An order that completes drops out
+// of that list, so the last label we ever see is usually the one it had while
+// still moving (配送中), and nothing afterwards can advance it: the refresh only
+// touches orders the list still returns, and the refund/exception queue only
+// carries voids. Left alone, every Eleme order would now stall on Dispatched
+// instead of Paid — a better place to stall, and still a stall.
+//
+// So: an order still non-terminal an hour past the ETA Eleme itself promised is
+// treated as delivered. channel_eta is stored UTC (lib/eleme-browser.js
+// toUtcStamp) and CURRENT_TIMESTAMP is UTC, so the comparison is UTC on both
+// sides. Idempotent — delivered is terminal, and a real 已完成 label arriving
+// first simply gets here first.
+//
+// delivered_at is deliberately NOT stamped: this is a timer's inference, not a
+// platform fact, and public/retail-admin/04-orders.js already treats a past-ETA
+// flip as the guess it is. A stamped time would present it as an observation.
+router.post('/auto-deliver-past-eta', (_req, res) => {
+  try {
+    const r = db.prepare(`
+      UPDATE retail_orders
+         SET status = 'delivered'
+       WHERE channel = 'eleme'
+         AND status IN ('paid','preparing','rider_pickup','dispatched')
+         AND channel_eta IS NOT NULL AND channel_eta != ''
+         AND datetime(channel_eta, '+1 hour') <= datetime('now')
+    `).run();
+    res.json({ ok: true, delivered: r.changes });
+  } catch (err) {
+    console.error('[eleme-internal] auto-deliver-past-eta error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

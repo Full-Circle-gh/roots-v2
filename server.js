@@ -728,6 +728,17 @@ app.get('/retail-admin', (req, res) => {
 // the `counter` FULFILMENT type, writing through the ordinary manual-order
 // endpoint. New path, new file, no revival of either.
 //
+// PERMISSIONED, as of the `till:use` capability. The shell is still served to
+// anyone who asks — this route stays a plain sendFile and deliberately does NOT
+// gate, redirect or 403 — because the page's own boot does it: it reads
+// /api/backend/me and stops on its boot screen with "no permission" unless the
+// operator holds BOTH `till:use` (opens the screen) and `orders:edit` (what
+// lib/cap-routes.js requires of the POST its Confirm makes). Gating here
+// instead would mean redirecting a signed-out tablet, which is the loop the
+// paragraph above exists to prevent. The rail row and the phone's More row are
+// hidden by the same pair, so the URL is no longer the only door and no longer
+// an unguarded one.
+//
 // no-store, not no-cache: the same reasoning as the backend shell. A till
 // pinned to old JavaScript by an intermediary cache would keep charging with
 // last week's prices, and it is a low-traffic page that can afford to be

@@ -171,7 +171,11 @@ App({
       // — it's the same benign, self-recovering event, just surfaced through
       // onError instead of onPageNotFound. Treat it the same way (a notice,
       // not an error) so it doesn't double up a healthy customer's error count.
-      if (message.indexOf('Component is not found in path "wx://not-found"') !== -1) {
+      // Check the full string, not just `message` — WeChat prefixes this
+      // particular error with a literal "MiniProgramError" header line, so
+      // the actual "Component is not found…" text lands in `stack`, not in
+      // the first line.
+      if (s.indexOf('Component is not found in path "wx://not-found"') !== -1) {
         diag.reportNotice(message, { stack });
       } else {
         diag.reportError(message, stack);

@@ -118,6 +118,11 @@ const ORDER_DOWN_AFTER_MS = 30 * 60_000;
 // BROWSER — and self-limiting: see the cool-down and cap in
 // lib/channel-drift-sweep. 30 min is well inside a trading day.
 const DRIFT_SWEEP_MS = 1_800_000; // 30 min
+// Time-based delivered flip, same cadence and same rule as meituan-daemon's. Our
+// order read is the IN-PROGRESS tab, so an order that completes drops off the
+// list before we ever see a 已完成 label and nothing afterwards can advance it.
+// Pure server-side SQL — no browser — so it runs whatever the stores are doing.
+const DELIVER_SWEEP_MS = 1_800_000; // 30 min
 
 function internalSecret() {
   return process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
@@ -300,10 +305,20 @@ function archiveFields(order) {
   return {
     daySeq: order.daySeq,
     moneyDivisor: order.moneyDivisor,
+    // Which field said where the order was. The status equivalent of
+    // totalKeyPath below, and archived for the same reason: "VALID" sat in
+    // channel_status on every Eleme order for months and nothing recorded that
+    // it had been read off an order-validity flag rather than a lifecycle field.
+    statusKeyPath: order.statusKeyPath || null,
+    statusIsStage: order.statusIsStage !== false,
     // Which payload field the order total was read out of, and what the LINES
     // said the basket was worth. Stored because the two disagreeing is the whole
     // of the EL20260901417897 bug and neither number, on its own, could say why.
     totalKeyPath: order.totalKeyPath,
+    // The same question for the other five money fields. A settlement that
+    // doesn't reconcile is diagnosable only if each term can say which payload
+    // field it came out of — see the moneyKeyPaths note in lib/eleme-browser.js.
+    moneyKeyPaths: order.moneyKeyPaths || null,
     channelTotal: order.total,
     itemsTotal: order.itemsTotal,
     merchantIncome: order.merchantIncome,
@@ -378,7 +393,8 @@ async function pollOrders(cfg) {
           // reads wrong, and "the total was ¥17.50" was never the useful half of
           // that sentence on its own.
           total: order.total, itemsTotal: order.itemsTotal,
-          totalKeyPath: order.totalKeyPath, status: order.statusDesc });
+          totalKeyPath: order.totalKeyPath, status: order.statusDesc,
+          statusKeyPath: order.statusKeyPath });
     }
 
     // Voids. These have dropped OUT of the list above, so they are read from the
@@ -440,6 +456,22 @@ async function ingestOrder(storeId, storeCode, order) {
   }
 }
 
+// Mark any mirrored Eleme order delivered once it is an hour past the ETA Eleme
+// itself promised. The endpoint carries the reasoning; here it is one call for
+// every store at once, touching no browser. Best-effort — never breaks the loop.
+async function autoDeliverPastEta() {
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/eleme/auto-deliver-past-eta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.delivered) log('all', `auto-delivered ${data.delivered} order(s) past ETA+1h`);
+    }
+  } catch (err) { log('all', `autoDeliverPastEta error: ${err.message}`); }
+}
+
 // Refresh an already-mirrored order's Eleme status label (server-side no-op when
 // nothing changed). Best-effort — a failed refresh must never break the poll.
 async function refreshOrderStatus(storeCode, order) {
@@ -452,6 +484,11 @@ async function refreshOrderStatus(storeCode, order) {
       // build parsed them backfills itself instead of staying permanently blank.
       body: JSON.stringify({
         elemeOrderId: order.elemeOrderId, statusDesc: order.statusDesc, eta: order.eta,
+        // Which payload field the label came out of, and whether that field
+        // names a lifecycle stage at all. Only ever logged, never stored on the
+        // order — it is what makes an unreadable label diagnosable without
+        // re-reading the order off the platform.
+        statusKeyPath: order.statusKeyPath, statusIsStage: order.statusIsStage,
         preOrderAt: order.preOrderAt, note: order.note,
         needsCutlery: order.needsCutlery, placedAt: order.placedAt,
         // The economics, when the LIST row carries them (no Tier 1 read happens
@@ -728,6 +765,7 @@ let lastOrphanSweep = 0;
 // likely to hold terminally-failed rows nothing else will ever look at, so making
 // it wait half an hour to find out would be backwards.
 let lastDriftSweep = 0;
+let lastDeliverSweep = 0;
 
 // ── Catalogue cache (feeds the admin's Eleme-name autocomplete) ─────────────
 // Eleme's live catalogue only exists inside THIS process's browser session —
@@ -822,6 +860,15 @@ async function main() {
         storeCodes: configs.map(c => c.store_code),
         log, logSync, sendOpsAlert, alerts,
       });
+    }
+
+    // Orders that completed after dropping off the in-progress list. Not gated on
+    // opening hours or on the channel close switch, for the same reason as the
+    // drift sweep above: no browser is touched, and an order left non-terminal
+    // because the shop shut is exactly the one this is for.
+    if (Date.now() - lastDeliverSweep >= DELIVER_SWEEP_MS) {
+      lastDeliverSweep = Date.now();
+      await autoDeliverPastEta();
     }
 
     await processStockQueue(configs);
