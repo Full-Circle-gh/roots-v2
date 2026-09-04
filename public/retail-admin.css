@@ -4442,6 +4442,11 @@
      saying what a catalogue is for, and the first action) and a filter that
      matched nothing (title, and the filters back). Same shape as the Suppliers
      empty state, which is the pattern this page was measured against. */
+  /* Drawn only when the list endpoint capped what it sent — see _paPagerHtml. */
+  .pa-cap-note {
+    font-size: 12px; font-family: var(--f-sans); color: var(--td-amber-ink); background: var(--td-amber-tint); border-radius: 8px;
+    padding: 4px 10px; margin-right: 12px;
+  }
   .pa-empty-t { font-size: 16px; font-weight: 500; color: var(--td-text); margin-bottom: 6px; }
   .pa-empty-s { max-width: 380px; margin: 0 auto; line-height: 1.55; }
   .pa-empty-b { margin-top: 16px; }

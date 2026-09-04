@@ -30,6 +30,11 @@ let PA_STORES = [];
 let PA_STORE  = (() => { try { const v = localStorage.getItem('pa-store'); return v && v !== 'all' ? (parseInt(v, 10) || 'all') : 'all'; } catch { return 'all'; } })();
 let PA_STOCK  = {};
 let PA_STOCK_LOADED = false;
+// How many products the catalogue holds, and whether the server sent them all.
+// The list endpoint caps at 500 and has no page number, so these two are what
+// let the grid distinguish "this is everything" from "this is the first 500".
+let PA_SERVER_TOTAL = 0;
+let PA_TRUNCATED = false;
 // Tenant-wide default low-stock threshold (units). Hydrated by loadConfig() from
 // storefront_config 'inventory.lowStockThreshold'; a product can override it via
 // its own low_stock_threshold. Drives the amber dot, the Low-stock KPI tile +
@@ -263,7 +268,15 @@ function _paPagerHtml(total, pages, start, shown, showSizeSel) {
           ${sizeOpt(50, '50')}${sizeOpt(100, '100')}${sizeOpt(200, '200')}${sizeOpt('all', cuT('All', '全部'))}
         </select>
       </label>` : '';
-  return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
+  // WHEN THE SERVER SENT ONLY PART OF THE CATALOGUE, SAY SO. The pager's own
+  // numbers describe the rows on screen, which is right — but for a catalogue
+  // bigger than the endpoint's 500-row cap those rows are not the whole
+  // catalogue, and "of 500" read as if they were. This line is drawn only when
+  // the server reported more than it sent.
+  const capNote = PA_TRUNCATED
+    ? `<span class="pa-cap-note"><span data-lang-block="en">First <b>${PA_PRODUCTS.length}</b> of <b>${PA_SERVER_TOTAL}</b> products — search or filter to reach the rest</span><span data-lang-block="cn">仅显示 <b>${PA_SERVER_TOTAL}</b> 件中的前 <b>${PA_PRODUCTS.length}</b> 件 — 请搜索或筛选以查看其余</span></span>`
+    : '';
+  return `${capNote}<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
     <div style="display:flex;align-items:center;gap:12px">
       ${sizeSel}
       <div style="display:flex;align-items:center;gap:8px">
@@ -482,6 +495,12 @@ async function paLoad() {
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_PRODUCTS = j.data || [];
+    // What the server says the catalogue actually holds, against what it sent.
+    // The endpoint caps at 500 rows and takes no page number, so a bigger
+    // catalogue arrives silently short; the grid says so rather than paging a
+    // truncated array and reporting its length as the total.
+    PA_SERVER_TOTAL = Number.isFinite(j.total) ? j.total : PA_PRODUCTS.length;
+    PA_TRUNCATED    = !!j.truncated;
     paFillCatFilter();                       // category options from the catalogue
     pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
@@ -489,7 +508,15 @@ async function paLoad() {
     paLoadHighlights();   // fills the Going nowhere / On promotion jump tiles
     paLoadStoreStock();   // per-store stock + store list (drives the switcher)
   } catch (e) {
-    grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">Failed to load products: ${escapeHtml(e.message)}</div>`;
+    // The operator gets a sentence they can act on; the developer detail goes to
+    // the console, where it belongs. It used to print the raw error text — an
+    // HTTP status and a SQLite message — into the middle of the page.
+    console.error('[products] load failed', e);
+    grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">`
+      + cuT('The catalogue did not load. Check the connection and try again.',
+            '商品目录未能加载。请检查网络后重试。')
+      + ` <button class="btn btn-sm" type="button" onclick="paLoad()" style="margin-left:10px">`
+      + cuT('Try again', '重试') + `</button></div>`;
   }
 }
 

@@ -22490,12 +22490,26 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM store_products p WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
+  // Collected separately as well as appended, so the count below can be built
+  // from exactly the same conditions without re-deriving them.
+  let where = '';
   if (q) {
-    sql += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
+    where += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
     const s = `%${q}%`; params.push(s, s, s);
   }
-  if (published === '1') sql += ' AND is_published = 1';
-  if (published === '0') sql += ' AND is_published = 0';
+  if (published === '1') where += ' AND is_published = 1';
+  if (published === '0') where += ' AND is_published = 0';
+  sql += where;
+  // HOW MANY THERE ACTUALLY ARE. The cap below used to be the whole answer:
+  // the grid asked with no limit, received at most 500 rows and paged over them
+  // in the browser, so its pager read "of 500" for a catalogue of nine hundred
+  // and four hundred products were unreachable from the screen with nothing
+  // saying so. This is what the same filters match, shipped alongside the rows
+  // so the grid can say when it is holding only part of the catalogue. One
+  // COUNT over the same WHERE — no ORDER BY, no columns, no image work.
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM store_products p WHERE COALESCE(is_active, 1) = 1${where}`
+  ).get(...params).n;
   // Optional cap (used by the global search palette, which only shows a few
   // hits and shouldn't pull the whole catalogue per keystroke). Defaults to
   // the full grid limit of 500.
@@ -22625,7 +22639,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // that matters most. Stripped after applyBundleCost has run: a bundle's
   // cost is derived on the way out, and deriving it into a field nobody may
   // read would just be work.
-  res.json({ success: true, data: stripProductCosts(req, rows) });
+  // `total` is what the filters match; `data` is at most `limit` of them. The
+  // grid needs both to tell the truth about how much of the catalogue it holds.
+  res.json({ success: true, data: stripProductCosts(req, rows), total, limit: lim, truncated: total > rows.length });
 });
 
 // GET /api/retail-admin/products/:id/image — stream a product's primary photo
