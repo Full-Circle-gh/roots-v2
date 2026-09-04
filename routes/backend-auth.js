@@ -603,7 +603,24 @@ router.get('/api/backend/me', (req, res) => {
   //
   // roleName travels too, so the phone and the topbar stop carrying their own
   // copies of a nine-role name map.
+  // `home` is the same question /quick-stock/context answers for Quick Stock,
+  // asked here for the OTHER screen that is a separate page rather than a
+  // pushed one: the counter till. A single-purpose app with no navigation is
+  // right for a device that only does that job, and a dead end for an operator
+  // who arrived from Tacet Mobile — which, on a phone in standalone, has no
+  // browser chrome to press Back in either.
+  //
+  // The question is not "can they ring a sale", it is whether they have a home
+  // to return to: an operator whose role is not stock-app-locked has Tacet
+  // Mobile, whatever else they hold. A stock-app-only role is bounced back out
+  // of the backend by the restriction middleware in server.js, so a door
+  // offered to one of those would open onto a redirect.
+  //
+  // The label travels with it for the reason every pushed screen on the phone
+  // already follows: a back link says where it GOES, and the screen it returns
+  // to is titled with the role's own name.
   let roleLayout = 'default', roleName = null, dashboardCards = null;
+  let home = null, homeLabel = null;
   try {
     const rec = require('../lib/roles').recordFor(u.tenant_id, u.role, tenant ? tenant.roles_version : undefined);
     if (rec) {
@@ -612,11 +629,19 @@ router.get('/api/backend/me', (req, res) => {
       // body.pos-<roleLayout> CSS rules exactly as before this field existed.
       dashboardCards = rec.dashboardCards;
     }
+    if (!rec || !rec.stockAppOnly) {
+      home = '/m';
+      if (rec && (rec.nameEn || rec.nameCn)) {
+        homeLabel = { en: rec.nameEn || rec.nameCn, cn: rec.nameCn || rec.nameEn };
+      }
+    }
   } catch (e) { /* unseeded tenant — 'default' is the pre-roles board */ }
   const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
             roleLayout, roleName, dashboardCards,
+            home,                   // '/m' when there is somewhere to go back to
+            homeLabel,              // that screen's own name, so Back can say it
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
