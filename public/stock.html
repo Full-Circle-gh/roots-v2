@@ -1687,12 +1687,15 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function rcCounted() { return rcItems().filter(function (it) { return rcCount(it) != null; }); }
   function rcArrived(o) { return !!o.delivered_at; }
 
-  /* Which transfers belong to the shelf she is looking at. The server resolves
-     the destination itself when it settles (_resolveDestStoreId), and it is the
-     authority; this is only the list filter, and it mirrors that function's own
-     tiers: the store stamped on the order, and — where no store is stamped, the
-     single-store case the create route still allows — every store sees it. */
+  /* WHAT IS COMING TO THE SHELF SHE IS LOOKING AT, read off the order.
+     Since #259 an order records `to_store_id`, so this is an id comparison
+     rather than a guess. It used to match the store's NAME against the free
+     text stamped on the order and let an order naming nobody belong to
+     everybody — which was the best available answer while the destination was
+     inferred at dispatch, and is a worse one now that the row carries it.
+     The name match survives ONLY for rows written before that column existed. */
   function rcForStore(o) {
+    if (o.to_store_id) return o.to_store_id === state.storeId;
     var s = state.stores.filter(function (x) { return x.id === state.storeId; })[0];
     if (!s) return false;
     if (!o.store_name && !o.store_cn) return true;
@@ -1701,11 +1704,25 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     return got.some(function (g) { return want.indexOf(g) >= 0; });
   }
 
+
+  /* THE PROBE AND THE LIST, and they are not the same question.
+     This used to ask for `to_role=store`, which reads like "deliveries to a
+     shop" and is not: `to_role` records who was ASKED, and a shop asking the
+     warehouse writes 'warehouse'. Nothing has ever written 'store' — no client
+     posts it and no route sets it — so the filter matched no row ever created
+     and the Receive list was permanently empty, whatever was actually on a van.
+     What is coming here is `to_store_id`, and rcForStore is what reads it.
+     The param is dropped, not corrected: an absent `to_role` still fails the
+     kitchen session's `!== 'kitchen'` test, so the 403 that keeps the launcher
+     off the kitchen host answers exactly as it did. */
   function rcLoad() {
     if (rc.on === false) return Promise.resolve();
-    return rcFetch('/api/restock?tab=active&to_role=store').then(function (j) {
+    return rcFetch('/api/restock?tab=active').then(function (j) {
       rc.on = true;
-      rc.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) { return o.goods_state === 'in_transit' && rcForStore(o); });
+      rc.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) {
+        return (o.to_role || 'warehouse') !== 'kitchen'
+          && o.goods_state === 'in_transit' && rcForStore(o);
+      });
       homeLand();
       if (state.view === 'home') homeRender();
       else if (state.view === 'list') render();
@@ -2307,8 +2324,17 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       rc.on = true;
       // A run is what has been asked for and not yet dispatched. goods_state
       // 'none' is the pre-dispatch state; anything else has already left.
+      // WHAT THIS LOCATION HAS BEEN ASKED TO SUPPLY. `from_store_id` is the
+      // supplier, so a Tianhe→Yuexiu request appears in YUEXIU's pick list —
+      // they are the ones who have to walk to a freezer. Filtering on the roles
+      // instead would have put it in Tianhe's, asking the requester to pick
+      // their own order. Rows written before #259 have no pair and fall back to
+      // the old role test, which is all they ever had.
       var want = (Array.isArray(j.data) ? j.data : []).filter(function (o) {
-        return (o.from_role || 'store') === 'store' && (o.to_role || 'warehouse') === 'warehouse'
+        var mine = o.from_store_id
+          ? o.from_store_id === state.storeId
+          : ((o.from_role || 'store') === 'store' && (o.to_role || 'warehouse') === 'warehouse');
+        return mine
           && ['sent', 'received'].indexOf(o.status) >= 0
           && (!o.goods_state || o.goods_state === 'none');
       });
@@ -2775,6 +2801,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     recv:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v12H3V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
     queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/></svg>',
     kit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 6V3M12 6V3M15 6V3"/><path d="M8 9h8"/></svg>',
+    ask:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h8v12H3z"/><path d="M21 6h-8v12h8z"/><path d="M11 12h2"/><path d="M15 9l-2 3 2 3"/></svg>',
   };
 
   // The launcher is for someone with more than one job. rc.on is the probe's
@@ -2840,6 +2867,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           toMake ? t('Make what was asked for', '制作已申请的商品')
                  : t('Nothing to make', '暂无待制作'),
           toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home') +
+        // Only where there IS somewhere to ask. On a one-location tenant the
+        // screen has nothing to offer, and a tile that opens onto "there is
+        // nowhere else" is a door into a wall.
+        (asSuppliers().length
+          ? homeTileHtml('ask', t('Ask for stock', '申请补货'),
+              t('Have another location send it', '请其他地点发货'), '', 'data-asopen')
+          : '') +
       '</div><div style="flex:1"></div></div>';
   }
 
@@ -2862,6 +2896,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (k) k.onclick = akEnter;
     var kqb = m.querySelector('[data-kqopen-home]');
     if (kqb) kqb.onclick = kqEnter;
+    var a = m.querySelector('[data-asopen]');
+    if (a) a.onclick = asEnter;
   }
 
   function homeGoCount() {
@@ -3287,6 +3323,192 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     each('[data-kqnext]', function (b) {
       b.onclick = function () { kqAdvance(b.getAttribute('data-kqnext')); };
     });
+  }
+
+  /* ══ ASK FOR STOCK ═════════════════════════════════════════════════════════
+     One location asking another to send it something. ONE SCREEN FOR BOTH
+     DIRECTIONS, because since #259 the direction is just which two ids go in
+     which field: at Yuexiu you pick Tianhe and it is Yuexiu asking Tianhe; at
+     Tianhe you pick Yuexiu and it is the request the old model could not even
+     express. Nothing about the screen knows which is which, and that is the
+     point — a "warehouse" is a row, not a special case.
+
+     IT ALSO REPLACES A DOOR THAT WAS QUIETLY SHUT. app.html's in-SPA Restock
+     screen was the only thing that could raise a store request, and it is
+     kitchen-realm, so #261's move to Tacet closed it: POST /api/restock became
+     tacetOnly and that button has 403'd ever since. Nothing could raise a
+     store-to-store request at all. This is that door, in the app the work now
+     lives in.
+
+     WHO RECEIVES IS THE SHELF ON SCREEN, not a choice. You are asking for stock
+     for the store you are standing in and looking at; making it a second picker
+     would invite ordering someone else's stock into someone else's building. */
+
+  var as = {
+    from: null,      // the location being asked to supply
+    qty: {},
+    q: '',
+    busy: false, err: '', sent: null,
+  };
+
+  function asEnter() {
+    state.view = 'askstock';
+    as.from = null; as.qty = {}; as.q = ''; as.err = ''; as.sent = null; as.busy = false;
+    asRender();
+    akLoad().then(asRender);        // the catalogue both request screens use
+  }
+  function asExit() { as.sent = null; homeBack(); }
+
+  function asSuppliers() {
+    return (state.stores || []).filter(function (s) { return s.id !== state.storeId; });
+  }
+  function asHere() {
+    var s = (state.stores || []).filter(function (x) { return x.id === state.storeId; })[0];
+    return s ? storeLabel(s) : '';
+  }
+  function asChosen() {
+    return (ak.products || []).filter(function (p) { return (as.qty[p.id] || 0) > 0; });
+  }
+  function asBump(id, d) {
+    var n = (as.qty[id] || 0) + d;
+    as.qty[id] = n > 0 ? n : 0;
+    asRender();
+  }
+  function asLines() {
+    var all = ak.products || [];
+    var q = as.q.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(function (p) {
+      return (p.name_en || '').toLowerCase().indexOf(q) >= 0
+          || (p.name_cn || '').indexOf(as.q.trim()) >= 0
+          || (p.sku || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function asSend() {
+    if (as.busy) return;
+    var chosen = asChosen();
+    if (!as.from || !chosen.length) return;
+    as.busy = true; as.err = ''; asRender();
+    rcFetch('/api/restock', { method: 'POST', body: {
+      // BOTH ENDS NAMED OUTRIGHT. The server still derives from_role/to_role for
+      // its notification routing, but the locations are the order's own — which
+      // is what makes a request TO a shop as ordinary as one to the warehouse.
+      from_store_id: as.from,
+      to_store_id: state.storeId,
+      status: 'sent',
+      items: chosen.map(function (p) {
+        return {
+          // No product_id, for the reason the kitchen screen gives: the store
+          // and kitchen catalogues are separate counters over one integer space
+          // and this field is read as a kitchen id. The name is what a picker
+          // reads off the row.
+          product_id: null,
+          product_name: p.name_en || p.name_cn || ('#' + p.id),
+          product_cn: p.name_cn || null,
+          sku: p.sku || null,
+          qty_requested: as.qty[p.id],
+          unit: 'pcs',
+        };
+      }),
+    } }).then(function (j) {
+      as.busy = false;
+      var supplier = (state.stores || []).filter(function (s) { return s.id === as.from; })[0];
+      as.sent = { rs: j.rs_number || ('#' + j.id), lines: chosen.length,
+                  units: chosen.reduce(function (a, p) { return a + as.qty[p.id]; }, 0),
+                  who: supplier ? storeLabel(supplier) : '' };
+      asRender();
+    }).catch(function (e) {
+      as.busy = false;
+      as.err = e.message === 'norealm'
+        ? t('This account cannot ask for stock.', '此账号无法发起补货申请。')
+        : (e.message || t('That did not send. Nothing has changed — try again.', '未发送,数据未变 — 请重试。'));
+      asRender();
+    });
+  }
+
+  function asHtml() {
+    if (as.sent) {
+      return '<div class="rc-wrap">' +
+        rcHeadHtml(t('Sent to ' + as.sent.who, '已发送至 ' + as.sent.who),
+                   as.sent.rs + ' · ' + clock(new Date()), false) +
+        '<div style="padding:0 16px"><div class="rc-card">' +
+          '<div style="font-size:15px;font-weight:600;line-height:1.35">' +
+            t(as.sent.lines + ' item' + (as.sent.lines > 1 ? 's' : '') + ' · ' + as.sent.units + ' units',
+              '共 ' + as.sent.lines + ' 项 · ' + as.sent.units + ' 件') + '</div>' +
+          '<div class="rc-sub" style="margin-top:6px">' +
+            t('It is on their pick list now. Stock moves when they dispatch it.',
+              '已进入对方拣货单。对方发货时库存才会变动。') + '</div></div></div>' +
+        '<div class="rc-body"></div>' +
+        '<div class="rc-foot" style="background:transparent;border:none">' +
+          '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+          '<button class="rc-big" data-asback>' + t('Done', '完成') + '</button></div></div></div>';
+    }
+    var chosen = asChosen();
+    var units = chosen.reduce(function (a, p) { return a + as.qty[p.id]; }, 0);
+    var suppliers = asSuppliers();
+    var ready = !!as.from && chosen.length > 0;
+    var rows = ak.products === null
+      ? '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div>'
+      : asLines().map(function (p) {
+          var n = as.qty[p.id] || 0;
+          return '<div class="rc-hr"></div><div class="rc-row">' +
+            '<span class="rc-mid"><span class="rc-nm">' + esc(akName(p)) + '</span>' +
+            '<span class="rc-cap">' + esc(p.sku || ('#' + p.id)) + '</span></span>' +
+            '<span class="ak-step">' +
+              '<button data-asdec="' + p.id + '"' + (n <= 0 ? ' disabled' : '') + '>' + AK_MINUS + '</button>' +
+              '<span class="n num">' + n + '</span>' +
+              '<button data-asinc="' + p.id + '">' + AK_PLUS + '</button>' +
+            '</span></div>';
+        }).join('') + '<div class="rc-hr"></div>';
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-asback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Ask for stock', '申请补货') + '</div>' +
+        '<div class="rc-sub">' + t('For ' + asHere(), '收货门店:' + asHere()) + '</div>' +
+      '</div>' +
+      (as.err ? '<div class="rc-err">' + esc(as.err) + '</div>' : '') +
+      // Asked first, and with no default. Which location supplies decides whose
+      // shelf empties, and picking one for him is picking whose stock to take.
+      '<div class="rc-lbl">' + t('Who should send it?', '由哪个地点发货?') + '</div>' +
+      (suppliers.length
+        ? '<div class="ak-purpose">' + suppliers.map(function (s) {
+            return '<button class="ak-opt' + (as.from === s.id ? ' on' : '') + '" data-asfrom="' + s.id + '">' +
+              '<b>' + esc(storeLabel(s)) + '</b></button>';
+          }).join('') + '</div>'
+        : '<div class="rc-flat rc-note" style="margin:0 16px 12px">' +
+            t('There is nowhere else to ask — this is the only location.', '没有其他地点可申请 — 当前仅此一个门店。') +
+          '</div>') +
+      '<div class="ak-search"><input id="asQ" inputmode="search" enterkeyhint="search" ' +
+        'placeholder="' + t('Search products', '搜索商品') + '" value="' + esc(as.q) + '"></div>' +
+      '<div class="rc-body">' + rows + '</div>' +
+      '<div class="rc-foot"><div class="rc-footrow">' +
+        '<div class="rc-tally"><b>' + chosen.length + ' <span>' + t('items', '项') + '</span></b>' +
+        '<i>' + t(units + ' units', units + ' 件') + '</i></div>' +
+        '<button class="rc-cta' + (ready && !as.busy ? ' on' : '') + '"' +
+          (ready && !as.busy ? ' data-assend' : ' disabled') + '>' +
+          (as.busy ? t('Sending…', '发送中…') : t('Send', '发送')) + '</button>' +
+      '</div></div></div>';
+  }
+
+  function asRender() {
+    if (state.view !== 'askstock') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = asHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-asback]', function (b) { b.onclick = asExit; });
+    each('[data-asfrom]', function (b) {
+      b.onclick = function () { as.from = parseInt(b.getAttribute('data-asfrom'), 10); asRender(); };
+    });
+    each('[data-asinc]', function (b) { b.onclick = function () { asBump(parseInt(b.getAttribute('data-asinc'), 10), 1); }; });
+    each('[data-asdec]', function (b) { b.onclick = function () { asBump(parseInt(b.getAttribute('data-asdec'), 10), -1); }; });
+    each('[data-assend]', function (b) { b.onclick = asSend; });
+    var q = $('#asQ');
+    if (q) q.oninput = function () { as.q = q.value; asRender(); var f = $('#asQ'); if (f) f.focus(); };
   }
 
   boot();
