@@ -42,8 +42,11 @@ const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ');
 // their own shelf, so weights stop at 500, the type scale is six steps, radii
 // are 8/14, and the Dusk budget is zero because nothing on it is Tacet acting.
 //
-// Below the marker is the store's half of a two-step transfer, drawn in
-// design-handoff/store-receiving/ and ruled in decisions §39. Those artboards
+// Below the marker are BOTH halves of the two-step transfer — receiving, then
+// picking — drawn in design-handoff/store-receiving/ and
+// design-handoff/warehouse-picking/ and ruled in decisions §39. They share one
+// ledger and one set of values on purpose: one warehouse, one list, two ends of
+// the same movement, so they are checked as one block. Those artboards
 // use display weights and sizes Quick Stock has no use for — a count read at
 // arm's length across a box — and they spend Dusk exactly once, on in-transit
 // stock, which is the one state in the whole flow that only Tacet holds.
@@ -110,7 +113,7 @@ if (/Fraunces/i.test(SRC_CODE)) fail('Fraunces appears in product UI');
   if (duskTint > 1) fail(`${duskTint} Dusk-tint surfaces — only the avatar earns one`);
 }
 
-// ── Receiving, checked against design-handoff/store-receiving/ ──────────────
+// ── Receiving and picking, checked against their own artboards ─────────────
 // The values below are lifted from those artboards, not widened to fit the
 // code: a size, weight or radius that appears here and nowhere in the design is
 // a drift, and fails.
@@ -123,7 +126,7 @@ if (/Fraunces/i.test(SRC_CODE)) fail('Fraunces appears in product UI');
   for (const m of CSS_RC.matchAll(/(\d*\.\d+)px/g)) fail(`receiving: half-pixel size ${m[1]}px`);
   for (const m of CSS_RC.matchAll(/font-weight\s*:\s*([a-z0-9]+)/g)) {
     if (!['400', '500', '600', '700', 'inherit'].includes(m[1])) {
-      fail(`receiving: font-weight ${m[1]} — the artboards use 400/500/600/700`);
+      fail(`transfer: font-weight ${m[1]} — the artboards use 400/500/600/700`);
     }
   }
   const radii = new Set(['0', '8px', '12px', '14px', '999px', '50%']);

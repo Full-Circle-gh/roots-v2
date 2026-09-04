@@ -457,6 +457,49 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         font-size:14px;color:var(--brick-ink);flex:none;}
 .rc-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
           padding:0 40px 80px;text-align:center;}
+
+/* ── Picking ────────────────────────────────────────────────────────────────
+   The warehouse's half, drawn in design-handoff/warehouse-picking/. It shares
+   the receiving ledger above — .rc-row, .rc-qty, .rc-cap, .rc-foot and the rest
+   are the same rows in the same rhythm, which is the point: one warehouse, one
+   list, two ends of the same movement. Only what picking has and receiving does
+   not gets a class here. */
+.pk-chips{display:flex;gap:8px;padding:0 16px 12px;flex:none;}
+.pk-chip{flex:1;height:44px;border-radius:999px;background:var(--surface);border:1px solid var(--line);
+         color:var(--text2);display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;
+         min-width:0;overflow:hidden;}
+.pk-chip.on{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:500;}
+.pk-chip .n{font-variant-numeric:tabular-nums;}
+.pk-chip.on .n{opacity:.7;}
+/* A labelled control, not a gesture — a new hire finds it by looking. */
+.pk-short{height:56px;padding:0 12px;flex:none;border-radius:12px;background:var(--surface);
+          border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+          font-size:13px;font-weight:500;color:var(--text2);}
+.pk-alloc{display:flex;align-items:center;gap:10px;}
+.pk-who{flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pk-ask{flex:none;font-size:13px;color:var(--text2);background:var(--raised);border-radius:999px;
+        padding:4px 10px;font-variant-numeric:tabular-nums;}
+/* Blank, never zero. Zero is an amount he chose; blank is an amount he has not. */
+.pk-field{width:76px;height:48px;flex:none;border-radius:8px;background:var(--surface);
+          border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+          font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;}
+.pk-field.on{border-color:var(--text);}
+.pk-rem{display:flex;align-items:baseline;gap:6px;margin-top:10px;}
+.pk-rem b{font-size:17px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.pk-rem span{font-size:15px;color:var(--text2);}
+/* The weighty bit. A press-and-hold, not a tap: a cold thumb brushing the screen
+   cannot move stock, and a hold works in gloves where a slider does not. */
+.pk-hold{position:relative;width:100%;height:72px;border-radius:14px;overflow:hidden;
+         border:1px solid var(--text);background:var(--surface);}
+.pk-hold .lbl,.pk-hold .fill .lbl{position:absolute;inset:0;display:flex;align-items:center;
+         justify-content:center;font-size:17px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;}
+.pk-hold .lbl{color:var(--text);}
+.pk-hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--text);overflow:hidden;
+               transition:width .08s linear;}
+.pk-hold .fill .lbl{color:var(--bg);width:100%;}
+.pk-hold[disabled]{border-color:var(--line);background:var(--raised);}
+.pk-hold[disabled] .lbl{color:var(--text2);}
+
 /* The entry into all of this, on the counting list. Cream, not Dusk: an arrival
    she can see through the door is not something Tacet did for her. */
 /* Cream in BOTH states, and the in-transit one too. The flow's whole Dusk
@@ -611,6 +654,42 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     <button class="kp-save" id="kpSave"></button>
   </div>
 </div>
+<!-- The short-pick sheet. Its own keypad again, for the same reason receiving
+     has one: the fields here are an allocation across stores with a remainder
+     that gates the save, which is a different machine from a single count. -->
+<div class="sheet-back" id="pkBack"></div>
+<div class="sheet" id="pkSheet">
+  <div class="grabber"></div>
+  <div class="kp">
+    <div class="kp-head">
+      <div class="kp-name" id="pkName"></div>
+      <div class="kp-sub" id="pkSub"></div>
+    </div>
+    <div id="pkFound" style="display:flex;align-items:baseline;gap:10px;margin:10px 0 12px"></div>
+    <div class="rc-hr"></div>
+    <div class="rc-note" id="pkAssignLbl" style="margin:12px 0 8px"></div>
+    <div id="pkRows" style="display:flex;flex-direction:column;gap:8px"></div>
+    <!-- The remainder IS the explanation for the inactive button. It counts
+         down, it never scolds, and there is no error message anywhere. -->
+    <div class="pk-rem" id="pkRem"></div>
+    <div class="kp-grid" id="pkGrid" style="margin-top:12px">
+      <button class="kp-key" data-k="1">1</button>
+      <button class="kp-key" data-k="2">2</button>
+      <button class="kp-key" data-k="3">3</button>
+      <button class="kp-key" data-k="4">4</button>
+      <button class="kp-key" data-k="5">5</button>
+      <button class="kp-key" data-k="6">6</button>
+      <button class="kp-key" data-k="7">7</button>
+      <button class="kp-key" data-k="8">8</button>
+      <button class="kp-key" data-k="9">9</button>
+      <button class="kp-key word" id="pkClear" data-k="clear"></button>
+      <button class="kp-key" data-k="0">0</button>
+      <button class="kp-key" data-k="back" aria-label="Backspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg></button>
+    </div>
+    <button class="kp-save" id="pkSave"></button>
+  </div>
+</div>
+
 <!-- Receiving's keypad. Its own sheet rather than a mode on the counting one:
      that keypad's Sold-out key, its label and its save verb are all quick-stock
      semantics, and receiving needs a "what the warehouse sent" reset key plus a
@@ -878,6 +957,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     $('#kpSave').onclick = kpSave;
     $('#kpBack').onclick = closeKeypad;
     rcMount();
+    pkMount();
     watchHead();
     startPolling();
   }
@@ -990,8 +1070,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function selectStore(id) {
-    // Which transfers are inbound depends on which shelf is on screen.
-    setTimeout(rcLoad, 0);
+    // Which transfers are inbound, and which run is waiting, both depend on
+    // which shelf is on screen.
+    setTimeout(function () { rcLoad(); pkLoad(); }, 0);
     state.storeId = id;
     localStorage.setItem('qs_store', String(id));
     var s = state.stores.filter(function (x) { return x.id === id; })[0];
@@ -1106,9 +1187,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     enterOnce = false;
     // The way into Receiving rides above the shelf rather than beside it: a van
     // at the door outranks a recount, and it leaves the moment nothing is due.
-    main.innerHTML = (rcEntryHtml() ? '<div style="padding:12px 16px 0">' + rcEntryHtml() + '</div>' : '') + html;
+    var ways = rcEntryHtml() + pkEntryHtml();
+    main.innerHTML = (ways ? '<div style="padding:12px 16px 0">' + ways + '</div>' : '') + html;
     wireMain();
     rcWireEntry();
+    pkWireEntry();
   }
 
   function renderSkeleton() {
@@ -2053,6 +2136,541 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     });
     $('#rcAll').onclick = rcAll;
     $('#rcSave').onclick = rcPadSave;
+  }
+
+
+  /* ══ PICKING — the warehouse's half of the two-step transfer ═══════════════
+     Decisions §39, drawn in design-handoff/warehouse-picking/. The rules:
+
+       • THE PICKER ALLOCATES EVERY SHORTFALL. Tacet pre-fills nothing. When a
+         line comes up short, every store's field opens BLANK — not zero, which
+         is an amount he chose, and not a proportional split, which was rejected
+         because some products a store can do without for a day and only the man
+         in the freezer knows which. Filling stores in list order was rejected
+         too: the same store loses every time.
+       • SHORT IS RECORDED, NEVER BLOCKED. No reason field. The remainder
+         counting down to zero is the whole explanation for the inactive save,
+         and there is no error message anywhere in the flow.
+       • A DISPATCH IS NEVER BLOCKED BY THE RECORD. If the shelf says 20 and he
+         finds and sends 50, the send goes through and the warehouse goes to −30
+         (§39 Ruling 1). Nothing here checks stock before dispatching, and
+         nothing refuses on it — the server owns that, and this screen must not
+         reintroduce a gate the ruling deleted.
+       • THE LIST IS COMBINED, ONE ROW PER PRODUCT. Several stores' requests are
+         merged into a single walk of the freezer — the flow's one Dusk spend,
+         because merging them is Tacet acting and everything else here is his.
+
+     WIRED TO #242's ENDPOINTS ONLY: GET /api/restock for the run,
+     PUT /api/restock/:id/item/:item_id for a picked line, and
+     PUT /api/restock/:id/status {status:'prepared'} for the dispatch, which is
+     what fires _applyDispatch. Retrying a failed dispatch is #244's job and is
+     deliberately not built here: the failure is SHOWN, and nothing offers to
+     re-run it.  */
+
+  var pk = {
+    list: null,      // the orders in this run, with their items
+    store: 'all',    // filter chip
+    step: 'list',    // list | dispatch | sent
+    busy: false,
+    err: '',
+    sheet: null,     // { key, found, entry, focus, alloc }
+    result: null,    // what the dispatch came back with
+  };
+
+  function pkOrders() { return Array.isArray(pk.list) ? pk.list : []; }
+  function pkStoreOf(o) {
+    return (lang === 'cn' ? (o.store_cn || o.store_name) : (o.store_name || o.store_cn))
+      || o.rs_number || ('#' + o.id);
+  }
+  function pkItemName(it) {
+    var n = lang === 'cn' ? (it.product_cn || it.product_name) : (it.product_name || it.product_cn);
+    return n || ('#' + it.id);
+  }
+  /* One row per PRODUCT, across every request in the run. Keyed on product_id
+     where there is one and on the name where there is not, so two requests for
+     the same thing become one walk to one freezer rather than two. */
+  function pkLines() {
+    var by = {}, order = [];
+    pkOrders().forEach(function (o) {
+      (o.items || []).forEach(function (it) {
+        if (!(rcNum(it.qty_requested) > 0)) return;
+        var key = it.product_id != null ? 'p' + it.product_id : 'n' + (it.product_name || it.id);
+        if (!by[key]) { by[key] = { key: key, name: pkItemName(it), sku: it.sku, parts: [] }; order.push(key); }
+        by[key].parts.push({ orderId: o.id, itemId: it.id, store: pkStoreOf(o),
+                             asked: rcNum(it.qty_requested),
+                             sent: it.qty_sent == null ? null : rcNum(it.qty_sent),
+                             checked: !!it.is_checked });
+      });
+    });
+    return order.map(function (k) {
+      var L = by[k];
+      L.asked = L.parts.reduce(function (a, p) { return a + p.asked; }, 0);
+      L.done = L.parts.every(function (p) { return p.checked; });
+      L.sent = L.done ? L.parts.reduce(function (a, p) { return a + (p.sent == null ? p.asked : p.sent); }, 0) : null;
+      return L;
+    });
+  }
+  function pkStores() {
+    var seen = [], out = [];
+    pkOrders().forEach(function (o) {
+      var n = pkStoreOf(o);
+      if (seen.indexOf(n) < 0) { seen.push(n); out.push({ name: n, id: o.id }); }
+    });
+    return out;
+  }
+  function pkVisible() {
+    var all = pkLines();
+    if (pk.store === 'all') return all;
+    return all.filter(function (L) {
+      return L.parts.some(function (p) { return p.store === pk.store; });
+    });
+  }
+  function pkPicked() { return pkLines().filter(function (L) { return L.done; }); }
+
+  function pkLoad() {
+    if (rc.on === false) return Promise.resolve();
+    return rcFetch('/api/restock?tab=active').then(function (j) {
+      rc.on = true;
+      // A run is what has been asked for and not yet dispatched. goods_state
+      // 'none' is the pre-dispatch state; anything else has already left.
+      var want = (Array.isArray(j.data) ? j.data : []).filter(function (o) {
+        return (o.from_role || 'store') === 'store' && (o.to_role || 'warehouse') === 'warehouse'
+          && ['sent', 'received'].indexOf(o.status) >= 0
+          && (!o.goods_state || o.goods_state === 'none');
+      });
+      return Promise.all(want.map(function (o) {
+        return rcFetch('/api/restock/' + o.id).then(function (d) { return d.data; });
+      })).then(function (full) {
+        pk.list = full;
+        if (state.view === 'picking') pkRender(); else render();
+      });
+    }).catch(function (e) {
+      if (e.message === 'norealm') { pk.list = []; return; }
+      pk.err = e.message; if (state.view === 'picking') pkRender();
+    });
+  }
+
+  function pkEnter() { state.view = 'picking'; pk.step = 'list'; pk.err = ''; pkRender(); }
+  function pkExit() {
+    state.view = 'list'; pk.step = 'list'; pk.err = '';
+    $('#pageHead').hidden = false; $('#band').hidden = false;
+    measureHead(); render(); pkLoad();
+  }
+
+  /* Writing a picked line. One PUT per contributing request, because a combined
+     row is several stores' lines standing next to each other — the merge is a
+     view, never a row of its own. qty_sent is what actually leaves; is_checked
+     is what marks the walk done. */
+  function pkWriteLine(L, per) {
+    pk.busy = true; pk.err = ''; pkRender();
+    return Promise.all(L.parts.map(function (p) {
+      var q = per ? per[p.itemId] : p.asked;
+      return rcFetch('/api/restock/' + p.orderId + '/item/' + p.itemId,
+        { method: 'PUT', body: { qty_sent: q, is_checked: 1 } })
+        .then(function () {
+          var o = pkOrders().filter(function (x) { return x.id === p.orderId; })[0];
+          var it = o && (o.items || []).filter(function (x) { return x.id === p.itemId; })[0];
+          if (it) { it.qty_sent = q; it.is_checked = 1; }
+        });
+    })).then(function () { pk.busy = false; pkRender(); })
+      .catch(function (e) {
+        pk.busy = false;
+        pk.err = e.message === 'norealm'
+          ? t('This account cannot pick transfers.', '此账号无法拣货。')
+          : t('That line did not save. Nothing has changed — try again.', '该项未保存,数据未变 — 请重试。');
+        pkRender();
+      });
+  }
+
+  /* ── The short-pick sheet ─────────────────────────────────────────────────
+     Two fields deep: how many he FOUND, then how those go across the stores.
+     Both open blank. The remainder gates the save and nothing else does. */
+  function pkOpenShort(key) {
+    var L = pkVisible().filter(function (x) { return x.key === key; })[0];
+    if (!L) return;
+    pk.sheet = { key: key, found: '', entry: '', focus: 'found', alloc: {} };
+    L.parts.forEach(function (p) { pk.sheet.alloc[p.itemId] = ''; });
+    $('#pkName').textContent = L.name;
+    $('#pkSub').textContent = (L.sku ? L.sku + ' · ' : '') + t('asked for ' + L.asked, '申请 ' + L.asked);
+    $('#pkClear').textContent = t('Clear', '清除');
+    pkPaintSheet();
+    state.sheet = 'pick';
+    $('#pkBack').classList.add('show'); $('#pkSheet').classList.add('show');
+  }
+  function pkCloseSheet() {
+    state.sheet = null; pk.sheet = null;
+    $('#pkBack').classList.remove('show'); $('#pkSheet').classList.remove('show');
+  }
+  function pkAssigned() {
+    var s = pk.sheet, n = 0;
+    for (var k in s.alloc) if (s.alloc[k] !== '') n += parseInt(s.alloc[k], 10);
+    return n;
+  }
+  function pkPaintSheet() {
+    var s = pk.sheet;
+    var L = pkVisible().filter(function (x) { return x.key === s.key; })[0]
+         || pkLines().filter(function (x) { return x.key === s.key; })[0];
+    if (!L) return;
+    var hasFound = s.found !== '';
+    var found = hasFound ? parseInt(s.found, 10) : null;
+    var short = hasFound ? L.asked - found : null;
+    $('#pkFound').innerHTML =
+      '<span class="num" style="font-size:44px;font-weight:700;line-height:1.05;letter-spacing:-.02em' +
+        (hasFound ? '' : ';color:var(--text2)') + '">' + (hasFound ? found : '—') + '</span>' +
+      '<span style="font-size:13px;color:var(--text2)">' + t('found', '找到') + '</span>' +
+      (hasFound && short > 0 ? '<span style="font-size:15px;font-weight:600">' +
+        t(short + ' short', '短少 ' + short) + '</span>' : '') +
+      (hasFound && short < 0 ? '<span style="font-size:15px;font-weight:600">' +
+        t((-short) + ' over', '多出 ' + (-short)) + '</span>' : '');
+    $('#pkAssignLbl').textContent = hasFound
+      ? t('Assign the ' + found + ' across the stores', '将这 ' + found + ' 件分配到门店')
+      : t('How many did you find?', '实际找到多少?');
+    $('#pkRows').innerHTML = !hasFound ? '' : L.parts.map(function (p) {
+      var v = s.alloc[p.itemId];
+      return '<div class="pk-alloc">' +
+        '<div class="pk-who">' + esc(p.store) + '</div>' +
+        '<div class="pk-ask">' + t('asked ' + p.asked, '申请 ' + p.asked) + '</div>' +
+        '<button class="pk-field' + (s.focus === p.itemId ? ' on' : '') + '" data-pkf="' + p.itemId + '">' +
+          (v === '' ? '' : parseInt(v, 10)) + '</button></div>';
+    }).join('');
+    var rem = hasFound ? found - pkAssigned() : null;
+    $('#pkRem').innerHTML = !hasFound ? ''
+      : rem === 0 ? '<span style="font-size:15px;color:var(--text2)">' +
+          t('All ' + found + ' assigned', '已全部分配 ' + found + ' 件') + '</span>'
+      : rem > 0 ? '<b class="num">' + rem + '</b><span>' + t('still to assign', '待分配') + '</span>'
+      : '<b class="num">−' + (-rem) + '</b><span>' +
+          t('over — take ' + (-rem) + ' back', '超出 — 请调减 ' + (-rem)) + '</span>';
+    var ok = hasFound && rem === 0;
+    var save = $('#pkSave');
+    save.disabled = !ok;
+    save.style.opacity = ok ? '' : '.5';
+    save.textContent = t('Save and continue', '保存并继续');
+  }
+  function pkKey(k) {
+    var s = pk.sheet; if (!s) return;
+    var slot = s.focus === 'found' ? 'found' : null;
+    var cur = slot ? s.found : s.alloc[s.focus];
+    if (k === 'clear') cur = '';
+    else if (k === 'back') cur = String(cur).slice(0, -1);
+    else if (String(cur).length < 5) cur = (cur === '0' ? '' : cur) + k;
+    if (slot) {
+      s.found = cur;
+      // The allocation cannot open before there is something to allocate, and
+      // it opens BLANK — every field, every time.
+      if (cur !== '') {
+        var L = pkLines().filter(function (x) { return x.key === s.key; })[0];
+        if (L && s.focus === 'found') { L.parts.forEach(function (p) { s.alloc[p.itemId] = ''; }); }
+      }
+    } else s.alloc[s.focus] = cur;
+    pkPaintSheet();
+  }
+  function pkFocus(itemId) { pk.sheet.focus = itemId; pkPaintSheet(); }
+  function pkSheetNext() {
+    // Entering the found figure hands the keypad to the first store field. He
+    // still types every one of them; nothing is filled for him.
+    var s = pk.sheet;
+    if (s.focus !== 'found') return;
+    var L = pkLines().filter(function (x) { return x.key === s.key; })[0];
+    if (L && L.parts.length) s.focus = L.parts[0].itemId;
+    pkPaintSheet();
+  }
+  function pkSaveShort() {
+    var s = pk.sheet; if (!s || $('#pkSave').disabled) return;
+    var L = pkLines().filter(function (x) { return x.key === s.key; })[0];
+    var per = {};
+    for (var k in s.alloc) per[k] = parseInt(s.alloc[k], 10);
+    pkCloseSheet();
+    if (L) pkWriteLine(L, per);
+  }
+
+  /* ── Dispatch ─────────────────────────────────────────────────────────────
+     One status write per request. Nothing here inspects stock first: §39 Ruling
+     1 says a dispatch is never blocked by the record, so a screen that checked
+     would be reintroducing the gate the ruling deleted.
+
+     A failure is SHOWN and nothing more. Retrying it is #244's work; offering a
+     retry here would be building that feature by the back door. */
+  function pkDispatch() {
+    if (pk.busy) return;
+    pk.busy = true; pk.err = ''; pk.result = null; pkRender();
+    var orders = pkOrders();
+    var failed = [];
+    Promise.all(orders.map(function (o) {
+      return rcFetch('/api/restock/' + o.id + '/status', { method: 'PUT', body: { status: 'prepared' } })
+        .then(function (j) {
+          if (j.stock_transfer && j.stock_transfer.ok === false) {
+            failed.push({ rs: o.rs_number || ('#' + o.id), error: j.stock_transfer.error });
+          }
+        })
+        .catch(function (e) { failed.push({ rs: o.rs_number || ('#' + o.id), error: e.message }); });
+    })).then(function () {
+      pk.busy = false; pk.result = { failed: failed }; pk.step = 'sent'; pkRender();
+      if (state.storeId != null) loadStock(true);
+      pkLoad();
+    });
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+  function pkRowHtml(L) {
+    var split = L.parts.map(function (p) {
+      return esc(p.store) + ' ' + (L.done ? (p.sent == null ? p.asked : p.sent) : p.asked);
+    }).join(' · ');
+    if (!L.done) {
+      return '<div class="rc-row">' +
+        '<span class="rc-qty num">' + L.asked + '</span>' +
+        '<span class="rc-mid"><span class="rc-nm">' + esc(L.name) + '</span>' +
+        '<span class="rc-cap">' + split + '</span></span>' +
+        '<button class="pk-short" data-pkshort="' + L.key + '">' + t('Short', '短缺') + '</button>' +
+        '<button class="rc-tick todo" data-pkfull="' + L.key + '">' + RC_TICK + '</button>' +
+        '</div>';
+    }
+    var short = L.asked - L.sent;
+    return '<div class="rc-row done">' +
+      '<span class="rc-qty num' + (short === 0 ? ' rc-muted' : '') + '">' + L.sent + '</span>' +
+      '<span class="rc-mid"><span class="rc-nm rc-muted">' + esc(L.name) + '</span>' +
+      '<span class="rc-cap">' + (short > 0 ? '<span class="rc-gap">' + t(short + ' short', '短少 ' + short) + '</span> · ' : '') +
+        split + '</span></span>' +
+      '<span class="rc-tick">' + RC_TICK + '</span>' +
+      '</div>';
+  }
+
+  function pkListHtml() {
+    var lines = pkLines(), shown = pkVisible(), picked = pkPicked();
+    var pct = lines.length ? Math.round(picked.length / lines.length * 100) : 0;
+    var all = lines.length > 0 && picked.length === lines.length;
+    var stores = pkStores();
+    var rs = pkOrders().length === 1 ? (pkOrders()[0].rs_number || '') : '';
+    var resume = (picked.length && !all)
+      ? '<div class="rc-flat" style="margin:0 16px 10px">' +
+          '<div style="font-size:15px;font-weight:600;line-height:1.35">' + t('Picking up where you left off', '继续上次的拣货') + '</div>' +
+          '<div class="rc-sub">' + t(picked.length + ' of ' + lines.length + ' lines picked · nothing was lost',
+                                     '已拣 ' + picked.length + '/' + lines.length + ' 项 · 数据未丢失') + '</div></div>'
+      : '';
+    // THE ONE DUSK ELEMENT. Merging several stores' requests into a single walk
+    // is Tacet acting; every other thing on this screen is the picker's own.
+    var combined = pkOrders().length > 1
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">' +
+          '<span class="rc-dot"></span>' +
+          '<span style="font-size:13px;color:var(--dusk-ink);flex:1;min-width:0">' +
+            t('Combined from ' + pkOrders().length + ' store requests', '合并自 ' + pkOrders().length + ' 个门店申请') + '</span>' +
+          (rs ? '<span class="rc-sub" style="flex:none;margin:0">' + esc(rs) + '</span>' : '') + '</div>'
+      : '<div class="rc-meta"><span class="l">' + t(lines.length + ' lines', '共 ' + lines.length + ' 项') + '</span>' +
+        '<span class="r">' + esc(rs) + '</span></div>';
+    var chip = function (name, n, on) {
+      return '<button class="pk-chip' + (on ? ' on' : '') + '" data-pkstore="' + esc(name) + '">' +
+        esc(name) + ' <span class="n">' + n + '</span></button>';
+    };
+    var chips = stores.length > 1
+      ? '<div class="pk-chips">' + chip('all', lines.length, pk.store === 'all').replace('>all <', '>' + t('All stores', '全部门店') + ' <') +
+        stores.map(function (s) {
+          var n = lines.filter(function (L) { return L.parts.some(function (p) { return p.store === s.name; }); }).length;
+          return chip(s.name, n, pk.store === s.name);
+        }).join('') + '</div>'
+      : '';
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-pkback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Pick list', '拣货单') + '</div>' + combined +
+      '</div>' + (pk.err ? '<div class="rc-err">' + esc(pk.err) + '</div>' : '') + chips + resume +
+      '<div class="rc-body">' + shown.map(function (L) {
+        return '<div class="rc-hr"></div>' + pkRowHtml(L);
+      }).join('') + '<div class="rc-hr"></div></div>' +
+      '<div class="rc-foot"><div class="rc-prog"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="rc-footrow"><div class="rc-tally">' +
+          '<b>' + picked.length + ' <span>' + t('of', '/') + '</span> ' + lines.length + '</b>' +
+          '<i>' + t('lines picked', '项已拣') + '</i></div>' +
+        '<button class="rc-cta' + (all ? ' on' : '') + '"' + (all ? ' data-pkreview' : ' disabled') + '>' +
+          t('Dispatch', '发货') + '</button></div></div></div>';
+  }
+
+  function pkDispatchHtml() {
+    var lines = pkLines();
+    var perStore = {};
+    lines.forEach(function (L) {
+      L.parts.forEach(function (p) {
+        var q = p.sent == null ? p.asked : p.sent;
+        if (!perStore[p.store]) perStore[p.store] = { lines: 0, units: 0 };
+        perStore[p.store].lines++; perStore[p.store].units += q;
+      });
+    });
+    var total = lines.reduce(function (a, L) { return a + (L.sent == null ? L.asked : L.sent); }, 0);
+    var shortLines = lines.filter(function (L) { return L.sent != null && L.sent < L.asked; });
+    var names = Object.keys(perStore);
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-pklist>' + RC_CHEV + t('Pick list', '拣货单') + '</button>' +
+        '<div class="rc-h1">' + t('Ready to dispatch', '准备发货') + '</div>' +
+        '<div class="rc-sub">' + t('all ' + lines.length + ' lines picked', '全部 ' + lines.length + ' 项已拣') + '</div>' +
+      '</div>' + (pk.err ? '<div class="rc-err">' + esc(pk.err) + '</div>' : '') +
+      '<div class="rc-body" style="padding:0 16px;display:flex;flex-direction:column;gap:8px">' +
+        // Per store, because that is how the boxes are stacked on the van.
+        '<div class="rc-card" style="display:flex;flex-direction:column;gap:14px">' +
+        names.map(function (n, i) {
+          return (i ? '<div class="rc-hr"></div>' : '') +
+            '<div style="display:flex;align-items:center;gap:14px">' +
+            '<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:600;line-height:1.3">' + esc(n) + '</div>' +
+            '<div class="rc-sub">' + t(perStore[n].lines + ' lines', perStore[n].lines + ' 项') + '</div></div>' +
+            '<div style="text-align:right"><div class="num" style="font-size:38px;font-weight:700;line-height:1;letter-spacing:-.02em">' +
+              perStore[n].units + '</div><div class="rc-sub">' + t('units', '件') + '</div></div></div>';
+        }).join('') + '</div>' +
+        '<div class="rc-flat rc-note">' +
+          t('Stock leaves the warehouse the moment you dispatch. The van run is 1–2 hours.',
+            '点击发货后库存立即从仓库扣除。车程约 1–2 小时。') + '</div>' +
+        '<div style="flex:1"></div>' +
+        // Stated, never blocked on. It stops the eye by sitting in the way.
+        (shortLines.length
+          ? '<div class="rc-plain" style="display:flex;gap:12px;align-items:flex-start">' +
+              '<div style="min-width:0"><div style="font-size:15px;font-weight:600;line-height:1.35">' +
+                t(shortLines.length + ' line' + (shortLines.length > 1 ? 's are' : ' is') + ' going out short',
+                  shortLines.length + ' 项短缺发出') + '</div>' +
+              '<div class="rc-sub">' + shortLines.map(function (L) {
+                return esc(L.name) + ' −' + (L.asked - L.sent);
+              }).join(' · ') + '</div>' +
+              '<div class="rc-note" style="margin-top:6px">' +
+                t('Each store sees the shortfall when it receives.', '各门店收货时会看到短缺数量。') +
+              '</div></div></div>'
+          : '') +
+      '</div>' +
+      '<div class="rc-foot" style="background:transparent;border:none"><div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        '<div class="rc-note" style="text-align:center;margin-bottom:10px">' +
+          (pk.busy ? t('Dispatching…', '发货中…') : t('Press and hold to confirm', '长按确认')) + '</div>' +
+        '<div class="pk-hold"' + (pk.busy ? ' disabled' : ' data-pkhold') + '>' +
+          '<div class="lbl">' + t('Hold to dispatch · ' + total + ' units', '长按发货 · ' + total + ' 件') + '</div>' +
+          '<div class="fill"><div class="lbl">' + t('Hold to dispatch · ' + total + ' units', '长按发货 · ' + total + ' 件') + '</div></div>' +
+        '</div></div></div></div>';
+  }
+
+  function pkSentHtml() {
+    var failed = (pk.result && pk.result.failed) || [];
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head"><div class="rc-h1">' +
+        (failed.length ? t('Dispatch did not complete', '发货未完成') : t('On the way', '已发货')) + '</div>' +
+        '<div class="rc-sub">' + clock(new Date()) + '</div></div>' +
+      '<div style="padding:0 16px">' +
+        (failed.length
+          // SHOWN, and nothing more. A retry door is #244's work, and building
+          // one here would be that feature arriving through the back door.
+          ? '<div class="rc-err" style="margin:0">' +
+              t('These did not go out. No stock moved for them.', '以下未发出,库存未变动。') +
+              failed.map(function (f) { return '<div class="rc-sub" style="margin-top:6px">' + esc(f.rs) + ' · ' + esc(f.error) + '</div>'; }).join('') +
+            '</div>'
+          : '<div class="rc-card"><div style="font-size:15px;font-weight:600;line-height:1.35">' +
+              t('The van has what it needs.', '货已装车。') + '</div>' +
+              '<div class="rc-sub" style="margin-top:6px">' +
+                t('Each store counts it in when it arrives.', '各门店到货后自行点数入库。') + '</div></div>') +
+      '</div><div class="rc-body"></div>' +
+      '<div class="rc-foot" style="background:transparent;border:none">' +
+        '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        '<button class="rc-big" data-pkback>' + t('Done', '完成') + '</button></div></div></div>';
+  }
+
+  function pkEmptyHtml() {
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head"><button class="rc-back" data-pkback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+      '<div class="rc-h1">' + t('Pick list', '拣货单') + '</div></div>' +
+      '<div class="rc-empty">' +
+        '<div style="font-size:20px;font-weight:600;letter-spacing:-.02em;line-height:1.35">' +
+          t('Nothing to pick', '暂无待拣货') + '</div>' +
+        '<div style="font-size:15px;color:var(--text2);margin-top:6px;line-height:1.5">' +
+          t('Every store has what it asked for.', '各门店申请均已满足。') + '</div></div>' +
+      '<div style="padding:16px 16px calc(var(--sa-bot) + 28px)">' +
+        '<button class="rc-big" data-pkback>' + t('Back', '返回') + '</button></div></div>';
+  }
+
+  function pkRender() {
+    if (state.view !== 'picking') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    var html;
+    if (!pk.list) html = '<div class="rc-wrap"><div class="rc-head"><div class="rc-h1">' + t('Pick list', '拣货单') +
+      '</div></div><div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div></div>';
+    else if (pk.step === 'sent') html = pkSentHtml();
+    else if (!pkLines().length) html = pkEmptyHtml();
+    else if (pk.step === 'dispatch') html = pkDispatchHtml();
+    else html = pkListHtml();
+    $('#main').className = '';
+    $('#main').innerHTML = html;
+    pkWire();
+    if (pk.sheet) pkPaintSheet();
+  }
+
+  function pkWire() {
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-pkback]', function (b) { b.onclick = pkExit; });
+    each('[data-pklist]', function (b) { b.onclick = function () { pk.step = 'list'; pkRender(); }; });
+    each('[data-pkreview]', function (b) { b.onclick = function () { pk.step = 'dispatch'; pkRender(); }; });
+    each('[data-pkstore]', function (b) {
+      b.onclick = function () { pk.store = b.getAttribute('data-pkstore'); pkRender(); };
+    });
+    each('[data-pkfull]', function (b) {
+      b.onclick = function () {
+        var L = pkLines().filter(function (x) { return x.key === b.getAttribute('data-pkfull'); })[0];
+        if (L) pkWriteLine(L, null);
+      };
+    });
+    each('[data-pkshort]', function (b) {
+      b.onclick = function () { pkOpenShort(b.getAttribute('data-pkshort')); };
+    });
+    var hold = m.querySelector('[data-pkhold]');
+    if (hold) pkWireHold(hold);
+  }
+
+  /* The hold. 900ms, and it resets the instant the thumb leaves: a partial hold
+     must never dispatch, or the gesture is a tap with extra steps. */
+  var PK_HOLD_MS = 900;
+  function pkWireHold(el) {
+    var fill = el.querySelector('.fill'), t0 = 0, raf = 0, fired = false;
+    function tick() {
+      var pct = Math.min(1, (Date.now() - t0) / PK_HOLD_MS);
+      fill.style.width = (pct * 100) + '%';
+      if (pct >= 1) { if (!fired) { fired = true; stop(); pkDispatch(); } return; }
+      raf = setTimeout(tick, 40);
+    }
+    function start(e) { if (e && e.cancelable) e.preventDefault(); if (fired) return; t0 = Date.now(); tick(); }
+    function stop() { clearTimeout(raf); if (!fired) fill.style.width = '0'; }
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointercancel', stop);
+    el.addEventListener('pointerleave', stop);
+    // Keyboard and headless: a click is a hold that already completed.
+    el.addEventListener('click', function () { if (!fired) { fired = true; stop(); pkDispatch(); } });
+  }
+
+  function pkMount() {
+    $('#pkBack').onclick = pkCloseSheet;
+    $('#pkGrid').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-k]'); if (!b) return;
+      pkKey(b.getAttribute('data-k'));
+    });
+    $('#pkRows').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pkf]'); if (!b) return;
+      pkFocus(parseInt(b.getAttribute('data-pkf'), 10));
+    });
+    $('#pkFound').addEventListener('click', function () { if (pk.sheet) { pk.sheet.focus = 'found'; pkPaintSheet(); } });
+    $('#pkAssignLbl').addEventListener('click', pkSheetNext);
+    $('#pkSave').onclick = function () {
+      if (pk.sheet && pk.sheet.focus === 'found' && pk.sheet.found !== '') return pkSheetNext();
+      pkSaveShort();
+    };
+  }
+
+  /* The way in, beside receiving's. A run waiting to be picked is the picker's
+     own work, so it is Cream — the Dusk on this side is spent on the merge. */
+  function pkEntryHtml() {
+    var lines = pkLines();
+    if (!lines.length) return '';
+    var left = lines.filter(function (L) { return !L.done; }).length;
+    return '<button class="rc-entry" data-pkopen>' +
+      '<span class="t"><b>' + t('A run is waiting to be picked', '有一批待拣货') + '</b>' +
+      '<i>' + t(left + ' of ' + lines.length + ' lines still to pull · ' + pkStores().length + ' store' + (pkStores().length > 1 ? 's' : ''),
+                '还有 ' + left + '/' + lines.length + ' 项待拣 · ' + pkStores().length + ' 个门店') + '</i></span>' +
+      '<span style="flex:none;color:var(--text2);transform:rotate(180deg);display:flex">' + RC_CHEV + '</span></button>';
+  }
+  function pkWireEntry() {
+    var b = document.querySelector('[data-pkopen]');
+    if (b) b.onclick = pkEnter;
   }
 
   boot();
