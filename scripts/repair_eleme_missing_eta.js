@@ -148,7 +148,10 @@ if (!APPLY) {
 }
 
 // Guard 4 — a real backup, taken through SQLite rather than the filesystem.
-const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+// 14, not 15: slice(0,15) keeps the '.' that starts the milliseconds, which
+// named the first backup roots-eleme-eta-20260904070302..db. Harmless, and
+// still wrong in a filename somebody may have to find in a hurry.
+const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
 const backup = path.join('/root/backups', `roots-eleme-eta-${stamp}.db`);
 fs.mkdirSync('/root/backups', { recursive: true });
 console.log(`\nBacking up to ${backup} …`);

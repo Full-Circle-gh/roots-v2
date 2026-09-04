@@ -159,14 +159,14 @@ console.log('');
 // after the deploy would mean the box is not running the new code.
 console.log('── newest imports: which field the status was read from ───────');
 const imports = db.prepare(`
-  SELECT rowid, eleme_order_id, retail_order_id, store_code, status, created_at,
+  SELECT rowid, eleme_order_id, retail_order_id, store_code, status, imported_at,
          detail_json, LENGTH(raw_payload) AS raw_len
     FROM eleme_order_import ORDER BY rowid DESC LIMIT 12
 `).all();
 for (const im of imports) {
   let d = {};
   try { d = JSON.parse(im.detail_json || '{}'); } catch (_) { d = {}; }
-  console.log(`  rowid ${im.rowid}  eleme_id=${show(im.eleme_order_id)}  order=${show(im.retail_order_id)}  ${show(im.created_at)}  import=${im.status}`);
+  console.log(`  rowid ${im.rowid}  eleme_id=${show(im.eleme_order_id)}  order=${show(im.retail_order_id)}  ${show(im.imported_at)}  import=${im.status}`);
   console.log(`     statusKeyPath=${show(d.statusKeyPath)}  statusIsStage=${show(d.statusIsStage)}  totalKeyPath=${show(d.totalKeyPath)}  raw=${im.raw_len} chars`);
 }
 console.log('');
