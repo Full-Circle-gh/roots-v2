@@ -10508,10 +10508,32 @@ async function loadLive(){
       // the average, where the number is small enough for it to mean something.
       [['Revenue (all channels)','营收（全渠道）'], money0(CUR,rev), deltaText(rev, b.revenue, bl)],
       [['Orders (storefront)','订单（自营）'], String(ord), deltaText(ord, b.orders, bl)],
+      // AVERAGE ORDER IS THE SERVER'S `aov`, NEVER rev/ord. The two tiles above
+      // are deliberately different measures: revenue is all-channels and carries
+      // money that produced no storefront order — wallet top-up cash, cash-basis
+      // booked the day it lands, and gzgrocery wholesale takings read off the
+      // stock ledger — while the order count is the storefront alone. Dividing
+      // one by the other charges every yuan of that money to a handful of
+      // orders. Reported from a real day: ONE ¥3,000 TOP-UP AGAINST 17 ORDERS
+      // PUSHED THIS TILE TO ¥417.59, roughly ¥176 of it the top-up alone, on
+      // money nobody spent on goods — and the better the top-up day, the further
+      // the tile drifted, while the desktop's own tile disagreed with it.
+      //
+      // `kpis.aov` is AVG over storefront order totals with gzgrocery excluded
+      // in the query itself (routes/retail.js), which is the figure the desktop
+      // has always read. This is the same fault §36's FINDING 2026-09-01 wrote
+      // down for Finance, arrived at from the other side: not by reusing the
+      // blended revenue AS revenue, but as the numerator of a ratio whose
+      // denominator was never blended. Revenue and its denominator must stand on
+      // the same population.
+      //
+      // NO LOCAL FALLBACK. rev/ord is precisely the wrong answer, so a server
+      // that sends no `aov` gets a dash rather than a confident lie.
+      //
       // The server sends no baseline for average order value, so this tile has
       // nothing to compare against and says nothing — rather than printing a
       // comparison label with no comparison under it.
-      [['Avg. order','客单价'], money(CUR, ord? rev/ord : 0), null],
+      [['Avg. order','客单价'], k.aov!=null ? money(CUR, Number(k.aov)) : (CUR||'¥')+'—', null],
       [['New customers','新客'], String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // The desktop's Today strip carries a fifth figure and its Customers card

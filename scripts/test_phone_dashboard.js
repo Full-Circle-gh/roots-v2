@@ -204,10 +204,31 @@ it('a metric with NO baseline says nothing at all', () => {
 });
 
 it('the Avg. order tile is wired to that silence, and renders no line for it', () => {
-  assert.ok(/\[\['Avg\. order','客单价'\], money\(CUR, ord\? rev\/ord : 0\), null\]/.test(M_HTML),
+  assert.ok(/\[\['Avg\. order','客单价'\], k\.aov[^\]]*, null\]/.test(M_HTML),
     'Avg. order must pass no delta, not a bare label');
   assert.ok(/\$\{d\?`<span class="num"[^`]*`:''\}/.test(M_HTML),
     'the delta span must be conditional, or an empty one still takes the space');
+});
+
+/* THE TILE READS THE SERVER'S FIGURE, AND NOTHING DERIVES ONE LOCALLY.
+   Both assertions are read off the TILE EXPRESSION rather than the file, so the
+   comment explaining the fix cannot satisfy them: a file-wide search for
+   "rev/ord" would go green on a page that still divided, as long as somebody
+   had written the words down somewhere else. */
+const AVG_TILE = (M_HTML.match(/\[\['Avg\. order','客单价'\],([\s\S]*?), null\]/) || [])[1] || '';
+
+it('the tile reads the server aov', () => {
+  assert.ok(AVG_TILE, 'the Avg. order tile expression was not found at all');
+  assert.ok(/\bk\.aov\b/.test(AVG_TILE), 'Avg. order must read kpis.aov');
+});
+
+it('no tile derives an average order from all-channel revenue', () => {
+  // rev is Revenue (all channels) and carries wallet top-up cash, cash-basis
+  // bookings and gzgrocery wholesale takings; ord is storefront orders alone.
+  // One divided by the other charges that money to a handful of orders — a real
+  // day put this tile at ¥417.59 off a single ¥3,000 top-up.
+  assert.ok(!/rev\s*\/\s*ord/.test(AVG_TILE),
+    'Avg. order must not be revenue ÷ orders — the two are different populations');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
