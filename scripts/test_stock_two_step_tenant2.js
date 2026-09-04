@@ -85,8 +85,8 @@ const inTransit2 = (productId) => {
   return row ? row.qty_in_transit : 0;
 };
 
-t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-            VALUES (77,'T2-RS-001','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, from_store_id, to_store_id)
+            VALUES (77,'T2-RS-001','2026-09-03','received','T2 Shop', 7, 'warehouse','store',3,4)`).run();
 t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
             VALUES (77,500,'T2 Hummus','T2-500',12,9)`).run();
 t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
@@ -143,8 +143,8 @@ const t1Before = {
   eq(inTransit2(501), 6, '20. …and its own 6 on the second line');
   // Tenant 1 has an in_transit order of its own, for the SAME product id, and
   // it must not leak into tenant 2's total.
-  h.db.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, goods_state, dispatched_at)
-                VALUES (900,'T1-RS-900','2026-09-03','prepared','T1 Shop',7,'warehouse','store','in_transit',CURRENT_TIMESTAMP)`).run();
+  h.db.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, goods_state, dispatched_at, from_store_id, to_store_id)
+                VALUES (900,'T1-RS-900','2026-09-03','prepared','T1 Shop',7,'warehouse','store','in_transit',CURRENT_TIMESTAMP,1,2)`).run();
   h.db.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
                 VALUES (900,500,'T1 Hummus','T1-500',999,999)`).run();
   eq(inTransit2(500), 9, '20. tenant 1\'s 999 in transit does NOT appear in tenant 2\'s total');
@@ -185,8 +185,8 @@ const t1Before = {
 
   // ══ 18 — a failed receipt rolls back BOTH the stock and the stamp ════════
   section('18. A receipt that throws rolls back the stock AND the stamp');
-  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-              VALUES (78,'T2-RS-002','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, from_store_id, to_store_id)
+              VALUES (78,'T2-RS-002','2026-09-03','received','T2 Shop', 7, 'warehouse','store',3,4)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
               VALUES (78,500,'T2 Hummus','T2-500',5,5)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
@@ -221,20 +221,51 @@ const t1Before = {
   eq(orderRow(78).goods_state, 'settled', '18. and the order settled');
 
   // ══ 19, the loud version ═════════════════════════════════════════════════
-  section('19. A tenant with NO warehouse setting refuses — it does not inherit tenant 1\'s');
+  section('19. A tenant\'s transfer runs on ITS OWN locations — it cannot inherit tenant 1\'s');
+  // REWRITTEN when the source moved onto the order. This used to clear tenant
+  // 2's stock.warehouseStoreId and prove the dispatch refused rather than
+  // falling back to tenant 1's store 1 — the direct descendant of the :333 bug.
+  //
+  // That fallback is now impossible for a stronger reason than a refusal: the
+  // dispatch reads NO CONFIG AT ALL. Source and destination come off the order
+  // row, fetched through tdb(), so they are tenant 2's ids by construction and
+  // there is nothing left to fall back to. The setting is consulted once at
+  // creation and never again.
+  //
+  // So the assertion is inverted rather than dropped: with the setting gone,
+  // tenant 2 still moves stock — at ITS OWN locations — and tenant 1 is
+  // untouched. Store ids 3 and 4 do not exist in tenant 1, so a leak would
+  // fail loudly rather than land on a plausible row.
   t2.prepare("DELETE FROM storefront_config WHERE key = 'stock.warehouseStoreId'").run();
-  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-              VALUES (79,'T2-RS-003','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, from_store_id, to_store_id)
+              VALUES (79,'T2-RS-003','2026-09-03','received','T2 Shop', 7, 'warehouse','store',3,4)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
               VALUES (79,500,'T2 Hummus','T2-500',3,3)`).run();
   const wh500Before = shelf2(T2_WH, 500);
-  const refused = setStatus(79, 'prepared');
-  ok(refused.body.stock_transfer && refused.body.stock_transfer.ok === false,
-     '19. tenant 2 with no setting is REFUSED — it does not fall back to tenant 1\'s store 1');
-  ok(/stock\.warehouseStoreId/.test(refused.body.stock_transfer.error), '19. and the message names the setting');
-  eq(shelf2(T2_WH, 500), wh500Before, '19. no stock moved in tenant 2');
-  eq(F.shelf(h.db, 1, 500), t1Before.wh, '19. and absolutely nothing moved in tenant 1');
-  eq(orderRow(79).goods_state, 'none', '19. goods_state stays none');
+  const moved = setStatus(79, 'prepared');
+  ok(moved.body && moved.body.success && !moved.body.stock_transfer,
+     '19. tenant 2 dispatches with no setting at all — the order carries its own locations');
+  eq(shelf2(T2_WH, 500), wh500Before - 3, '19. and the stock leaves TENANT 2\'s warehouse');
+  eq(F.shelf(h.db, 1, 500), t1Before.wh, '19. while absolutely nothing moved in tenant 1');
+  eq(h.db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n, t1Before.ledger,
+     '19. and tenant 1\'s ledger still has no rows at all');
+  eq(orderRow(79).goods_state, 'in_transit', '19. goods_state advances in tenant 2');
+
+  section('19b. An order in tenant 2 with no locations refuses, and moves nothing anywhere');
+  // The refusal the old assertion protected, at its new home: a row that cannot
+  // name both ends is not guessed at, in either tenant.
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
+              VALUES (82,'T2-RS-006','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
+              VALUES (82,500,'T2 Hummus','T2-500',3,3)`).run();
+  const beforeNoPair = shelf2(T2_WH, 500);
+  const refused = setStatus(82, 'prepared');
+  ok(refused.body.stock_transfer && refused.body.stock_transfer.ok === false, '19b. it is refused');
+  ok(/leave from|arrive at/.test(refused.body.stock_transfer.error),
+     '19b. and says the order does not name its locations');
+  eq(shelf2(T2_WH, 500), beforeNoPair, '19b. no stock moved in tenant 2');
+  eq(F.shelf(h.db, 1, 500), t1Before.wh, '19b. and none in tenant 1');
+  eq(orderRow(82).goods_state, 'none', '19b. goods_state stays none');
 
   // BOTH SIDES ARE ADDITIONS AT THE SAME POINT, KEPT IN FULL. #243 appended the
   // clamp-removal sections here and #244 appended the retry sections; the merge
@@ -248,8 +279,8 @@ const t1Before = {
   // same blind spot that let the :333 bug through — so it is asserted here too.
   t2.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', '3')").run();
   const t1WhBefore = F.shelf(h.db, 1, 500);
-  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-              VALUES (80,'T2-RS-004','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, from_store_id, to_store_id)
+              VALUES (80,'T2-RS-004','2026-09-03','received','T2 Shop', 7, 'warehouse','store',3,4)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
               VALUES (80,501,'T2 Tortilla','T2-501',200,200)`).run();
   const t2WhBefore = shelf2(T2_WH, 501);
@@ -280,8 +311,8 @@ const t1Before = {
   // through — so all three retry cases are asserted here too.
   section('Retry — a rolled-back dispatch is retryable in tenant 2');
   t2.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', '3')").run();
-  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
-              VALUES (81,'T2-RS-005','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role, from_store_id, to_store_id)
+              VALUES (81,'T2-RS-005','2026-09-03','received','T2 Shop', 7, 'warehouse','store',3,4)`).run();
   t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
               VALUES (81,501,'T2 Tortilla','T2-501',8,8)`).run();
   const whBefore = shelf2(T2_WH, 501);

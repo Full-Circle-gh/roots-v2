@@ -924,6 +924,36 @@ addColumn('restock_orders', 'goods_state', "TEXT DEFAULT 'none'");
 // run, which is precisely what one stamp guarding a pair of writes did imply.
 addColumn('restock_orders', 'dispatched_at', 'DATETIME');
 addColumn('restock_orders', 'received_confirmed_at', 'DATETIME');
+
+// ── WHERE THE GOODS COME FROM AND WHERE THEY GO, RECORDED RATHER THAN GUESSED ──
+//
+// An order used to carry only ROLES — store, warehouse, kitchen — and the
+// locations were inferred at dispatch time: the source from a tenant-wide
+// setting, the destination from the store name on the order, else the
+// requester's bound store, else "the only active store that is not the
+// warehouse". That works while there is exactly one warehouse AND it never
+// receives. Roots breaks both halves at once:
+//
+//   • Tianhe is a store AND the warehouse — the same building, the same people.
+//     So "the store" and "the warehouse" are the same row, and a direction
+//     inferred from a user's ROLE cannot say which hat they are wearing.
+//   • Tianhe must be able to ask Yuexiu for stock. The old resolver refused any
+//     destination equal to the warehouse and always sourced FROM it, so goods
+//     could only ever flow OUT of Tianhe. That request was not merely
+//     unsupported, it was inexpressible.
+//
+// It was also already wrong, silently. A Tianhe staffer on a `store`-role
+// account raising a request got a destination of YUEXIU: every tier refuses to
+// return the warehouse, and elimination leaves exactly one answer. Nothing
+// warned, and dispatching it would have moved stock the wrong way.
+//
+// NULLABLE, and the nulls mean something in each case. A kitchen-direction
+// request moves no goods and has no pair. A row created before this column
+// existed has none either, and the backfill below writes what the old resolver
+// would have answered rather than leaving the transfer to guess again.
+addColumn('restock_orders', 'from_store_id', 'INTEGER');
+addColumn('restock_orders', 'to_store_id',   'INTEGER');
+
 try {
   db.exec('CREATE INDEX IF NOT EXISTS idx_restock_goods_state ON restock_orders(goods_state)');
 } catch (e) { console.error('[index idx_restock_goods_state]', e); }
@@ -4118,6 +4148,71 @@ try {
     }
   }
 } catch (e) { console.error('[migration pin_warehouse_store_id_v1]', e); }
+
+// RUNS AFTER pin_warehouse_store_id_v1, DELIBERATELY. It reads the pinned
+// warehouse, and `storefront_config` does not exist this early in the file —
+// placed with the column it fills, this block threw on a fresh database and
+// then needed a spare boot to see a value the very next migration had written.
+// Backfill: say out loud what every existing row already meant.
+//
+// Deliberately NOT a foreign key. `retail_stores` is data-plane and the ids are
+// per tenant, but the same is true of every store reference on this table
+// already, and adding the constraint now would reject the very legacy rows this
+// backfill exists to repair.
+//
+// The derivation is the OLD resolver, reproduced once here and then deleted
+// from the request path: source = the configured warehouse, destination = the
+// store named on the order, else the only other active store. A row it cannot
+// resolve is LEFT NULL rather than guessed — an unresolvable row is exactly the
+// one a guess would get wrong, and the transfer now refuses on null and says so.
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_explicit_locations_v1');
+  if (!ran) {
+    const cfg = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'stock.warehouseStoreId'").get();
+    let wh = null;
+    try { const n = parseInt(JSON.parse(cfg ? cfg.value_json : 'null'), 10); wh = Number.isFinite(n) && n > 0 ? n : null; } catch (e) { wh = null; }
+    if (wh) {
+      const byName = db.prepare(`
+        SELECT id FROM retail_stores
+         WHERE COALESCE(is_active,1) = 1
+           AND (LOWER(TRIM(name_en)) = LOWER(TRIM(?))
+                OR (name_cn IS NOT NULL AND TRIM(name_cn) = TRIM(?))
+                OR LOWER(TRIM(code)) = LOWER(TRIM(?)))
+         LIMIT 1`);
+      const others = db.prepare('SELECT id FROM retail_stores WHERE COALESCE(is_active,1) = 1 AND id != ?').all(wh);
+      const rows = db.prepare(`
+        SELECT id, store_name, store_cn, COALESCE(from_role,'store') AS from_role,
+               COALESCE(to_role,'warehouse') AS to_role
+          FROM restock_orders
+         WHERE from_store_id IS NULL AND to_store_id IS NULL`).all();
+      const put = db.prepare('UPDATE restock_orders SET from_store_id = ?, to_store_id = ? WHERE id = ?');
+      let done = 0, skipped = 0;
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          // A kitchen request moves no goods. It has no pair, and inventing one
+          // would make it look like a transfer that failed to run.
+          if (r.from_role === 'kitchen' || r.to_role === 'kitchen') { skipped++; continue; }
+          let dest = null;
+          if (r.store_name || r.store_cn) {
+            const m = byName.get(r.store_name || '', r.store_cn || r.store_name || '', r.store_name || '');
+            if (m && m.id !== wh) dest = m.id;
+          }
+          if (!dest && others.length === 1) dest = others[0].id;
+          if (!dest) { skipped++; continue; }
+          put.run(wh, dest, r.id);
+          done++;
+        }
+      });
+      tx();
+      console.log(`[migration] restock_explicit_locations_v1: wrote a source and destination on ${done} order(s), left ${skipped} unresolved or kitchen-bound`);
+      db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_explicit_locations_v1');
+    } else {
+      // No warehouse pinned yet — pin_warehouse_store_id_v1 has not resolved
+      // one. Leave it unstamped so a later boot backfills once it has.
+      console.log('[migration] restock_explicit_locations_v1: no warehouse pinned yet — will retry on a later boot');
+    }
+  }
+} catch (e) { console.error('[migration restock_explicit_locations_v1]', e); }
 
 // Seed default reservation TTL config — minutes before an unpaid order's
 // stock reservations expire and stock returns to the available pool.
