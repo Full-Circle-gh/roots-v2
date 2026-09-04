@@ -6653,6 +6653,7 @@ function sheetOrderDetail(){
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
+       ${riderCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -6819,6 +6820,305 @@ function hoistedTracking(o){
     return sp.mode==='local'?localEtaCard(o,sp,label):trackingCard(o,sp,label);
   }).filter(Boolean);
   return cards.join('');
+}
+/* ---- Where the rider actually is ----------------------------------------
+   The desktop drawer has carried this since same-city dispatch went in: the
+   live rider card, and above it a map with the scooter moving between the shop
+   and the door. The phone had the WORD ("On the way") and nothing else — no
+   rider, no number to call them on, no distance, and no map. Which is the wrong
+   way round twice over: the person who needs to know where the rider has got to
+   is the one standing at the counter with a customer asking, and the phone is
+   the device they are holding; and a rider's phone number on a phone is a tap,
+   where on the desktop it is a number to copy out by hand.
+
+   Same feed as the desktop (the Qingyun daemon writes delivery_jobs every ~25s;
+   /orders/:id/delivery-track serves the positions), same stages, same stale
+   rule — so the two screens cannot tell an operator different things about the
+   same rider. */
+const M_COURIER_STALE_MS=10*60*1000;
+const M_COURIER_MOVING=['in_transit','heading_to_pickup'];
+const M_COURIER_STAGE={
+  awaiting_dispatch:{en:'Finding a rider',zh:'正在找骑手',dot:'var(--amber-ink)'},
+  heading_to_pickup:{en:'Rider coming',zh:'骑手前往取货',dot:'var(--dusk-ink)'},
+  in_transit:{en:'On the way',zh:'配送中',dot:'var(--brick-ink)'},
+  delivered:{en:'Delivered',zh:'已送达',dot:'var(--sage-ink)'},
+};
+/* _date already fixes the zoneless-UTC trap this file names at length above —
+   the desktop's courierAgeMs exists for exactly that bug, and reusing _date
+   here means the phone cannot regrow it. */
+function courierAgeMs(v){ const d=_date(v); return d?Date.now()-d.getTime():Infinity; }
+function courierAgo(v){
+  const ms=courierAgeMs(v);
+  if(!isFinite(ms)) return '';
+  if(ms<60000) return T('just now','刚刚');
+  if(ms<3600000) return T(Math.floor(ms/60000)+'m ago',Math.floor(ms/60000)+' 分钟前');
+  if(ms<86400000) return T(Math.floor(ms/3600000)+'h ago',Math.floor(ms/3600000)+' 小时前');
+  return T(Math.floor(ms/86400000)+'d ago',Math.floor(ms/86400000)+' 天前');
+}
+function riderDist(m){
+  return m>=1000 ? T((m/1000).toFixed(1)+' km',(m/1000).toFixed(1)+' 公里')
+                 : T(Math.round(m)+' m',Math.round(m)+' 米');
+}
+/* The ETA leg is not the same leg at both stages: eta_seconds means "to the
+   STORE" while the rider is going to collect and "to the CUSTOMER" once they
+   have. Saying "away" at both would tell the counter the parcel is minutes from
+   the door when the rider has not even reached the shop. */
+function riderEtaBits(c){
+  const bits=[];
+  if(c.eta_seconds!=null){
+    const m=Math.max(1,Math.round(c.eta_seconds/60));
+    bits.push(c.stage==='heading_to_pickup'?T('~'+m+' min to store','约 '+m+' 分钟到店')
+                                           :T('~'+m+' min away','约 '+m+' 分钟送达'));
+  }
+  if(c.rider_to_cust_m!=null) bits.push(riderDist(c.rider_to_cust_m));
+  return bits;
+}
+/* A rider genuinely on the move — which is exactly when there is a position to
+   plot. A frozen row (>10 min with no daemon update) is a likely cancel/drop,
+   so the map stands down and the card warns instead of drawing a scooter at a
+   place the rider left ten minutes ago. */
+function riderLive(o){
+  const c=o&&o.courier;
+  if(!c||!M_COURIER_MOVING.includes(c.stage)) return null;
+  if(['delivered','cancelled','refunded'].includes(o.raw)) return null;
+  if(courierAgeMs(c.updated_at)>M_COURIER_STALE_MS) return null;
+  return c;
+}
+function riderCard(o){
+  const c=o.courier;
+  if(!c||!c.stage) return '';
+  const delivered=o.raw==='delivered'||c.stage==='delivered';
+  const meta=delivered?M_COURIER_STAGE.delivered:M_COURIER_STAGE[c.stage];
+  if(!meta) return '';                      // 'scheduled' — pre-dispatch, nothing live to say
+  const live=!!riderLive(o);
+  const stale=!delivered&&M_COURIER_MOVING.includes(c.stage)&&!live;
+  const bits=(live?riderEtaBits(c):[]);
+  const name=(c.rider&&c.rider.name)||c.rider_name||'';
+  const phone=(c.rider&&c.rider.phone)||'';
+  const ago=courierAgo(c.updated_at);
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="width:8px;height:8px;border-radius:50%;background:${meta.dot};flex:none"></span>
+        <span id="riderStage" style="font-size:14.5px;font-weight:500">${T(meta.en,meta.zh)}</span></span>
+      ${c.carrier?`<span style="font-size:12px;color:var(--text-secondary);flex:none">${escAttr(c.carrier)}</span>`:''}</div>
+    ${live?`<div id="riderMapHost" aria-label="${T('Live rider location','骑手实时位置')}"
+       style="position:relative;height:190px;border-radius:12px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+       <div id="riderMapHold" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--text-secondary)">${T('Loading map…','正在加载地图…')}</div>
+     </div>`:''}
+    ${name?`<div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('bike',18)}</span>
+      <span style="flex:1;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
+      ${phone?`<a href="tel:${escAttr(phone)}" class="btn2" style="width:auto;flex:none;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;text-decoration:none">${ic('phone',15)} ${T('Call','拨打')}</a>`:''}
+    </div>`:''}
+    <div id="riderEta" style="font-size:13px;color:var(--text-secondary)${bits.length?'':';display:none'}">${bits.join(' · ')}</div>
+    ${stale?`<div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;background:var(--amber-tint);color:var(--amber-ink);font-size:12.5px;line-height:1.5">
+      <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
+      <span>${T('Not updating — the rider may have cancelled. Check with the courier or call another.','状态未更新 — 骑手可能已取消，请核实或另叫一位。')}</span></div>`:''}
+    ${ago?`<div id="riderAgo" style="font-size:11.5px;color:var(--text-secondary)">${T('Updated','更新于')} ${ago}</div>`:''}
+  </div>`;
+}
+/* ── The map itself (高德 AMap) ─────────────────────────────────────────────
+   Two things make this different from the desktop's copy, and both come from
+   the same fact: this app repaints by rewriting the WHOLE page in one
+   innerHTML. So (1) the map lives in a node this module holds a reference to
+   and re-attaches after each repaint — rebuilding an AMap on every toast would
+   flash the map and lose the operator's pan; and (2) the 25s poll updates the
+   card's text NODES in place rather than calling render(), because a repaint
+   would throw the sheet's scroll position back to the top four times a minute
+   while somebody is reading the item list. */
+let _mMap=null;      // active controller, or null
+let _mAmapP=null;    // memoised SDK load (reset on failure — a network blip must not poison it)
+function mAmapLoadOnce(){
+  return (async()=>{
+    let cfg=null;
+    try{ cfg=await api('/api/retail/maps-config'); }catch(e){ cfg=null; }
+    if(!cfg||cfg.provider!=='amap'||!cfg.key) throw new Error('no_amap');
+    if(window.AMap) return;
+    if(cfg.security) window._AMapSecurityConfig={securityJsCode:cfg.security};
+    await new Promise((resolve,reject)=>{
+      const cb='__mMapReady';
+      window[cb]=()=>resolve();
+      const s=document.createElement('script');
+      s.async=true;
+      s.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(cfg.key)+'&callback='+cb;
+      s.onerror=()=>reject(new Error('sdk_load_failed'));
+      document.head.appendChild(s);
+    });
+  })();
+}
+function mAmapLoad(){
+  if(_mAmapP) return _mAmapP;
+  _mAmapP=mAmapLoadOnce().catch(e=>{ _mAmapP=null; throw e; });
+  return _mAmapP;
+}
+function riderMapTeardown(){
+  if(!_mMap) return;
+  try{ clearInterval(_mMap.timer); }catch(e){}
+  try{ _mMap.map&&_mMap.map.destroy(); }catch(e){}
+  _mMap=null;
+}
+/* The RIDER is the point that matters — it is the one that moves — so it is
+   drawn large, in Brick, with a halo and a solid label; the fixed store and
+   door stay small and quiet so the scooter is unmistakable at arm's length. */
+function riderMarkerHtml(label,opts){
+  opts=opts||{};
+  const color=opts.color||'var(--text-secondary)';
+  const size=opts.size||11;
+  const halo=opts.halo?`<div style="position:absolute;left:50%;top:50%;width:${size*2.6}px;height:${size*2.6}px;transform:translate(-50%,-50%);border-radius:50%;background:${color};opacity:.2"></div>`:'';
+  const dotBg=opts.ring?'var(--surface-card)':color;
+  const dotBorder=opts.ring?('3px solid '+color):'2.5px solid var(--surface-card)';
+  const labelStyle=opts.pill
+    ? `font-size:10.5px;font-weight:600;color:#FBF9F4;background:${color};padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 5px rgba(17,26,43,.35)`
+    : `font-size:10px;font-weight:600;color:${color};white-space:nowrap`;
+  const glyph=opts.glyph?`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#FBF9F4">${opts.glyph}</div>`:'';
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+    <div style="${labelStyle}">${label}</div>
+    <div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">${halo}
+      <div style="position:relative;width:${size}px;height:${size}px;border-radius:50%;background:${dotBg};border:${dotBorder};box-shadow:0 1px 3px rgba(17,26,43,.4)">${glyph}</div>
+    </div></div>`;
+}
+/* Its own fetch, for the reason the order poll has one: this ticks on a timer,
+   and a session that lapsed while the phone was in a pocket must not throw the
+   operator at a login screen. On any failure it goes quiet and tries again. */
+function trackFetch(id){
+  return fetch(apiURL('/orders/'+id+'/delivery-track'),{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null).then(j=>(j&&j.data!==undefined)?j.data:null).catch(()=>null);
+}
+function riderNote(st,text){
+  st.node.innerHTML=`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px;font-size:12.5px;color:var(--text-secondary)">${text}</div>`;
+}
+async function riderMapMount(o,host){
+  const st={orderId:o._id,node:document.createElement('div'),map:null,timer:null,
+            rider:null,shop:null,cust:null,line:null,hint:null,fitted:false};
+  st.node.style.cssText='position:absolute;inset:0';
+  host.appendChild(st.node);
+  _mMap=st;
+  let ok=true;
+  try{ await mAmapLoad(); }catch(e){ ok=false; }
+  if(_mMap!==st) return;                       // sheet closed / another order opened while loading
+  if(!ok||!window.AMap){
+    // A shop with no map key still gets the rider, the number and the distance
+    // — the card below is the useful part and it is already on screen.
+    riderNote(st,T('Map unavailable — the rider details are below.','地图暂不可用 — 骑手信息见下方'));
+    return;
+  }
+  /* Built on the first payload that carries a coordinate, never up front: an
+     AMap with no centre picks a view of its own, and the desktop's copy of this
+     once showed a Guangzhou order sitting in Hunan. A map with nothing to
+     anchor on stays a placeholder, which is at least true. */
+  const ensureMap=anchor=>{
+    if(st.map||!anchor) return st.map;
+    st.node.innerHTML='';
+    st.map=new AMap.Map(st.node,{zoom:15,resizeEnable:true,jogEnable:false,center:[anchor.lng,anchor.lat]});
+    return st.map;
+  };
+  const setMarker=(cur,pos,opts,label,z)=>{
+    if(!pos||!st.map) return cur;
+    const ll=[pos.lng,pos.lat];
+    if(cur){ cur.setPosition(ll); return cur; }
+    const mk=new AMap.Marker({position:ll,content:riderMarkerHtml(label,opts),anchor:'center',zIndex:z});
+    mk.setMap(st.map);
+    return mk;
+  };
+  const apply=d=>{
+    const anchor=d.rider_position||d.recipient_position||d.shop_position
+      ||((Array.isArray(d.route)&&d.route.length)?d.route[0]:null);
+    const map=ensureMap(anchor);
+    if(!map) return;
+    st.shop =setMarker(st.shop, d.shop_position,     {color:'var(--text-secondary)',size:11},              T('Store','门店'),100);
+    st.cust =setMarker(st.cust, d.recipient_position,{color:'var(--text-primary)',size:11,ring:true},      T('Customer','收货'),100);
+    st.rider=setMarker(st.rider,d.rider_position,    {color:'var(--brick-ink)',size:22,halo:true,pill:true,glyph:ic('bike',13,2)},T('Rider','骑手'),120);
+    if(Array.isArray(d.route)&&d.route.length>1){
+      const path=d.route.map(p=>[p.lng,p.lat]);
+      if(st.line) st.line.setPath(path);
+      else { st.line=new AMap.Polyline({path,strokeColor:'#6E67AF',strokeWeight:4,strokeOpacity:.85,lineJoin:'round',showDir:true}); st.line.setMap(map); }
+    }
+    /* Rider GPS blinks out on some couriers between pings. Say so, rather than
+       leaving a door pin with no scooter and letting it read as "no rider". */
+    if(!d.rider_position&&d.stage!=='delivered'){
+      if(!st.hint){
+        st.hint=document.createElement('div');
+        st.hint.style.cssText='position:absolute;left:10px;top:10px;z-index:5;background:var(--surface-card);border:1px solid var(--border-default);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--amber-ink);display:flex;align-items:center;gap:6px';
+        st.hint.innerHTML='<span style="width:6px;height:6px;border-radius:50%;background:var(--amber-ink)"></span>'+T('Locating rider…','正在定位骑手…');
+        st.node.appendChild(st.hint);
+      }
+    } else if(st.hint){ st.hint.remove(); st.hint=null; }
+    if(!st.fitted){
+      const pts=[st.shop,st.cust,st.rider].filter(Boolean);
+      if(pts.length>1){ try{ map.setFitView(pts,false,[24,24,24,24]); }catch(e){} st.fitted=true; }
+      else if(anchor){ map.setZoomAndCenter(15,[anchor.lng,anchor.lat]); st.fitted=true; }
+    } else if(d.rider_position){
+      map.setCenter([d.rider_position.lng,d.rider_position.lat]);
+    }
+  };
+  /* The card's own words, refreshed from the same payload — in place, not by
+     render(). Distance is the answer to the question this whole block exists
+     for, and a card that still says "1.2 km" twenty minutes later is the same
+     silence with extra confidence. */
+  const applyText=d=>{
+    const stage=document.getElementById('riderStage');
+    const meta=M_COURIER_STAGE[d.stage];
+    if(stage&&meta) stage.textContent=T(meta.en,meta.zh);
+    const eta=document.getElementById('riderEta');
+    if(eta){
+      const bits=(d.stage==='delivered')?[]:riderEtaBits(d);
+      eta.textContent=bits.join(' · ');
+      eta.style.display=bits.length?'':'none';
+    }
+    const ago=document.getElementById('riderAgo');
+    const when=courierAgo(d.updated_at);
+    if(ago&&when) ago.textContent=T('Updated','更新于')+' '+when;
+    // Keep the cached order in step, so closing and reopening the sheet — or the
+    // next repaint — draws what the map is already showing rather than the
+    // figures the detail read came back with.
+    const cur=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:null;
+    if(cur&&cur.courier&&cur._id===st.orderId){
+      cur.courier.stage=d.stage;
+      cur.courier.eta_seconds=d.eta_seconds!=null?d.eta_seconds:null;
+      cur.courier.rider_to_cust_m=d.rider_to_cust_m!=null?d.rider_to_cust_m:null;
+      cur.courier.updated_at=d.updated_at||cur.courier.updated_at;
+      if(d.rider) cur.courier.rider=d.rider;
+    }
+  };
+  const poll=async()=>{
+    if(_mMap!==st) return;
+    const d=await trackFetch(st.orderId);
+    if(_mMap!==st||!d) return;                 // superseded, or a blip — try again next tick
+    if(!d.tracking){ st.done=true; clearInterval(st.timer); st.timer=null; return; }
+    applyText(d);
+    /* A momentarily missing rider_position is NOT a stop signal (see the hint
+       above) — only a finished delivery ends the loop. */
+    if(d.stage==='delivered'){
+      st.done=true; clearInterval(st.timer); st.timer=null;
+      // Destroy the map BEFORE the note overwrites the container it lives in —
+      // an AMap torn out from under itself leaves its listeners behind.
+      try{ st.map&&st.map.destroy(); }catch(e){}
+      st.map=null; st.rider=st.shop=st.cust=st.line=st.hint=null;
+      riderNote(st,T('Delivered — the rider has dropped off.','已送达 — 骑手已完成配送。'));
+      return;
+    }
+    apply(d);
+  };
+  await poll();
+  // `done` is the first poll saying this delivery is over (dropped off, or no
+  // longer tracked). Without it the loop it just stopped would be re-armed here
+  // and go on asking about a finished job every 25 seconds.
+  if(_mMap===st&&!st.timer&&!st.done) st.timer=setInterval(poll,25000);
+}
+/* Called after every repaint. The map node survives the innerHTML rewrite
+   because this module holds it; all that is needed is to put it back. */
+function riderMapSync(){
+  const host=document.getElementById('riderMapHost');
+  const o=state.detailId?currentOrder():null;
+  if(!host||!o||o._id==null||!riderLive(o)){ riderMapTeardown(); return; }
+  if(_mMap&&_mMap.orderId===o._id){
+    if(_mMap.node.parentNode!==host) host.appendChild(_mMap.node);
+    if(_mMap.map){ try{ _mMap.map.resize(); }catch(e){} }
+    return;
+  }
+  riderMapTeardown();
+  riderMapMount(o,host);
 }
 /* The desktop's shipment cards. The mode is the fact the phone was missing
    entirely: an order that leaves as an Air parcel and a Land parcel arrives on
@@ -8554,6 +8854,10 @@ function render(){
   if(_qkeep){ const b=document.getElementById('mQuickBody'); if(b) b.scrollTop=_qkeep; }
   wireDrag();
   wirePull();
+  /* The live rider map is a real map instance, not markup — it is put back into
+     the freshly written DOM rather than rebuilt, and torn down when the sheet
+     it belongs to is no longer on screen. */
+  riderMapSync();
   syncHistory();
   if(state.focus){ const el=document.getElementById(state.focus.id);
     if(el){ el.focus();
@@ -9379,7 +9683,16 @@ function courierLine(r){
     : c.stage==='awaiting_dispatch'?T('Finding a rider','正在找骑手') : '';
   if(!label) return null;
   const mins=(c.stage==='in_transit'&&c.eta_seconds!=null)?('~'+Math.max(1,Math.round(c.eta_seconds/60))+T('m','分')):'';
-  return {text:mins?label+' · '+mins:label, tone:'brick'};
+  /* How far off the rider is, which is the half of "where are they" a row can
+     hold. The desktop's list cell has carried it since dispatch went in; here
+     the line said "On the way" and stopped, so the counter had to open the
+     order to learn whether that meant two minutes or two kilometres. It goes on
+     the cell's SECOND line, not appended to the first: this cell is capped at
+     52% of the card and does not wrap, and "On the way · ~5m · 1.2 km" is what
+     that cap eats first — the same clip the ship-by plan was split to avoid.
+     Only while a rider is actually moving, as on the desktop. */
+  const away=(M_COURIER_MOVING.includes(c.stage)&&c.rider_to_cust_m!=null)?riderDist(c.rider_to_cust_m):'';
+  return {text:mins?label+' · '+mins:label, sub:away, tone:'brick'};
 }
 /* deliveryStateInfo, ported: problems first, because those are what the
    operator must act on. */
@@ -9584,6 +9897,12 @@ function mapOrderRow(r){
     // right — one parcel has gone and another has not — and the row was the
     // only place that could say so.
     parcels: parcelRollup(r),
+    /* The live same-city courier block, carried through rather than read once
+       and thrown away. deliveryLine() used to be the only thing that ever
+       touched it, so the drawer — the screen where an operator asks WHERE the
+       rider is — could not see it at all. The list row's copy has the stage,
+       ETA and distance; the detail read adds the rider's name and number. */
+    courier: r.courier||null,
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:r.address_full?[r.address_full,r.address_full]:null,
     pay:payLabel(r.payment_method), payRaw:payIsKnown(r.payment_method)?null:(r.payment_method||''),
