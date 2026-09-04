@@ -1,0 +1,95 @@
+name: Tests
+
+# WHY THIS EXISTS. 93 npm scripts run 119 distinct test files and 34 more sat in
+# scripts/ with no npm script naming them at all — and CI ran none of them.
+# deploy.yml gates on eslint, the bilingual-banner check, and the fulfilment
+# test when fulfilment logic changed; everything else was on the honour system.
+# A survey of main on 2026-09-04 found six suites red, some of them for months,
+# and one had gone red for a DELIBERATE, correct capability change that nobody
+# was told about because nothing was watching.
+#
+# This runs BEFORE the merge that deploys. deploy.yml fires on push to main and
+# ships to production, so a gate that only ran there would be telling you what
+# you had already shipped. Running on pull_request is the whole point.
+#
+# It does not replace deploy.yml's gates. Those run against the changed-file
+# list on the way out of the door and are cheap; this runs the suites.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A second push to a PR makes the first run's answer worthless — cancel it
+# rather than pay for it. Never on main: those runs are the record of what each
+# commit did, and a cancelled one is a hole in it.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  suites:
+    name: ${{ matrix.shard }} suites
+    runs-on: ubuntu-latest
+    strategy:
+      # Both shards always report. Failing fast here would hide a browser
+      # regression behind an unrelated unit failure, and the browser shard is
+      # the slow one you least want to re-queue.
+      fail-fast: false
+      matrix:
+        shard: [fast, slow]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Not --ignore-scripts: better-sqlite3 is a native build and most of these
+      # suites open a real database. This is the difference between running the
+      # tests and running a mock of them.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # The render suites drive a real headless Chromium. Without one they print
+      # "SKIP — no Chromium found" and exit 0, which on a laptop is courtesy and
+      # in CI is a green tick over nothing — so the runner treats that skip as a
+      # failure when REQUIRE_BROWSER=1, and this step is what makes it possible
+      # to pass honestly.
+      #
+      # CHROME_BIN IS SET EXPLICITLY, and that is not belt-and-braces. The
+      # suites' findChrome() tries CHROME_BIN, then require('playwright') —
+      # which is not a dependency of this repo and does not resolve — then a
+      # fixed list: /opt/pw-browsers, /usr/bin/chromium, /usr/bin/chromium-
+      # browser, /usr/bin/google-chrome. `playwright install` puts its download
+      # in ~/.cache/ms-playwright, which is on NONE of those paths, so
+      # installing a browser and saying nothing about where would still have
+      # skipped every render pass.
+      - name: Provide a Chromium
+        if: matrix.shard == 'slow'
+        run: |
+          set -euo pipefail
+          if [ -x /usr/bin/google-chrome ]; then
+            echo "Using the runner image's Chrome."
+            echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          npx --yes playwright install --with-deps chromium
+          CHROME=$(find "$HOME/.cache/ms-playwright" -type f -name chrome | head -1)
+          if [ -z "$CHROME" ]; then
+            echo "Installed Chromium but could not find its binary — the render suites would silently check nothing."
+            exit 1
+          fi
+          echo "CHROME_BIN=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Run the ${{ matrix.shard }} suites
+        env:
+          # Production runs UTC+8 with no DST and a good deal of the date logic
+          # is local-time, so a UTC runner reads 18:26 Guangzhou as 10:26 and
+          # whole cutoff scenarios evaporate. Pinned for the same reason
+          # test_batch_timing.js pins it in-process.
+          TZ: Asia/Shanghai
+          REQUIRE_BROWSER: ${{ matrix.shard == 'slow' && '1' || '0' }}
+        run: node scripts/run-suites.js --shard ${{ matrix.shard }}
