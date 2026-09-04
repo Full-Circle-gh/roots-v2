@@ -12,11 +12,13 @@ under their own briefs: permission enforcement and the unmapped routes behind it
 sales-channel sync redesign; and the finance category data-quality pass. They are
 referred to where they explain something, but no findings are raised against them.
 
-**How this document is built.** Part 1 is the inventory: a map of everything the admin
-contains, with a file and line reference for each item, and no judgements. Part 2 (to
-follow) walks that map and records what is wrong. Every count below was produced by
-reading the code, and the method is stated wherever a number could be arrived at more
-than one way.
+**How this document is built.** The summary comes first. Part 1 is the inventory: a map
+of everything the admin contains, with a file and line reference for each item, and no
+judgements. Part 2 walks that map and records what is wrong. Every count was produced by
+reading the code, and the method is stated wherever a number could be arrived at more than
+one way. Nothing was executed to produce this — no server was started, no page was loaded,
+no database was read — so statements about what appears on screen are read from the code
+that draws it.
 
 **A word on names.** The platform is **Tacet**. The first merchant on it is **Roots**.
 Where the code carries an older brand name it is described here as "legacy tenant name"
@@ -25,6 +27,102 @@ rather than repeated.
 **A word on jargon.** Some technical words are unavoidable when citing code. Each is
 defined the first time it appears, like this: *tenant* — the code's word for one
 merchant's account and their data.
+
+---
+
+# Summary
+
+**81 findings.** 2 Critical · 28 High · 35 Medium · 11 Low. (One entry, H-04, is a table of
+evidence rather than a finding and carries no severity.)
+
+| Category | Findings | | Category | Findings |
+|---|---|---|---|---|
+| A. Bugs and errors | 9 | | J. Speed and scale | 3 |
+| B. Dead ends | 6 | | K. Roles in daily use | 2 |
+| C. Common-sense failures | 5 | | L. Mistakes and recovery | 2 |
+| D. Multi-tenant leaks | 10 | | M. Language | 2 |
+| E. Missing standard functions | 12 | | N. Mobile admin | 3 |
+| F. Click efficiency | 2 | | O. Search and find | 2 |
+| G. Simplicity | 3 | | P. Notifications and silence | 3 |
+| H. Empty tenant / day one | 4 | | Q. Pattern consistency | 4 |
+| I. Money, end to end | 4 | | R. Accessibility | 5 |
+
+## The ten that matter most, in order
+
+1. **D-01 — Purchasing, Recipes and Materials write into the first merchant's database.**
+   102 statements with no merchant filter, 36 of them writes. Latent today because
+   per-merchant separation is switched off; live the day it is switched on. *Critical.*
+2. **D-02 — System alerts are read from one fixed database file**, so a second merchant's
+   alert setting is never consulted and their alerts can land in the first merchant's chat
+   group. *Critical.*
+3. **A-02 — A mistyped stock count silently sets the shelf to zero.** Blank field, stray
+   letter, unreadable paste: all become 0, with a green tick and no confirmation. Every
+   merchant, every day. *High.*
+4. **A-04 and A-05 — Every date and every "today" in the admin is Guangzhou's.** The
+   time-zone hook exists (`window.TD_TZ`) and nothing sets it; the business day is
+   hand-written as `'+8 hours'` in 25 places while the correct helper is used by one file.
+   *High.*
+5. **E-01 — There is no record of who changed what.** The data is being written on 139
+   call sites and no screen reads it. *High.*
+6. **A-01 — The product list stops at 500 and tells the merchant that is all there is.**
+   *High.*
+7. **E-03 and F-01 — Nothing on the Orders list can be acted on in bulk.** Twenty orders
+   to dispatch is sixty clicks. *High.*
+8. **D-03 — The merchant's currency setting is honoured by 8 of 23 screens.** 844
+   hardcoded yuan signs, including the coupon presets a new merchant is offered. *High.*
+9. **E-04 and E-06 — The merchant cannot export their own orders, customers or ledger, and
+   is never told stock is running out.** *High.*
+10. **B-01 and A-03 — Day one is broken on the screen that matters most.** An empty
+    catalogue is reported as a filter error on the desktop, and as "118 products" on the
+    phone. *High and Medium.*
+
+## The three themes
+
+**1. The product was built for one shop, and the seams are where the second shop will
+tear.** Not as a slogan — as a count: 11,971 first-merchant assumptions, a currency
+setting honoured by a third of the screens, a time zone hook that was designed and never
+wired, three files writing into the wrong database, alerts read from a hardcoded filename,
+a fixed channel list, and a new merchant seeded with yuan amounts, two languages and a
+green. The remarkable thing is how much of the *scaffolding* is right — there is a
+currency setting, a per-location time zone helper, a per-merchant credential store, a
+capability system — and how often the screens do not use it. This is a wiring problem more
+than a design problem, which is the good news.
+
+**2. The system knows things it never tells anyone.** It records who changed what and
+shows nobody. It knows stock is low and sends nothing. It knows an email failed, a push
+was refused, a reminder had no recipient — and swallows all three (211 empty catch blocks,
+269 that only reach a server log). Meanwhile the alerts it *does* send go to the
+platform's own chat rather than the merchant's. The merchant is the last to know about
+their own business.
+
+**3. Every good pattern in this product exists exactly once.** There is a proper empty
+state — on Suppliers. There is version history with a restore — on Products. There is a
+"clear the filters" button in the toolbar — on Waste. There is a shared date formatter —
+used by seven files of twenty-three. There is a spreadsheet import with a template and
+plain instructions — for suppliers only. There is a money function that reads the
+merchant's currency — called by eight files. Nothing here needs inventing; it needs
+applying.
+
+## The tasks furthest from their minimum
+
+| Task | Now | Minimum |
+|---|---|---|
+| Mark 20 orders dispatched | 60 clicks | 3 |
+| Annotate an order that came in from the shop | impossible | 2 |
+| Find out who changed a price | impossible | 2 |
+| Export last month's orders | impossible | 2 |
+| Rebuild yesterday's filtered view | 4, every morning | 1 |
+| Take an order over the phone, on a phone | impossible | 4–5 |
+
+## Day one for a new merchant, in three sentences
+
+They sign up with a company name, a username and a password — nobody asks what country
+they are in, what currency they sell in or what time zone they keep, so they are given
+yuan, Guangzhou time, English-and-Chinese and a green accent, and there is no welcome
+email. The setup guide that greets them is the best-built screen in the product: five
+steps, honest time estimates, each one routing to the right place. Then they open Products
+to add their first item and are told "No products match this filter" — or, on their phone,
+that they have 118 products already.
 
 ---
 
@@ -46,8 +144,7 @@ merchant's account and their data.
 | API routes behind the admin | **404** (`/api/retail-admin/*`) + 67 (`/api/backend/*`) |
 | Admin routes with no caller in the front end | 21 |
 | Route registrations in the whole service | 856 |
-| Database statements on merchant data, correctly scoped | **1,301** |
-| Database statements on merchant data using the shared handle | **204** — 31 with a merchant filter in the SQL, **173 without** |
+| Database statements on merchant data using the shared handle | **121**, in three files — 19 carry a merchant filter, **102 do not** (36 of them writes) |
 | Money columns in the schema | 61 across 32 tables — **51 stored as floating point** |
 | Money formatting helpers | **7, none shared** |
 | Rounding decisions in code | 243 in the admin front end, 330 in the API and libraries |
@@ -1308,51 +1405,59 @@ as control-plane at `lib/tenant-db.js:90-95`; everything else is data-plane.
 Some handlers rebind `const db = tdb()` inside the function, which makes `db` scoped
 for that block; the counts below account for that by tracking the rebinding block.
 
-### 7.2 Counts
+### 7.2 Counts — corrected
 
-Across the 23 files that serve the admin and its API:
+*(An earlier draft of this section over-counted. The first pass treated any bare
+`db` as the shared handle; in `routes/retail.js` most of those sit inside helper
+functions that take `db` as an argument and are called with `tdb()` — for example
+`productContentSnapshot(db, id)` at `:20924`, called from `:21048` and `:21334` with
+`tdb()`, and the restore-version route which opens with `const db = tdb()` at `:20986`.
+The figures below resolve each call site to its enclosing scope. `routes/ai.js` is also
+excluded: its 55 shared-handle statements belong to the kitchen assistant behind
+`requireAuth`, not the merchant admin.)*
 
-| | Statements |
-|---|---|
-| Data-plane statements on the **merchant-scoped** handle | **1,301** |
-| Data-plane statements on the **shared** handle | **204** |
-| Control-plane statements on the shared handle (correct by design) | 222 |
-| Statements whose table could not be read from a template string | 227 |
+Across the admin API, **121 statements read or write merchant-owned data through the
+shared database handle**, all in three files:
 
-Of the 204 data-plane statements on the shared handle, **31 carry an explicit
-`tenant_id` filter** in the SQL — a different, also-valid way of keeping merchants
-apart — and **173 carry no merchant filter of any kind**.
-
-| File | Shared-handle data statements with no merchant filter |
-|---|---|
-| `routes/retail-purchasing.js` | 59 |
-| `routes/ai.js` | 57 |
-| `routes/retail-recipes.js` | 27 |
-| `routes/retail.js` | 14 |
-| `routes/retail-materials.js` | 14 |
-| `routes/push.js` | 2 |
-
-By kind: 126 reads, 18 inserts, 17 updates, 12 deletes.
-
-### 7.3 The writes, listed
-
-Every write that goes to the shared database with no merchant filter. (Several are
-scoped indirectly — the parent row was fetched with a filter first — so this is a list
-of what to examine, not yet a list of defects.)
-
-| Statement | File:line | Table |
+| File | Statements | Of those, carrying an explicit `tenant_id` filter |
 |---|---|---|
-| INSERT / UPDATE / INSERT / DELETE (product version snapshots) | `routes/retail.js:20940`, `:20958`, `:20961`, `:20968` | `retail_product_versions` |
-| UPDATE (print status) | `routes/retail.js:26606` | `retail_orders` |
-| DELETE + INSERT (purchase order posted to the expense ledger) | `routes/retail-purchasing.js:124`, `:134` | `expense_entries` |
-| INSERT supplier | `routes/retail-purchasing.js:741` | `suppliers` |
-| INSERT / DELETE supplier document | `routes/retail-purchasing.js:802`, `:820` | `supplier_documents` |
-| INSERT / UPDATE / DELETE supplier invoice lines | `routes/retail-purchasing.js:1862`, `:1923`, `:1931` | `invoice_lines`, `invoices` |
-| 13 writes across purchase orders and their lines | `routes/retail-purchasing.js:2144`–`:2719` | `purchase_orders`, `po_line_items` |
-| UPDATE material (archive) | `routes/retail-materials.js:474` | `ingredients` |
-| 8 writes creating and editing recipes | `routes/retail-recipes.js:376`–`:522` | `recipes`, `recipe_ingredients`, `recipe_steps` |
-| 8 writes to the AI assistant's memory and help index | `routes/ai.js:2277`–`:3412` | `ai_memory`, `ai_app_help`, `ai_app_help_misses` |
-| 2 push-subscription writes | `routes/push.js:59`, `:102` | push tables |
+| `routes/retail-purchasing.js` | 81 | 19 |
+| `routes/retail-recipes.js` | 26 | 0 |
+| `routes/retail-materials.js` | 14 | 0 |
+
+**102 carry no merchant filter of any kind** — 66 reads and **36 writes** (14 inserts,
+14 updates, 8 deletes). The tables they touch are `po_line_items` (33), `purchase_orders`
+(29), `recipes` (15), `suppliers` (13), `ingredients` (11), `invoices` (6),
+`recipe_ingredients` (5), `supplier_documents` (4), `invoice_lines` (4), `recipe_steps`
+(4), `expense_entries` (3).
+
+Everything else in the admin API resolves to the signed-in merchant's own database:
+`routes/retail.js` alone makes 1,105 such calls, `lib/inventory.js` 64,
+`routes/restock.js` 42, `routes/retail-inventory.js` 24.
+
+Two of the three files document the hazard in their own opening comments and then use the
+shared handle anyway:
+
+- `routes/retail-recipes.js:31-36` — *"`recipe_cost_data`, `recipes` and `ingredients`
+  are data-plane tables with no tenant_id column, so under data isolation they live in
+  the tenant's own DB and the global handle is Roots'."*
+- `routes/retail-materials.js:25-33` — the same note, and the cost path really does go
+  through `tdb()` (`:363`, `:370`, `:381`, `:403`). The archive route four hundred lines
+  later does not (`:471-476`).
+
+### 7.3 The 36 writes that carry no merchant filter
+
+| Where | What is written |
+|---|---|
+| `routes/retail-purchasing.js:124`, `:134` | the expense ledger rows a purchase order posts (delete then re-insert) |
+| `:741` | a new supplier |
+| `:802`, `:820` | a supplier document, added and removed |
+| `:1191`, `:2138`, `:2300` | a new purchase order |
+| `:1862`, `:1923`, `:1931` | supplier invoice and its lines |
+| `:2027`, `:2144`, `:2172`, `:2207`, `:2217`, `:2285`, `:2336`, `:2367`, `:2368`, `:2419`, `:2423`, `:2511`, `:2515`, `:2651`, `:2719` | purchase-order headers and their lines, through the whole ordering, receiving and cancelling flow |
+| `routes/retail-recipes.js:376`, `:384`, `:394` | a new recipe with its materials and steps |
+| `:427`, `:449`, `:450`, `:462`, `:463`, `:522` | editing a recipe — its materials and steps are deleted and re-inserted |
+| `routes/retail-materials.js:474` | archiving or restoring a material |
 
 ### 7.4 Lookups by id
 
@@ -1895,3 +2000,1541 @@ but it is tracked by Tacet's own staff and is **never shown to the merchant**.
 7. **Mobile ergonomics.** Touch-target sizes, overflow and one-handed reach at phone
    width need measuring against the CSS rather than reading; §3.4 lists the screens, the
    measurements are still open.
+
+---
+
+# Part 2 — Findings
+
+Every finding below cites the code that proves it. Where something looks wrong but the
+code cannot settle it, it is marked **Suspected** and says what would confirm it.
+
+**Severity.** *Critical* — data loss, money wrong, one merchant's data reachable by
+another, or a daily task blocked. *High* — a daily task degraded or wrong for many
+merchants. *Medium* — wrong or confusing, with a way around it. *Low* — worth fixing,
+nobody is stuck.
+
+**A note on the isolation switch.** Per-merchant data separation is currently switched
+off (`TENANT_DATA_ISOLATION`, `lib/tenant-db.js:87`) and non-Roots merchants are held out
+of the admin entirely (`server.js:289-298`). Several findings below therefore say
+"latent": the defect is in the code today and becomes live the moment that switch is
+turned on. They are not hypothetical — the switch is the plan.
+
+---
+
+## A. Bugs and errors
+
+### A-01 · The product list stops at 500 and the counter says that is all there is
+**Severity:** High
+**Where:** `routes/retail.js:22482`; `public/retail-admin/09-products.js:463-467`, `:230-258`
+
+The server never returns more than 500 products, and it takes no page number — the cap is
+the whole answer. The Products screen asks for the list with no limit, then pages through
+whatever came back, and prints "Showing 1–50 of 500". A merchant with 900 products has
+400 that cannot be reached from the Products screen at all, and nothing tells them.
+
+**Who it affects:** any merchant with more than 500 products — a small clothing shop, a
+hardware store, a grocer. Roots is under the cap today, so Roots is unaffected.
+
+**Evidence:** `const lim = Math.min(500, … || 500); sql += ' … LIMIT ' + lim;`
+(`retail.js:22482-22483`) — no `OFFSET`, no `page`. The client: `fetch('/api/retail-admin/products')`
+(`09-products.js:467`) then `PA_PRODUCTS = j.data || []`, and the pager's total is the
+length of that array (`_paPagerHtml(total…)`, `:230`).
+
+**Suggested direction:** page the endpoint server-side and have the pager read the real total.
+
+### A-02 · A mistyped stock count silently sets the shelf to zero
+**Severity:** High
+**Where:** `routes/retail-inventory.js:372`; `public/retail-admin/09-products.js:585`; `lib/inventory.js:1095`
+
+The stock box on the Products grid saves on blur. Both the browser and the server turn
+whatever was typed into a number with `parseInt(value) || 0`, so an empty box, a stray
+letter, or a pasted value the parser cannot read all become **0**. Nothing asks "are you
+sure", and the cell shows a green tick as though it saved what you meant. `adjustStock`
+does not check the figure either.
+
+**Who it affects:** every merchant, every day. Roots is affected now.
+
+**Evidence:** `const qty = Math.max(0, parseInt(raw, 10) || 0)` (`09-products.js:585`);
+`const newQty = parseInt(b.physical_qty, 10) || 0` (`retail-inventory.js:372`);
+`adjustStock` writes `newPhysicalQty` straight through with no validation
+(`lib/inventory.js:1095`, and the absolute path at `:36-45` has no floor or ceiling check).
+The movement is recorded in the ledger, so the old figure is recoverable by hand — but
+only if somebody notices.
+
+**Suggested direction:** reject a blank or unparseable count instead of reading it as zero, and confirm any recount that drops stock to zero.
+
+### A-03 · The phone app shows invented product counts before the catalogue loads
+**Severity:** Medium
+**Where:** `public/m.html:5121-5125`
+
+The Products screen on the phone draws its filter chips as "All 118 · Live 96 · Draft 0 ·
+Low 14 · Out 8" until the real catalogue arrives — and if the request fails, those numbers
+stay. A merchant who has just signed up and has no products is told they have 118.
+
+**Who it affects:** every merchant on the phone in the first seconds after opening
+Products, and any merchant whose connection drops. A new merchant sees it as their
+opening screen.
+
+**Evidence:** `count: L ? P.length : 118`, `L ? n('on') : 96`, `L ? n('restock') : 14`,
+`L ? n('off') : 8` where `L` is `state.liveProductsLoaded`. The same file's `DB` object at
+`:459-475` carries a comment saying every sample row was removed for exactly this reason —
+these five numbers survived that cleanup.
+
+**Suggested direction:** show the loading state until the catalogue lands, as the rest of the file already does.
+
+### A-04 · Every timestamp in the admin is rendered in Guangzhou time, for everyone
+**Severity:** High
+**Where:** `public/td-datetime.js:37-40`; searched across `public/`
+
+The shared date formatter reads the shop's time zone from `window.TD_TZ` and falls back to
+`Asia/Shanghai` when it is not set. **Nothing anywhere sets it.** Its own comment says a
+merchant in another zone "sets TD_TZ" — that wiring was never built, so every order time,
+every report boundary and every "today" in the admin is Guangzhou's.
+
+**Who it affects:** every merchant outside UTC+8 — which is every merchant except the
+first. Roots is unaffected, and that is why it has not been noticed.
+
+**Evidence:** `function tz() { return root.TD_TZ || 'Asia/Shanghai'; }`
+(`td-datetime.js:40`). `grep -rn "TD_TZ" public/` returns three hits, all inside that
+one file — the definition and its comment. No page assigns it.
+
+**Suggested direction:** set `TD_TZ` from the merchant's own setting at boot, and give them a setting to hold it.
+
+### A-05 · The business day is hand-written as "+8 hours" in the API, in 25 places
+**Severity:** High
+**Where:** `routes/retail.js` (25 occurrences), `routes/finance-summary.js:1`, `routes/restock.js:1`, `lib/finance-window.js:1`
+
+There is a correct helper for this — `lib/business-date.js` reads the location's own time
+zone and explains at length why hand-rolled offsets are wrong. **One file uses it:**
+`routes/retail-waste.js`. Everywhere else the day boundary is the string `'+8 hours'`
+pasted into SQL, so today's takings, the dashboard, the finance window and the customer
+"new this week" counts all end at midnight in Guangzhou.
+
+**Who it affects:** every merchant outside UTC+8. Roots is unaffected.
+
+**Evidence:** `const TZ = '+8 hours'` at `routes/retail.js:13257`, `:13331`, `:13360`,
+`:13378`, `:13531`, `:14214`, `:21871`, and inline `date(o.placed_at, '+8 hours')` at
+`:2468`, `:16424`, `:16531`, `:22541` and others. `lib/business-date.js:44` documents the
+fallback as a fallback: *"the moment a location carries a zone, that zone wins, including
+for a business nowhere near China."*
+
+**Suggested direction:** route every day-boundary calculation through `lib/business-date.js`.
+
+### A-06 · Money is stored as floating point
+**Severity:** High
+**Where:** `schema.sql` and `database.js` — 51 of 61 money columns
+
+Fifty-one money columns are declared `REAL`. Floating-point numbers cannot hold every
+decimal exactly, so sums of many small amounts drift, and two figures that should match
+can differ by a fraction of a cent. The code compensates in places with a tolerance of
+half a cent, which is a sign of the same problem rather than a fix.
+
+**Who it affects:** every merchant, everywhere money is totalled — which is most of the
+product. Roots is affected now.
+
+**Evidence:** the money-column inventory in Part 1 §8.1; `isFull = amount + 0.005 >=
+remainingGross` at `routes/retail.js:28894`, whose own comment reads *"tolerance for ¥0.01
+rounding"*; the same 0.005 tolerance again at `:3713`, `:10792`, `:28050`, `:28053`,
+`:28152`. Recorded as a known defect in `docs/tacet-consolidation-decisions.md` §22 item 5,
+folded into a future rebuild.
+
+**Suggested direction:** none needed here — it is already scheduled; this entry exists so the audit's money findings are read against it.
+
+### A-07 · A negative stock count is accepted through the recount door
+**Severity:** Medium
+**Where:** `routes/retail-inventory.js:372-384`; `lib/inventory.js:1095`
+
+The relative "add stock" path refuses a negative number and says so clearly. The absolute
+"set the new total" path next to it accepts any integer, including a negative one, and
+writes it. A shelf can be set to −40.
+
+**Who it affects:** every merchant. Whether it has happened to Roots is not knowable from
+the code.
+
+**Evidence:** the delta path returns `delta_must_be_positive` with a plain-language
+message (`:359-364`); the `physical_qty` branch immediately below does `parseInt(…) || 0`
+and calls `adjustStock` with no lower bound (`:372-376`). `adjustStock` removed its floor
+deliberately (`lib/inventory.js:11-14`) on the grounds that silently clamping hid real
+losses — which is right for the delta path and leaves this one unguarded.
+
+**Suggested direction:** refuse a negative absolute count at the same place the delta path refuses a negative delta.
+
+### A-08 · Two screens report the same money to different precision
+**Severity:** Medium
+**Where:** `public/retail-admin/03-dashboard.js:21`; `public/retail-admin/04-orders.js:1061`, `:7782`; `public/retail-admin/01-core.js:176`
+
+The same amount is formatted three different ways inside the Orders screen alone: through
+the merchant's currency setting with two decimals, as a hardcoded yuan sign with the
+number rounded to whole units, and as a hardcoded yuan sign with two decimals. The
+dashboard's default is zero decimals. So a day's takings can read ¥1,235 on one card and
+¥1,234.60 on another, and both are "right".
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** `acMoney()` (`01-core.js:176-183`) uses the merchant's decimals;
+`dashMoney(n, dp)` defaults to `dp || 0` (`03-dashboard.js:21`); Orders KPI tiles use
+`'¥' + Math.round(n).toLocaleString()` (`04-orders.js:1061`, `:1064`, `:1124`); the refund
+dialog uses `'¥' + fmt(amt)`, which is `toFixed(2)` (`:7782`, `01-core.js:141`).
+
+**Suggested direction:** one money function, taking the merchant's currency and decimals, used everywhere.
+
+### A-09 · 195 error messages show the merchant the server's own words
+**Severity:** Medium
+**Where:** across `public/retail-admin/*.js` — 195 `toast(… e.message …)` sites
+
+When a save fails, most screens put the raw error text in front of the merchant. That text
+is written for a developer: `HTTP 500 · server_error`, `product_not_found`,
+`forbidden_capability`, or a SQLite message. The Products stock cell goes further and
+builds the toast as `HTTP ${res.status} · ${detail}` on purpose.
+
+**Who it affects:** every merchant, every time something goes wrong. Roots is affected now.
+
+**Evidence:** 195 occurrences of `e.message` inside a `toast(...)` call across the 23 admin
+files; `throw new Error(\`HTTP ${res.status} · ${detail}\`)` at `09-products.js:602`; the
+raw codes returned by the API include `server_error` (`server.js:981`), `kitchen_add_only`
+(`server.js:351`), `not_eligible`, `already_shipped`, `store_not_found`,
+`product_not_found`, `forbidden_capability`, `forbidden_store`.
+
+**Suggested direction:** map failures to a sentence the merchant can act on, and keep the technical text in the console.
+
+---
+
+## B. Dead ends
+
+### B-01 · A new merchant's Products screen says their filter matched nothing
+**Severity:** High
+**Where:** `public/retail-admin.html:4388`; `public/retail-admin/09-products.js` (`paRender`, +66 lines)
+
+Products has exactly one empty state — "No products match this filter" — and it is shown
+whenever the count is zero, filtered or not. A merchant who has just signed up opens the
+screen that matters most on day one and is told their filter is wrong. There is no "add
+your first product" anywhere on it.
+
+**Who it affects:** every new merchant. Roots passed this point years ago.
+
+**Evidence:** the only empty element is
+`<div id="pa-empty" …>No products match this filter. · 没有匹配此筛选条件的产品。</div>`
+(`retail-admin.html:4388`), toggled by `empty.style.display = total ? 'none' : 'block'`.
+Compare Suppliers, which does it properly: "No suppliers yet", an explanation, and two
+buttons — "Add your first supplier" and "Import from a spreadsheet"
+(`16-purchasing.js:3510-3521`).
+
+**Suggested direction:** split the two states, and give the empty one the first action.
+
+### B-02 · An order cannot be annotated after it arrives
+**Severity:** High
+**Where:** `public/retail-admin/04-orders.js:9313`, `:9421`; `routes/retail.js:28255`
+
+Orders carry a staff note, and the API accepts one on any order. The only place the admin
+lets anyone type it is the **New order** form — an order that came in from the shop, the
+website or a marketplace can never be annotated. "Customer called, wants it left with the
+neighbour" has nowhere to go.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** `staff_note` appears twice in the 9,551-line Orders file, both in the
+manual-order form (`:9313` writes it, `:9421` restores it from a draft). The order drawer
+renders `customer_note` (`:5669`, `:5866`) and never offers a staff note. The server-side
+patch handler accepts it: `if (staff_note != null) { sets.push('staff_note = ?') … }`
+(`retail.js:28255`).
+
+**Suggested direction:** put the note field in the order drawer, saving through the endpoint that already exists.
+
+### B-03 · Four endpoints for opening and closing the shop, and no screen
+**Severity:** Medium
+**Where:** `routes/meituan-admin.js:938`, `:968`, `:989`, `:1029`
+
+`GET /store-status`, `POST /store-status/online`, `POST /store-status/master` and
+`POST /store-status/store/:code` implement pausing and resuming a shop per channel. No
+page, drawer or phone screen calls any of them.
+
+**Who it affects:** every merchant who wants to close for a day. Roots is affected —
+closing the shop is done somewhere else, or not at all from here.
+
+**Evidence:** searched every admin surface (desktop JS, shell markup, phone app, till,
+Quick Stock, both editors) for any string beginning `/api/retail-admin/store-status` —
+no caller. Part 1 §6.3 lists the other 17 routes in the same position.
+
+**Suggested direction:** decide whether the shop-closing feature ships or the endpoints go; leaving both is the worst of the three.
+
+### B-04 · A whole brand-design screen is deployed with no way in
+**Severity:** Low
+**Where:** `public/brand-studio.html`; `routes/retail.js:20474-20739`
+
+There is a finished AI brand studio — a brief form, a progress state, a preview and an
+apply step — backed by five working endpoints. Nothing links to it. It is reachable only
+by typing `/assets/brand-studio.html`, because the static file server exposes the whole
+`public/` folder.
+
+**Who it affects:** nobody today, which is the point — the work is paid for and unused.
+
+**Evidence:** the file's own fetches to `/api/retail-admin/brand/generate`, `/job/:id`,
+`/apply` (`brand-studio.html:157`, `:171`, `:206`); `server.js` has no `/brand-studio`
+route; the only other mention of the filename in the repository is a deployment checksum
+list (`scripts/diagnose_deployed_tree.js:446`).
+
+**Suggested direction:** link it from Set up → Brand, or remove it.
+
+### B-05 · Escape throws away a half-finished product with no warning
+**Severity:** Medium
+**Where:** `public/retail-admin/09-products.js:5883-5895`
+
+The Add-a-product wizard is five steps long. Pressing Escape at any point closes it and
+discards everything typed. There is no confirmation and no draft — unlike orders, which
+keep half-written ones.
+
+**Who it affects:** every merchant adding products. Roots is affected now.
+
+**Evidence:** `pwClose()` clears `_pw = null` with no save (`:5883-5888`); the key handler
+calls it directly on Escape (`:5891-5895`). The comment above it notes that a backdrop
+click deliberately does *not* close "so an in-progress product is never discarded by a
+stray click" — the same reasoning was not applied to the key.
+
+**Suggested direction:** ask before discarding, or keep a draft the way the order form does.
+
+### B-06 · Only two screens can clear their own filters
+**Severity:** Medium
+**Where:** `public/retail-admin/08-customers.js:718`; `public/retail-admin/20-waste.js`; the rest of the admin
+
+Customers and Waste give the merchant a "Clear filters" button in their empty state. Orders
+— which has thirteen status chips, a store dropdown, a channel dropdown and a search box —
+has no way to reset them in one action, and neither does Products. A merchant who has
+narrowed to nothing has to remember what they set.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** `cuFilterClearAll()` exists and is offered on the Customers empty state
+(`08-customers.js:718`); Waste has five references to the same idea. Searching all 23
+admin files for "Clear filters"-style handlers returns hits in only those two, plus the
+phone app and the Meituan screen.
+
+**Suggested direction:** one "clear" control wherever more than one filter can be set.
+
+---
+
+## C. Common-sense failures
+
+### C-01 · The Team screen asks the owner to type a number into a browser pop-up
+**Severity:** High
+**Where:** `public/retail-admin/02-settings-ops.js:3121`, `:3142`, `:3161`, `:3166`, `:3288`, `:2172`, `:3057`
+
+Deleting a staff role that people hold opens the browser's own grey `prompt()` box
+containing a numbered list, and asks the merchant to "Type a number:". Creating a role is
+another `prompt()`. Signing a device out is a native `confirm()`. Everywhere else in the
+admin these are designed dialogs with real buttons.
+
+**Who it affects:** every merchant who manages staff. Roots is affected now.
+
+**Evidence:** `window.prompt(who + '. ' + cuT('Where do they go? Type a number:', …) +
+'\n\n' + menu + exc, '')` (`:3161-3162`), then `const dest = others[parseInt(pick, 10) - 1]`.
+`window.prompt(cuT('Name the new role', …))` (`:3121`). Native `window.confirm` at `:2172`,
+`:3057`, `:3142`, `:3166`, `:3288`. Compare `askConfirm({title, body, confirmLabel, danger})`
+used by Orders and Products (`09-products.js:3193`, `04-orders.js:6389`).
+
+**Suggested direction:** replace the four native dialogs on this screen with the existing designed ones and a role picker.
+
+### C-02 · Four date formats across the admin, and one shared formatter most screens ignore
+**Severity:** Medium
+**Where:** `public/td-datetime.js`; `02-settings-ops.js:3218`; `05-marketing.js:2149`; `09-products.js:3155`; `public/m.html:9450`
+
+There is a shared formatter, `tdWhen()`, and seven files use it. Team rolls its own with
+`toLocaleDateString('en-US')`; Marketing rolls its own with a hand-written month table;
+the product version list builds "Jan 5, 14:30" by hand from UTC arithmetic; the phone app
+has a third family. So the same order can be shown as "2026-09-04 14:30", "Sep 4, 14:30"
+and "4 Sep" depending on which screen you are on.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** `tdWhen` is called in `01-core`, `03-dashboard`, `04-orders`,
+`07-content-billing`, `08-customers`, `10-extras`, `20-waste` and the shell markup —
+and nowhere else. `tmdDateFmt` (`02-settings-ops.js:3218`) uses `'en-US'`/`'zh-CN'`
+directly; `bxFmtDate` (`05-marketing.js:2149`) uses its own `BX_MON_ABBR` array;
+`pdFmtVersionTime` (`09-products.js:3150-3158`) does `gz.getUTCMonth()` arithmetic.
+
+**Suggested direction:** one formatter, called from every screen.
+
+### C-03 · The materials list explains itself; the products list does not
+**Severity:** Low
+**Where:** `public/retail-admin/18-materials.js:282-292`; `16-purchasing.js:3510-3521`; `retail-admin.html:4388`
+
+Three list screens meet an empty catalogue in three different ways. Suppliers gets a title,
+a sentence of explanation and two buttons. Materials gets a title, a good plain-language
+explanation of what a material is, and no button. Products gets a filter error.
+
+**Who it affects:** every new merchant. Roots is past it.
+
+**Evidence:** the three blocks above, side by side.
+
+**Suggested direction:** hold all three to the Suppliers pattern.
+
+### C-04 · A daemon is mentioned to the merchant by name
+**Severity:** Low
+**Where:** `public/retail-admin/04-orders.js:4116`, `:4444`, `:4655`
+
+Three confirmation messages on the Orders screen tell the merchant "the daemon will push
+it within a minute".
+A daemon is a background program; the word means nothing to a shop owner, and the sentence
+is otherwise a good one.
+
+**Who it affects:** every merchant using a marketplace channel.
+
+**Evidence:** `cuT('Queued — the daemon will push it within a minute', '已排队 — 约一分钟内发单')`
+(`:4655`), `'Point confirmed — the daemon will push it within a minute'` (`:4444`), and
+`` cuT(`Picked ${j.name || label} — the daemon will push it within a minute`, …) `` (`:4116`).
+The Chinese half of each pair says only "about a minute to dispatch" — it does not mention
+a daemon, so the two languages are not saying the same thing either.
+
+**Suggested direction:** say "we'll send it to <channel> within a minute".
+
+### C-05 · Confirmation is asked for consistently — this is a strength, with one gap
+**Severity:** Low
+**Where:** 31 of 32 destructive calls across the admin
+
+Checked every request the admin makes with the DELETE method: 31 of 32 ask first, most
+through the designed dialog, several with a type-the-name gate. The exception is deleting
+an unfinished order draft, which happens immediately — defensible, since a draft is
+scratch work.
+
+**Who it affects:** nobody adversely. Recorded because the audit checked it.
+
+**Evidence:** `04-orders.js:9172`, `:9494` are the two unconfirmed deletes, both
+`/api/retail-admin/order-drafts/`. The other 30 sites all have `askConfirm`, `askReason`
+or `matchWord` in scope.
+
+**Suggested direction:** none.
+
+---
+
+## D. Multi-tenant leaks and isolation
+
+### D-01 · Purchasing, Recipes and Materials write to the first merchant's database
+**Severity:** Critical (latent — see the note at the top of Part 2)
+**Where:** `routes/retail-purchasing.js` (81 statements), `routes/retail-recipes.js` (26), `routes/retail-materials.js:474`
+
+Three of the admin's screens run their database work on the shared connection instead of
+the signed-in merchant's. 102 of those statements carry no merchant filter at all, and
+**36 of them are writes**. Once per-merchant separation is switched on, a second merchant
+creating a purchase order, editing a recipe or archiving a material writes it into the
+first merchant's data — and their supplier list, purchase orders and recipes are read from
+there too.
+
+**Who it affects:** every merchant except the first, the moment the switch is flipped.
+Roots is not affected today, because it *is* the shared database and no other merchant can
+reach the admin.
+
+**Evidence:** the corrected count and per-file breakdown in Part 1 §7.2-7.3. Two of the
+three files describe the hazard in their own header comments and then do it anyway:
+`retail-recipes.js:31-36` — *"under data isolation they live in the tenant's own DB and
+the global handle is Roots'"*; `retail-materials.js:25-33` — the same note, followed by a
+cost path that correctly uses `tdb()` (`:363`, `:370`, `:381`, `:403`) and an archive route
+that does not (`:471-476`). Representative writes: `INSERT INTO recipes …`
+(`retail-recipes.js:376`), `UPDATE ingredients SET is_active = ?` (`retail-materials.js:474`),
+`INSERT INTO purchase_orders …` (`retail-purchasing.js:2138`).
+
+**Suggested direction:** bind these three files to `tdb()` the way `routes/retail.js` already is.
+
+### D-02 · System alerts are read from one merchant's database, by file path
+**Severity:** Critical (latent)
+**Where:** `lib/ops-alert.js:29`, `:64`, `:200`
+
+Where the platform's alerts go — crashes, failed routes, stalled channel queues, geocoder
+outages — is a setting the merchant enters in their own admin, under Settings → Push
+notifications. The code that reads it opens `data/roots.db` by name and reads that
+merchant's settings row. A second merchant's setting is never consulted, so their alerts
+either go to the first merchant's staff chat or nowhere.
+
+**Who it affects:** every merchant except the first. It also means one merchant's operational
+alerts can land in another merchant's chat group.
+
+**Evidence:** `const DB_FILE = path.join(__dirname, '..', 'data', 'roots.db')`
+(`:29`); `_ro.prepare('SELECT value_json FROM storefront_config WHERE key = ?')` (`:64`);
+the module header names the setting as `system_alerts.enabled` +
+`system_alerts.wecom_webhook` in `storefront_config`, which is a per-merchant table
+(`:7-8`). The alert's own timestamp is fixed too: `Date.now() + 8 * 3600 * 1000` (`:208`).
+
+**Suggested direction:** resolve the webhook per merchant, the way credentials already are.
+
+### D-03 · The merchant's currency setting exists and 15 of 23 screens ignore it
+**Severity:** High
+**Where:** `public/retail-admin/01-core.js:154-183`; 19 of 23 admin files
+
+Currency is a real per-merchant setting: it is stored, normalised on the server, editable
+in Settings, and there is a helper that reads it. Eight admin files call that helper.
+Nineteen contain a hardcoded `¥`. A merchant selling in dollars sees dollars on some
+screens and yuan on others — including the coupon presets they are offered on day one.
+
+**Who it affects:** every merchant not trading in yuan. Roots is unaffected.
+
+**Evidence:** `normalizeCurrency()` (`routes/retail.js:336-343`), `acCurrency()` /
+`acMoney()` (`01-core.js:154-183`), whose own comment says the cost and margin screens
+"printed a hardcoded '¥' with a hardcoded 2dp, so a tenant who selected $ or ฿ was told
+their costs and margins in yuan". The per-file counts are in Part 1 §8.3: 77 hardcoded
+symbols in Orders, 32 in Content, 26 in Loyalty, 22 each in Products and Delivery, 21 in
+Marketing, 18 on the Dashboard, 15 in Customers. The coupon wizard's five starting points
+are labelled `'¥20 off · 立减'`, `'¥10 off · 立减'`, `'¥0 delivery · 免运'`
+(`05-marketing.js:779-782`).
+
+**Suggested direction:** route every amount through `acMoney()`.
+
+### D-04 · The Settings screen tells every merchant about "Roots Club tiers"
+**Severity:** Medium
+**Where:** `lib/features.js:16-18`
+
+The description under the Membership feature switch — text every merchant reads when
+deciding whether to turn loyalty on — names the first merchant's loyalty programme.
+
+**Who it affects:** every merchant. It is the clearest example of the first merchant's name
+in shared interface copy.
+
+**Evidence:** `desc_en: 'Roots Club tiers and the points the mini-app shows shoppers.'`
+
+**Suggested direction:** describe the feature, not the first merchant's version of it.
+
+### D-05 · The sales channel list is fixed in the interface
+**Severity:** High
+**Where:** `public/retail-admin.html:2318-2323`; `routes/retail.js:23911`
+
+The Orders channel filter is a hardcoded list of six options: All, WeChat, Web, Meituan,
+gzgrocery, Manual. The counts endpoint behind it initialises the same six keys and drops
+anything else. A merchant selling through a channel not on that list cannot filter by it,
+and one who has never heard of the Guangzhou grocery partner is offered it by name.
+
+**Who it affects:** every merchant. The platform's own governing rules say the channel list
+is per-business and that this partner is specific to one customer.
+
+**Evidence:** the six `data-channel` options in the markup; `const out = { all: 0, wechat:
+0, web: 0, meituan: 0, gzgrocery: 0, manual: 0 }; … if (r.ch in out) out[r.ch] += r.n`
+(`routes/retail.js:23911-23913`) — a channel not in the object is counted into `all` but
+never surfaced. `docs/tacet-consolidation-decisions.md` §0: *"SALES CHANNELS ARE NOT A
+FIXED LIST … GZ Grocery in particular is specific to one customer."*
+
+**Suggested direction:** build the filter from the merchant's own configured channels.
+
+### D-06 · Ship-it-on-time reminders are sent to the wrong kind of user entirely
+**Severity:** High (latent)
+**Where:** `lib/delivery-reminders.js:54-77`; `routes/push.js:202-219`
+
+The three delivery reminders — "deliver soon", "deliver today", "prepare for pickup" — are
+sent with `sendPushByPermission('retail', …)`, which looks up users in the **kitchen**
+`users` table and their `permissions` row. Merchant staff are not in that table; they are
+`tenant_users` with capabilities. So for any merchant other than the first, these
+reminders have no possible recipient.
+
+**Who it affects:** every merchant except the first. Roots has kitchen users, so Roots gets
+them — which is why it works today.
+
+**Evidence:** `_push.sendPushByPermission('retail', payload)` (`delivery-reminders.js:63`,
+`:70`, `:77`); that function's query is `SELECT u.id FROM users u LEFT JOIN permissions p …`
+(`push.js:209-214`). The correct sender for merchant staff exists in the same file and is
+used elsewhere: `sendPushToOperatorsWithCaps(tenantId, needCaps, …)` (`push.js:333`), whose
+own comment says the older sender *"reads `permissions` on the kitchen `users` table — a
+different realm entirely"* and that operators *"got nothing, on every event."*
+
+**Suggested direction:** send these three through `sendPushToOperatorsWithCaps` like transfers already do.
+
+### D-07 · Every link back into the admin points at the first merchant's web address
+**Severity:** Medium
+**Where:** `server.js:558`, `:714-718`; `lib/delivery-reminders.js:60`; `routes/backend-auth.js:1163`
+
+`/retail-admin` redirects to `store.rootskitchenchina.com`, and push notifications carry
+`url: '/retail-admin?tab=orders'`. Any merchant on their own address who follows one of
+these is sent to the first merchant's host, where their session cookie does not apply.
+
+**Who it affects:** every merchant on their own web address. Roots is unaffected.
+
+**Evidence:** `const STORE_HOST = 'store.rootskitchenchina.com'` (`server.js:558`) and the
+redirect at `:714-718`; `payload.url = '/retail-admin?tab=orders'`
+(`delivery-reminders.js:60`, `:74`); the push self-test does the same
+(`backend-auth.js:1163`).
+
+**Suggested direction:** build these links from the host the request arrived on.
+
+### D-08 · A new merchant is given yuan amounts, two languages and a green
+**Severity:** High
+**Where:** `lib/provision-tenant.js:78-203`
+
+The 43 settings a new merchant starts with include a free-shipping threshold of 399, a
+standard shipping fee of 12, a same-day fee of 18, one point per 100 spent, a redemption
+rate whose comment reads "1 point = ¥1", a bilingual English-and-Chinese shop navigation,
+a holiday message written in both languages, and a green accent. None of them is presented
+as a choice, and **currency, time zone, country, units and tax are not seeded at all** —
+they fall back to yuan and Guangzhou time.
+
+**Who it affects:** every merchant who is not a Guangzhou food business.
+
+**Evidence:** `buildDefaultConfig()` at `lib/provision-tenant.js:78-140`; the starter home
+layout with `kicker_en: 'WELCOME', kicker_cn: '欢迎光临'` (`:160-200`). Currency falls back
+through `normalizeCurrency()` to `{code:'CNY', symbol:'¥'}` (`routes/retail.js:336-343`);
+the business day falls back to `Asia/Shanghai` (`lib/business-date.js:44`).
+
+**Suggested direction:** ask for country, currency, time zone and language at sign-up, and seed from the answers.
+
+### D-09 · The admin loads its fonts from a host that is unreachable where the first merchant trades
+**Severity:** Medium
+**Where:** 13 files, 40 references — `retail-admin.html`, `m.html`, `till.html`, `16-purchasing.js` and others
+
+The admin pulls typefaces from Google's font service. That service is blocked in mainland
+China, which is where the only live merchant operates. The pages still work — the browser
+falls back — but the interface a merchant sees is not the one that was designed, and every
+page pays a connection timeout.
+
+**Who it affects:** the first merchant most of all; any merchant in a region that blocks
+the host. This is the one finding where the platform's assumption hurts Roots rather than
+everyone else.
+
+**Evidence:** 40 references to `fonts.googleapis.com` / `fonts.gstatic.com` across 13
+files. `docs/tacet-ia-blueprint.md` §11 records the same risk for the Profile page and
+calls it unresolved.
+
+**Suggested direction:** serve the typefaces from the application, as the brand fonts already are.
+
+### D-10 · Guangzhou's districts are written into delivery, orders and stock routing
+**Severity:** High
+**Where:** `routes/retail.js` (77 district references), `lib/inventory.js` (26), `public/retail-admin/11-meituan.js` (32), `database.js` (37)
+
+Same-city delivery, the dispatch-method choice, the shipping zones and the stock routing
+are all expressed in terms of named Guangzhou districts and two named shops. A merchant
+elsewhere gets delivery rules describing a city they are not in.
+
+**Who it affects:** every merchant outside Guangzhou.
+
+**Evidence:** 253 district-name occurrences across 30 files; the comment at
+`routes/retail.js:23920-23926` naming 花都/番禺/南沙/从化/增城 and 白云 as the districts where
+staff may choose the dispatch method, and 越秀/天河/海珠/荔湾/黄埔 as rider-only; 100
+references to the two shop identifiers; `lib/china_districts.json` as the picker's data.
+
+**Suggested direction:** make delivery areas data the merchant defines, with the current set as one merchant's saved configuration.
+
+---
+
+## E. Missing standard functions
+
+Rated as the brief asks: **table-stakes** (a mature admin has it and a merchant will ask
+for it in week one), **expected**, **nice-to-have**.
+
+### E-01 · There is no record of who changed what — although it is being written
+**Severity:** High · table-stakes
+**Where:** `middleware/auth.js:43-55`; 139 call sites; no reading surface
+
+Every significant write calls `logActivity(...)`, and the rows land in `activity_log`.
+**No screen anywhere reads that table.** A merchant who finds a price changed, a product
+unpublished or an order refunded cannot find out who did it. The Products screen's "Stock
+activity" is a stock-movement ledger, not a change log.
+
+**Who it affects:** every merchant with more than one member of staff. Roots is affected now.
+
+**Evidence:** `logActivity` is called 102 times in `routes/retail.js`, 27 in
+`routes/retail-purchasing.js`, 8 in `routes/retail-inventory.js`, 2 in
+`routes/retail-waste.js`. Searching every admin surface for `activity_log` or an activity
+endpoint returns nothing but the stock ledger (`13-activity.js`, which reads
+`retail_stock_ledger`). The data even survives the two-realm problem —
+`middleware/auth.js:44-51` deliberately records the operator's name when their id would
+break the foreign key.
+
+**Suggested direction:** a Settings → Activity screen reading `activity_log`, filtered by person and date.
+
+### E-02 · Customers cannot be given a note or a tag
+**Severity:** High · table-stakes
+**Where:** `database.js` (`retail_customers` columns); `public/retail-admin/08-customers.js`
+
+A customer record holds a name, a phone, addresses, orders, points and a wallet. There is
+nowhere to write "allergic to nuts", "always calls before collecting", "wholesale — invoice
+monthly", and no way to tag a group of customers so they can be found again.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** the columns added to `retail_customers` are `referral_code`,
+`referred_by_customer_id`, `referral_applied_at`, `lifetime_eligible`,
+`lifetime_eligible_since`, `affiliate_blocked`, `source`, `created_by`, `seen_at` — no note
+and no tag column. The customer drawer (`08-customers.js`) has no note field. Reviews have
+tags (`retail_reviews.tags_json`); customers do not.
+
+**Suggested direction:** a free-text note and a tag list on the customer record, both searchable.
+
+### E-03 · Nothing on a list can be acted on in bulk except products and images
+**Severity:** High · table-stakes
+**Where:** `public/retail-admin/09-products.js:1961-2036`; `07-content-billing.js:268`, `:594`; Orders and Customers have none
+
+Products has a proper selection bar with a menu. The media library has one. Orders — the
+screen a merchant lives in — has no row selection at all, so marking twenty orders
+dispatched is twenty separate trips into the drawer. Customers has none either.
+
+**Who it affects:** every merchant with more than a handful of daily orders. Roots is
+affected now.
+
+**Evidence:** `#pa-bulkbar` with `paBulkMenu*` handlers (`09-products.js:1961-2036`);
+`#ml-bulkbar` and `bulkDeleteSelected()` (`07-content-billing.js:268`, `:594`). The Orders
+file's only "bulk" is an opt-in paste-a-list-of-waybills tool
+(`06-delivery.js:195`, `04-orders.js:6826-6832`) — not row selection. Searching
+`08-customers.js` for selection state returns nothing.
+
+**Suggested direction:** the Products selection bar, reused on Orders and Customers.
+
+### E-04 · Orders, customers and the finance ledger cannot be exported
+**Severity:** High · table-stakes
+**Where:** two export endpoints exist: `routes/retail.js:21540`, `:14561`
+
+The admin can export the product catalogue and the stock-movement ledger. It cannot export
+orders, customers, the finance ledger, purchase orders or supplier invoices. A merchant
+whose bookkeeper wants last quarter's sales, or who wants to leave the platform, has no
+route out except the screen.
+
+**Who it affects:** every merchant, monthly. Roots is affected now.
+
+**Evidence:** the only two `text/csv` responses in the whole service are
+`/api/retail-admin/products/export.csv` (`retail.js:21540`) and
+`/api/retail-admin/activity/export.csv` (`:14561`). The kitchen app has a recipe-cost
+spreadsheet export (`routes/recipes.js:310`), which the merchant admin cannot reach.
+
+**Suggested direction:** a CSV export on every list screen, honouring the filters in force.
+
+### E-05 · Only suppliers can be imported
+**Severity:** Medium · expected
+**Where:** `public/retail-admin/16-purchasing.js:4029-4090`
+
+Bringing suppliers in from a spreadsheet is a genuinely good flow: a template to download,
+plain instructions, forgiving column names, and "same name updates rather than
+duplicates". Nothing else can be imported — not products, not customers, not opening stock
+— so a merchant moving from another system types their catalogue in by hand.
+
+**Who it affects:** every new merchant. It is the single largest cost of switching to Tacet.
+
+**Evidence:** `CSV_MAP` and the three-step import screen (`16-purchasing.js:4031-4090`);
+no other import surface exists in the admin. The example row in the template is itself
+first-merchant-shaped — "Guangzhou Bean Works … tofu; soy milk" (`:3538`).
+
+**Suggested direction:** reuse this exact flow for products and customers.
+
+### E-06 · Stock never tells anyone it is running out
+**Severity:** High · table-stakes
+**Where:** `routes/retail.js:8887-8892`; `public/retail-admin/03-dashboard.js:2450-2460`
+
+There is a low-stock threshold per merchant and per shop, and the dashboard shows "N
+running low" when you open it. No notification of any kind is ever sent — not a push, not
+an email, not a daily digest. A merchant who does not open the admin does not find out.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** `lowStockDefault()` (`retail.js:8889`) and the per-store column
+`low_stock_threshold` (`retail-inventory.js:109`) feed a badge and a dashboard card only.
+The notification catalogue in Part 1 §10.1 has twenty entries and none is about stock.
+
+**Suggested direction:** a daily low-stock push or digest, on by default, with a threshold the merchant already sets.
+
+### E-07 · There is no undo, except for products
+**Severity:** Medium · expected
+**Where:** `routes/retail.js:20974`, `:20986`; `public/retail-admin/09-products.js:3159-3207`
+
+Products have proper version history: automatic checkpoints, an "Original" baseline, who
+edited, and a Restore button behind a clear confirmation. Nothing else in the admin has
+it. A deleted coupon, a wrong price on a purchase order line, a deleted delivery zone, an
+edited recipe — all one-way.
+
+**Who it affects:** every merchant. Roots is affected now.
+
+**Evidence:** the version list and `pdRestoreVersion` (`09-products.js:3159-3207`), backed
+by `GET /products/:id/versions` and `POST /products/:id/restore-version`
+(`retail.js:20974`, `:20986`). No equivalent exists for any other record type.
+
+**Suggested direction:** extend the same snapshot-and-restore pattern to the other records a merchant edits by hand.
+
+### E-08 · Filters cannot be saved
+**Severity:** Medium · expected
+**Where:** the whole admin
+
+Nothing remembers a view. "Unpaid orders from the Web channel at the Tianhe shop" has to
+be rebuilt from three controls every morning, and cannot be shared with a colleague.
+
+**Who it affects:** every merchant with a daily routine. Roots is affected now.
+
+**Evidence:** no saved-view storage exists — searching the admin for saved filters, views
+or presets returns nothing. Filter state is held in page variables and lost on reload
+(`04-orders.js:127-160`).
+
+**Suggested direction:** let a set of filters be named and pinned to the screen it belongs to.
+
+### E-09 · Beyond the command palette there are no keyboard shortcuts
+**Severity:** Low · nice-to-have
+**Where:** `public/retail-admin/*.js` key handlers
+
+The only global keys are `Ctrl/⌘+K` to search and Escape to close. There is no way to move
+between rows, open a record, or advance an order's status from the keyboard — which is how
+a busy counter works.
+
+**Who it affects:** high-volume merchants.
+
+**Evidence:** the registered key handlers across all 23 files are Enter (17), Escape (16),
+ArrowDown (6), ArrowUp (4) and Tab (2) — all inside individual dialogs and pickers, none
+global except the palette.
+
+**Suggested direction:** j/k to move, Enter to open, and a status key on the Orders list.
+
+### E-10 · Notifications cannot be tuned
+**Severity:** Medium · expected
+**Where:** `public/backend-account.html:441-470`; `routes/backend-auth.js:1141-1156`
+
+A member of staff can turn the new-order chime on or off, and turn push on or off for the
+device they are holding. That is the whole of it. There is no way to say which events they
+want, no quiet hours, and no shared inbox of what has been sent.
+
+**Who it affects:** every merchant with staff who do different jobs.
+
+**Evidence:** the Notifications pane offers exactly two switches (`backend-account.html:456`,
+`:462`); the preference endpoints store a single on/off (`backend-auth.js:1141-1156`,
+`routes/push.js` `operatorPref`).
+
+**Suggested direction:** per-event preferences on the same pane, defaulting to today's behaviour.
+
+### E-11 · There is no bookkeeper
+**Severity:** Medium · expected
+**Where:** `lib/capabilities.js:428-560`
+
+The roles supplied are owner, deputy, manager, shop floor, shop manager, warehouse,
+customer service, dispatch, kitchen and stock clerk. None of them can see Finance:
+`finance:view` is held only by the three roles that can see everything. A merchant whose
+accountant needs the ledger and the supplier invoices — and nothing else — has to make them
+a manager.
+
+**Who it affects:** every merchant who uses a bookkeeper. Roots is affected now.
+
+**Evidence:** the preset definitions at `lib/capabilities.js:428-560`; checked each
+non-owner preset for `finance:*` and `reports:*` — `staff`, `store_manager`, `warehouse`,
+`customer_service` and `dispatch` hold none.
+
+**Suggested direction:** a bookkeeper preset holding finance, reports and purchasing invoices.
+
+### E-12 · Printable documents exist for orders and purchase orders only
+**Severity:** Low · nice-to-have
+**Where:** `public/retail-admin/04-orders.js:6269`; `16-purchasing.js:1921-1926`; `lib/feie.js`
+
+An order can be printed, a purchase order has a proper print sheet with "Print / Save as
+PDF", and a thermal receipt and packing slip exist for the shop printer. There is no
+customer statement, no stock count sheet, and no invoice document for a customer who asks
+for one on paper.
+
+**Who it affects:** merchants who trade with businesses rather than only consumers.
+
+**Evidence:** the two print paths above and the printer templates in `lib/feie.js`
+(`receipt`, `packing`).
+
+**Suggested direction:** add the two or three documents a merchant is asked for by customers.
+
+---
+
+## F. Click efficiency
+
+Measured from the counts in Part 1 §12. "Minimum" is what the same task takes in a mature
+admin doing it well.
+
+| Task | Now | Minimum | What is in the way |
+|---|---|---|---|
+| Mark 20 orders dispatched | **60** (3 each) | 3 (select, act, confirm) | No row selection on Orders — E-03 |
+| Annotate an order that came in from the shop | **impossible** | 2 | The field only exists on the manual-order form — B-02 |
+| Find who changed a price | **impossible** | 2 | Nothing reads the activity log — E-01 |
+| Export last month's orders | **impossible** | 2 | No export — E-04 |
+| Rebuild yesterday's filtered view | **4** every time | 1 | Filters are not saved — E-08 |
+| Clear the filters on Orders | **up to 4** | 1 | No reset control — B-06 |
+| Add a product | **8** + typing | 5–6 | The wizard's front door adds a step before the first question; Review is a step of its own |
+| Create a coupon | **8** + typing | 5–6 | Same shape |
+| Take a phone order | **7+** | 4–5 | Customer search, then product search per line, then fees, then confirm |
+| Record waste | **6** | 3–4 | Item, quantity and reason are three separate steps |
+| Refund part of an order | **6+** | 4 | Grows with the number of lines |
+| Adjust one product's stock | **4** | 2 | Reaching the field means opening the row first |
+| Reply to a review | **5** | 3 | Reviews live in a top-bar menu rather than the rail |
+
+Two things are already at or near the minimum and should not be changed: opening the
+admin lands on the Dashboard with no clicks at all, and finding an order by phone number
+through the command palette takes two.
+
+---
+
+### F-01 · Everything on a list is done one at a time
+**Severity:** High
+**Where:** Orders and Customers have no row selection — E-03
+
+The single biggest multiplier in the table above. Twenty orders to dispatch is twenty
+trips into the drawer: sixty clicks where three would do. Nothing about the Orders screen
+acknowledges that orders arrive in batches.
+
+**Evidence:** E-03.
+
+**Suggested direction:** the Products selection bar, on Orders.
+
+### F-02 · Both wizards spend a step before the first real question
+**Severity:** Low
+**Where:** `09-products.js:5940` (products); `05-marketing.js:778` (coupons)
+
+Each wizard opens on a choose-your-route screen — three doors for a product, five for a
+coupon — before anything is asked. For the common case (start from scratch) that is one
+click and one screen of reading spent on nothing. Both also make the review a step of its
+own rather than the foot of the last one.
+
+**Evidence:** `pwFrontHtml()` and its three cards (`09-products.js:5940-5955`);
+`vwFrontHtml()` and its five (`05-marketing.js:778-795`).
+
+**Suggested direction:** open on the first question with the other routes offered beside it.
+
+
+## G. Simplicity
+
+### G-01 · Developer vocabulary in text the merchant reads
+**Severity:** Medium
+**Where:** as listed
+
+| Word | Where | Why it is a problem |
+|---|---|---|
+| "daemon" | `04-orders.js:4116`, `:4444`, `:4655` | C-04 |
+| "Stock & quotas" | Products stock panel | A quota is the platform's word for a per-channel cap |
+| "safety buffer" | Products stock panel, Quick Stock | Means "stock held back from sale" — the glossary says so, the screen does not |
+| "paste access_token" | integrations | An access token is a developer's object |
+| "AppID must look like wx + 16 chars" | channel setup | Correct and unreadable |
+| "API v3 key", "cert serial", "mch_id" | payment setup | Unavoidable — they are the payment provider's words — but no help text says where to find them |
+| `server_error`, `not_found`, `forbidden_capability`, `kitchen_add_only` | 195 toast sites | A-09 |
+
+**Suggested direction:** a copy pass over the settings and integration screens, and a plain sentence for each error.
+
+### G-02 · Two hundred form fields have no label a screen reader can use
+**Severity:** Medium
+**Where:** `public/retail-admin.html`
+
+Of 335 input fields in the shell, 37 have a `for=` label, 88 sit inside a label, and 10
+carry an `aria-label`. The remaining ~200 rely on a placeholder, which disappears as soon
+as the merchant types.
+
+**Who it affects:** anyone using a screen reader, and anyone who forgets what a field was
+for once it has content in it.
+
+**Evidence:** counted from the markup: 343 `<label>` elements but only 37 with `for=`;
+88 inputs nested inside a label; 10 `aria-label` attributes on inputs.
+
+**Suggested direction:** associate every field with its label.
+
+### G-03 · Settings is nine dropdowns deep with no explanation
+**Severity:** Medium
+**Where:** `public/retail-admin.html` (Settings section), `02-settings-ops.js`
+
+Settings holds more dropdowns than any other screen and no search box, no chip strip and
+no date fields — it is a wall of controls. Some of them change what customers see
+immediately; nothing on screen distinguishes those from the ones that do not.
+
+**Who it affects:** every merchant, on the screen they are least confident in.
+
+**Evidence:** the per-section control counts in Part 1 §5.5: Settings has 9 dropdowns and
+0 search boxes. The command palette can jump to an individual setting card
+(`02-settings-ops.js:1280-1310`), which is the mitigation — but only if the merchant knows
+the name of what they are looking for.
+
+**Suggested direction:** group the settings by what they affect, and mark the ones customers see.
+
+---
+
+## H. Empty tenant / day one
+
+### H-01 · The first ten minutes assume the merchant is the first merchant
+**Severity:** High
+**Where:** `lib/provision-tenant.js`; `routes/retail-setup.js:86-130`; `public/backend-signup.html:162`
+
+Sign-up asks for a company name, a username and a password. It does not ask what country
+the business is in, what currency it sells in, what time zone it keeps, or what language
+it works in — so all four are decided for them (D-08). There is no welcome email and no
+address verification: the page says "Backend created" and redirects to sign-in after 1.8
+seconds. The setup checklist that follows has five steps and none of them is any of those
+four questions.
+
+**Who it affects:** every new merchant.
+
+**Evidence:** the provisioning inputs (`provision-tenant.js:205-219`); the checklist steps
+— store, products, payment, fulfilment, open (`retail-setup.js:120-126`); the sign-up
+page's closing message (`backend-signup.html:162-165`).
+
+**Suggested direction:** four questions at sign-up, seeded into the settings the product already has.
+
+### H-02 · The public door is a waiting list
+**Severity:** Medium
+**Where:** `routes/backend-signup.js:19-65`, `:3-6`
+
+Unless a platform staffer is signed in or an environment switch is on, `/backend/signup`
+shows a waitlist form rather than creating an account. That switch is itself gated behind
+the data-isolation flag. So a merchant who finds Tacet cannot start using it.
+
+**Who it affects:** every prospective merchant. Deliberate for now — recorded because the
+day-one experience is what this section measures.
+
+**Evidence:** `GET /api/backend/signup/status` decides which of the two forms the page
+shows (`backend-signup.js:19-65`); `BACKEND_SIGNUP_OPEN` is read alongside
+`TENANT_DATA_ISOLATION` (`:3-6`).
+
+**Suggested direction:** none — this is a sequencing decision, not a defect.
+
+### H-03 · A new shop may have no web address at all
+**Severity:** High
+**Where:** `lib/provision-tenant.js:22`, `:46-56`, `:265-272`
+
+A merchant is given a subdomain for their online shop only if the platform has a base
+domain configured. If it does not, provisioning skips the step silently and the merchant
+finishes the setup checklist — including "Open the doors" — with a shop that has no
+address to send anyone to.
+
+**Who it affects:** every new merchant, depending on a server setting they cannot see.
+
+**Evidence:** `if (!STOREFRONT_BASE_DOMAIN) return null;` (`:46`), called best-effort at
+`:265-272`; nothing in the setup guide checks that a domain exists.
+
+**Suggested direction:** make the address a checklist step, and fail loudly at provisioning if none can be issued.
+
+### H-04 · Day one, screen by screen
+**Severity:** — (evidence for the findings above)
+
+| Screen | What a merchant with nothing sees |
+|---|---|
+| Dashboard | Cards with zeroes; the setup guide opens over it on first sign-in |
+| Open your store | The one screen built for this moment, and it works: five steps with time estimates, each routing to the right place |
+| Orders | An empty list |
+| Products | **"No products match this filter"** — B-01 |
+| Products, on a phone | **"All 118 · Live 96 · Low 14 · Out 8"** — A-03 |
+| Customers | "No customers yet" and a good sentence explaining they arrive on their own |
+| Suppliers | The best empty state in the product: explanation plus two actions |
+| Materials | A good explanation, no action |
+| Recipes | "No recipes yet" |
+| Finance | Empty ledger |
+| Delivery | No zones; the merchant must build them before delivery works, and the checklist's fulfilment step accepts pickup instead |
+| Team | The owner, alone |
+| Settings | 43 seeded values, none of them chosen by the merchant — D-08 |
+
+---
+
+## I. Money, end to end
+
+The money rule differs by screen. Collected:
+
+| Site | Rule | Where |
+|---|---|---|
+| The merchant's own currency and decimals | `toFixed(currency.decimals)`, symbol before or after | `01-core.js:176-183` — used by 8 files |
+| Dashboard cards | `toLocaleString` with **0 decimals** by default | `03-dashboard.js:21` |
+| Orders KPI tiles | `Math.round` then thousands separators, hardcoded ¥ | `04-orders.js:1061`, `:1064`, `:1124` |
+| Refund dialogs | `toFixed(2)`, hardcoded ¥ | `04-orders.js:7782`, `:7946` |
+| Phone app | 2 decimals if there is a fraction, otherwise 0 | `m.html:9576` |
+| Phone app glance cards | `Math.round`, whole units | `m.html:9581` |
+| Counter till | `toFixed(2)` with separators, minus sign before the symbol | `till.html:845` |
+| Thermal printer | `toFixed(2)`, full-width ￥ deliberately | `lib/feie.js:156` |
+| Refund tender split | `Math.round(x * 100) / 100` | `routes/retail.js:31801-31805` |
+| Points converted to money | `Math.floor(x * 100) / 100` | `routes/retail.js:31742` |
+| Full-refund test | `amount + 0.005 >= remainingGross` | `routes/retail.js:28894` |
+
+**I-01 · Nine ways to write an amount** — Severity High. Two of them disagree about
+decimals on the same screen (A-08); seven of the nine ignore the merchant's currency
+setting (D-03).
+
+**I-02 · Money arithmetic happens inside SQL, outside every helper** — Severity Medium.
+The expense a purchase order posts to the ledger is summed in a string-built SQL statement
+(`retail-purchasing.js:126`: `SUM(${billableQtySql()} * COALESCE(cost_per_unit, 0))`), and
+the dashboard, finance summary and customer lifetime-spend totals are the same shape. Their
+rounding is the database's, not the product's.
+
+**I-03 · There is no tax anywhere** — Severity High · table-stakes. No tax rate, no
+inclusive/exclusive setting, no tax line on an order, no tax on a report. What exists is a
+free-typed `extra_tax` amount on a supplier order (`retail-purchasing.js`) and the Chinese
+tax-invoice request flow (`routes/retail.js:24239`, `lib/nuonuo.js`). A merchant anywhere
+that charges sales tax or VAT cannot use this product to do it.
+
+**I-04 · The platform's money and the merchant's money are stored in different units** —
+Severity Low. Billing amounts are integer cents (`billing_invoices.amount_cents`,
+`billing_plans.price_cents`, `tenants.setup_fee_cents`); everything the merchant deals in
+is a floating-point decimal (A-06).
+
+---
+
+## J. Speed and scale
+
+### J-01 · 63 list endpoints have no row limit
+**Severity:** High
+**Where:** the full list is in Part 1; the ones that will bite first are below
+
+Most of the 63 are small lookup lists where it does not matter. These grow without bound:
+
+| Endpoint | What grows | Where |
+|---|---|---|
+| `/materials` | every material the merchant has ever added | `routes/retail-materials.js:156` |
+| `/suppliers` | every supplier | `routes/retail-purchasing.js:639` |
+| `/recipes` | every recipe, with all its lines | `routes/retail-recipes.js:184` |
+| `/purchasing/invoices` | every supplier invoice — and see J-02 | `routes/retail-purchasing.js:1796` |
+| `/finance/transactions` | every ledger row in the chosen window | `routes/finance-transactions.js:237` |
+| `/inventory/grid` | every product × every location | `routes/retail-inventory.js:201` |
+| `/products/export.csv` | the whole catalogue, assembled in memory | `routes/retail.js:21540` |
+| `/delivery-zones`, `/categories`, `/flash-sales`, `/media/folders`, `/refunds` | each grows with use | various |
+
+**Who it affects:** the first merchant to reach a few thousand rows in any one of them.
+Roots is not there yet.
+
+**Evidence:** each handler calls `.all()` with no `LIMIT` in the statement. For contrast,
+the endpoints that do page are Orders (`limit` 100, capped at 200, with `offset`),
+Customers (`pageSize` 20, capped at 100) and Media (`limit` 60, capped at 200, with
+`offset`) — so the pattern exists and was simply not applied to the rest.
+
+**Suggested direction:** page the seven that grow without bound, using the shape Orders and Media already use.
+
+### J-02 · One confirmed query-per-row loop
+**Severity:** Medium
+**Where:** `routes/retail-purchasing.js:1808-1819`
+
+The supplier-invoice list runs one extra query for every invoice it returns, to fetch that
+invoice's linked purchase orders. With no limit on the list (J-01), the number of queries
+grows with the number of invoices.
+
+**Who it affects:** merchants with a long invoice history.
+
+**Evidence:** `const linkStmt = db.prepare(...)` before the loop, then
+`const lines = linkStmt.all(inv.id)` inside `invs.map(inv => { … })`.
+
+*Checked and clean:* the catalogue export, the inventory grid, the recipe list, the order
+detail and the product list all load their related rows in one batched query and join them
+in memory (`retail.js:21562-21583`, `retail-inventory.js:212-220`,
+`retail-recipes.js:197-211`) — this codebase is careful about it, which is why the one
+exception stands out. `routes/backend-notices.js:66-67` does the same per-ticket, but the
+list is a handful of support tickets and will not grow.
+
+**Suggested direction:** fetch the links for every invoice on the page in one query.
+
+### J-03 · The admin shell is 970 KB of JavaScript before anything is fetched
+**Severity:** Medium
+**Where:** `public/retail-admin/` — 23 files, 57,241 lines
+
+Every screen's code is loaded on every visit, in one global scope, in a fixed order.
+Orders alone is 558 KB. Nothing is loaded on demand.
+
+**Who it affects:** every merchant on a slow connection, at every sign-in; worst on the
+first visit after a deploy, when the cache is invalidated by design.
+
+**Evidence:** the file sizes; `server.js:624-632` stamps every asset URL with a new version
+on each deploy, so the whole bundle is re-fetched.
+
+**Suggested direction:** load a section's code when the section is first opened.
+
+---
+
+## K. Roles in daily use
+
+RBAC enforcement is out of scope. What follows is only about what each role *sees*, and
+excess here is a simplicity problem, not a security one.
+
+### K-01 · Fifty-eight controls out of nearly two thousand are tagged by role
+**Severity:** Medium
+**Where:** `public/retail-admin.html` (14 `data-cap`), `public/retail-admin/*.js` (44)
+
+Screens hide from a role that lacks the capability, and individual controls hide if they
+are tagged `data-cap`. Fifty-eight controls are tagged. The admin has 1,872 click
+handlers. So once a role can open a screen, they see essentially all of it — a shop-floor
+member of staff opening Orders sees every button an owner sees, including refunds.
+
+**Who it affects:** every merchant with staff. Roots is affected now.
+
+**Evidence:** 14 `data-cap` attributes in the shell markup and 44 across the 23 JavaScript
+files; `applyCapGates()` hides rail rows and `[data-cap]` elements only
+(`01-core.js:160-182`). Part 1 §3.5 counts the handlers.
+
+**Suggested direction:** tag the actions that matter — refunds, price changes, payouts, deletions — not every control.
+
+### K-02 · Five realistic roles, and what today's admin gives them
+
+| Role | What they hold | What they see that they do not need |
+|---|---|---|
+| **Owner** | everything, by absolute bypass (`lib/capabilities.js:430`) | — |
+| **Manager / deputy** | everything except paying the bill, editing permissions and deleting a location | nothing much; this is the intended shape |
+| **Cashier / shop floor** (`staff`) | dashboard, orders view+edit, till, invoices view, customers view, products view, stock recount — 10 capabilities | The whole Orders screen once opened, including Refund and Cancel + refund, because those buttons are not tagged (K-01) |
+| **Stock person** (`warehouse`) | 19 capabilities: stock ledger, quick stock, transfers, purchasing, materials, waste, channel stock pushes | Purchasing includes supplier prices and invoice totals — the preset comments say money was deliberately kept away from this role elsewhere, and buying prices arrive with the purchasing section |
+| **Bookkeeper** | **does not exist** — E-11 | — |
+
+**Evidence:** the presets at `lib/capabilities.js:428-560`, read in full. The `warehouse`
+preset's own comments explain that `materials:view`/`:edit` are listed individually rather
+than granting the whole section precisely so a future money capability would not arrive by
+accident — and then grant `...sect('purchasing')`, which is the section that carries
+supplier prices.
+
+**Suggested direction:** add a bookkeeper preset, and split purchasing's money out of the stock person's grant.
+
+---
+
+## L. Mistakes and recovery
+
+| Action | Can it be taken back? | Where |
+|---|---|---|
+| Stock recount typed wrong | Only by typing the right number again — the ledger keeps the history, but nothing warns and nothing offers an undo. **A-02** makes the accidental version easy | `retail-inventory.js:372` |
+| Product edited wrongly | **Yes** — version history with a Restore button and a clear confirmation. The best recovery path in the product | `09-products.js:3159-3207` |
+| Product deleted | Behind a confirmation; recoverable only if it archived rather than deleted — the governing rules say archive, the capability is called `products:delete` | `cap-routes.js:136` |
+| Order cancelled | **No.** `NEXT_STATUS` offers nothing from `cancelled` | `04-orders.js:2862` |
+| Order refunded | **No.** Nothing from `refunded` | `04-orders.js:2863` |
+| Order dispatched by mistake | **Yes**, while no parcel has a waybill — rolls back to Preparing, silently, without telling the customer | `04-orders.js:6435` |
+| Waste recorded wrongly | **Yes** — voiding is a separate capability from recording, deliberately | `cap-routes.js:224-227` |
+| Material archived | **Yes** — restore | `19-recipes.js:2025` |
+| Half-written product | **No** — Escape discards it (**B-05**) | `09-products.js:5891` |
+| Broadcast sent | **No** | `/api/retail-admin/broadcasts` |
+| Coupon deleted | **No** | `cap-routes.js:121` |
+| Delivery zone deleted | **No** | `06-delivery.js:1124` |
+| Supplier deleted | Deactivated rather than deleted — recoverable | `retail-purchasing.js:789` |
+| Purchase order deleted | **No** — the header and its lines are removed | `retail-purchasing.js:2367-2368` |
+| Recipe edited | **No** — its materials and steps are deleted and re-inserted on every save | `retail-recipes.js:449-463` |
+| Finance ledger row deleted | **No** — the confirmation says so: "This removes the row from the ledger. This cannot be undone." | `22-finance.js:865` |
+
+**L-01 · The two most common daily mistakes have the weakest recovery** — Severity High.
+A wrong stock count writes silently (A-02) and a half-written product vanishes on Escape
+(B-05). Both are everyday slips; both are one keystroke away.
+
+**L-02 · Recipes lose their history on every save** — Severity Medium. Editing a recipe
+deletes all its material lines and steps and re-inserts them (`retail-recipes.js:449-463`),
+so there is no previous version to go back to and no record that a quantity changed. The
+same product has a full version history for products a few files away.
+
+---
+
+## M. Language — the numbers, for the open decision
+
+No recommendation is made here; §23 of the decisions record is where that belongs. The
+shape is this.
+
+**Four mechanisms are live at once** (Part 1 §9.1): `cuT(en, cn)` in the shell,
+`T(en, cn)` aliasing it in six newer files, an `English · 中文` text node split at render
+by a DOM walker, and paired `.en`/`.cn` spans with `L(en, cn)` on the standalone pages.
+A fifth, `EN_ONLY_MAP` (`10-extras.js:1476-1520`), is a 45-entry lookup for strings that
+shipped in English and were translated afterwards.
+
+**Counts**
+
+| | |
+|---|---|
+| Pairing calls in admin JavaScript | 3,921 (`cuT` 2,873 + `T` 1,048) |
+| Paired text nodes in the shell markup | 1,484 of 2,094 |
+| Message strings (toasts, confirms, placeholders, titles) | 866 — 271 through a pairing call, 209 as a single `EN · 中文` string, **128 English only**, 7 Chinese only, 33 a raw variable |
+| Bilingual database columns | 73 across 23 tables |
+| Tables with a language column | 1 (`retail_synthetic_reviews.lang`) |
+| Language columns on the merchant record | **0** |
+| Language columns on a staff account | **0** |
+| Hardcoded-locale date/number calls | 61 in the front end, 1 in the API |
+
+**By section** (pairing calls, largest first): Orders 612 · Products 491 · Channels 288 ·
+Dashboard 249 · Customers 165 · Marketing 173 · Settings 152 · Meituan 146 · Core 142 ·
+Setup guide 126 · Content 118 · Eleme 89 · Purchasing 549 (via `T`) · Recipes 236 ·
+Materials 109 · SKU 77 · Waste 62 · Product build 37 · Finance 40 · Delivery 34 ·
+Loyalty 25 · Activity 1 · gzgrocery 0.
+
+**Where the language is decided**
+
+| Surface | Decided by | Key |
+|---|---|---|
+| Desktop admin | the viewer, on this browser | `localStorage['roots-admin-lang']`, default English |
+| Phone admin | the viewer, on this phone — **a separate setting** | `localStorage['tacet-m-lang']` |
+| Profile, sign-in, brand | shared with the desktop admin | same key |
+| Quick Stock | shared with the desktop admin | same key |
+| Customer parcel-tracking page | **the link, not the reader** — `?lang=cn`, default English | `routes/retail.js:11232` |
+| Printed receipts | neither — the template is fixed | `lib/feie.js` |
+| Text-message codes | the template registered with the provider | `lib/aliyun-sms.js:86-96` |
+| A new merchant's shop | **the platform** — seeded `theme.language: 'bilingual'` | `lib/provision-tenant.js:82` |
+
+**Shape of the problem for a third language:** every mechanism above is built for exactly
+two. A function of two arguments, a string with one separator, two CSS classes, two
+database columns per name. There is no language registry, no translation file, and no use
+of `Accept-Language` anywhere. The one part that would already work in any locale is
+number and date formatting, because 61 of the 62 `toLocaleString` calls pass no fixed
+locale and follow the viewer's browser.
+
+---
+
+### M-01 · The phone and the desktop remember different languages
+**Severity:** Medium
+**Where:** `public/retail-admin/10-extras.js:1471`; `public/m.html:730`
+
+The desktop admin stores the chosen language under `roots-admin-lang`; the phone app uses
+`tacet-m-lang`. A merchant who switches to Chinese on their phone finds English on their
+computer, and vice versa. Every other admin surface — profile, sign-in, brand, Quick Stock
+— shares the desktop key, so the phone is the only one out of step.
+
+**Evidence:** `const LANG_KEY = 'roots-admin-lang'` (`10-extras.js:1471`);
+`const M_LANG_KEY='tacet-m-lang'` (`m.html:730`); `backend-account.html:15` reads the
+desktop key.
+
+**Suggested direction:** one key, or a per-person setting stored against the account.
+
+### M-02 · Language is a browser setting, not a person's setting
+**Severity:** Medium
+**Where:** `10-extras.js:1471-1475`; `database.js` (`tenant_users` columns)
+
+A member of staff's language lives in the browser they happen to be using. Sign in on the
+shop tablet and you get whatever the last person chose; sign in on a new computer and you
+get English. There is no language column on a staff account or on the merchant record.
+
+**Evidence:** the storage keys above; searched the schema for a language column — the only
+one in the whole database is `retail_synthetic_reviews.lang`.
+
+**Suggested direction:** store the language on the staff account, with the browser as a fallback.
+
+
+## N. Mobile admin
+
+Phones are served a different application (`public/m.html`), not a narrow version of the
+desktop one. It is well built for the size: 44px minimum touch targets on buttons, chips
+and rows, 56px list rows, primary actions at the bottom, pull-to-refresh, a Back that
+closes the top sheet, and an install manifest.
+
+### N-01 · The phone app switches off pinch-zoom
+**Severity:** Medium
+**Where:** `public/m.html:9`
+
+`maximum-scale=1, user-scalable=no` in the viewport tag means a merchant cannot zoom in
+on their own orders. For anyone with less than perfect eyesight this is the difference
+between using the app and not.
+
+**Evidence:** `<meta name="viewport" content="width=device-width, initial-scale=1,
+viewport-fit=cover, maximum-scale=1, user-scalable=no">`. The desktop shell does not do
+this (`retail-admin.html:5`).
+
+**Suggested direction:** drop `maximum-scale` and `user-scalable`.
+
+### N-02 · A phone order cannot be taken on a phone
+**Severity:** High
+**Where:** `public/m.html:1551-1562`; `tab-orders-new` is desktop-only
+
+Taking an order over the telephone is a daily task in a shop, and the phone is where the
+shopkeeper is standing. The mobile app deliberately has no create surface — the comment
+explains that an earlier fake one was removed because its submit handler only showed
+"Created" and sent nothing, and that "authoring stays on the desktop".
+
+**Who it affects:** every merchant who takes orders by phone or at a market stall.
+
+**Evidence:** the removal note at `m.html:1551-1562`; the desktop-only `tab-orders-new`
+section; the quick-actions comment at `:2006-2014` listing "Add product", "Create coupon",
+"Send broadcast" as "three verbs the phone cannot perform".
+
+**Suggested direction:** the one authoring flow worth putting on the phone is a manual order.
+
+### N-03 · What the phone can and cannot do
+
+| Task | On the phone |
+|---|---|
+| See new orders, with a chime and a badge | **Yes** |
+| Move an order through its statuses | **Yes** |
+| Approve, reject or pay out a refund | **Yes** (`m.html:863-885`) |
+| Find an order or a customer | **Yes** — a search sheet |
+| Fix a price or a stock count | **Yes** — described as "quick edits here · full authoring on desktop" |
+| Receive a delivery | **Yes** |
+| Record waste | **Yes** |
+| Read and reply to the inbox | **Yes** |
+| Today's takings and a trend | **Yes** |
+| Team, settings, sign out | **Yes** |
+| **Take a manual order** | **No** — N-02 |
+| **Add a product, create a coupon, send a broadcast** | **No**, by decision |
+| Reports | Trend only |
+
+**Evidence:** the 30 screens and 13 sheets listed in Part 1 §3.4, read against `SUBS`
+(`m.html:5115`) and the `reg(...)` command table.
+
+---
+
+## O. Search and find
+
+### O-01 · What can be found, and from where
+
+| Looking for | From the command palette | From its own screen | Matches on |
+|---|---|---|---|
+| An order | **Yes** | Yes | order number, recipient name, recipient phone |
+| A customer | **Yes** | Yes | nickname, phone, openid, and the phone on any saved address — with digits normalised, so a spaced number still matches |
+| A product | **Yes** | Yes | name in both languages, SKU |
+| A stock movement | No | Yes | SKU, name, order number, note |
+| An image | No | Yes | filename, alt text |
+| A coupon | No | Yes | code, label |
+| A delivery zone | No | Yes | zone name |
+| A supplier | No | Yes | name |
+| **A location** | No | **No** | — |
+| A purchase order | No | Yes — but the filtering happens in the browser over rows already loaded, so it only searches what the unpaged list happened to return (J-01) | PO number, supplier, line suppliers (`16-purchasing.js:403`) |
+| **A staff member** | No | **No** | — |
+| **A material** | No | Yes | name, SKU |
+
+The command palette is the strongest thing in this product's navigation: it indexes every
+page, panel and individual setting from the live page, and on two characters it also
+queries products, orders and customers and deep-links into the right drawer. It even
+explains in a result's subtitle *why* a row matched — showing the phone number when the
+query matched a phone (`02-settings-ops.js:1350-1360`).
+
+### O-02 · Locations and staff cannot be searched
+**Severity:** Low
+**Where:** Settings → Stores; Manage team
+
+Both are lists with no search box. Fine at two locations and four staff; not fine at
+twenty and sixty, which is the size of merchant the platform is being built for.
+
+**Evidence:** the per-section control counts in Part 1 §5.5 — Settings has 9 dropdowns and
+0 search boxes; Team has 4 dropdowns, 1 chip strip and 0 search boxes.
+
+**Suggested direction:** a search box on both lists, and locations in the command palette.
+
+---
+
+## P. Notifications and silence
+
+### P-01 · The merchant's own operational alerts go to the platform's chat, not theirs
+**Severity:** High
+**Where:** `lib/ops-alert.js`; call sites in `routes/retail.js` (5), `server.js` (3), the channel drift sweeps (4), `lib/alert-latch.js` (1), the four background daemons (31)
+
+Most of what the system notices about a merchant's day — a route failing on their orders, a
+channel queue stalling, a courier push that cannot geocode an address, the storefront not
+responding — is sent to one operations chat group and never to the merchant. The merchant's
+own channel exists (`lib/tenant-notify.js`) but fires for exactly two events, and only if
+they have configured a staff-chat app of their own.
+
+**Who it affects:** every merchant. Roots is affected now — in Roots' case the two groups
+may be the same people, which is why it has not been felt.
+
+**Evidence:** the alert catalogue in Part 1 §10.1, items 13-15; `sendOpsAlert` call sites
+counted above; `notifyTenantOperators` returns `wecom_app_not_configured` when the merchant
+has not set one up (`lib/tenant-notify.js:31`). D-02 covers the second half of this: the
+destination is read from one fixed database file.
+
+**Suggested direction:** split the alerts into "the platform's problem" and "this merchant's problem", and route the second to the merchant.
+
+### P-02 · Failures that reach nobody
+**Severity:** High
+**Where:** as listed
+
+Checked every failure path in the admin's own flows. These end without any signal to the
+merchant:
+
+| What fails | What happens instead | Where |
+|---|---|---|
+| An email fails to send | the caller gets `{ok:false}` and, on the sign-in path, a generic message; no record is kept | `lib/email-sender.js:38` |
+| A text message fails to send | same shape — `{ok:false, error}` returned and dropped | `lib/aliyun-sms.js:86-96` |
+| A push notification fails | the device's subscription is quietly pruned; the merchant is not told their phone has stopped receiving orders | `routes/push.js` `_sendMany` |
+| A delivery reminder cannot find a recipient | returns `{sent: 0}` and logs nothing | `lib/delivery-reminders.js:63` — and see D-06, where for most merchants this is *every* reminder |
+| Stock reaches zero, or the low threshold | nothing is sent; it shows on the dashboard if someone opens it | E-06 |
+| A background daemon stops | the platform is paged; the merchant is not | `scripts/health-watchdog.js` |
+| A merchant's stored credentials cannot be decrypted | falls back to a development mode that silently does nothing, logged at boot only | `server.js:1030-1038` |
+| Any of 211 swallowed errors in the API | nothing at all — the `catch` block is empty | counted across `routes/` and `lib/` |
+| Any of 269 console-only errors | a line in the server log | same |
+| A session expires mid-edit | the page redirects to sign-in; anything typed is gone | `backend-account.html:533`, and every page's 401 handler |
+
+**Who it affects:** every merchant.
+
+**Evidence:** the counts above were produced by matching `catch` blocks whose body is empty
+or a single `console.*` call across all of `routes/` and `lib/`;
+`routes/retail.js` alone holds 69 empty ones and 202 console-only.
+
+*Checked and clean:* a failed printer job is **not** silent — the outcome is written onto
+the order as `print_status` / `print_error` and the drawer offers a reprint
+(`routes/retail.js:26602-26614`). That is the pattern the rest of this table needs.
+
+**Suggested direction:** record every failed send against the thing it was about, the way printing already does, and show it there.
+
+### P-03 · There is no history of what was sent
+**Severity:** Medium
+**Where:** the whole admin
+
+Twenty kinds of notification can leave the system and there is no screen listing what went
+out, to whom, and whether it arrived. A merchant asking "did the customer get told?" has
+no way to find out.
+
+**Evidence:** the catalogue in Part 1 §10.1; no notification-log table or screen exists.
+`retail_notifications` holds customer-facing in-app messages, not a send log.
+
+**Suggested direction:** one log, written by the same helpers that send.
+
+---
+
+## Q. Pattern consistency
+
+The rebuilt Customers and Orders screens are the standard. Measured against them:
+
+| Screen | Drawer | Empty state | Filters can be cleared | Dialogs | Money format | Dates |
+|---|---|---|---|---|---|---|
+| **Customers** (standard) | side drawer, dismissable | explains itself, offers a clear-filters button | **yes** | designed | `¥` hardcoded | shared formatter |
+| **Orders** (standard) | side drawer | plain | **no** | designed | **three formats on one screen** (A-08) | shared formatter |
+| Products | docked inspector, not a drawer | **filter error on an empty catalogue** (B-01) | no | designed | mixed | **own formatter** (`pdFmtVersionTime`) |
+| Purchasing | own screen stack with its own back button | good, with two actions | no (browser-side filter only) | designed (`pu2-*`) | `acMoney` in 2 places, `¥` in 5 | shared |
+| Materials | own card layout | good text, no action | no | designed | `acMoney` | shared |
+| Recipes | own layout | plain | no | designed | mixed | shared |
+| Waste | own layout | plain | **yes**, and shown in the toolbar — the best of the three patterns | `acMoney` | shared |
+| Team | modals, not drawers | plain | n/a | **native browser dialogs** (C-01) | n/a | **own formatter** |
+| Marketing | drawer + wizard | plain | no | designed | `¥` hardcoded | **own formatter** |
+| Delivery | edit panel | plain | no | designed | `¥` hardcoded | shared |
+| Settings | panels | n/a | n/a | **native `window.confirm` in three places** | `¥` hardcoded | n/a |
+| Finance | modal | plain | no | designed | `¥` hardcoded | shared |
+| Phone app | sheets | good, with a clear-filters button | **yes** | own sheet pattern | **own formatter** | **own formatter** |
+
+**Q-01 · Three dialog systems** — Severity Medium. The designed `askConfirm`/`askReason`
+dialogs, the native browser `confirm`/`prompt` on Settings and Team (C-01), and the phone
+app's own sheets. `public/tacet-dialogs.js` exists to be the one answer and is not used by
+Settings or Team.
+
+**Q-02 · Four date formatters and nine money formats** — Severity Medium. C-02 and I-01.
+
+**Q-03 · Three "clear the filters" behaviours** — Severity Low. Waste shows the button in
+the toolbar whenever a filter is set; Customers shows it only in the empty state; every
+other screen has none (B-06). Waste's is the right one.
+
+**Q-04 · Two navigation models inside one shell** — Severity Low. Most sections are a page
+with a drawer. Purchasing is a stack of screens with its own back button
+(`16-purchasing.js` `_screen` state, `backBtn(...)`), which is the phone app's model
+arriving on the desktop.
+
+---
+
+## R. Accessibility — basic pass
+
+### R-01 · Pinch-zoom is switched off on the phone
+**Severity:** Medium · N-01 above. This is the single most consequential accessibility
+defect found, because it removes the standard remedy for every other size problem.
+
+### R-02 · About two hundred fields have no label a screen reader can read
+**Severity:** Medium · G-02 above.
+
+### R-03 · Small muted text in the dark theme falls below the contrast standard
+**Severity:** Medium
+**Where:** `public/retail-admin.css:35` (`--text-3: #7d7a72`), used 192 times
+
+`--text-3` on the dark theme's raised background gives a contrast ratio of **3.61**. The
+standard for normal-sized text is 4.5. It is used for 192 rules, several of them at 10 and
+11 pixels — the brand sub-label is `font-size: 10px` in this colour.
+
+**Evidence:** computed from the token values: `#7d7a72` on `--bg-elev-1: #1F252B` = 3.61.
+The light theme's equivalent (`--td-text2: #58606E` on the paper background) is 6.02 and
+passes. `--text-2` in dark passes at 6.74.
+
+**Suggested direction:** lighten `--text-3` in the dark theme until it clears 4.5.
+
+### R-04 · Touch targets in the product inspector are about half the minimum
+**Severity:** Low
+**Where:** `public/retail-admin.css:4749`
+
+`.pa-inspector-actions .btn { padding: 5px 9px; font-size: 11px; }` — roughly 26 pixels
+tall against a 44-pixel guideline. This is a desktop-only surface driven by a mouse, so it
+is a low-severity comfort problem rather than a blocker. The phone app is properly sized
+throughout (44px buttons and chips, 56px rows).
+
+**Suggested direction:** raise the inspector's action buttons to the same size as the rest of the admin.
+
+### R-05 · Keyboard reachability is partial
+**Severity:** Medium
+**Where:** `public/retail-admin.html`; `public/retail-admin.css` (108 focus rules)
+
+Focus styling exists and is used. Order rows carry `tabindex="0"` so the list is
+keyboard-reachable. But 385 of the shell's actions are `onclick` on elements that are not
+always buttons, dialogs have no focus trap (recorded for the Profile pane in the project's
+own IA notes), and there is no skip link past the rail.
+
+**Evidence:** 108 `:focus` / `:focus-visible` rules in the stylesheet;
+`<tr class="order-row" … tabindex="0">` (`04-orders.js:1301`); `docs/tacet-ia-blueprint.md`
+§11 records "no focus trap in either layer" for the Profile app.
+
+**Suggested direction:** trap focus in dialogs and drawers, and add a skip link.
+
+---
+
+## Categories with no findings
+
+**None.** Every category produced at least one. Two are close, and what was checked is
+recorded so the next pass does not redo it:
+
+- **C (common-sense failures)** — the check that came back cleanest was confirmations on
+  destructive actions: 31 of 32 delete requests ask first, several with a type-the-name
+  gate (C-05). The findings that remain are about consistency, not absence.
+- **J (speed and scale)** — the codebase batches its queries carefully. Every list endpoint
+  that looked like a per-row loop was read; all but one load their related rows in a single
+  batched query (J-02). The scale problem here is missing paging, not bad queries.
+
+---
