@@ -144,12 +144,16 @@ const HELPERS =
 const seq = (items) => 'window.__seq([' + items + '],window.__done);';
 
 const CASES = {
-  // Three jobs, named, with the two that carry work counting it.
+  // Every transfer job, named, with the two that carry work counting it.
   'home-is-the-landing': { js: 'window.__done();',
-    expect: ['Hi Asher', 'Count', 'Set what is on your shelf',
+    expect: ['Hi Asher',
              'Pick', 'Pull a run for the stores', '1 of 1 lines still to pull',
              'Receive', 'Count a delivery in', '1 delivery waiting',
              'Ask the kitchen', 'Have something made', 'Kitchen queue'],
+    // AND NOT COUNTING. It has its own row in the Tacet app, which is where
+    // every operator enters every tool from — the standalone PWAs are gone — so
+    // a tile here was the copy of that row you met by tapping that row.
+    absent: ['Set what is on your shelf', 'Log what you made'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the app did not open on the launcher' },
 
   // THE ORIGINAL DEFECT, ASSERTED. A quiet day must still show both doors.
@@ -169,8 +173,6 @@ const CASES = {
     } },
 
   // Each tile reaches its screen, and comes back.
-  'count-tile-opens-the-shelf': { js: seq(["'[data-hcount]'"]),
-    expect: ['Quick stock', 'Hummus Asli', 'All', 'Low', 'Out'] },
   'pick-tile-opens-the-run': { js: seq(["'[data-pkopen]'", '250']),
     expect: ['Pick list', 'Frozen dumplings 500g', 'Short', '0 of 1'] },
   'receive-tile-opens-the-count': { js: seq(["'[data-rcenter]'", '250']),
@@ -205,7 +207,8 @@ const CASES = {
     } },
 
   'home-cn': { pre: "localStorage.setItem('roots-admin-lang','cn');", js: 'window.__done();',
-    expect: ['你好', '盘点', '拣货', '收货', '向厨房下单', '厨房制作队列', '待拣', '批待收货'] },
+    expect: ['你好', '拣货', '收货', '向厨房下单', '厨房制作队列', '待拣', '批待收货'],
+    absent: ['设置本店库存数量', '记录制作数量'] },
 
   // ── Ask the kitchen ──────────────────────────────────────────────────────
   // Nothing has raised a kitchen request since 16 May, because the only screen
@@ -340,7 +343,7 @@ const CASES = {
   // refused; Count is theirs because counting is not restock at all.
   'kitchen-only-operator-is-shown-no-transfer-tiles': { kitchenOnly: true, stores: TWO,
     js: 'window.__done();',
-    expect: ['Kitchen queue', 'Count'],
+    expect: ['Kitchen queue'],
     absent: ['Pull a run for the stores', 'Nothing to pick', 'Count a delivery in',
              'Nothing on its way', 'Ask for stock'] },
 
@@ -370,11 +373,12 @@ const CASES = {
     expect: ['Quick stock', 'Hummus Asli'],
     check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
 
-  // The launcher is still whole for anyone who arrives without one — the
-  // installed PWA starts on a bare /stock, and that tile is the only shelf door
-  // it has.
-  'the-count-tile-stays-for-a-bare-open': { stores: TWO, js: 'window.__done();',
-    expect: ['Count', 'Set what is on your shelf'],
+  // And a bare /stock — the Transfers row in that same list — still opens on the
+  // launcher, which is the only screen Pick, Receive and Ask the kitchen have.
+  // It just does not offer counting a second time.
+  'a-bare-open-still-gets-the-transfer-launcher': { stores: TWO, js: 'window.__done();',
+    expect: ['Pick', 'Receive', 'Ask the kitchen', 'Ask for stock'],
+    absent: ['Set what is on your shelf', 'Log what you made'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the launcher did not appear' },
 
   /* ── The two lines of a row are two lines ─────────────────────────────────

@@ -2808,7 +2808,6 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      before the morning they need it. */
 
   var HOME_ICO = {
-    count: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M3 11h18"/><path d="M9 7V4h6v3"/></svg>',
     pick:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
     recv:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v12H3V8"/><path d="M2 4h20v4H2z"/><path d="M10 12h4"/></svg>',
     queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/></svg>',
@@ -2855,20 +2854,25 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var recvCount = !inbound ? '' : (inbound === 1
       ? t('1 delivery waiting', '1 批待收货')
       : t(inbound + ' deliveries waiting', inbound + ' 批待收货'));
+    /* NO COUNTING TILE. Counting has its own row in the Tacet app — More →
+       Operations → "Add stock" — and that is where every operator now enters
+       every tool from; the individual PWAs are gone. A tile here was a second
+       copy of that row, and it was the copy you met by tapping the row: the
+       door named "Add stock" opened a menu offering "Add stock".
+
+       The counting list is still where this app opens. Nothing routes THROUGH
+       the launcher to reach it — ?go=add lands on it directly, and homeBack()
+       falls back to it for the operator who has no launcher at all. What is
+       gone is the tile, not the screen. */
     return '<div class="sh-wrap">' +
       '<div class="sh-greet"><div class="g1">' + esc(g.hi) + '</div>' +
       '<div class="g2">' + esc(g.when) + '</div></div>' +
       '<div class="sh-grid">' +
-        homeTileHtml('count', state.mode === 'add' ? t('Add stock', '加库存') : t('Count', '盘点'),
-          state.mode === 'add' ? t('Log what you made', '记录制作数量')
-                               : t('Set what is on your shelf', '设置本店库存数量'),
-          '', 'data-hcount') +
-        // EVERY TILE BELOW IS TRANSFER WORK, and it is shown only to a session
+        // EVERY TILE HERE IS TRANSFER WORK, and it is shown only to a session
         // the transfer lists actually answered. A kitchen operator is refused
         // all of it at the route, so drawing these for them would be five doors
         // onto a wall — the exact defect the launcher was built to end, arrived
-        // from the other side. Count stays above unconditionally because
-        // counting is not restock and is gated by nothing here.
+        // from the other side.
         (rc.on !== true ? '' :
         homeTileHtml('pick', t('Pick', '拣货'),
           picks.length ? t('Pull a run for the stores', '为门店拣货')
@@ -2911,8 +2915,6 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     $('#main').className = '';
     $('#main').innerHTML = homeHtml();
     var m = $('#main');
-    var c = m.querySelector('[data-hcount]');
-    if (c) c.onclick = function () { homeGoCount(); };
     var p = m.querySelector('[data-pkopen]');
     if (p) p.onclick = pkEnter;
     var r = m.querySelector('[data-rcenter]');
