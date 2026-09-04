@@ -156,6 +156,28 @@ const CASES = {
     absent: ['Set what is on your shelf', 'Log what you made'],
     check: (out) => /data-view="home"/.test(out) ? null : 'the app did not open on the launcher' },
 
+  /* ── The screen's own name ────────────────────────────────────────────────
+     The head said "Quick stock" on every screen this app has, because it was
+     set from the MODE once and never from the view. On the launcher that named
+     the one job the launcher does not do — counting has no tile here at all —
+     and it named a door nobody opened to get in: the row that lands here is
+     Transfers, in More → Operations. */
+  'the-launcher-is-named-for-the-door-that-opens-it': { js: 'window.__done();',
+    expect: ['Transfers'], absent: ['Quick stock'] },
+
+  'the-launcher-is-named-in-chinese-too': { pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: 'window.__done();', expect: ['调拨'], absent: ['快速库存'] },
+
+  // The counting list keeps the name it always had — it IS Quick stock, and the
+  // row in /m that reaches it says so too.
+  'the-counting-list-is-still-quick-stock': { deny: true, js: 'window.__done();',
+    expect: ['Quick stock'], absent: ['Transfers'] },
+
+  // A launcher with no transfer tiles is a kitchen account's. It says what it
+  // holds rather than borrowing a name for work it was refused.
+  'a-queue-only-launcher-says-queue': { kitchenOnly: true, js: 'window.__done();',
+    expect: ['Kitchen queue'], absent: ['Quick stock', 'Transfers'] },
+
   // THE ORIGINAL DEFECT, ASSERTED. A quiet day must still show both doors.
   'tiles-stay-when-there-is-no-work': { noRun: true, noInbound: true, js: 'window.__done();',
     expect: ['Pick', 'Nothing to pick', 'Receive', 'Nothing on its way', 'Ask the kitchen', 'Kitchen queue'],
@@ -372,6 +394,23 @@ const CASES = {
     js: 'window.__done();',
     expect: ['Quick stock', 'Hummus Asli'],
     check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  /* ── The doors a notification opens ───────────────────────────────────────
+     A push that says "RS-260904-002 ready to receive" and lands on a menu has
+     told somebody about a job and then asked them to go and find it. Both
+     screens sit behind the one transfer probe, so a refusal drops both links. */
+  'go-pick-opens-the-run': { stores: TWO, search: '?go=pick', js: 'window.__done();',
+    expect: ['Pick list', 'Frozen dumplings 500g'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  'go-receive-opens-the-delivery': { stores: TWO, search: '?go=receive', js: 'window.__done();',
+    expect: ['Receiving'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
+
+  // A LINK CANNOT GRANT ACCESS — the same rule ?go=queue already keeps.
+  'go-pick-is-ignored-when-the-run-was-refused': { deny: true, search: '?go=pick',
+    js: 'window.__done();',
+    expect: ['Quick stock', 'Hummus Asli'], absent: ['Pick list'] },
 
   // And a bare /stock — the Transfers row in that same list — still opens on the
   // launcher, which is the only screen Pick, Receive and Ask the kitchen have.

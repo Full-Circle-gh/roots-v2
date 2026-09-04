@@ -267,9 +267,28 @@ const CASES = {
     js: "document.querySelector('.row .qty').click();" },
   'store-sheet': { rows: ROWS, ctxPatch: TWO_STORES, expect: ['Choose store', 'Panyu'], opens: 'storeSheet',
     js: "document.getElementById('storeBtn').click();" },
-  'account-sheet': { rows: ROWS, expect: ['Signed in as Asher', 'Language', 'Appearance', 'Sign out'],
+  /* NOTIFICATIONS IS ON THIS SHEET BECAUSE FOR SOME OPERATORS THERE IS NO OTHER
+     SHEET. The switch lived only in Tacet Mobile, and the kitchen and the shelf
+     clerk are stock-app-only — server.js refuses them /m — so the two roles this
+     app exists for were the two that could never enrol a device. Every push
+     addressed to them landed on nobody. */
+  'account-sheet': { rows: ROWS,
+    expect: ['Signed in as Asher', 'Language', 'Appearance', 'Notifications', 'Sign out'],
     absent: ['Cancel'],                            // the confirm is asked for, not standing open
     opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
+
+  // And it asks nothing on the way in: no permission sheet, no enrolment, until
+  // somebody taps the switch. A headless render has no push support at all, so
+  // the row says why instead of offering a control that cannot work.
+  'notifications-say-why-when-the-browser-cannot': { rows: ROWS,
+    expect: ['Notifications'], opens: 'acctSheet',
+    js: "document.getElementById('acctBtn').click();",
+    check: (out) => /Unavailable|Add to home screen|Blocked in the browser|On/.test(out) ? null
+      : 'the notifications row offered neither a switch nor a reason' },
+
+  'notifications-in-chinese': { rows: ROWS, pre: "localStorage.setItem('roots-admin-lang','cn');",
+    expect: ['通知'], opens: 'acctSheet',
+    js: "document.getElementById('acctBtn').click();" },
   // THE WAY BACK out of a single-purpose app, and it lives in the HEAD — the
   // place every pushed screen on a phone keeps it. An operator whose whole job
   // is this screen has no home to return to and is given no control at all; the

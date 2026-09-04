@@ -295,9 +295,14 @@ function main() {
     if (c.checkPuts) { const p = c.checkPuts(puts); if (p) failures.push([name, p]); }
 
     // Only what #242 already ships. A fourth shape is a new backend path.
+    // The two push-pref reads are the account sheet's Notifications switch
+    // settling its own position — a GET that writes nothing, and the realm probe
+    // behind it (the operator endpoint 401s a kitchen session, which is how the
+    // app knows which realm's subscription store it is in).
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
       /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/restock\/\d+\/item\/\d+$/,
-      /^\/api\/restock\/\d+\/status$/, /^\/api\/restock\/\d+\/receive$/];
+      /^\/api\/restock\/\d+\/status$/, /^\/api\/restock\/\d+\/receive$/,
+      /^\/api\/backend\/push\/pref$/, /^\/api\/push\/pref$/];
     for (const u of calls) {
       if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u} — not one of #242's endpoints`]);
     }

@@ -680,20 +680,17 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
   // gets nothing, which is correct: for them this app is the whole product.
   //
   // The label travels with it. A back link that says where it GOES is the rule
-  // every pushed screen on the phone already follows, and the screen it returns
-  // to is titled with the role's name — so the same name is sent here rather
-  // than a generic "Back" that names nothing.
+  // every pushed screen on the phone already follows — so the door lands on the
+  // tool list this app is reached from (More → Operations → Transfers) and
+  // carries that list's own title. lib/app-home.js holds the rule and why the
+  // role's name alone was the wrong label for most of the roles that see it.
   let home = null;
   let homeLabel = null;
   if (req.backendUser) {
     try {
       const rec = require('../lib/roles').recordFor(req.backendUser.tenant_id, req.backendUser.role);
-      if (!rec || !rec.stockAppOnly) {
-        home = '/m';
-        if (rec && (rec.nameEn || rec.nameCn)) {
-          homeLabel = { en: rec.nameEn || rec.nameCn, cn: rec.nameCn || rec.nameEn };
-        }
-      }
+      const back = require('../lib/app-home').backToTacet(rec, req.caps || null);
+      home = back.home; homeLabel = back.homeLabel;
     } catch (e) { home = null; homeLabel = null; }
   }
 
@@ -702,7 +699,7 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     data: {
       enabled,
       mode,                       // 'add' (kitchen) | 'recount' (warehouse)
-      home,                       // '/m' when there is somewhere to go back to
+      home,                       // the tool list, when there is somewhere to go back to
       home_label: homeLabel,      // that screen's own name, so Back can say it
       user: {
         name: req.user?.display_name || req.user?.username || null,
