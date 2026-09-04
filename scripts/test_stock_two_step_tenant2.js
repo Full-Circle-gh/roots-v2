@@ -236,5 +236,57 @@ const t1Before = {
   eq(F.shelf(h.db, 1, 500), t1Before.wh, '19. and absolutely nothing moved in tenant 1');
   eq(orderRow(79).goods_state, 'none', '19. goods_state stays none');
 
+  // ══ Retry a failed dispatch, on TENANT 2 ═════════════════════════════════
+  // The retry delegates to _applyDispatch, which writes stock through tdb() and
+  // its stamps through the same connection. A tenant-1 suite cannot tell whether
+  // either landed in the right file — the blind spot that let the :333 bug
+  // through — so all three retry cases are asserted here too.
+  section('Retry — a rolled-back dispatch is retryable in tenant 2');
+  t2.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', '3')").run();
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
+              VALUES (81,'T2-RS-005','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
+              VALUES (81,501,'T2 Tortilla','T2-501',8,8)`).run();
+  const whBefore = shelf2(T2_WH, 501);
+  const t1LedgerBefore = h.db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n;
+
+  t2.exec(`CREATE TRIGGER _t2retryboom BEFORE INSERT ON retail_stock_ledger
+           WHEN NEW.product_id = 501 AND NEW.reason = 'restock_transfer_out'
+           BEGIN SELECT RAISE(ABORT,'simulated'); END`);
+  const failed81 = setStatus(81, 'prepared');
+  ok(failed81.body.stock_transfer && failed81.body.stock_transfer.ok === false, 'the tenant 2 dispatch failed');
+  eq(shelf2(T2_WH, 501), whBefore, 'tenant 2 stock rolled back');
+  eq(orderRow(81).goods_state, 'none', 'and goods_state rolled back to none in tenant 2');
+  t2.exec('DROP TRIGGER _t2retryboom');
+
+  const retry2 = (id) => inT2(() => F.callRoute(restock, 'post', '/api/restock/:id/retry-dispatch', {
+    params: { id: String(id) }, body: {}, user: ACTOR, permissions: PERMS }));
+
+  const retried81 = retry2(81);
+  ok(retried81.body && retried81.body.success, 'the retry succeeds in tenant 2');
+  eq(retried81.body.stock_moved, true, 'and reports that stock moved');
+  eq(shelf2(T2_WH, 501), whBefore - 8, 'TENANT 2\'s warehouse is the one that moved');
+  ok(!!orderRow(81).dispatched_at, 'dispatched_at stamped IN TENANT 2 by the retry');
+  eq(orderRow(81).goods_state, 'in_transit', 'goods_state in_transit IN TENANT 2');
+  eq(h.db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n, t1LedgerBefore,
+     'and the shared database got no ledger row from the retry');
+
+  section('Retry — a double retry moves stock once, in tenant 2');
+  const before2 = shelf2(T2_WH, 501);
+  const twice2 = retry2(81);
+  ok(twice2.body.success && twice2.body.already === true, 'the second retry reports already dispatched');
+  eq(twice2.body.stock_moved, false, 'and moved nothing');
+  eq(shelf2(T2_WH, 501), before2, 'tenant 2\'s shelf is unchanged by the second tap');
+  eq(t2.prepare("SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE ref_id = 81 AND reason = 'restock_transfer_out'").get().n,
+     1, 'exactly one outbound ledger row in tenant 2');
+
+  section('Retry — a completed dispatch cannot be retried, in tenant 2');
+  // Order 77 dispatched and settled successfully at the top of this file.
+  const settledBefore = shelf2(T2_WH, 500);
+  const completed2 = retry2(77);
+  eq(completed2.body.already, true, 'a settled order reports already, not a fresh dispatch');
+  eq(completed2.body.stock_moved, false, 'and moves nothing');
+  eq(shelf2(T2_WH, 500), settledBefore, 'tenant 2\'s warehouse shelf is untouched');
+
   done();
 })();

@@ -891,6 +891,87 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
   res.json({ success: true });
 });
 
+// ── Retry a dispatch that failed ───────────────────────────────────────────
+//
+// THE GAP THIS FILLS. Under the old one-step model a failed transfer was
+// retried by the 'delivered' transition, which re-ran the whole thing as a
+// safety net. 'delivered' now moves no stock, and STATUS_FLOW refuses a
+// backward move, so an order whose dispatch rolled back sits at status
+// 'prepared' with goods_state 'none' and NOTHING REACHES _applyDispatch AGAIN.
+// The function was always retryable — its guards rolled back with the stock —
+// what was missing is a door, and this is the door.
+//
+// THE PICKER OPENS IT HIMSELF. Same permission as the dispatch he already had
+// (requireRestockOrInbox — the identical middleware the status endpoint uses),
+// no manager, no unlock, no second person. The transaction rolled back cleanly
+// and nothing is half-done, so the alternative is a warehouse worker standing
+// with cold boxes hunting for someone with a password.
+//
+// ONLY WHERE A DISPATCH GENUINELY DID NOT HAPPEN. _applyDispatch's three guards
+// — goods_state, dispatched_at, and the old stock_applied_at — are the same
+// three that protect it everywhere else, and they are what makes a retry
+// incapable of moving stock twice. They are NOT re-implemented here: this
+// endpoint delegates, so the two paths can never drift apart on what "already
+// dispatched" means.
+//
+// AND IT IS ITSELF IDEMPOTENT. Two taps on a bad connection is one dispatch:
+// the second call meets dispatched_at and reports that the goods already left,
+// as a success rather than an error — because from the picker's side it IS one,
+// and an error would send him looking for a problem that does not exist.
+router.post('/api/restock/:id/retry-dispatch', requireAuth, requireRestockOrInbox, (req, res) => {
+  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+
+  // A RETRY IMPLIES AN ATTEMPT. An order still at draft/sent/received has never
+  // been packed, so there is nothing to retry and dispatching it here would
+  // bypass the request lifecycle — the warehouse would not have picked it yet.
+  // Refused rather than silently dispatching, which would make this endpoint a
+  // second, quieter way to send goods.
+  if (STATUS_FLOW.indexOf(order.status) < STATUS_FLOW.indexOf('prepared')) {
+    return res.status(409).json({
+      error: 'not_dispatched_yet',
+      message: 'This order has not been packed yet, so there is nothing to retry. Mark it prepared when the goods are ready to leave.',
+    });
+  }
+
+  const result = _applyDispatch(order.id, req.user);
+
+  // Already gone. The common second-tap case, and a success from where the
+  // picker is standing.
+  if (result.ok && (result.skipped === 'already_dispatched' || result.skipped === 'already_applied_old_model')) {
+    return res.json({
+      success: true, retried: false, already: true, stock_moved: false,
+      goods_state: order.goods_state,
+      message: 'These goods have already left the warehouse. Nothing was moved again.',
+    });
+  }
+  if (result.ok && result.skipped === 'kitchen_direction') {
+    return res.json({
+      success: true, retried: false, stock_moved: false,
+      message: 'This is a kitchen order, which does not move store stock.',
+    });
+  }
+  if (result.ok && result.skipped === 'no_lines') {
+    return res.status(409).json({
+      error: 'no_lines',
+      message: 'There is nothing on this order to send. Add a quantity to at least one line first.',
+    });
+  }
+  // Failed again — the cause is still there. The message from _applyDispatch
+  // already names it in plain words, so it is passed through rather than
+  // replaced by a code the picker would have to look up.
+  if (result.ok === false) {
+    return res.status(409).json({ error: 'retry_failed', stock_moved: false, message: result.error });
+  }
+
+  _broadcastRestock(order.id, 'prepared', req.user.id);
+  res.json({
+    success: true, retried: true, stock_moved: true, moved: result.moved || 0,
+    goods_state: 'in_transit',
+    message: `Sent. ${result.moved || 0} line${result.moved === 1 ? '' : 's'} left the warehouse.`,
+  });
+});
+
 // ── Mark item prepared (warehouse side) ────────────────────────────────────
 router.put('/api/restock/:id/item/:item_id', requireAuth, requireRestockOrInbox, (req, res) => {
   const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);

@@ -274,6 +274,67 @@ function makeOrder({ lines, shelves = {} }) {
   // warehouse, silently. A wrong source is worse than a refusal.
   setCfg(String(WH));
 
+  // ══ Retry a failed dispatch ══════════════════════════════════════════════
+  section('A rolled-back dispatch can be retried by the picker');
+  const retryOrder = makeOrder({
+    lines: [{ product_id: 901, name: 'Tortilla', sku: 'P-901', qty_requested: 8, qty_sent: 8 }],
+    shelves: { '1:901': 30, '2:901': 0 },
+  });
+  // Abort the outbound ledger row so the dispatch rolls back exactly as a real
+  // failure would — stock back, stamps back, order still dispatchable.
+  h.db.exec(`CREATE TRIGGER _retryboom BEFORE INSERT ON retail_stock_ledger
+             WHEN NEW.product_id = 901 AND NEW.reason = 'restock_transfer_out'
+             BEGIN SELECT RAISE(ABORT, 'simulated'); END`);
+  const failedPrep = setStatus(retryOrder, 'prepared');
+  ok(failedPrep.body.stock_transfer && failedPrep.body.stock_transfer.ok === false, 'the dispatch failed');
+  eq(shelf(WH, 901), 30, 'nothing moved');
+  eq(orderRow(retryOrder).goods_state, 'none', 'and the order rolled back to none');
+
+  const retry = (id) => call('post', '/api/restock/:id/retry-dispatch', { id: String(id) }, {});
+
+  // Retrying while the cause is still there fails again, and says so plainly.
+  const stillBroken = retry(retryOrder);
+  eq(stillBroken.status, 409, 'retrying while the cause remains is refused');
+  eq((stillBroken.body || {}).stock_moved, false, 'and says plainly that no stock moved');
+
+  h.db.exec('DROP TRIGGER _retryboom');
+  const retried = retry(retryOrder);
+  ok(retried.body && retried.body.success, 'the retry succeeds once the cause is fixed');
+  eq(retried.body.stock_moved, true, 'and says plainly that stock DID move');
+  eq(retried.body.moved, 1, 'reporting how many lines went');
+  ok(/left the warehouse/.test(retried.body.message), 'in words, not a status code');
+  eq(shelf(WH, 901), 22, 'the stock actually moved (30 → 22)');
+  eq(orderRow(retryOrder).goods_state, 'in_transit', 'and the order is in transit');
+  eq(refRows('restock_transfer_out', retryOrder).length, 1, 'exactly one outbound ledger row');
+
+  section('A second retry moves stock once');
+  const beforeSecond = { wh: shelf(WH, 901), rows: refRows('restock_transfer_out', retryOrder).length };
+  const twice = retry(retryOrder);
+  ok(twice.body.success, 'the second tap is a success, not an error');
+  eq(twice.body.already, true, 'reported as already dispatched');
+  eq(twice.body.stock_moved, false, 'and it says no stock moved this time');
+  eq(shelf(WH, 901), beforeSecond.wh, 'the shelf is unchanged by the second tap');
+  eq(refRows('restock_transfer_out', retryOrder).length, beforeSecond.rows, 'still exactly one outbound row');
+
+  section('A completed dispatch cannot be retried');
+  // `id` was dispatched successfully at the top of this file.
+  const beforeDone = { wh: shelf(WH, 900), rows: refRows('restock_transfer_out', id).length };
+  const completed = retry(id);
+  eq(completed.body.already, true, 'a dispatched order reports already, not a fresh dispatch');
+  eq(completed.body.stock_moved, false, 'and moves nothing');
+  eq(shelf(WH, 900), beforeDone.wh, 'its warehouse shelf is untouched');
+  eq(refRows('restock_transfer_out', id).length, beforeDone.rows, 'and it gains no ledger row');
+
+  section('An order that was never packed cannot be retried');
+  const unpacked = makeOrder({
+    lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 3, qty_sent: 3 }],
+    shelves: { '1:900': 20, '2:900': 0 },
+  });
+  const tooEarly = retry(unpacked);
+  eq(tooEarly.status, 409, 'retrying an unpacked order is refused');
+  eq((tooEarly.body || {}).error, 'not_dispatched_yet', 'by name — this is not a second way to send goods');
+  eq(shelf(WH, 900), 20, 'and nothing moved');
+
   section('The receipt refuses an order that never left');
   const never = makeOrder({
     lines: [{ product_id: 900, name: 'Hummus', sku: 'P-900', qty_requested: 2, qty_sent: 2 }],
