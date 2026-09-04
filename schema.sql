@@ -485,6 +485,59 @@ CREATE TABLE IF NOT EXISTS categories (
   UNIQUE(kind, name)
 );
 
+-- ── SKU rules (automatic SKU generation) ──────────────────────────
+-- A tenant writes the SHAPE of its codes here and the system fills the SKU
+-- field in for every new record. See lib/sku-format.js (the token template)
+-- and lib/sku-rules.js (which rule applies, and what number it gets).
+--
+-- Three levels, most specific wins: (category, subcategory) → (category, '')
+-- → ('', ''). THE WILDCARD IS THE EMPTY STRING, NEVER NULL — SQLite counts
+-- NULLs as distinct, so a nullable UNIQUE would accept any number of rules
+-- claiming to be the default.
+--
+-- entity_type is 'material' today. Recipes and products are meant to follow
+-- through the same two tables, which is why nothing here says ingredient.
+CREATE TABLE IF NOT EXISTS sku_rules (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type   TEXT NOT NULL DEFAULT 'material',
+  category      TEXT NOT NULL DEFAULT '',   -- materials: ingredients.item_kind
+  subcategory   TEXT NOT NULL DEFAULT '',   -- materials: ingredients.category
+  code          TEXT NOT NULL DEFAULT '',   -- what {CAT} / {SUB} render — 'B'
+  pattern       TEXT NOT NULL,              -- e.g. 'B-{SEQ:4}'
+  is_active     INTEGER DEFAULT 1,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(entity_type, category, subcategory)
+);
+
+-- One running number per rule that has ever issued a code. scope_key is the
+-- matched rule's own (category|subcategory), case-folded — so numbering
+-- restarts wherever a rule is DEFINED, and renaming the capitalisation of a
+-- category does not start the series over.
+--
+-- NOTHING EVER DECREMENTS next_seq. A deleted material keeps its code out of
+-- circulation on purpose: reissuing it would point old orders and reports at
+-- the wrong thing, which is the same rule archiving already follows (§18).
+CREATE TABLE IF NOT EXISTS sku_counters (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type   TEXT NOT NULL,
+  scope_key     TEXT NOT NULL,
+  next_seq      INTEGER NOT NULL DEFAULT 1,
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(entity_type, scope_key)
+);
+
+-- The master switch, one row per entity. An ABSENT row means OFF: a generated
+-- code is permanent (nothing renumbers it, archiving keeps it, no counter goes
+-- backwards), so numbering is opt-in per tenant rather than something a tenant
+-- discovers already written onto its catalogue. See lib/sku-rules.js
+-- getSettings for the full argument.
+CREATE TABLE IF NOT EXISTS sku_settings (
+  entity_type   TEXT PRIMARY KEY,
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ── Price Alerts ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS price_alerts (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

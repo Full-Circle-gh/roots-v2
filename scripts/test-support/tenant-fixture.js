@@ -111,8 +111,22 @@ function captureNotifications(h, { pushEnabled = true } = {}) {
 // ── auth ────────────────────────────────────────────────────────────────────
 // A fixed actor, so a suite drives real handlers without a session. `actor` is
 // mutable by the caller between requests when a suite needs a different role.
-function stubAuth(h, actor, permissions = { restock: 1, warehouse_inbox: 1, kitchen_inbox: 1 }) {
-  const state = { actor, permissions };
+// `realm` decides which identity the stub presents. 'kitchen' (the default) is
+// middleware/auth.js's users session; 'tacet' is a tenant_users operator, which
+// is what requireRetailAdmin resolves and what the Stock screens actually sign
+// in as. Routes that read req.restockRealm need the second one — a suite driving
+// them as a kitchen user is testing a door that is deliberately shut.
+function stubAuth(h, actor, permissions = { restock: 1, warehouse_inbox: 1, kitchen_inbox: 1 }, realm = 'kitchen') {
+  const state = { actor, permissions, realm };
+  if (realm === 'tacet') {
+    h.stub('routes/retail.js', {
+      requireRetailAdmin: (req, res, next) => {
+        req.backendUser = state.actor; req.user = state.actor;
+        req.caps = null; req.scopeStores = null;
+        next();
+      },
+    });
+  }
   h.stub('middleware/auth.js', {
     requireAuth: (req, res, next) => { req.user = state.actor; req.permissions = state.permissions; next(); },
     requirePermission: () => (req, res, next) => next(),

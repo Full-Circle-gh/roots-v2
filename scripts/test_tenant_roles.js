@@ -279,9 +279,17 @@ function versionOf(tid) {
   // 21st mover, 107th capability: `till:use` (2026-09-03). Counting a sale rung
   // at the counter as money MOVED is the deliberate call — the till takes
   // payment and books revenue, which is the definition this marker uses.
+  //
+  // 108–110 are restock:request / :pick / :receive (2026-09-04), when the
+  // transfer screens moved under Tacet and needed keys the role editor could
+  // grant. NONE carries a money marker, deliberately: moving stock between two
+  // of your own locations, or asking your own kitchen to make something, books
+  // no revenue and shows no price. It changes where goods are, not what they
+  // are worth. A marker here would put a lock icon on the picker's screen and
+  // teach the operator that the marker means "important" rather than "money".
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 107, 'across all 107');
+  is(caps.CAPABILITIES.length, 110, 'across all 110');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

@@ -1836,10 +1836,16 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('.sub-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
   // The shared "Save settings" bar drives saveConfig() (Shop/Push/CS only). The
   // Operations panel has its own per-card saves, so hide the shared bar there.
+  // SKU codes is on that list for the same reason Operations is: every rule
+  // saves itself, so a shared "Save settings" button there would either do
+  // nothing or claim to have saved something it never touched.
   const _saveBar = document.querySelector('.settings-body > .save-bar');
-  if (_saveBar) _saveBar.style.display = (sub === 'ops') ? 'none' : '';
+  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku') ? 'none' : '';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
+  // Same, for the SKU rules — the category lists it offers are read from the
+  // live catalogue, so a stale copy would hide a category added since boot.
+  if (sub === 'sku' && typeof skuLoad === 'function') skuLoad();
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));

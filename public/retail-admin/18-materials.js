@@ -804,10 +804,19 @@
             <h3 class="mat-blk-h">${esc(T('Identity', '基本信息'))}</h3>
             <div class="mat-fgrid">
               ${field(T('Kind', '类别'), select('item_kind', m.item_kind || 'food', kindOpts, 'matKindChanged()'))}
-              ${field(T('Category', '分类'), select('category', m.category, catOpts))}
-              ${field(T('Name (English)', '名称(英文)'), input('name_en', m.name_en, 'maxlength="120"'))}
+              ${field(T('Category', '分类'), select('category', m.category, catOpts, 'matSkuPreview()'))}
+              ${/* onblur, not oninput: a {NAME:3} pattern makes the suggested code
+                    depend on this field, and a request per keystroke would be
+                    both wasteful and jumpy. */''}
+              ${field(T('Name (English)', '名称(英文)'), input('name_en', m.name_en, 'maxlength="120" onblur="matSkuPreview()"'))}
               ${field(T('Name (中文)', '名称(中文)'), input('name_cn', m.name_cn, 'maxlength="120"'))}
-              ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
+              ${/* The SKU carries a live line of its own (#mat-sku-note) under
+                    the standing hint: on a NEW material with the field empty it
+                    shows the code the tenant's rules would issue, and on a typed
+                    one it flags a code that does not match that category's
+                    scheme. Both are ADVISORY — see matSkuPreview(). */''}
+              ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"', 'matSkuTyped()')
+                       + '<span class="mat-skunote" id="mat-sku-note"></span>',
                        T('Kept forever, even after archiving — so old orders keep pointing at the right thing.', '归档后仍永久保留 — 以免历史订单指向错误。'))}
               ${field(T('Finance category', '财务分类'),
                        `<div class="mat-combo-wrap">`
@@ -913,6 +922,9 @@
         </div>
       </div>`;
     try { applyCapGates(); } catch (_) {}
+    // The suggested code, once the fields it reads exist. Fire-and-forget: it
+    // paints a hint and nothing on this screen waits for it.
+    try { matSkuPreview(); } catch (_) {}
   }
 
   // What the cost WILL be if saved now, worked out by the same shared module the
@@ -964,6 +976,96 @@
     if (!_rec) return;
     Object.assign(_rec.row, readForm());
     paintRecord();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  THE AUTOMATIC SKU (Ash, 2026-09-04)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Settings → SKU codes holds the tenant's numbering rules; the server issues
+  // the code when the material is saved with the field blank. What happens HERE
+  // is only ever advisory, and deliberately so:
+  //
+  //   • On a NEW material with an empty SKU, the code the rules would issue is
+  //     shown as the field's placeholder and spelled out underneath. It is a
+  //     PEEK — nothing is claimed, so opening the form, changing the category
+  //     four times and closing it burns no codes and leaves no gaps.
+  //   • On a TYPED SKU, a code that does not fit that category's pattern is
+  //     flagged and saved anyway. A supplier's own article number is a real
+  //     reason to override, and refusing it would make the scheme the enemy of
+  //     the catalogue.
+  //   • On an EXISTING material, nothing is suggested at all. Renumbering what
+  //     is already coded is what would break historical orders and reports.
+  //
+  // The preview the operator sees is not a promise: a concurrent save can take
+  // the number in between, so the create response carries the code actually
+  // issued and matSave() paints that.
+  let _skuRule = null;      // the last /sku/material/next answer
+  let _skuSeq = 0;          // request sequencer — a slow answer must not overwrite a fast later one
+
+  function skuNoteEl() { return document.getElementById('mat-sku-note'); }
+  function skuFieldEl() { return document.getElementById('mat-f-sku'); }
+
+  window.matSkuPreview = async function () {
+    const note = skuNoteEl();
+    const field = skuFieldEl();
+    if (!note || !field || !_rec) return;
+    // An existing material keeps the code it has. Nothing to suggest, and the
+    // mismatch flag below still applies if the operator edits it.
+    if (_rec.row.id) { _skuRule = null; matSkuTyped(); return; }
+    if (String(field.value || '').trim()) { matSkuTyped(); return; }
+
+    const mine = ++_skuSeq;
+    try {
+      const q = new URLSearchParams({
+        category: val('item_kind') || 'food',
+        subcategory: val('category') || '',
+        name: val('name_en') || '',
+      });
+      const j = await api('/api/retail-admin/sku/material/next?' + q.toString());
+      if (mine !== _skuSeq) return;                       // a newer request has since answered
+      _skuRule = j && j.ok ? j : null;
+      if (!_skuRule) {
+        field.placeholder = '';
+        note.className = 'mat-skunote';
+        note.textContent = j && j.reason === 'disabled'
+          ? T('Automatic SKUs are off — type one, or leave it blank.', '自动编码已关闭 —— 可手动填写或留空。')
+          : '';
+        return;
+      }
+      field.placeholder = _skuRule.sku;
+      note.className = 'mat-skunote is-auto';
+      note.textContent = T(
+        `Will be saved as ${_skuRule.sku} — type your own to override.`,
+        `将自动生成为 ${_skuRule.sku} —— 如需自定义请直接输入。`);
+    } catch (_) {
+      // A preview that cannot be fetched is silence, never an error banner: the
+      // save works either way, and the server issues the code regardless.
+      if (mine === _skuSeq) { _skuRule = null; note.textContent = ''; }
+    }
+  };
+
+  // Typed into the SKU field. Blank → back to showing the suggestion; filled →
+  // check it against the pattern for this category and say so if it does not
+  // fit. The regex comes from the server (lib/sku-format.js matchRegexSource),
+  // so the check and the generator can never disagree about what a token means.
+  window.matSkuTyped = function () {
+    const note = skuNoteEl();
+    const field = skuFieldEl();
+    if (!note || !field) return;
+    const typed = String(field.value || '').trim();
+    if (!typed) { note.textContent = ''; note.className = 'mat-skunote'; matSkuPreview(); return; }
+    if (!_skuRule || !_skuRule.match_re) { note.textContent = ''; note.className = 'mat-skunote'; return; }
+    let fits = true;
+    try { fits = new RegExp(_skuRule.match_re).test(typed.toUpperCase()); } catch (_) { return; }
+    note.className = 'mat-skunote' + (fits ? ' is-auto' : ' is-warn');
+    // The message names an EXAMPLE, never the pattern behind it — `{SUB}{SEQ:4}`
+    // means nothing to the person holding the sack, and this line exists to be
+    // understood at a glance rather than decoded.
+    note.textContent = fits
+      ? T('Matches this category\'s codes.', '符合此分类的编码规则。')
+      : T(`Saved as typed. Codes in this category normally look like ${_skuRule.sku}.`,
+          `将按输入内容保存。此分类的编码通常形如 ${_skuRule.sku}。`);
   };
 
   function histHtml() {
@@ -1038,6 +1140,10 @@
       } else {
         const j = await api('/api/retail-admin/materials', { method: 'POST', body });
         _rec.row.id = j.id;
+        // The server issues the code, not the preview: a concurrent save can
+        // take the number the form was showing, so what came back is what this
+        // material is actually called.
+        if (j.sku) _rec.row.sku = j.sku;
       }
       _dirty = false;
       toast(T('Saved', '已保存'));

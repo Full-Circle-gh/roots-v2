@@ -86,7 +86,7 @@ function stub(o) {
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
-    '  else if(url.indexOf("/api/products")===0){\n' +
+    '  else if(url.indexOf("/api/retail-admin/products")===0){\n' +
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    body={success:true,data:[{id:7,name_en:"Hummus Asli",name_cn:"鹰嘴豆泥",sku:"1-10",status:"Active"}]};\n' +
     '  }\n' +
@@ -178,6 +178,10 @@ const CASES = {
       if (!p.items || p.items.length !== 1 || p.items[0].qty_requested !== 2) {
         return 'the line did not carry the quantity that was set';
       }
+      // A store id in a field the kitchen reads as a kitchen id points at a
+      // different product, and nothing would ever say so.
+      if (p.items[0].product_id != null) return 'a product_id was sent from the wrong catalogue';
+      if (!p.items[0].product_name) return 'the line carried no name, which is all a kitchen request has';
       return null;
     } },
 
@@ -234,7 +238,7 @@ function main() {
     }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
-      /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/products$/];
+      /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/retail-admin\/products$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
   }

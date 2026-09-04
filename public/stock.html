@@ -2911,24 +2911,32 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   var AK_MINUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></svg>';
   var AK_PLUS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 
-  /* THE KITCHEN'S OWN CATALOGUE, because that is what is being asked for — you
-     are asking them to make one of THEIR products, so /api/products carries the
-     right ids and the right names.
+  /* THE CATALOGUE TACET OWNS. /api/retail-admin/products is the sellable list,
+     reachable by exactly the operator who can raise one of these requests, and
+     it lists everything rather than only what happens to have a stock row at
+     this store. The shelf already in memory stands in if it cannot be read.
 
-     IF THAT IS REFUSED, the shelf already loaded stands in, and the request goes
-     WITHOUT a product_id. That is deliberate, not a shortcut: `products` and
-     `store_products` are separate AUTOINCREMENT counters over one integer space
-     (see _checkTransferIds), so a store id written into a field the kitchen
-     reads as a kitchen id is a number that points at the wrong thing. A kitchen
-     request needs the NAME — nothing in this direction ever moves stock by id —
-     so the honest answer is to send the name and leave the id empty rather than
-     fill it with one from the wrong catalogue. */
+     NO product_id IS SENT, and that is deliberate rather than a shortcut.
+     `restock_items.product_id` is read as a KITCHEN `products.id`, and the two
+     catalogues are separate AUTOINCREMENT counters over one integer space (see
+     _checkTransferIds) — so a store id written into that field points at a
+     different thing on the kitchen's side, and nothing would ever tell anybody.
+     A kitchen request needs the NAME: it moves no stock, and nothing in this
+     direction resolves a product by id. So the honest thing is to send the name
+     and leave the id empty rather than fill it from the wrong catalogue.
+
+     THIS USED TO ASK /api/products, the kitchen's own list, which was right
+     while the screens lived on the kitchen host. Since the restock routes moved
+     to Tacet that endpoint 403s for every operator who can reach this screen,
+     so the "right" source had become one that always failed — leaving the
+     fallback as the only path and an apology on screen for the normal case. */
   function akLoad() {
     if (ak.products) return Promise.resolve();
-    return rcFetch('/api/products').then(function (j) {
-      ak.products = (Array.isArray(j.data) ? j.data : [])
-        .filter(function (p) { return p.status !== 'Inactive' && p.is_active !== 0; })
-        .map(function (p) { return { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku }; });
+    return rcFetch('/api/retail-admin/products').then(function (j) {
+      var rows = Array.isArray(j.data) ? j.data : (j.data && j.data.products) || [];
+      ak.products = rows.map(function (p) {
+        return { id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku };
+      });
       ak.fromShelf = false;
       akRender();
     }).catch(function () {
@@ -2984,7 +2992,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       status: 'sent',
       items: chosen.map(function (p) {
         return {
-          product_id: ak.fromShelf ? null : p.id,
+          product_id: null,
           product_name: p.name_en || p.name_cn || ('#' + p.id),
           product_cn: p.name_cn || null,
           sku: p.sku || null,
@@ -3050,8 +3058,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       '</div>' +
       (ak.err ? '<div class="rc-err">' + esc(ak.err) + '</div>' : '') +
       (ak.fromShelf ? '<div class="rc-flat rc-note" style="margin:0 16px 12px">' +
-        t('Showing this shelf’s products — the kitchen’s own list is not available to this account.',
-          '显示本店商品 — 此账号无法读取厨房商品列表。') + '</div>' : '') +
+        t('Showing what this shelf holds — the full catalogue could not be read.',
+          '显示本店在架商品 — 未能读取完整商品目录。') + '</div>' : '') +
       // Asked FIRST, because it is what the kitchen reads first. No default:
       // a purpose picked for him is a reason he did not give.
       '<div class="rc-lbl">' + t('What is it for?', '用途') + '</div>' +

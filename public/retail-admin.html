@@ -9557,6 +9557,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
           Operations · 运营
         </button>
+        <!-- SKU codes. Gated on materials:view because that is whose catalogue
+             the rules number — an operator who cannot see materials has no use
+             for a screen about how materials are coded. The write endpoints are
+             gated on materials:edit (lib/cap-routes.js), which is the pair the
+             Materials page itself already uses. -->
+        <button data-sub="sku" data-cap="materials:view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14"/></svg>
+          SKU codes · 编码规则
+        </button>
         <!-- Brand + Billing — moved off the profile pop-up (2026-07-14), then
              off the rail into Settings (2026-07-14): business identity /
              account, not a rail-level concern. Real page links, not
@@ -10481,6 +10490,18 @@
               <button class="btn btn-primary" onclick="_savePrinter()">💾 Save all · 全部保存</button>
             </div>
           </div>
+        </div>
+
+        <!-- ── SKU codes · 编码规则 ─────────────────────────────────────────
+             Automatic SKUs for the Materials catalogue: the tenant says how a
+             code is shaped, per category and subcategory, and every new
+             material is numbered on save. Painted entirely by
+             retail-admin/23-sku.js — data-no-i18n because every string in it is
+             baked by cuT(), the same way the Materials screens work. The rules
+             live in the tenant's own database (sku_rules / sku_counters), so
+             this is not a Roots screen with Roots' letters in it. -->
+        <div class="sub-panel" id="sub-sku">
+          <div id="sku-root" data-no-i18n></div>
         </div>
 
         <!-- ────── shared save bar ────── -->
@@ -12853,6 +12874,7 @@
 <script src="/assets/retail-admin/20-waste.js"></script>
 <script src="/assets/retail-admin/21-product-build.js"></script>
 <script src="/assets/retail-admin/22-finance.js"></script>
+<script src="/assets/retail-admin/23-sku.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

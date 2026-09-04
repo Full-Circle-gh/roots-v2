@@ -6388,6 +6388,81 @@ try {
   }
 } catch (e) { console.error('[created_by-fk] migration failed (left untouched):', e); }
 
+// ── Automatic SKUs (2026-09-04) ─────────────────────────────────────────────
+//
+// The three tables also live in schema.sql, which covers a fresh database.
+// CREATE TABLE IF NOT EXISTS is a no-op on a table that exists, so this block
+// is what gives an ALREADY-CREATED database (Roots, and every tenant DB
+// provisioned before today) the same three. lib/tenant-db.js's initTenantSchema
+// copies whatever the main DB has into each tenant DB on open, so a tenant
+// self-heals from here on its next boot — nothing per-tenant to run by hand.
+//
+// The rules themselves are DATA-PLANE: each tenant's DB holds its own rows, so
+// a tenant numbers its catalogue its own way and Roots is not a special case.
+// See lib/sku-rules.js for the resolution order and why the wildcard is '' and
+// never NULL.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sku_rules (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type   TEXT NOT NULL DEFAULT 'material',
+    category      TEXT NOT NULL DEFAULT '',
+    subcategory   TEXT NOT NULL DEFAULT '',
+    code          TEXT NOT NULL DEFAULT '',
+    pattern       TEXT NOT NULL,
+    is_active     INTEGER DEFAULT 1,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(entity_type, category, subcategory)
+  );
+  CREATE TABLE IF NOT EXISTS sku_counters (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type   TEXT NOT NULL,
+    scope_key     TEXT NOT NULL,
+    next_seq      INTEGER NOT NULL DEFAULT 1,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(entity_type, scope_key)
+  );
+  CREATE TABLE IF NOT EXISTS sku_settings (
+    entity_type   TEXT PRIMARY KEY,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Seed the ONE fallback rule — the row a category with no rule of its own lands
+// on, so every new material gets a code from the first save rather than after a
+// setup screen. INSERT OR IGNORE, so an operator who has since edited the
+// default pattern keeps their edit through every boot.
+//
+// It is deliberately GEN-0001 and not a letter: the letters are the tenant's to
+// choose per category (Ash's example: dried fruits start with B), and picking
+// one here would put a wrong-looking code on their catalogue while they are
+// still deciding. Nothing else is seeded — a shipped guess at somebody's
+// category scheme is the same mistake the empty income list documents.
+//
+// The prefix goes in `code` and renders through {CAT} rather than sitting in
+// the pattern as the literal "GEN". Same output either way; the difference is
+// that the settings screen's plain controls can describe this rule, so editing
+// the fallback never puts a formula in front of an operator.
+try {
+  db.prepare(`INSERT OR IGNORE INTO sku_rules (entity_type, category, subcategory, code, pattern)
+              VALUES ('material', '', '', 'GEN', '{CAT}-{SEQ:4}')`).run();
+} catch (e) { console.error('[sku] default rule seed', e); }
+
+// The first cut of that seed wrote the prefix as a literal ('GEN-{SEQ:4}', no
+// code), which the plain controls can only show as a custom format. Rewrite it
+// — but ONLY where it is still untouched, so an operator who has since edited
+// their fallback keeps what they chose. Guarded so it runs once.
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('sku_default_rule_code_v1');
+  if (!done) {
+    db.prepare(`UPDATE sku_rules SET code = 'GEN', pattern = '{CAT}-{SEQ:4}'
+                 WHERE entity_type = 'material' AND category = '' AND subcategory = ''
+                   AND pattern = 'GEN-{SEQ:4}' AND code = ''`).run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('sku_default_rule_code_v1');
+  }
+} catch (e) { console.error('[sku] default rule code migration', e); }
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
