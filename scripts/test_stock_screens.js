@@ -233,6 +233,13 @@ function stub(o) {
     '  if(url.indexOf("/quick-stock/context")>-1) body=FAIL.context?{success:false,error:"context down"}:{success:true,data:CTX};\n' +
     '  else if(/\\/stock\\/\\d+$/.test(url)) body=FAIL.write?{success:false,error:"write down"}:{success:true,data:{}};\n' +
     '  else if(/\\/stock$/.test(url)) body=FAIL.stock?{success:false,error:"stock down"}:{success:true,data:STOCK};\n' +
+    // THE RESTOCK API REFUSES THIS FIXTURE, DELIBERATELY. These 26 cases are the
+    // Quick Stock surface as a counting operator sees it, and /stock is served to
+    // two realms: a Mini App Backend session gets a 403 from /api/restock and so
+    // never sees the launcher or the transfer screens. Answering 200 here would
+    // land every case on the Stock home instead of the list under test. The
+    // launcher has its own suite — scripts/test_stock_home.js.
+    '  else if(url.indexOf("/api/restock")===0) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '  else body={success:true,data:{}};\n' +
     '  return Promise.resolve({status:200,json:function(){return Promise.resolve(body)}});};\n' +
     '</scr' + 'ipt>';
