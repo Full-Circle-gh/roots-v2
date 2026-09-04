@@ -77,8 +77,34 @@ check('and gains nothing else — this is a queue, not the backend', () => {
   assert.deepStrictEqual([...kitchenCaps].sort(), ['quickstock:add', 'restock:fulfil'].sort());
 });
 
-check('store_stock is untouched by any of this', () => {
-  assert.deepStrictEqual(caps.PRESETS.store_stock, ['quickstock:recount']);
+/* THE KITCHEN'S GRANT DID NOT LEAK INTO THE OTHER RESTRICTED STOCKER, which is
+   the property this case was always about — the two roles are refused each
+   other's job, and a change to one must not quietly widen the other.
+
+   IT USED TO ASSERT THE WHOLE LIST, and that made it a change-detector rather
+   than a test. store_stock legitimately grew `restock:request` and
+   `restock:receive` in "The restock notifications reach the people who do the
+   work" — the shelf clerk is exactly who asks for stock and counts a delivery
+   in, and #267 had already given them both tiles. That was a deliberate
+   decision with a comment on it in lib/capabilities.js, and this line went red
+   for it and stayed red, because nothing runs these files. A test that fails on
+   correct changes teaches people to ignore it, and this one had already taught
+   that lesson by the time anybody looked.
+
+   So it asserts the invariant instead: whatever else the shelf clerk gains,
+   they never gain the kitchen's two, and they never lose the recount that IS
+   their job. */
+check('store_stock never gains the kitchen’s capabilities', () => {
+  const clerk = caps.PRESETS.store_stock;
+  assert.ok(clerk.indexOf('quickstock:add') < 0,
+    `store_stock holds quickstock:add — the kitchen's add door, not the clerk's: ${JSON.stringify(clerk)}`);
+  assert.ok(clerk.indexOf('restock:fulfil') < 0,
+    `store_stock holds restock:fulfil — it would put the shelf clerk in the kitchen queue: ${JSON.stringify(clerk)}`);
+});
+
+check('and keeps the recount that is its whole job', () => {
+  assert.ok(caps.PRESETS.store_stock.indexOf('quickstock:recount') >= 0,
+    `store_stock lost quickstock:recount: ${JSON.stringify(caps.PRESETS.store_stock)}`);
 });
 
 // ── 2. The migration, against a real database ──────────────────────────────
