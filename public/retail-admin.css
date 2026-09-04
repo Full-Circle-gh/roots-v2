@@ -13406,9 +13406,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     text-decoration: line-through; opacity: .65;
   }
   #tab-recipes-record .rcp-line .rcp-input { width: auto; }
-  #tab-recipes-record .rcp-line-qty { width: 90px; flex: none; }
-  #tab-recipes-record .rcp-line-unit { width: 70px; flex: none; }
-  #tab-recipes-record .rcp-line-note { width: 140px; flex: none; }
+  /* .rcp-line prefixed on each, matching the reset above's specificity: without
+     it, "auto" (1 ID + 2 classes) beat these (1 ID + 1 class) regardless of
+     source order, so every qty/unit/note box rendered at its browser-default
+     width instead of the fixed one — and, drifting wider row by row, no
+     longer lined up under .rcp-lhead's fixed-width labels above it. */
+  #tab-recipes-record .rcp-line .rcp-line-qty { width: 90px; flex: none; }
+  #tab-recipes-record .rcp-line .rcp-line-unit { width: 70px; flex: none; }
+  #tab-recipes-record .rcp-line .rcp-line-note { width: 140px; flex: none; }
   #tab-recipes-record .rcp-line-cost { width: 90px; flex: none; text-align: right; font-size: 13px;
     color: var(--td-text2); font-variant-numeric: tabular-nums; }
   #tab-recipes-record .rcp-line-rm { flex: none; cursor: pointer; color: var(--td-text2);
