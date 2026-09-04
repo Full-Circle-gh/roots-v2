@@ -140,9 +140,9 @@ function stub(me) {
   </script>`;
 }
 
-// The verdict is stashed in sessionStorage before anything navigates, and the
-// landing page reads it back — so a case that leaves still reports what it
-// proved on the way out.
+// The verdict is stashed in sessionStorage, which the frame and the page around
+// it share, because the case that proves the exit works LEAVES: its own document
+// is gone by the time anything reads the answer.
 const harness = (body) => `<script>
   addEventListener('load', function () { setTimeout(function () {
     var out = [];
@@ -155,22 +155,41 @@ const harness = (body) => `<script>
   }, 300); });
 </script>`;
 
-const LANDED = '<!doctype html><html><head><meta charset="utf-8"><title>x</title></head><body>home'
-  + '<script>document.title = "LANDED " + (sessionStorage.getItem("probe") || "no verdict");</script>'
-  + '</body></html>';
+// THE TILL RUNS IN A FRAME, and the verdict is read from outside it. The exit
+// is a real navigation, and a top-level one takes the dumped page with it:
+// --dump-dom hands back the new document while it is still empty, so every case
+// that proved the control WORKS came back as a page with no title at all. In a
+// frame the navigation happens where it can be observed — the outer page stays
+// put, reads which document the frame ended on, and answers for both.
+const WRAP = (i) => `<!doctype html><html><head><meta charset="utf-8"><title>x</title></head>
+<body style="margin:0"><iframe id="f" src="/till/${i}" style="width:500px;height:900px;border:0"></iframe>
+<script>
+  addEventListener('load', function () { setTimeout(function () {
+    var where = '?';
+    try { where = document.getElementById('f').contentWindow.location.pathname; } catch (e) {}
+    var v = 'no verdict';
+    try { v = sessionStorage.getItem('probe') || v; } catch (e) {}
+    document.title = (where === '/m' ? 'LANDED ' : '') + v;
+  }, 1200); });
+</script></body></html>`;
+
+const LANDED = '<!doctype html><html><head><meta charset="utf-8"><title>home</title></head><body>home</body></html>';
 
 function serve() {
   return new Promise((resolve) => {
     const srv = http.createServer((req, res) => {
       const p = req.url.split('?')[0];
-      if (p === '/m') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(LANDED); return; }
-      const m = p.match(/^\/case\/(\d+)$/);
+      const html = { 'Content-Type': 'text/html; charset=utf-8' };
+      if (p === '/m') { res.writeHead(200, html).end(LANDED); return; }
+      const c = p.match(/^\/case\/(\d+)$/);
+      if (c && CASES[+c[1]]) { res.writeHead(200, html).end(WRAP(+c[1])); return; }
+      const m = p.match(/^\/till\/(\d+)$/);
       if (!m || !CASES[+m[1]]) { res.writeHead(404).end('no'); return; }
       const [, me, , body] = CASES[+m[1]];
-      const html = src
+      const page = src
         .replace(/<script>\n\(function \(\) \{/, stub(me) + '\n<script>\n(function () {')
         .replace('</body>', harness(body) + '</body>');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(html);
+      res.writeHead(200, html).end(page);
     });
     // unref: a keep-alive socket left behind by the last browser would hold the
     // runner open after the last case, with nothing on screen to say why.
@@ -202,7 +221,7 @@ function serve() {
         // timeout.
         '--no-proxy-server', '--disable-background-networking', '--no-first-run',
         '--user-data-dir=' + profile, '--window-size=500,940',
-        '--virtual-time-budget=2500', '--dump-dom', base + '/case/' + i]);
+        '--virtual-time-budget=4000', '--dump-dom', base + '/case/' + i]);
     } catch (e) { fail(`${name} — chrome failed: ${e.message}`); console.log(`  ✗ ${name}`); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     const landed = title.startsWith('LANDED');
