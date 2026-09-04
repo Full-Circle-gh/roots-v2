@@ -76,8 +76,25 @@ const QUARANTINE = {
      long as anybody has looked, the answer was "test:mobile fails" and WHICH of
      the 24 was red took a 9-minute run and a scroll to find out. Running the
      files separately named them in the first pass. */
+  /* DATE-EXPIRED, AND DO NOT DELETE THIS ENTRY ON ONE GREEN RUN. The case
+     asserts the head band reads "¥6,080 this month", and ¥6,080 is exactly the
+     Ordered+Delivered total of the fixture's AUGUST 2026 orders (3240 + 1880 +
+     960). statusPurchasing() sums orders whose date is in the CURRENT month
+     (`GZ_ISO().slice(0,7)`), and every order in the fixture is dated August or
+     July 2026 — so the assertion was true in August and false from 1 September,
+     without anybody touching the code it tests.
+
+     It is red here reproducibly and was GREEN on the first CI run, on the same
+     commit and the same calendar day. That divergence is NOT explained yet, so
+     the "now GREEN" line this runner prints must not be taken at face value for
+     this file. Whatever the cause, the assertion is still wrong in the same way:
+     it encodes a moment rather than a property, which is the same defect as the
+     store_stock literal-list assertion fixed alongside this runner. The fix is
+     to date the fixture relative to today, not to re-record the figure. */
   'test_mobile_purchasing.js':
-    'mobile-purchasing: 1 of 9 cases — the ledger does not state this month’s spend.',
+    'mobile-purchasing: 1 of 9 cases — asserts "¥6,080 this month", which is the ' +
+    'fixture’s AUGUST total; the screen sums the CURRENT month, so it expired on ' +
+    '1 Sep. Green on one CI run, red locally on the same day — divergence unexplained.',
   'test_mobile_trend.js':
     'mobile-trend: 2 of 10 cases — both ends of the line are not dated, and ' +
     'switching range does not re-ask the server for thirty days.',
