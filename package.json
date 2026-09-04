@@ -78,6 +78,7 @@
     "test:queue-stall": "node scripts/test_meituan_queue_stall.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
     "test:stock-screens": "node scripts/test_stock_screens.js",
+    "test:stock-receiving": "node scripts/test_stock_receiving.js",
     "test:guanyi-expiry": "node scripts/test_guanyi_session_expiry.js",
     "test:stock-movement": "node scripts/test_stock_two_step.js && node scripts/test_stock_two_step_tenant2.js",
     "test:restock-handles": "node scripts/test_restock_tenant_handle.js && node scripts/test_restock_tenant2_split.js && node scripts/test_created_by_fk_migration.js",
