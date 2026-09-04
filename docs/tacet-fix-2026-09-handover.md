@@ -11,7 +11,7 @@ nothing here has deployed. Every commit carries `[skip deploy]` as well.
 
 ## 1. What is fixed
 
-Twenty commits, worked strictly down by severity. Both Critical findings that
+Twenty-two commits, worked strictly down by severity. Both Critical findings that
 could be fixed without a decision, every High that could, and fifteen Mediums
 and Lows that were cheap and clearly right — 33 findings in all.
 
@@ -247,19 +247,39 @@ note is in the document.
 
 ## 5. How to check this
 
-No test suite was run: this container has no `node_modules` and no registry
-access, so `npm install` and `npx eslint` both fail. What was run, on every
-commit:
+**`main` gained a CI test runner (#272) while this branch was in flight.** It is
+merged in, and it has been run.
+
+**60 of the 115 fast suites pass.** The other 49 cannot run in this container —
+they need `better-sqlite3` or `express`, and there is no registry access to
+install them. Six more were already quarantined as red on `main` before this
+branch existed, and are unchanged by it. The slow shard needs Chromium and was
+not attempted.
+
+**The runner caught four failures, all of them mine, none a product defect** —
+and one of the four was a real bug. See the last commit for the detail; in
+short: two source-greps named a database handle that D-01 correctly changed, a
+VM sandbox was missing the currency helpers D-03 introduced, and the broadcast
+composer was echoing a typed time back shifted by the store's offset. That last
+one only shows up on a host that is not at UTC+8, which is why only a test could
+find it. It is fixed, with a zone-inversion helper that round-trips exactly at
+Asia/Shanghai, America/New_York and Europe/London.
+
+Also run, on every commit:
 
 - `node --check` on every changed JavaScript file
-- `scripts/check-html-js.js` on `public/retail-admin.html`
+- `scripts/check-html-js.js` on every changed HTML file
+- `scripts/check-tenant-als.js` — **passes**, all 24 call sites enter the tenant
+  scope with a raw handle, which is the check that matters most for D-01
+- `scripts/check-i18n-banners.js` — **passes**, 27 files
 - scripted verification per change — every SQL column resolved against its
   table, the low-stock predicate diffed against the dashboard's, the column
   percentages re-summed, the accessible-name coverage re-counted, the new role
   preset resolved through `lib/capabilities`
 
-Before any of this reaches `main` it needs the suite run somewhere that can
-install. The changes with real behaviour risk, in order:
+`npx eslint` still cannot run here (no `node_modules`), so before this reaches
+`main` it needs a full run somewhere that can install — the CI workflow on a PR
+will do exactly that. The changes with real behaviour risk, in order:
 
 1. **J-01's ceilings** — six list endpoints changed shape. The ceilings are far
    above any real list, so the risk is a client reading `data` from a response
