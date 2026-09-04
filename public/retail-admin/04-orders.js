@@ -25,6 +25,10 @@ let _ordClampRetry = false;   // guards the one refetch when a page falls off th
 // "View all N orders" path from a customer's drawer). null = every customer.
 // Read by loadOrders() alongside the DOM filters; surfaced as a removable chip.
 let ORD_CUSTOMER_FILTER = null;
+// The rows currently painted. Held so the bulk bar can reason about what is
+// ticked — which step each selected order could actually move to — without
+// re-reading it out of the DOM.
+let ORD_ROWS = [];
 
 // A filter re-cuts the result set, so the current page number no longer
 // points at the same orders. Start over at page 1.
@@ -1139,6 +1143,176 @@ function ordRepaintKpiLabels() {
     money, cuT('order', '单'));
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   BULK ACTIONS ON ORDERS (audit E-03 / F-01)
+
+   Orders is the screen a merchant lives in, and until now every row was acted
+   on one at a time: marking twenty orders dispatched was twenty trips into the
+   drawer, sixty clicks where three would do. Products has had a proper
+   selection bar for a long time; this is that bar, on the list that needed it
+   most, reusing the same .pa-bulkbar-sel / .pa-bm classes so the two screens
+   look and behave alike.
+
+   🔴 WHAT IS DELIBERATELY NOT HERE: refund and cancel. Both move real money,
+   both are irreversible, and neither has a shape where doing twenty at once is
+   safer than doing them one at a time. A bulk refund is the single most
+   expensive mis-click this admin could offer and it is not offered. Everything
+   here is a FORWARD step on the fulfilment track — the same PATCH /status call
+   the drawer's own buttons make, one order at a time, with the server's
+   transition guard applying to each.
+
+   Read-only channel rows (the Meituan / gzgrocery mirrors) cannot be selected
+   at all: their state belongs to the platform that owns them, so a tick would
+   promise something the row cannot do.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let ORD_SELECTED = new Set();
+let ORD_VISIBLE_SELECTABLE = [];
+
+// Which of the ticked orders this action could actually move, judged from the
+// rows on screen. Purely to word the confirmation honestly — the server's
+// STATUS_TRANSITIONS is the real authority and each order is still checked
+// there. Mirrors routes/retail.js STATUS_TRANSITIONS; if that gains a step,
+// this list is the other half to update.
+const ORD_BULK_FROM = {
+  preparing:  ['paid', 'awaiting_restock'],
+  dispatched: ['preparing', 'paid'],
+  delivered:  ['dispatched'],
+};
+
+function ordSelectableRows() {
+  return (ORD_ROWS || []).filter(o => !ordIsReadonlyChannel(o));
+}
+
+function ordToggleSelect(id, ev) {
+  if (ev) ev.stopPropagation();
+  const n = Number(id);
+  if (ORD_SELECTED.has(n)) ORD_SELECTED.delete(n); else ORD_SELECTED.add(n);
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+function ordSelectAllVisible(on) {
+  ORD_VISIBLE_SELECTABLE.forEach(id => on ? ORD_SELECTED.add(id) : ORD_SELECTED.delete(id));
+  document.querySelectorAll('#orders-table tbody input.ord-sel').forEach(cb => {
+    cb.checked = ORD_SELECTED.has(Number(cb.dataset.id));
+  });
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+function ordClearSelection() {
+  ORD_SELECTED = new Set();
+  document.querySelectorAll('#orders-table tbody input.ord-sel').forEach(cb => { cb.checked = false; });
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+// The header tick has three honest states, not two: all of this page, none of
+// it, or some — which is what indeterminate is for. Without it, "some selected"
+// renders as "none selected" and clicking once appears to do nothing.
+function ordSyncSelectAll() {
+  const all = document.getElementById('ord-sel-all');
+  if (!all) return;
+  const n = ORD_VISIBLE_SELECTABLE.filter(id => ORD_SELECTED.has(id)).length;
+  all.checked = n > 0 && n === ORD_VISIBLE_SELECTABLE.length;
+  all.indeterminate = n > 0 && n < ORD_VISIBLE_SELECTABLE.length;
+  all.disabled = ORD_VISIBLE_SELECTABLE.length === 0;
+}
+
+function ordRenderBulkBar() {
+  const bar = document.getElementById('ord-bulkbar');
+  if (!bar) return;
+  const n = ORD_SELECTED.size;
+  if (!n) { bar.className = ''; bar.innerHTML = ''; return; }
+
+  // How many of the ticked orders each step can actually move. A step that can
+  // move none of them is greyed and says why on hover, rather than being
+  // offered and then failing on every order.
+  const picked = (ORD_ROWS || []).filter(o => ORD_SELECTED.has(o.id));
+  const movable = to => picked.filter(o => (ORD_BULK_FROM[to] || []).includes(o.status)).length;
+
+  const step = (to, en, cn) => {
+    const k = movable(to);
+    const dis = k ? '' : 'disabled';
+    const title = k === n ? '' : (k
+      ? ` title="${escapeHtml(cuT(k + ' of the ' + n + ' selected can move to this step', n + ' 单中有 ' + k + ' 单可进入此步骤'))}"`
+      : ` title="${escapeHtml(cuT('None of the selected orders can move to this step', '所选订单均无法进入此步骤'))}"`);
+    return `<button type="button" class="pa-bm-trig" ${dis}${title} onclick="ordBulkStatus('${to}')">`
+      + escapeHtml(cuT(en, cn)) + (k && k !== n ? ` <span class="muted">${k}</span>` : '') + `</button>`;
+  };
+
+  const visN = ORD_VISIBLE_SELECTABLE.length;
+  const allVis = visN > 0 && ORD_VISIBLE_SELECTABLE.every(id => ORD_SELECTED.has(id));
+  bar.className = 'pa-bulkbar-sel';
+  bar.innerHTML =
+    `<span class="pa-bulk-count"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4L6 11 3 8"/></svg>`
+      + escapeHtml(cuT(n + ' selected', '已选 ' + n + ' 单')) + `</span>`
+    + `<button type="button" class="btn btn-sm" onclick="ordSelectAllVisible(${allVis ? 'false' : 'true'})">`
+      + escapeHtml(allVis ? cuT('Clear page', '清空本页') : cuT('Select all ' + visN, '全选 ' + visN)) + `</button>`
+    + `<button type="button" class="btn btn-sm" onclick="ordClearSelection()">${escapeHtml(cuT('Clear', '清除'))}</button>`
+    + `<span class="pa-bulk-actions">`
+      + step('preparing',  'Start preparing', '开始备货')
+      + step('dispatched', 'Mark dispatched', '标记发货')
+      + step('delivered',  'Mark delivered',  '标记送达')
+    + `</span>`;
+}
+
+// Move every ticked order one step forward. One PATCH per order — the same
+// call the drawer makes — so the server's transition guard applies to each and
+// an order that cannot move is reported rather than silently skipped.
+async function ordBulkStatus(to) {
+  const picked = (ORD_ROWS || []).filter(o => ORD_SELECTED.has(o.id));
+  const can = picked.filter(o => (ORD_BULK_FROM[to] || []).includes(o.status));
+  if (!can.length) return;
+  const label = { preparing: cuT('Start preparing', '开始备货'),
+                  dispatched: cuT('Mark dispatched', '标记发货'),
+                  delivered: cuT('Mark delivered', '标记送达') }[to] || to;
+
+  // The confirmation names BOTH numbers when they differ. "Move 20 orders" when
+  // only 14 can move is the kind of quiet arithmetic that makes an operator
+  // stop trusting the screen.
+  const skipped = picked.length - can.length;
+  if (!(await askConfirm({
+    titleEn: `${label} — ${can.length} order${can.length === 1 ? '' : 's'}?`,
+    titleCn: `${label} — ${can.length} 单?`,
+    bodyEn: skipped
+      ? `${skipped} of the ${picked.length} you selected ${skipped === 1 ? 'is' : 'are'} not at a step this can move from, and will be left alone.`
+      : '',
+    bodyCn: skipped ? `所选 ${picked.length} 单中有 ${skipped} 单当前状态无法进入此步骤,将保持不变。` : '',
+    confirmEn: label, confirmCn: label,
+  }))) return;
+
+  toast(cuT('Working…', '处理中…'));
+  let done = 0; const failed = [];
+  for (const o of can) {
+    try {
+      await api(`/api/retail-admin/orders/${o.id}/status`, { method: 'PATCH', body: { status: to } });
+      done++;
+    } catch (e) {
+      failed.push(ordShortNo(o.order_no) + ' — ' + e.message);
+    }
+  }
+  // A failure names the orders, not just a count: "3 failed" leaves the
+  // operator to find which three by hand across a paged list.
+  if (failed.length) {
+    await askConfirm({
+      titleEn: `${done} moved, ${failed.length} could not`,
+      titleCn: `${done} 单已处理,${failed.length} 单失败`,
+      bodyEn: failed.slice(0, 10).map(escapeHtml).join('<br>')
+        + (failed.length > 10 ? `<br>…and ${failed.length - 10} more` : ''),
+      bodyCn: failed.slice(0, 10).map(escapeHtml).join('<br>')
+        + (failed.length > 10 ? `<br>…还有 ${failed.length - 10} 单` : ''),
+      confirmEn: 'OK', confirmCn: '好',
+      hideCancel: true,
+    });
+  } else {
+    toast(cuT('Moved ' + done + ' ✓', '已处理 ' + done + ' 单 ✓'), 'ok');
+  }
+  ORD_SELECTED = new Set();
+  loadOrders();
+}
+
 // ── The Orders filter, read from the controls in ONE place ─────────────────
 // Three callers need the same answer: the list, the CSV export and the
 // clear-filters control. Returns the filter half of the query string only —
@@ -1237,7 +1411,7 @@ async function loadOrders(opts = {}) {
     qs.set('offset', (ORD_PAGE - 1) * ORD_PAGE_SIZE);
     const tbody = $('#orders-table tbody');
     if (!silent) {
-      tbody.innerHTML = '<tr><td colspan="10" class="muted">Loading…</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="muted">Loading…</td></tr>';
     }
     // Populate the store filter once stores are loaded.
     ensureOrdersStoreFilter();
@@ -1251,7 +1425,7 @@ async function loadOrders(opts = {}) {
       j = await api('/api/retail-admin/orders?' + qs);
     } catch (e) {
       if (!silent && myReq === _ORDERS_REQ_ID) {
-        tbody.innerHTML = `<tr><td colspan="10" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
       }
       return;
     }
@@ -1309,7 +1483,7 @@ async function loadOrders(opts = {}) {
            <p class="muted">Orders show up here when a customer asks for an invoice. · 顾客申请开票的订单会显示在这里。</p>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
-      tbody.innerHTML = `<tr><td colspan="10">
+      tbody.innerHTML = `<tr><td colspan="11">
         <div class="empty-state">
           <div class="icon">${ICONS.empty}</div>
           ${emptyMsg}
@@ -1337,6 +1511,17 @@ async function loadOrders(opts = {}) {
       ? j.data.filter(o => isActionable(o) && !prevNotified.has(o.id))
       : [];
 
+    ORD_ROWS = j.data;
+    ORD_VISIBLE_SELECTABLE = ordSelectableRows().map(o => o.id);
+    // A selection does not survive the rows it pointed at. Orders leave the
+    // filter on their own (a status change, an auto-refresh, the next page), and
+    // acting on an id that is no longer on screen is a bulk action on an unknown
+    // set. Drop anything that is no longer selectable here.
+    {
+      const live = new Set(ORD_VISIBLE_SELECTABLE);
+      ORD_SELECTED.forEach(id => { if (!live.has(id)) ORD_SELECTED.delete(id); });
+    }
+
     tbody.innerHTML = j.data.map(o => {
       // No flash / no NEW mark for unpaid orders — nothing to act on yet.
       const fresh = (isActionable(o) && prevSeen && !prevSeen.has(o.id)) ? ' is-fresh' : '';
@@ -1356,7 +1541,10 @@ async function loadOrders(opts = {}) {
       const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
+        <td class="oc-sel">${ro ? '' : `<input type="checkbox" class="ord-sel" data-id="${o.id}"${ORD_SELECTED.has(o.id) ? ' checked' : ''}
+             onclick="ordToggleSelect(${o.id}, event)"
+             aria-label="Select order ${escapeHtml(ordShortNo(o.order_no))}">`}</td>
+        <td class="oc-ord"><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -1374,6 +1562,9 @@ async function loadOrders(opts = {}) {
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
+
+    ordRenderBulkBar();
+    ordSyncSelectAll();
 
     _ORDERS_SEEN_IDS = newIds;
     _ORDERS_NOTIFIED_IDS = actionableIds;
@@ -5332,6 +5523,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const row = document.activeElement && document.activeElement.closest && document.activeElement.closest('tr.order-row');
   if (!row) return;
+  // The row's own selection checkbox is inside the row, so without this Space
+  // would tick it AND open the drawer, and the preventDefault below would stop
+  // the tick from registering at all. Same bail the click handler makes.
+  if (document.activeElement.matches('input, button, a, select, textarea')) return;
   e.preventDefault();
   const id = row.dataset.orderId;
   if (id) openOrder(Number(id));

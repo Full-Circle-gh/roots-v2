@@ -12,7 +12,10 @@
 //   askConfirm(opts) -> Promise<boolean>
 //     opts: { title|titleEn+titleCn, body|bodyEn+bodyCn (may contain simple HTML
 //            like <b>), confirmLabel|confirmEn+confirmCn, cancelLabel|cancelEn+cancelCn,
-//            danger: bool, matchWord: string (optional typed-confirmation gate) }
+//            danger: bool, matchWord: string (optional typed-confirmation gate),
+//            hideCancel: bool — drops the Cancel button, turning the dialog into
+//            an acknowledgement ("here is what happened") rather than a question.
+//            Escape and the backdrop still dismiss it. }
 //   askPrompt(opts) -> Promise<string|null>   -- single-line text input
 //     opts: { title|titleEn+titleCn, label|labelEn+labelCn, value, placeholder|phEn+phCn,
 //            submitLabel|submitEn+submitCn, cancelLabel|cancelEn+cancelCn, danger: bool }
@@ -191,8 +194,14 @@
       <h3 class="tdlg-title">${title}</h3>
       ${body ? `<p class="tdlg-msg">${body}</p>` : ''}
       ${gateField}`;
+    // hideCancel turns this into an ACKNOWLEDGEMENT rather than a question:
+    // one button, which closes it. For reporting an outcome the operator can do
+    // nothing about — "14 moved, 3 could not, here is which three". Two buttons
+    // that both mean "I have read this" is a choice that isn't one, and the
+    // ghost button reads as "undo" when there is nothing to undo.
+    // Escape and the scrim still close it, exactly as they always did.
     const footHtml = `
-      <button class="tdlg-btn tdlg-btn--ghost" data-cancel>${cancelLabel}</button>
+      ${opts.hideCancel ? '' : `<button class="tdlg-btn tdlg-btn--ghost" data-cancel>${cancelLabel}</button>`}
       <button class="tdlg-btn ${danger ? 'tdlg-btn--danger' : 'tdlg-btn--primary'}" data-submit ${opts.matchWord ? 'disabled' : ''}>${confirmLabel}</button>`;
     const focusSel = opts.matchWord ? '#tdlg-gate' : '[data-submit]';
     const { scrim, closer, ready } = openScrim(kindClass, bodyHtml, footHtml, focusSel);

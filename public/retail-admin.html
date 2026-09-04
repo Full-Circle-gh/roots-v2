@@ -2420,8 +2420,10 @@
          a mangled multi-line header row. */
       #orders-table thead th { white-space: nowrap; }
       /* Order # cell — fixed-width digit alignment so the live-poll refresh
-         doesn't jitter the column when a row swaps in. */
-      #orders-table td:first-child { font-variant-numeric: tabular-nums; }
+         doesn't jitter the column when a row swaps in. Addressed by CLASS, not
+         :first-child: the selection column now sits to its left, and a
+         positional selector would have quietly moved this to the checkbox. */
+      #orders-table td.oc-ord { font-variant-numeric: tabular-nums; }
       /* Read-only channel rows (Meituan / gzgrocery) — a mirrored ledger, not a
          worklist item. They open a view-only detail drawer (product / SKU / qty)
          but carry no fulfilment actions. The channel cell renders identically to
@@ -2637,16 +2639,26 @@
          query switching to px widths, or a min-width on the table plus
          horizontal scroll — and the latter is already ruled out above. */
       #orders-table { table-layout: fixed; }
+      /* The selection column (bulk actions) costs 3%, taken one point each from
+         Channel, Status and Delivery — the three with slack. Items (6%) and
+         Placed (12%) are NOT touched: both are at a measured floor, stated
+         below and enforced by the overflow rule further down. The eleven
+         percentages still sum to exactly 100. */
+      #orders-table col.oc-c-sel      { width:  3%; }
       #orders-table col.oc-c-ord      { width:  9%; }
-      #orders-table col.oc-c-chan     { width: 10%; }
+      #orders-table col.oc-c-chan     { width:  9%; }
       #orders-table col.oc-c-cust     { width: 10%; }
       #orders-table col.oc-c-store    { width:  8%; }
       #orders-table col.oc-c-shipto   { width:  9%; }
       #orders-table col.oc-c-items    { width:  6%; }
       #orders-table col.oc-c-total    { width:  8%; }
-      #orders-table col.oc-c-status   { width: 15%; }
-      #orders-table col.oc-c-delivery { width: 13%; }
+      #orders-table col.oc-c-status   { width: 14%; }
+      #orders-table col.oc-c-delivery { width: 12%; }
       #orders-table col.oc-c-placed   { width: 12%; }
+      /* The checkbox cell is a target, not a text cell: centred, tight, and
+         with a hit area big enough to press on a laptop trackpad. */
+      #orders-table th.oc-sel, #orders-table td.oc-sel { text-align: center; padding-left: 4px; padding-right: 4px; }
+      #orders-table th.oc-sel input, #orders-table td.oc-sel input { width: 16px; height: 16px; cursor: pointer; margin: 0; vertical-align: middle; }
       /* 6% is Items' floor, and the binding constraint is its own HEADER, not
          its data: "Items" needs ~58px, the digit needs ~45. At 5% the header
          overflows into Total at 996px — measured, not assumed. Placed at 12%
@@ -2683,16 +2695,26 @@
     <!-- Customer-scope chip: shown only when the list is filtered to one
          customer (the "View all N orders" path from a customer's drawer). -->
     <div id="orders-cust-chip" class="ord-cust-chip" hidden></div>
+    <!-- Bulk selection bar. A MODE, not furniture: it is absent until the
+         operator ticks something, exactly as the Products bar behaves. Painted
+         by ordRenderBulkBar(). -->
+    <div id="ord-bulkbar"></div>
     <div class="list-card">
       <div class="table-wrap">
         <table id="orders-table">
           <colgroup>
-            <col class="oc-c-ord"><col class="oc-c-chan"><col class="oc-c-cust"><col class="oc-c-store"><col class="oc-c-shipto"><col class="oc-c-items"><col class="oc-c-total"><col class="oc-c-status"><col class="oc-c-delivery"><col class="oc-c-placed">
+            <col class="oc-c-sel"><col class="oc-c-ord"><col class="oc-c-chan"><col class="oc-c-cust"><col class="oc-c-store"><col class="oc-c-shipto"><col class="oc-c-items"><col class="oc-c-total"><col class="oc-c-status"><col class="oc-c-delivery"><col class="oc-c-placed">
           </colgroup>
           <thead><tr>
+            <!-- Select-all applies to THIS PAGE, which is why its label says so.
+                 A tick that silently selected orders on pages the operator
+                 cannot see would be a bulk action on an unknown set. -->
+            <th class="oc-sel"><input type="checkbox" id="ord-sel-all" onchange="ordSelectAllVisible(this.checked)"
+                                      title="Select every order on this page · 选择本页全部订单"
+                                      aria-label="Select every order on this page"></th>
             <th>Order # · 订单号</th><th>Channel · 渠道</th><th>Customer · 顾客</th><th>Store · 门店</th><th>Ship to · 收货地</th><th>Items · 商品</th><th class="numeric">Total · 合计</th><th>Status · 状态</th><th>Delivery · 配送</th><th>Placed · 下单时间</th>
           </tr></thead>
-          <tbody><tr><td colspan="10" class="muted">Loading · 加载中…</td></tr></tbody>
+          <tbody><tr><td colspan="11" class="muted">Loading · 加载中…</td></tr></tbody>
         </table>
       </div>
 
