@@ -2366,6 +2366,69 @@ function awaitingRestockStore(o) {
 // landing at the store flips the order back to Paid on its own. Without that
 // sentence the card reads as a task, and staff chase an order that is already
 // being watched.
+// ── The shop's own note on an order ─────────────────────────────────────────
+//
+// Orders have carried a `staff_note` since manual orders were built, and until
+// now the ONLY place it could be typed was the New order form: an order that
+// arrived from the shop, the website or a marketplace could never be annotated,
+// because the only endpoint that accepted a note was the status route and that
+// refuses a request carrying no status transition. "Customer rang, leave it
+// next door" had nowhere to go.
+//
+// Collapsed to a single line when empty so it costs nothing on a drawer nobody
+// needs it on; the Save button appears only once the text differs from what is
+// stored, so an operator reading an order never sees an action they have no
+// reason to take.
+function staffNoteBlock(o) {
+  const note = o.staff_note || '';
+  return `<div class="full ord-note" data-order-id="${o.id}">
+    <div class="kicker">Shop note · 店铺备注</div>
+    <textarea class="ord-note-in" rows="${note ? 3 : 1}" maxlength="2000"
+      data-ph-en="Add a note for whoever handles this order" data-ph-cn="给处理这张订单的同事留个备注"
+      placeholder="Add a note for whoever handles this order"
+      oninput="ordNoteChanged(${o.id})">${escapeHtml(note)}</textarea>
+    <div class="ord-note-foot" id="ord-note-foot-${o.id}" hidden>
+      <button class="btn btn-sm" type="button" onclick="ordNoteReset(${o.id})">${cuT('Cancel', '取消')}</button>
+      <button class="btn btn-sm btn-primary" type="button" onclick="ordNoteSave(${o.id}, event)">${cuT('Save note', '保存备注')}</button>
+    </div>
+  </div>`;
+}
+// Show the footer only when the text has actually changed. `_ordNoteOriginal`
+// is read from the open order rather than stashed at render time, so reopening
+// the drawer can never leave a stale baseline behind.
+function _ordNoteOriginal() { return (_OPEN_ORDER && _OPEN_ORDER.staff_note) || ''; }
+function ordNoteChanged(id) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  const foot = document.getElementById('ord-note-foot-' + id);
+  if (!wrap || !foot) return;
+  const el = wrap.querySelector('.ord-note-in');
+  foot.hidden = (el.value === _ordNoteOriginal());
+}
+function ordNoteReset(id) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  if (!wrap) return;
+  wrap.querySelector('.ord-note-in').value = _ordNoteOriginal();
+  ordNoteChanged(id);
+}
+async function ordNoteSave(id, ev) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  if (!wrap) return;
+  const el = wrap.querySelector('.ord-note-in');
+  try {
+    const j = await adminWrite({
+      btn: ev && ev.currentTarget, url: `/api/retail-admin/orders/${id}/note`,
+      method: 'PATCH', body: { staff_note: el.value },
+      busyLabel: cuT('Saving…', '保存中…'),
+      errLabelEn: 'Note not saved', errLabelCn: '备注未保存',
+    });
+    // Keep the open order in step so the baseline and a later reopen agree.
+    if (_OPEN_ORDER && _OPEN_ORDER.id === id) _OPEN_ORDER.staff_note = j.staff_note || '';
+    el.value = j.staff_note || '';
+    ordNoteChanged(id);
+    toast(cuT('Note saved', '备注已保存'));
+  } catch (e) { /* adminWrite has already said what went wrong */ }
+}
+
 function awaitingRestockCard(o) {
   const pids = awaitingRestockPids(o);
   if (!pids.length) return '';
@@ -5864,6 +5927,7 @@ function renderOpenOrder(o) {
           ${awaitingRestockCard(o)}
           ${renderAlipayProof(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
+          ${staffNoteBlock(o)}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
         </div>

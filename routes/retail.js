@@ -28194,6 +28194,37 @@ function orderHasRefundableGatewayMoney(orderId) {
   ).get(orderId, ...offline, WX_OUT_TRADE_PREFIX + '%');
 }
 
+// A NOTE ON AN ORDER, WITHOUT MOVING IT.
+//
+// `staff_note` has existed on every order since manual orders were built, and
+// until now there were exactly two ways to write one: type it into the New
+// order form, or send it alongside a STATUS CHANGE on the route below — which
+// refuses any request without a valid transition (`invalid_status`). So an
+// order that arrived from the shop, the website or a marketplace could not be
+// annotated at all: "customer called, leave it with the neighbour" had nowhere
+// to go, and the drawer never offered a field for it.
+//
+// Its own endpoint, because a note is not a state change and must not have to
+// pretend to be one. Gated as `orders:edit` automatically — lib/cap-routes.js
+// maps everything under /orders that is not a refund or a courier dispatch to
+// that capability. 2000 characters, the same ceiling the manual-order form
+// applies. An empty string clears the note; that is a legitimate edit.
+router.patch('/api/retail-admin/orders/:id/note', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const raw = (req.body || {}).staff_note;
+  if (raw != null && typeof raw !== 'string') {
+    return res.status(400).json({ success: false, error: 'staff_note_invalid', message: 'A note must be text.' });
+  }
+  const note = raw == null ? null : String(raw).slice(0, 2000);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('UPDATE retail_orders SET staff_note = ? WHERE id = ?').run(note && note.trim() ? note : null, id);
+  logActivity(req.user.id, req.user.username, 'order_note', 'retail_order', id,
+    { length: note ? note.length : 0 }, req.ip);
+  res.json({ success: true, staff_note: note && note.trim() ? note : null });
+});
+
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status, reason, staff_note, pay_method } = req.body || {};
