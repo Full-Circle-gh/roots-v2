@@ -189,6 +189,15 @@ function callRoute(router, method, routePath, { params = {}, body = {}, user, pe
   const res = {
     json: (b) => { captured = b; return res; },
     status: (c) => { statusCode = c; return res; },
+    // Header setters as chainable no-ops. Handlers that set cache or content
+    // headers before answering (the dashboard ops endpoint sets Cache-Control)
+    // would otherwise throw "res.set is not a function" and take the assertion
+    // down with them. Nothing here asserts on headers; these exist so a handler
+    // that touches them can still be driven.
+    set: () => res,
+    setHeader: () => res,
+    type: () => res,
+    send: (b) => { captured = b; return res; },
   };
   const handlers = layer.route.stack.map(s => s.handle);
   handlers[handlers.length - 1](req, res, () => {});

@@ -839,9 +839,9 @@ const good = Math.round(onHandQty(l) || 0);
 
 **Making each channel honest is separate, per-channel work and is deliberately NOT in scope here.** Per-channel rather than one change because the right answer differs by path: an unattended daemon inferring loss from a scraped listing (`scripts/guanyi-daemon.js` — already burned once by a bad read that removed 1,863 units and needed `scripts/repair_guanyi_false_pickup.js` to undo) has a real argument for keeping a floor, while an operator confirming a pickup by hand has the same argument for losing one that the picker in D1 does. **Nothing here approves stripping the other four in one pass.**
 
-## E2. THE PO-RECEIVING DOWNWARD CORRECTION — STILL OPEN, AND IT BLOCKS STEP 1b ONLY
+## E2. THE PO-RECEIVING DOWNWARD CORRECTION — RULED, AND STEP 1b IS UNBLOCKED
 
-**Ash is ruling on this now. Do not act on it.**
+**SETTLED 2026-09-03 by §39 Ruling 7: the correction goes NEGATIVE — neither clamped nor refused.** This section was headed *STILL OPEN* and carried the line *"Ash is ruling on this now. Do not act on it."* Both are now false and are removed rather than left to mislead the next reader, who would otherwise be told not to act on something already acted on. **The clamp is deleted, Step 1b has landed, and the reasoning is in the ruling; the analysis below is kept because it is what the ruling was taken against, and because it names the two prior in-writing rulings on this path that assumed the clamp would stay.**
 
 **Scope of the block, stated precisely because "blocks D1" has been read too widely.** E2 gates **Step 1b — the clamp deletion — and nothing else.** Steps 0, 1, 2, 3, 4, 5, 6 and 7 do not touch `applyReceivedToStock` and can all proceed while this is open. **The two-step transfer can ship in full with the clamp still in place**; what it cannot do is ship *honest*, because A0.2's invented units survive until Step 1b lands. B8 carries the same statement at the step itself.
 

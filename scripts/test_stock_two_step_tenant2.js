@@ -236,6 +236,43 @@ const t1Before = {
   eq(F.shelf(h.db, 1, 500), t1Before.wh, '19. and absolutely nothing moved in tenant 1');
   eq(orderRow(79).goods_state, 'none', '19. goods_state stays none');
 
+  // BOTH SIDES ARE ADDITIONS AT THE SAME POINT, KEPT IN FULL. #243 appended the
+  // clamp-removal sections here and #244 appended the retry sections; the merge
+  // could not tell them apart, but they share no fixture and assert nothing in
+  // common. The clamp sections run first because #244's makeOrder() re-seeds every
+  // shelf it uses, so a negative one left behind cannot leak into a retry case.
+  // ══ The clamp removal, on tenant 2 ═══════════════════════════════════════
+  section('§39 ruling 7 — a negative balance is written in TENANT 2, not clamped');
+  // The clamp lived in lib/inventory.js, which runs on tdb(). A tenant-1-only
+  // suite cannot tell whether the negative landed in the right database — the
+  // same blind spot that let the :333 bug through — so it is asserted here too.
+  t2.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('stock.warehouseStoreId', '3')").run();
+  const t1WhBefore = F.shelf(h.db, 1, 500);
+  t2.prepare(`INSERT INTO restock_orders (id, rs_number, date, status, store_name, created_by, from_role, to_role)
+              VALUES (80,'T2-RS-004','2026-09-03','received','T2 Shop', 7, 'warehouse','store')`).run();
+  t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku, qty_requested, qty_sent)
+              VALUES (80,501,'T2 Tortilla','T2-501',200,200)`).run();
+  const t2WhBefore = shelf2(T2_WH, 501);
+  const bust2 = setStatus(80, 'prepared');
+  ok(bust2.body && bust2.body.success && !bust2.body.stock_transfer,
+     'a dispatch larger than tenant 2\'s shelf is not refused');
+  eq(shelf2(T2_WH, 501), t2WhBefore - 200,
+     'tenant 2\'s warehouse goes NEGATIVE by the full amount — not floored at 0');
+  ok(shelf2(T2_WH, 501) < 0, 'and the balance really is below zero in tenant 2');
+  const negRow = t2.prepare(
+    "SELECT delta, balance_after FROM retail_stock_ledger WHERE ref_id = 80 AND reason = 'restock_transfer_out'").get();
+  eq(negRow.delta, -200, 'tenant 2\'s ledger records the full −200, discarding nothing');
+  ok(negRow.balance_after < 0, 'and balance_after carries the negative');
+  eq(F.shelf(h.db, 1, 500), t1WhBefore, 'tenant 1 is untouched by tenant 2 going negative');
+  eq(h.db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger').get().n, t1Before.ledger,
+     'and the shared database still has no ledger rows at all');
+
+  // A downward correction on tenant 2 — the PO-receiving case the ruling settles.
+  const inv = require(path.join(h.REPO, 'lib/inventory.js'));
+  F.setShelf(t2, T2_SHOP, 501, 1);
+  const corrected = inT2(() => inv.adjustStock({ storeId: T2_SHOP, productId: 501, deltaQty: -2, reason: 'restock' }));
+  eq(corrected.newQty, -1, 'a downward correction leaves −1 in tenant 2, not 0');
+  eq(shelf2(T2_SHOP, 501), -1, 'and tenant 2\'s shelf holds it');
   // ══ Retry a failed dispatch, on TENANT 2 ═════════════════════════════════
   // The retry delegates to _applyDispatch, which writes stock through tdb() and
   // its stamps through the same connection. A tenant-1 suite cannot tell whether
