@@ -22,22 +22,59 @@
 
 const { run } = require('./lib/m-probe');
 
+// THE FIXTURE IS ANCHORED TO TODAY, NOT TYPED IN.
+//
+// Two of this screen's figures are read against the clock: `poLate` compares an
+// arrival date with today, and the head band sums only the orders dated THIS
+// MONTH. The dates here were written as literals in August 2026, so on
+// 1 September the spend assertion began failing on a screen nobody had touched
+// — every seeded order had aged out of "this month" and the band stopped
+// printing the figure at all. A date typed into a fixture that the code reads
+// relative to now is a test with an expiry date on it.
+//
+// So they are computed from GZ_ISO(), the app's OWN Asia/Shanghai today, which
+// is the same clock the screen compares against — a fixture built from the
+// runner's UTC date would disagree with the page for eight hours a day.
+const CLOCK = `
+  var TODAY=GZ_ISO(), MONTH=TODAY.slice(0,7), FIRST=MONTH+'-01';
+  var shift=function(iso,days){ var d=new Date(iso+'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate()+days); return d.toISOString().slice(0,10); };
+  // Day 0 of this month is the last day of the previous one, whatever its length.
+  var LAST_MONTH=shift(FIRST,-1), SOON=shift(TODAY,26);
+`;
+
 // Two open orders (one of them late — Ordered, with an arrival date in the
 // past), one received, one cancelled, and one draft. Between them they cover
 // every segment, every status word and both tones.
+//
+// THE LATE ORDER IS LAST MONTH'S, and it has to be. Late means an arrival date
+// strictly before today, and this month cannot supply one on the 1st — an
+// order placed on the 1st and due on the 1st is not late until the 2nd, so a
+// fixture that kept it in-month would pass for 30 days and fail on the 31st,
+// which is the bug this comment exists to stop happening twice. An order placed
+// last month and still not delivered is what late looks like anyway. Its ¥3,240
+// is therefore outside the month's spend, which leaves ¥1,880 + ¥960 = ¥2,840:
+// the draft's ¥120 and the cancelled ¥5,000 are excluded by STATUS, not by date,
+// so the two filters are still both proven.
 const POS = `[
   {id:4, po_number:'RPO-0004', supplier:'Fresh Co.', store_name_en:'Tianhe', store_name_cn:'天河店',
-   date:'2026-08-14', delivery_date:'2026-08-16', status:'Ordered', line_count:6, received_lines:0, total_cost:3240},
+   date:LAST_MONTH, delivery_date:LAST_MONTH, status:'Ordered', line_count:6, received_lines:0, total_cost:3240},
   {id:5, po_number:'RPO-0005', supplier:'Oat Works',
-   date:'2026-08-20', delivery_date:'2026-09-30', status:'Ordered', line_count:2, received_lines:0, total_cost:1880},
+   date:FIRST, delivery_date:SOON, status:'Ordered', line_count:2, received_lines:0, total_cost:1880},
   {id:6, po_number:'RPO-0006', supplier:'Nut House',
-   date:'2026-08-10', delivery_date:'2026-08-12', status:'Delivered', line_count:3, received_lines:3, total_cost:960},
-  {id:7, po_number:'RPO-0007', supplier:'Bean Bros', date:'2026-08-21', status:'Requested', line_count:1, total_cost:120},
-  {id:8, po_number:'RPO-0008', supplier:'Gone Ltd', date:'2026-07-02', status:'Cancelled', line_count:1, total_cost:5000}
+   date:FIRST, delivery_date:FIRST, status:'Delivered', line_count:3, received_lines:3, total_cost:960},
+  {id:7, po_number:'RPO-0007', supplier:'Bean Bros', date:FIRST, status:'Requested', line_count:1, total_cost:120},
+  {id:8, po_number:'RPO-0008', supplier:'Gone Ltd', date:LAST_MONTH, status:'Cancelled', line_count:1, total_cost:5000}
 ]`;
 
-const SEEDED = `state.posTried=true; state.poList=${POS}; APP.cmd('push','purchasing');`;
+const SEEDED = `${CLOCK} state.posTried=true; state.poList=${POS}; APP.cmd('push','purchasing');`;
 
+// THE SHEET'S DATES STAY LITERAL, deliberately — the opposite call to the list
+// above, for the opposite reason. Nothing here is read against the clock: the
+// assertion is that a stored date is FORMATTED ("Aug 16", not "2026-08-16"), and
+// a literal in the past is the only kind of date that formats the same way
+// forever. Made relative, it would drift into fmtDateOnly's Today / Tomorrow /
+// Yesterday branch and the format assertion would have nothing left to read.
 const DETAIL = `{id:4, po_number:'RPO-0004', supplier:'Fresh Co.', store_name_en:'Tianhe', store_name_cn:'天河店',
   date:'2026-08-14', delivery_date:'2026-08-16', status:'Ordered', total_cost:3240, notes:'Back door before 9am.',
   items:[
@@ -54,8 +91,10 @@ const CASES = [
     ['open is counted',                        `/3\\s+open/.test(txt('content'))`],
     ['late is counted separately',             `/1\\s+late/.test(txt('content'))`],
     // In the head band now, not the first row of the body — §1.7, and the same
-  // move the Orders status line made.
-  ['this month\'s spend is stated',          `txt('content').includes('¥6,080 this month')`],
+  // move the Orders status line made. The figure is the two orders dated this
+  // month (see POS): last month's late one and the draft and cancelled ones are
+  // all out, by date and by status respectively.
+  ['this month\'s spend is stated',          `txt('content').includes('¥2,840 this month')`],
     ['a late order says so, on the row',       `txt('content').includes('late')`],
     ['lines are counted',                      `txt('content').includes('6 lines')`],
     ['segments carry their counts',            `/Open\\s*3/.test(txt('content')) && /Received\\s*1/.test(txt('content')) && /All\\s*5/.test(txt('content'))`],
