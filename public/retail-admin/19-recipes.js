@@ -225,6 +225,9 @@
     try {
       const j = await api('/api/retail-admin/recipes?' + qs.toString());
       _rows = j.data || [];
+      // Row ceiling (audit J-01) — say so when it bites, clear it when it does
+      // not, which is every load on every tenant today.
+      if (typeof tdShowTruncation === 'function') tdShowTruncation(r, j, 'recipes', '个食谱');
     } catch (e) {
       _rows = [];
       if (r) r.innerHTML = `<div class="rcp-emptyline">${esc(T('Could not load recipes', '无法加载食谱'))} — ${esc(e.message || '')}</div>`;

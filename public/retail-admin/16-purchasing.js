@@ -90,6 +90,9 @@
   let _langHooked = false;
   let _stores = [];          // active retail_stores
   let _suppliers = [];       // supplier rows (active; +disabled when asked)
+  // The { total, limit, truncated } that came with them (audit J-01), held so
+  // whichever list paints next can say the set is cut.
+  let _suppliersWindow = null;
   let _showDisabled = false;
   let _pos = [];             // PO header rows
   const _prodCache = {};     // storeId → stock rows (picker + suggestions)
@@ -231,7 +234,11 @@
     try {
       const r = await api('/api/retail-admin/suppliers' + (_showDisabled ? '?all=1' : ''));
       _suppliers = r.data || [];
-    } catch (e) { _suppliers = []; }
+      // Row ceiling (audit J-01). Held rather than drawn here: this loader runs
+      // before the screen decides which view it is painting, so the notice is
+      // placed by whichever list renders next.
+      _suppliersWindow = r;
+    } catch (e) { _suppliers = []; _suppliersWindow = null; }
   }
   async function loadPOs() {
     try {
@@ -2291,7 +2298,15 @@
     const qs = new URLSearchParams();
     if (_invMonth)  qs.set('month', _invMonth);
     if (_invSearch) qs.set('q', _invSearch);
-    try { const r = await api('/api/retail-admin/purchasing/invoices?' + qs); _invList = r.data || []; }
+    try {
+      const r = await api('/api/retail-admin/purchasing/invoices?' + qs);
+      _invList = r.data || [];
+      // Row ceiling (audit J-01). Mounted above the invoice list body once it
+      // exists; cleared on any load that was not cut.
+      if (typeof tdShowTruncation === 'function') {
+        tdShowTruncation('#pu2-inv-body', r, 'invoices', '张发票');
+      }
+    }
     catch (_) { _invList = []; }
   }
   const invGroup = sup => (_invOut && _invOut.groups.find(g => g.supplier === sup)) || null;
@@ -3501,6 +3516,12 @@
   function renderSupplierRows() {
     const body = document.getElementById('pu2-suprows');
     if (!body) return;
+    // Row ceiling (audit J-01). The notice mounts above the table this tbody
+    // belongs to, and clears itself on any load that was not cut — which is
+    // every load on every tenant today.
+    if (typeof tdShowTruncation === 'function') {
+      tdShowTruncation(body.closest('table') || body, _suppliersWindow, 'suppliers', '家供应商');
+    }
     const q = (document.getElementById('pu2-supq')?.value || '').toLowerCase().trim();
     let rows = _suppliers.filter(s => _supSeg === 'disabled' ? !s.is_active : s.is_active);
     if (q) rows = rows.filter(s => `${s.name} ${s.name_cn || ''} ${s.contact_name || ''}`.toLowerCase().includes(q));

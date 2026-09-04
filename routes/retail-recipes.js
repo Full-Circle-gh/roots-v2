@@ -55,6 +55,9 @@ const { applyAutoYield } = require('../lib/recipe-yield');
 // this door files the state it displaced, and the History panel puts one back.
 // See lib/recipe-versions.js for why the snapshot is whole-record JSON.
 const { snapshotRecipe, listVersions, getVersion, restoreVersion } = require('../lib/recipe-versions');
+// The row ceiling for a list that grows without bound (audit J-01): every
+// recipe, each one carrying all of its lines.
+const { listWindow, windowMeta } = require('../lib/list-window');
 
 const router = express.Router();
 
@@ -189,7 +192,15 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
   if (search)   { where += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; p.push(s, s, s); }
   if (category) { where += ' AND category = ?'; p.push(category); }
 
-  const recipes = tdb().prepare(`SELECT * FROM recipes${where} ORDER BY is_favorite DESC, name_en COLLATE NOCASE`).all(...p);
+  // Row ceiling (audit J-01). 500 rather than the shared default: each row here
+  // carries its ingredient lines, so the response grows with the product of the
+  // two. `total` is counted under the same WHERE so the screen can say how many
+  // recipes there really are.
+  const { limit, offset } = listWindow(req.query, { defaultLimit: 500, maxLimit: 2000 });
+  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM recipes${where}`).get(...p).n;
+  const recipes = tdb().prepare(
+    `SELECT * FROM recipes${where} ORDER BY is_favorite DESC, name_en COLLATE NOCASE LIMIT ? OFFSET ?`
+  ).all(...p, limit, offset);
 
   // Bulk-load lines + cost data in three queries total rather than one round
   // trip per row — same technique the Excel export uses (routes/recipes.js,
@@ -261,7 +272,7 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       materialBlock: material ? materialBlockState(r.id) : null,
     };
   });
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data: rows, ...windowMeta({ total, limit, offset, returned: rows.length }) });
 });
 
 router.get('/api/retail-admin/recipes/meta/categories', requireRetailAdmin, (req, res) => {

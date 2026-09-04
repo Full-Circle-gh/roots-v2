@@ -195,6 +195,40 @@ function acMoney(n, dp) {
   return c.position === 'after' ? s + c.symbol : c.symbol + s;
 }
 
+/* ── "This list is not all of it" (audit J-01) ──────────────────────────────
+   Six list endpoints grew without bound — every material, every supplier, every
+   recipe, every supplier invoice, every ledger row, every product × location.
+   They now carry a row ceiling and report { total, limit, truncated }.
+
+   The ceilings are set far above any real tenant, so for every merchant today
+   this draws nothing at all. It exists for the one who eventually crosses it:
+   the difference between a screen that quietly shows a fraction and one that
+   says which fraction, and how to see the rest, is the difference between a
+   wrong decision and an inconvenience.
+
+   Mounts itself immediately before the list's own container, so no screen needs
+   markup added for it. Call it on every load — including the loads that are NOT
+   truncated, which is what takes the banner away again. */
+function tdShowTruncation(containerSel, resp, whatEn, whatCn) {
+  const host = typeof containerSel === 'string' ? document.querySelector(containerSel) : containerSel;
+  if (!host || !host.parentNode) return;
+  const id = 'td-trunc-' + (host.id || Math.abs(String(containerSel).split('').reduce((a, c) => a + c.charCodeAt(0), 0)));
+  let bar = document.getElementById(id);
+  if (!resp || !resp.truncated) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = id;
+    bar.className = 'td-trunc';
+    host.parentNode.insertBefore(bar, host);
+  }
+  const shown = Number(resp.limit) || 0;
+  const total = Number(resp.total) || 0;
+  const fmtN = n => Number(n).toLocaleString();
+  bar.textContent = cuT(
+    `Showing the first ${fmtN(shown)} of ${fmtN(total)} ${whatEn}. Search or filter to reach the rest.`,
+    `仅显示前 ${fmtN(shown)} 条,共 ${fmtN(total)} ${whatCn}。请用搜索或筛选查看其余。`);
+}
+
 // ── Per-user capabilities (RBAC) — client mirror of the server's req.caps ──
 // One operator's effective capability set decides what this app draws: hide the
 // nav sections and action buttons they can't use. This is the "same app,

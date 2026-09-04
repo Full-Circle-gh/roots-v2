@@ -572,7 +572,11 @@ async function paLoad() {
 async function paLoadStoreStock() {
   if (CATALOG_MODE === 'upstream') return;
   try {
-    const res = await fetch('/api/retail-admin/inventory/grid');
+    // The grid carries a row ceiling now (audit J-01). Ask for enough to cover
+    // the products list, which is itself capped at 500 — so on any catalogue
+    // where the list is complete, the stock map behind it is too. Past that,
+    // the list's own "first N of M" note is already on screen saying so.
+    const res = await fetch('/api/retail-admin/inventory/grid?limit=1000');
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_STORES = (j.data && j.data.stores) || [];

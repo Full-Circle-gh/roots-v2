@@ -53,6 +53,9 @@ const { materialConsumers } = require('../lib/recipe-materialize');
 // when the operator left the field blank; routes/sku.js is the settings door
 // onto the same two libraries.
 const skuRules = require('../lib/sku-rules');
+// The row ceiling for lists that grow without bound (audit J-01). This one is
+// every material a merchant has ever added, and it had none.
+const { listWindow, windowMeta } = require('../lib/list-window');
 
 const router = express.Router();
 
@@ -199,9 +202,17 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
     : '';
   const kindClause = kind ? ' AND COALESCE(item_kind,\'food\') = ?' : '';
 
+  // How many match, before the ceiling — the number the screen's own counter
+  // must show, and the only honest way to know whether the list was cut.
+  const { limit, offset } = listWindow(req.query);
+  const listArgs = [...base, ...(kind ? [kind] : [])];
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM ingredients${where}${sourceClause}${kindClause}`
+  ).get(...listArgs).n;
   const rows = tdb().prepare(
-    `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause} ORDER BY name_en COLLATE NOCASE`
-  ).all(...base, ...(kind ? [kind] : []));
+    `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause}
+      ORDER BY name_en COLLATE NOCASE LIMIT ? OFFSET ?`
+  ).all(...listArgs, limit, offset);
   for (const r of rows) {
     r.has_image = !!r.has_image;
     r.has_supplier_qr = !!r.has_supplier_qr;
@@ -224,6 +235,7 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   res.json({
     success: true, data: hideCost ? rows.map(stripMaterialCost) : rows, counts: byKind,
     sourceCounts: { bought: (srcRow && srcRow.bought) || 0, made: (srcRow && srcRow.made) || 0 },
+    ...windowMeta({ total, limit, offset, returned: rows.length }),
     ...(hideCost ? { costs_hidden: true } : {}),
   });
 });

@@ -164,6 +164,10 @@
       _rows = j.data || [];
       _counts = j.counts || {};
       _srcCounts = j.sourceCounts || { bought: 0, made: 0 };
+      // The list now carries a row ceiling (audit J-01). Say so when it bites;
+      // clear the notice when it does not, which is every load on every tenant
+      // today. `r` is the list root this screen already holds.
+      if (typeof tdShowTruncation === 'function') tdShowTruncation(r, j, 'materials', '条物料');
     } catch (e) {
       _rows = [];
       if (r) r.innerHTML = `<div class="mat-emptyline">${esc(T('Could not load materials', '无法加载物料'))} — ${esc(e.message || '')}</div>`;

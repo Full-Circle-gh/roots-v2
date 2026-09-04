@@ -620,6 +620,10 @@ async function finTxLoad() {
   try {
     const j = await api(`/api/retail-admin/finance/transactions?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`);
     FIN_TX = j.data;
+    // Row ceiling (audit J-01). The totals above the list are taken BEFORE the
+    // cut and still describe the whole window — this notice is about the rows
+    // only, which is what it says.
+    if (typeof tdShowTruncation === 'function') tdShowTruncation(host, j.data, 'ledger rows', '条流水');
     finTxRender();
   } catch (e) {
     // A failed read renders where the operator is looking and stays. On a

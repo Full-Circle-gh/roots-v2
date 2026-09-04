@@ -3073,27 +3073,43 @@ Customers (`pageSize` 20, capped at 100) and Media (`limit` 60, capped at 200, w
 
 **Suggested direction:** page the seven that grow without bound, using the shape Orders and Media already use.
 
-### J-02 · One confirmed query-per-row loop
+### J-02 · Two query-per-row loops
 **Severity:** Medium
-**Where:** `routes/retail-purchasing.js:1808-1819`
+**Where:** `routes/retail-purchasing.js:1808-1819`; `routes/retail-inventory.js:222-234`
 
-The supplier-invoice list runs one extra query for every invoice it returns, to fetch that
-invoice's linked purchase orders. With no limit on the list (J-01), the number of queries
-grows with the number of invoices.
+> **Correction, made during the fix pass.** This finding originally read *"One confirmed
+> query-per-row loop"* and listed the inventory grid under *checked and clean*. That was
+> half right and is corrected here rather than quietly repaired in the code. The grid
+> batches its **shelf** rows (`stockByPair`, one query for the whole table) — which is what
+> was checked — but the availability call sitting under them, `inventory.getAvailable(...)`,
+> was made once per product **per store**, and it issues three queries each. A 500-product
+> catalogue across four shops was 6,000 queries to paint one screen. A batch twin,
+> `inventory.getAvailableMap`, already existed for exactly this and was not being used.
 
-**Who it affects:** merchants with a long invoice history.
+1. **The supplier-invoice list** runs one extra query for every invoice it returns, to fetch
+   that invoice's linked purchase orders. With no limit on the list (J-01), the number of
+   queries grows with the number of invoices.
+   *Evidence:* `const linkStmt = db.prepare(...)` before the loop, then
+   `const lines = linkStmt.all(inv.id)` inside `invs.map(inv => { … })`.
 
-**Evidence:** `const linkStmt = db.prepare(...)` before the loop, then
-`const lines = linkStmt.all(inv.id)` inside `invs.map(inv => { … })`.
+2. **The cross-store inventory grid** calls `inventory.getAvailable(s.id, p.product_id,
+   'wechat')` inside a product × store double loop. `getAvailable` (`lib/inventory.js:284`)
+   runs one shelf read plus two reservation sums, so the cost is three queries per cell.
+   *Evidence:* the call site inside `products.map(p => { const stocks = stores.map(s => …`,
+   against `getAvailableMap` at `lib/inventory.js:317`, whose own comment says it exists to
+   replace "3 queries per product".
 
-*Checked and clean:* the catalogue export, the inventory grid, the recipe list, the order
-detail and the product list all load their related rows in one batched query and join them
-in memory (`retail.js:21562-21583`, `retail-inventory.js:212-220`,
-`retail-recipes.js:197-211`) — this codebase is careful about it, which is why the one
-exception stands out. `routes/backend-notices.js:66-67` does the same per-ticket, but the
-list is a handful of support tickets and will not grow.
+**Who it affects:** (1) merchants with a long invoice history; (2) every merchant with more
+than a small catalogue, on the page they use to check stock across shops. Roots is affected
+by (2) now.
 
-**Suggested direction:** fetch the links for every invoice on the page in one query.
+*Checked and clean:* the catalogue export, the recipe list, the order detail and the product
+list all load their related rows in one batched query and join them in memory
+(`retail.js:21562-21583`, `retail-recipes.js:197-211`).
+`routes/backend-notices.js:66-67` does the same per-ticket, but the list is a handful of
+support tickets and will not grow.
+
+**Suggested direction:** batch both — one query per page of invoices, and `getAvailableMap` per store.
 
 ### J-03 · The admin shell is 970 KB of JavaScript before anything is fetched
 **Severity:** Medium
@@ -3533,8 +3549,9 @@ recorded so the next pass does not redo it:
 - **C (common-sense failures)** — the check that came back cleanest was confirmations on
   destructive actions: 31 of 32 delete requests ask first, several with a type-the-name
   gate (C-05). The findings that remain are about consistency, not absence.
-- **J (speed and scale)** — the codebase batches its queries carefully. Every list endpoint
-  that looked like a per-row loop was read; all but one load their related rows in a single
-  batched query (J-02). The scale problem here is missing paging, not bad queries.
+- **J (speed and scale)** — the codebase batches its queries carefully; two endpoints do
+  not (J-02, corrected during the fix pass — the second was found only when the inventory
+  grid was read a second time, and this section originally said "all but one"). The scale
+  problem here is mostly missing paging rather than bad queries.
 
 ---

@@ -64,6 +64,10 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+// The row ceiling (audit J-01). The window is the only bound this read has, and
+// a merchant widening it to "all time" is asking for every ledger row they have
+// ever entered.
+const { listWindow, windowMeta } = require('../lib/list-window');
 const { storeCategory } = require('../lib/category-text');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
@@ -238,7 +242,7 @@ router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailA
 // the CSV export. The export is the file the bookkeeper works from; if it and
 // the screen answered the same window differently, whichever one was wrong
 // would not be found until the books did not balance.
-function readTransactions(query) {
+function readTransactions(query, opts = {}) {
   const win = resolveWindow(query);
   const { from, to } = win;
   const db = tdb();
@@ -364,6 +368,25 @@ function readTransactions(query) {
                 || String(b.id).localeCompare(String(a.id)));
 
   const sum = (k) => fen(rows.filter(r => r.kind === k).reduce((t, r) => t + r.amount, 0));
+
+  // ── The row ceiling, applied to the MERGED list (audit J-01) ──────────────
+  // Applied here and not in the three SQL reads above, because the three are
+  // interleaved by date afterwards: capping each query separately would drop
+  // rows from the middle of the window and the screen would show a ledger with
+  // holes in it, which is worse than a ledger that stops.
+  //
+  // 🔴 THE TOTALS ARE TAKEN BEFORE THE CUT, ON PURPOSE. `totals.in` and
+  // `totals.out` are what the window actually holds — that is what the staircase
+  // above the list means, and a total that silently described only the first N
+  // rows would be a wrong number on a finance screen. Same for `counts`. The
+  // cut applies to the ROWS ONLY, and `truncated` says so.
+  //
+  // The CSV export passes { cap: false }: an export is the deliberate "give me
+  // everything" door, and a spreadsheet that silently held the first 2,000 rows
+  // of a year is the exact failure a bookkeeper would not catch.
+  const { limit, offset } = listWindow(query, { defaultLimit: 2000, maxLimit: 10000 });
+  const page = opts.cap === false ? rows : rows.slice(offset, offset + limit);
+
   return {
     window: { from, to, span_days: win.span_days },
     income_categories: incomeCategories,
@@ -373,7 +396,8 @@ function readTransactions(query) {
       in: rows.filter(r => r.kind === 'in').length,
       out: rows.filter(r => r.kind === 'out').length,
     },
-    rows,
+    rows: page,
+    ...windowMeta({ total: rows.length, limit: opts.cap === false ? rows.length : limit, offset: opts.cap === false ? 0 : offset, returned: page.length }),
   };
 }
 
@@ -404,7 +428,7 @@ router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdm
     return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
   }
   try {
-    const data = readTransactions(req.query);
+    const data = readTransactions(req.query, { cap: false });
     const head = ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order'];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];

@@ -69,6 +69,9 @@ const { recipeOwnsProductCost } = require('../lib/recipe-rollup');
 // guard (routes/purchases.js), so 'pc' vs 'pcs' cannot pass on one cost path
 // and fail on the other. See the unit-mismatch guard in applyReceivedToStock.
 const { normaliseUnit } = require('../lib/ingredient-cost');
+// Row ceilings for the two lists in this file that grow without bound (audit
+// J-01): every supplier, and every supplier invoice.
+const { listWindow, windowMeta } = require('../lib/list-window');
 // The no-invoice mark and the receive row's invoice_status are one fact stored
 // in two columns; every write of either goes through here so a later re-derive
 // cannot reverse a buyer's decision. See lib/invoice-mark.js.
@@ -655,6 +658,14 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
   // line-level supplier_name) but as 0 on this list. Mirror that same
   // fallback so the two never disagree again.
   const SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = s.name";
+  // The row ceiling (audit J-01): this list grows with every supplier the
+  // merchant has ever added and had no upper bound. `total` is counted under
+  // the same WHERE, so the screen can say how many there really are.
+  const { limit, offset } = listWindow(req.query);
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM suppliers s
+      WHERE s.tenant_id = ?${includeInactive ? '' : ' AND s.is_active = 1'}`
+  ).get(tid).n;
   const rows = tdb().prepare(`
     SELECT s.id, s.name, s.name_cn, s.contact_name, s.contact_phone, s.contact_wechat,
            s.payment_terms, s.payment_method, s.rating, s.notes, s.is_active,
@@ -668,8 +679,9 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
       FROM suppliers s
      WHERE s.tenant_id = ?${includeInactive ? '' : ' AND s.is_active = 1'}
      ORDER BY s.name COLLATE NOCASE
-  `).all(tid);
-  res.json({ success: true, data: rows });
+     LIMIT ? OFFSET ?
+  `).all(tid, limit, offset);
+  res.json({ success: true, data: rows, ...windowMeta({ total, limit, offset, returned: rows.length }) });
 });
 
 router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
@@ -1812,19 +1824,47 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
     where += " AND (LOWER(supplier) LIKE LOWER(?) OR LOWER(COALESCE(invoice_number,'')) LIKE LOWER(?))";
     const t = '%' + search + '%'; params.push(t, t);
   }
-  const invs = tdb().prepare(`SELECT * FROM invoices WHERE ${where} ORDER BY date DESC, id DESC`).all(...params);
-  const linkStmt = tdb().prepare(`
-    SELECT il.id AS link_id, il.allocated_amount, pli.id AS line_id,
-           pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
-           po.id AS po_id, po.po_number, po.date AS po_date, po.status
-      FROM invoice_lines il
-      JOIN po_line_items pli ON pli.id = il.line_id
-      JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE il.invoice_id = ?
-     ORDER BY po.date DESC, pli.id`);
+  // Row ceiling (audit J-01). 500 rather than the shared default, because every
+  // row here carries its own invoice LINES — the response grows with the
+  // product of the two, not with the row count.
+  const { limit, offset } = listWindow(req.query, { defaultLimit: 500, maxLimit: 2000 });
+  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM invoices WHERE ${where}`).get(...params).n;
+  const invs = tdb().prepare(
+    `SELECT * FROM invoices WHERE ${where} ORDER BY date DESC, id DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset);
+
+  // ── The lines, in ONE query per chunk, not one per invoice (audit J-02) ───
+  // This ran `linkStmt.all(inv.id)` inside the map below — one extra query for
+  // every invoice returned, which is the only confirmed query-per-row loop the
+  // audit found in the whole service. Fetched by IN (…) instead and grouped in
+  // memory. Chunked at 500 because SQLite's parameter ceiling is 999 and the
+  // whole point of the limit above is that this list can be large.
+  const linesByInvoice = new Map();
+  if (invs.length) {
+    const ids = invs.map(i => i.id);
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const ph = chunk.map(() => '?').join(',');
+      const rows = tdb().prepare(`
+        SELECT il.invoice_id, il.id AS link_id, il.allocated_amount, pli.id AS line_id,
+               pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.unit, pli.cost_per_unit,
+               po.id AS po_id, po.po_number, po.date AS po_date, po.status
+          FROM invoice_lines il
+          JOIN po_line_items pli ON pli.id = il.line_id
+          JOIN purchase_orders po ON po.id = pli.po_id
+         WHERE il.invoice_id IN (${ph})
+         ORDER BY po.date DESC, pli.id`).all(...chunk);
+      for (const r of rows) {
+        const { invoice_id, ...line } = r;   // the grouping key is not part of the line
+        if (!linesByInvoice.has(invoice_id)) linesByInvoice.set(invoice_id, []);
+        linesByInvoice.get(invoice_id).push(line);
+      }
+    }
+  }
+
   const supCn = supplierCnByName(tid);
   const data = invs.map(inv => {
-    const lines = linkStmt.all(inv.id);
+    const lines = linesByInvoice.get(inv.id) || [];
     const seen = new Map();
     for (const l of lines) if (!seen.has(l.po_number)) seen.set(l.po_number, { po_id: l.po_id, po_number: l.po_number, po_date: l.po_date, status: l.status });
     const allocated = round2(lines.reduce((s, l) => s + (l.allocated_amount || 0), 0));
@@ -1836,7 +1876,7 @@ router.get('/api/retail-admin/purchasing/invoices', requireRetailAdmin, (req, re
       unallocated: round2((inv.amount || 0) - allocated),
     };
   });
-  res.json({ success: true, data });
+  res.json({ success: true, data, ...windowMeta({ total, limit, offset, returned: data.length }) });
 });
 
 router.get('/api/retail-admin/purchasing/invoices/:id', requireRetailAdmin, (req, res) => {
