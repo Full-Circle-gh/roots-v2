@@ -1591,7 +1591,9 @@ let CATALOG_MODE = 'self';
 // is the operator-on default when the tenant has never touched the Features tab.
 const FEATURE_CATALOG = [
   { key: 'membership',  en: 'Membership & points', cn: '会员与积分', def: true,
-    desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
+    // Describes the FEATURE, not one merchant's version of it (audit D-04).
+    // Kept in step with lib/features.js, which carries the same sentence.
+    desc: 'Spending tiers you name yourself, and the points shown to shoppers. · 由你自行命名的消费等级,以及向顾客展示的积分。' },
   { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
     desc: 'On/off for the whole referral program — when off, shoppers can\'t apply codes or earn rewards, and the admin tab is hidden. · 推荐计划总开关:关闭后顾客无法使用邀请码或获得奖励,后台标签页也会隐藏。' },
   // A4: the master switch says what STATE the feature is in, not what it is.

@@ -188,12 +188,33 @@ function acWrap(formatted) {
 // Format an amount in the tenant's display currency. `dp` overrides the
 // currency's own decimal places, for the sub-cent per-unit figures on the
 // Recipes screen; everything else takes the tenant's setting.
+//
+// THOUSANDS ARE GROUPED (audit A-08). This was toFixed() alone, so an exact
+// amount came out "¥12345.60" while every screen that had written its own
+// formatter grouped it — the same number in two shapes on one page. Grouping
+// here is what lets those local formatters go away.
+//
+// Grouped as en-US ("1,234.56") DELIBERATELY, not by the viewer's locale: a
+// browser set to de-DE renders toLocaleString() as "1.234,56", which on a page
+// whose other amounts use a dot for the decimal is not a different style, it is
+// a different number. The admin is bilingual EN/CN and both read this shape.
 function acMoney(n, dp) {
   const c = acCurrency();
   const places = Number.isInteger(dp) ? dp : c.decimals;
-  const s = Number(n || 0).toFixed(places);
+  const s = Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: places, maximumFractionDigits: places,
+  });
   return c.position === 'after' ? s + c.symbol : c.symbol + s;
 }
+// The same money, rounded to whole units — for KPI tiles and chart axes ONLY,
+// where the figure is a headline at 28px and the decimals are noise.
+//
+// It exists so that "rounded" is a stated, shared decision rather than three
+// screens each having quietly picked zero (audit A-08: a day's takings read
+// ¥1,235 on one card and ¥1,234.60 on another, and both were "right"). Anywhere
+// an operator might reconcile the number against something — a list, a total, a
+// dialog, an export — uses acMoney and shows the real amount.
+function acMoneyCompact(n) { return acMoney(n, 0); }
 
 /* ── "This list is not all of it" (audit J-01) ──────────────────────────────
    Six list endpoints grew without bound — every material, every supplier, every

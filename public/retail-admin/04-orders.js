@@ -1062,10 +1062,10 @@ function ordRenderKpis() {
   const k = data.kpis || {};
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
-  dashCountUp($('#ord-kpi-rev'), revenue, n => acWrap(Math.round(n).toLocaleString()));
+  dashCountUp($('#ord-kpi-rev'), revenue, n => acMoneyCompact(n));
   // No orders means no average — which is ¥0, not an unreadable dash. A money
   // tile carries a number.
-  $('#ord-kpi-aov').textContent = orders ? acWrap(Math.round(revenue / orders).toLocaleString()) : acWrap('0');
+  $('#ord-kpi-aov').textContent = acMoneyCompact(orders ? revenue / orders : 0);
   ordRepaintKpiLabels();   // deltas (language-aware)
 }
 // The Orders strip's own delta badge. Same states, same arithmetic and the same
@@ -1125,7 +1125,7 @@ function ordRepaintKpiLabels() {
   const count   = (cur, avg) => Math.round(cur - avg);
   // One decimal, matching what the server already computes for baseline.delta.
   const pct     = (cur, avg) => Math.round(((cur - avg) / avg) * 1000) / 10;
-  const money   = v => acWrap(Math.round(v).toLocaleString());
+  const money   = v => acMoneyCompact(v);
   const perDay  = cuT('day', '日');
   ordSetDelta('#ord-kpi-orders-d', orders,  ordAvg, days, count, '',
     v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), perDay);

@@ -30,12 +30,28 @@
 <!-- Full Circle backend chrome type — IBM Plex Sans / Mono (+ SC for 中文).
      Same stack the Mini App Editor (/cms) loads. Brand display fonts below
      stay for the mini-app product previews. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- ── Web fonts, loaded so a blocked host costs nothing (audit D-09) ───────
+     This service's only live merchant trades in mainland China, where this font
+     host is unreachable. As blocking <link rel="stylesheet"> tags these cost
+     every page load a connection timeout before first paint, on the one network
+     that matters most.
+     media="print" + onload makes the request non-blocking: the page paints
+     immediately in the fallback stack (which every --f-* variable already
+     names), and the web faces swap in if and when they arrive. `display=swap`
+     was already set, so text was never going to be invisible — only late.
+     The <noscript> copy keeps the fonts for a scripting-disabled browser, where
+     the onload trick cannot run.
+     The preconnect hints are gone with them: a warmed connection to a host that
+     does not answer is a wasted one.
+     THE REAL FIX is to serve these faces from the application, as the brand
+     display fonts in /assets/fonts already are. That needs the files, which is
+     a deliberate step and not this change. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="/assets/retail-admin.css">
 <!-- Tacet type: Inter for the reskinned surfaces + Fraunces for the wordmark. -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet"></noscript>
 <!-- ═══════════════════════════════════════════════════════════════════════
      TACET SKIN — scoped to Orders, Invoices, and the order drawer ONLY.
      Behaviour is untouched; this only restyles. It remaps the app's own CSS

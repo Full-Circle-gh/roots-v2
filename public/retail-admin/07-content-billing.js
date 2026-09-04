@@ -830,8 +830,8 @@ function mpPreview() {
     const remain = Math.max(0, (Number(next.threshold) || 0) - sampleSpend);
     const nextName = cn ? (next.name_cn || next.name_en) : (next.name_en || next.name_cn);
     nextLine = cuT(
-      `${acWrap(Math.round(remain).toLocaleString('en-US'))} more to reach ${escapeHtml(nextName)}`,
-      `再消费 ${acWrap(Math.round(remain).toLocaleString('en-US'))} 即达 ${escapeHtml(nextName)}`);
+      `${acMoneyCompact(remain)} more to reach ${escapeHtml(nextName)}`,
+      `再消费 ${acMoneyCompact(remain)} 即达 ${escapeHtml(nextName)}`);
   } else {
     nextLine = escapeHtml(cuT('Top tier — nothing higher to climb.', '最高等级 — 已达顶端。'));
   }
@@ -843,7 +843,12 @@ function mpPreview() {
     <div class="mp-pv-tabs">${tabs}</div>
     <div class="mp-phone">
       <div class="mp-pv-scr">
-        <div class="mp-pv-eyebrow">${escapeHtml(cuT('Roots Club', '会员俱乐部'))}</div>
+        <!-- The eyebrow above the tier card in the preview. Was the first
+             merchant's own programme name, shown to every merchant editing
+             their own tiers (audit D-04). A generic word, because this screen
+             has nowhere to read a programme name from — the ladder has tier
+             names, not a name for itself. -->
+        <div class="mp-pv-eyebrow">${escapeHtml(cuT('Membership', '会员'))}</div>
         <div class="mp-pv-tier">${escapeHtml(nameMain || '—')}${nameSub ? `<small>${escapeHtml(nameSub)}</small>` : ''}</div>
         <span class="mp-pv-mult">${escapeHtml(cuT(mpFmt(mult) + '× points', mpFmt(mult) + '× 积分'))}</span>
         <div class="mp-pv-bar"><i style="width:${barPct}%"></i></div>

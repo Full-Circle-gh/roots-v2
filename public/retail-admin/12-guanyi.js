@@ -436,7 +436,7 @@
     setText('gy-t-units', Number(s.units || 0).toLocaleString());
     setText('gy-t-products', s.products || 0);
     const amt = document.getElementById('gy-nav-bill-amt');
-    if (amt) amt.textContent = acWrap(Math.round(s.owed || 0).toLocaleString());
+    if (amt) amt.textContent = acMoneyCompact(s.owed || 0);
   }
 
   function gyRenderAnalytics(r) {
