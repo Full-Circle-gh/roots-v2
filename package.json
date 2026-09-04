@@ -24,6 +24,7 @@
     "test:mobile-receiving": "node scripts/test_mobile_receiving.js",
     "test:mobile-waste": "node scripts/test_mobile_waste.js",
     "test:mobile-scroll": "node scripts/test_mobile_scroll.js",
+    "test:till": "node scripts/test_till_back.js",
     "test:mobile-customer-record": "node scripts/test_mobile_customer_record.js",
   "test:mobile-geometry": "node scripts/test_mobile_geometry.js",
   "test:mobile-pwa": "node scripts/test_mobile_pwa.js && node scripts/test_mobile_i18n_names.js",
