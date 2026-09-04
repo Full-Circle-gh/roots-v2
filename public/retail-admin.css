@@ -13083,10 +13083,17 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      z-index 20: above the record's cards and the ingredient list's own column
      header (3), below the app's fixed topbar (12 — a different scroller, and
      it never overlaps this one) and the dialog scrim. */
+  /* NOTHING HERE TWEENS. The block's height is load-bearing — the space it
+     gives back on condensing (below) is measured from it — and a height that
+     animates is a height that is wrong for the 180ms it takes to arrive: the
+     give-back was computed on scroll events, the padding kept easing between
+     them, and the rows below drifted and snapped for the length of the tween.
+     The card's own type and layout switched instantly all along (font-size and
+     flex-direction do not transition here), so the tween was smoothing ~10px
+     of padding onto a change that had already happened. */
   #tab-recipes-record .rcp-pin {
     position: sticky; top: 0; z-index: 20; background: var(--td-paper);
-    margin: 0 calc(-1 * var(--s6)); padding: 16px var(--s6) 18px;
-    transition: padding .18s var(--ease-out); }
+    margin: 0 calc(-1 * var(--s6)); padding: 16px var(--s6) 18px; }
   /* THE SPACE THE CONDENSE GIVES BACK. The block is the first thing in the
      document; losing ~130px of its own height took that much out of the
      document too, so the rows below leapt up mid-scroll and, on a short tab,
@@ -13102,8 +13109,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      buttons in the same places. */
   #tab-recipes-record .rcp-pin > .rcp-rechead {
     position: static; margin: 0 0 16px; padding: 0;
-    background: none; border-bottom: none;
-    transition: margin .18s var(--ease-out); }
+    background: none; border-bottom: none; }
   #tab-recipes-record .rcp-pin .rcp-subtabs { margin-bottom: 0; }
   #tab-recipes-record .rcp-pin .rcp-summary { margin-bottom: 16px; }
 
@@ -13148,12 +13154,8 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #rcp-rec-scroll.is-stuck .rcp-matline:not(.blocked) { display: none; }
   #rcp-rec-scroll.is-stuck .rcp-outputs { flex-basis: 100%; gap: 4px; }
   #rcp-rec-scroll.is-stuck .rcp-matline.blocked { font-size: 12px; }
-  /* The tween is a courtesy, not information: asked for less motion, the two
-     states are the same two states, arrived at instantly. */
-  @media (prefers-reduced-motion: reduce) {
-    #tab-recipes-record .rcp-pin,
-    #tab-recipes-record .rcp-pin > .rcp-rechead { transition: none; }
-  }
+  /* No prefers-reduced-motion block here any more: the two states are arrived
+     at instantly for everyone, so there is no motion left to reduce. */
 
   /* ── THE STICKY HEADER ──────────────────────────────────────────────────
      Pinned to the top of .rcp-scroll (the element that actually scrolls —
