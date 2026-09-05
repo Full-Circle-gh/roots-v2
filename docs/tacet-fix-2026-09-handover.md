@@ -2,7 +2,8 @@
 
 Companion to `docs/tacet-audit-2026-09.md`. That document says what is wrong.
 This one says what has been changed, what has deliberately **not** been changed,
-and the eleven questions that need your answer before the rest can move.
+and the eleven questions that need your answer before the rest can move. Three
+of the eleven are answered and built; eight are still waiting.
 
 Branch: `claude/tacet-audit-2026-09-tpkn60`. Nothing here is on `main`, so
 nothing here has deployed. Every commit carries `[skip deploy]` as well.
@@ -14,6 +15,9 @@ nothing here has deployed. Every commit carries `[skip deploy]` as well.
 Twenty-two commits, worked strictly down by severity. Both Critical findings that
 could be fixed without a decision, every High that could, and fifteen Mediums
 and Lows that were cheap and clearly right — 33 findings in all.
+
+**Three more since you answered:** you said *3b · 5 do it · 10 account*, and all
+three are done and pushed. They are the last three rows of the table.
 
 | Finding | Severity | What changed |
 |---|---|---|
@@ -50,13 +54,55 @@ and Lows that were cheap and clearly right — 33 findings in all.
 | **R-04** | Low | The product inspector's buttons were 26px against a 44px guideline. |
 | **P-03** | Medium | Twenty kinds of notification could leave the system and no screen listed any of them. Settings → What was sent: what went out, to whom, whether it landed, and why not. Also delivers the visible half of **P-02** — every silent failure in the push, email and SMS paths is now a row with its reason. |
 | **R-05** | Medium | A skip link past the rail, and a focus trap in dialogs and drawers. The 385 non-button click handlers remain — see §3. |
+| **D-02** | Critical (latent) | *Answered: Q3 (b).* An alert about a merchant's day goes to that merchant's own chat app, and falls back to the platform's when they have not set one up. The cache is keyed by database path instead of holding one connection, so a second account's alerts have somewhere to go. The `/root/ops-alert.conf` mirror is deliberately **not** extended per-tenant — it exists so the platform destination survives a rename of `data/roots.db`, and a tenant read that fails falls back to the platform send, which reads it. |
+| **P-02** | High | *Answered: Q5 (do it).* The other half. See the three paragraphs below the table. |
+| **M-01 / M-02** | Medium ×2 | *Answered: Q10 (account).* Language is a column on the person now, not a key in a browser. `tenant_users.language` is NULL until they choose; the first choice on any surface adopts, and every surface after that follows them onto a new device. The device can still override for the session. |
+
+**P-02, the second half, in detail.** Three things:
+
+*The order says whether the customer was told.* An order detail carries the
+latest send attempt per kind, and the drawer shows it next to the staff note —
+"Delivery notice · sent to •••• 8000", or "did not arrive · the number was
+refused", with a **Send it again** button. A notification that failed is amber,
+never red: the order is fine and the message is not, and the two must not read
+the same. The resend clears the atomic `sms_delivered_sent_at` claim first;
+without that it would report success while doing nothing, which is the same lie
+in a new place.
+
+*The sign-in code.* Four call sites sent a one-time code and dropped the answer
+— an expired SMS key, a mail provider refusing the account, a network blip, all
+of them producing the same screen as a code that arrived. The operator then
+waited for a message that was never sent, shut out of their own admin. They go
+through one function now that returns the result; the screen says what happened;
+the channel picker hands the choice back so the channel that still works is
+still reachable. **It is not a fail-open** — a channel that is on and
+momentarily failing does not sign anybody in without a code. The
+forgotten-password path keeps its identical-for-every-username reply, because
+"that address bounced" is still an answer to "does this username exist", so
+there the failure goes to the record and the log instead.
+
+*The empty catch blocks.* The count was 211 in the audit; a proper scan of
+`routes/`, `lib/`, `middleware/`, `public/`, `server.js` and `database.js` finds
+**610** catch blocks that do nothing at all — 153 of them say why and 457 do
+not. Rewriting all 457 is not a change anybody should review, and most of them
+are correct. So the rule is not "no empty catches", it is *one that swallows must
+carry a comment saying why*, which costs a line, cannot be written without
+thinking about the case, and turns an invisible decision into a reviewable one.
+`scripts/check-swallowed-errors.js` holds the ceiling at today's 457 and fails
+when it is exceeded, so the pile cannot grow while it is worked down. Lower it
+with `--update`; list them with `--list`. The two worst offenders are
+`routes/retail.js` (72) and `database.js` (66).
 
 ---
 
-## 2. The eleven questions
+## 2. The eleven questions — three answered
 
 Each is a decision I should not take for you. Every one is blocking a specific,
 already-scoped change; several are a single word.
+
+**Q3, Q5 and Q10 are answered and built** — they are kept below with the answer
+marked, so the reasoning stays readable next to what was decided. The eight that
+remain are Q1, Q2, Q4, Q6, Q7, Q8, Q9 and Q11.
 
 ### Q1 — A-06 · Money is stored as floating point *(High)*
 
@@ -89,7 +135,7 @@ only live merchant.
 **What I need:** confirmation that a number moving for a future merchant is
 acceptable, or a note of which reports must be pinned.
 
-### Q3 — D-02 · System alerts are read from one merchant's database, by file path *(Critical, latent)*
+### Q3 — D-02 · System alerts are read from one merchant's database, by file path *(Critical, latent)*  ·  **ANSWERED: (b) — done**
 
 `lib/ops-alert.js` opens `data/roots.db` by path to find where to send an alert.
 A second account's alerts have nowhere to go.
@@ -105,6 +151,12 @@ the platform's; (c) always both.
 still not have their storefront outage go unnoticed.
 **What I need:** a, b or c. This also unblocks Q4.
 
+**Your answer: (b).** Built. `sendTenantAlert(tenantId, text)` sends to the
+account's own webhook and falls back to the platform's when that account has
+none or the read fails. Q4 — which of the ~65 alert sites are the merchant's
+problem and which are the platform's — is still open, and is now the only thing
+between this and the whole alert path being right.
+
 ### Q4 — P-01 · The merchant's operational alerts go to the platform's chat *(High)*
 
 Roughly forty alert call sites send everything the system notices about a
@@ -119,7 +171,7 @@ storefront is down.
 *this merchant's problem*. I can propose a split of the forty for you to approve
 in one pass — say the word and I will draft it.
 
-### Q5 — P-02 · Failures that reach nobody *(High)*
+### Q5 — P-02 · Failures that reach nobody *(High)*  ·  **ANSWERED: do it — done**
 
 Ten failure paths end in silence: a failed email, a failed text, a pruned push
 subscription, 211 empty `catch` blocks. The pattern to copy already exists — a
@@ -136,6 +188,15 @@ shape — are rows saying so.
 the thing it was about (a failed customer notification shown on that order, the
 way a failed print already is) and doing something about the 211 empty `catch`
 blocks. That is a week of work and touches the API everywhere.
+
+**Your answer: do it.** Done — the order drawer, the sign-in code, and a gate
+holding the empty-catch count where it is. Detail in §1 under "P-02, the second
+half". One thing I did **not** decide for you, and it is worth a word: when the
+only two-step channel an operator has is failing, they are now told so and stay
+out. The alternative — signing them in on the password alone, the way the code
+already does when no channel is *configured* — would make a provider outage into
+a two-step bypass. If you would rather have that (a locked-out owner is also a
+real cost), say so and it is a two-line change.
 
 ### Q6 — D-08 + H-01 + H-03 · What a new merchant is asked on day one *(High ×3)*
 
@@ -183,7 +244,7 @@ taking an order by telephone has to find a computer.
 "name, phone, items, done" version? *(My recommendation: the cut-down one — the
 desktop wizard has six steps and none of them fit a phone.)*
 
-### Q10 — M-01 / M-02 · Language is a browser setting, not a person's *(Medium ×2)*
+### Q10 — M-01 / M-02 · Language is a browser setting, not a person's *(Medium ×2)*  ·  **ANSWERED: account — done**
 
 The phone and the desktop remember different languages, in different keys, per
 browser. Sign in on a new device and you are back to the default.
@@ -191,6 +252,12 @@ browser. Sign in on a new device and you are back to the default.
 **What I need:** should language move onto the account (one setting, follows the
 person everywhere), or stay per-device? *(My recommendation: onto the account,
 with the device able to override for one session.)*
+
+**Your answer: account.** Built, with the device override kept. `tenant_users`
+gains a `language` column that is NULL until somebody chooses — so an existing
+operator is not retro-assigned a language by whichever browser they last used.
+The desktop console, the phone admin and the stockroom screen all read it at
+sign-in and write it when the toggle is used.
 
 ### Q11 — D-05 · The sales channel list is fixed in the interface *(High)*
 
@@ -250,7 +317,8 @@ note is in the document.
 **`main` gained a CI test runner (#272) while this branch was in flight.** It is
 merged in, and it has been run.
 
-**60 of the 115 fast suites pass.** The other 49 cannot run in this container —
+**62 of the 117 fast suites pass** (60 of 115 before the two new gates below).
+The other 49 cannot run in this container —
 they need `better-sqlite3` or `express`, and there is no registry access to
 install them. Six more were already quarantined as red on `main` before this
 branch existed, and are unchanged by it. The slow shard needs Chromium and was
@@ -271,6 +339,10 @@ Also run, on every commit:
 - `scripts/check-html-js.js` on every changed HTML file
 - `scripts/check-tenant-als.js` — **passes**, all 24 call sites enter the tenant
   scope with a raw handle, which is the check that matters most for D-01
+- `scripts/check-swallowed-errors.js` — **passes** at 457, the ceiling it set on
+  the day it was written. Both new scripts were confirmed to FAIL against the
+  pre-fix tree, which is the only evidence that a gate is a gate
+- `scripts/test_signin_code_delivery.js` — **25 pass, 0 fail**
 - `scripts/check-i18n-banners.js` — **passes**, 27 files
 - scripted verification per change — every SQL column resolved against its
   table, the low-stock predicate diffed against the dashboard's, the column
@@ -290,5 +362,10 @@ will do exactly that. The changes with real behaviour risk, in order:
 3. **The schema additions** — three columns (E-01, E-02) added with the file's
    own idempotent `addColumn` idiom, all nullable, and one new table
    (`notification_log`, P-03) which nothing reads except its own screen.
-4. **The currency pass** — 188 render sites. Output is identical on CNY except
+4. **The sign-in code path** — the response shape of `/api/backend/login` and
+   `/api/backend/login/2fa/channel` changed on the failure branch only: a
+   successful send answers exactly as it did before. The one behaviour change a
+   person can see is that a failed send now says so instead of showing the code
+   screen in silence.
+5. **The currency pass** — 188 render sites. Output is identical on CNY except
    that thousands are now grouped.
