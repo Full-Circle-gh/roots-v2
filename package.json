@@ -34,14 +34,14 @@
     "test:app-home": "node scripts/test_app_home.js",
     "test:mobile-customer-record": "node scripts/test_mobile_customer_record.js",
     "test:mobile-rider": "node scripts/test_mobile_rider.js",
-  "test:mobile-geometry": "node scripts/test_mobile_geometry.js",
-  "test:mobile-pwa": "node scripts/test_mobile_pwa.js && node scripts/test_mobile_i18n_names.js",
+    "test:mobile-geometry": "node scripts/test_mobile_geometry.js",
+    "test:mobile-pwa": "node scripts/test_mobile_pwa.js && node scripts/test_mobile_i18n_names.js",
     "test:roles": "node scripts/test_tenant_roles.js && node scripts/test_role_editor_client.js",
     "test:waste-costs": "node scripts/test_waste_cost_visibility.js",
     "test:material-costs": "node scripts/test_material_cost_visibility.js",
     "test:sku": "node scripts/test_sku_generation.js",
     "test:product-costs": "node scripts/test_product_cost_visibility.js",
-  "test:mobile": "node scripts/test_mobile_screens.js && node scripts/test_mobile_geometry.js && node scripts/test_mobile_nav.js && node scripts/test_mobile_scroll.js && node scripts/test_mobile_addstock.js && node scripts/test_mobile_home.js && node scripts/test_mobile_orders.js && node scripts/test_mobile_rider.js && node scripts/test_mobile_products.js && node scripts/test_mobile_purchasing.js && node scripts/test_mobile_receiving.js && node scripts/test_mobile_inbox.js && node scripts/test_mobile_activity.js && node scripts/test_mobile_waste.js && node scripts/test_mobile_categories.js && node scripts/test_mobile_club.js && node scripts/test_mobile_voting.js && node scripts/test_mobile_settings.js && node scripts/test_mobile_sales.js && node scripts/test_mobile_team.js && node scripts/test_mobile_trend.js && node scripts/test_mobile_dots.js && node scripts/test_mobile_customer_record.js && node scripts/test_mobile_pwa.js",
+    "test:mobile": "node scripts/test_mobile_screens.js && node scripts/test_mobile_geometry.js && node scripts/test_mobile_nav.js && node scripts/test_mobile_scroll.js && node scripts/test_mobile_addstock.js && node scripts/test_mobile_home.js && node scripts/test_mobile_orders.js && node scripts/test_mobile_rider.js && node scripts/test_mobile_products.js && node scripts/test_mobile_purchasing.js && node scripts/test_mobile_receiving.js && node scripts/test_mobile_inbox.js && node scripts/test_mobile_activity.js && node scripts/test_mobile_waste.js && node scripts/test_mobile_categories.js && node scripts/test_mobile_club.js && node scripts/test_mobile_voting.js && node scripts/test_mobile_settings.js && node scripts/test_mobile_sales.js && node scripts/test_mobile_team.js && node scripts/test_mobile_trend.js && node scripts/test_mobile_dots.js && node scripts/test_mobile_customer_record.js && node scripts/test_mobile_pwa.js",
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:offapp-refund": "node scripts/test_offapp_refund_guard.js",
@@ -102,7 +102,8 @@
     "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js",
     "test:channel-hub-binding": "node scripts/test_channel_hub_binding.js",
     "test:affiliate-new-customer": "node scripts/test_affiliate_new_customer.js",
-    "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js"
+    "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js",
+    "test:production-log": "node scripts/test_production_log.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

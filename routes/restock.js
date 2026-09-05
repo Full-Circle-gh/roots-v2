@@ -868,11 +868,35 @@ router.get('/api/restock/suggest', requireRestockAccess, tacetOnly, (req, res) =
   res.json({ success: true, data: buildRestockSuggestions(days) });
 });
 
-function genRsNumber() {
+/* TWO PREFIXES, BECAUSE THEY ARE TWO THINGS.
+ *
+ * RS- is a transfer: goods that exist, moving between two locations, with a
+ * dispatch and a receipt. PR- is a production request: nothing exists yet and
+ * nothing travels — somebody is being asked to MAKE it. This file already knew
+ * that in ten places (_transferContext refuses a kitchen direction outright,
+ * both locations are forced to NULL on create, `purpose` is required for one
+ * shape and meaningless for the other, and half of STATUS_FLOW is dead on a
+ * kitchen row). The number was the last place still calling them the same.
+ *
+ * EXISTING ROWS KEEP THEIR NUMBERS. A number that has been read down a phone,
+ * written on a tray or printed on a sheet is not ours to rewrite, so nothing
+ * backfills: RS-260904-002 stays RS-260904-002 for the rest of its life, and
+ * only requests raised from here on are PR-. The two live side by side, which
+ * is what a rename in a working system actually looks like.
+ *
+ * THE SEQUENCE IS PER PREFIX. Counting both together would leave a day looking
+ * like RS-001, PR-002, RS-003 — a shared run of numbers across two things that
+ * have nothing to do with each other, which is the very confusion the prefix
+ * exists to end. substr(4,6) is the date in both, the prefixes being the same
+ * width, so the existing index-free scan reads either.
+ */
+function genRsNumber(prefix = 'RS') {
   const d = new Date();
   const ymd = d.getFullYear().toString().slice(2) + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-  const todayCount = tdb().prepare("SELECT COUNT(*) AS c FROM restock_orders WHERE substr(rs_number,4,6) = ?").get(ymd).c;
-  return `RS-${ymd}-${String(todayCount + 1).padStart(3,'0')}`;
+  const todayCount = tdb().prepare(
+    'SELECT COUNT(*) AS c FROM restock_orders WHERE substr(rs_number,1,3) = ? AND substr(rs_number,4,6) = ?'
+  ).get(prefix + '-', ymd).c;
+  return `${prefix}-${ymd}-${String(todayCount + 1).padStart(3,'0')}`;
 }
 
 // ── Orders list (with item count + progress) ────────────────────────────────
@@ -977,7 +1001,10 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
   // to every user with the `restock` permission. Reintroduce a hard
   // requirement here once a second retail store is added.
 
-  const rs_number = genRsNumber();
+  // A request the kitchen must MAKE is production, not a transfer — see the
+  // note on genRsNumber. Read off the resolved direction rather than the body,
+  // so a caller cannot pick its own prefix.
+  const rs_number = genRsNumber(dir.to_role === 'kitchen' ? 'PR' : 'RS');
   const today = date || new Date().toISOString().slice(0,10);
   const initialStatus = status === 'sent' ? 'sent' : 'draft';
   const sent_at = initialStatus === 'sent' ? new Date().toISOString() : null;

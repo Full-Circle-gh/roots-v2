@@ -411,6 +411,7 @@ app.use(require('./routes/retail-purchasing')); // online store buying dept: sup
 app.use(require('./routes/retail-materials')); // Materials (物料) — the shared ingredients masterlist, backend door
 app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend door onto the same recipes tables the kitchen app writes; not wired into any UI yet
 app.use(require('./routes/retail-waste')); // Waste (损耗) — §32: a stock movement with a reason; product subjects only for now. NOT routes/waste.js, which is the kitchen screen's API and stays live until cutover
+app.use(require('./routes/retail-production')); // Production (生产) — what the kitchen MADE, in the realm the kitchen is actually in. production_batches has been empty since it shipped because its only two screens are kitchen-realm and the cooks are Tacet operators. NOT routes/production.js, which is those screens' API
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
 app.use(require('./routes/finance-summary')); // Finance Summary (§36) — Tacet's own staircase, on tdb() from the first commit. NOT routes/finance.js, which is the kitchen Finance API and is blocked-and-left-to-die under §36
 app.use(require('./routes/finance-transactions')); // Finance Transactions (§36 v4.121) — the ledger of typed rows; reads income_entries + expense_entries, never the order record
