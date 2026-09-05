@@ -3041,12 +3041,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      whatever answered first: a kitchen operator is 403'd on both transfer lists
      and answered on the queue, and reading only rc.on left them on the counting
      list with no way to the thing they were sent there to do. */
-  /* WHAT MAKES A LAUNCHER WORTH SHOWING. Any of the jobs it can offer — and
-     `quickstock:add` is one of them now, because "Log a batch" is a door in its
-     own right. Without this a kitchen operator whose queue probe answers empty
-     would be sent straight to the counting list and never see the one screen
-     that records what they spent the morning making. */
-  function homeAvailable() { return rc.on === true || kq.on === true || state.mode === 'add'; }
+  /* THE LAUNCHER IS FOR SOMEONE WITH MORE THAN ONE JOB, and adding "Log a
+     batch" was not a reason to widen that. It was widened, briefly, to
+     `|| state.mode === 'add'` so a kitchen operator with an empty queue would
+     still meet the new tile — and that put a menu in front of the counting list
+     for every add-only operator, which is the exact tax this rule exists to
+     prevent. test_stock_screens caught it by noticing the Add stock screen had
+     stopped being what the app opens on.
+
+     It was also unnecessary. `state.mode === 'add'` comes from holding
+     `quickstock:add`, and the preset that grants it grants `restock:fulfil`
+     alongside — so a kitchen operator's queue probe answers, kq.on is true, and
+     the launcher is already there with the new tile on it. Somebody who really
+     holds add and nothing else has one job, and should land on it. */
+  function homeAvailable() { return rc.on === true || kq.on === true; }
 
   function homeGreeting() {
     var d = new Date();
