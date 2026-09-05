@@ -478,12 +478,23 @@ that could be done without one has been.
   `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
   closed the suite says so.
 - **The currency on three more surfaces**, each left for a stated reason rather
-  than for lack of time. `public/cms.html` has about forty hardcoded ¥, but most
-  are DEMO CONTENT in the block editor's own previews ("¥50 off your first
-  order" as sample coupon copy) and help text describing what a ¥ field means —
-  mixed in with maybe a dozen that render real product and voucher values. Right
-  requires reading each one, and the page is the merchant's editor rather than
-  anything a customer sees. `public/storefront.html` renders eight real prices
+  than for lack of time. `public/cms.html` has about forty hardcoded ¥, and they
+  are genuinely mixed: DEMO CONTENT in the block editor's own previews ("¥50 off
+  your first order" as sample coupon copy), help text describing what a ¥ field
+  means, and — among them — roughly eighteen that render REAL product prices,
+  bundle totals and voucher values. Telling those apart is a per-site reading of
+  a fifteen-thousand-line file that no suite covers (only `check-i18n-banners`
+  touches it), and the page is the merchant's editor rather than anything a
+  customer sees, so it ranked below the storefront, the till and the parcel.
+
+  It is not hard, though, and the shape is already there: `displayPrice(p)` at
+  about `:15248` is the one helper, and several call sites re-format
+  `price.value` themselves instead of using its `html`. So the work is (1) a
+  `cmsMoney()` reading the currency from `/api/retail-admin/config`, which this
+  file already fetches for the theme at `:6318`, (2) `displayPrice` through it,
+  and (3) the re-formatting call sites pointed at it — leaving the demo copy and
+  the help text alone, since a sample coupon in a preview is illustrating a
+  layout, not quoting a price. `public/storefront.html` renders eight real prices
   but has no currency machinery at all — it would need its own config fetch —
   and it is a PREVIEW tool ("share the current published layout via a link"),
   not the storefront. `public/store-admin.html` bills in ¥ on purpose as far as
