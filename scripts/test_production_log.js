@@ -103,6 +103,9 @@ check('and the route is gated on that one key alone', () => {
    that assumes a clean database and a cleanup that only half-runs are the same
    bug from two directions; this is one ordering, used twice. */
 function cleanup() {
+  // waste_records first: a short batch now writes one, and it points at both the
+  // store and the product this file is about to delete.
+  db.prepare('DELETE FROM waste_records      WHERE location_id IN (?,?)').run(STORE, OTHER);
   db.prepare('DELETE FROM production_batches  WHERE store_id IN (?,?)').run(STORE, OTHER);
   db.prepare('DELETE FROM retail_stock_ledger WHERE store_id IN (?,?)').run(STORE, OTHER);
   db.prepare('DELETE FROM retail_store_stock  WHERE store_id IN (?,?)').run(STORE, OTHER);
@@ -207,6 +210,46 @@ async function main() {
     assert.strictEqual(rows()[0].product_id, PROD);
   });
 
+  section('A loss reaches the waste ledger, and the shelf still lands right');
+
+  /* THE ARITHMETIC THAT MATTERS. waste SUBTRACTS, so the route adds what was
+     MADE and then writes the gap off. Add 18 and waste 2 and the shelf ends at
+     16 — the number nobody has. These assertions are the difference. */
+  const wasteRows = () => db.prepare(
+    `SELECT qty, reason_code, note, cost_total_cents, is_uncosted
+       FROM waste_records WHERE location_id = ? ORDER BY id`).all(STORE);
+
+  check('the 2 broken jars are a waste row, not a private column', () => {
+    const w = wasteRows();
+    assert.strictEqual(w.length, 1, `expected one waste row, got ${w.length}`);
+    assert.strictEqual(w[0].qty, 2);
+    assert.strictEqual(w[0].reason_code, 'damaged');
+  });
+  check('and it names the batch it came from', () => {
+    assert.ok(/^production #\d+$/.test(wasteRows()[0].note || ''),
+      `note was ${wasteRows()[0].note}`);
+  });
+  // A loss nobody could price and a loss that cost nothing must not read alike
+  // (§32 rule 10) — so an uncosted product says so rather than storing zero.
+  check('the loss is costed, or says plainly that it could not be', () => {
+    const w = wasteRows()[0];
+    if (w.is_uncosted) assert.strictEqual(w.cost_total_cents, null);
+    else assert.ok(w.cost_total_cents > 0, `costed row stored ${w.cost_total_cents}`);
+  });
+  // The whole point of add-made-then-waste-the-gap: the shelf is 18, not 16.
+  check('the shelf landed on what actually reached it', () => {
+    assert.strictEqual(shelf(), 18);
+  });
+  check('and the ledger shows both movements, not one net figure', () => {
+    const moves = db.prepare(
+      `SELECT reason, delta FROM retail_stock_ledger
+        WHERE store_id = ? AND product_id = ? ORDER BY id`).all(STORE, PROD);
+    const add = moves.filter(m => m.reason === 'kitchen_add' && m.delta === 20);
+    const off = moves.filter(m => m.reason === 'waste' && m.delta === -2);
+    assert.strictEqual(add.length, 1, 'the 20 that were made never went on');
+    assert.strictEqual(off.length, 1, 'the 2 that broke never came off');
+  });
+
   section('made_fewer is not a loss');
 
   r = await post({ store_id: STORE, product_id: PROD, qty_made: 8, qty_shelved: 8, gap_reason: null });
@@ -218,6 +261,21 @@ async function main() {
   check('and is stored distinctly, so it is never summed as waste', () => {
     const last = rows()[rows().length - 1];
     assert.strictEqual(last.gap_reason, 'made_fewer');
+  });
+  /* NOTHING WAS DESTROYED, SO NOTHING IS WRITTEN OFF. The client cannot tell the
+     two mornings apart — it sends max(asked, shelved) either way — so the server
+     rewrites qty_made down to what was actually shelved. Recording "made 5, lost
+     2" for a batch that simply came out at three would overstate both the
+     kitchen's output and the shop's losses, from the same row. */
+  check('made_fewer records what was MADE, not what was asked for', () => {
+    const last = rows()[rows().length - 1];
+    assert.strictEqual(last.qty_made, 3, 'qty_made was not normalised down to the shelved figure');
+    assert.strictEqual(last.qty_shelved, 3);
+  });
+  check('and writes no waste row at all', () => {
+    const w = db.prepare(
+      "SELECT COUNT(*) n FROM waste_records WHERE location_id = ? AND reason_code = 'made_fewer'").get(STORE);
+    assert.strictEqual(w.n, 0, 'made_fewer reached the loss ledger');
   });
 
   section('The normal morning takes one number');

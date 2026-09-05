@@ -31,26 +31,36 @@
 // that file's header records how a private reason list is exactly how the old
 // kitchen screen ended up with codes that existed only in a browser.
 //
-// ── WHAT IT DELIBERATELY DOES NOT DO YET ─────────────────────────────────────
+// ── A SHORT BATCH IS A LOSS, AND IT LANDS IN THE LOSS LEDGER ─────────────────
 //
-// A loss recorded here does NOT yet write a waste_records row. It should: a
-// broken jar is a real cost and belongs in the ledger where every other loss
-// already lives. Doing it properly means reusing retail-waste's costing
-// (productUnitCostYuan / resolveCostCents / linkLedgerToWaste), which are
-// private to that file — so it is either an extraction from a money-touching
-// module, or a second copy of cost logic that will drift. Neither belongs in
-// the same change that first moves stock from this route. The gap and its
-// reason are recorded here in the meantime, so nothing is lost while the link
-// is built; see gap_reason on production_batches.
+// Two of twenty jars broke. That is a real cost, and it belongs in
+// waste_records beside every other loss rather than in a private column on this
+// table that nothing totals. So a gap with a LOSS reason writes a waste row
+// through lib/waste-record.js — the same costing, the same refuse-do-not-clamp
+// guard and the same ledger link the waste screen uses, extracted rather than
+// copied so the two cannot drift.
 //
-// NOTE FOR WHOEVER BUILDS THAT: the arithmetic changes when it lands. Today
-// this adds qty_shelved. With waste wired it must add qty_MADE and then waste
-// the gap, because waste_records SUBTRACTS — add 18 and waste 2 and the shelf
-// ends at 16. Same net, different ledger, and the ledger is the honest one.
+// WHICH MEANS THE ARITHMETIC IS: ADD WHAT WAS MADE, THEN WASTE THE GAP.
+// waste_records SUBTRACTS — it is a movement off a shelf — so adding 18 and
+// wasting 2 would land the shelf on 16. Adding 20 and wasting 2 lands it on 18,
+// which is where it actually is, and leaves a ledger that reads the way the
+// morning went: twenty arrived, two were destroyed. It also satisfies the
+// insufficient_stock guard by construction, since the units are on the shelf
+// before the loss is taken off it.
+//
+// `made_fewer` IS NOT A LOSS AND IS NORMALISED AWAY. If the batch simply came
+// out at eighteen, nothing was destroyed and qty_made IS eighteen — so the
+// server rewrites qty_made down to qty_shelved rather than recording twenty
+// made and two lost. The shortfall against what was ASKED for is still there,
+// on the request. This is the one place the client's numbers are overruled, and
+// it is overruled because the client cannot know the difference: it sends
+// max(asked, shelved) for both, and only the reason says which happened.
 
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
+const { recordProductWaste } = require('../lib/waste-record');
+const { businessDateForLocation } = require('../lib/business-date');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
 const { REASONS } = require('./retail-waste');
@@ -157,6 +167,13 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
     return res.status(403).json({ success: false, error: 'store_not_assigned' });
   }
 
+  /* A gap that is a LOSS, separated from a gap that is a smaller batch. Only the
+     first destroys anything, and only the first belongs in the waste ledger. */
+  const isLoss = gap > 0 && gapReason && gapReason !== NOT_A_LOSS;
+  // Nothing was destroyed, so what was made IS what was shelved. See the header.
+  const madeQty = (gap > 0 && gapReason === NOT_A_LOSS) ? qtyShelved : qtyMade;
+  const lossQty = isLoss ? gap : 0;
+
   const conn = tdb();
   const actorId = req.user?.id || null;
   const actorLabel = req.user?.display_name || req.user?.username || null;
@@ -176,19 +193,19 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(
         today, product.recipe_id || null, madeName, product.sku || null,
-        qtyMade, b.note || null, actorId,
-        storeId, product.id, qtyMade, qtyShelved, gapReason, requestId
+        madeQty, b.note || null, actorId,
+        storeId, product.id, madeQty, qtyShelved, gapReason, requestId
       );
       const batchId = Number(ins.lastInsertRowid);
 
-      // The shelf. Reuses adjustStock exactly as the Add stock screen does, so
-      // this lands in the same ledger and fans out to Meituan / Eleme /
+      // EVERYTHING THAT WAS MADE GOES ON FIRST, including the part that is about
+      // to be written off. Reuses adjustStock exactly as the Add stock screen
+      // does, so this lands in the same ledger and fans out to Meituan / Eleme /
       // gzgrocery through enqueueChannelSync — stock that rises here and not
       // there is live underselling.
-      let stock = null;
-      if (qtyShelved > 0) {
-        stock = inventory.adjustStock({
-          storeId, productId: product.id, deltaQty: qtyShelved,
+      if (madeQty > 0) {
+        inventory.adjustStock({
+          storeId, productId: product.id, deltaQty: madeQty,
           actorUserId: actorId, actorLabel,
           reason: 'kitchen_add',
           // Names the batch, so a ledger row can be traced back to the morning
@@ -196,17 +213,37 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
           note: `production #${batchId}`,
         });
       }
-      return { batchId, stock };
+
+      // …and then the part that never reached the shelf comes straight back off
+      // it, as a costed loss. Same transaction: a batch recorded as twenty with
+      // no matching write-off would leave two jars on a shelf that does not have
+      // them, which is worse than not recording the loss at all.
+      let wasteId = null;
+      if (lossQty > 0) {
+        wasteId = recordProductWaste({
+          db: conn, locationId: storeId, productId: product.id,
+          qty: lossQty, unit: null, reason: gapReason,
+          note: `production #${batchId}`,
+          actor: { id: actorId, label: actorLabel },
+          businessDate: businessDateForLocation(conn, storeId),
+        });
+      }
+      return { batchId, wasteId };
     })();
 
     logActivity(actorId, actorLabel, 'log_production', 'production_batch', out.batchId,
-      { store_id: storeId, product: madeName, qty_made: qtyMade, qty_shelved: qtyShelved,
-        gap_reason: gapReason, request_id: requestId }, req.ip);
+      { store_id: storeId, product: madeName, qty_made: madeQty, qty_shelved: qtyShelved,
+        gap_reason: gapReason, waste_id: out.wasteId, request_id: requestId }, req.ip);
 
     res.json({ success: true, data: {
       id: out.batchId,
-      qty_made: qtyMade, qty_shelved: qtyShelved,
-      gap, gap_reason: gapReason,
+      qty_made: madeQty, qty_shelved: qtyShelved,
+      gap: madeQty - qtyShelved, gap_reason: gapReason,
+      // Named so the screen can say the loss was filed, and so a caller can
+      // follow it into the ledger. No COST comes back: a kitchen operator does
+      // not hold waste:costs, and a figure they were sent is a figure that has
+      // already left the server (routes/retail-waste says the same, at length).
+      waste_id: out.wasteId,
       // A kitchen operator is never sent a shelf total (routes/retail-inventory
       // strips quantities from their product list for the same reason) — what
       // comes back is what THEY just did, not what the shelf now holds.

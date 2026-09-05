@@ -35,6 +35,9 @@ const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
 const { productUnitCostYuan } = require('../lib/product-cost');
+// The loss-writing itself, shared with Production so a batch that comes up short
+// lands in this same ledger by the same path rather than a second copy of it.
+const { recordProductWaste, resolveCostCents, linkLedgerToWaste } = require('../lib/waste-record');
 const { businessDateForLocation } = require('../lib/business-date');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
@@ -258,23 +261,12 @@ router.get('/api/retail-admin/waste/preview', requireRetailAdmin, requireWasteEn
 
 // ── The cost snapshot (§32 addendum point 3) ─────────────────────────────────
 //
-// Unit cost times quantity, ROUNDED ONCE, here, and stored as whole cents. §24's
-// exclusion of whole cents for per-unit costs is about RATES that get multiplied
-// downstream — a per-gram figure rounded to a cent and then multiplied by a
-// thousand carries the rounding error a thousand times. This is the product of
-// that multiplication and nothing multiplies it again.
-//
-// THE SUB-CENT FLOOR. A real loss whose total rounds below one cent is stored as
-// one cent, not as zero. Zero is reserved for nothing at all: §32 rule 10 says a
-// loss nobody could price and a loss that cost nothing must not render alike,
-// and the table's CHECK enforces that a stored cost is strictly positive. The
-// alternative — letting a genuine loss round away to a figure the schema then
-// refuses — would fail the save outright over a tenth of a cent.
-function resolveCostCents(unitYuan, qty) {
-  if (unitYuan == null) return { cents: null, uncosted: true };
-  const cents = Math.round(unitYuan * qty * 100);
-  return { cents: Math.max(1, cents), uncosted: false };
-}
+// resolveCostCents and linkLedgerToWaste MOVED to lib/waste-record.js, with the
+// reasoning that used to sit here — the rounding rule and the sub-cent floor.
+// They left because Production is now a second writer of losses: a batch of 20
+// that reaches the shelf as 18 has lost two jars, and they belong in this ledger
+// by this path rather than through a second copy of the costing that drifts.
+// This file still imports both, so nothing about a loss recorded HERE changed.
 
 // ── GET / — the list ───────────────────────────────────────────────
 //
@@ -408,58 +400,14 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
 
   try {
     const out = db.transaction(() => {
-      // REFUSE, DO NOT CLAMP. adjustStock's delta path silently applies
-      // `Math.max(0, old + delta)` and discards the shortfall — a behaviour §10
-      // has already withdrawn but which is still live. Reusing it without this
-      // check would write a waste row saying 5 and a movement saying 3, with no
-      // error anywhere. A mismatch means the count is already wrong, and the
-      // person entering it is the one who can see the shelf; tell them the
-      // figure we hold and let them decide.
-      //
-      // The check lives INSIDE the transaction so the quantity it read cannot
-      // move before the movement is applied. Passing it also makes the clamp
-      // unreachable, which is the point — this does not fix adjustStock, it
-      // stops depending on it being wrong.
-      const onHand = db.prepare(
-        'SELECT COALESCE(physical_qty, 0) AS q FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
-      ).get(locationId, productId)?.q ?? 0;
-      if (qty > onHand) {
-        const e = new Error('insufficient_stock');
-        e.detail = { on_hand: onHand, requested: qty };
-        throw e;
-      }
-
-      const unitYuan = productUnitCostYuan(db, productId);
-      const cost = resolveCostCents(unitYuan, qty);
-
-      const ins = db.prepare(`
-        INSERT INTO waste_records
-          (location_id, subject_type, store_product_id, qty, unit, reason_code, note,
-           cost_total_cents, is_uncosted, business_date, created_by, created_by_label)
-        VALUES (?, 'product', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        locationId, productId, qty, b.unit || null, reason, note,
-        cost.cents, cost.uncosted ? 1 : 0, businessDate, actor.id, actor.label
-      );
-      const wasteId = Number(ins.lastInsertRowid);
-
-      // The movement. One transaction with the row above: better-sqlite3 nests
-      // this as a savepoint, so a failure in either rolls back both and neither
-      // lands. adjustStock is what fans the change out to Meituan, Eleme and
-      // gzgrocery (enqueueChannelSync) — stock that drops here and not there is
-      // live overselling, which is why this reuses it rather than writing its
-      // own ledger row.
-      inventory.adjustStock({
-        storeId: locationId,
-        productId,
-        deltaQty: -qty,
-        actorUserId: actor.id,
-        actorLabel: actor.label,
-        note: `waste #${wasteId} · ${reason}`,
-        reason: 'waste',
+      // The row, the movement and the link, in lib/waste-record.js so Production
+      // writes a loss exactly the way this screen does — one costing, one
+      // refuse-do-not-clamp guard, one ledger link. It runs INSIDE this
+      // transaction on purpose: better-sqlite3 nests it as a savepoint, so a
+      // failure in either half rolls back both and neither lands.
+      const wasteId = recordProductWaste({
+        db, locationId, productId, qty, unit: b.unit, reason, note, actor, businessDate,
       });
-
-      linkLedgerToWaste(db, locationId, productId, wasteId);
       return db.prepare(`SELECT ${ROW_COLS} FROM waste_records WHERE id = ?`).get(wasteId);
     })();
 
@@ -497,22 +445,6 @@ router.post('/api/retail-admin/waste', requireRetailAdmin, requireWasteEnabled, 
 // statement can have appended a matching row in between. `last_insert_rowid()`
 // is NOT usable here — enqueueChannelSync writes to the channel queue tables
 // after the ledger insert and moves it.
-function linkLedgerToWaste(db, storeId, productId, wasteId) {
-  try {
-    const row = db.prepare(
-      `SELECT MAX(id) AS id FROM retail_stock_ledger
-        WHERE store_id = ? AND product_id = ? AND reason = 'waste'`
-    ).get(storeId, productId);
-    if (row?.id) {
-      db.prepare("UPDATE retail_stock_ledger SET ref_table = 'waste_records', ref_id = ? WHERE id = ?")
-        .run(wasteId, row.id);
-    }
-  } catch (e) {
-    // Best-effort: the movement and the record are both already correct, and an
-    // audit convenience must not roll back a loss that really happened.
-    console.error('[waste] ledger link failed:', e.message);
-  }
-}
 
 // ── POST /:id/void — undo by reversal, never by edit ─────────────────────────
 //
