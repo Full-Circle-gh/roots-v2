@@ -32,33 +32,53 @@ const bad = (m, extra) => { fail++; console.log('  ✗ ' + m + (extra ? '\n     
 const is  = (a, e, m) => (JSON.stringify(a) === JSON.stringify(e) ? ok(m) : bad(m, 'expected ' + JSON.stringify(e) + '\n      got      ' + JSON.stringify(a)));
 const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
 const section = (t) => console.log('\n' + t);
+// Elements are compared by IDENTITY, never stringified: an El points back at
+// the document that focused it, and JSON.stringify goes round in a circle.
+const same = (a, e, m) => (a === e ? ok(m) : bad(m, 'a different element'));
+const eqNum = (a, e, m) => (a === e ? ok(m) : bad(m, `expected ${e}, got ${a}`));
 
 // ── A DOM, by hand ────────────────────────────────────────────────────────
 // Only what the module actually touches. A fake that answered more than the
 // module asks would be a fake that could pass while the real page did not.
 class El {
-  constructor(tag, attrs = {}) {
+  // `kinds` are the selectors this element should answer to — enough for the
+  // row navigation, which asks `closest('tr.order-row, …')` and matches a list
+  // of selectors against the whole document.
+  constructor(tag, attrs = {}, kinds = []) {
     this.tagName = tag.toUpperCase();
     this._a = { ...attrs };
     this.dataset = {};
     this.clicks = 0;
+    this.focused = 0;
     this.isContentEditable = false;
+    this.offsetParent = {};                 // visible unless a test says otherwise
+    this.kinds = kinds;
+    this._doc = null;
   }
   getAttribute(k) { return k in this._a ? this._a[k] : null; }
   setAttribute(k, v) { this._a[k] = String(v); }
   hasAttribute(k) { return k in this._a; }
   click() { this.clicks++; }
+  focus() { this.focused++; if (this._doc) this._doc.activeElement = this; }
+  scrollIntoView() {}
+  matches(sel) { return this.kinds.some((k) => sel.includes(k)); }
+  closest(sel) { return this.matches(sel) ? this : null; }
 }
 function makeDoc(els) {
   const keydown = [];
-  return {
+  const doc = {
     _keydown: keydown,
     readyState: 'complete',
     activeElement: null,
     documentElement: {},
-    querySelectorAll: (sel) => (sel === '[onclick]' ? els.filter((e) => e.hasAttribute('onclick')) : []),
+    querySelector: (sel) => els.find((e) => e.matches(sel)) || null,
+    querySelectorAll: (sel) => (sel === '[onclick]'
+      ? els.filter((e) => e.hasAttribute('onclick'))
+      : els.filter((e) => e.matches(sel))),
     addEventListener: (type, fn) => { if (type === 'keydown') keydown.push(fn); },
   };
+  els.forEach((e) => { e._doc = doc; });
+  return doc;
 }
 function load(els) {
   const doc = makeDoc(els);
@@ -183,6 +203,76 @@ section('6 · it is loaded, and it is the last word');
     'and re-sweeps on repaint — every list here is painted from JavaScript');
   yes(/_kbdQueued/.test(src),
     'once per frame, not once per mutation: a hundred rows is one paint, not a hundred sweeps');
+}
+
+// ── E-09 · moving through a list without the mouse ────────────────────────
+section('7 · j and k move through the list, and only when they should');
+{
+  const rows = [
+    new El('tr', {}, ['tr.order-row']),
+    new El('tr', {}, ['tr.order-row']),
+    new El('tr', {}, ['tr.order-row']),
+  ];
+  const { doc } = load(rows);
+  // Nothing focused: j starts at the top, which is what j means everywhere it
+  // exists. (press() sets activeElement, so start from null explicitly.)
+  doc.activeElement = null;
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: {}, preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'j with nothing focused starts at the first row');
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: rows[0], preventDefault: () => {} }));
+  same(doc.activeElement, rows[1], 'and moves down one at a time');
+  doc._keydown.forEach((fn) => fn({ key: 'ArrowUp', target: rows[1], preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'the arrows do the same thing');
+  doc._keydown.forEach((fn) => fn({ key: 'k', target: rows[0], preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'and it stops at the top rather than wrapping round');
+}
+{
+  // The rule that decides whether these are shortcuts or a hazard.
+  const rows = [new El('tr', {}, ['tr.order-row']), new El('tr', {}, ['tr.order-row'])];
+  const field = new El('input', {});
+  const { doc } = load([...rows, field]);
+  doc.activeElement = rows[0];
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: field, preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'typing a j in a search box types a j');
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: rows[0], ctrlKey: true, preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'and a modifier means the key belongs to somebody else');
+}
+{
+  const rows = [new El('tr', {}, ['tr.order-row']), new El('tr', {}, ['tr.order-row'])];
+  const scrim = new El('div', {}, ['.tdlg-scrim']);
+  const { doc } = load([...rows, scrim]);
+  doc.activeElement = rows[0];
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: rows[0], preventDefault: () => {} }));
+  same(doc.activeElement, rows[0], 'while a dialog is open the keys are the dialog’s');
+}
+{
+  const hidden = new El('tr', {}, ['tr.order-row']);
+  hidden.offsetParent = null;                     // a section that is display:none
+  const shown = new El('tr', {}, ['tr.order-row']);
+  const { doc } = load([hidden, shown]);
+  doc.activeElement = null;
+  doc._keydown.forEach((fn) => fn({ key: 'j', target: {}, preventDefault: () => {} }));
+  same(doc.activeElement, shown,
+    'rows on a screen that is not showing are skipped — the whole shell stays in the DOM');
+}
+
+section('8 · the search key, and the one key that is deliberately missing');
+{
+  const box = new El('input', { id: 'orders-q' }, ['input[id$="-q"]']);
+  const { doc } = load([box]);
+  doc._keydown.forEach((fn) => fn({ key: '/', target: {}, preventDefault: () => {} }));
+  eqNum(box.focused, 1, '/ jumps to the search box on this screen');
+}
+{
+  const src = fs.readFileSync(path.join(ROOT, 'public/retail-admin/26-keyboard.js'), 'utf8');
+  yes(/kbdHelp/.test(src), '? says what the keys are — a shortcut nobody can find is not one');
+  // The audit suggests a status key on the Orders list. There is deliberately
+  // none: advancing an order is a WRITE, and a single unmodified letter that
+  // writes is how the wrong order gets dispatched by somebody who thought they
+  // were still typing.
+  yes(/NO STATUS KEY/.test(src), 'and the absent status key is recorded as a decision, not an oversight');
+  yes(!/transition\(/.test(src) && !/api\(/.test(src),
+    'nothing here writes anything — moving and opening change nothing, which is why they are safe');
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

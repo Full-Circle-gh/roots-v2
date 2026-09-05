@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /* retail-admin app JS — reachable from the keyboard (audit R-05, second half).
 
    THE FINDING, AND WHAT IS LEFT OF IT
@@ -125,3 +126,113 @@ try {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => kbdPromote(document));
 else kbdPromote(document);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOVING THROUGH A LIST WITHOUT THE MOUSE (audit E-09)
+   ══════════════════════════════════════════════════════════════════════════
+   The only global keys were Ctrl/⌘+K to search and Escape to close. There was
+   no way to move between rows, or to open one, from the keyboard — which is
+   how a busy counter works, and the merchants this is built for run twenty
+   locations.
+
+   Four keys, and no more:
+
+     j / ↓     next row          k / ↑     previous row
+     /         jump to the search box on this screen
+     ?         what the keys are
+
+   Enter already opens a focused row; that was written with the row's own
+   tabindex and is left alone.
+
+   THERE IS DELIBERATELY NO STATUS KEY, though the audit suggests one.
+   Advancing an order is a WRITE, and a single unmodified letter that writes is
+   how the wrong order gets dispatched by somebody who thought they were still
+   typing. Moving and opening are safe because they change nothing; the action
+   stays a button somebody meant to press.
+
+   Every key here bails while something is being typed — a text field, a select,
+   anything editable — and while a dialog is open, where focus belongs to the
+   dialog. A shortcut that fires mid-sentence is not a shortcut. */
+
+// The rows that are click-to-open across the admin, plus an opt-in for any list
+// added later. Deliberately the same set the Orders click handler recognises:
+// if a row opens on a click, it should move under a key.
+const KBD_ROWS = 'tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .dp-work-row, [data-kbd-row]';
+
+function _kbdTyping(el) {
+  if (!el || !el.tagName) return false;
+  if (el.isContentEditable) return true;
+  return ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(el.tagName) >= 0;
+}
+function _kbdDialogOpen() {
+  return !!document.querySelector('.tdlg-scrim');
+}
+function _kbdVisibleRows() {
+  const out = [];
+  for (const el of document.querySelectorAll(KBD_ROWS)) {
+    // offsetParent is null for anything display:none — which is most of this
+    // shell at any moment, since every section stays in the DOM.
+    if (el.offsetParent !== null) out.push(el);
+  }
+  return out;
+}
+function kbdMoveRow(delta) {
+  const rows = _kbdVisibleRows();
+  if (!rows.length) return false;
+  const cur = document.activeElement && document.activeElement.closest
+    ? document.activeElement.closest(KBD_ROWS) : null;
+  let i = cur ? rows.indexOf(cur) : -1;
+  // Nothing focused yet: j starts at the top and k at the bottom, which is what
+  // those keys mean everywhere else they exist.
+  i = i < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, i + delta));
+  const el = rows[i];
+  if (!el) return false;
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+  el.focus();
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  return true;
+}
+window.kbdMoveRow = kbdMoveRow;
+
+// The search box for whatever is on screen. The house convention is an id
+// ending in `-q` — nine of them across the admin — so this finds the visible
+// one rather than keeping a list that would go stale.
+function kbdFocusSearch() {
+  for (const el of document.querySelectorAll('input[data-kbd-search], input[id$="-q"]')) {
+    if (el.offsetParent === null) continue;
+    el.focus();
+    if (el.select) el.select();
+    return true;
+  }
+  return false;
+}
+window.kbdFocusSearch = kbdFocusSearch;
+
+function kbdHelp() {
+  if (typeof askConfirm !== 'function') return;
+  const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+  askConfirm({
+    title: T('Keyboard shortcuts', '键盘快捷键'),
+    body: [
+      'j / ↓ · ' + T('next row', '下一行'),
+      'k / ↑ · ' + T('previous row', '上一行'),
+      'Enter · ' + T('open the row', '打开该行'),
+      '/ · ' + T('jump to search', '跳到搜索框'),
+      'Ctrl/⌘ K · ' + T('search everything', '全局搜索'),
+      'Esc · ' + T('close', '关闭'),
+    ].join('  ·  '),
+    confirm: T('Got it', '知道了'),
+    hideCancel: true,
+  });
+}
+window.kbdHelp = kbdHelp;
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;      // Ctrl+K and friends are not ours
+  if (_kbdTyping(e.target) || _kbdDialogOpen()) return;
+  const k = e.key;
+  if (k === 'j' || k === 'ArrowDown')      { if (kbdMoveRow(1)) e.preventDefault(); return; }
+  if (k === 'k' || k === 'ArrowUp')        { if (kbdMoveRow(-1)) e.preventDefault(); return; }
+  if (k === '/')                           { if (kbdFocusSearch()) e.preventDefault(); return; }
+  if (k === '?')                           { e.preventDefault(); kbdHelp(); }
+});
