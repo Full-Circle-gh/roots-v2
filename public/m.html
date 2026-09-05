@@ -548,9 +548,11 @@ const state = {
      puts the phone's dot out on its next poll. */
   ordersUnseen:0,
   /* Kitchen requests this warehouse raised that the kitchen has finished and
-     nobody has collected. Counted by the server off `archived_at` — a shared
-     fact, like the orders one above — so collecting a tray in /stock puts the
-     dot out on every other phone rather than only on the one that tapped it. */
+     nobody here has read yet. Counted by the server off `seen_at` — a shared
+     fact, like the orders one above — so one person opening the list in /stock
+     puts the dot out on every other phone rather than only on the one that
+     looked. Nothing is COLLECTED: the kitchen shelves what it makes and records
+     the stock itself, so this is news, not a job. */
   kitchenReady:0,
   /* One word for whether this phone rings when the app is shut: unknown until
      asked, then unsupported / needs-install (iOS, not on the home screen) /
@@ -9385,12 +9387,18 @@ function pollUnseenOrders(){
    dot, on More and on the row that opens it. Never a count and never red — the
    kitchen finishing a job is good news, not an alarm.
 
-   CLEARED BY A FACT, NOT BY A STAMP. The server counts requests that are
-   'prepared' and NOT ARCHIVED, and /stock's "Collected" archives them — so the
-   dot goes out on every phone the moment anybody actually carries the tray
-   upstairs. A localStorage "last seen" would have gone out only here, and lit
-   again on the next handset over work that was already done. It is the property
-   the Orders dot has and the Inbox dot does not. */
+   IT IS NEWS, NOT A JOB, and the first cut of this got that wrong. The dot went
+   out on a "Collected" button in /stock, which invented a step Roots does not
+   have: the kitchen puts what it makes straight on the shelf and records the
+   stock itself, so nothing is waiting for the warehouse to go and fetch. All
+   the warehouse needs is to KNOW.
+
+   SO IT CLEARS ON BEING READ, and the read is written down server-side
+   (`seen_at`, stamped when somebody opens the list). One person looking clears
+   it for the whole warehouse — a localStorage "last seen" would have gone out
+   only here and lit again on the next handset, sending the next person to check
+   on something the team already knew. It is the property the Orders dot has and
+   the Inbox dot does not. */
 const KITCHEN_READY_POLL_MS=60000;
 let _kitchenReadyPrev=null, _kitchenReadyBusy=false;
 /* WHO IS ASKED. The same pair routes/restock.js addresses the 'prepared' push
@@ -9415,7 +9423,7 @@ function pollKitchenReady(){
       const litBefore=state.kitchenReady>0;
       _kitchenReadyPrev=n; state.kitchenReady=n;
       /* Announced on a genuine increase only, and never on the first poll of a
-         session: a backlog of four uncollected trays lights the dot, it does not
+         session: a backlog of four unread finishes lights the dot, it does not
          toast four times at a phone being unlocked. No chime — the ding belongs
          to a customer arriving, and this is a colleague finishing. */
       if(arrived){

@@ -15,13 +15,25 @@
  * that neither app carried the fact at all: the person who raised it found out
  * by remembering to go and look, and there was nowhere to look.
  *
+ * THERE IS NOTHING TO COLLECT, and the first cut of this assumed there was. It
+ * counted unarchived rows and cleared on a "Collected" button, which invented a
+ * step Roots does not have: the kitchen puts what it makes straight on the shelf
+ * and records the stock itself. Ash, reading the tile on the warehouse account:
+ * "the only thing needed is that the warehouse knows the kitchen handled his
+ * request." So the fact is SEEN, not done.
+ *
  * WHAT IS ASSERTED HERE is the endpoint the dot reads, and the single property
  * that makes a dot worth drawing — THAT IT CAN GO OUT, AND EVERYWHERE AT ONCE.
- * The count is a server-side fact (prepared, addressed to the kitchen, not
- * archived) rather than a per-device "last seen" stamp, so one person collecting
- * the tray clears it on every other phone. A localStorage stamp would have gone
- * out on one handset and lit again on the next, over work already done — which
- * is the defect scripts/test_mobile_dots.js exists because of.
+ * `seen_at` is a server-side fact rather than a per-device stamp, so one person
+ * opening the list clears it on every other phone. A localStorage stamp would
+ * have gone out on one handset and lit again on the next, sending the next
+ * person to check on something the team already knew — which is the defect
+ * scripts/test_mobile_dots.js exists because of.
+ *
+ * AND THAT IT ONLY CLEARS WHAT WAS ACTUALLY SHOWN. The kitchen can finish
+ * something in the seconds between the list rendering and the stamp landing, and
+ * a blanket "mark everything seen" would silently clear a request nobody has
+ * laid eyes on — the one failure that would make the dot worth ignoring.
  */
 'use strict';
 
@@ -119,24 +131,53 @@ async function askTheKitchen(name) {
 
   section('And it can go out — everywhere, not just here');
 
-  /* THE WHOLE POINT. Archiving is what "we have it" already means on this route,
-     and it is a row in the database rather than a stamp in one browser: the next
-     poll on every OTHER phone reads the same zero. */
-  eq((await call('PUT', `/api/restock/${id}/archive`, { archived: true })).status, 200,
-     'somebody collects it');
-  eq(await readyCount(), 0, 'and the dot goes out for everyone at once');
+  /* THE WHOLE POINT. Reading it is the acknowledgement, and the read is a row in
+     the database rather than a stamp in one browser: the next poll on every
+     OTHER phone reads the same zero. */
+  const seen = await call('POST', '/api/restock/kitchen-ready/seen', { ids: [id] });
+  eq(seen.status, 200, 'somebody opens the list');
+  eq(seen.body.data.seen, 1, 'and the one they were shown is marked read');
+  eq(await readyCount(), 0, 'so the dot goes out for everyone at once');
 
-  eq((await call('PUT', `/api/restock/${id}/archive`, { archived: false })).status, 200,
-     'un-archiving is the same switch, backwards');
-  eq(await readyCount(), 1, 'so a collection undone lights it again');
+  // Nobody is asked to confirm anything, so re-opening the screen must be free.
+  const again = await call('POST', '/api/restock/kitchen-ready/seen', { ids: [id] });
+  eq(again.body.data.seen, 0, 'looking twice changes nothing');
+  eq(await readyCount(), 0, 'and does not re-light it');
+
+  /* BEING READ IS NOT BEING HIDDEN. Archiving is a different fact and this
+     screen is a RECORD — "what did the kitchen make today" has to still answer
+     the day after somebody glanced at it. */
+  const hist = await call('GET', '/api/restock?to_role=kitchen&tab=history');
+  ok((hist.body.data || []).some(o => o.id === id),
+     'and the request is still in the history it was read from');
 
   section('Two requests, and only the finished one counts');
 
   const other = await askTheKitchen('Tortilla');
-  eq(await readyCount(), 1, 'a second request still in the queue adds nothing');
+  eq(await readyCount(), 0, 'a second request still in the queue adds nothing');
   await call('PUT', `/api/restock/${other}/status`, { status: 'received' });
   await call('PUT', `/api/restock/${other}/status`, { status: 'prepared' });
-  eq(await readyCount(), 2, 'and counts once the kitchen has made it too');
+  eq(await readyCount(), 1, 'and lights the dot once the kitchen has made it too');
+
+  section('It marks what was on the screen, and nothing else');
+
+  /* THE RACE THIS EXISTS FOR. The kitchen can finish something between the list
+     rendering and the stamp landing. A blanket "mark everything seen" would
+     clear a request nobody has laid eyes on — a dot that lies once is a dot
+     everybody learns to ignore. So the client sends the ids it drew. */
+  const late = await askTheKitchen('Pita');
+  await call('PUT', `/api/restock/${late}/status`, { status: 'received' });
+  await call('PUT', `/api/restock/${late}/status`, { status: 'prepared' });
+  eq(await readyCount(), 2, 'two are unread — one of them arrived a moment ago');
+
+  const partial = await call('POST', '/api/restock/kitchen-ready/seen', { ids: [other] });
+  eq(partial.body.data.seen, 1, 'the screen stamps only the one it showed');
+  eq(await readyCount(), 1, 'and the one that landed after it is still unread');
+
+  // An empty list is not "mark everything": it is a screen with nothing on it.
+  const none = await call('POST', '/api/restock/kitchen-ready/seen', { ids: [] });
+  eq(none.body.data.seen, 0, 'an empty screen marks nothing');
+  eq(await readyCount(), 1, 'and leaves the unread one alone');
 
   section('A transfer between locations is not a kitchen request');
 
@@ -150,22 +191,27 @@ async function askTheKitchen(name) {
   eq(transfer.status, 200, 'a store asks another location for stock');
   await call('PUT', `/api/restock/${transfer.body.id}/status`, { status: 'received' });
   await call('PUT', `/api/restock/${transfer.body.id}/status`, { status: 'prepared' });
-  eq(await readyCount(), 2, 'a dispatched transfer does not light the kitchen dot');
+  eq(await readyCount(), 1, 'a dispatched transfer does not light the kitchen dot');
 
   section('The maker is not the audience');
 
   /* An operator holding fulfil and NOT pick is the person who marked it made.
-     Telling them their own work is waiting is telling them about themselves —
+     Telling them their own work is unread is telling them about themselves —
      and an honest zero rather than a 403, because this is polled in the
      background and a refusal there bounces a phone to the login screen out of
      somebody's pocket. */
   CAPS = new Set(['restock:fulfil', 'quickstock:add']);
-  eq(await readyCount(), 0, 'the kitchen is not told its own output is waiting');
+  eq(await readyCount(), 0, 'the kitchen is not told about its own output');
   eq((await call('GET', '/api/restock/kitchen-ready')).status, 200,
      'and is answered rather than refused — a 403 in a heartbeat is a logout');
 
+  // And it cannot mark the asker's dot read on their behalf, which would put the
+  // signal out for a warehouse that has still not been told.
+  const makerSeen = await call('POST', '/api/restock/kitchen-ready/seen', { ids: [late] });
+  eq(makerSeen.body.data.seen, 0, 'nor can it read the news on the asker\'s behalf');
+
   CAPS = new Set(['restock:request', 'restock:pick']);
-  eq(await readyCount(), 2, 'the side that asked still sees all of it');
+  eq(await readyCount(), 1, 'the side that asked is still the side that is told');
 
   section('The route is reachable at all');
 

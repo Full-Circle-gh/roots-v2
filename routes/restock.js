@@ -989,16 +989,34 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
  * carried the fact afterwards, so the person who asked found out by remembering
  * to go and look.
  *
- * This is the number behind that dot, and it is deliberately a SERVER-SIDE fact
- * rather than a per-device "last seen" stamp: addressed to the kitchen, at
- * 'prepared', and NOT ARCHIVED. Archiving already means "we have it" on this
- * route (PUT /:id/archive), so an acknowledgement made on one phone clears the
- * dot on every other — the property the Orders dot gets from reading a status
- * (routes/retail.js orders/unseen-count) and the Inbox dot has never had.
+ * WHAT THE ACKNOWLEDGEMENT IS, AND WHAT IT IS NOT. This shipped counting
+ * unarchived rows and clearing on a "Collected" button, which invented a step
+ * Roots does not have: the kitchen puts what it makes on the shelf and records
+ * the stock itself, so nothing is physically waiting for the warehouse and
+ * there is nothing to collect. Ash, on the warehouse account: "the only thing
+ * needed is that the warehouse knows the kitchen handled his request."
+ *
+ * So the fact behind the dot is SEEN, not done: `seen_at`, stamped when
+ * somebody opens the list. It is still a SERVER-SIDE fact rather than a
+ * per-device "last seen" stamp, and that is the half worth keeping — one person
+ * looking clears it for the whole warehouse, so nobody is chased about a
+ * request the team already knows about. That is the property the Orders dot
+ * gets from reading a status (routes/retail.js orders/unseen-count) and the
+ * Inbox dot has never had.
+ *
+ * ARCHIVED IS STILL EXCLUDED, and it is a different fact: archiving HIDES a
+ * row. Being seen does not — the list stays a record of what the kitchen has
+ * made, and it must still read that way the day after somebody glanced at it.
  *
  * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
  * 404 for a row whose id is 'kitchen-ready'.
  */
+const KITCHEN_READY_WHERE = `
+       COALESCE(to_role, 'warehouse') = 'kitchen'
+   AND status = 'prepared'
+   AND archived_at IS NULL
+   AND seen_at IS NULL`;
+
 router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, res) => {
   /* THE MAKER IS NOT THE AUDIENCE. A fulfil-only operator is the person who
      marked it made; a dot telling them their own work is waiting is telling
@@ -1009,10 +1027,38 @@ router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, 
   const row = tdb().prepare(`
     SELECT COUNT(*) AS n, MAX(prepared_at) AS latest
       FROM restock_orders
-     WHERE COALESCE(to_role, 'warehouse') = 'kitchen'
-       AND status = 'prepared'
-       AND archived_at IS NULL`).get();
+     WHERE ${KITCHEN_READY_WHERE}`).get();
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
+/* ── "We have read it" ──────────────────────────────────────────────────────
+ *
+ * The only acknowledgement this direction has room for, and it is not a button:
+ * opening the list IS the acknowledgement, so /stock posts this the moment the
+ * screen has something on it. Nobody is asked to confirm anything, because
+ * there is nothing to confirm — the goods are already on the shelf and the
+ * stock is already right.
+ *
+ * IT STAMPS THE IDS THE SCREEN ACTUALLY SHOWED, never "everything unseen". The
+ * kitchen can mark something made in the seconds between the list rendering and
+ * this call landing, and a blanket stamp would quietly clear a request nobody
+ * has laid eyes on — the one failure that would make the dot worth ignoring.
+ *
+ * ALREADY-SEEN ROWS ARE LEFT ALONE (`seen_at IS NULL` in the UPDATE), so the
+ * stamp records when the warehouse FIRST knew rather than the last time anyone
+ * scrolled past. Re-opening the screen is therefore free and idempotent.
+ */
+router.post('/api/restock/kitchen-ready/seen', requireRestockAccess, tacetOnly, (req, res) => {
+  // The maker's own screen has no business stamping the asker's dot.
+  if (_kitchenScopedSession(req)) return res.json({ success: true, data: { seen: 0 } });
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+  if (!ids.length) return res.json({ success: true, data: { seen: 0 } });
+  const marks = ids.map(() => '?').join(',');
+  const r = tdb().prepare(
+    `UPDATE restock_orders SET seen_at = ?
+      WHERE id IN (${marks}) AND ${KITCHEN_READY_WHERE}`
+  ).run(new Date().toISOString(), ...ids);
+  res.json({ success: true, data: { seen: r.changes || 0 } });
 });
 
 // ── Single order with items ─────────────────────────────────────────────────

@@ -80,14 +80,20 @@ const KITCHEN_REQ2 = {
   ],
 };
 
-/* MADE, AND NOBODY HAS COLLECTED IT — the far end of "Ask the kitchen".
+/* MADE, AND NOBODY HERE HAS READ IT YET — the far end of "Ask the kitchen".
    warehouse→kitchen closes at 'prepared' (nothing travels, so there is no
-   delivery leg), and the list route puts exactly that row in `tab=history`
-   while dropping archived ones from every tab. So "history, unarchived" IS
-   "waiting for you", and archiving it is the acknowledgement. */
+   delivery leg), and the list route puts exactly that row in `tab=history`.
+
+   THERE IS NOTHING TO COLLECT, and this fixture said there was. The screen
+   shipped with a "Collected" button on the reasoning that archiving is what
+   "we have it" means elsewhere on this route — true for a transfer, wrong
+   here: the kitchen puts what it makes straight on the shelf and records the
+   stock itself. `seen_at` is the acknowledgement, and opening the list is what
+   stamps it. NULL here, because nobody has looked. */
 const READY = {
   id: 93, rs_number: 'RS-260904-004', status: 'prepared', from_role: 'warehouse', to_role: 'kitchen',
   purpose: 'shelf', goods_state: 'none', item_count: 1, prepared_at: '2026-09-04 03:20:00',
+  seen_at: null,
   items: [{ id: 931, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 8 }],
 };
 
@@ -125,7 +131,7 @@ function stub(o) {
   const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
   const ready = o.ready ? [READY] : [];
   return '<script>\n' +
-    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];window.__archive=[];\n' +
+    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];window.__seen=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(ctx) +
@@ -186,18 +192,25 @@ function stub(o) {
     // in it. The confinement is on which orders they see, not on seeing one.
     '    if(KONLY && url.indexOf("to_role=kitchen")<0 && !/\\/api\\/restock\\/\\d+/.test(url))\n' +
     '      return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
-    '    if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
+    /* READING IT IS THE ACKNOWLEDGEMENT. Matched BEFORE the generic POST below,
+       which answers the create route — /api/restock/kitchen-ready/seen is a
+       POST on the same prefix, and falling into that branch would have the
+       screen "raise a request" every time somebody opened it.
+
+       The stub stamps the rows it was given, exactly as the server does, so a
+       case can assert that the tile's count drops for what was SHOWN and not
+       for whatever happened to be unread. */
+    '    if(/\\/kitchen-ready\\/seen$/.test(url)){\n' +
+    '      var sb=JSON.parse(opts.body||"{}"); window.__seen.push(sb);\n' +
+    '      (READY||[]).forEach(function(o){ if((sb.ids||[]).indexOf(o.id)>=0) o.seen_at="2026-09-04T04:00:00Z"; });\n' +
+    '      body={success:true,data:{seen:(sb.ids||[]).length}};\n' +
+    '    }\n' +
+    '    else if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
     '      body={success:true,id:99,rs_number:"RS-260904-001"}; }\n' +
     '    else\n' +
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    var m=url.match(/restock\\/(\\d+)$/);\n' +
     '    if(/\\/status$/.test(url)){ window.__status=JSON.parse(opts.body||"{}"); body={success:true}; }\n' +
-    // "Collected", which is the whole point of the ready list: it archives the
-    // request, and archiving is what drops it out of the count on every phone.
-    '    else if(/\\/archive$/.test(url)){\n' +
-    '      window.__archive.push({url:url,body:JSON.parse(opts.body||"{}")});\n' +
-    '      READY=[]; body={success:true,archived:true};\n' +
-    '    }\n' +
     '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).concat(READY).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
     // The queue and the ready list read the same route from opposite sides —
     // `tab=active` is what is still to make, `tab=history` is what is made.
@@ -796,36 +809,52 @@ const CASES = {
   'ready-tile-is-there-on-a-quiet-day': { js: 'window.__done();',
     // The launcher's own rule: a tile that vanishes when empty is a tool nobody
     // learns exists before the morning they need it.
-    expect: ['Ready from the kitchen', 'Nothing waiting'] },
+    expect: ['Ready from the kitchen', 'What the kitchen has finished'] },
 
-  'ready-tile-counts-what-is-waiting': { ready: true, js: 'window.__done();',
-    expect: ['Ready from the kitchen', 'Made and waiting for you', '1 waiting'],
-    absent: ['Nothing waiting'] },
+  /* IT DOES NOT SAY "WAITING FOR YOU", and it did until Ash read it on the
+     warehouse account. At Roots the kitchen puts what it makes on the shelf and
+     records the stock itself, so nothing is waiting and there is nothing to
+     fetch — the tile reports a job that is already finished. */
+  'ready-tile-never-sends-anyone-to-fetch-anything': { ready: true, js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'Made and on the shelf', '1 new'],
+    absent: ['waiting for you', 'Collected', 'collect'] },
 
   'ready-list-names-the-request': { ready: true,
     js: seq(["'[data-kropen]'", '250']),
-    expect: ['Ready from the kitchen', '1 waiting for you', 'RS-260904-004', 'For the shelf'] },
+    expect: ['Ready from the kitchen', '1 made · already on the shelf', 'RS-260904-004', 'For the shelf'] },
 
   'ready-empty-says-so-rather-than-painting-nothing': {
     js: seq(["'[data-kropen]'", '250']),
-    expect: ['Nothing waiting', 'Everything the kitchen has made has been collected.'] },
+    expect: ['Nothing finished yet', 'What the kitchen makes for you shows up here.'] },
 
-  /* COLLECTING IS AN ARCHIVE, and that is the point rather than an
-     implementation detail: /api/restock/kitchen-ready counts unarchived
-     'prepared' rows, so this puts the dot in /m out on EVERY phone instead of
-     only the one that tapped it. */
-  'collected-archives-it-for-everyone': { ready: true,
-    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250', "'[data-krcollect]'", '300']),
-    checkArchive: (a) => a.length === 1 && /\/api\/restock\/93\/archive$/.test(a[0].url)
-      && a[0].body.archived === true ? null : 'Collected did not archive the request: ' + JSON.stringify(a),
-    // And the list it came from is empty afterwards, on the same screen.
-    expect: ['Nothing waiting'] },
+  /* OPENING IT IS THE ACKNOWLEDGEMENT — there is no button, and asking for one
+     would be asking somebody to confirm a job they did not do and cannot
+     affect. The stamp is server-side, so the dot in /m goes out on EVERY phone
+     rather than the one that looked. */
+  'opening-the-list-is-what-marks-it-read': { ready: true,
+    js: seq(["'[data-kropen]'", '400']),
+    checkSeen: (s) => s.length === 1 && Array.isArray(s[0].ids) && s[0].ids.length === 1 && s[0].ids[0] === 93
+      ? null : 'opening the list did not mark what it showed as read: ' + JSON.stringify(s),
+    // THE IDS IT DREW, never "everything unseen": the kitchen can finish
+    // something between the render and the post, and clearing a request nobody
+    // has seen is the one failure that makes a dot worth ignoring.
+    absent: ['Collected'] },
 
-  // It does not move stock, and does not let anyone infer that it does.
-  'collected-does-not-claim-to-fill-a-shelf': { ready: true,
-    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250']),
-    expect: ['RS-260904-004', 'Hummus Asli', 'Collected', 'It does not change stock'],
-    checkPatch: (p) => p.length ? 'collecting wrote a stock change: ' + JSON.stringify(p) : null },
+  // And the record survives being read. "What did the kitchen make today" has
+  // to still answer the day after somebody glanced at it, so the row stays on
+  // the screen and only the COUNT goes quiet.
+  'reading-it-does-not-hide-it': { ready: true,
+    js: seq(["'[data-kropen]'", '400']),
+    expect: ['RS-260904-004'] },
+
+  /* NOTHING TO DO HERE, and the detail says so as a statement about where the
+     stock already went — not as a warning about what a button will not do. */
+  'the-detail-says-the-job-is-already-finished': { ready: true,
+    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '300']),
+    expect: ['RS-260904-004', 'Hummus Asli',
+             'The kitchen has put this on the shelf and recorded the stock. Nothing to do here.', 'Done'],
+    absent: ['Collected', 'Collecting this'],
+    checkPatch: (p) => p.length ? 'reading a finished request wrote a stock change: ' + JSON.stringify(p) : null },
 
   /* THE PUSH'S OWN DOOR. routes/restock.js addresses the 'prepared' alert to
      the side that asked with go=ready; a notification that opens a launcher has
@@ -846,7 +875,8 @@ const CASES = {
 
   'ready-cn': { ready: true, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-kropen]'", '250']),
-    expect: ['厨房已完成', '项待领取', 'RS-260904-004'] },
+    expect: ['厨房已完成', '已上架', 'RS-260904-004'],
+    absent: ['待领取'] },
 
   // A session the transfer realm refuses never asked the kitchen for anything,
   // so it is not offered the answer either.
@@ -893,7 +923,7 @@ function main() {
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'document.body.setAttribute("data-patch",JSON.stringify(window.__patch||[]));' +
       'document.body.setAttribute("data-prod",JSON.stringify(window.__prod||[]));' +
-      'document.body.setAttribute("data-archive",JSON.stringify(window.__archive||[]));' +
+      'document.body.setAttribute("data-seen2",JSON.stringify(window.__seen||[]));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
@@ -936,9 +966,9 @@ function main() {
       const prod = JSON.parse(dec((out.match(/data-prod="([^"]*)"/) || [])[1] || '[]'));
       const p = c.checkProd(prod); if (p) failures.push([name, p]);
     }
-    if (c.checkArchive) {
-      const arch = JSON.parse(dec((out.match(/data-archive="([^"]*)"/) || [])[1] || '[]'));
-      const p = c.checkArchive(arch); if (p) failures.push([name, p]);
+    if (c.checkSeen) {
+      const seen = JSON.parse(dec((out.match(/data-seen2="([^"]*)"/) || [])[1] || '[]'));
+      const p = c.checkSeen(seen); if (p) failures.push([name, p]);
     }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,

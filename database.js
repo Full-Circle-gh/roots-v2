@@ -923,6 +923,19 @@ addColumn('restock_orders', 'purpose',   'TEXT');
 // exist (for activity log + future restore) but the default list
 // endpoint excludes them. NULL = active.
 addColumn('restock_orders', 'archived_at', 'DATETIME');
+/* The warehouse has READ that the kitchen finished this — and that is all it
+   means. Stamped when somebody opens "Ready from the kitchen" (/stock), which
+   is the only acknowledgement this direction has room for at Roots: the kitchen
+   shelves what it makes and records the stock itself, so there is no collection
+   to confirm and nothing physically waiting for anybody. The dot in /m counts
+   the rows where this is NULL, so one person looking clears it for the whole
+   warehouse instead of each phone keeping its own opinion.
+
+   NOT archived_at, which is a different fact. Archiving HIDES a row; being seen
+   does not — the list is a record of what the kitchen has made, and it must
+   still read that way the day after somebody glanced at it. NULL = nobody has
+   looked yet. */
+addColumn('restock_orders', 'seen_at', 'DATETIME');
 // Idempotency guard for the auto-stock-update hook — stamped the first
 // time a restock_orders row transitions to 'delivered' and we apply
 // the order's items to the receiving store's per-market inventory.
