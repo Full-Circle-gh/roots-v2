@@ -668,6 +668,13 @@ const state = {
      lowstock / popups — nine names that read like feature flags and that
      nothing had looked at since those switches were wired to the real config. */
   sw:{},
+
+  /* THE ORDER BEING TAKEN ON THE PHONE (audit N-02). Its shape is onwBlank()'s,
+     built by the same function Clear uses so the two cannot drift — see the New
+     order block for the whole screen. Empty stores here on purpose: state does
+     not exist yet at this line, and the single-store default is settled on the
+     way into the screen instead. */
+  onw:onwBlank([]),
 };
 const app = document.getElementById('app');
 let toastTimer;
@@ -2384,7 +2391,13 @@ function ordSkeleton(){
 }
 function screenOrders(){
   const os=ordersFiltered();
-  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine(), controls:true})}
+  /* The one authoring control in this app, and it sits where the work it makes
+     lands. Gated the same way the More row is, so an operator who cannot create
+     an order is not shown a button that would 403 (audit N-02). */
+  const newCta=canRoute('neworder')
+    ? `<button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','neworder')" aria-label="${T('New order','新建订单')}">${ic('file-plus')}</button>`
+    : '';
+  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine(), cta:newCta, controls:true})}
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${state.ordersLoadErr?`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
@@ -2683,7 +2696,7 @@ const MORE_GROUPS=[
      tiles stay put on a quiet day, so "Nothing to pick" is what tells somebody
      the tool is there before the morning they need it. Four rows here would say
      the same thing louder and worse. */
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add']]},
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -4244,6 +4257,684 @@ function sheetWaste(){
 }
 
 /* ==========================================================================
+   New order — one taken on the phone (audit N-02)
+   --------------------------------------------------------------------------
+   Taking an order over the telephone is a daily job in a shop, and the phone
+   is where the shopkeeper is standing. This app had no create surface at all:
+   an earlier fake one was deleted because its submit handler said "Created"
+   and sent nothing, and the note left behind said authoring stays on the
+   desktop. That was right about authoring — a product, a coupon, a broadcast,
+   things written once and read a thousand times — and wrong about the one
+   thing a shop authors while standing up with a customer on the line.
+
+   It posts to POST /api/retail-admin/orders: the SAME endpoint the desktop
+   form and the counter till use, with the same field names, and its refusals
+   read back through the same sentences the desktop answers them with. There is
+   no second contract here and no second set of rules to keep in step — this is
+   a third caller of one endpoint, not a second product.
+
+   WHAT IT DELIBERATELY DOES NOT CARRY:
+     · Counter sales. public/till.html is a purpose-built till with a keypad
+       and a wallet picker, one row away in More, and the server has three extra
+       rules for a walk-in (a store, a named tender, a POS that is open). Two
+       surfaces for one job is how the two drift apart.
+     · Drafts. The desktop writes half-typed orders to a table. This keeps what
+       was typed in memory instead — Back, another call, a look at the ledger
+       and back again all return to it — and Clear is the way out. Nothing is
+       written anywhere until Create.
+     · A grand-total override and per-line prices. Both are desk work, and both
+       are the kind of edit that wants a second pair of eyes on a big screen.
+
+   NOTHING HERE RE-RENDERS THE APP WHILE SOMEBODY IS TYPING. render() rebuilds
+   the whole page with innerHTML, which removes the focused input from the
+   document, and a removed input drops the on-screen keyboard on some Android
+   builds however fast it is put back — the bug the waste sheet's search field
+   documents at length. So every text field writes to state and patches the one
+   region that reads it, and every fetch that lands mid-typing patches too.
+   ========================================================================== */
+/* The four origins the server accepts from a form (MANUAL_ORDER_ORIGINS).
+   'manual' is NOT offered: it is the till's own value, and the route refuses it
+   for anything that is not a counter sale. */
+const ONW_ORIGINS=[{k:'pickup',en:'Pick up',zh:'到店自取'},{k:'wechat_chat',en:'WeChat message',zh:'微信消息'},
+  {k:'wholesale',en:'Wholesale',zh:'批发'},{k:'other',en:'Other',zh:'其他'}];
+const ONW_FULS=[{k:'delivery',en:'Delivery',zh:'配送'},{k:'pickup',en:'Pickup',zh:'自提'}];
+/* Server error code → the section that owns the control that produced it, so a
+   refusal renders beside the field that caused it and stays there. An unmapped
+   code lands on 'who', the top of the form, rather than nowhere — §1.12: an
+   error the operator cannot see is worse than no error at all. The address and
+   the two fees live in the fulfilment section, so their codes land there. */
+const ONW_WHERE={
+  recipient_name_required:'who', bad_phone:'who', bad_customer_id:'who', customer_not_found:'who',
+  name_or_phone_required:'who', bad_email:'who', forbidden_capability:'who',
+  no_items:'what', invalid_item:'what', product_unavailable:'what', bad_unit_price:'what',
+  bad_shipping_fee:'how', bad_packing_fee:'how', bad_total:'how',
+  shipping_fee_not_allowed_for_pickup:'how', shipping_fee_not_allowed_for_counter:'how',
+  bad_store_id:'how', store_not_found:'how', bad_fulfillment_type:'how',
+  fulfillment_type_required:'how', store_required_for_counter:'how',
+  payment_method_required_for_counter:'how', pos_closed_for_store:'how',
+  address_required_for_delivery:'how', address_not_allowed_for_pickup:'how',
+  address_not_allowed_for_counter:'how',
+  bad_channel:'from', channel_required:'from', channel_note_required:'from',
+};
+/* One sentence per code, the desktop's own (04-orders.js ordNewErrText) — two
+   surfaces answering the same refusal with the same words. E(), not T(): this
+   is stored from a .catch and resolved when the screen next paints, so a
+   Chinese operator does not read an English failure. */
+function onwErrText(code,msg){
+  const M={
+    recipient_name_required:E('Enter a name for the order.','请填写订单姓名。'),
+    bad_phone:E('That phone number is not a valid number.','电话号码格式不正确。'),
+    customer_not_found:E('That customer no longer exists. Search again.','该顾客已不存在,请重新搜索。'),
+    bad_customer_id:E('That customer record could not be read. Search again.','无法读取该顾客档案,请重新搜索。'),
+    name_or_phone_required:E('Saving a customer needs a name or a phone number.','存为顾客需要姓名或电话。'),
+    forbidden_capability:E('Your account cannot create customers. Turn off "Also save as a customer" to place the order.','您的账户无权新建顾客。取消"同时存为顾客"即可下单。'),
+    no_items:E('Add at least one product.','请至少添加一个商品。'),
+    invalid_item:E('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。'),
+    product_unavailable:E('One product is no longer on sale. Remove that line.','有商品已下架,请移除该行。'),
+    bad_unit_price:E('A line price is not a valid amount.','某行单价金额不正确。'),
+    bad_shipping_fee:E('Shipping is not a valid amount.','运费金额不正确。'),
+    bad_packing_fee:E('Packing is not a valid amount.','包装费金额不正确。'),
+    bad_channel:E('Pick a channel this order can be created on.','请选择可下单的渠道。'),
+    channel_required:E('Say where this order came from.','请选择订单来源。'),
+    channel_note_required:E('Write where this order came from.','请填写具体来源。'),
+    bad_store_id:E('Pick a store.','请选择门店。'),
+    store_not_found:E('That store no longer exists. Pick another.','该门店已不存在,请另选。'),
+    address_required_for_delivery:E('A delivery order needs a full address.','配送订单需要完整地址。'),
+    address_not_allowed_for_pickup:E('A pickup order cannot carry a delivery address.','自提订单不能填写收货地址。'),
+    shipping_fee_not_allowed_for_pickup:E('A pickup order cannot carry a shipping fee. Clear it or set it to 0.','自提订单不能收取运费,请清空或设为 0。'),
+  };
+  return M[code]||msg||E('That did not save. Nothing was created.','未能保存,未创建任何内容。');
+}
+/* The form, empty. A FUNCTION rather than a literal because two callers need
+   the same shape — the state literal at the top of this file and Clear — and a
+   second copy of twenty keys is a second copy to forget to update. `stores` is
+   passed in rather than read off state: this runs while the state literal is
+   still being evaluated, where `state` does not exist yet. */
+function onwBlank(stores){
+  const st=stores||[];
+  return {lines:[],cust:null,name:'',phone:'',saveCust:false,
+    q:'',picks:null,pickErr:null,pickSeq:0,pickTimer:null,
+    custQ:'',custPicks:null,custErr:null,custSeq:0,custTimer:null,
+    /* One store, no question — §1.9, a picker that can only pick one thing is
+       not a choice. The chips do not render at all in that shop, and the order
+       still carries the store. */
+    ful:'delivery',storeId:st.length===1?st[0].id:null,channel:'',channelNote:'',
+    cityQ:'',city:'',province:'',cities:null,citiesTried:false,districts:null,district:'',street:'',
+    ship:0,pack:0,feeTouched:{ship:false,pack:false},feeNote:null,feeSeq:0,tax:null,
+    paid:false,pay:'cash',note:'',staffNote:'',busy:false,err:null};
+}
+/* The city catalogue is 300-odd rows and does not go stale, so it survives a
+   Clear — everything the operator typed does not. */
+function onwReset(){
+  const had=state.onw;
+  state.onw=onwBlank(state.stores||[]);
+  state.onw.cities=had.cities; state.onw.citiesTried=had.citiesTried;
+}
+/* The stores arrive after boot, so the single-store default cannot be settled
+   when the blank form is built. Settled on the way into the screen instead. */
+function onwSyncStore(){
+  const st=state.stores||[];
+  if(st.length===1&&!state.onw.storeId) state.onw.storeId=st[0].id;
+}
+/* Guangzhou is the one city whose district changes how a parcel SHIPS rather
+   than only what it costs — planShipments reads it to tell a same-city rider
+   drop from an outer district that goes out by courier — so a blank district
+   there is refused, exactly as the desktop refuses it. Everywhere else
+   city-wide is an honest answer. */
+function onwDistrictRequired(){ return String(state.onw.city||'').trim()==='广州市'; }
+function onwAddress(){
+  const o=state.onw;
+  return {province:o.province||'',city:o.city||'',district:o.district||'',
+          address:o.street.trim(),detail:'',postal_code:''};
+}
+function onwSubtotal(){ return state.onw.lines.reduce((s,l)=>s+(Number(l.qty)||0)*(Number(l.price)||0),0); }
+function onwTotal(){ const o=state.onw;
+  return onwSubtotal()+(o.ful==='delivery'?(Number(o.ship)||0):0)+(Number(o.pack)||0)
+    + (o.tax?(Number(o.tax.added)||0):0); }
+/* Anything typed. Read by the Clear control — there is nothing to clear on an
+   untouched form — and by nothing else: leaving this screen never asks, because
+   leaving it KEEPS what is in it. */
+function onwHasWork(){
+  const o=state.onw;
+  return !!(o.lines.length||o.name.trim()||o.phone.trim()||o.cust||o.street.trim()||o.city
+            ||o.channel||o.note.trim()||o.staffNote.trim());
+}
+/* What is still missing, in the order the questions are asked. Said in the foot
+   BEFORE the button is pressed — the rule the waste sheet follows — and every
+   sentence is the one the server would answer with, so a local block and a
+   remote refusal read identically. */
+function onwBlocked(){
+  const o=state.onw, stores=state.stores||[];
+  if(!o.name.trim()) return T('Enter a name for the order.','请填写订单姓名。');
+  if(!o.lines.length) return T('Add at least one product.','请至少添加一个商品。');
+  if(o.lines.some(l=>!(Number(l.qty)>0))) return T('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。');
+  if(!o.channel) return T('Say where this order came from.','请选择订单来源。');
+  if(o.channel==='other'&&!o.channelNote.trim()) return T('Write where this order came from.','请填写具体来源。');
+  /* A collection has to name the counter it will be collected from. The server
+     does not demand it — a phone order taken before routing is decided
+     legitimately has no store yet — but a pickup with no store is an order
+     nobody can hand over, so this asks while the customer is still on the
+     line, and only where there is a choice to make. */
+  if(o.ful==='pickup'&&stores.length>1&&!o.storeId) return T('Pick a store.','请选择门店。');
+  if(o.ful==='delivery'){
+    if(!o.city||!o.street.trim()) return T('A delivery order needs a full address.','配送订单需要完整地址。');
+    if(onwDistrictRequired()&&!o.district) return T('Pick the Guangzhou district — it decides whether this goes by rider or by courier.','请选择广州的区 — 该选择决定走同城骑手还是快递。');
+  }
+  return '';
+}
+/* The body, built in ONE place. shipping_fee is forced to zero off a delivery
+   rather than sent as typed: the server refuses a shipping fee on a collection
+   — nothing is being shipped — and a number left standing after a switch of
+   fulfilment is a stale quote, not a negotiated rate. */
+function onwBody(){
+  const o=state.onw;
+  const body={
+    customer_id:o.cust?o.cust.id:null,
+    recipient_name:o.name.trim(),
+    recipient_phone:o.phone.trim(),
+    items:o.lines.map(l=>({product_id:l.id,qty:Number(l.qty),unit_price:Number(l.price)})),
+    shipping_fee:o.ful==='delivery'?(Number(o.ship)||0):0,
+    packing_fee:Number(o.pack)||0,
+    status:o.paid?'paid':'pending_payment',
+    payment_method:o.paid?o.pay:'offline',
+    channel:o.channel,
+    channel_note:o.channel==='other'?(o.channelNote.trim()||null):null,
+    fulfillment_type:o.ful,
+    customer_note:o.note.trim()||null,
+    staff_note:o.staffNote.trim()||null,
+  };
+  if(o.storeId) body.store_id=Number(o.storeId);
+  /* The customer is created by the ORDER endpoint, inside the order's own
+     transaction — never as a POST of its own first. A failure between the two
+     used to leave a customer nobody asked for, already carrying signup
+     vouchers. */
+  if(!o.cust&&o.saveCust) body.save_customer=true;
+  if(o.ful==='delivery') body.address=onwAddress();
+  return body;
+}
+
+/* ---- the reads this screen makes --------------------------------------- */
+/* The city catalogue, once. Same source as the desktop's picker
+   (/china-regions), and the province is READ OFF the picked city rather than
+   asked for — the two cannot drift, and nobody types a province they would
+   then have to be right about. */
+function loadOnwCities(){
+  const o=state.onw;
+  if(o.citiesTried) return;
+  o.citiesTried=true;
+  api('/china-regions').then(d=>{
+    state.onw.cities=(d&&d.cities)||[]; onwRepaint('mOnwCityBox',onwCityPicksHtml);
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    state.onw.cities=[]; onwRepaint('mOnwCityBox',onwCityPicksHtml);
+  });
+}
+/* Districts per city. GET /api/retail/districts is public and cached an hour by
+   the server; it reads a static reference file, touches no tenant data, and the
+   desktop's picker calls it directly for the same reason. Absolute path — api()
+   only prefixes /api/retail-admin onto paths that do not already start /api/. */
+function loadOnwDistricts(){
+  const city=state.onw.city;
+  if(!city){ state.onw.districts=[]; return; }
+  state.onw.districts=null;
+  api('/api/retail/districts?city='+encodeURIComponent(city)).then(rows=>{
+    if(state.onw.city!==city) return;              // the city changed under it
+    state.onw.districts=Array.isArray(rows)?rows:[]; onwRepaintDistricts();
+  }).catch(e=>{
+    if(String(e.message)==='auth'||state.onw.city!==city) return;
+    /* Offline or a 500 → city-wide, the same answer a city with no districts
+       gives. Guangzhou is the one place that then blocks, and says so. */
+    state.onw.districts=[]; onwRepaintDistricts();
+  });
+}
+/* The product picker. Debounced server search rather than the whole catalogue:
+   this can be the first screen opened, and 500 products is not a download to
+   make somebody wait through to type two letters. */
+function loadOnwProducts(){
+  const o=state.onw, q=o.q.trim();
+  if(!q){ o.picks=null; onwRepaint('mOnwProdBox',onwProdPicksHtml); return; }
+  const seq=++o.pickSeq;
+  api('/products?limit=10&q='+encodeURIComponent(q)).then(rows=>{
+    if(seq!==state.onw.pickSeq) return;            // a later keystroke already won
+    state.onw.picks=(Array.isArray(rows)?rows:[]).slice(0,10); state.onw.pickErr=null;
+    onwRepaint('mOnwProdBox',onwProdPicksHtml);
+  }).catch(e=>{
+    if(seq!==state.onw.pickSeq||String(e.message)==='auth') return;
+    state.onw.picks=[]; state.onw.pickErr=E('Could not search products.','无法搜索商品。');
+    onwRepaint('mOnwProdBox',onwProdPicksHtml);
+  });
+}
+function loadOnwCustomers(){
+  const o=state.onw, q=o.custQ.trim();
+  if(!q){ o.custPicks=null; onwRepaint('mOnwCustBox',onwCustPicksHtml); return; }
+  const seq=++o.custSeq;
+  apiRaw('/customers?pageSize=8&page=1&q='+encodeURIComponent(q)).then(j=>{
+    if(seq!==state.onw.custSeq) return;
+    state.onw.custPicks=((j&&j.data)||[]).slice(0,8); state.onw.custErr=null;
+    onwRepaint('mOnwCustBox',onwCustPicksHtml);
+  }).catch(e=>{
+    if(seq!==state.onw.custSeq||String(e.message)==='auth') return;
+    state.onw.custPicks=[]; state.onw.custErr=E('Could not search customers.','无法搜索顾客。');
+    onwRepaint('mOnwCustBox',onwCustPicksHtml);
+  });
+}
+/* What this cart, to this address, would be charged — the SAME engine the
+   customer checkout prices with, so the two surfaces cannot quote different
+   money for one basket. Read-only, so it is safe on every change. A failed
+   quote leaves whatever is in the fields rather than zeroing them: a zero looks
+   like an answer. */
+function loadOnwFees(){
+  const o=state.onw;
+  const items=o.lines.filter(l=>Number(l.qty)>0).map(l=>({product_id:l.id,qty:Number(l.qty),unit_price:Number(l.price)}));
+  if(!items.length) return;
+  const body={fulfillment_type:o.ful,items};
+  if(o.ful==='delivery'){
+    body.address=onwAddress();
+    if(!body.address.city&&!body.address.address) return;   // no destination to match a zone on
+  }
+  const seq=++o.feeSeq;
+  apiWrite('/order-fees',body).then(j=>{
+    if(seq!==state.onw.feeSeq) return;             // a newer quote owns the fields
+    const d=(j&&j.data)||{};
+    if(!d.error){
+      if(!o.feeTouched.ship) onwSetFee('ship','mOnwShip',Number(d.shipping_fee||0));
+      if(!o.feeTouched.pack) onwSetFee('pack','mOnwPack',Number(d.packing_fee||0));
+    }
+    /* The tax this cart attracts, as the create route will compute it (audit
+       I-03) — same base, same module. Without it the foot said ¥100 while the
+       server charged ¥120, and the operator found out after the customer did.
+       Null on a shop that charges none, which is every shop until one sets a
+       rate, and the line stays absent. */
+    o.tax = d.tax ? d.tax : null;
+    o.feeNote=onwFeeNote(o.ful,d);
+    const n=document.getElementById('mOnwFeeNote');
+    if(n) n.textContent=String(o.feeNote);
+    onwRepaintFoot();
+  }).catch(()=>{ /* the typed numbers stand */ });
+}
+/* A quote lands in the field the operator may be standing in. Never overwrite a
+   focused input: they are mid-number, and having it change under the caret is
+   worse than a stale quote they can see and correct. */
+function onwSetFee(key,id,v){
+  state.onw[key]=v;
+  const el=document.getElementById(id);
+  if(el&&document.activeElement!==el) el.value=String(v);
+}
+function onwFeeNote(ft,d){
+  if(d&&d.error==='no_zone_match') return E('No delivery zone matches this address — type both fees yourself, then set the zone up under Delivery.','没有匹配这个地址的配送区 — 请手动填写两项费用,并在“配送”中配置该区域。');
+  if(d&&d.error) return E('Fees could not be worked out for this order — type them yourself.','无法自动计算本单费用 — 请手动填写。');
+  if(ft==='pickup') return E('Packing fills in from the store-pickup fee; there is no delivery to charge. Edit it to override.','包装费按自提包装费填入,自提无运费。可直接修改。');
+  return E("Shipping and packing fill in from this order's delivery zone; edit either to override.",'运费与包装费按本单配送区自动填入,可直接修改。');
+}
+
+/* ---- the three patches, and why they are patches ----------------------- */
+/* One results box, rewritten in place while the operator is still in the field
+   above it — the same two branches wstRepaintPicks uses, and the same reason:
+   render() would take the input they are typing into out of the document. */
+function onwRepaint(id,build){
+  const box=document.getElementById(id);
+  const on=document.activeElement;
+  if(box&&on&&box.previousElementSibling===on) box.innerHTML=build();
+  else render();
+}
+function onwRepaintDistricts(){
+  const box=document.getElementById('mOnwDistBox');
+  if(box) box.innerHTML=onwDistrictsHtml(); else render();
+}
+/* The foot — the blocking sentence, the money, the button. Every text field
+   writes to state and calls this, so typing a name or a street repaints what
+   those numbers say without rebuilding the input being typed into. Nothing in
+   the foot can hold focus, so patching it can never steal any. */
+function onwRepaintFoot(){
+  const f=document.getElementById('mOnwFoot');
+  if(f) f.innerHTML=onwFootHtml(); else render();
+}
+
+/* ---- the pieces ------------------------------------------------------- */
+function onwChips(items,current,cmd){
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px">${items.map(c=>
+    `<button class="chip ${String(c.k)===String(current)?'on':''}" onclick="APP.cmd('${cmd}','${c.k}')"><span>${T(c.en,c.zh)}</span></button>`).join('')}</div>`;
+}
+function onwField(label,inner,hint){
+  return `<div style="display:flex;flex-direction:column;gap:6px">
+    ${label?`<span class="eyebrow">${label}</span>`:''}${inner}
+    ${hint?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${hint}</span>`:''}</div>`;
+}
+function onwSection(title,inner,where){
+  const e=state.onw.err;
+  return `<div style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow" style="padding:2px 4px 0">${title}</div>
+    ${e&&e.where===where?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${e.msg}</span></div>`:''}
+    ${inner}</div>`;
+}
+function onwProdPicksHtml(){
+  const o=state.onw;
+  if(o.pickErr) return `<div style="font-size:13px;color:var(--brick-ink)">${o.pickErr}</div>`;
+  if(o.picks===null) return o.q.trim()?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`:'';
+  if(!o.picks.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`;
+  return `<div class="list">${o.picks.map((p,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('onwAddLine',${p.id})" style="min-height:52px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(p.name_en||p.name_cn||'',p.name_cn||p.name_en||''))}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${money(CUR,p.sell_price)}${p.sku?' · '+escAttr(p.sku):''}</span></span>
+    </button>`).join('')}</div>`;
+}
+function onwCustPicksHtml(){
+  const o=state.onw;
+  if(o.custErr) return `<div style="font-size:13px;color:var(--brick-ink)">${o.custErr}</div>`;
+  if(o.custPicks===null) return o.custQ.trim()?`<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`:'';
+  if(!o.custPicks.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No customers match','没有匹配的顾客')}</div>`;
+  return `<div class="list">${o.custPicks.map((c,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('onwPickCust',${c.id})" style="min-height:52px">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.nickname||'—')}</span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${escAttr(c.phone||'')}</span></span>
+    </button>`).join('')}</div>`;
+}
+/* The city matches, computed in one place because two callers read them — the
+   list, and the tap that picks row N out of it. The tap carries the INDEX and
+   never the name: a name goes into a JS string inside an HTML attribute, and a
+   catalogue of place names is not this file's to make safe. Same rule the
+   category chips already follow. */
+function onwCityMatches(){
+  const o=state.onw, q=o.cityQ.trim().toLowerCase();
+  if(!q||!o.cities) return [];
+  return o.cities.filter(c=>String(c.name_cn||'').toLowerCase().indexOf(q)>=0
+                          ||String(c.name_en||'').toLowerCase().indexOf(q)>=0).slice(0,8);
+}
+function onwCityPicksHtml(){
+  const o=state.onw;
+  if(!o.cityQ.trim()) return '';
+  if(o.cities===null) return `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=onwCityMatches();
+  if(!rows.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No cities match','没有匹配的城市')}</div>`;
+  return `<div class="list">${rows.map((c,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('onwPickCity',${i})" style="min-height:48px">
+      <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.name_cn||'')}${c.name_en?' · '+escAttr(c.name_en):''}</span>
+    </button>`).join('')}</div>`;
+}
+function onwDistrictsHtml(){
+  const o=state.onw;
+  if(o.districts===null) return `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!o.districts.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('City-wide · no district','全城 · 不分区')}</div>`;
+  const head=onwDistrictRequired()?[]:[{k:'',en:'City-wide · no district',zh:'全城 · 不分区'}];
+  const cur=o.district?String(o.districts.findIndex(d=>(d.name_cn||d.name_en)===o.district)):'';
+  return onwChips(head.concat(o.districts.map((d,i)=>({k:i,en:d.name_cn||d.name_en||'',zh:d.name_cn||d.name_en||''}))),cur,'onwDistrict');
+}
+/* A line is two rows, not one: a product name, a price and a stepper do not fit
+   across 360px without the name being cut to nothing, and the name is the part
+   being read back down the telephone. */
+function onwLinesHtml(){
+  const o=state.onw;
+  if(!o.lines.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No lines yet. Search above to add the first product.','还没有商品行。在上方搜索,添加第一个商品。')}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:10px">${o.lines.map((l,i)=>`
+    <div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <span style="flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(l.en||l.cn||'',l.cn||l.en||''))}</span>
+        <button class="iconbtn" style="width:32px;height:32px;margin:-4px -6px 0 0" onclick="APP.cmd('onwDropLine',${i})" aria-label="${T('Remove line','移除此行')}">${ic('x',18,2)}</button></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="num" style="flex:1;min-width:0;font-size:12.5px;color:var(--text-secondary)">${money(CUR,l.price)} · ${money(CUR,(Number(l.qty)||0)*(Number(l.price)||0))}</span>
+        <button class="stepbtn" onclick="APP.cmd('onwQty',${i},-1)" ${Number(l.qty)<=1?'disabled':''} aria-label="${T('Less','减少')}">${ic('minus',20)}</button>
+        <span class="num" style="min-width:30px;text-align:center;font-size:18px;font-weight:500">${Number(l.qty)||0}</span>
+        <button class="stepbtn" onclick="APP.cmd('onwQty',${i},1)" aria-label="${T('More','增加')}">${ic('plus',20)}</button></div>
+    </div>`).join('')}</div>`;
+}
+/* The foot: what is missing, what it comes to, and the one commit. The money
+   line names the parts rather than one number — the operator is reading it back
+   to somebody on the telephone. */
+function onwFootHtml(){
+  const o=state.onw, blocked=onwBlocked();
+  const ship=o.ful==='delivery'?(Number(o.ship)||0):0, pack=Number(o.pack)||0;
+  const parts=[T('Items','商品')+' '+money(CUR,onwSubtotal())];
+  if(ship) parts.push(T('Shipping','运费')+' '+money(CUR,ship));
+  if(pack) parts.push(T('Packing','包装费')+' '+money(CUR,pack));
+  /* The shop's own word for the tax, and — where the price already contains it
+     — the word that stops this reading as one more thing added to the list. */
+  if(o.tax) parts.push((T(o.tax.label&&o.tax.label.en||'Tax', o.tax.label&&o.tax.label.cn||'税费')
+    + (o.tax.mode==='inclusive'?T(' incl.','（已含）'):'')) + ' ' + money(CUR,Number(o.tax.amount)||0));
+  return `<div style="font-size:13px;min-height:18px">${blocked
+      ?`<span style="color:var(--amber-ink)">${blocked}</span>`
+      :`<span class="num" style="color:var(--text-secondary)">${parts.join(' · ')}</span>`}</div>
+   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+     <span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span>
+     <span class="num" style="font-size:22px;font-weight:500">${money(CUR,onwTotal())}</span></div>
+   <button class="cta" ${blocked||o.busy?'disabled':''} style="${blocked||o.busy?'opacity:.55':''}" onclick="APP.cmd('onwCreate')">${
+     o.busy?T('Creating…','创建中…'):T('Create order','创建订单')}</button>`;
+}
+
+function screenNewOrder(){
+  const o=state.onw, stores=state.stores||[];
+  loadOnwCities(); onwSyncStore();
+  /* WHO. A customer record if there is one — the order then hangs off their
+     history, their points and their tier — and a typed name if there is not.
+     The name is required either way: it is what the picking list, the label and
+     the receipt are addressed to, and it is not always the account holder. */
+  const who=(o.cust
+    ? `<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.cust.nickname||'—')}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(o.cust.phone||'')}</span></span>
+        <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" onclick="APP.cmd('onwUnpickCust')" aria-label="${T('Remove','移除')}">${ic('x',20,2)}</button></div>`
+    : onwField('',`<input id="mOnwCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.custQ)}"
+         placeholder="${T('Search name or phone, or leave as guest','搜索姓名或电话,或留空作为访客')}" oninput="APP.cmd('onwCustQ',this.value)">
+       <div id="mOnwCustBox">${onwCustPicksHtml()}</div>`))
+    + onwField(T('Name','姓名'),`<input id="mOnwName" value="${escAttr(o.name)}" maxlength="80" oninput="APP.cmd('onwName',this.value)">`)
+    + onwField(T('Phone','电话'),`<input id="mOnwPhone" inputmode="tel" value="${escAttr(o.phone)}" maxlength="20" oninput="APP.cmd('onwPhone',this.value)">`)
+    + (o.cust?'':`<button class="chip ${o.saveCust?'on':''}" style="align-self:flex-start" onclick="APP.cmd('onwSaveCust')"><span>${T('Also save as a customer','同时存为顾客')}</span></button>`);
+  const what=onwField('',
+      `<input id="mOnwProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.q)}"
+         placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('onwProdQ',this.value)">
+       <div id="mOnwProdBox">${onwProdPicksHtml()}</div>`)
+    + onwLinesHtml();
+  /* HOW. Two answers, not three: a walk-in rings up at the till, which is a
+     purpose-built screen and three server rules this form would have to grow to
+     satisfy. */
+  const storeRow=stores.length>1
+    ? onwField(T('Store','门店'),onwChips(stores.map(s=>({k:s.id,en:s.name_en||s.name_cn||('#'+s.id),zh:s.name_cn||s.name_en||('#'+s.id)})),o.storeId,'onwStore'),
+        o.ful==='pickup'?T('Where the customer collects it.','顾客到这家门店取货。'):T('Which counter owns this order.','由哪家门店处理这张订单。'))
+    : '';
+  const addr=o.ful!=='delivery' ? '' :
+    onwField(T('City','城市'), o.city
+      ? `<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
+           <span style="flex:1;min-width:0;font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.city)}</span>
+           <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" onclick="APP.cmd('onwUnpickCity')" aria-label="${T('Remove','移除')}">${ic('x',20,2)}</button></div>`
+      : `<input id="mOnwCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.cityQ)}"
+           placeholder="${T('Select a city…','请选择城市…')}" oninput="APP.cmd('onwCityQ',this.value)">
+         <div id="mOnwCityBox">${onwCityPicksHtml()}</div>`,
+      o.province?T('Province','省')+' · '+escAttr(o.province):'')
+    + (o.city?onwField(T('District','区'),`<div id="mOnwDistBox">${onwDistrictsHtml()}</div>`):'')
+    + onwField(T('Street address','详细地址'),`<input id="mOnwStreet" value="${escAttr(o.street)}" maxlength="200" oninput="APP.cmd('onwStreet',this.value)">`);
+  const fees=`<div style="display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;gap:10px">
+        ${o.ful==='delivery'?`<div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <span class="eyebrow">${T('Shipping','运费')}</span>
+          <input id="mOnwShip" inputmode="decimal" value="${escAttr(o.ship)}" oninput="APP.cmd('onwFee','ship',this.value)"></div>`:''}
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <span class="eyebrow">${T('Packing','包装费')}</span>
+          <input id="mOnwPack" inputmode="decimal" value="${escAttr(o.pack)}" oninput="APP.cmd('onwFee','pack',this.value)"></div></div>
+      <span id="mOnwFeeNote" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${o.feeNote?String(o.feeNote):''}</span></div>`;
+  const how=onwField('',onwChips(ONW_FULS,o.ful,'onwFul'),
+      canRoute('till')?T('A walk-in rings up at the counter till.','顾客到店购买请用前台收银。'):'')
+    + storeRow + addr + fees;
+  /* WHERE IT CAME FROM. Required by the server for everything but a counter
+     sale, and it is the answer that gives this revenue a card on the Sales
+     page — an unanswered origin is what used to leave hand-keyed money filed
+     under nothing at all. */
+  const from=onwField('',onwChips(ONW_ORIGINS,o.channel,'onwOrigin'))
+    + (o.channel==='other'?onwField(T('Where did it come from?','具体来源'),
+        `<input id="mOnwOriginNote" value="${escAttr(o.channelNote)}" maxlength="200" oninput="APP.cmd('onwOriginNote',this.value)">`):'');
+  /* PAYMENT. Unpaid is the default and the common case — a phone order is paid
+     when the money lands, from the order itself. Marking it paid here records
+     WHICH tender took it, the same five the order sheet's Mark paid offers, so
+     the day's takings still split correctly. */
+  const pay=onwField('',onwChips([{k:'no',en:'Unpaid',zh:'待付款'},{k:'yes',en:'Paid',zh:'已付款'}],o.paid?'yes':'no','onwPaid'))
+    + (o.paid?onwField(T('Pay method','付款方式'),onwChips(PAY_METHODS.map(m=>({k:m[0],en:m[1],zh:m[2]})),o.pay,'onwPay')):'');
+  const notes=onwField(T('Customer note','顾客备注')+' <span style="font-weight:400">· '+T('optional','选填')+'</span>',
+      `<input id="mOnwNote" value="${escAttr(o.note)}" maxlength="2000" placeholder="${T('What the customer should read','顾客会读到的内容')}" oninput="APP.cmd('onwNote',this.value)">`)
+    + onwField(T('Staff note','员工备注')+' <span style="font-weight:400">· '+T('optional','选填')+'</span>',
+      `<input id="mOnwStaffNote" value="${escAttr(o.staffNote)}" maxlength="2000" placeholder="${T('Only the shop reads this','仅店内可见')}" oninput="APP.cmd('onwStaffNote',this.value)">`);
+  return `<div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:22px">
+    ${onwSection(T('Customer','顾客'),who,'who')}
+    ${onwSection(T('Products','商品'),what,'what')}
+    ${onwSection(T('Fulfilment','履约方式'),how,'how')}
+    ${onwSection(T('Order came from','订单来源'),from,'from')}
+    ${onwSection(T('Payment','付款'),pay,'pay')}
+    ${onwSection(T('Notes','备注'),notes,'notes')}
+    <div id="mOnwFoot" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">${onwFootHtml()}</div>
+  </div>`;
+}
+
+/* ---- the commands ------------------------------------------------------ */
+/* Text fields NEVER call render(), and never arm state.focus either. They are
+   not rebuilt by their own typing, so there is no caret to put back — and an
+   armed focus would be spent by the NEXT render whatever caused it, which is
+   how a tap on a chip ends up reopening the keyboard on a field nobody is in. */
+function onwTyped(key,v){ state.onw[key]=String(v==null?'':v); }
+reg('onwName', v=>{ onwTyped('name',v); onwRepaintFoot(); });
+reg('onwPhone', v=>{ onwTyped('phone',v); });
+reg('onwStreet', v=>{ onwTyped('street',v); onwRepaintFoot(); onwFeesSoon(); });
+reg('onwNote', v=>{ onwTyped('note',v); });
+reg('onwStaffNote', v=>{ onwTyped('staffNote',v); });
+reg('onwOriginNote', v=>{ onwTyped('channelNote',v); onwRepaintFoot(); });
+/* A typed fee is the operator's, and no later quote may overwrite it — the
+   whole point of typing one is a waived charge or a rate agreed on the call. */
+reg('onwFee', (which,v)=>{
+  const o=state.onw, n=Number(String(v).trim());
+  o[which]=Number.isFinite(n)&&n>=0?n:0;
+  o.feeTouched[which]=true;
+  onwRepaintFoot();
+});
+/* The two searches: no render per keystroke, a debounced read, and the results
+   box patched when it lands. state.focus IS armed here, exactly as the waste
+   picker arms it, because these are the fields whose box can miss its patch and
+   fall back to a full render. */
+reg('onwProdQ', v=>{ const o=state.onw, el=document.getElementById('mOnwProdQ');
+  o.q=String(v||''); state.focus={id:'mOnwProdQ',pos:el?el.selectionStart:null};
+  clearTimeout(o.pickTimer); o.pickTimer=setTimeout(loadOnwProducts,180); });
+reg('onwCustQ', v=>{ const o=state.onw, el=document.getElementById('mOnwCustQ');
+  o.custQ=String(v||''); state.focus={id:'mOnwCustQ',pos:el?el.selectionStart:null};
+  clearTimeout(o.custTimer); o.custTimer=setTimeout(loadOnwCustomers,180); });
+/* The city list is already in memory, so this one filters rather than fetches
+   — and patches the same way, for the same keyboard. */
+reg('onwCityQ', v=>{ const o=state.onw, el=document.getElementById('mOnwCityQ');
+  o.cityQ=String(v||''); state.focus={id:'mOnwCityQ',pos:el?el.selectionStart:null};
+  onwRepaint('mOnwCityBox',onwCityPicksHtml); });
+reg('onwPickCity', i=>{
+  const o=state.onw, c=onwCityMatches()[Number(i)];
+  if(!c) return;
+  o.city=c.name_cn||c.name_en||''; o.province=c.province_cn||''; o.cityQ='';
+  /* A new city is a new set of districts and a new zone, so neither the old
+     district nor the old quote means anything. Dropped, not carried across. */
+  o.district=''; o.districts=null;
+  render(); loadOnwDistricts(); onwFeesSoon();
+});
+reg('onwUnpickCity', ()=>{ const o=state.onw;
+  o.city=''; o.province=''; o.district=''; o.districts=null; o.cityQ=''; render(); });
+reg('onwDistrict', i=>{ const o=state.onw;
+  const d=i===''?null:(o.districts||[])[Number(i)];
+  o.district=d?(d.name_cn||d.name_en||''):'';
+  render(); onwFeesSoon(); });
+reg('onwPickCust', id=>{
+  const o=state.onw, c=(o.custPicks||[]).find(x=>String(x.id)===String(id));
+  if(!c) return;
+  o.cust=c; o.custQ=''; o.custPicks=null; o.saveCust=false;
+  /* The name and the phone belong to the ORDER, not to the record — a customer
+     can have an order sent to somebody else — so they are seeded from the
+     record and stay editable. Only when empty: a name already typed is the one
+     that was given on the telephone. */
+  if(!o.name.trim()) o.name=String(c.nickname||'');
+  if(!o.phone.trim()) o.phone=String(c.phone||'');
+  render();
+});
+reg('onwUnpickCust', ()=>{ const o=state.onw; o.cust=null; o.custPicks=null; o.custQ=''; render(); });
+reg('onwSaveCust', ()=>{ const o=state.onw; o.saveCust=!o.saveCust; render(); });
+reg('onwAddLine', id=>{
+  const o=state.onw, p=(o.picks||[]).find(x=>String(x.id)===String(id));
+  if(!p) return;
+  const have=o.lines.find(l=>String(l.id)===String(p.id));
+  if(have) have.qty=Number(have.qty)+1;
+  else o.lines.push({id:p.id,en:p.name_en||p.name_cn||'',cn:p.name_cn||p.name_en||'',
+                     price:Number(p.sell_price)||0,qty:1});
+  o.q=''; o.picks=null; render(); onwFeesSoon();
+});
+reg('onwQty', (i,d)=>{ const l=state.onw.lines[Number(i)]; if(!l) return;
+  l.qty=Math.max(1,(Number(l.qty)||0)+Number(d)); render(); onwFeesSoon(); });
+reg('onwDropLine', i=>{ state.onw.lines.splice(Number(i),1); render(); onwFeesSoon(); });
+reg('onwFul', k=>{ const o=state.onw;
+  if(o.ful===k) return;
+  o.ful=k;
+  /* Switching to a collection drops the shipping quote rather than leaving it
+     standing: the server refuses a shipping fee on one, and a stale number is
+     how that refusal arrives after the operator has stopped looking. */
+  if(k!=='delivery'){ o.ship=0; o.feeTouched.ship=false; }
+  render(); onwFeesSoon(); });
+reg('onwStore', id=>{ state.onw.storeId=Number(id); render(); });
+reg('onwOrigin', k=>{ const o=state.onw;
+  o.channel=k; if(k!=='other') o.channelNote=''; render(); });
+reg('onwPaid', k=>{ state.onw.paid=k==='yes'; render(); });
+reg('onwPay', k=>{ state.onw.pay=String(k); render(); });
+/* Clearing throws away work and nothing else does, so it asks — the rule the
+   desktop's draft delete follows. Leaving the screen is not destructive and
+   never asks: what was typed is still here when you come back. */
+reg('onwClear', ()=>{
+  if(!onwHasWork()) return;
+  state.ask={title:T('Clear this order?','清空这张订单？'),
+    body:T('Everything typed here goes. Nothing has been created yet, so there is nothing to undo.','已填写的内容会全部清除。订单尚未创建，因此无需撤销。'),
+    confirmLabel:T('Clear','清空'), danger:true, run:()=>{ onwReset(); render(); }};
+  render();
+});
+let _onwFeeTimer=null;
+function onwFeesSoon(){ clearTimeout(_onwFeeTimer); _onwFeeTimer=setTimeout(loadOnwFees,300); }
+reg('onwCreate', ()=>{
+  const o=state.onw;
+  if(o.busy||onwBlocked()) return;
+  o.busy=true; o.err=null; render();
+  apiWrite('/orders',onwBody()).then(j=>{
+    const d=(j&&j.data)||{};
+    state.onw.busy=false;
+    onwReset();
+    /* Land on the list with the new order open — that is where the pay link,
+       the receipt and every next action live. The same landing the desktop
+       makes, for the same reason. */
+    forgetPushed(); state.stack=[]; state.tab='orders'; markOrdersSeen();
+    showToast(T('Order created','订单已创建'));
+    render();
+    loadOrdersPage();
+    if(d.id!=null) onwOpenCreated(d);
+  }).catch(e=>{
+    state.onw.busy=false;
+    if(String(e.message)==='auth') return;
+    /* The server's CODE where there is one, its own words only where there is
+       not: a code has a sentence written for it here, and e.message for a coded
+       failure is the raw field name. */
+    state.onw.err={where:ONW_WHERE[e.code]||'who',msg:onwErrText(e.code,e.code?null:e.message)};
+    render();
+  });
+});
+/* The order that has just been made is not in the list yet, so its sheet is
+   built from its own read — the shape openCustOrder uses for an order that is
+   pages down the list. */
+function onwOpenCreated(d){
+  const no=d.order_no||('#'+d.id);
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  api('/orders/'+d.id).then(r=>{
+    if(state.detailId!==no) return;
+    const m=mapDetail(r);
+    state.liveDetail=m; state.detailId=m.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=E('This order could not be opened. Close and try again.','无法打开该订单，请关闭后重试。');
+    render();
+  });
+}
+
+/* ==========================================================================
    Purchasing — the goods ledger (desktop: 16-purchasing.js)
    --------------------------------------------------------------------------
    This screen used to be three invented purchase orders out of DB.purchasing,
@@ -5161,6 +5852,14 @@ function poDeliveries(poId){
 let sheetStep={};
 const SUBS={
   setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
+  /* Pushed from the Orders header and from More, so Back names whichever of the
+     two the operator came through — the same reason Receive carries a backLabel
+     of its own. The CTA appears only once there is something to lose. */
+  neworder:{title:['New order','新建订单'],
+    backLabel:()=>flatNav()?escAttr(homeTitle()):(state.tab==='orders'?T('Orders','订单'):T('More','更多')),
+    cta:()=>onwHasWork()
+      ? `<button class="btn2" style="width:auto;padding:0 16px;flex:none" onclick="APP.cmd('onwClear')">${T('Clear','清空')}</button>` : '',
+    render:()=>screenNewOrder()},
   products:{title:['Products','产品'],render:()=>{
     loadCatalogue();
     const L=state.liveProductsLoaded, P=DB.products;
@@ -6763,6 +7462,7 @@ function sheetOrderDetail(){
        <div style="background:var(--surface-raised);border-radius:14px;padding:16px">
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
          ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}
+           ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
        ${isPO?'':`
@@ -8395,6 +9095,12 @@ function screenProducts(){
 const ROUTE_CAP={
   // The five destinations.
   home:'dashboard:view', orders:'orders:view', customers:'customers:view', products:'products:view',
+  /* NEW ORDER IS GATED ON EDIT, NOT ON VIEW — the same call Receiving's line
+     below makes, for the same reason. It is a screen whose entire purpose is
+     the Create at the bottom of it, and that create is gated on `orders:edit`
+     server-side (lib/cap-routes.js). Offering it to somebody holding
+     orders:view alone is a form that 403s after the order has been typed. */
+  neworder:'orders:edit',
   // More → Operations. sales and trend both read /dashboard, so they are gated
   // on the capability that endpoint belongs to and not on a reports key they
   // never touch.
@@ -10247,6 +10953,12 @@ function mapDetail(o){
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
+  /* Tax (audit I-03). Carried as a PAIR of facts, not a rendered string: the
+     amount, and which kind it is — an exclusive tax was added to the figures
+     above it and an inclusive one was already inside them, and the sheet says
+     which. Absent on every order taken before a shop charged tax, which is a
+     different thing from an order that was taxed nothing. */
+  if(o.tax_amount!=null&&o.tax_mode) base.tax={amount:Number(o.tax_amount)||0, mode:o.tax_mode};
   base.id=o.order_no||base.id;
   return base;
 }

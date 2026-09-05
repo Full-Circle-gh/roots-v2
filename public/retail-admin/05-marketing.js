@@ -505,8 +505,13 @@ async function loadGrantedList() {
         </div>
         ${!standing && g.used_at
           ? ''
-          : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
+          : `<button class="btn btn-sm" data-cap="coupons:grant" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
       </div>`).join('');
+    /* Built after the page's one pass over [data-cap] (audit K-01). Revoking a
+       coupon somebody already holds is coupons:grant — the same cap
+       requiredCapFor() answers for the DELETE this calls, and a different grant
+       from editing the coupon definition that opened this panel. */
+    try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e2) { /* the server still refuses */ }
   } catch (e) {
     mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
@@ -1425,6 +1430,120 @@ function renderCurrencyControl(c) {
   };
 }
 
+// ── Tax · 税费 (audit I-03) ───────────────────────────────────────────────
+// Self-contained, like the Currency control above it and for the same reason:
+// it is not part of the shared Settings save, so it can validate before it
+// writes and say what it did.
+//
+// THE RATE IS TYPED IN PERCENT AND STORED IN MICRO. 20 on screen, 200000 in the
+// database — the same integer the order snapshots and the server computes with,
+// so there is exactly one conversion and it happens here. 8.875% is a real
+// sales-tax rate, which is why the field takes four decimal places and why a
+// fraction in ten-thousandths would not have been enough (0.08875 is 887.5, and
+// an exact unit may not be a fraction).
+const TAX_MAX_MICRO = 1000000;            // 100%, mirroring lib/tax.js MAX_RATE_MICRO
+function taxRateMicroTyped() {
+  const raw = ($('#cfg-tax-rate')?.value || '').trim();
+  if (!raw) return 0;
+  const pct = Number(raw);
+  if (!Number.isFinite(pct) || pct < 0) return null;
+  const micro = Math.round(pct * 10000);
+  return micro > TAX_MAX_MICRO ? null : micro;
+}
+// What the settings on screen do to a round number, recomputed on every
+// keystroke. A rate is abstract; "a ¥100 order becomes ¥120.00, of which ¥20.00
+// is tax" is not, and every tax setting anybody has ever got wrong was got
+// wrong by somebody who could not see this.
+function taxCardSync() {
+  const on = !!$('#cfg-tax-enabled')?.checked;
+  const fields = $('#tax-fields');
+  if (fields) fields.hidden = !on;
+  const chip = $('#tax-chip');
+  const micro = taxRateMicroTyped();
+  const mode = $('#cfg-tax-mode')?.value === 'inclusive' ? 'inclusive' : 'exclusive';
+  if (chip) {
+    chip.textContent = on && micro ? (micro / 10000) + '%' : cuT('Off', '关闭');
+    chip.style.cssText = 'padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;'
+      + (on && micro ? 'background:var(--accent);color:var(--accent-ink)' : 'background:var(--line);color:var(--text-3)');
+  }
+  const pv = $('#tax-preview');
+  if (!pv) return;
+  if (!on) { pv.textContent = ''; return; }
+  if (micro == null) {
+    pv.textContent = cuT('That rate is not a number between 0 and 100.', '税率需为 0 到 100 之间的数字。');
+    return;
+  }
+  if (!micro) {
+    pv.textContent = cuT('A rate of zero charges no tax — the switch above stays on but nothing is added.',
+                         '税率为 0 时不收取税费 — 开关虽开启,但不会加收任何金额。');
+    return;
+  }
+  // The same arithmetic lib/tax.js does, on a round number, in cents. Rounded
+  // once, half away from zero, so the figure shown here is the figure charged.
+  const base = 10000;
+  const taxMinor = mode === 'inclusive'
+    ? Math.floor((base * micro) / (TAX_MAX_MICRO + micro) + 0.5)
+    : Math.floor((base * micro) / TAX_MAX_MICRO + 0.5);
+  const pays = mode === 'inclusive' ? base : base + taxMinor;
+  const m = (minor) => acMoney(minor / 100);
+  pv.textContent = mode === 'inclusive'
+    ? cuT(`A ${m(base)} price stays ${m(pays)} — of which ${m(taxMinor)} is tax, and ${m(base - taxMinor)} is yours.`,
+          `标价 ${m(base)} 的商品仍收 ${m(pays)} — 其中 ${m(taxMinor)} 为税费,${m(base - taxMinor)} 归本店。`)
+    : cuT(`A ${m(base)} price is charged as ${m(pays)} — ${m(taxMinor)} of tax added at checkout.`,
+          `标价 ${m(base)} 的商品结账收 ${m(pays)} — 结账时加收 ${m(taxMinor)} 税费。`);
+}
+function renderTaxCard(c) {
+  if (!$('#cfg-tax-enabled')) return;      // card absent from this build
+  const t = (c && c.tax) || {};
+  $('#cfg-tax-enabled').checked = t.enabled === true;
+  $('#cfg-tax-mode').value = t.mode === 'inclusive' ? 'inclusive' : 'exclusive';
+  // Blank rather than 0 when nothing has ever been set: a zero in the box reads
+  // as a decision somebody made.
+  $('#cfg-tax-rate').value = Number.isInteger(t.rateMicro) && t.rateMicro > 0 ? String(t.rateMicro / 10000) : '';
+  $('#cfg-tax-label-en').value = (t.label && t.label.en) || '';
+  $('#cfg-tax-label-cn').value = (t.label && t.label.cn) || '';
+  $('#cfg-tax-number').value = t.number || '';
+  $('#cfg-tax-shipping').checked = t.shippingTaxable === true;
+  taxCardSync();
+}
+async function saveTaxSettings() {
+  const status = $('#tax-status');
+  const on = !!$('#cfg-tax-enabled')?.checked;
+  const micro = taxRateMicroTyped();
+  if (micro == null) {
+    toast(cuT('That rate is not a number between 0 and 100.', '税率需为 0 到 100 之间的数字。'), 'err');
+    return;
+  }
+  // Turning it ON with no rate is the one combination that would look like it
+  // worked and charge nothing. Refused here rather than stored, because the
+  // shop would find out at the end of a tax year.
+  if (on && !micro) {
+    toast(cuT('Set a rate above zero, or turn tax off.', '请填写大于 0 的税率,或关闭税费。'), 'err');
+    return;
+  }
+  const body = {
+    'tax.enabled': on,
+    'tax.mode': $('#cfg-tax-mode').value === 'inclusive' ? 'inclusive' : 'exclusive',
+    'tax.rateMicro': micro,
+    'tax.label': { en: ($('#cfg-tax-label-en').value || '').trim(), cn: ($('#cfg-tax-label-cn').value || '').trim() },
+    'tax.number': ($('#cfg-tax-number').value || '').trim(),
+    'tax.shippingTaxable': !!$('#cfg-tax-shipping')?.checked,
+  };
+  if (status) status.textContent = cuT('Saving…', '保存中…');
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    if (status) { status.textContent = cuT('Saved ✓', '已保存 ✓'); setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
+    toast(cuT('Tax settings saved', '税费设置已保存'), 'ok');
+  } catch (e) {
+    if (status) status.textContent = '';
+    // The server refuses a rate it will not apply; say which of the three it was.
+    const msg = /bad_tax_rate/.test(e.message) ? cuT('That rate is not a number between 0 and 100.', '税率需为 0 到 100 之间的数字。')
+      : /bad_tax_mode/.test(e.message) ? cuT('Pick how prices are shown.', '请选择价格含税方式。')
+      : (e.message || cuT('Save failed', '保存失败'));
+    toast(msg, 'err');
+  }
+}
+
 async function loadConfig() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
@@ -1477,6 +1596,7 @@ async function loadConfig() {
     $('#cfg-pickup-close').value               = c.pickup?.window?.close || '20:00';
     if ($('#cfg-pickup-lead')) $('#cfg-pickup-lead').value = c.pickup?.leadMinutes ?? 0;
     renderCurrencyControl(c);
+    renderTaxCard(c);
     // Shop layout & filters
     const shopLayout = c.shop?.layout === 'grid' ? 'grid-2col' : (c.shop?.layout || 'list');
     $('#cfg-shop-layout').value             = shopLayout;

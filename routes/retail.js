@@ -320,6 +320,8 @@ const businessDate = require('../lib/business-date');
 const money = require('../lib/money');
 // What was deleted, kept so it can be put back (audit E-07).
 const recycle = require('../lib/recycle');
+// Sales tax and VAT (audit I-03). Off unless a shop has set a rate.
+const tax = require('../lib/tax');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -8967,6 +8969,35 @@ function cfgValue(key, fallback) {
   try { return JSON.parse(row.value_json); } catch { return fallback; }
 }
 
+/* The shop's tax settings, normalised (audit I-03).
+   Read per call rather than cached: the settings screen writes through
+   storefront_config, this reads it back, and a cache would price one order at
+   the old rate for as long as the process lived. It is one indexed row.
+   Everything about it is OFF unless a rate has been set — see lib/tax.js. */
+function taxSettings() {
+  try {
+    // The settings are stored as DOTTED keys — `tax.enabled`, `tax.rateMicro`,
+    // `tax.label.en` — which is how every other setting in this table is
+    // stored. Rebuilt into the shape lib/tax.js takes, rather than read through
+    // loadConfig(): that reads every row in the table, and this is called once
+    // per order.
+    const rows = tdb().prepare("SELECT key, value_json FROM storefront_config WHERE key LIKE 'tax.%'").all();
+    const t = {};
+    for (const r of rows) {
+      const path = r.key.split('.').slice(1);
+      if (!path.length) continue;
+      let v; try { v = JSON.parse(r.value_json); } catch (e) { v = r.value_json; }
+      let cur = t;
+      for (let i = 0; i < path.length - 1; i++) {
+        if (cur[path[i]] == null || typeof cur[path[i]] !== 'object') cur[path[i]] = {};
+        cur = cur[path[i]];
+      }
+      cur[path[path.length - 1]] = v;
+    }
+    return tax.settingsFrom({ tax: t });
+  } catch (e) { return tax.settingsFrom({}); }   // an unreadable setting charges no tax
+}
+
 // Tenant-wide default low-stock threshold (units). A product flagged "low" when
 // its stock is >0 and at/under its own low_stock_threshold, or this default when
 // the product hasn't set one. Clamped to a sane non-negative integer; 5 if unset.
@@ -10757,7 +10788,24 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (winner.free_shipping) shippingFee = 0;
   }
 
-  const grossTotal = Math.max(0, subtotal + shippingFee + packingFee - voucherDiscount);
+  // ── Tax (audit I-03) ──────────────────────────────────────────────────
+  // Computed on the DISCOUNTED base — a voucher reduces what was actually
+  // charged, and tax is charged on what was actually charged — and BEFORE
+  // points and wallet, which are tenders rather than discounts: they change who
+  // pays the bill, not what the bill is. On a shop with no rate set this adds
+  // nothing and stores NULL, so every existing checkout is byte-identical.
+  const taxCfg = taxSettings();
+  const taxLine = tax.taxOn({
+    subtotalMinor: money.toMinor(subtotal) || 0,
+    shippingMinor: money.toMinor(shippingFee) || 0,
+    packingMinor: money.toMinor(packingFee) || 0,
+    discountMinor: money.toMinor(voucherDiscount) || 0,
+  }, taxCfg);
+  const taxAmount = taxCfg.enabled ? money.fromMinor(taxLine.taxMinor) : null;
+  const taxRateMicro = taxCfg.enabled ? taxCfg.rateMicro : null;
+  const taxMode = taxCfg.enabled ? taxCfg.mode : null;
+  const grossTotal = Math.max(0, subtotal + shippingFee + packingFee - voucherDiscount)
+    + money.fromMinor(taxLine.addedMinor);
 
   // ── Points redemption ────────────────────────────────────────────────
   // Two modes:
@@ -10771,7 +10819,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // shipping from points coverage, the residual (shipping) must always be
   // paid in cash — so the legacy points-only payment method can't settle
   // it alone and is rejected for orders that ship.
-  const redeemBase = pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount);
+  const redeemBase = pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount,
+    money.fromMinor(taxLine.addedMinor));
   if (paymentMethod === 'points') {
     sweepExpiredPoints(req.customer.id);
     const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
@@ -10845,7 +10894,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   if (body.use_balance && paymentMethod !== 'points') {
     const cust = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = Math.max(0, Number(cust?.balance) || 0);
-    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount);
+    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount,
+      money.fromMinor(taxLine.addedMinor));
   }
   const total = Math.max(0, grossTotal - pointsAmount - balanceUsed);
 
@@ -10870,10 +10920,27 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   const carriesPoints = paymentMethod === 'points' || Number(body.points_to_use) > 0;
   if (declaresTotal && carriesPoints) {
     const declaredTotal = Number(body.client_total);
-    // Same money class as `total` — ¥ at 2dp, no conversion. Half-cent
-    // tolerance absorbs float dust on either side; a real disagreement is
-    // never smaller than a fen.
-    if (!Number.isFinite(declaredTotal) || Math.abs(declaredTotal - total) > 0.005) {
+    /* ── A CLIENT THAT HAS NOT LEARNED ABOUT TAX YET IS NOT A DISAGREEMENT ──
+       (audit I-03.) The mini app is a PUBLISHED WeChat build: turning tax on in
+       the admin takes effect here immediately, while the handset in a
+       customer's pocket is whatever build WeChat last approved. Without this,
+       the day a shop switched tax on, every customer still on the old build
+       would have declared a total short by exactly the tax and been refused —
+       a checkout outage lasting until a new build cleared review, caused by a
+       setting change.
+
+       So the pre-tax figure is accepted too, and it is not a hole: `taxAdded`
+       is not a free variable a client can move, it is what THIS server just
+       computed for THIS cart. Both accepted values are the server's own
+       arithmetic; the thing the check exists to catch — a stale
+       points-affordability flag, where the client shows ¥0.00 and the real
+       residual is ¥24.40 — is neither of them, and is still refused.
+
+       Zero on an inclusive shop and on every shop that charges no tax, where
+       the two accepted values are the same number and this changes nothing. */
+    const taxAdded = money.fromMinor(taxLine.addedMinor);
+    const agrees = (v) => Number.isFinite(declaredTotal) && Math.abs(declaredTotal - v) <= 0.005;
+    if (!(agrees(total) || (taxAdded > 0 && agrees(Math.max(0, total - taxAdded))))) {
       return res.status(400).json({
         success: false,
         error: 'points_cannot_cover_shipping',
@@ -10904,8 +10971,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          invoice_type, invoice_email,
          store_id, routing_reason, routed_by_distance, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
-         fulfillment_type, fulfillment_short_pids, balance_used
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fulfillment_type, fulfillment_short_pids, balance_used,
+         tax_amount, tax_rate_micro, tax_mode
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -10942,7 +11010,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       idempotencyKey,
       isPickup ? 'pickup' : 'delivery',
       fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null,
-      balanceUsed
+      balanceUsed,
+      taxAmount, taxRateMicro, taxMode
     );
     const orderId = info.lastInsertRowid;
 
@@ -11468,6 +11537,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
             subtotal, shipping_fee, packing_fee, delivery_mode, delivery_zone_id,
             voucher_code, voucher_amount,
             points_used, points_amount, points_earned, total,
+            tax_amount, tax_rate_micro, tax_mode,
             customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
             invoice_type, invoice_email,
             invoice_status, invoice_file_url, invoice_number, invoice_issued_at,
@@ -20819,6 +20889,31 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async
   const entries = Object.entries(body);
   if (!entries.length) return res.status(400).json({ success: false, error: 'no_updates' });
 
+  /* ── Tax settings are validated, and nothing else here is (audit I-03) ────
+     This endpoint takes any dotted key and stores any JSON, which is right for
+     a table of copy, colours and thresholds: a wrong one looks wrong and is
+     retyped. A wrong TAX RATE does not look wrong — it looks like a number —
+     and it is applied to every order taken until somebody notices the bank
+     balance. 900 instead of 9 would nearly double every bill.
+
+     So the three keys that decide money are checked here, at the only door
+     they can arrive through, rather than clamped later where the clamp would
+     silently charge something nobody chose. `tax.rateMicro` is the PERCENTAGE
+     in micro units — 20% is 200000 — the same unit the order snapshots. */
+  for (const [k, v] of entries) {
+    if (k === 'tax.rateMicro') {
+      if (!Number.isInteger(v) || v < 0 || v > tax.MAX_RATE_MICRO) {
+        return res.status(400).json({ success: false, error: 'bad_tax_rate', max_micro: tax.MAX_RATE_MICRO });
+      }
+    } else if (k === 'tax.mode') {
+      if (!tax.MODES.includes(v)) {
+        return res.status(400).json({ success: false, error: 'bad_tax_mode', allowed: tax.MODES });
+      }
+    } else if (k === 'tax.enabled' || k === 'tax.shippingTaxable') {
+      if (typeof v !== 'boolean') return res.status(400).json({ success: false, error: 'bad_tax_switch', key: k });
+    }
+  }
+
   // Await inside the try — the update_failed 500 below is only reachable there.
   try {
     await withTransaction(tdb(), (tx) => {
@@ -23451,6 +23546,16 @@ router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), 
     lines: resolved.map(r => ({ size: r.p.size, qty: r.qty })),
     deliveryMode: b.delivery_mode,
   });
+  // Tax, on the same base the create route will use, so the figure the operator
+  // approves is the figure the order is made with (audit I-03). Absent — not
+  // zero — on a shop with no rate set, so a caller can tell "no tax here" from
+  // "the tax came to nothing".
+  const taxCfg = taxSettings();
+  const taxLine = tax.taxOn({
+    subtotalMinor: money.toMinor(subtotal) || 0,
+    shippingMinor: money.toMinor(fees.shippingFee) || 0,
+    packingMinor: money.toMinor(fees.packingFee) || 0,
+  }, taxCfg);
   res.json({
     success: true,
     data: {
@@ -23460,6 +23565,13 @@ router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), 
       free_shipping: !!fees.freeShipping,
       zone: fees.zone || null,
       error: fees.error || null,
+      tax: taxCfg.enabled ? {
+        amount: money.fromMinor(taxLine.taxMinor),
+        added: money.fromMinor(taxLine.addedMinor),
+        mode: taxCfg.mode,
+        rate_micro: taxCfg.rateMicro,
+        label: taxCfg.label,
+      } : null,
     },
   });
 });
@@ -23542,11 +23654,37 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     packingFee = Math.round(pf * 100) / 100;
   }
   let total = Math.round((subtotal + shippingFee + packingFee) * 100) / 100;
+  let overridden = false;
   if (b.total_override != null && b.total_override !== '') {
     const to = Number(b.total_override);
     if (!Number.isFinite(to) || to < 0) return res.status(400).json({ success: false, error: 'bad_total' });
     total = Math.round(to * 100) / 100;
+    overridden = true;
   }
+  // ── Tax (audit I-03) ──────────────────────────────────────────────────────
+  // Off for every shop that has not turned it on, so this line changes nothing
+  // for anybody until somebody sets a rate. On an exclusive shop it ADDS to the
+  // total; on an inclusive one the total is unchanged and the tax is the share
+  // of it that was tax. Both are snapshotted onto the order — a rate that
+  // changes in April must not restate March.
+  //
+  // AN OVERRIDDEN TOTAL IS ALWAYS TREATED AS INCLUSIVE, whichever shape the
+  // shop uses, and that is a deliberate choice rather than an oversight: the
+  // operator typed the figure the customer is going to pay. Adding tax on top
+  // of it would contradict the number they just wrote down, and the customer
+  // would be charged something nobody chose.
+  const taxCfg = taxSettings();
+  const taxLine = overridden
+    ? tax.taxOn({ subtotalMinor: money.toMinor(total) || 0 }, { ...taxCfg, mode: 'inclusive' })
+    : tax.taxOn({
+        subtotalMinor: money.toMinor(subtotal) || 0,
+        shippingMinor: money.toMinor(shippingFee) || 0,
+        packingMinor: money.toMinor(packingFee) || 0,
+      }, taxCfg);
+  if (taxLine.addedMinor) total = money.round(total + money.fromMinor(taxLine.addedMinor));
+  const taxAmount = taxCfg.enabled ? money.fromMinor(taxLine.taxMinor) : null;
+  const taxRateMicro = taxCfg.enabled ? taxCfg.rateMicro : null;
+  const taxMode = taxCfg.enabled ? (overridden ? 'inclusive' : taxCfg.mode) : null;
 
   // ── Status + payment method. Default pending; staff may mark paid offline. ──
   const status = b.status === 'paid' ? 'paid' : 'pending_payment';
@@ -23800,8 +23938,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            recipient_name, recipient_phone, address_full, address_json,
            subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
-           store_id
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           store_id, tax_amount, tax_rate_micro, tax_mode
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
@@ -23809,7 +23947,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         recipientName, recipientPhone || null, addressFull, addressJson,
         subtotal, shippingFee, packingFee, total,
         customerNote, staffNote, channel, channelNote, 'manual', req.user.id, fulfillmentType, payToken,
-        storeId
+        storeId, taxAmount, taxRateMicro, taxMode
       );
       orderId = info.lastInsertRowid;
       // ship_modes / needs_ice_pack / ship_from_supplier are SNAPSHOTTED here, the
@@ -23896,7 +24034,10 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     ? `${req.protocol}://${req.get('host')}/pay/${payToken}`
     : null;
   res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl,
-                                    customer_id: customerId, customer_reused: customerReused, carried } });
+                                    customer_id: customerId, customer_reused: customerReused, carried,
+                                    // What was charged, so the caller can print
+                                    // it without a second read (audit I-03).
+                                    tax_amount: taxAmount, tax_mode: taxMode, tax_rate_micro: taxRateMicro } });
 });
 
 // ── Unfinished New-order forms ─────────────────────────────────────────────────
@@ -27302,7 +27443,7 @@ function printOrderById(orderId, prefs, pcfg) {
   }
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
-  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit() });
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
   return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
@@ -27662,7 +27803,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
     ({ order, items, shipments } = _sampleOrderForPreview());
     sample = true;
   }
-  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
+  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
   res.json({ ok: true, content, sample, template: tpl });
 });
 
@@ -27684,7 +27825,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
     r = await printOrderById(last.id, prefs, printer);
   } else {
     const { order, items, shipments } = _sampleOrderForPreview();
-    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
+    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
     r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
   }
   if (r.ok) return res.json({ ok: true });
@@ -32497,9 +32638,25 @@ function pointsCoverShipping() {
 }
 // Cash base that points are allowed to redeem against. When shipping is
 // excluded by policy, the residual (shipping) is always paid in cash.
-function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount = 0) {
+/* `taxAdded` is the tax CHARGED ON TOP (audit I-03) — zero on a shop whose
+   prices already contain it, and zero on every shop that charges none.
+
+   IT IS INSIDE THE BASE, and that is a decision rather than an oversight.
+   Points are a TENDER, not a discount: the audit's own note on orderTenders()
+   says the gross a customer pays is `points_amount + balance_used + total`, and
+   a tender settles the bill it is offered against — tax included. Shipping is
+   excluded only because a shop can say so (pointsCoverShipping), and no such
+   switch exists for tax; defaulting to "points may not pay the tax" would be
+   inventing one.
+
+   Leaving it out was tried first and is worse than untidy: `payment_method:
+   'points'` refuses outright when the redeemable base is short of the gross, so
+   every points-only order on a tax-charging shop would have been rejected —
+   with `points_cannot_cover_shipping`, naming a fee that was not the problem. */
+function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount = 0, taxAdded = 0) {
   const ship = pointsCoverShipping() ? Number(shippingFee || 0) : 0;
-  return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0) - Number(voucherDiscount || 0));
+  return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0)
+    - Number(voucherDiscount || 0) + Number(taxAdded || 0));
 }
 // Cash base that prepaid wallet BALANCE may be spent against. HARD RULE
 // (operator-stated): store credit — balance OR points — never pays the
@@ -32507,16 +32664,18 @@ function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount
 // the portion not already covered by points (points apply first; see the order
 // endpoint). Shipping is ALWAYS settled in cash via WeChat/Alipay. No toggle —
 // unlike points there is no balance.coverShipping escape hatch by design.
-function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+// `taxAdded` for the same reason as the line above it: store credit is a tender
+// too, and the hard rule it obeys names SHIPPING, not tax.
+function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0, taxAdded = 0) {
   return Math.max(0,
-    Number(subtotal || 0) + Number(packingFee || 0)
+    Number(subtotal || 0) + Number(packingFee || 0) + Number(taxAdded || 0)
     - Number(voucherDiscount || 0) - Number(pointsAmount || 0));
 }
 // How much wallet balance THIS order can actually spend: the spendable base
 // (never shipping), capped at the customer's available balance. Rounded to
 // cents so we never charge sub-fen dust.
-function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
-  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount);
+function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0, taxAdded = 0) {
+  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount, taxAdded);
   return Math.round(Math.min(Math.max(0, Number(balanceAvailable || 0)), base) * 100) / 100;
 }
 
@@ -32848,7 +33007,18 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     });
   }
 
-  const grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee);
+  // Tax, on the same base and in the same place the order route computes it
+  // (audit I-03) — before points and wallet, which are tenders. The quote is
+  // what the customer is shown, so a shop that charges tax must show it here or
+  // the pay button says one number and the bill is another.
+  const quoteTaxCfg = taxSettings();
+  const quoteTax = tax.taxOn({
+    subtotalMinor: money.toMinor(priced.subtotal) || 0,
+    shippingMinor: money.toMinor(fees.deliveryFee) || 0,
+    packingMinor: money.toMinor(fees.packingFee) || 0,
+  }, quoteTaxCfg);
+  const grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee)
+    + money.fromMinor(quoteTax.addedMinor);
 
   // Points preview — two modes the client uses:
   //   • payment_method='points' (full redeem): pointsRequired / pointsAffordable
@@ -32866,7 +33036,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // When the store excludes shipping from points coverage, the redeemable
   // base is subtotal + packing only; the customer always pays shipping in
   // cash (so residual = shipping when the points side is "full").
-  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee);
+  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
+    money.fromMinor(quoteTax.addedMinor));
   const pointsRequired   = pointsRequiredFor(redeemBase);
   const pointsAffordable = pointsBalance >= pointsRequired;
   const pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
@@ -32893,7 +33064,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // vouchers; the order endpoint re-prices with the real voucher discount.)
   const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
-  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount);
+  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
+    money.fromMinor(quoteTax.addedMinor));
   const balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
   const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
   const balanceApplied   = useBalance ? balanceMaxUsable : 0;
@@ -33094,6 +33266,19 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       free_shipping: fees.freeShipping,
       total,
       gross_total: grossTotal,
+      // NULL on a shop that charges no tax, so a client can tell "there is no
+      // tax here" from "the tax came to nothing". `added` is what the customer
+      // pays on top — zero on an inclusive shop, where the price already
+      // contained it — and the rate travels so the client can keep its own
+      // arithmetic in step when it recomputes between quotes.
+      tax: quoteTaxCfg.enabled ? {
+        amount: money.fromMinor(quoteTax.taxMinor),
+        added: money.fromMinor(quoteTax.addedMinor),
+        mode: quoteTaxCfg.mode,
+        rate_micro: quoteTaxCfg.rateMicro,
+        shipping_taxable: quoteTaxCfg.shippingTaxable,
+        label: quoteTaxCfg.label,
+      } : null,
       payment_method: paymentMethodPreview,
       points_required: pointsRequired,
       points_balance:  pointsBalance,

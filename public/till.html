@@ -769,6 +769,11 @@ button{font:inherit;color:inherit;margin:0}
                    '还没有商品行。在上方搜索,添加第一个商品。'], // admin: 04-orders.js
     subtotal:     ['subtotal', '小计'],                // admin
     total:        ['Total', '合计'],                   // admin: 04-orders.js summary
+    // The default name for the tax line, used when the shop has not typed its
+    // own (audit I-03). A shop in Dublin writes VAT and one in Toronto writes
+    // GST/HST, so the merchant's own text wins — this is only the fallback, and
+    // it is declared here because every Chinese string on this page is.
+    taxLabel:     ['Tax', '税费'],                     // admin: 04-orders.js order subline
     // settle
     amount:       ['Amount', '金额'],                  // admin: refund payout dialog
     payMethod:    ['Pay method', '付款方式'],          // admin: retail-admin.html:2829
@@ -852,7 +857,12 @@ button{font:inherit;color:inherit;margin:0}
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
     wallet: null, moreOpen: false, busy: false, err: '',
-    done: null, printState: 'idle'
+    done: null, printState: 'idle',
+    // The shop's tax settings, or null for a shop that charges none (audit
+    // I-03). Null is the state every shop starts in and the only one that
+    // existed before this, so every line that reads it falls through to what
+    // the till has always shown.
+    tax: null
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -874,6 +884,44 @@ button{font:inherit;color:inherit;margin:0}
   // ---- money. One place, so the rail and the settle screen cannot disagree.
   function subtotal() {
     return Math.round(S.lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0) * 100) / 100;
+  }
+
+  /* ---- tax (audit I-03) -------------------------------------------------
+     The SERVER computes what is charged — this till posts items and lets
+     /api/retail-admin/orders price them, exactly as it always has. What is
+     here is the same arithmetic done for the GLASS, so the cashier quotes the
+     figure the customer is about to pay rather than the one before tax.
+
+     Same shape as lib/tax.js: the rate is the percentage in micro (20% is
+     200000), the base is in cents, and it is rounded once, half away from zero.
+     If the two ever disagree it is a rounding of a single cent on the display,
+     never on the charge — the order carries the server's figure. */
+  var TAX_MAX_MICRO = 1000000;
+  function taxFrom(cfg) {
+    var t = (cfg && cfg.tax) || {};
+    var micro = Number(t.rateMicro);
+    if (t.enabled !== true || !Number.isFinite(micro) || micro <= 0 || micro > TAX_MAX_MICRO) return null;
+    return {
+      micro: Math.round(micro),
+      mode: t.mode === 'inclusive' ? 'inclusive' : 'exclusive',
+      // The merchant's own word in the reader's language, and the declared
+      // fallback pair when they have typed neither half.
+      label: cuT((t.label && t.label.en) || '', (t.label && t.label.cn) || '') || T('taxLabel'),
+    };
+  }
+  // The tax on a subtotal, in major units. Zero when the shop charges none.
+  function taxOn(sub) {
+    if (!S.tax) return 0;
+    var base = Math.round(sub * 100);
+    var minor = S.tax.mode === 'inclusive'
+      ? Math.floor((base * S.tax.micro) / (TAX_MAX_MICRO + S.tax.micro) + 0.5)
+      : Math.floor((base * S.tax.micro) / TAX_MAX_MICRO + 0.5);
+    return minor / 100;
+  }
+  // What the customer hands over: the shelf price plus tax on an exclusive
+  // shop, the shelf price alone on an inclusive one.
+  function dueNow(sub) {
+    return (S.tax && S.tax.mode === 'exclusive') ? Math.round((sub + taxOn(sub)) * 100) / 100 : sub;
   }
 
   // ---- stock. Per STORE, not the catalogue's cross-store sum: a till may only
@@ -925,10 +973,18 @@ button{font:inherit;color:inherit;margin:0}
     Promise.all([
       api('/api/retail-admin/stores'),
       api('/api/retail-admin/channel-status').catch(function () { return null; }),
-      api('/api/backend/me').catch(function () { return null; })
+      api('/api/backend/me').catch(function () { return null; }),
+      // The shop's tax settings (audit I-03). The server prices every sale this
+      // till makes, so it computes the tax whatever the till believes — but a
+      // till that showed ¥100 while the customer was charged ¥108.88 would be
+      // taking money the cashier never quoted. Read here so the number on the
+      // glass is the number on the card machine. A failed read means no tax
+      // line, which is what a shop that charges none looks like anyway.
+      api('/api/retail/config').catch(function () { return null; })
     ])
       .then(function (r) {
-        var j = r[0], cs = r[1], me = r[2];
+        var j = r[0], cs = r[1], me = r[2], cfg = r[3];
+        S.tax = taxFrom(cfg && cfg.data);
         var caps = me && me.user && Array.isArray(me.user.caps) ? me.user.caps : null;
         // The way back, from the same read as the permission above. Null on any
         // hiccup, which simply means no control is drawn — the till itself is
@@ -1248,17 +1304,25 @@ button{font:inherit;color:inherit;margin:0}
 
   function renderFoot() {
     var sub = subtotal();
+    var due = dueNow(sub);
     // NO summary row. On a counter sale the subtotal IS the total — nothing
     // ships, nothing is boxed, nothing is discounted — so a subtotal line would
     // print the same figure twice, one line apart. That is noise, not a
     // reconciliation. The row returns the moment something can make the two
-    // differ.
-    $('sums').innerHTML = '';
+    // differ — and TAX is that moment (audit I-03): a shop that adds tax at the
+    // till has a subtotal and a total that are two numbers, and the cashier has
+    // to be able to read both to the customer. An inclusive shop shows the tax
+    // as what it is, a share of the one figure, and still prints no subtotal.
+    $('sums').innerHTML = !S.tax || !S.lines.length ? ''
+      : (S.tax.mode === 'exclusive'
+          ? '<div><span>' + esc(T('subtotal')) + '</span><span>' + yuan(sub) + '</span></div>'
+            + '<div><span>' + esc(S.tax.label) + '</span><span>' + yuan(taxOn(sub)) + '</span></div>'
+          : '<div><span>' + esc(S.tax.label) + '</span><span>' + yuan(taxOn(sub)) + '</span></div>');
     $('tot-lb').textContent = T('total');
-    $('tot-amt').textContent = yuan(sub);
+    $('tot-amt').textContent = yuan(due);
     var b = $('pay');
     b.disabled = !S.lines.length;
-    b.textContent = S.lines.length ? T('markPaid') + '  ' + yuan(sub) : T('markPaid');
+    b.textContent = S.lines.length ? T('markPaid') + '  ' + yuan(due) : T('markPaid');
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
     // so this is the only always-true statement of what the customer owes.
@@ -1267,10 +1331,13 @@ button{font:inherit;color:inherit;margin:0}
     // unit to be read. The product tiles already count the same way.
     var any = S.lines.length > 0;
     $('bar-ct').textContent = any ? String(itemCount()) : '';
-    $('bar-amt').textContent = yuan(sub);
+    // WHAT THE CUSTOMER OWES, tax included — the same figure as the button in
+    // the sheet above. The bar is the only always-true statement of the amount
+    // on a phone, so it must not be the pre-tax one.
+    $('bar-amt').textContent = yuan(due);
     var bb = $('bar-pay');
     bb.disabled = !any;
-    bb.textContent = any ? T('markPaid') + '  ' + yuan(sub) : T('markPaid');
+    bb.textContent = any ? T('markPaid') + '  ' + yuan(due) : T('markPaid');
     // With nothing rung up there is no order to open, so the summary row goes
     // rather than sitting there inert.
     document.querySelector('.bar-sum').hidden = !any;
@@ -1287,6 +1354,11 @@ button{font:inherit;color:inherit;margin:0}
     var el = $('settle');
     if (S.view === 'done') { el.innerHTML = doneHtml(); return; }
     var sub = subtotal();
+    // The settle screen states ONE number and it must be the one the card
+    // machine will take (audit I-03) — the tax-inclusive amount, with the tax
+    // named under it so the cashier can answer "what's the extra?" without
+    // going back.
+    var due = dueNow(sub);
     var lead = WALLETS.filter(function (w) { return w.lead; });
     var rest = WALLETS.filter(function (w) { return !w.lead; });
     var walletBtn = function (w) {
@@ -1299,8 +1371,9 @@ button{font:inherit;color:inherit;margin:0}
       + esc(T('back')) + '</button></div>'
       + '<div class="smain">'
       +   '<div class="samt"><div class="lb">' + esc(T('amount')) + '</div>'
-      +     '<div class="amt">' + yuan(sub) + '</div>'
-      +     '<div class="sb">' + esc(T('counterSale')) + '</div></div>'
+      +     '<div class="amt">' + yuan(due) + '</div>'
+      +     '<div class="sb">' + esc(T('counterSale'))
+      +       (S.tax ? ' · ' + esc(S.tax.label) + ' ' + yuan(taxOn(sub)) : '') + '</div></div>'
       +   '<div class="spick"><div class="lb">' + esc(T('payMethod')) + '</div>'
       +     lead.map(walletBtn).join('')
       +     (S.moreOpen ? rest.map(walletBtn).join('')

@@ -78,6 +78,10 @@ const router = express.Router();
 //   LEDGER_DATE the ledger's own DATE column, which takes no shift
 const { PAID, odateFor, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
 const { sqlDayShiftForShop } = require('../lib/business-date');
+// Sales tax / VAT (audit I-03). The refunded half is proportional arithmetic
+// this file must not invent a second copy of.
+const tax = require('../lib/tax');
+const money = require('../lib/money');
 
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
@@ -127,6 +131,52 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     const revenue = fen(rev.revenue);
     const expenses = fen(exp.total);
 
+    // ── Tax collected, and tax handed back (audit I-03) ──
+    // NOT the merchant's money. On a shop that charges tax exclusively it is
+    // inside the revenue figure above — the customer paid it to the shop, and
+    // the shop owes it on — and a report that shows revenue without showing
+    // this is a report somebody will pay their own tax out of.
+    //
+    // NULL, not zero, for a shop that has never charged tax: absence must mean
+    // "there is no tax here", never "the tax was nothing" (§1.12). That is why
+    // the row is counted as well as summed.
+    let taxBlock = null;
+    const taxCollected = db.prepare(`
+      SELECT COALESCE(SUM(tax_amount), 0) AS collected, COUNT(tax_amount) AS taxed
+        FROM retail_orders
+       WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?`).get(from, to);
+    if (taxCollected.taxed > 0) {
+      // The refunded half, proportional to the gross each refund came out of.
+      // Bounded: only orders that carry tax AND were refunded, which is a
+      // fraction of a fraction. The gross is the one orderTenders() defines —
+      // points and wallet were tenders on that bill too, and a refund
+      // proportional to the CASH alone would return too much tax on any order
+      // partly paid in points.
+      const refunded = db.prepare(`
+        SELECT tax_amount,
+               COALESCE(points_amount, 0) + COALESCE(balance_used, 0) + COALESCE(total, 0) AS gross,
+               COALESCE(refund_amount_paid, 0) AS refund
+          FROM retail_orders
+         WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?
+           AND tax_amount IS NOT NULL AND COALESCE(refund_amount_paid, 0) > 0`).all(from, to);
+      let backMinor = 0;
+      for (const r of refunded) {
+        backMinor += tax.taxInRefund({
+          taxMinor: money.toMinor(r.tax_amount) || 0,
+          grossMinor: money.toMinor(r.gross) || 0,
+          refundMinor: money.toMinor(r.refund) || 0,
+        });
+      }
+      const collected = fen(taxCollected.collected);
+      const back = money.fromMinor(backMinor);
+      taxBlock = {
+        collected,
+        refunded: back,
+        net: fen(collected - back),
+        orders: taxCollected.taxed,
+      };
+    }
+
     // ── Lines 2, 3 and 5 ──
     // cost_of_goods and gross_profit are null and always will be until a cost
     // reader exists. NULL, not 0, and not omitted from the payload: the screen
@@ -149,6 +199,10 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
         gross_profit: null,
         operating_expenses: expenses,
         net: fen(revenue - expenses),
+        // NULL for a shop that charges no tax — see the block above. The screen
+        // renders the row only when there is one, so nothing changes for a shop
+        // that has never turned tax on.
+        tax: taxBlock,
         expense_breakdown: breakdown.map(r => ({
           category: r.category || null,
           amount: fen(r.amount),
