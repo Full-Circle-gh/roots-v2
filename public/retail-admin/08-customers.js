@@ -277,10 +277,11 @@ async function cuLoadKpis(force) {
   if (!force && Date.now() - _CU_KPI_AT < 45000) return;
   _CU_KPI_AT = Date.now();
   if (!_CU_KPI_LANG_HOOKED && window.onLangChange) { _CU_KPI_LANG_HOOKED = true; onLangChange(cuRepaintKpis); }
-  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The store's own day — see the note in 04-orders.js on the same line.
+  const todayShop = tdToday();
   try {
     const [dash, tot] = await Promise.all([
-      api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`),
+      api(`/api/retail-admin/dashboard?from=${todayShop}&to=${todayShop}`),
       api('/api/retail-admin/customers?includeBlocked=1&pageSize=1&withReturning=1&withSegments=1'),
     ]);
     _CU_KPI_DASH = dash.data || {};

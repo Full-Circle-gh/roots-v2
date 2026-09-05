@@ -1056,9 +1056,12 @@ async function ordLoadKpis(force) {
   // language toggle, without refetching. Registered lazily so window.onLangChange
   // (defined later in the i18n module) exists by the time we wire it.
   if (!_ORD_KPI_LANG_HOOKED && window.onLangChange) { _ORD_KPI_LANG_HOOKED = true; onLangChange(ordRepaintKpiLabels); }
-  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The STORE's today, not Guangzhou's. The server counts its business day on
+  // the account's own clock (A-05); asking it about the wrong day put an
+  // account outside UTC+8 a day out on its own KPI row.
+  const todayShop = tdToday();
   try {
-    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
+    const j = await api(`/api/retail-admin/dashboard?from=${todayShop}&to=${todayShop}`);
     _ORD_KPI_DATA = j.data || {};
     ordRenderKpis();
   } catch (e) { /* silent — the table is the source of truth; KPIs are a bonus */ }

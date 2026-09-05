@@ -2276,7 +2276,9 @@ async function saveLeaderboardConfig() {
     const data = await r.json();
     if (!data.success) throw new Error(data.error || 'save_failed');
     lbApplyConfigToForm(data.data);
-    if (status) status.textContent = cuT('Saved', '已保存') + ' · ' + new Date().toLocaleTimeString();
+    // The store's clock and the product's one time format — this printed the
+    // OS locale's idea of a time, which is neither.
+    if (status) status.textContent = cuT('Saved', '已保存') + ' · ' + tdWhen(new Date(), 'time');
     toast('Leaderboard saved · 排行榜已保存');
     await lbLoadPreview();
     lbRenderPreview();
@@ -2918,7 +2920,7 @@ async function saveAbout() {
       method: 'PUT',
       body: { 'about.content': next },
     });
-    status.textContent = 'Saved · ' + new Date().toLocaleTimeString();
+    status.textContent = 'Saved · ' + tdWhen(new Date(), 'time');
     toast('About page saved · 已保存');
   } catch (e) {
     status.textContent = 'Save failed · 保存失败: ' + e.message;

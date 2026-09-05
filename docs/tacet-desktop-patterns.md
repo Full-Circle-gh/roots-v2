@@ -1005,7 +1005,7 @@ Three variants were built on twelve real Orders rows and measured in-browser at 
 
 Callers read `tdWhen(value, 'dateTime')`. Nothing else. A page that needs a format the eight names don't cover is a conversation, not a local helper — the same gate as §6 for archetypes. Passing a name outside the eight throws rather than falling back, so the closed set is enforced at runtime and not only on trust.
 
-**The table above is executable.** `node scripts/td-datetime-check.js` asserts every row of it in both languages, plus the cases a 12-hour clock gets wrong (midnight, noon), the missing-`Z` shift, day-only values, and dirty stored dates. §7's audit is executable on purpose and so is this — **a formatting contract nobody can run is how eight formats shipped in the first place.** If the check and this table ever disagree, one of them is wrong and the answer is not to adjust the check.
+**The table above is executable, and it runs on every commit.** `node scripts/check-td-datetime.js` asserts every row of it in both languages, plus the cases a 12-hour clock gets wrong (midnight, noon), the missing-`Z` shift, day-only values, dirty stored dates, and `tdToday` under three store zones. It was called `td-datetime-check.js` until 2026-09 — outside the `(test|check|verify)[-_]` prefix the suite runner discovers on, so the one contract in this document that could be run was the one nothing ran. §7's audit is executable on purpose and so is this — **a formatting contract nobody can run is how eight formats shipped in the first place.** If the check and this table ever disagree, one of them is wrong and the answer is not to adjust the check.
 
 ---
 
@@ -1963,7 +1963,7 @@ A Chinese negation governs the verb after it, and a line break can fall on eithe
 
 The dates rule listed English and Chinese and closed with *"There is no third style, no house style, and no per-page exception."* With exactly two languages that is exhaustive; with a third it reads as a ban. A scope clause now says what the clause always meant: **it forbids an invented house format, not a third language.** The rule's own principle — *each language follows its own actual rules* — already generalises, so a third language arrives with its own convention and its own row.
 
-**The table and the executable check are untouched.** `scripts/td-datetime-check.js` asserts every row in both languages; nothing in this bump changes a format, a row, or what the check tests.
+**The table and the executable check are untouched.** `scripts/check-td-datetime.js` asserts every row in both languages; nothing in this bump changes a format, a row, or what the check tests.
 
 Everything else unchanged from v4.0.
 

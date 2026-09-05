@@ -7,7 +7,7 @@
    If a row here and the §1.18 table disagree, ONE of them is wrong and
    the answer is not "adjust the test" — a formatting contract nobody can
    run is how eight formats shipped in the first place. */
-const { tdWhen, tdRange, tdTimeWindow } = require('../public/td-datetime.js');
+const { tdWhen, tdRange, tdTimeWindow, tdToday } = require('../public/td-datetime.js');
 
 let pass = 0, fail = 0;
 function is(got, want, label) {
@@ -109,6 +109,41 @@ try { tdWhen(T, 'shortDate'); is('no throw', 'throw', 'unknown name rejected'); 
 catch (e) { is(/not one of the eight/.test(e.message), true, 'unknown name rejected'); }
 try { tdWhen(T, 'range'); is('no throw', 'throw', 'range routed to tdRange'); }
 catch (e) { is(/tdRange/.test(e.message), true, 'range routed to tdRange'); }
+
+console.log('\ntdToday — the STORE\'s calendar date');
+is(tdToday(), '2026-07-29', 'today, machine-shaped');
+is(tdToday(-1), '2026-07-28', 'yesterday');
+is(tdToday(1), '2026-07-30', 'tomorrow');
+is(tdToday(-6), '2026-07-23', 'the "last 7 days" anchor');
+is(tdToday(-29), '2026-06-30', 'the "last 30 days" anchor, across a month end');
+is(tdToday(-89), '2026-05-01', 'the "last 90 days" anchor');
+is(tdToday(-210), '2025-12-31', 'and across a year end');
+
+/* THE POINT OF IT. Eighteen call sites computed this as `Date.now() + 8h`,
+   sliced out of an ISO string — Guangzhou, written out. Under one zone that is
+   indistinguishable from correct, so the check has to move the clock: 20:30 UTC
+   is already the 30th in Shanghai and still the 29th in New York, and an admin
+   that asks the server for the wrong one of those is asking about the wrong
+   day's money. */
+{
+  const AT = new RealDate('2026-07-29T20:30:00Z');
+  const Pinned = global.Date;
+  global.Date = class extends RealDate {
+    constructor(...a) { return a.length ? new RealDate(...a) : new RealDate(AT); }
+    static now() { return AT.getTime(); }
+  };
+  global.Date.UTC = RealDate.UTC;
+  const was = global.TD_TZ;
+  global.TD_TZ = 'Asia/Shanghai';  is(tdToday(), '2026-07-30', 'a Shanghai shop is already on the 30th');
+  global.TD_TZ = 'America/New_York'; is(tdToday(), '2026-07-29', 'a New York shop is still on the 29th');
+  global.TD_TZ = 'Pacific/Auckland'; is(tdToday(), '2026-07-30', 'and Auckland is on the 30th too');
+  /* The offset is CALENDAR arithmetic. `- 6 * 86400000` off an instant lands an
+     hour out across a summer-time change; from the 30th in a zone that keeps
+     one, that is the difference between the 24th and the 23rd. */
+  global.TD_TZ = 'America/New_York'; is(tdToday(-6), '2026-07-23', 'and stepping back is done on the calendar');
+  global.TD_TZ = was;
+  global.Date = Pinned;
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

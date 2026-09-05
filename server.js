@@ -812,6 +812,19 @@ app.get('/cms', (req, res) => {
 // page redirects to the store root on 401/403. Served no-store (like the admin
 // shell) so operators always get the freshest build on deploy. Reachable at /m
 // on any host, and it's the intended phone entry point on the store.* subdomain.
+//
+// NOT ?v=-STAMPED, unlike the desktop shell above, and the difference is
+// deliberate. m.html's one local dependency (/assets/td-datetime.js) is
+// PRE-CACHED BY THE SERVICE WORKER — it is in sw.js's SHELL so an installed app
+// opened on a dead signal still renders its dates. sw.js's asset branch matches
+// with `caches.match(request)`, which compares the FULL url including the query,
+// so a page asking for `…/td-datetime.js?v=abc` would miss the precached entry
+// entirely and the offline app would open blank. The two mechanisms are
+// alternatives, not layers: the desktop stamps because nothing precaches its
+// 23 parts, and the phone precaches because it has to work with no network.
+// Freshness is still covered — CACHE is restamped on every deploy and the
+// activate handler drops every older cache, so a deploy invalidates the
+// precached copy exactly as a new ?v= would.
 app.get('/m', (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');

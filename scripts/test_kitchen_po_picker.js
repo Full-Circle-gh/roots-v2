@@ -22,6 +22,11 @@
 const fs   = require('fs');
 const path = require('path');
 const vm   = require('vm');
+// The REAL date module, not a stub. Every admin part renders through tdWhen
+// and asks tdToday() for the store's day; a sandbox without them throws on
+// the first row that carries a date. Stubbing them would let a format drift
+// past every suite in this directory at once.
+const { tdWhen, tdToday } = require('../public/td-datetime.js');
 
 // ── DOM stub: enough of a document for the module's innerHTML writes ──────
 // getElementById hands back a node for ANY id, because the module paints a
@@ -94,6 +99,7 @@ const sandbox = {
   escapeHtml: s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
   cuT: en => en,
+  tdWhen, tdToday,
   fmt: n => String(n),
   acMoney: n => '¥' + n,
   acCurrencySymbol: () => '¥',

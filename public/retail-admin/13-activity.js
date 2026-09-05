@@ -31,7 +31,8 @@ const ACT_SOURCE_NAME = {
 function actSourceName(src) { const f = ACT_SOURCE_NAME[src]; return f ? f() : (src || '—'); }
 
 function actT(en, cn) { return window.cuT ? cuT(en, cn) : en; }
-function actGzToday() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
+// Today on the STORE's calendar. Was Guangzhou's, spelled out as +8 hours.
+function actShopToday() { return tdToday(); }
 function actShiftDate(d, days) {
   const t = Date.parse(d + 'T00:00:00Z') + days * 86400000;
   return new Date(t).toISOString().slice(0, 10);
@@ -44,7 +45,7 @@ function actFmtClock(ts) {
 
 // Quick range: 'today' | 'week' | 'month' → sets from/to ending on today.
 function actSetRange(kind) {
-  const today = actGzToday();
+  const today = actShopToday();
   ACT.to = today;
   ACT.from = kind === 'week' ? actShiftDate(today, -6)
            : kind === 'month' ? actShiftDate(today, -29)
@@ -56,7 +57,7 @@ function actSetRange(kind) {
 }
 
 async function actAdminInit() {
-  if (!ACT.from) { ACT.from = actGzToday(); ACT.to = actGzToday(); }
+  if (!ACT.from) { ACT.from = actShopToday(); ACT.to = actShopToday(); }
   const f = document.getElementById('act-from'), t = document.getElementById('act-to');
   if (f && !f.value) f.value = ACT.from;
   if (t && !t.value) t.value = ACT.to;
@@ -65,7 +66,7 @@ async function actAdminInit() {
 }
 
 function actReadFilters() {
-  ACT.from   = document.getElementById('act-from')?.value || actGzToday();
+  ACT.from   = document.getElementById('act-from')?.value || actShopToday();
   ACT.to     = document.getElementById('act-to')?.value || ACT.from;
   // Channel comes from the tab switcher (ACT.source), not a form field.
   ACT.q      = document.getElementById('act-search')?.value.trim() || '';

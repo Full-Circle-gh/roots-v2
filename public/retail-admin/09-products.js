@@ -445,9 +445,10 @@ async function prodLoadStock(force) {
   if (!force && Date.now() - _PROD_STOCK_AT < 45000) return;
   _PROD_STOCK_AT = Date.now();
   if (!_PROD_STOCK_LANG_HOOKED && window.onLangChange) { _PROD_STOCK_LANG_HOOKED = true; onLangChange(prodRenderStock); }
-  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The store's own day — see the note in 04-orders.js on the same line.
+  const todayShop = tdToday();
   try {
-    const j = await api(`/api/retail-admin/activity?from=${todayGz}&to=${todayGz}&limit=1`);
+    const j = await api(`/api/retail-admin/activity?from=${todayShop}&to=${todayShop}&limit=1`);
     const sum = j.summary || [];
     // zeroed_total = exact count (digest.zeroed itself is capped at 8 rows);
     // fall back to the list length against an older server mid-deploy.
@@ -3107,15 +3108,15 @@ function pdSetSalesRange(days, btn) {
 // them as plain YYYY-MM-DD keys rather than reconstructing a timezone.
 function pdSalesWhen(iso) {
   if (!iso) return '';
-  const now = new Date(Date.now() + 8 * 3600 * 1000);
-  const key = d => d.toISOString().slice(0, 10);
-  if (iso === key(now)) return cuT('today', '今天');
-  if (iso === key(new Date(now.getTime() - 86400000))) return cuT('yesterday', '昨天');
-  const days = Math.round((Date.parse(key(now)) - Date.parse(iso)) / 86400000);
+  // The store's calendar, and the shared formatter for the fall-through — this
+  // function carried its own month table, which was the fourth of the four
+  // C-02 counted, sitting one screen away from three others that disagreed.
+  const today = tdToday();
+  if (iso === today) return cuT('today', '今天');
+  if (iso === tdToday(-1)) return cuT('yesterday', '昨天');
+  const days = Math.round((Date.parse(today) - Date.parse(iso)) / 86400000);
   if (days > 1 && days <= 30) return cuT(days + ' days ago', days + ' 天前');
-  const d = new Date(iso + 'T00:00:00Z');
-  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
-  return cuT(mon + ' ' + d.getUTCDate(), (d.getUTCMonth() + 1) + '月' + d.getUTCDate() + '日');
+  return tdWhen(iso, 'date');
 }
 function pdSalesContext(d) {
   const n = Number(d.selling_days || 0);

@@ -26,6 +26,11 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+// The REAL date module, not a stub. Every admin part renders through tdWhen
+// and asks tdToday() for the store's day; a sandbox without them throws on
+// the first row that carries a date. Stubbing them would let a format drift
+// past every suite in this directory at once.
+const { tdWhen, tdToday } = require('../public/td-datetime.js');
 
 const ROOT = path.join(__dirname, '..');
 let pass = 0, fail = 0;
@@ -46,6 +51,7 @@ function run(setup) {
     console,
     toast: (msg, kind) => toasts.push({ msg, kind }),
     cuT: (en) => en,
+    tdWhen, tdToday,
     acMoney: (n) => '¥' + Number(n || 0).toFixed(2),
     api: async () => ({ data: sandbox.ORDERS || [] }),
     Date,

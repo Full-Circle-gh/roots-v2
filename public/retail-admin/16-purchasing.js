@@ -81,9 +81,10 @@
     const half = supSplit(cat);
     return T(half.en, half.cn);
   }
-  // "Today" in the store's clock (GZ = UTC+8) so a delivery due today never
-  // reads as late just because the browser is on UTC.
-  const todayGz = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // "Today" in the store's clock — the ACCOUNT's, now, rather than Guangzhou's
+  // written out as +8 — so a delivery due today never reads as late just
+  // because the browser is somewhere else.
+  const todayShop = () => tdToday();
 
   // ── module state ──────────────────────────────────────────────────────────
   let _init = false;
@@ -177,7 +178,7 @@
     })[status] || status;
   }
   function isLate(p) {
-    return p.status === 'Ordered' && p.delivery_date && p.delivery_date < todayGz();
+    return p.status === 'Ordered' && p.delivery_date && p.delivery_date < todayShop();
   }
   function statusPill(p) {
     if (isLate(p)) return `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Late', '已逾期'))}</span>`;
@@ -357,7 +358,7 @@
     const openN = _pos.filter(p => p.status === 'Requested' || p.status === 'Ordered').length;
     const rcvN  = _pos.filter(p => p.status === 'Delivered').length;
     const lateN = _pos.filter(isLate).length;
-    const m = todayGz().slice(0, 7);
+    const m = todayShop().slice(0, 7);
     const monthSpend = _pos
       .filter(p => (p.date || '').slice(0, 7) === m && (p.status === 'Ordered' || p.status === 'Delivered'))
       .reduce((s, p) => s + (Number(p.total_cost) || 0), 0);
@@ -464,7 +465,7 @@
   // ═══════════════════════════════════════════════════════════════════════════
   window.puNewOrder = function () {
     _edit = {
-      id: null, po_number: null, date: todayGz(), delivery_date: '',
+      id: null, po_number: null, date: todayShop(), delivery_date: '',
       supplier: '', store_id: _stores[0]?.id || null, notes: '', items: [],
     };
     _wstep = 1; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
@@ -1434,7 +1435,7 @@
 
   function wizBody() {
     return {
-      date: _edit.date || todayGz(),
+      date: _edit.date || todayShop(),
       delivery_date: _edit.delivery_date || null,
       supplier: _edit.supplier || null,
       store_id: _edit.store_id,
@@ -1969,8 +1970,17 @@
   ${p.notes ? `<div class="notes"><b>Notes 备注</b> ${e2(p.notes)}</div>` : ''}
 
   <div class="foot">
-    <span>Roots Retail · 广州</span>
-    <span class="num">${new Date().toLocaleString('zh-CN')}</span>
+    <!-- THE ACCOUNT'S OWN NAME. This said "Roots Retail · 广州" — the first
+         tenant's name and city, hardcoded into a shared print template, on a
+         document that goes to a SUPPLIER. Every other account's purchase
+         orders went out under it. tdPrintShopName() is what the rest of
+         26-print.js already uses, and an empty masthead is better than
+         somebody else's shop name on somebody else's paperwork.
+         The stamp beside it was the browser's clock in Chinese whatever
+         language the admin was in; it is the store's clock now, in the
+         operator's own language. -->
+    <span>${e2(tdPrintShopName())}</span>
+    <span class="num">${e2(tdWhen(new Date(), 'dateTime'))}</span>
   </div>
 </div>
 <script>setTimeout(()=>window.print(), 300);<\/script>
@@ -2242,7 +2252,7 @@
       const r = await api('/api/retail-admin/purchases/' + id);
       const po = r.data;
       _edit = {
-        id: null, po_number: null, date: todayGz(), delivery_date: '',
+        id: null, po_number: null, date: todayShop(), delivery_date: '',
         supplier: po.supplier || '', store_id: po.store_id || _stores[0]?.id || null, notes: '',
         items: (po.items || []).map(i => ({
           store_product_id: i.store_product_id, ingredient_id: i.ingredient_id,
@@ -3111,7 +3121,7 @@
   window.puInvNew = function (groupIdx) {
     const groups = (_invOut && _invOut.groups) || [];
     const sup = (typeof groupIdx === 'number' && groups[groupIdx]) ? groups[groupIdx].supplier : '';
-    _invDraft = { id: null, supplier: sup && sup !== INV_UNSPECIFIED ? sup : '', invoice_number: '', date: todayGz(), due_date: '', amount: '', notes: '', alloc: {} };
+    _invDraft = { id: null, supplier: sup && sup !== INV_UNSPECIFIED ? sup : '', invoice_number: '', date: todayShop(), due_date: '', amount: '', notes: '', alloc: {} };
     renderInvModal();
   };
   // Editing loads the invoice's OWN allocations into the draft, so the lines it
@@ -3393,7 +3403,7 @@
     const g = _reorder[idx];
     if (!g) return;
     _edit = {
-      id: null, po_number: null, date: todayGz(), delivery_date: '',
+      id: null, po_number: null, date: todayShop(), delivery_date: '',
       supplier: g.supplier || '', store_id: g.store_id, notes: '',
       items: g.items.map(it => ({
         store_product_id: it.product_id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,

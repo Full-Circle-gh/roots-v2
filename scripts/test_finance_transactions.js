@@ -24,6 +24,11 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+// The REAL date module, not a stub. Every admin part renders through tdWhen
+// and asks tdToday() for the store's day; a sandbox without them throws on
+// the first row that carries a date. Stubbing them would let a format drift
+// past every suite in this directory at once.
+const { tdWhen, tdToday } = require('../public/td-datetime.js');
 const Database = require('better-sqlite3');
 
 let pass = 0, fail = 0;
@@ -74,6 +79,7 @@ function formCtx(els, lang) {
     window: { cuLang: () => LANG },
     cuLang: () => LANG,
     cuT: (en, cn) => (LANG === 'cn' ? cn : en),
+    tdWhen, tdToday,
     setLang: (l) => { LANG = l; },
   });
   vm.runInContext(CLIENT_HELPERS, ctx);
@@ -286,6 +292,7 @@ const ctx = {
   window: {}, document: { getElementById: () => null, querySelectorAll: () => [] },
   Date, Math, Number, String, JSON, isNaN,
   cuT: (en) => en,
+  tdWhen, tdToday,
   escapeHtml: (s) => String(s == null ? '' : s),
   // The tenant's currency helpers, which live in 01-core.js. This screen used
   // to print a hardcoded ¥ and now goes through them (audit D-03 / I-01), so

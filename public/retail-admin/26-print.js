@@ -129,7 +129,10 @@ function tdPrintTable({ docEn, docCn, subtitle, meta, columns, rows, note }) {
     <tbody>${body || `<tr><td colspan="${(columns || []).length + 1}" class="empty">Nothing to show · 暂无内容</td></tr>`}</tbody>
   </table>
   ${note ? `<div class="note">${e(note)}</div>` : ''}
-  <div class="foot"><span>${e(shop)}</span><span>${e(new Date().toLocaleString())}</span></div>
+  <!-- The stamp carried no locale at all, so the same document was footed
+       29/07/2026 on one laptop and 7/29/2026 on the next, on the operator's
+       clock rather than the shop's. -->
+  <div class="foot"><span>${e(shop)}</span><span>${e(tdWhen(new Date(), 'dateTime'))}</span></div>
 </div>
 </body></html>`;
   w.document.write(doc);
@@ -165,7 +168,10 @@ function paPrintCountSheet() {
     subtitle: store ? cuT(store.name_en || store.name_cn || '', store.name_cn || store.name_en || '')
       : cuT('All locations', '全部门店'),
     meta: [
-      [cuT('Date', '日期'), new Date().toLocaleDateString()],
+      // No locale at all before this: a printed document carried whatever
+      // date format the operator's OPERATING SYSTEM was set to, so the same
+      // count sheet read 29/07/2026 on one laptop and 7/29/2026 on the next.
+      [cuT('Date', '日期'), tdWhen(new Date(), 'date')],
       [cuT('Lines', '行数'), String(rows.length)],
       [cuT('Counted by', '盘点人'), '________'],
     ],
@@ -219,7 +225,10 @@ async function cuPrintStatement(customerId) {
     docEn: 'Statement', docCn: '对账单',
     subtitle: c.nickname || c.phone || ('#' + id),
     meta: [
-      [cuT('Date', '日期'), new Date().toLocaleDateString()],
+      // No locale at all before this: a printed document carried whatever
+      // date format the operator's OPERATING SYSTEM was set to, so the same
+      // count sheet read 29/07/2026 on one laptop and 7/29/2026 on the next.
+      [cuT('Date', '日期'), tdWhen(new Date(), 'date')],
       [cuT('Orders', '订单数'), String(orders.length)],
       [cuT('Total', '合计'), acMoney(total)],
     ],

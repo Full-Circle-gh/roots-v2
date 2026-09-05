@@ -32,6 +32,8 @@
     "test:tax": "node scripts/test_tax.js",
     "test:role-tags": "node scripts/test_role_tagged_controls.js",
     "test:phone-dates": "node scripts/test_phone_dates.js",
+    "test:admin-dates": "node scripts/test_admin_dates.js",
+    "test:datetime": "node scripts/check-td-datetime.js",
     "test:asset-delivery": "node scripts/test_asset_delivery.js",
     "test:clear-filters": "node scripts/test_clear_filters.js",
     "test:money-invariants": "node scripts/test_money_invariants.js",

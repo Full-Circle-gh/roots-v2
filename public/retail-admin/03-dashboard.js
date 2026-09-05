@@ -231,11 +231,16 @@ function dashZenScrollTo(el, opts) {
 // pull waits for the first real Reports visit (reportsInit).
 function dashSetRange(key, opts) {
   $$('#db-range-seg button').forEach(b => b.classList.toggle('active', b.dataset.range === key));
-  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The STORE's today and the store's days back from it. These four lines used
+  // to spell Guangzhou out (+8 hours, then slice the ISO string), so on any
+  // account outside UTC+8 every preset on this page asked the server for the
+  // wrong window — and the server, since A-05, counts its business day on the
+  // account's OWN clock, so the two disagreed about which day "today" is.
+  const today = tdToday();
   let from = today;
-  if (key === '7')  from = new Date(Date.now() + 8 * 3600 * 1000 - 6  * 86400000).toISOString().slice(0, 10);
-  if (key === '30') from = new Date(Date.now() + 8 * 3600 * 1000 - 29 * 86400000).toISOString().slice(0, 10);
-  if (key === '90') from = new Date(Date.now() + 8 * 3600 * 1000 - 89 * 86400000).toISOString().slice(0, 10);
+  if (key === '7')  from = tdToday(-6);
+  if (key === '30') from = tdToday(-29);
+  if (key === '90') from = tdToday(-89);
   $('#db-from').value = from;
   $('#db-to').value = today;
   if (opts && opts.defer) { dashRangeLabel(); return; }
@@ -603,13 +608,13 @@ function dashMarkReady(part) {
 }
 
 async function dashHeroLoadToday(opts) {
-  // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
-  // returns 24 hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
-  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The store's own day. Server tolerates same-day from/to and returns 24
+  // hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
+  const todayShop = tdToday();
   // Manual refresh asks for a slow, zen roll-up; the auto-poller stays snappy.
   const dur = opts && opts.slow ? 2600 : undefined;
   try {
-    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}${dashStoreQS()}`);
+    const j = await api(`/api/retail-admin/dashboard?from=${todayShop}&to=${todayShop}${dashStoreQS()}`);
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
     const k = data.kpis || {};
@@ -854,20 +859,22 @@ function dashIncomingRender() {
   }
   // Soonest expected first; POs with no date sink to the bottom.
   const byEta = [...rows].sort((a, b) => (a.delivery_date || '9999').localeCompare(b.delivery_date || '9999'));
-  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const todayShop = tdToday();
   const etaLabel = d => {
     if (!d) return cuT('no date yet', '未定日期');
-    if (d <= todayGz) return cuT('arrives today', '今日到货');
-    const dt = new Date(d + 'T00:00:00');
-    return cuT('by ' + dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-              '预计 ' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日');
+    if (d <= todayShop) return cuT('arrives today', '今日到货');
+    // Was toLocaleDateString('en-GB') — "29 Jul", a British date on a product
+    // whose English convention is American (§1.18). One of the four formats
+    // C-02 counted, and the shared one renders both languages.
+    const when = tdWhen(d, 'date');
+    return cuT('by ' + when, '预计 ' + when);
   };
   host.innerHTML = byEta.slice(0, 5).map((po, i) => {
     const sup = (po.supplier || '').trim();
     const lines = Number(po.line_count || 0);
     const linesTxt = cuT(lines + (lines === 1 ? ' line' : ' lines'), lines + ' 项');
     const sub = [sup, linesTxt].filter(Boolean).join(cuT(' · ', ' · '));
-    const soon = po.delivery_date && po.delivery_date <= todayGz;
+    const soon = po.delivery_date && po.delivery_date <= todayShop;
     const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
     return `<div class="bx-in-row${cls}">
       <span class="bx-in-nm">${escapeHtml(po.po_number || '')}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
@@ -901,9 +908,8 @@ function dashDraftsRender() {
   const byAge = [...rows].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const dateLabel = d => {
     if (!d) return '';
-    const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
-    return cuT('drafted ' + dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-              (dt.getMonth() + 1) + '月' + dt.getDate() + '日草拟');
+    const when = tdWhen(String(d).slice(0, 10), 'date');
+    return when ? cuT('drafted ' + when, when + '草拟') : '';
   };
   host.innerHTML = byAge.slice(0, 5).map((po, i) => {
     const sup = (po.supplier || '').trim();
@@ -2200,9 +2206,9 @@ function tdRecapWorkRender() {
     return;
   }
   const pad = n => String(n).padStart(2, '0');
-  const cn = window.cuLang && cuLang() === 'cn';
-  const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  const multiDay = new Set(evs.map(e => new Date(e.ts).toDateString())).size > 1;
+  // The day separator is tdWhen(ts, 'weekday') now, so the hand-built Chinese
+  // weekday table and the language flag it was picked with are both gone.
+  const multiDay = new Set(evs.map(e => tdWhen(e.ts, 'machine'))).size > 1;
   const since = TD.recapSince || 0;
   // Only split the feed into an "away" band when the operator genuinely left.
   // A quick reload / tab-switch shows a plain reverse-chron feed, no boundary.
@@ -2212,12 +2218,12 @@ function tdRecapWorkRender() {
     const ts = new Date(e.ts);
     const away = TD.reallyAway && ts.getTime() >= since;
     if (multiDay) {
-      const dayKey = ts.toDateString();
+      // The store's day, so the key the feed GROUPS by and the label the
+      // separator PRINTS cannot disagree about where a day ends.
+      const dayKey = tdWhen(ts, 'machine');
       if (dayKey !== lastDay) {
         lastDay = dayKey;
-        const dayLbl = cn
-          ? `${ts.getMonth() + 1}月${ts.getDate()}日 ${DOW[ts.getDay()]}`
-          : ts.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+        const dayLbl = tdWhen(ts, 'weekday');
         html += `<div class="td-drawer-day">${escapeHtml(dayLbl)}</div>`;
       }
     }
@@ -2857,16 +2863,17 @@ function tdAttnRender() {
   // a specific capability.
   for (const c of (DASH_OPS.channel_sync_stale || [])) {
     const t = new Date(String(c.oldest_at || '').replace(' ', 'T') + 'Z');
-    const cn = window.cuLang && cuLang() === 'cn';
     // A bare clock time is a trap on this row: two channels stuck on different
     // DAYS read as "02:06 PM" and "11:39 AM", and the older one looks newer —
     // the rows sort correctly by real age while the text argues they don't.
     // Carry the date whenever it isn't today, so what the row says and how it
     // sorts can't disagree.
-    const sameDay = !isNaN(t) && t.toDateString() === new Date(dashNow()).toDateString();
-    const when = isNaN(t) ? ''
-      : (sameDay ? t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
-                 : t.toLocaleString(cn ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+    // "Today" on the STORE's calendar, and both stamps on the store's clock.
+    // Read on the browser's, an operator abroad saw a row stuck since this
+    // morning carry yesterday's date, which is the very confusion the comment
+    // above says this branch exists to prevent.
+    const sameDay = !isNaN(t) && tdWhen(t, 'machine') === tdWhen(new Date(dashNow()), 'machine');
+    const when = isNaN(t) ? '' : tdWhen(t, sameDay ? 'time' : 'dateTime');
     fires.push({
       sev: 'amber', icon: 'plug',
       label: cuT(`${c.label} not syncing`, `${c.label} 未同步`),
@@ -3067,12 +3074,7 @@ function dashRangeLabel() {
   if (!el) return;
   const from = $('#db-from').value, to = $('#db-to').value;
   if (!from || !to) { el.textContent = ''; return; }
-  const cn = window.cuLang && cuLang() === 'cn';
-  const fmt = s => {
-    const d = new Date(s + 'T00:00:00');
-    return cn ? `${d.getMonth() + 1}月${d.getDate()}日`
-              : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  const fmt = s => tdWhen(s, 'date');
   const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const win = days <= 1 ? cuT('today', '今日') : cuT(`${days} days`, `${days}天`);
   const sel = document.getElementById('db-store');
@@ -3767,7 +3769,7 @@ function dashRenderCohorts() {
     const [by, bm] = b.split('-').map(Number);
     return (by - ay) * 12 + (bm - am);
   };
-  const todayYM = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7);
+  const todayYM = tdToday().slice(0, 7);
   const age = {};
   months.forEach(m => { age[m] = monthsBetween(m, todayYM); });
   const maxOffset = Math.max(0, ...Object.values(age));
@@ -4250,8 +4252,7 @@ function dashReadRender() {
     .map(pText => `<p>${escapeHtml(pText)}</p>`).join('');
   let when = '';
   if (d.generated_at) {
-    const t = new Date(String(d.generated_at).replace(' ', 'T') + 'Z');
-    if (!isNaN(t)) when = t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+    when = tdWhen(d.generated_at, 'time');
   }
   const head = `<div class="rh"><span class="td-ai-dot"></span><h3>${escapeHtml(cuT('The read', '解读'))}</h3>
       <span class="meta">${escapeHtml(when ? cuT('written at ' + when, '写于 ' + when) : cuT("written from this period's numbers", '由本期数据生成'))}</span></div>`;

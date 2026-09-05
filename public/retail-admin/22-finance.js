@@ -74,11 +74,14 @@ function finMoney(n) {
 function finSetRange(key) {
   document.querySelectorAll('#fin-range-seg button')
     .forEach(b => b.classList.toggle('on', b.dataset.range === key));
-  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // The store's own days. These four spelled Guangzhou out, so on any other
+  // account Finance's presets asked the ledger for the wrong window — and
+  // Finance is the one screen where a day out is money in the wrong month.
+  const today = tdToday();
   let from = today;
-  if (key === '7')  from = new Date(Date.now() + 8 * 3600 * 1000 - 6  * 86400000).toISOString().slice(0, 10);
-  if (key === '30') from = new Date(Date.now() + 8 * 3600 * 1000 - 29 * 86400000).toISOString().slice(0, 10);
-  if (key === '90') from = new Date(Date.now() + 8 * 3600 * 1000 - 89 * 86400000).toISOString().slice(0, 10);
+  if (key === '7')  from = tdToday(-6);
+  if (key === '30') from = tdToday(-29);
+  if (key === '90') from = tdToday(-89);
   const f = document.getElementById('fin-from'), t = document.getElementById('fin-to');
   if (f) f.value = from;
   if (t) t.value = today;
@@ -93,12 +96,7 @@ function finRangeLabel() {
   const from = (document.getElementById('fin-from') || {}).value;
   const to = (document.getElementById('fin-to') || {}).value;
   if (!from || !to) { el.textContent = ''; return; }
-  const cn = window.cuLang && cuLang() === 'cn';
-  const fmt = s => {
-    const d = new Date(s + 'T00:00:00');
-    return cn ? `${d.getMonth() + 1}月${d.getDate()}日`
-              : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  const fmt = s => tdWhen(s, 'date');
   const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const win = days <= 1 ? cuT('today', '今日') : cuT(`${days} days`, `${days}天`);
   el.textContent = `${from === to ? fmt(from) : `${fmt(from)} – ${fmt(to)}`} · ${win}`;
@@ -498,11 +496,10 @@ function finTxRow(r) {
    every row is inside the selected window. */
 function finTxDay(d) {
   if (!d) return '';
-  const dt = new Date(String(d) + 'T00:00:00');
-  if (isNaN(dt)) return String(d);
-  return (window.cuLang && cuLang() === 'cn')
-    ? `${dt.getMonth() + 1}月${dt.getDate()}日`
-    : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // A ledger row's date is a CALENDAR day, which tdWhen reads literally — no
+  // zone is applied to it, so a row dated the 1st cannot print as the 31st in
+  // a negative-offset account and move money into the previous month.
+  return tdWhen(d, 'date') || String(d);
 }
 
 /* The row action. Purchasing owns the record; Finance links to it. §36: "It is
@@ -786,7 +783,9 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   if (!m) return;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   finTxKind(row ? row.kind : (typeof kindOrRow === 'string' ? kindOrRow : 'out'));
-  set('fin-tx-date', row ? row.date : new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10));
+  // A new row defaults to the STORE's today: the operator is dating a
+  // transaction in the shop's books, not on their laptop's calendar.
+  set('fin-tx-date', row ? row.date : tdToday());
   set('fin-tx-amount', row ? row.amount : '');
   // The label, not the stored value — and finTxSave maps it back, so the
   // round trip does not rewrite the category of a row merely opened and saved.

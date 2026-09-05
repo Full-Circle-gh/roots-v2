@@ -33,6 +33,11 @@ const fs     = require('fs');
 const path   = require('path');
 const vm     = require('vm');
 const Module = require('module');
+// The REAL date module, not a stub. Every admin part renders through tdWhen
+// and asks tdToday() for the store's day; a sandbox without them throws on
+// the first row that carries a date. Stubbing them would let a format drift
+// past every suite in this directory at once.
+const { tdWhen, tdToday } = require('../public/td-datetime.js');
 
 const ROOT       = path.join(__dirname, '..');
 const ROUTE_PATH = path.join(ROOT, 'routes', 'retail-purchasing.js');
@@ -111,6 +116,7 @@ const sandbox = {
   escapeHtml: s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
   cuT: en => en, fmt: n => String(n), acMoney: n => '¥' + n, acCurrencySymbol: () => '¥',
+  tdWhen, tdToday,
   applyCapGates: () => {}, askConfirm: async () => true,
 };
 sandbox.window = sandbox;

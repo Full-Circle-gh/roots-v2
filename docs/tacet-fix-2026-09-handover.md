@@ -14,7 +14,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part one** | the first 36 findings | merged and live (commit `24f3991`) |
 | **Part two** | §1b's nineteen | merged and live (commit `5070ca1`) |
 | **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | merged and live (commit `dae3a5f`) |
-| **Part four** | C-02's last part — the phone's date family | on the branch, deploys with the next merge |
+| **Part four** | C-02's last part — the phone's date family | merged and live (commit `9ae4673`) |
+| **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | on the branch, deploys with the next merge |
 
 ---
 
@@ -108,7 +109,7 @@ with `--update`; list them with `--list`. The two worst offenders are
 Everything below was built after the first 36 shipped, working down what was
 left. It is grouped by what each one changes rather than by severity: at this
 point the severities left are mostly Medium and Low, and the useful question is
-what a merchant notices. One row is marked **part four** — it is on the branch
+what a merchant notices. One row is marked **part five** — it is on the branch
 and deploys with the next merge; everything else here is live.
 
 | Finding | Severity | What changed |
@@ -137,6 +138,7 @@ and deploys with the next merge; everything else here is live.
 | **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
 | **K-01** | Medium | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
 | **C-02** | Medium · part four | The phone admin had its own date family — its own parser, its own English and Chinese branches, and its own idea of what "today" is. Its SHAPES matched the desktop's; its ZONE did not. Every stamp on the phone was drawn on the handset's clock while every stamp on the desktop is drawn on the store's, so an owner abroad read two different times for the same order on two screens — the same defect A-05 fixed on the server, pointing the other way. Three "today" computations were hardcoded to UTC+8 on top of that, which is right for exactly one account. The phone now loads `/assets/td-datetime.js` and renders through it, so there is one formatter and one clock. Nothing changes for Roots: Guangzhou is UTC+8 and the module's fallback is the same zone. `scripts/test_phone_dates.js` runs the shipped helpers under two store zones, which is the only way to see this at all.|
+| **C-02** | Medium · part five | And the DESKTOP still had the same two mistakes, which is the half the finding was actually written about ("four date formats across the admin, and one shared formatter most screens ignore"). **Eighteen call sites across nine parts** computed today as `Date.now() + 8 * 3600 * 1000` — Guangzhou, spelled out — so on any account outside UTC+8 the dashboard's range presets, Finance's presets, the KPI rows on Orders / Customers / Products, Purchasing's late-delivery pill and the default date on a new ledger row were a day out, asking a server that since A-05 counts its business day on the ACCOUNT's clock about a city it has never heard of. A dozen more rendered with `toLocaleDateString` / `toLocaleTimeString`: the browser's zone, in whatever locale each call site named — `en-GB` ("29 Jul") on the dashboard's purchase-order cards beside `en-US` ("Jul 29") on its own range label, and NO locale at all on two printed documents, where the operator's operating system decided whether a count sheet read 29/07/2026 or 7/29/2026. All of it now goes through `tdWhen` and a new `tdToday()`. Two things fell out on the way: the printed purchase order carried **the first tenant's name and city hardcoded into a shared template** — every account's purchase orders went to their suppliers under it — and `scripts/td-datetime-check.js`, the executable §1.18 contract, sat outside the runner's `(test|check|verify)[-_]` discovery prefix, so **the one formatting contract that could be run was the one nothing ran**. Renamed `check-td-datetime.js`; it runs on every commit now. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -471,7 +473,7 @@ earlier note here said it could not; that was wrong for two sessions, and it
 mattered — half the suites and every eslint run were being skipped on an
 assumption. With `npm ci` the whole thing runs locally.
 
-**The fast shard: 143 suites, 0 failures, 0 quarantined.** The quarantine list
+**The fast shard: 146 suites, 0 failures, 0 quarantined.** The quarantine list
 is empty — five of the six were fixed on `main` while this branch was in
 flight, and the sixth (`test_mobile_purchasing.js`) left on the evidence
 described below. `npx eslint` reports **0 errors** on every changed file, which
@@ -489,7 +491,9 @@ independent environments AND the cause its entry named is gone from the file
 (commit 558eed3 anchored the fixture to today, which is exactly what the entry
 said the fix had to be). Both halves were required: the entry warned against
 acting on one green run, because it had been green on CI and red locally on the
-same day with no explanation. Five remain quarantined, unchanged.
+same day with no explanation. **And the list is empty now** — `QUARANTINE` in
+`scripts/run-suites.js` is `{}`, and both shards report zero. The five that
+were still on it when this paragraph was first written have gone the same way.
 
 Suites added by this pass, each named for the finding it holds down:
 `test_money.js`, `test_money_boundaries.js`, `test_business_day.js`,
@@ -500,7 +504,7 @@ Suites added by this pass, each named for the finding it holds down:
 `test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
 `test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
 `test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
-`test_role_tagged_controls.js`, `test_phone_dates.js`.
+`test_role_tagged_controls.js`, `test_phone_dates.js`, `test_admin_dates.js`.
 
 Also run, on every commit:
 

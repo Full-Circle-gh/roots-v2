@@ -13,7 +13,7 @@
    The 2+-days and past rows render through §1.18's `weekday` and `date`
    names (docs/tacet-desktop-patterns.md:927-941). If a row here and that
    table disagree, ONE of them is wrong and the answer is not to adjust
-   the test — the same rule scripts/td-datetime-check.js runs on. */
+   the test — the same rule scripts/check-td-datetime.js runs on. */
 const { execFileSync } = require('child_process');
 const { deliverySlotDisplay } = require('../lib/slot-label.js');
 

@@ -324,6 +324,33 @@
     return h12(pa) + ' ' + mer(pa) + ' – ' + h12(pb) + ' ' + mer(pb);
   }
 
+  /* ── tdToday — the STORE's calendar date ────────────────────────────
+     `YYYY-MM-DD` on the store's clock, optionally n days either side of
+     it. Not a ninth name: an export alongside tdRange, like the two
+     above, because the value it produces is machine-shaped and its
+     input is not a value at all.
+
+     WHAT IT REPLACES, and why this belongs here rather than at each
+     call site. Eighteen places across the admin computed "today" as
+     `new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0,10)`
+     — the date in Guangzhou, spelled out. It was correct for the only
+     account there was. On any other account every one of them asked
+     the server for the wrong day: A-05 taught the SERVER to count a
+     business day on the shop's own clock, and the client kept asking
+     it about Guangzhou's.
+
+     The offset is CALENDAR arithmetic, not `- n * 86400000`. Subtracting
+     six days' worth of milliseconds from an instant lands an hour out
+     across a summer-time change, which moves the answer to the wrong
+     date whenever "now" is within that hour of midnight. China keeps no
+     summer time; the accounts this exists for do. */
+  function tdToday(offsetDays) {
+    var p = parts(new Date(), false);
+    var d = new Date(Date.UTC(p.y, p.mo, p.da));
+    if (offsetDays) d.setUTCDate(d.getUTCDate() + offsetDays);
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
   /* ── A value the OPERATOR TYPED, not one the server stored ───────────
      `<input type="datetime-local">` yields "2026-06-08T10:00" with no zone,
      and parse() above reads a zoneless string as UTC — which is right for the
@@ -358,6 +385,7 @@
   }
 
   root.tdFromShopLocal = tdFromShopLocal;
+  root.tdToday = tdToday;
   root.tdWhen = tdWhen;
   root.tdRange = tdRange;
   root.tdTimeWindow = tdTimeWindow;
@@ -369,6 +397,6 @@
   /* global module */
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { tdWhen: tdWhen, tdRange: tdRange, tdTimeWindow: tdTimeWindow,
-                      tdFromShopLocal: tdFromShopLocal, NAMES: NAMES };
+                      tdFromShopLocal: tdFromShopLocal, tdToday: tdToday, NAMES: NAMES };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
