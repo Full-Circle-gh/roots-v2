@@ -124,6 +124,7 @@ what a merchant notices.
 | **F-02** | Low | Both wizards open on the first question instead of a door screen, with the other routes beside it. |
 | **E-09** | Low | Four keys: j/k to move, / to search, ? for the list. Deliberately no status key — a single letter that WRITES is how the wrong order gets dispatched. |
 | **E-12** | Low | A stock count sheet for the shelves and a customer statement. Both carry the merchant's own name; the older purchase-order sheet had "Roots" written into the file, and no longer does. |
+| **Q-03** | Low | Three behaviours for "clear the filters". Customers and Products now follow Waste's, which Orders already did: the button is present while something is narrowing the list and absent otherwise. Empty-state-only was serving the wrong case — a filter that matched nothing announces itself; one that matched forty out of four hundred does not. |
 | **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
@@ -342,6 +343,10 @@ that could be done without one has been.
 - **E-07 for purchase orders** — restoring one means re-deriving stock that has
   moved and books that have been reported. The honest version is an accounting
   policy decision, not a function.
+- **Q-04** — Purchasing is a stack of screens with its own back button while
+  every other section is a page with a drawer. Converging them is a redesign of
+  a working screen, and the audit records it as an observation rather than a
+  defect with a direction.
 - **H-02** — the public door is a waiting list. The audit's own suggested
   direction is "none — this is a sequencing decision, not a defect".
 - Everything under **K** (RBAC enforcement and the ~50 unmapped routes) and the
@@ -383,6 +388,13 @@ defect**: two source-greps naming a database handle D-01 correctly changed, two
 VM sandboxes missing the currency helpers D-03 introduced, and a stale
 role-count assertion for the bookkeeper E-11 added. All fixed.
 
+**One suite left quarantine.** `test_mobile_purchasing.js` is green in two
+independent environments AND the cause its entry named is gone from the file
+(commit 558eed3 anchored the fixture to today, which is exactly what the entry
+said the fix had to be). Both halves were required: the entry warned against
+acting on one green run, because it had been green on CI and red locally on the
+same day with no explanation. Five remain quarantined, unchanged.
+
 Suites added by this pass, each named for the finding it holds down:
 `test_money.js`, `test_money_boundaries.js`, `test_business_day.js`,
 `test_csv_import.js`, `test_delivery_districts.js`, `test_alert_audience.js`,
@@ -390,7 +402,7 @@ Suites added by this pass, each named for the finding it holds down:
 `test_open_close_panel.js`, `test_notification_choices.js`,
 `test_saved_views.js`, `test_keyboard_reach.js`, `test_wizard_first_question.js`,
 `test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
-`test_asset_delivery.js`.
+`test_asset_delivery.js`, `test_clear_filters.js`.
 
 Also run, on every commit:
 
