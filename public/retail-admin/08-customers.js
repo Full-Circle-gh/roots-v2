@@ -1678,6 +1678,17 @@ function cuRenderDetail() {
       </div>
       <div>
         <div class="lbl">Points · 积分
+          ${/* NOT TAGGED, and that is a finding rather than an omission (audit
+                K-01). `customers:adjust` exists in lib/capabilities.js, is
+                marked `money: 'moves'`, and is what the role editor offers for
+                exactly this — but the endpoint these two buttons call
+                (/customers/:id/points-adjust, /wallet-adjust) is mapped to
+                `customers:edit` in lib/cap-routes.js, so the capability is not
+                enforced on it. Tagging them customers:adjust would hide a
+                control the server accepts, which takes work away from somebody
+                entitled to do it and looks to them like a bug. Closing the gap
+                is a change to what an account may DO — reserved, and recorded
+                in the handover instead. */''}
           <button class="cux-adj" onclick="cuOpenAdjust('points')">Adjust · 调整</button></div>
         <div class="fig${ptsBal ? '' : ' zero'}" data-no-i18n>${ptsBal}</div>
         <div class="sub" data-no-i18n>${ptsSub}</div>

@@ -87,6 +87,11 @@ Page({
       trackingViewLive: 'View full tracking',
       subtotalLabel: 'Subtotal',
       shippingLabel: 'Shipping',
+      // Tax (audit I-03). The word is the merchant's on the receipt and in the
+      // admin; here it is the neutral one, because the order record carries the
+      // amount and not the label the shop chose at the time.
+      taxLabel: 'Tax',
+      taxIncludedLabel: 'Tax (included)',
       totalLabel: 'Total',
       noteLabel: 'Note',
       back: '← Back',
@@ -261,6 +266,8 @@ Page({
         trackingViewLive: '查看完整物流',
         subtotalLabel: '小计',
         shippingLabel: '运费',
+        taxLabel: '税费',
+        taxIncludedLabel: '税费（已含）',
         totalLabel: '总计',
         noteLabel: '备注',
         back: '← 返回',
@@ -575,6 +582,12 @@ Page({
           ? '¥' + Number(data.shipping_fee || 0).toFixed(2)
           : (L === 'cn' ? '免费' : 'FREE'),
         total: '¥' + Number(data.total || 0).toFixed(2),
+        // Tax (audit I-03). Absent on an order taken before the shop charged
+        // any, which is a different fact from an order taxed nothing — so this
+        // is '' rather than '¥0.00', and the row does not render at all.
+        tax: (data.tax_amount != null && data.tax_mode)
+          ? '¥' + Number(data.tax_amount || 0).toFixed(2) : '',
+        taxIncluded: data.tax_mode === 'inclusive',
         statusLabel: labels[data.status] || data.status,
         address: data.address_full || '',
         paymentLabel: (data.payment_method || '').toUpperCase(),

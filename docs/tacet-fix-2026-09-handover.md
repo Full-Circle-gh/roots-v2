@@ -2,13 +2,18 @@
 
 Companion to `docs/tacet-audit-2026-09.md`. That document says what is wrong.
 This one says what has been changed, what has deliberately **not** been changed,
-and the eleven questions that need your answer before the rest can move. Three
-of the eleven are answered and built; eight are still waiting.
+and the eleven questions that needed your answer before the rest could move.
+Nine of the eleven are answered and built. The tenth — the money-storage
+migration — is written and waiting on a single rehearsal run against a copy of
+production. The eleventh (D-05) is yours by the brief.
 
-Branch: `claude/tacet-audit-2026-09-tpkn60`. The first 36 findings were merged
-and deployed to production on 5 September (run 1703, commit `24f3991`); the work
-in §1b below has been built since and deploys with the next merge. Every commit
-on the branch carries `[skip deploy]`, so nothing ships until the merge.
+Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
+
+| | What | State |
+|---|---|---|
+| **Part one** | the first 36 findings | merged and live (commit `24f3991`) |
+| **Part two** | §1b's nineteen | merged and live (commit `5070ca1`) |
+| **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | on the branch, deploys with the next merge |
 
 ---
 
@@ -97,12 +102,13 @@ with `--update`; list them with `--list`. The two worst offenders are
 
 ---
 
-## 1b. What has been fixed since the deploy
+## 1b. What has been fixed since part one
 
 Everything below was built after the first 36 shipped, working down what was
-left. It is grouped by what each one changes rather than by severity, because at
-this point the severities left are all Medium and Low and the useful question is
-what a merchant notices.
+left. It is grouped by what each one changes rather than by severity: at this
+point the severities left are mostly Medium and Low, and the useful question is
+what a merchant notices. Four rows are marked **part three** — those are on the
+branch and deploy with the next merge; everything else here is live.
 
 | Finding | Severity | What changed |
 |---|---|---|
@@ -111,11 +117,13 @@ what a merchant notices.
 | **D-08 / H-01 / H-03** | High ×3 | *Q6.* A new merchant is asked where they trade, once, and currency, time zone and shop language follow from it. The yuan fee defaults are seeded only in yuan. An unknown country falls back to USD/UTC, deliberately not to China. A shop with no web address says so instead of finishing the checklist with a shop nobody can reach. |
 | **D-10** | High | *Q7.* Guangzhou's districts were written into delivery, orders and stock routing. The districts that may choose a dispatch method are the merchant's own now. |
 | **P-01** | High | *Q4.* Every alert says whose problem it is: `alertPlatform`, `alertMerchant`, `alertBoth`. A gate refuses an alert that declares no audience. |
+| **N-02** | High · part three | *Q9.* An order can be taken on the phone. One screen, six sections, the same create endpoint the desktop and the till use — including the same fee quote, so the phone cannot charge a different delivery fee for the same basket. Counter sales stay at the till and drafts stay on the desktop, both for stated reasons. Nothing in the form re-renders the app while somebody is typing: on a phone that drops the keyboard. |
+| **I-03** | High · part three | *Q8.* Sales tax and VAT. One rate per shop, both shapes — added at checkout, or already in the price — off until a shop sets a rate, so nothing moves for Roots. The order keeps a snapshot of the money, the rate and the shape, so a rate that changes in April cannot restate March. It shows on the checkout and its quote, the mini-app order page, the web storefront, the till, the admin drawer, the phone, the thermal receipt and the finance summary. |
 | **E-05** | Larger | Products and customers can come in from a spreadsheet. The importer refuses an ambiguous comma decimal rather than guessing — `18,00` as 1800 is a hundredfold mis-price, and my own test caught it. |
 | **B-03** | Medium | Four endpoints for opening and closing the shop, and no screen. There is one now, above the store list. Wiring it up exposed a wrong answer: `master` counted a shop with no marketplace as closed, so a merchant with no integration would have been told their whole business was shut while it traded. |
 | **E-10** | Medium | Notifications can be tuned. Four events, each a switch, all on until somebody turns one off, filtered at the one place every send funnels through. No quiet hours, deliberately — an operational alert dropped by a clock is indistinguishable from one that failed. |
 | **E-08** | Medium | A filter set can be named, kept and shared with a colleague. Private until shared; a shared view stays its author's. Orders adopts it; the module is general. |
-| **E-07** | Medium | What was deleted can be put back — coupons, delivery zones and hand-typed ledger rows, for sixty days, from Settings → Operations. A purchase order is deliberately not covered: putting one back means re-deriving stock that has moved and books that have been reported. |
+| **E-07** | Medium · part three | What was deleted can be put back — coupons, delivery zones, hand-typed ledger rows and draft purchase orders, for sixty days, from Settings → Operations. A purchase order comes back with its lines and with its own date, so it still belongs to the month it was placed in. Only a draft can get there: the delete route refuses anything else, and a delivered order has to be stood down first, which reverses its stock and unposts its books under its own all-or-nothing rule. |
 | **I-02** | Medium | Money arithmetic in SQL no longer sets the rounding. A purchase order's expense rows, a customer's lifetime spend and the finance summary's `fen()` all round the product's way — which fixes two real cases: 1.005 became 1.00, and a negative net rounded the opposite way from the positive it should mirror. |
 | **G-03** | Medium | Settings has a search of its own, over the cards' own words, and fourteen of its twenty-seven cards are marked as things customers see. |
 | **J-03** | Medium | The shell is compressed on the way out and a stamped file is cached properly: 3,355 KB → 1,073 KB on the wire, and nothing at all between deploys. Loading a section on demand — the audit's direction — is still open, and why is written into `lib/static-assets.js`. |
@@ -126,6 +134,7 @@ what a merchant notices.
 | **E-12** | Low | A stock count sheet for the shelves and a customer statement. Both carry the merchant's own name; the older purchase-order sheet had "Roots" written into the file, and no longer does. |
 | **Q-03** | Low | Three behaviours for "clear the filters". Customers and Products now follow Waste's, which Orders already did: the button is present while something is narrowing the list and absent otherwise. Empty-state-only was serving the wrong case — a filter that matched nothing announces itself; one that matched forty out of four hundred does not. |
 | **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
+| **K-01** | Medium · part three | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -140,7 +149,7 @@ correct. The correction is a visible block in the money plan, not a quiet edit.
 
 ---
 
-## 2. The eleven questions — three answered
+## 2. The eleven questions — nine answered and built
 
 Each is a decision I should not take for you. Every one is blocking a specific,
 already-scoped change; several are a single word.
@@ -149,7 +158,7 @@ already-scoped change; several are a single word.
 marked, so the reasoning stays readable next to what was decided. The eight that
 remain are Q1, Q2, Q4, Q6, Q7, Q8, Q9 and Q11.
 
-### Q1 — A-06 · Money is stored as floating point *(High)*
+### Q1 — A-06 · Money is stored as floating point *(High)*  ·  **Stage 1 done · rung 1 written, one rehearsal to run**
 
 Every amount the merchant deals in is a SQLite `REAL`. Your own billing tables
 already use integer cents. Converting means a schema migration, a data
@@ -164,7 +173,7 @@ is invisible; the day it is not, it is a customer refunded the wrong amount.
 copy of production — not folded into a fix pass.
 **What I need:** permission to plan it, or "not now".
 
-### Q2 — A-05 · The business day is hand-written as `'+8 hours'` in 25 places *(High)*
+### Q2 — A-05 · The business day is hand-written as `'+8 hours'` in 25 places *(High)*  ·  **ANSWERED — done**
 
 Every "today", every daily total, every report boundary is Guangzhou's midnight,
 written as a literal into SQL. `lib/business-date.js` exists and reads the
@@ -202,7 +211,7 @@ none or the read fails. Q4 — which of the ~65 alert sites are the merchant's
 problem and which are the platform's — is still open, and is now the only thing
 between this and the whole alert path being right.
 
-### Q4 — P-01 · The merchant's operational alerts go to the platform's chat *(High)*
+### Q4 — P-01 · The merchant's operational alerts go to the platform's chat *(High)*  ·  **ANSWERED — done**
 
 Roughly forty alert call sites send everything the system notices about a
 merchant's day to one operations group. The merchant's own channel exists and
@@ -243,7 +252,7 @@ already does when no channel is *configured* — would make a provider outage in
 a two-step bypass. If you would rather have that (a locked-out owner is also a
 real cost), say so and it is a two-line change.
 
-### Q6 — D-08 + H-01 + H-03 · What a new merchant is asked on day one *(High ×3)*
+### Q6 — D-08 + H-01 + H-03 · What a new merchant is asked on day one *(High ×3)*  ·  **ANSWERED — done**
 
 Sign-up asks for a shop name and an email. It does not ask for a country, a
 currency, a timezone or a language, and then assumes all four. H-03 is the same
@@ -259,7 +268,7 @@ unset.
    storefront and a clear message saying so, or (b) a path on the admin host?
 4. Is the waiting-list door (H-02) deliberate, or should sign-up be open?
 
-### Q7 — D-10 · Guangzhou's districts are written into delivery, orders and stock routing *(High)*
+### Q7 — D-10 · Guangzhou's districts are written into delivery, orders and stock routing *(High)*  ·  **ANSWERED — done**
 
 253 district-name occurrences across 30 files. Delivery zones, the dispatch
 method choice, and stock routing are all expressed in named Guangzhou districts
@@ -270,24 +279,87 @@ merchant defines, with the current set imported as Roots' saved configuration.
 It is a large change and I want it agreed before it starts, not discovered
 half-done.
 
-### Q8 — I-03 · There is no tax anywhere *(High, table-stakes)*
+### Q8 — I-03 · There is no tax anywhere *(High, table-stakes)*  ·  **ANSWERED: build it — done**
 
 No tax rate, no inclusive/exclusive setting, no tax line on an order, no tax on
 a report. A merchant anywhere that charges sales tax or VAT cannot use this
 product.
 
-**What I need:** is this in scope for the platform, and if so, which model —
-single rate per shop, rate per product, or rate per shipping destination? They
-are three different products.
+**You said build it and left me the details. What I chose, and why:**
 
-### Q9 — N-02 · A phone order cannot be taken on a phone *(High)*
+*One rate per shop, not per product and not per destination.* Per-product is a
+column on every product and a decision on every product page; per-destination
+is a rate table that has to be kept current in every jurisdiction you sell
+into, and getting it wrong is a legal problem rather than a bug. One rate is
+what a single-country merchant needs and it is the only one of the three that
+is finished when it ships. The other two are additive later: the order carries
+the rate it was charged at, so a second source for that rate does not disturb
+anything already stored.
+
+*Both shapes — added at checkout, and already in the price.* Not a preference:
+a US merchant must add at the till because the rate depends on where the buyer
+is, and an EU or UK one must show a consumer price with the tax inside it.
+
+*Off until a shop sets a rate, and the switch alone is not enough.* Nothing
+moves for Roots. A rate of zero charges nothing rather than printing a
+zero-rate line on every receipt.
+
+*The order keeps a snapshot* — the money, the rate and the shape. A shop that
+moves from 20% to 17.5% in April must not have March restate itself.
+
+Where it shows: the customer's checkout and the quote behind it, the mini-app
+order page, the web storefront, the counter till, the admin order drawer, the
+phone admin, the thermal receipt, and the finance summary as tax collected net
+of tax refunded. Settings sit beside Currency, with a preview of what a ¥100
+order becomes.
+
+*Points and store credit may pay the tax.* They are tenders, not discounts —
+the gross a customer pays is points + wallet + cash — and a tender settles the
+bill it is offered against. Shipping is excluded from what they may cover only
+because there is a switch that says so; there is no such switch for tax, and
+defaulting to "a tender may not pay the tax" would have been inventing one. It
+also matters practically: with the tax outside that base, a points-only order on
+a tax-charging shop would have been refused outright, naming a shipping fee that
+was not the problem.
+
+**The mini app needs a rebuild before a shop turns tax on.** `miniapp/` is not
+in the deploy's allowlist — it never has been, because the mini app is published
+through WeChat rather than shipped to the server — so the checkout page's half
+of this reaches customers only when a new build clears WeChat review. Nothing
+breaks in the meantime: the create route accepts a total declared by a client
+that predates the tax, precisely so a settings change cannot take an old build
+out of the checkout. But until that build is live, a customer on the old one
+sees a total without the tax line and is charged the taxed figure at the
+gateway, so the sensible order is: publish the build, then set the rate.
+
+**One thing I did not do, and would ask before doing:** tax on a REFUND is
+computed proportionally at report time rather than stored on the refund. It is
+right for every case I can see; it would be wrong if you ever refund a
+different tax rate from the one you charged.
+
+### Q9 — N-02 · A phone order cannot be taken on a phone *(High)*  ·  **ANSWERED: the cut-down one — done**
 
 The phone admin can do most things; it cannot create an order. A shopkeeper
 taking an order by telephone has to find a computer.
 
-**What I need:** should the phone get the full New-order flow, or a cut-down
-"name, phone, items, done" version? *(My recommendation: the cut-down one — the
-desktop wizard has six steps and none of them fit a phone.)*
+**Taken as recommended: the cut-down one.** Who, what, how, where it came from,
+payment, notes — one scrolling screen, no wizard, and it posts to the same
+`POST /api/retail-admin/orders` the desktop form and the counter till use, with
+the same field names and the same refusals read back in the same sentences.
+
+Three things it deliberately does not carry, each for a stated reason: **counter
+sales** (the till is a purpose-built screen one row away in More, and a walk-in
+has three extra server rules — a store, a named tender, a POS that is open),
+**drafts** (what was typed stays in memory instead, so Back and a second phone
+call do not lose it; nothing is written anywhere until Create), and **a
+grand-total override or per-line prices** (desk work).
+
+The fee quote is the same engine the customer checkout prices with, so the phone
+cannot quote a different delivery charge for the same basket. The one rule the
+form adds beyond the server's is a pickup at a multi-store shop having to name
+the store: the server allows an order with no store — a phone order taken before
+routing is decided legitimately has none — but a collection nobody can hand over
+is worth asking about while the customer is still on the line.
 
 ### Q10 — M-01 / M-02 · Language is a browser setting, not a person's *(Medium ×2)*  ·  **ANSWERED: account — done**
 
@@ -317,16 +389,14 @@ that work.
 **Nothing on this list needs a decision except where it says so.** Everything
 that could be done without one has been.
 
-**Waiting on an answer (the eight questions in §2):**
-- **I-03** — there is no tax anywhere. Q8. Table-stakes for a merchant outside
-  China, and a product decision about inclusive/exclusive, per-line or per-order.
-- **N-02** — a phone order cannot be taken on a phone. Q9. A new surface, not a
-  repair.
+**Waiting on you, and only these:**
+- **A-06 stage 2** — the storage migration itself. Rung 1 (add the integer
+  column, backfill it, change nothing that reads) is written, along with the
+  rehearsal that proves it against a copy of production. It needs one run on the
+  server: `bash scripts/rehearse-money-migration.sh`, and the whole of its
+  output back. Rungs 2 to 5 are written against what that run says.
 - **D-05** — the sales channel list is fixed in the interface. Q11, and yours per
   the brief.
-- **A-06 stage 2** — the storage migration itself. Stage 1 has shipped and the
-  plan is measured against production; the migration is its own piece of work
-  with a rehearsal, which is what Q1 asks for.
 
 **Deliberately left, with the reason:**
 - **C-02, the last part** — the phone admin still has its own date family. Its
@@ -340,15 +410,22 @@ that could be done without one has been.
   share one global scope and call each other by name; there is no module
   boundary to load across, and half-doing it is a screen that opens on a
   ReferenceError. The wire cost is down 3× in the meantime.
-- **E-07 for purchase orders** — restoring one means re-deriving stock that has
-  moved and books that have been reported. The honest version is an accounting
-  policy decision, not a function.
 - **Q-04** — Purchasing is a stack of screens with its own back button while
   every other section is a page with a drawer. Converging them is a redesign of
   a working screen, and the audit records it as an observation rather than a
   defect with a direction.
 - **H-02** — the public door is a waiting list. The audit's own suggested
   direction is "none — this is a sequencing decision, not a defect".
+- **Two capabilities the server does not enforce**, both found by K-01's work
+  and both left alone because closing either changes what an account may DO,
+  which is yours: a **full refund** travels through `PATCH /orders/:id/status`,
+  which `requiredCapFor()` answers `orders:edit` for, so the server would accept
+  one from a cashier today; and **`customers:adjust`** — a capability that
+  exists, that the role editor offers, and that `lib/capabilities.js` marks as
+  moving money — is not required by `/customers/:id/points-adjust` or
+  `/wallet-adjust`, which map to `customers:edit`. Both are one line each in
+  `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
+  closed the suite says so.
 - Everything under **K** (RBAC enforcement and the ~50 unmapped routes) and the
   finance category data quality pass — both yours per the brief.
 
@@ -378,10 +455,13 @@ earlier note here said it could not; that was wrong for two sessions, and it
 mattered — half the suites and every eslint run were being skipped on an
 assumption. With `npm ci` the whole thing runs locally.
 
-**The fast shard: 128 suites, 0 failures, 6 quarantined** — the same six that
-were already red on `main` before this branch existed. `npx eslint` reports **0
-errors** on every changed file, which is what the deploy gate blocks on. The
-slow shard (Chromium render passes) runs in CI.
+**The fast shard: 141 suites, 0 failures, 0 quarantined.** The quarantine list
+is empty — five of the six were fixed on `main` while this branch was in
+flight, and the sixth (`test_mobile_purchasing.js`) left on the evidence
+described below. `npx eslint` reports **0 errors** on every changed file, which
+is what the deploy gate blocks on. The slow shard — the Chromium render passes,
+including the 372-render sweep over every screen of the phone admin in English,
+Chinese and both themes — runs in CI and locally.
 
 **CI caught five failures on the first real run, none of them a product
 defect**: two source-greps naming a database handle D-01 correctly changed, two
@@ -402,7 +482,9 @@ Suites added by this pass, each named for the finding it holds down:
 `test_open_close_panel.js`, `test_notification_choices.js`,
 `test_saved_views.js`, `test_keyboard_reach.js`, `test_wizard_first_question.js`,
 `test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
-`test_asset_delivery.js`, `test_clear_filters.js`.
+`test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
+`test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
+`test_role_tagged_controls.js`.
 
 Also run, on every commit:
 
@@ -420,9 +502,8 @@ Also run, on every commit:
   percentages re-summed, the accessible-name coverage re-counted, the new role
   preset resolved through `lib/capabilities`
 
-`npx eslint` still cannot run here (no `node_modules`), so before this reaches
-`main` it needs a full run somewhere that can install — the CI workflow on a PR
-will do exactly that. The changes with real behaviour risk, in order:
+Both shards run in CI on every push to this branch, and green there is what
+gates the merge. The changes with real behaviour risk, in order:
 
 1. **J-01's ceilings** — six list endpoints changed shape. The ceilings are far
    above any real list, so the risk is a client reading `data` from a response
@@ -440,3 +521,13 @@ will do exactly that. The changes with real behaviour risk, in order:
    screen in silence.
 5. **The currency pass** — 188 render sites. Output is identical on CNY except
    that thousands are now grouped.
+6. **Tax (part three)** — it touches the customer checkout, its quote, the till
+   and the manual-order route, which is the money path. Every one of those is
+   a no-op while `tax.enabled` is false, which it is for every shop until one
+   sets a rate; `scripts/test_tax.js` asserts that a shop with no rate stores
+   three NULLs and is charged exactly what it was charged before. The one place
+   the arithmetic is duplicated rather than read is the mini-app checkout, and
+   the reason is written at the function: that page recomputes its own total
+   between quotes, and the server refuses an order whose declared total
+   disagrees with its own — so a figure frozen at the last quote would not be a
+   cosmetic problem, it would be a checkout that stops working.

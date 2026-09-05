@@ -142,6 +142,12 @@ const NOT_A_SUITE = new Set([
   'check_ledger_invariants.js',
   'check_points_invariants.js',
   'check_sync_freshness.js',
+  // A fourth of the same kind (audit A-06): the money migration's oracle. It
+  // measures a live database before and after a conversion and requires the two
+  // to agree, so bare — with no --db and nothing to compare against — it is
+  // asking nothing. Its red-proof, test_money_invariants.js, IS a suite and runs
+  // in the plan: that is where the queries are proven able to go red.
+  'check_money_invariants.js',
 ]);
 
 /* Does this suite need a browser? Asked of the source rather than of a list, so

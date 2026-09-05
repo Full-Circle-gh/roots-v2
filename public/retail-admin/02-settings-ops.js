@@ -147,8 +147,11 @@ else setTimeout(cfgMarkAudience, 0);
    RECENTLY DELETED (audit E-07)
    ══════════════════════════════════════════════════════════════════════════
    Products had version history and nothing else in the admin had anything. The
-   contents of a deleted coupon, delivery zone or ledger row are now kept for
-   sixty days, and this is where somebody puts one back.
+   contents of a deleted coupon, delivery zone, ledger row or DRAFT PURCHASE
+   ORDER are now kept for sixty days, and this is where somebody puts one back.
+   A purchase order comes back with its lines and with its own date, so it still
+   belongs to the month it was placed in — see the header of lib/recycle.js for
+   why only a draft can get here at all.
 
    IT LIVES IN OPERATIONS, not on each screen it covers. A merchant looking for
    something they deleted does not remember which screen they deleted it from —
