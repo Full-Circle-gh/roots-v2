@@ -355,6 +355,51 @@ async function place(taxCfg, body) {
         'including the rate, so a client that recomputes between quotes stays in step with the server');
   }
 
+  // ── §7b · the INSERT nothing here executes ──────────────────────────────
+  // §4 runs the manual-order handler for real, so its INSERT is proven by
+  // execution. The CUSTOMER checkout's is not: driving it would mean standing
+  // up vouchers, points, wallet, stock reservations and a customer session. So
+  // the one failure that shape of change actually produces is checked directly
+  // — three columns and three values added to a statement with forty-two
+  // placeholders, where a miscount binds every value after the gap to the wrong
+  // column and writes an order that looks plausible and is wrong.
+  section('7b · the checkout INSERT still lines up');
+  {
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const runArgs = (src, from) => {
+      const at = src.indexOf(').run(', from);
+      if (at < 0) return null;
+      let depth = 0, args = 1, q = null, tpl = false;
+      for (let i = at + 6; i < src.length; i++) {
+        const c = src[i];
+        if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+        if (c === "'" || c === '"') { q = c; continue; }
+        if (c === '`') { tpl = !tpl; continue; }
+        if (tpl) continue;
+        if (c === '(' || c === '[' || c === '{') { depth++; continue; }
+        if (c === ')') { if (!depth) break; depth--; continue; }
+        if (c === ']' || c === '}') { depth--; continue; }
+        if (c === ',' && !depth) args++;
+      }
+      return args;
+    };
+    const src = strip(RETAIL_SRC);
+    const re = /INSERT INTO retail_orders \(([\s\S]*?)\)\s*VALUES \(([^)]*)\)/g;
+    let m, seen = 0;
+    while ((m = re.exec(src))) {
+      seen++;
+      const cols = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+      const marks = (m[2].match(/\?/g) || []).length;
+      const args = runArgs(src, m.index + m[0].length);
+      is(cols.length, marks, `order INSERT #${seen}: ${cols.length} columns, ${marks} placeholders`);
+      is(args, marks, `order INSERT #${seen}: and ${args} values bound to them`);
+      for (const c of ['tax_amount', 'tax_rate_micro', 'tax_mode']) {
+        yes(cols.includes(c), `order INSERT #${seen} carries ${c}`);
+      }
+    }
+    is(seen, 2, 'both order INSERTs were found — the checkout and the manual one');
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is
