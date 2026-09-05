@@ -527,6 +527,110 @@ async function place(taxCfg, body) {
     yes(/0\.005/.test(block), 'and the half-cent tolerance for float dust is unchanged');
   }
 
+  // ── §7g · the two handlers that were only read, now run ─────────────────
+  section('7g · the quote and the settings door, executed');
+  {
+    /* §4 runs the create handler; these two were asserted by reading their
+       source, which proves the line is written and not that it does anything.
+       Both are small and both are extracted and run here for the same reason
+       the create handler is: a harness that runs a copy is testing a different
+       program. */
+    const sliceRoute = (anchor) => {
+      const i = RETAIL_SRC.indexOf(anchor);
+      assert.notStrictEqual(i, -1, 'route anchor did not match: ' + anchor);
+      const from = i + anchor.length;
+      const m = /\r?\n\}\);/.exec(RETAIL_SRC.slice(from));
+      assert.ok(m, 'unterminated route: ' + anchor);
+      return RETAIL_SRC.slice(from, from + m.index);
+    };
+    const res = () => {
+      const r = { code: 200, body: null };
+      r.status = (c) => { r.code = c; return r; };
+      r.json = (o) => { r.body = o; return r; };
+      return r;
+    };
+
+    // ── the fee quote ──
+    {
+      const db = fixture({ 'tax.enabled': true, 'tax.mode': 'exclusive', 'tax.rateMicro': 200000 });
+      const scope = {
+        tdb: () => db, tax, money,
+        ORDER_FULFILLMENT_TYPES: ['delivery', 'pickup', 'counter'],
+        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
+          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+        )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+        // The fee engine is stubbed — this suite is about the tax, and the zone
+        // matcher wants a delivery-zone catalogue that says nothing about it.
+        manualOrderFees: () => ({ shippingFee: 10, packingFee: 5, freeShipping: false, zone: null, error: null }),
+        taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db, tax),
+      };
+      const keys = Object.keys(scope);
+      const quote = new Function(...keys, `return (req, res) => {${sliceRoute("router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), (req, res) => {")}};`)(...keys.map((k) => scope[k]));
+      const r = res();
+      quote({ body: { fulfillment_type: 'delivery', items: [{ product_id: 1, qty: 2 }] } }, r);
+      is(r.code, 200, 'the quote answers');
+      const d = r.body.data;
+      is(d.subtotal, 100, 'with the cart it priced');
+      yes(!!d.tax, 'and a tax block');
+      is(d.tax.amount, 21, 'the tax on the goods and the packing — 20% of 105');
+      is(d.tax.added, 21, 'all of it added, because this shop charges on top');
+      is(d.tax.rate_micro, 200000, 'carrying the rate, so a client that recomputes stays in step');
+      is(d.tax.mode, 'exclusive', 'and the shape');
+
+      const off = res();
+      const db2 = fixture(null);
+      const scope2 = { ...scope, tdb: () => db2,
+        taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db2, tax),
+        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
+          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+        )(() => db2, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan) };
+      const k2 = Object.keys(scope2);
+      const quote2 = new Function(...k2, `return (req, res) => {${sliceRoute("router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), (req, res) => {")}};`)(...k2.map((k) => scope2[k]));
+      quote2({ body: { fulfillment_type: 'delivery', items: [{ product_id: 1, qty: 2 }] } }, off);
+      is(off.body.data.tax, null,
+         'and a shop that charges none answers NULL — a caller can tell that from a tax of zero');
+    }
+
+    // ── the settings door ──
+    {
+      const body = sliceRoute("router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async (req, res) => {");
+      /* The write is stubbed to a no-op that RECORDS that it ran, so a payload
+         the door lets through is asserted positively — "the write was reached"
+         — rather than by the absence of a particular refusal. An assertion that
+         only says "not this error" passes just as happily when the handler
+         refuses for some other reason. */
+      let reached = false;
+      const put = new Function('tax', 'withTransaction', 'tdb', 'loadConfig', 'logActivity',
+        `return async (req, res) => {${body}};`
+      )(tax,
+        async (_db, fn) => { reached = true; fn({ prepare: () => ({ run: () => {} }) }); },
+        () => ({ prepare: () => ({ run: () => {} }) }),
+        () => ({}), () => {});
+      const cases = [
+        [{ 'tax.rateMicro': 200000 }, null, 'a real rate is let through to the write'],
+        [{ 'tax.rateMicro': 90000000 }, 'bad_tax_rate', '900% is refused — it looks like a number and would nearly double every bill'],
+        [{ 'tax.rateMicro': -1 }, 'bad_tax_rate', 'and so is a negative one'],
+        [{ 'tax.rateMicro': 8.875 }, 'bad_tax_rate', 'and a percentage typed where micro units belong — 8.875 is not an integer'],
+        [{ 'tax.mode': 'sideways' }, 'bad_tax_mode', 'a shape the server does not know is refused'],
+        [{ 'tax.mode': 'inclusive' }, null, 'a shape it does know is not'],
+        [{ 'tax.enabled': 'yes' }, 'bad_tax_switch', 'a switch that is not a boolean is refused'],
+        [{ 'tax.enabled': true }, null, 'a boolean is not'],
+        [{ 'copy.anything': 'whatever somebody types' }, null, 'and everything else is still stored without an opinion'],
+      ];
+      for (const [payload, want, what] of cases) {
+        const r = res();
+        reached = false;
+        await put({ body: payload, user: { id: 1, username: 'op' }, ip: '127.0.0.1' }, r);
+        if (want) {
+          is(r.body && r.body.error, want, what);
+          is(reached, false, `— and ${want} is refused BEFORE anything is written`);
+        } else {
+          is(reached, true, what);
+        }
+      }
+    }
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is
