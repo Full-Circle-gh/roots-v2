@@ -5455,6 +5455,24 @@
       .vw-door.fresh { border-style: dashed; background: transparent; }
       .vw-door.fresh:hover { background: var(--bg-elev-1); }
 
+      /* The other ways in, offered BESIDE the first question rather than on a
+         screen before it (audit F-02). Deliberately quiet: they are for the
+         minority who already have the words written down, and the first
+         question is what everybody else came for. */
+      .pw-alts, .vw-alts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 12px; }
+      .pw-alt, .vw-alt {
+        display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+        border-radius: 999px; padding: 5px 11px; background: var(--bg-input); cursor: pointer;
+        font: inherit; font-size: 12.5px; color: var(--text-2);
+        transition: border-color .2s var(--ease-out, ease), color .2s var(--ease-out, ease);
+      }
+      .pw-alt:hover, .vw-alt:hover { border-color: var(--text-3); color: var(--text-1); }
+      .pw-alt .vico, .vw-alt .vico { display: flex; }
+      /* The coupon wizard's chips are a CHOICE — one of them is always the one
+         the answers below came from — so the current one is marked. The product
+         wizard's two are alternative routes, not a selection, and have no "on". */
+      .vw-alt.on { border-color: var(--text-1); color: var(--text-1); background: var(--bg-elev-1); }
+
       /* screen 2 — the deal */
       .vw-kinds { display: flex; gap: 10px; margin-top: 10px; }
       .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 18px 10px; background: var(--bg-input); cursor: pointer; transition: border-color .2s var(--ease-out, ease); }

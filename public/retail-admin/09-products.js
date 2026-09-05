@@ -5999,7 +5999,12 @@ function pwPrimaryLang() { try { if (typeof cuLang === 'function') return cuLang
 
 function pwOpen() {
   _pw = {
-    step: 'front', source: null,
+    // OPENS ON THE FIRST QUESTION (audit F-02). This used to open on a
+    // choose-your-route screen — three doors before anything was asked — which
+    // for the common case (a blank product) was one click and a screen of
+    // reading spent on nothing. The other two routes are offered beside the
+    // first question instead, where they cost nobody who does not want them.
+    step: 'what', source: 'scratch',
     name_en: '', name_cn: '', sku: '', top: '', sub: '', photo: '',
     price: '', compare: '', stock: '', weight: '',
     hasSizes: false, sizes: [{ name_en: '', name_cn: '', weight: '', price: '', stock: '' }], localOnly: false,
@@ -6023,16 +6028,17 @@ function pwClose() {
 // a question while "typed a name, three sizes and a photo" does not.
 function pwHasWork() {
   if (!_pw) return false;
-  if (_pw.step !== 'front' && _pw.source) {
-    const t = ['name_en', 'name_cn', 'sku', 'top', 'sub', 'photo', 'price', 'compare', 'stock', 'weight', 'descEn', 'descCn'];
-    if (t.some(k => String(_pw[k] || '').trim())) return true;
-    if (_pw.hasSizes || (_pw.options || []).length) return true;
-    if (Object.keys(_pw.facts || {}).length || Object.keys(_pw.freeOf || {}).length) return true;
-    // Past the first question with a route chosen but nothing typed yet still
-    // counts as work in progress — the operator is mid-task either way.
-    return _pw.step !== 'front-paste' && _pw.step !== 'front-copy';
-  }
-  return false;
+  const t = ['name_en', 'name_cn', 'sku', 'top', 'sub', 'photo', 'price', 'compare', 'stock', 'weight', 'descEn', 'descCn'];
+  if (t.some(k => String(_pw[k] || '').trim())) return true;
+  if (_pw.hasSizes || (_pw.options || []).length) return true;
+  if (Object.keys(_pw.facts || {}).length || Object.keys(_pw.freeOf || {}).length) return true;
+  // Nothing has been typed. On the FIRST question that is an untouched wizard —
+  // opened and closed again — and asking to confirm would be a dialog about
+  // nothing. The wizard now opens on that question rather than on a door screen
+  // (audit F-02), so this is the case that used to be `step === 'front'`.
+  // Past it, or on one of the two other routes, the operator is mid-task even
+  // with every box still empty.
+  return _pw.step !== 'what' && _pw.step !== 'front-paste' && _pw.step !== 'front-copy';
 }
 // Esc closes; backdrop click does NOT, so an in-progress product is never
 // discarded by a stray click. Escape used to discard it with no question at all,
@@ -6072,7 +6078,12 @@ function pwDots(active) {
   return '<div class="vw-dots">' + PW_STEPS.map(s => '<span class="vw-dot' + (s === active ? ' on' : '') + '"></span>').join('') + '</div>';
 }
 function pwFoot(backStep, nextFn, active, nextLabel) {
-  return '<button class="btn" onclick="pwGoto(\'' + backStep + '\')">' + cuT('Back', '返回') + '</button>'
+  // A null backStep is the FIRST step, which has nowhere to go back to. An empty
+  // span rather than nothing, so the dots stay centred and the Next button does
+  // not jump left between step one and step two.
+  return (backStep
+    ? '<button class="btn" onclick="pwGoto(\'' + backStep + '\')">' + cuT('Back', '返回') + '</button>'
+    : '<span></span>')
     + pwDots(active)
     + '<button class="btn btn-primary" onclick="' + nextFn + '">' + (nextLabel || cuT('Next', '下一步')) + '</button>';
 }
@@ -6081,11 +6092,10 @@ function pwRender() {
   const title = document.getElementById('pw-title'), body = document.getElementById('pw-body'), foot = document.getElementById('pw-foot');
   if (!title || !body || !foot) return;
   const s = _pw.step;
-  foot.style.display = (s === 'front' || s === 'front-paste' || s === 'front-copy') ? 'none' : 'flex';
-  if (s === 'front')            { title.textContent = cuT('Add a product', '添加产品');     body.innerHTML = pwFrontHtml(); }
-  else if (s === 'front-paste') { title.textContent = cuT('Paste your text', '粘贴文字');     body.innerHTML = pwPasteHtml(); }
+  foot.style.display = (s === 'front-paste' || s === 'front-copy') ? 'none' : 'flex';
+  if (s === 'front-paste')      { title.textContent = cuT('Paste your text', '粘贴文字');     body.innerHTML = pwPasteHtml(); }
   else if (s === 'front-copy')  { title.textContent = cuT('Copy one you sell', '复制已有产品'); body.innerHTML = pwCopyHtml(); pwCopyList(); }
-  else if (s === 'what')        { title.textContent = cuT('What is it?', '这是什么?');       body.innerHTML = pwWhatHtml();   foot.innerHTML = pwFoot('front', 'pwNextWhat()', 'what'); }
+  else if (s === 'what')        { title.textContent = cuT('What is it?', '这是什么?');       body.innerHTML = pwWhatHtml();   foot.innerHTML = pwFoot(null, 'pwNextWhat()', 'what'); }
   else if (s === 'price')       { title.textContent = cuT('Sizes & price', '规格与价格');     body.innerHTML = pwPriceHtml();  foot.innerHTML = pwFoot('what', "pwGoto('details')", 'price'); }
   else if (s === 'details')     { title.textContent = cuT('The details', '详细信息');        body.innerHTML = pwDetailsHtml(); foot.innerHTML = pwFoot('price', "pwGoto('extras')", 'details'); }
   else if (s === 'extras')      { title.textContent = cuT('Customize?', '可定制?');          body.innerHTML = pwExtrasHtml();  foot.innerHTML = pwFoot('details', "pwGoto('review')", 'extras'); }
@@ -6098,18 +6108,25 @@ function pwRender() {
   }
 }
 
-// ── Front door ───────────────────────────────────────────────────────────────
-function pwFrontHtml() {
-  const cards = [
-    ['scratch', 'pencil', cuT('Start from scratch', '从头开始'), cuT('A blank product. You fill it in.', '空白产品,自行填写。')],
-    ['paste', 'paste', cuT('Paste what you’ve written', '粘贴已有文字'), cuT('Drop in a description — we’ll sort it into the right boxes.', '粘贴描述 — 我们帮你归类到各栏。')],
-    ['copy', 'copy', cuT('Copy one you already sell', '复制已有产品'), cuT('Start from a similar product and change what’s different.', '从相似产品开始,只改不同处。')],
-  ];
-  return '<div class="vw-lab" style="margin-bottom:2px;">' + cuT('How do you want to add it?', '你想怎样添加?') + '</div>'
-    + '<div class="vw-help" style="margin:-2px 0 12px;">' + cuT('Pick whatever’s easiest. You can change anything later.', '选最方便的方式,之后都能修改。') + '</div>'
-    + '<div class="vw-doors">'
-    + cards.map(c => '<button class="vw-door" onclick="pwFront(\'' + c[0] + '\')"><span class="vico">' + pwIcon(c[1], 22) + '</span>'
-        + '<span class="vw-door-txt"><span class="dt">' + c[2] + '</span><span class="ds">' + c[3] + '</span></span></button>').join('')
+// ── The two other ways in (audit F-02) ───────────────────────────────────────
+// This was a screen of its own: three doors — start from scratch, paste, copy —
+// before a single question. Two of the three are worth having and one of them
+// is what almost everybody wants, so the wizard now OPENS on the first question
+// and the other two are a line above it.
+//
+// Shown only while nothing has been typed. Both routes fill boxes in — paste
+// writes the description, copy writes the name, category and price — so
+// offering them over half-finished work would be offering to overwrite it.
+function pwAltRoutesHtml() {
+  if (_pw.source !== 'scratch') return '';
+  if (pwHasWork()) return '';
+  const link = (src, icon, label) =>
+    '<button type="button" class="pw-alt" onclick="pwFront(\'' + src + '\')">'
+    + '<span class="vico">' + pwIcon(icon, 15) + '</span>' + label + '</button>';
+  return '<div class="pw-alts">'
+    + '<span class="vw-help">' + cuT('Already have it written down?', '已经写好了?') + '</span>'
+    + link('paste', 'paste', cuT('Paste it in', '粘贴文字'))
+    + link('copy', 'copy', cuT('Copy one you sell', '复制已有产品'))
     + '</div>';
 }
 function pwFront(source) {
@@ -6123,7 +6140,7 @@ function pwPasteHtml() {
     + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('A description, the back of the package, a spec sheet — we’ll pull the details out next.', '描述、包装背面、规格表都行 — 下一步我们帮你提取详情。') + '</div>'
     + '<textarea id="pw-paste" rows="7" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;resize:vertical;"></textarea>'
     + '<div class="pw-row-end" style="margin-top:14px;">'
-    + '<button class="btn" onclick="pwGoto(\'front\')">' + cuT('Back', '返回') + '</button>'
+    + '<button class="btn" onclick="pwGoto(\'what\')">' + cuT('Back', '返回') + '</button>'
     + '<button class="btn btn-primary" onclick="pwPasteContinue()">' + cuT('Continue', '继续') + '</button></div>';
 }
 function pwPasteContinue() {
@@ -6135,7 +6152,7 @@ function pwCopyHtml() {
   return '<div class="vw-lab">' + cuT('Which product is it like?', '与哪个产品相似?') + '</div>'
     + '<input id="pw-copy-q" type="text" autocomplete="off" placeholder="' + cuT('Search by name or SKU…', '按名称或货号搜索…') + '" oninput="pwCopyList()" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;margin:6px 0 10px;">'
     + '<div id="pw-copy-list" class="pw-pick-list"></div>'
-    + '<div class="pw-row-end" style="margin-top:12px;"><button class="btn" onclick="pwGoto(\'front\')">' + cuT('Back', '返回') + '</button></div>';
+    + '<div class="pw-row-end" style="margin-top:12px;"><button class="btn" onclick="pwGoto(\'what\')">' + cuT('Back', '返回') + '</button></div>';
 }
 function pwCopyList() {
   const el = document.getElementById('pw-copy-list'); if (!el) return;
@@ -6183,7 +6200,8 @@ function pwWhatHtml() {
     ? { lab: cuT('English name (optional)', '英文名(可选)'), val: _pw.name_en, fn: 'pwSet(\'name_en\', this.value)', ph: 'Cacao Nibs' }
     : { lab: cuT('中文名 (optional)', '中文名(可选)'), val: _pw.name_cn, fn: 'pwSet(\'name_cn\', this.value)', ph: '可可碎' };
   const prefilled = (_pw.source === 'paste' || _pw.source === 'copy');
-  return (prefilled ? '<div class="vw-help" style="margin:-2px 0 4px;">' + cuT('We’ve filled in what we could — just check it’s right.', '已尽量帮你填好 — 核对一下即可。') + '</div>' : '')
+  return pwAltRoutesHtml()
+    + (prefilled ? '<div class="vw-help" style="margin:-2px 0 4px;">' + cuT('We’ve filled in what we could — just check it’s right.', '已尽量帮你填好 — 核对一下即可。') + '</div>' : '')
     + '<div class="field"><label class="vw-lab">' + nameMain.lab + '</label>'
     + '<input type="text" value="' + escapeAttr(nameMain.val) + '" placeholder="' + nameMain.ph + '" oninput="' + nameMain.fn + '" style="width:100%;box-sizing:border-box;"></div>'
     + '<div class="vw-help" style="margin:-6px 0 4px;">' + cuT('Type one language — you can add the other below.', '填一种语言即可 — 另一种可在下方补充。') + '</div>'
