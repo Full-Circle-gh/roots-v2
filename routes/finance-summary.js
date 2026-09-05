@@ -74,9 +74,10 @@ const router = express.Router();
 // routes/finance-transactions.js, and this file adds none of its own.
 //
 //   PAID        the order status ALLOW-list
-//   ODATE       date(COALESCE(paid_at, placed_at), '+8 hours')
+//   odateFor()  date(COALESCE(paid_at, placed_at), '<the shop's own shift>')
 //   LEDGER_DATE the ledger's own DATE column, which takes no shift
-const { PAID, ODATE, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const { PAID, odateFor, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const { sqlDayShiftForShop } = require('../lib/business-date');
 
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
@@ -97,7 +98,7 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     const rev = db.prepare(`
       SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS orders
         FROM retail_orders
-       WHERE ${PAID} AND ${ODATE} BETWEEN ? AND ?`).get(from, to);
+       WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?`).get(from, to);
 
     // ── Line 4 · Operating expenses ──
     // The kitchen route groups by `substr(date,1,7)`, a calendar-month string,

@@ -312,6 +312,39 @@ const MEDIA_INLINE_MIME = new Set([
 // customer, and the mini app reads the amount straight from here.
 const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
 
+const businessDate = require('../lib/business-date');
+// ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
+// Thirty-five day-boundary calculations in this file were the literal string
+// '+8 hours', so today's takings, the dashboard, the finance window and "new
+// this week" ended at midnight in Guangzhou for every merchant on the platform.
+// lib/business-date.js already existed and said why that was wrong; one file
+// used it.
+//
+// THE SAME ZONE THE SCREEN USES. This resolves the first active location's
+// timezone — character for character the query GET /api/retail-admin/config
+// answers with, which is what the client hands to td-datetime.js as TD_TZ. They
+// must agree: a screen that RENDERS a row at 00:30 Monday while the server
+// BUCKETS it into Sunday is a screen arguing with itself, and the operator has
+// no way to tell which half is lying.
+//
+// Memoised for a minute, per account. It is read many times per request and the
+// answer changes when somebody edits a location's zone, which is not a thing
+// that happens twice in a minute.
+const _tzMemo = new Map();          // tenantId -> { at, shift }
+function shopSqlShift() {
+  const tid = (() => { try { return currentTenantId() || ROOTS_TENANT_ID; } catch (e) { return ROOTS_TENANT_ID; } })();
+  const hit = _tzMemo.get(tid);
+  const now = Date.now();
+  if (hit && now - hit.at < 60_000) return hit.shift;
+  // The library owns the resolution so every reader agrees — including
+  // finance-summary.js and restock.js, which ask the same question. A column
+  // absent on an old account database falls back to UTC+8 there, which is
+  // exactly what this code did before, so an un-migrated account behaves
+  // identically rather than shifting every date it shows.
+  const shift = businessDate.sqlDayShiftForShop(tdb());
+  _tzMemo.set(tid, { at: now, shift });
+  return shift;
+}
 function loadConfig() {
   const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();
   const out = { version: 0 };
@@ -2469,7 +2502,7 @@ function socialProofForProduct(id) {
   try {
     const row = tdb().prepare(`
       SELECT
-        COUNT(DISTINCT CASE WHEN date(o.placed_at, '+8 hours') = date('now', '+8 hours')
+        COUNT(DISTINCT CASE WHEN date(o.placed_at, '${shopSqlShift()}') = date('now', '${shopSqlShift()}')
                             THEN o.customer_id END) AS c_today,
         COUNT(DISTINCT CASE WHEN o.placed_at >= datetime('now', '-7 days')
                             THEN o.customer_id END) AS c_week,
@@ -13297,7 +13330,7 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 function guanyiPickupSales(db, from, to, opts) {
   const out = { revenue: 0, lines: 0, orders: 0, byBucket: {} };
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const hourly = !!(opts && opts.hourly);
     const bkL = hourly ? `strftime('%H', l.created_at, '${TZ}')`  : `date(l.created_at, '${TZ}')`;
     const bkP = hourly ? `strftime('%H', pl.created_at, '${TZ}')` : `date(pl.created_at, '${TZ}')`;
@@ -13371,7 +13404,7 @@ function guanyiPickupSales(db, from, to, opts) {
 function topupCashReceived(db, from, to, opts) {
   const out = { received: 0, byBucket: {} };
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const hourly = !!(opts && opts.hourly);
     const bk = hourly ? `strftime('%H', paid_at, '${TZ}')` : `date(paid_at, '${TZ}')`;
     const rows = db.prepare(`
@@ -13400,7 +13433,7 @@ function topupCashReceived(db, from, to, opts) {
 // with the day the order settled. Returns a rounded ¥ total.
 function storeCreditRedeemed(db, from, to) {
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
     const row = db.prepare(`
       SELECT COALESCE(SUM(balance_used), 0) AS redeemed
@@ -13418,7 +13451,7 @@ function storeCreditRedeemed(db, from, to) {
 // "Today" is GZ-local (UTC+8), same convention as the dashboard.
 router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => {
   try {
-    const TZ    = '+8 hours';
+    const TZ    = shopSqlShift();
     const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
     const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
@@ -13571,7 +13604,7 @@ function dashMemoBust(tenantId) {
 }
 
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
-  const TZ    = '+8 hours';
+  const TZ    = shopSqlShift();
   // gzgrocery is a wholesale pickup channel whose revenue is folded in via the
   // Guanyi/order-read ledger (guanyiPickupSales, below). Its display-only mirror
   // rows in retail_orders (channel='gzgrocery') must therefore be excluded from
@@ -14254,7 +14287,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 const _catHiCache = new Map();   // tenant → { at, body }
 const CAT_HI_TTL = 60 * 1000;
 router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, res) => {
-  const TZ = '+8 hours';
+  const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
   const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
@@ -14485,8 +14518,8 @@ function buildActivityQuery(q) {
   // tab counts are computed over `whereNoSource` so the switcher always shows
   // every channel's count regardless of which tab is selected; the table + CSV
   // use `where` (base + the picked channel).
-  const base = [`date(datetime(l.created_at,'+8 hours')) >= @from`,
-                `date(datetime(l.created_at,'+8 hours')) <= @to`];
+  const base = [`date(datetime(l.created_at,'${shopSqlShift()}')) >= @from`,
+                `date(datetime(l.created_at,'${shopSqlShift()}')) <= @to`];
   const params = { from, to };
   if (q.store_id && /^\d+$/.test(String(q.store_id))) { base.push('l.store_id = @store_id'); params.store_id = Number(q.store_id); }
   const term = String(q.q || '').trim();
@@ -14501,7 +14534,7 @@ function buildActivityQuery(q) {
 function activityRows({ where, params }, limit, offset) {
   return tdb().prepare(`
     SELECT l.id,
-           datetime(l.created_at,'+8 hours') AS ts_local,
+           datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
            ${ACT_SOURCE_SQL} AS source,
            l.reason, l.store_id,
            COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store,
@@ -14568,8 +14601,8 @@ function buildChangeLogFilter(req) {
   // Day bounds, read as Guangzhou days because that is what the screen shows.
   const from = String(req.query.from || '').trim();
   const to   = String(req.query.to   || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(a.created_at,'+8 hours') >= ?"); params.push(from); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(a.created_at,'+8 hours') <= ?"); params.push(to); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push(`date(a.created_at,'${shopSqlShift()}') >= ?`); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push(`date(a.created_at,'${shopSqlShift()}') <= ?`); params.push(to); }
 
   return { whereSql: 'WHERE ' + where.join(' AND '), params };
 }
@@ -14581,7 +14614,7 @@ function buildChangeLogFilter(req) {
 const CHANGE_LOG_SELECT = `
   SELECT a.id, a.username, a.action, a.entity_type, a.entity_id, a.details, a.ip_address,
          a.created_at,
-         datetime(a.created_at,'+8 hours') AS at_local
+         datetime(a.created_at,'${shopSqlShift()}') AS at_local
     FROM activity_log a`;
 
 // GET /api/retail-admin/activity-log — the change history, newest first.
@@ -14677,8 +14710,8 @@ function buildNotifyLogFilter(req) {
 
   const from = String(req.query.from || '').trim();
   const to   = String(req.query.to   || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(n.created_at,'+8 hours') >= ?"); params.push(from); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(n.created_at,'+8 hours') <= ?"); params.push(to); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push(`date(n.created_at,'${shopSqlShift()}') >= ?`); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push(`date(n.created_at,'${shopSqlShift()}') <= ?`); params.push(to); }
 
   return { whereSql: 'WHERE ' + where.join(' AND '), params };
 }
@@ -14771,7 +14804,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
          WHERE ${built.where}
          GROUP BY l.product_id, l.store_id
       )
-      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+      SELECT datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
              COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
              p.sku,
              COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store
@@ -14797,7 +14830,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         JOIN retail_stock_ledger l ON l.id = last.last_id
        WHERE l.balance_after = 0 AND l.delta < 0`).get(built.params).n;
     const big = tdb().prepare(`
-      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+      SELECT datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
              ${ACT_SOURCE_SQL} AS source,
              COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
              p.sku, l.delta, l.actor_label,
@@ -16694,7 +16727,7 @@ function buildCustomerFilter(query) {
   // as "today" on the tile and as a day old on the roster. Today plus the
   // previous 6 GZ days, so today is always inside this week.
   if      (segment === 'blocked')  where.push('is_blocked = 1');
-  else if (segment === 'new_week') where.push("date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days')");
+  else if (segment === 'new_week') where.push(`date(created_at, '${shopSqlShift()}') >= date('now', '${shopSqlShift()}', '-6 days')`);
   else if (segment === 'sleeping') {
     where.push(`EXISTS (${SEG_PAID_EXISTS})`);
     params.push(...BC_PAID_STATUSES);
@@ -16731,9 +16764,9 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
               lifetime_spend, points_balance, balance, is_blocked,
               ${CHANNEL_SQL} AS channel,
               (SELECT COUNT(*) FROM retail_orders o WHERE o.customer_id = retail_customers.id) AS orders_count,
-              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '+8 hours') AS last_order_at,
-              datetime(created_at,     '+8 hours') AS joined_local,
-              datetime(last_login_at,  '+8 hours') AS last_seen_local
+              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '${shopSqlShift()}') AS last_order_at,
+              datetime(created_at,     '${shopSqlShift()}') AS joined_local,
+              datetime(last_login_at,  '${shopSqlShift()}') AS last_seen_local
          FROM retail_customers
          ${whereSql}
         ORDER BY id ASC`
@@ -16869,7 +16902,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     const seg = tdb().prepare(
       `SELECT
          COALESCE(SUM(CASE WHEN is_blocked = 0 THEN 1 ELSE 0 END), 0) AS all_count,
-         COALESCE(SUM(CASE WHEN is_blocked = 0 AND date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days') THEN 1 ELSE 0 END), 0) AS new_week,
+         COALESCE(SUM(CASE WHEN is_blocked = 0 AND date(created_at, '${shopSqlShift()}') >= date('now', '${shopSqlShift()}', '-6 days') THEN 1 ELSE 0 END), 0) AS new_week,
          COALESCE(SUM(CASE WHEN is_blocked = 0
                             AND EXISTS (${SEG_PAID_EXISTS})
                             AND NOT EXISTS (${SEG_PAID_EXISTS} AND o.placed_at >= datetime('now', '-60 days'))
@@ -21967,8 +22000,8 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
               free_of, nutrition, product_facts, tags, notes,
               ship_modes, ship_from_supplier, supplier_paused, is_batch_made, oos_policy,
               is_market, is_restock_only, sort_order, image_url,
-              datetime(created_at,'+8 hours') AS created_local,
-              datetime(updated_at,'+8 hours') AS updated_local
+              datetime(created_at,'${shopSqlShift()}') AS created_local,
+              datetime(updated_at,'${shopSqlShift()}') AS updated_local
          FROM store_products
         WHERE COALESCE(is_active, 1) = 1
         ORDER BY is_published DESC, sort_order ASC, name_en ASC`
@@ -22282,7 +22315,7 @@ router.get('/api/retail-admin/products/:id/variant-store-stocks', requireRetailA
 router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
-  const TZ = '+8 hours';
+  const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
   const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
@@ -22966,7 +22999,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
        WHERE i.product_id IN (${ph})
          AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
          AND COALESCE(o.channel,'') != 'gzgrocery'
-         AND date(COALESCE(o.paid_at, o.placed_at), '+8 hours') BETWEEN ? AND ?
+         AND date(COALESCE(o.paid_at, o.placed_at), '${shopSqlShift()}') BETWEEN ? AND ?
        GROUP BY i.product_id
     `).all(...ids, from, to);
     const bySales = new Map(salesRows.map(r => [r.product_id, r.units]));
@@ -24115,10 +24148,10 @@ router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res)
               o.tracking_carrier, o.tracking_number, o.tracking_status,
               o.needs_invoice, o.invoice_status, o.invoice_number, o.invoice_title,
               o.staff_note,
-              datetime(o.placed_at,     '+8 hours') AS placed_local,
-              datetime(o.paid_at,       '+8 hours') AS paid_local,
-              datetime(o.dispatched_at, '+8 hours') AS dispatched_local,
-              datetime(o.delivered_at,  '+8 hours') AS delivered_local
+              datetime(o.placed_at,     '${shopSqlShift()}') AS placed_local,
+              datetime(o.paid_at,       '${shopSqlShift()}') AS paid_local,
+              datetime(o.dispatched_at, '${shopSqlShift()}') AS dispatched_local,
+              datetime(o.delivered_at,  '${shopSqlShift()}') AS delivered_local
          FROM retail_orders o
     LEFT JOIN retail_customers c ON c.id = o.customer_id
     LEFT JOIN retail_stores    s ON s.id = o.store_id

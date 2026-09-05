@@ -69,8 +69,13 @@ function constOf(name) {
 // ── The predicates, read from the shipped file rather than restated ────────
 const PAID = constOf('PAID');
 const TZ = constOf('TZ');
-const ODATE = WINDOW_LIB.match(/const ODATE = `([\s\S]*?)`;/)[1].replace('${TZ}', TZ);
 const EDATE = constOf('LEDGER_DATE');
+// ODATE comes from the MODULE, not from a regex over its source. It used to be
+// scraped as `const ODATE = \`…\`;` with ${TZ} substituted by hand — which broke
+// the day audit A-05 made the order date take the shop's own clock and ODATE
+// became `odateFor(TZ)`. The module is pure and has no database, so requiring it
+// tests the value that actually ships instead of a copy of its spelling.
+const { ODATE, odateFor } = require(path.join(ROOT, 'lib', 'finance-window.js'));
 
 console.log('\n1 · the predicates — declared once, and the right ones');
 
@@ -84,6 +89,25 @@ it('the status filter is the ALLOW-list, not a deny-list', () => {
 it('the order date is COALESCE(paid_at, placed_at) shifted +8h', () => {
   assert.strictEqual(TZ, '+8 hours');
   assert.ok(/date\(COALESCE\(paid_at, placed_at\), '\+8 hours'\)/.test(ODATE), ODATE);
+});
+
+it('the order date takes the SHOP\'s clock when one is given (audit A-05)', () => {
+  // Every merchant outside UTC+8 had their day end at midnight in Guangzhou.
+  // odateFor() is how a caller hands in its own boundary; minutes, not hours,
+  // because +5:45 and +9:30 are real places.
+  assert.strictEqual(odateFor('+345 minutes'),
+    "date(COALESCE(paid_at, placed_at), '+345 minutes')");
+  assert.strictEqual(odateFor('-300 minutes'),
+    "date(COALESCE(paid_at, placed_at), '-300 minutes')");
+  // And with nothing given it is the documented fallback, unchanged.
+  assert.strictEqual(odateFor(), ODATE);
+  assert.strictEqual(odateFor(null), ODATE);
+});
+
+it('the summary asks for the shop\'s shift rather than pasting one', () => {
+  assert.match(ROUTE_CODE, /odateFor\(sqlDayShiftForShop\(tdb\(\)\)\)/,
+    'the live query must resolve the account’s own boundary');
+  assert.ok(!/\+8 hours/.test(ROUTE_CODE), 'no hand-written offset may remain in the route');
 });
 
 it('the expense date takes NO shift — it is already a business day', () => {

@@ -901,13 +901,15 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
     // span days (slow ferments, multi-step recipes), so a "stale" sent
     // request to the kitchen is still real work, not noise. The original
     // sweep was designed for the store→warehouse Fulfill tab only.
+    // The shop's own midnight, not Guangzhou's (audit A-05).
+    const SHIFT = require('../lib/business-date').sqlDayShiftForShop(tdb());
     tdb().prepare(`
       UPDATE restock_orders
          SET archived_at = CURRENT_TIMESTAMP
        WHERE archived_at IS NULL
          AND status NOT IN ('prepared','delivered','draft')
          AND COALESCE(to_role, 'warehouse') != 'kitchen'
-         AND date(created_at, '+8 hours') < date('now', '+8 hours')
+         AND date(created_at, '${SHIFT}') < date('now', '${SHIFT}')
     `).run();
   }
   let q = `
