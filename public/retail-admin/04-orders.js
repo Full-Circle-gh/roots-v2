@@ -5880,6 +5880,17 @@ function orderMoneyGapBand(o) {
 function orderTotalSubline(o) {
   let s = `${cuT('subtotal','小计')} ${acMoney(o.subtotal)} · ${cuT('shipping','运费')} ${acMoney(o.shipping_fee)}`;
   if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ${acMoney(o.packing_fee)}`;
+  // Tax (audit I-03), and it has to say WHICH KIND, because the same figure
+  // means two different things: an exclusive tax was added to the charges to
+  // the left of it, an inclusive one was already inside them. A line that read
+  // only "tax ¥8.88" would make the subline stop adding up on half the shops
+  // that use it. Absent — not zero — on an order taken before the shop charged
+  // tax, or by a shop that never has.
+  if (o.tax_amount != null && o.tax_mode) {
+    s += o.tax_mode === 'inclusive'
+      ? ` · ${cuT('incl. tax','含税')} ${acMoney(o.tax_amount)}`
+      : ` · ${cuT('tax','税费')} ${acMoney(o.tax_amount)}`;
+  }
   // Deductions last, grouped. Points and wallet were missing entirely, so an
   // order paid partly from either showed charges that read like a total and
   // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is

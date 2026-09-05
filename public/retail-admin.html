@@ -10152,6 +10152,66 @@
             </div>
           </div>
 
+          <!-- TAX · 税费 (audit I-03). Sits with Currency: both decide what a
+               price MEANS rather than what it looks like, and a merchant
+               looking for one is looking for the other. Off until a rate is
+               set, so nothing about an existing shop changes.
+
+               The two shapes are not a preference. A US merchant must add tax
+               at the till because the rate depends on where the buyer is; an
+               EU or UK one must show a consumer price with the tax already in
+               it. Which is why the preview under the fields is the important
+               control here: a rate is abstract and "a ¥100 order becomes
+               ¥120.00" is not. -->
+          <div class="group-card" data-sees="customer">
+            <div class="group-card-head">
+              <h3>Tax · 税费 <span id="tax-chip" style="margin-left:8px;vertical-align:middle"></span></h3>
+              <div class="muted">Sales tax or VAT on what the customer pays. Choose whether your prices already include it or it is added at checkout, and the rate. The tax lands on the order, the receipt and the finance report. Leave it off if your prices carry no tax. · 顾客支付金额中的销售税/增值税。请选择价格是否已含税、以及税率。税额会记录在订单、小票与财务报表中。若价格不含税,保持关闭即可。</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:2px 2px 14px">
+              <input type="checkbox" id="cfg-tax-enabled" style="width:18px;height:18px" onchange="taxCardSync()">
+              <label for="cfg-tax-enabled" style="font-size:13px;color:var(--text-1)">Charge tax on orders · 订单收取税费</label>
+            </div>
+            <div id="tax-fields" hidden>
+              <div class="onw-row3" style="display:flex;flex-wrap:wrap;gap:16px">
+                <div class="field" style="margin:0;min-width:220px;flex:1">
+                  <label for="cfg-tax-mode" class="stacked">How prices are shown · 价格含税方式</label>
+                  <select id="cfg-tax-mode" onchange="taxCardSync()">
+                    <option value="exclusive">Tax added at checkout · 结账时另加</option>
+                    <option value="inclusive">Prices already include tax · 价格已含税</option>
+                  </select>
+                </div>
+                <div class="field" style="margin:0;min-width:160px">
+                  <label for="cfg-tax-rate" class="stacked">Rate % · 税率 %</label>
+                  <input type="number" id="cfg-tax-rate" min="0" max="100" step="0.0001" oninput="taxCardSync()">
+                </div>
+              </div>
+              <div class="onw-row3" style="display:flex;flex-wrap:wrap;gap:16px;margin-top:14px">
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-label-en" class="stacked">What to call it · 税费名称 (EN)</label>
+                  <input type="text" id="cfg-tax-label-en" maxlength="24" placeholder="VAT">
+                </div>
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-label-cn" class="stacked">What to call it · 税费名称 (中文)</label>
+                  <input type="text" id="cfg-tax-label-cn" maxlength="24" placeholder="增值税">
+                </div>
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-number" class="stacked">Registration number · 税号 <span style="color:var(--text-3);font-weight:400">— optional · 选填</span></label>
+                  <input type="text" id="cfg-tax-number" maxlength="40">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:14px 2px 2px">
+                <input type="checkbox" id="cfg-tax-shipping" style="width:18px;height:18px" onchange="taxCardSync()">
+                <label for="cfg-tax-shipping" style="font-size:13px;color:var(--text-1)">Tax the delivery fee too · 运费同样计税</label>
+              </div>
+              <div class="helper" id="tax-preview" data-no-i18n style="margin-top:12px"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+              <button type="button" class="btn" onclick="saveTaxSettings()">Save tax settings · 保存税费设置</button>
+              <span class="muted" id="tax-status" data-no-i18n style="font-size:12px"></span>
+            </div>
+          </div>
+
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款

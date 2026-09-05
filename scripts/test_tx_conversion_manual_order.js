@@ -69,8 +69,12 @@ const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8
 
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
+// storefront_config is here for TAX (audit I-03): the handler reads the shop's
+// rate through the real taxSettings(), and a fixture with no such table would
+// have exercised the catch that silently charges nothing — which is the one
+// branch that must not be the one under test.
 const DB_TABLES = ['retail_customers', 'retail_orders', 'retail_order_items',
-                   'retail_payments', 'retail_stores'];
+                   'retail_payments', 'retail_stores', 'storefront_config'];
 
 // ── Extraction ─────────────────────────────────────────────────────────────
 // Anchors carry NO line ending — a `\r\n` anchor is the specific mistake §24
@@ -192,6 +196,17 @@ function makeHandler(db, spies) {
       'tdb',
       `${extractFunction(RETAIL_SRC, 'posClosedForStore')}\nreturn posClosedForStore;`
     )(() => db),
+    /* TAX (audit I-03), all three real. The handler computes the tax on the
+       priced base and snapshots the rate and the shape onto the order, so a
+       stub here would be deciding the very thing the cases below assert.
+       taxSettings() is extracted like the resolvers above and reads the
+       fixture's own storefront_config rows; lib/tax and lib/money are pure. */
+    taxSettings: new Function(
+      'tdb', 'tax',
+      `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`
+    )(() => db, require(path.join(ROOT, 'lib', 'tax'))),
+    tax: require(path.join(ROOT, 'lib', 'tax')),
+    money: require(path.join(ROOT, 'lib', 'money')),
     ...spies,
   };
   const keys = Object.keys(scope);

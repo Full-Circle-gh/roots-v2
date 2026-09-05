@@ -2688,6 +2688,12 @@ function renderCoSummary(d){
     `<div class="cx-bd"><span class="cx-bd-l">${cn?'小计':'Subtotal'}</span><span class="cx-bd-v">${money(sub)}</span></div>`+
     `<div class="cx-bd"><span class="cx-bd-l">${cn?'配送费':'Delivery'}</span><span class="cx-bd-v">${d.free_shipping?(cn?'免运费':'Free'):money(ship)}</span></div>`+
     (pack>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'包装费':'Packing fee'}</span><span class="cx-bd-v">${money(pack)}</span></div>`:'')+
+    /* Tax (audit I-03). Straight off the quote — this page takes its total from
+       the server rather than recomputing one, so there is nothing here to keep
+       in step. It says which kind it is: an inclusive tax is already inside the
+       figures above it, and a bare line would make the column stop adding up.
+       Absent entirely on a shop that charges no tax. */
+    (d.tax?`<div class="cx-bd"><span class="cx-bd-l">${esc((cn?d.tax.label.cn:d.tax.label.en)||(cn?'税费':'Tax'))}${d.tax.mode==='inclusive'?(cn?' · 已含':' · included'):''}</span><span class="cx-bd-v">${money(Number(d.tax.amount)||0)}</span></div>`:'')+
     (Number(d.points_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'积分抵扣':'Points'}</span><span class="cx-bd-v">−${money(Number(d.points_discount))}</span></div>`:'')+
     (Number(d.balance_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'余额抵扣':'Balance'}</span><span class="cx-bd-v">−${money(Number(d.balance_discount))}</span></div>`:'')+
     (earn>0?`<div class="cx-bd earn"><span class="cx-bd-l">${cn?'本单获得':"You'll earn"}</span><span class="cx-bd-v">+${earn} ${cn?'积分':'pts'}</span></div>`:'');
@@ -3122,6 +3128,10 @@ async function renderOrderDetail(id){
       ${pack>0?`<div class="co-line"><span>${cn?'包装费':'Packing'}</span><span>${money(pack)}</span></div>`:''}
       ${vou>0?`<div class="co-line"><span>${cn?'优惠':'Voucher'}</span><span>−${money(vou)}</span></div>`:''}
       ${pts>0?`<div class="co-line"><span>${cn?'积分抵扣':'Points'}</span><span>−${money(pts)}</span></div>`:''}
+      ${/* Tax (audit I-03). Off the order's own snapshot, not off today's
+           settings — a rate that changed since must not restate what was
+           charged. Absent on every order taken before a shop charged tax. */''}
+      ${o.tax_amount!=null&&o.tax_mode?`<div class="co-line"><span>${cn?'税费':'Tax'}${o.tax_mode==='inclusive'?(cn?'（已含）':' (included)'):''}</span><span>${money(Number(o.tax_amount)||0)}</span></div>`:''}
       <div class="co-line tot"><span>${cn?'合计':'Total'}</span><span>${money(tot)}</span></div>
     </div>
     ${o.status==='pending_payment'?`<button class="co-place" id="odPay">${cn?'去支付':'Pay now'}</button>`:''}

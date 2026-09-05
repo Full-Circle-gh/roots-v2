@@ -66,6 +66,14 @@ Page({
     offerTotalLabel: '',
     quoting: false,          // suppresses spam-clicks while a quote is in flight
     total: 0,
+    // Tax (audit I-03). Every one of these is the "no tax" state, which is what
+    // every shop looks like until one sets a rate — so the row below the total
+    // is absent and the total is what it has always been.
+    taxRateMicro: 0,         // the PERCENTAGE in micro: 20% = 200000
+    taxMode: 'exclusive',    // 'exclusive' adds at checkout · 'inclusive' is already in the price
+    taxShippingTaxable: false,
+    taxLabel: '',            // the merchant's own word for it, in this language
+    taxShown: '',            // '' = no tax line at all, never a zero
     voucherCode: '',         // applied code (uppercase)
     voucherDiscount: 0,      // ¥ off
     voucherFreeShip: false,  // if voucher is free-shipping type
@@ -938,6 +946,53 @@ Page({
   },
 
   // The discount actually in effect = whichever of {customer's applied code,
+  /* ── Tax (audit I-03) ───────────────────────────────────────────────────
+     The SERVER decides what is charged; every figure here is the same
+     arithmetic done for the screen, so the pay button and the bill agree.
+
+     It has to be duplicated rather than simply read off the quote, because
+     this page recomputes its own total between quotes — a voucher applied, a
+     slot surcharge picked, points toggled — and a tax figure frozen at the
+     last quote would then be stale against a base that had moved. The server
+     compares what this page declares (client_total) against what it computes
+     and REFUSES the order if they disagree, so a stale figure is not a
+     cosmetic problem: it is a checkout that stops working.
+
+     Same shape as lib/tax.js: the rate is the percentage in micro (20% is
+     200000), the base is in cents, the discount comes off it, and it is
+     rounded once, half away from zero.
+
+     `taxAdded` is what goes ON TOP — zero on a shop whose prices already
+     include the tax, where the total does not move and only the receipt
+     changes. `taxAmount` is how much of the bill is tax, which is what the
+     line on screen says either way. */
+  taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge) {
+    const micro = Number(this.data.taxRateMicro) || 0;
+    if (!micro) return { added: 0, amount: 0 };
+    const MAXM = 1000000;                       // 100% in micro
+    const ship = Number(deliveryFee) || 0;
+    const c = (v) => Math.round((Number(v) || 0) * 100);
+    const base = Math.max(0, c(subtotal) + (this.data.taxShippingTaxable ? c(ship) : 0)
+      + c(packingFee) + c(surcharge) - c(voucherDiscount));
+    if (!base) return { added: 0, amount: 0 };
+    const minor = this.data.taxMode === 'inclusive'
+      ? Math.floor((base * micro) / (MAXM + micro) + 0.5)
+      : Math.floor((base * micro) / MAXM + 0.5);
+    return { added: this.data.taxMode === 'inclusive' ? 0 : minor / 100, amount: minor / 100 };
+  },
+  // Fold a quote's tax block into page data. Absent block = a shop that
+  // charges no tax, which is every shop until one turns it on.
+  applyQuoteTax(t) {
+    if (!t) { this.setData({ taxRateMicro: 0, taxShown: '', taxLabel: '' }); return; }
+    const L = this.data.lang;
+    this.setData({
+      taxRateMicro: Number(t.rate_micro) || 0,
+      taxMode: t.mode === 'inclusive' ? 'inclusive' : 'exclusive',
+      taxShippingTaxable: !!t.shipping_taxable,
+      taxLabel: lang.pick((t.label && t.label.en) || 'Tax', (t.label && t.label.cn) || '税费', L),
+    });
+  },
+
   // best auto-apply promo} is worth more (best one wins). Mirrors the server's
   // order-placement decision so the shown total matches what we charge.
   effectiveVoucher() {
@@ -1134,7 +1189,10 @@ Page({
     const ev = this.effectiveVoucher();
     const voucherDiscount = ev.discount;
     const packingFee = Number(this.data.pickupPackingFee) || 0;
-    const grossTotal = Math.max(0, subtotal + packingFee - voucherDiscount);
+    // Tax rides the same base the server taxes (audit I-03): no delivery on a
+    // collection, so no delivery in the base whatever the shipping switch says.
+    const tax = this.taxOn(subtotal, 0, packingFee, voucherDiscount, 0);
+    const grossTotal = Math.max(0, subtotal + packingFee - voucherDiscount) + tax.added;
     const rate = Number(this.data.pointsRedeemRate) || 100;
     let pointsToUse = 0, pointsDiscount = 0;
     if (this.data.usePoints && this.data.pointsBalance > 0) {
@@ -1166,6 +1224,7 @@ Page({
       balancePotentialDiscount: balMaxUsable.toFixed(2),
       balanceDiscount: balanceDiscount.toFixed(2),
       savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
+      taxShown: tax.amount ? tax.amount.toFixed(2) : '',
       total: total.toFixed(2),
       quoting: false,
     });
@@ -1379,7 +1438,12 @@ Page({
         let effectiveDelivery = deliveryFee;
         if (ev.freeShip) effectiveDelivery = 0;
         const voucherDiscount = ev.discount;
-        const grossTotal = Math.max(0, srvSubtotal + effectiveDelivery + packingFee - voucherDiscount);
+        // The server sent its own tax figure with this quote; take the RATE
+        // from it and recompute, because `effectiveDelivery` here may be zero
+        // from a free-shipping voucher the quote did not know about.
+        this.applyQuoteTax(data.tax);
+        const tax = this.taxOn(srvSubtotal, effectiveDelivery, packingFee, voucherDiscount, 0);
+        const grossTotal = Math.max(0, srvSubtotal + effectiveDelivery + packingFee - voucherDiscount) + tax.added;
         const payingWithPoints = !!this.data.usePoints && data.points_affordable;
         // Partial-points stack: server clamped points_to_use → applied amount + discount.
         const pointsMaxUsable    = Number(data.points_max_usable) || 0;
@@ -1428,7 +1492,12 @@ Page({
           nextSlotLabel = this.data.lang === 'cn' ? '立即配送' : 'Right away';
           nextSlotSurcharge = 0;
         }
-        const totalWithSurcharge = Math.max(0, (Number(total) || 0) + nextSlotSurcharge);
+        // The surcharge is taxable like everything else the customer pays, so
+        // the tax is recomputed WITH it rather than carried over from the
+        // pre-surcharge figure above (audit I-03).
+        const taxWithSurcharge = this.taxOn(srvSubtotal, effectiveDelivery, packingFee, voucherDiscount, nextSlotSurcharge);
+        const totalWithSurcharge = Math.max(0, (Number(total) || 0) + nextSlotSurcharge
+          + (taxWithSurcharge.added - tax.added));
         // Routing info — drives both the simple yes/no fallback modal
         // (legacy) and the new 5-option modal (GZ + non-excluded district
         // + right_away slot). Server tells us which via `routing.gate`.
@@ -1499,6 +1568,7 @@ Page({
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
           deliverySurcharge: nextSlotSurcharge,
+          taxShown: taxWithSurcharge.amount ? taxWithSurcharge.amount.toFixed(2) : '',
           total: totalWithSurcharge.toFixed(2),
           quoting: false,
           routing,
@@ -1598,6 +1668,7 @@ Page({
             deliveryFee: '0.00',
             packingFee: '0.00',
             freeShipping: false,
+            taxShown: '',
             total: subtotal.toFixed(2),
             quoting: false,
           });
@@ -1977,7 +2048,10 @@ Page({
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
-    const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
+    // Tax on the same base, surcharge included — the server taxes what the
+    // customer is charged, and a slot surcharge is part of that (audit I-03).
+    const tax = this.taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge);
+    const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge) + tax.added;
     const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
     // Re-quote on a change of slot identity OR of slot KIND. The kind matters
     // even when the id is unchanged: when the kitchen is open the server only
@@ -1993,6 +2067,7 @@ Page({
       deliverySlotId: slot.slot_id,
       deliverySlotLabel: label,
       deliverySurcharge: surcharge,
+      taxShown: tax.amount ? tax.amount.toFixed(2) : '',
       total: total.toFixed(2),
     });
     // Re-quote when the slot identity/kind changes — slot affects server-side
@@ -2026,7 +2101,10 @@ Page({
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
-    const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
+    // Tax on the same base, surcharge included — the server taxes what the
+    // customer is charged, and a slot surcharge is part of that (audit I-03).
+    const tax = this.taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge);
+    const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge) + tax.added;
     const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
     const slotChanged = id !== this.data.deliverySlotId;
     // Mutually-exclusive radio state: the Schedule-for-later option keys
@@ -2043,6 +2121,7 @@ Page({
       deliverySlotLabel: label,
       deliverySurcharge: surcharge,
       selectedSlotKind: '',
+      taxShown: tax.amount ? tax.amount.toFixed(2) : '',
       total: total.toFixed(2),
     });
     if (slotChanged) this.refreshQuote();
@@ -2064,6 +2143,10 @@ Page({
       deliveryFee: '0.00',
       packingFee: '0.00',
       freeShipping: false,
+      // No zone, no quote, no fees — and no tax line either. A figure computed
+      // against a base the server has not agreed to would be a number nobody
+      // could stand behind; the row returns with the next successful quote.
+      taxShown: '',
       total: Math.max(0, subtotal - voucherDiscount).toFixed(2),
       quoting: false,
     });

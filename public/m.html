@@ -7443,6 +7443,7 @@ function sheetOrderDetail(){
        <div style="background:var(--surface-raised);border-radius:14px;padding:16px">
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
          ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}
+           ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
        ${isPO?'':`
@@ -10858,6 +10859,12 @@ function mapDetail(o){
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
+  /* Tax (audit I-03). Carried as a PAIR of facts, not a rendered string: the
+     amount, and which kind it is — an exclusive tax was added to the figures
+     above it and an inclusive one was already inside them, and the sheet says
+     which. Absent on every order taken before a shop charged tax, which is a
+     different thing from an order that was taxed nothing. */
+  if(o.tax_amount!=null&&o.tax_mode) base.tax={amount:Number(o.tax_amount)||0, mode:o.tax_mode};
   base.id=o.order_no||base.id;
   return base;
 }

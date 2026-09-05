@@ -266,6 +266,23 @@ function finRender() {
     // Line 1 — Revenue. Every channel the order record carries, gzgrocery
     // included, wallet top-ups excluded (§36).
     + finRow(cuT('Revenue', '营收'), finMoney(d.revenue))
+    // Tax collected (audit I-03), and ONLY where a shop has charged some: the
+    // block is null otherwise, so nothing about this screen changes for a shop
+    // that charges none. It renders directly under revenue because that is
+    // where it lives — on a shop that adds tax at checkout the customer paid it
+    // to the shop and the shop owes it on, so it is inside the figure above and
+    // is not the merchant's money. Net of what has been handed back with
+    // refunds, which is the number that eventually gets remitted.
+    //
+    // NO MINUS SIGN, deliberately. The staircase's signs are arithmetic — each
+    // one is a step from the line above to the line below — and this is not a
+    // step: net is still revenue minus operating expenses, and nothing here
+    // subtracts the tax. A "−" would make the column stop adding up, which §36
+    // treats as the worst thing a figure on this card can do. It is a note
+    // about the line above it, and reads as one.
+    + (d.tax
+      ? finRow(cuT('of which tax', '其中税费'), finMoney(d.tax.net))
+      : '')
     // Lines 2 and 3 — the two the mockup could not have. Labels kept, figures
     // absent, no dash, and one sentence under the pair.
     + finRow(cuT('Cost of goods', '销货成本'), finNotRecordedValue(), { less: true, notrec: true })

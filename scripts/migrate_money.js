@@ -184,6 +184,13 @@ if (!APPLY && !VERIFY && !ROLLBACK) {
   console.log('\n  Would add:');
   for (const c of doable) {
     if (!tableExists(db, c.table)) { console.log(`    · ${c.key} — no such table here, would skip`); continue; }
+    /* AND THE COLUMN, not only its table. The apply path below has always
+       checked both; this one checked only the table, so a database whose
+       retail_orders predates a column the inventory knows about — an older
+       tenant file, or any fixture — crashed the DRY RUN with a bare
+       SqliteError. The report is the step somebody runs first, on the database
+       they are least sure about, which is exactly the wrong place to throw. */
+    if (!has(db, c.table, c.column)) { console.log(`    · ${c.key} — no such column here, would skip`); continue; }
     const already = has(db, c.table, c.to);
     const n = db.prepare(`SELECT COUNT(${c.column}) AS n FROM ${c.table}`).get().n;
     console.log(`    ${already ? '·' : '+'} ${c.table}.${c.to.padEnd(30)} ${String(n).padStart(7)} value(s)`
