@@ -475,7 +475,11 @@ function toggle(on, onClick){
    Data — aligned to tacet-orders-sample-data.md + the prototype.
    Labels stored as {en, zh}; only the live language renders.
    ========================================================================== */
-const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen'};
+// `shop` is declared rather than left to chIcon's `|| 'store'` fallback. The
+// fallback would paint the same glyph, but by accident: 'store' is what an
+// UNKNOWN channel gets, and a value this app knows about should not be reading
+// its icon off the unknown branch.
+const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen',shop:'store'};
 const DB = {
   /* The runtime store, and nothing else. Every one of these used to ship with
      sample rows — five orders at ¥312, three coupons, two flash sales, three
@@ -2270,7 +2274,7 @@ function screenHome(){
    list says how much of the set it is showing. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
   delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment'};
-const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
+const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
   const qs=new URLSearchParams();
@@ -2347,7 +2351,12 @@ function ordersHeader(){
     {key:'delivered',en:'Delivered',zh:'送达',count:undefined},
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock')},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open')}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat')},{key:'web',en:'Web',zh:'网页',count:cCount('web')},
-    {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan')},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery')},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual')}];
+    {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan')},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery')},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual')},
+    // A sale that originated at a physical shop — till or QR menu (§14, §44).
+    // Its count comes from the same /order-channel-counts key the desktop chips
+    // read, which now declares `shop`; without that the chip would sit at zero
+    // while the orders were in `all`.
+    {key:'shop',en:'Shop',zh:'门店',count:cCount('shop')}];
   const stores=state.stores||[];
   const st=[{key:'all',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>({key:String(s.id),en:s.name_en||s.name||('#'+s.id),zh:s.name_cn||s.name_en||s.name||('#'+s.id)})));
   /* 14px of top padding: the first chip row used to sit exactly ON the head's
@@ -9700,7 +9709,16 @@ const ORDER_STATUS={
   delivered:['delivered','Delivered','已送达'],pending:['pending','Pending','待处理'],pending_payment:['pending','Unpaid','待付款'],
   cancelled:['cancelled','Cancelled','已取消'],refunded:['refund','Refunded','已退款'],
 };
-const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
+// retail_orders.channel → this screen's chip key. KNOWN LIVE DEFECT, NOT FIXED
+// HERE: the read at the order card ends `|| 'miniapp'`, so any channel absent
+// from this map is drawn as "Mini app · 小程序" with a smartphone glyph — a
+// fabricated claim about where the order came from. Four values are affected
+// today: 'pickup', 'wechat_chat', 'wholesale' and 'other', the four origins the
+// New order form actually offers. Adding `shop` here keeps it out of that
+// population; it does not repair the fallback, which is its own change with its
+// own test (the desktop already fixed the same fault — see ordChannelLabel's
+// `return c` and the removal of chanIcon's `|| CHAN_ICON.wechat`).
+const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 let CUR='¥';
 
 /* The desktop's paymentCheckLine, on a phone. Only while unpaid — once a person
