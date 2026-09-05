@@ -235,6 +235,21 @@ section('5 · a column nobody has classified stops the run');
 }
 {
   const M = require('../lib/money-columns');
+  // THE MIGRATION'S OWN OUTPUT must not read as unclassified, or the rehearsal
+  // reports every column it just created and the one that would actually matter
+  // is buried in the list.
+  const done = M.classify('retail_payments', 'amount_cents');
+  yes(done && done.done, 'amount_cents beside a classified amount is recognised, not reported');
+  is(done.unit, 'amount', 'and carries its base column’s unit');
+  const rate = M.classify('ingredients', 'cost_per_unit_micro');
+  yes(rate && rate.done && rate.unit === 'rate', 'so is a _micro column beside a rate');
+  is(M.classify('ingredients', 'cost_per_unit_cents'), null,
+    'but a _cents column beside a RATE is not — that is the 5% error, and it must be reported');
+  is(M.classify('mystery', 'thing_cents'), null,
+    'and a _cents column beside a column nobody classified is still a question');
+}
+{
+  const M = require('../lib/money-columns');
   // The noise floor. A scanner that reports thirty timestamps is a scanner
   // nobody reads, and the next unclassified money column hides in the list.
   is(M.couldHoldMoney('refund_paid_at', 'DATETIME'), false, 'a timestamp is not money');
