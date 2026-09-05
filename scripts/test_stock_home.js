@@ -80,6 +80,17 @@ const KITCHEN_REQ2 = {
   ],
 };
 
+/* MADE, AND NOBODY HAS COLLECTED IT — the far end of "Ask the kitchen".
+   warehouse→kitchen closes at 'prepared' (nothing travels, so there is no
+   delivery leg), and the list route puts exactly that row in `tab=history`
+   while dropping archived ones from every tab. So "history, unarchived" IS
+   "waiting for you", and archiving it is the acknowledgement. */
+const READY = {
+  id: 93, rs_number: 'RS-260904-004', status: 'prepared', from_role: 'warehouse', to_role: 'kitchen',
+  purpose: 'shelf', goods_state: 'none', item_count: 1, prepared_at: '2026-09-04 03:20:00',
+  items: [{ id: 931, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 8 }],
+};
+
 // TWO LOCATIONS, which is the whole subject of the "Ask for stock" cases below.
 // Roots really has these two, and the second one is what makes the screen mean
 // anything: with one store there is nobody to ask.
@@ -112,14 +123,15 @@ function stub(o) {
   // quickstock:add. The handoff after "Mark as made" exists only for them.
   if (o.mode) ctx.mode = o.mode;
   const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
+  const ready = o.ready ? [READY] : [];
   return '<script>\n' +
-    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];\n' +
+    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];window.__archive=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(ctx) +
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
-    'var KITCHEN=' + JSON.stringify(queue) + ';\n' +
+    'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) + ';\n' +
     'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
     'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
@@ -175,8 +187,17 @@ function stub(o) {
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    var m=url.match(/restock\\/(\\d+)$/);\n' +
     '    if(/\\/status$/.test(url)){ window.__status=JSON.parse(opts.body||"{}"); body={success:true}; }\n' +
-    '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
-    '    else if(url.indexOf("to_role=kitchen")>-1) body={success:true,data:KITCHEN};\n' +
+    // "Collected", which is the whole point of the ready list: it archives the
+    // request, and archiving is what drops it out of the count on every phone.
+    '    else if(/\\/archive$/.test(url)){\n' +
+    '      window.__archive.push({url:url,body:JSON.parse(opts.body||"{}")});\n' +
+    '      READY=[]; body={success:true,archived:true};\n' +
+    '    }\n' +
+    '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).concat(READY).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
+    // The queue and the ready list read the same route from opposite sides —
+    // `tab=active` is what is still to make, `tab=history` is what is made.
+    '    else if(url.indexOf("to_role=kitchen")>-1)\n' +
+    '      body={success:true,data:url.indexOf("tab=history")>-1?READY:KITCHEN};\n' +
     '    else body={success:true,data:ORDERS};\n' +
     '  }\n' +
     '  else body={success:true,data:{}};\n' +
@@ -701,6 +722,61 @@ const CASES = {
     js: seq(["'[data-asopen]'", '250']),
     expect: ['申请补货', '由哪个地点发货?', '越秀店'] },
 
+  /* ── READY FROM THE KITCHEN ───────────────────────────────────────────────
+     The far end of "Ask the kitchen", and until now there was none. A kitchen
+     request closes at 'prepared' — nothing travels — so the person who raised
+     it heard once, in a push, and this app could not show it back. */
+  'ready-tile-is-there-on-a-quiet-day': { js: 'window.__done();',
+    // The launcher's own rule: a tile that vanishes when empty is a tool nobody
+    // learns exists before the morning they need it.
+    expect: ['Ready from the kitchen', 'Nothing waiting'] },
+
+  'ready-tile-counts-what-is-waiting': { ready: true, js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'Made and waiting for you', '1 waiting'],
+    absent: ['Nothing waiting'] },
+
+  'ready-list-names-the-request': { ready: true,
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['Ready from the kitchen', '1 waiting for you', 'RS-260904-004', 'For the shelf'] },
+
+  'ready-empty-says-so-rather-than-painting-nothing': {
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['Nothing waiting', 'Everything the kitchen has made has been collected.'] },
+
+  /* COLLECTING IS AN ARCHIVE, and that is the point rather than an
+     implementation detail: /api/restock/kitchen-ready counts unarchived
+     'prepared' rows, so this puts the dot in /m out on EVERY phone instead of
+     only the one that tapped it. */
+  'collected-archives-it-for-everyone': { ready: true,
+    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250', "'[data-krcollect]'", '300']),
+    checkArchive: (a) => a.length === 1 && /\/api\/restock\/93\/archive$/.test(a[0].url)
+      && a[0].body.archived === true ? null : 'Collected did not archive the request: ' + JSON.stringify(a),
+    // And the list it came from is empty afterwards, on the same screen.
+    expect: ['Nothing waiting'] },
+
+  // It does not move stock, and does not let anyone infer that it does.
+  'collected-does-not-claim-to-fill-a-shelf': { ready: true,
+    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250']),
+    expect: ['RS-260904-004', 'Hummus Asli', 'Collected', 'It does not change stock'],
+    checkPatch: (p) => p.length ? 'collecting wrote a stock change: ' + JSON.stringify(p) : null },
+
+  /* THE PUSH'S OWN DOOR. routes/restock.js addresses the 'prepared' alert to
+     the side that asked with go=ready; a notification that opens a launcher has
+     told somebody about a job and then asked them to go and find it. */
+  'go-ready-opens-the-list-not-the-launcher': { ready: true, search: '?go=ready',
+    js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'RS-260904-004'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link landed on the launcher' : null },
+
+  'ready-cn': { ready: true, pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['厨房已完成', '项待领取', 'RS-260904-004'] },
+
+  // A session the transfer realm refuses never asked the kitchen for anything,
+  // so it is not offered the answer either.
+  'kitchen-only-has-no-ready-tile': { kitchenOnly: true, ready: true, js: 'window.__done();',
+    absent: ['Ready from the kitchen'] },
+
 };
 
 function main() {
@@ -741,6 +817,7 @@ function main() {
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'document.body.setAttribute("data-patch",JSON.stringify(window.__patch||[]));' +
       'document.body.setAttribute("data-prod",JSON.stringify(window.__prod||[]));' +
+      'document.body.setAttribute("data-archive",JSON.stringify(window.__archive||[]));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
@@ -782,6 +859,10 @@ function main() {
     if (c.checkProd) {
       const prod = JSON.parse(dec((out.match(/data-prod="([^"]*)"/) || [])[1] || '[]'));
       const p = c.checkProd(prod); if (p) failures.push([name, p]);
+    }
+    if (c.checkArchive) {
+      const arch = JSON.parse(dec((out.match(/data-archive="([^"]*)"/) || [])[1] || '[]'));
+      const p = c.checkArchive(arch); if (p) failures.push([name, p]);
     }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,

@@ -547,6 +547,11 @@ const state = {
      the server (status is a shared fact), so handling an order on the desktop
      puts the phone's dot out on its next poll. */
   ordersUnseen:0,
+  /* Kitchen requests this warehouse raised that the kitchen has finished and
+     nobody has collected. Counted by the server off `archived_at` — a shared
+     fact, like the orders one above — so collecting a tray in /stock puts the
+     dot out on every other phone rather than only on the one that tapped it. */
+  kitchenReady:0,
   /* One word for whether this phone rings when the app is shut: unknown until
      asked, then unsupported / needs-install (iOS, not on the home screen) /
      blocked (refused in the phone's own settings) / off / on. */
@@ -789,7 +794,7 @@ reg('toggleSound', ()=>{ state.sound=!state.sound; render();
   if(state.sound) playOrderChime(true); });
 reg('toggleLive', ()=>{ state.live=!state.live; render();
   try{ localStorage.setItem(M_LIVE_KEY,state.live?'1':'0'); }catch(e){}
-  if(state.live) pollUnseenOrders(); });
+  if(state.live){ pollUnseenOrders(); pollKitchenReady(); } });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 /* Opening the inbox IS reading it — the desktop stamps last-seen the moment
@@ -3289,6 +3294,9 @@ function screenMore(){
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
+        ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
+             Never a count: the number lives on the screen it points at. */''}
+        ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
   </div>`;
@@ -8658,6 +8666,70 @@ function pollUnseenOrders(){
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollUnseenOrders(); });
 })();
 
+/* ── The kitchen finished what we asked for ────────────────────────────────
+   THE COMPLAINT THIS ANSWERS. A warehouse account asks the kitchen to make
+   something ("Ask the kitchen", on the /stock launcher) and then hears nothing
+   in this app at all. warehouse→kitchen closes at 'prepared' — nothing travels,
+   so there is no delivery to watch and no receipt to count in — and the only
+   announcement was a push (routes/restock.js, PUSH_AUDIENCE): one moment, on
+   one phone, regularly in a pocket, on silent, or swiped away. The work was
+   done and the app carried no trace of it.
+
+   So it gets the same chrome every other piece of arriving work gets: one Sage
+   dot, on More and on the row that opens it. Never a count and never red — the
+   kitchen finishing a job is good news, not an alarm.
+
+   CLEARED BY A FACT, NOT BY A STAMP. The server counts requests that are
+   'prepared' and NOT ARCHIVED, and /stock's "Collected" archives them — so the
+   dot goes out on every phone the moment anybody actually carries the tray
+   upstairs. A localStorage "last seen" would have gone out only here, and lit
+   again on the next handset over work that was already done. It is the property
+   the Orders dot has and the Inbox dot does not. */
+const KITCHEN_READY_POLL_MS=60000;
+let _kitchenReadyPrev=null, _kitchenReadyBusy=false;
+/* WHO IS ASKED. The same pair routes/restock.js addresses the 'prepared' push
+   to — the people who raise these requests. A fulfil-only kitchen operator is
+   the one who MADE it, and telling them their own work is waiting is telling
+   them about themselves. */
+function canSeeKitchenReady(){ return mCan(['restock:request','restock:pick']); }
+/* Its own fetch rather than api(), for the reason fetchUnseenOrders states: a
+   401 out of a heartbeat would navigate a phone sitting in a pocket to the
+   login screen. On any failure it goes quiet and tries again in a minute. */
+function pollKitchenReady(){
+  if(!canSeeKitchenReady()||!state.live||_kitchenReadyBusy) return;
+  _kitchenReadyBusy=true;
+  return fetch('/api/restock/kitchen-ready',{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>{
+      _kitchenReadyBusy=false;
+      const d=j&&j.data!==undefined?j.data:j;
+      if(!d) return;
+      const n=Number(d.count||0);
+      const arrived=_kitchenReadyPrev!==null&&n>_kitchenReadyPrev;
+      const litBefore=state.kitchenReady>0;
+      _kitchenReadyPrev=n; state.kitchenReady=n;
+      /* Announced on a genuine increase only, and never on the first poll of a
+         session: a backlog of four uncollected trays lights the dot, it does not
+         toast four times at a phone being unlocked. No chime — the ding belongs
+         to a customer arriving, and this is a colleague finishing. */
+      if(arrived){
+        showToast(n>1?T(n+' kitchen requests are ready',n+' 项厨房申请已完成')
+                     :T('The kitchen finished a request','厨房已完成一项申请'));
+        return;   // showToast has already repainted
+      }
+      /* Repaint only when the dot actually changes state. render() rewrites the
+         whole app in one innerHTML, and a repaint on every tick throws away the
+         scroll position of whatever list is being read. */
+      if((state.kitchenReady>0)!==litBefore) render();
+    }).catch(()=>{ _kitchenReadyBusy=false; });
+}
+(function startKitchenReadyPoll(){
+  setTimeout(pollKitchenReady,2000);
+  setInterval(pollKitchenReady,KITCHEN_READY_POLL_MS);
+  window.addEventListener('focus',pollKitchenReady);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenReady(); });
+})();
+
 /* The list on screen, not a snapshot taken at boot. `seen_at` is stamped
    server-side the moment an order is opened, and openOrder clears the row
    locally too so the dot goes out on the tap rather than on the next reload. */
@@ -8668,11 +8740,22 @@ function pollUnseenOrders(){
 function unseenOrders(){ return canRoute('orders') &&
   (state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew)); }
 function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
+/* Made and not collected. Gated on the row it points at for the same reason
+   the inbox count is: a dot must never promise work behind a door this operator
+   cannot open. */
+function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('transfers')
+  ? Number(state.kitchenReady||0) : 0; }
+/* Which More ROWS carry a dot of their own. The folder's dot says something
+   inside wants you; without this the operator opens More and has to guess
+   which of thirty rows it meant — and on a role with no tab bar at all
+   (flatNav) this list IS the home screen, so the row dot is the only one
+   there is. */
+function moreRowDot(key){ return key==='transfers' ? readyFromKitchen()>0 : false; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
 function tabDot(k){ return k==='orders' ? unseenOrders()
-  : k==='more' ? (canRoute('inbox') && unseenReviews()>0) : false; }
+  : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0) : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
    acting, not the system: it does not earn Dusk either. */

@@ -248,6 +248,12 @@ check('nor deleting one', () => {
 check('nor archiving', () => {
   assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/archive'), false);
 });
+// The "what the kitchen has finished" count, which is the ASKING side's dot.
+// The route answers this role a zero anyway (_kitchenScopedSession), and it has
+// no screen in /stock that reads it — so it has no business on this list.
+check('nor the count of what is waiting to be collected', () => {
+  assert.strictEqual(stockAppOnlyAllows('GET', '/api/restock/kitchen-ready'), false);
+});
 
 check('the three the Add Stock app already had still work', () => {
   assert.strictEqual(stockAppOnlyAllows('GET', '/api/retail-admin/quick-stock/context'), true);
