@@ -15,7 +15,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part two** | §1b's nineteen | merged and live (commit `5070ca1`) |
 | **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | merged and live (commit `dae3a5f`) |
 | **Part four** | C-02's last part — the phone's date family | merged and live (commit `9ae4673`) |
-| **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | on the branch, deploys with the next merge |
+| **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | merged and live (commit `56accb7`) |
+| **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | on the branch, deploys with the next merge |
 
 ---
 
@@ -109,7 +110,7 @@ with `--update`; list them with `--list`. The two worst offenders are
 Everything below was built after the first 36 shipped, working down what was
 left. It is grouped by what each one changes rather than by severity: at this
 point the severities left are mostly Medium and Low, and the useful question is
-what a merchant notices. One row is marked **part five** — it is on the branch
+what a merchant notices. One row is marked **part six** — it is on the branch
 and deploys with the next merge; everything else here is live.
 
 | Finding | Severity | What changed |
@@ -139,6 +140,7 @@ and deploys with the next merge; everything else here is live.
 | **K-01** | Medium | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
 | **C-02** | Medium · part four | The phone admin had its own date family — its own parser, its own English and Chinese branches, and its own idea of what "today" is. Its SHAPES matched the desktop's; its ZONE did not. Every stamp on the phone was drawn on the handset's clock while every stamp on the desktop is drawn on the store's, so an owner abroad read two different times for the same order on two screens — the same defect A-05 fixed on the server, pointing the other way. Three "today" computations were hardcoded to UTC+8 on top of that, which is right for exactly one account. The phone now loads `/assets/td-datetime.js` and renders through it, so there is one formatter and one clock. Nothing changes for Roots: Guangzhou is UTC+8 and the module's fallback is the same zone. `scripts/test_phone_dates.js` runs the shipped helpers under two store zones, which is the only way to see this at all.|
 | **C-02** | Medium · part five | And the DESKTOP still had the same two mistakes, which is the half the finding was actually written about ("four date formats across the admin, and one shared formatter most screens ignore"). **Eighteen call sites across nine parts** computed today as `Date.now() + 8 * 3600 * 1000` — Guangzhou, spelled out — so on any account outside UTC+8 the dashboard's range presets, Finance's presets, the KPI rows on Orders / Customers / Products, Purchasing's late-delivery pill and the default date on a new ledger row were a day out, asking a server that since A-05 counts its business day on the ACCOUNT's clock about a city it has never heard of. A dozen more rendered with `toLocaleDateString` / `toLocaleTimeString`: the browser's zone, in whatever locale each call site named — `en-GB` ("29 Jul") on the dashboard's purchase-order cards beside `en-US` ("Jul 29") on its own range label, and NO locale at all on two printed documents, where the operator's operating system decided whether a count sheet read 29/07/2026 or 7/29/2026. All of it now goes through `tdWhen` and a new `tdToday()`. Two things fell out on the way: the printed purchase order carried **the first tenant's name and city hardcoded into a shared template** — every account's purchase orders went to their suppliers under it — and `scripts/td-datetime-check.js`, the executable §1.18 contract, sat outside the runner's `(test|check|verify)[-_]` discovery prefix, so **the one formatting contract that could be run was the one nothing ran**. Renamed `check-td-datetime.js`; it runs on every commit now. |
+| **D-03 / D-04** | High · part six | D-03 is recorded above as fixed — "188 hardcoded ¥ conversions across twelve files". The twelve files were all `public/retail-admin/*.js`, the merchant's own admin. **`public/shop.html`, the CUSTOMER-facing web storefront, was never in that pass**, and still carried thirty-four: every wallet balance, the top-up screen end to end, the coupon stubs, the free-shipping nudge, the membership ladder, the leaderboard, the referral programme, the favourites card, and the shop listing's own third money helper. The page has had a correct `money()` — symbol, decimals and position from `/api/retail/config` — the entire time; thirty-four places did not call it. So a merchant trading in dollars saw dollars in their admin and their CUSTOMERS saw yuan, on the same order. Now two helpers, `money()` and `money0()`, mirroring the admin's `acMoney` / `acMoneyCompact` pair. The membership hero also read "ROOTS CLUB" to every merchant's customers — D-04, a fourth place — and is built from the shop's own brand now. `scripts/test_storefront_currency.js` bans the symbol outside the two helpers' fallback. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -401,6 +403,23 @@ that could be done without one has been.
   output back. Rungs 2 to 5 are written against what that run says.
 - **D-05** — the sales channel list is fixed in the interface. Q11, and yours per
   the brief.
+- **What an unwritten About page shows.** Found while fixing D-03 on the
+  storefront, and stopped there because the fix needs an answer from you rather
+  than a decision from me. `ABOUT_DEFAULTS` in `public/shop.html` is the first
+  tenant's own brand copy — the manifesto about plant-based food, EST. 2017,
+  MADE IN 广州, "From soil to soul", the founder's quote, the in/out list — and
+  it is handed to every merchant who has not written an About page. Worse, it is
+  merged FIELD BY FIELD (`Object.assign({}, ABOUT_DEFAULTS, stored)`), so a
+  merchant who wrote half a page gets the other half from Roots without knowing.
+  The hero photo is `/assets/brand/welcome-roots.jpg`, hardcoded, on every
+  account. That is D-04 at full strength and it is customer-facing.
+
+  The fix is one line once you say what an empty About page should be:
+  **(a)** nothing — the page does not render until they write it; **(b)** neutral
+  prompts ("YOUR STORY", "Tell customers who you are"); **(c)** keep defaults but
+  make them generic. (a) and (b) both stop the lie; (c) is more work and still
+  guesses at their voice. I would take (a). `scripts/test_storefront_currency.js`
+  §4 pins the current state so the day you answer, that check is what fails.
 
 **Deliberately left, with the reason:**
 - **I-04** — the platform's money is integer cents and the merchant's is a
@@ -426,6 +445,20 @@ that could be done without one has been.
   `/wallet-adjust`, which map to `customers:edit`. Both are one line each in
   `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
   closed the suite says so.
+- **The currency on three more surfaces**, each left for a stated reason rather
+  than for lack of time. `public/cms.html` has about forty hardcoded ¥, but most
+  are DEMO CONTENT in the block editor's own previews ("¥50 off your first
+  order" as sample coupon copy) and help text describing what a ¥ field means —
+  mixed in with maybe a dozen that render real product and voucher values. Right
+  requires reading each one, and the page is the merchant's editor rather than
+  anything a customer sees. `public/storefront.html` renders eight real prices
+  but has no currency machinery at all — it would need its own config fetch —
+  and it is a PREVIEW tool ("share the current published layout via a link"),
+  not the storefront. `public/store-admin.html` bills in ¥ on purpose as far as
+  I can tell: it is the platform's own plan and setup-fee screen, and one
+  platform currency is a plausible deliberate choice rather than a bug. That
+  last one is the only one of the three I am genuinely unsure about; say the
+  word and it is ten minutes.
 - **K-02's second half.** The finding asks for two things. The first — a
   bookkeeper preset, which did not exist — shipped with E-11. The second is
   "split purchasing's money out of the stock person's grant": the `warehouse`
@@ -473,7 +506,7 @@ earlier note here said it could not; that was wrong for two sessions, and it
 mattered — half the suites and every eslint run were being skipped on an
 assumption. With `npm ci` the whole thing runs locally.
 
-**The fast shard: 146 suites, 0 failures, 0 quarantined.** The quarantine list
+**The fast shard: 148 suites, 0 failures, 0 quarantined.** The quarantine list
 is empty — five of the six were fixed on `main` while this branch was in
 flight, and the sixth (`test_mobile_purchasing.js`) left on the evidence
 described below. `npx eslint` reports **0 errors** on every changed file, which
@@ -504,7 +537,8 @@ Suites added by this pass, each named for the finding it holds down:
 `test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
 `test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
 `test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
-`test_role_tagged_controls.js`, `test_phone_dates.js`, `test_admin_dates.js`.
+`test_role_tagged_controls.js`, `test_phone_dates.js`, `test_admin_dates.js`,
+`test_storefront_currency.js`.
 
 Also run, on every commit:
 

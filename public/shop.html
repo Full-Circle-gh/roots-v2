@@ -642,7 +642,8 @@
     .fb-bar{position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--oat);border-top:2px solid var(--ink);padding:14px 22px calc(14px + env(safe-area-inset-bottom));z-index:20;}
     .fb-send{width:100%;background:var(--ink);color:var(--lime);border:0;padding:15px 0;font-family:var(--bf-toni);font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;}
     .fb-send:disabled{opacity:.45;cursor:default;}
-    /* membership ("Roots Club") — mirrors mini-app pages/membership */
+    /* membership — the shop's own club, named from its brand rather than the
+       first tenant's (audit D-04). Mirrors mini-app pages/membership. */
     .mb-hero{background:var(--forest);color:var(--oat);padding:38px 22px 30px;}
     .mb-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--lime);}
     .mb-title{font-family:var(--bf-bear);font-size:46px;font-weight:500;line-height:1.08;margin-top:8px;}
@@ -1280,6 +1281,15 @@ function altLang(en,cn){return state.lang==='cn'?(en||'').trim():'';}  /* second
 // Format an amount in the tenant's display currency (from /api/retail/config).
 // The stored numbers are already in the tenant's own currency units, so this is
 // a symbol + decimals + position swap. Defaults to ¥ when config isn't loaded.
+/* Whole units, same symbol and position. The pair mirrors the admin's acMoney /
+   acMoneyCompact (audit I-01): one exact, one for the places where a fen would
+   be noise — a top-up tile, a tier threshold, a referral reward. */
+function money0(n){
+  const c=(state.config&&state.config.currency)||{};
+  const sym=c.symbol||'¥';
+  const v=Math.round(Number(n)||0).toLocaleString();
+  return c.position==='after'?(v+sym):(sym+v);
+}
 function money(n){
   const c=(state.config&&state.config.currency)||{};
   const dec=(c.decimals!=null?c.decimals:2), sym=c.symbol||'¥';
@@ -2622,7 +2632,7 @@ function renderCoBalance(d){
   const disc=Number(d.balance_discount)||0;
   const sub=co.useBalance&&disc>0
     ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span> <span>${cn?'· 余额不抵运费':'· balance never covers shipping'}</span>`
-    : `¥${bal.toFixed(2)} ${cn?'余额 · 本单可抵 ':'· worth '}${money(maxUse)}${cn?'':' on this order'}`;
+    : `${money(bal)} ${cn?'余额 · 本单可抵 ':'· worth '}${money(maxUse)}${cn?'':' on this order'}`;
   // Nothing left for balance to cover (e.g. points already cover the goods) —
   // show the toggle but disable it so the state reads clearly.
   const dis=maxUse<=0?'disabled':'';
@@ -3371,9 +3381,9 @@ async function renderMe(){
   const meta={
     notif: notifUnread>0?(notifUnread+(cn?' 条未读':' new')):'',
     addresses: addrPreview||(cn?'点击添加地址':'Tap to add an address'),
-    wallet: '¥'+balance.toFixed(2)+' · '+points+(cn?' 积分':' Points'),
+    wallet: money(balance)+' · '+points+(cn?' 积分':' Points'),
     topup: cn?'充值得积分，余额随时用':'Add credit, earn bonus points',
-    affiliate: affThem>0?(cn?`你得 ¥${affYou}，好友得 ¥${affThem}`:`¥${affYou} for you, ¥${affThem} for them`):(cn?`好友首单，你得 ¥${affYou}`:`¥${affYou} on a friend’s first order`),
+    affiliate: affThem>0?(cn?`你得 ${money0(affYou)}，好友得 ${money0(affThem)}`:`${money0(affYou)} for you, ${money0(affThem)} for them`):(cn?`好友首单，你得 ${money0(affYou)}`:`${money0(affYou)} on a friend’s first order`),
     coupons: coupons>0?(coupons+(cn?' 张可用':' active')):'',
     invoices:'',
     favorites: favCount+(cn?' 件已收藏':' saved'),
@@ -3425,7 +3435,7 @@ async function renderMe(){
       </div>
     </div>
     <div class="me-stats">
-      <div class="me-stat"><span class="v">¥${balance.toFixed(2)}</span><span class="l">${cn?'余额':'Balance'}</span></div>
+      <div class="me-stat"><span class="v">${money(balance)}</span><span class="l">${cn?'余额':'Balance'}</span></div>
       <button class="me-stat tap" data-go="#/coupons"><span class="v">${coupons}</span><span class="l">${cn?'优惠券':'Coupons'}</span></button>
       <button class="me-stat tap" data-go="#/wallet"><span class="v">${points}</span><span class="l">${cn?'积分':'Points'}</span></button>
     </div>
@@ -3472,7 +3482,7 @@ function cartRemovePage(key){cartSave(cartGet().filter(x=>x.key!==key));renderCa
 // Free-shipping threshold for the cart bar. Mirrors the mini-app cart: prefer
 // the customer's default-address zone value (fetched by loadZoneThreshold so the
 // bar matches what checkout charges), else the global fees.freeShippingThreshold
-// (default ¥399). 0 = always free.
+// (default 399 in the merchant's own currency). 0 = always free.
 function freeShipThreshold(){
   if(state._freeShipT!=null) return state._freeShipT;
   return Number(state.config&&state.config.fees&&state.config.fees.freeShippingThreshold) || 399;
@@ -3519,8 +3529,8 @@ function renderCartPage(){
   const progText=unlocked
     ? `<b>${cn?'已享免运费。':'Free shipping unlocked.'}</b>`
     : (cn
-        ? `再差 <b>¥${remaining}</b> 即可<b>免运费</b>。`
-        : `You're <b>¥${remaining}</b> away from <b>free shipping.</b>`);
+        ? `再差 <b>${money0(remaining)}</b> 即可<b>免运费</b>。`
+        : `You're <b>${money0(remaining)}</b> away from <b>free shipping.</b>`);
   const rows=c.map(l=>`<div class="cp-row" data-k="${escAttr(l.key)}">
     <div class="ph">
       ${l.image?`<img src="${escAttr(l.image)}" alt="">`:''}
@@ -3744,7 +3754,7 @@ async function renderWallet(){
   const emptyHtml=`<div class="sp-empty">${cn?'暂无记录':'Nothing here yet'}</div>`;
   function tabsHtml(){
     return `<div class="wl-tabs">
-      <div class="wl-tab wallet ${wtab==='wallet'?'on':''}" data-wt="wallet"><div class="wl-tab-lbl">${cn?'余额':'WALLET'}</div><span class="wl-tab-val">¥${balance.toFixed(2)}</span>${wtab==='wallet'?'<div class="wl-arrow ink"></div>':''}</div>
+      <div class="wl-tab wallet ${wtab==='wallet'?'on':''}" data-wt="wallet"><div class="wl-tab-lbl">${cn?'余额':'WALLET'}</div><span class="wl-tab-val">${money(balance)}</span>${wtab==='wallet'?'<div class="wl-arrow ink"></div>':''}</div>
       <div class="wl-tab points ${wtab==='points'?'on':''}" data-wt="points"><div class="wl-tab-lbl">${cn?'积分':'POINTS'}</div><div class="wl-tab-val-row"><span class="wl-tab-val">${points}</span><span class="wl-tab-unit">${cn?'积分':'PTS'}</span></div>${wtab==='points'?'<div class="wl-arrow accent"></div>':''}</div>
     </div>`;
   }
@@ -3755,9 +3765,9 @@ async function renderWallet(){
     if(wtab==='wallet'){
       if(walletTx===null){ try{ walletTx=await api('/api/retail/topup/transactions?limit=100')||[]; }catch(e){ walletTx=[]; } }
       const items=(walletTx||[]).map(t=>{ const ts=parseTs(t.paid_at||t.created_at); const amt=Number(t.amount)||0;
-        return {day:ts.day,mon:ts.mon,time:ts.time+(t.payment_method?' · '+t.payment_method:''),pip:'topup',label:cn?'充值':'Top-up',display:'+¥'+amt.toFixed(2),amtClass:'pos',bonus:t.bonus_points}; });
+        return {day:ts.day,mon:ts.mon,time:ts.time+(t.payment_method?' · '+t.payment_method:''),pip:'topup',label:cn?'充值':'Top-up',display:'+'+money(amt),amtClass:'pos',bonus:t.bonus_points}; });
       const filtered=items.filter(()=>wFilter!=='out'); // top-ups are all income; OUT shows none
-      const card=`<div class="wl-bal wallet"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用余额':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'账户余额':'STORE CREDIT'}</div></div><div class="wl-bal-amt">¥${balance.toFixed(2)}</div><div class="wl-btns"><div class="wl-btn primary" data-go="#/topup">${cn?'充值':'TOP UP'}</div><div class="wl-btn ghost" id="wlWithdraw">${cn?'提现':'WITHDRAW'}</div></div></div>`;
+      const card=`<div class="wl-bal wallet"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用余额':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'账户余额':'STORE CREDIT'}</div></div><div class="wl-bal-amt">${money(balance)}</div><div class="wl-btns"><div class="wl-btn primary" data-go="#/topup">${cn?'充值':'TOP UP'}</div><div class="wl-btn ghost" id="wlWithdraw">${cn?'提现':'WITHDRAW'}</div></div></div>`;
       const filters=`<div class="wl-filters"><div class="wl-chip ${wFilter==='all'?'on':''}" data-wf="all">${cn?'全部':'ALL'}</div><div class="wl-chip ${wFilter==='in'?'on':''}" data-wf="in">${cn?'收入':'IN'}</div><div class="wl-chip ${wFilter==='out'?'on':''}" data-wf="out">${cn?'支出':'OUT'}</div></div>`;
       const sec=`<div class="wl-sec"><div class="wl-sec-l">${cn?'明细':'HISTORY'} · ${filtered.length}</div><div class="wl-sec-m">${monLbl}</div></div>`;
       body.innerHTML=tabsHtml()+card+filters+sec+(filtered.length?`<div class="wl-list">${renderRows(filtered)}</div>`:emptyHtml);
@@ -3769,7 +3779,7 @@ async function renderWallet(){
         return {day:ts.day,mon:ts.mon,time:ts.time,pip:pos?'earn':'redeem',label:pointsSource(t.source,cn),display:(pos?'+':'−')+Math.abs(d),amtClass:pos?'pos':'berry',ym:ts.ym,amount:d}; });
       const filtered=items.filter(r=> pFilter==='all'||(pFilter==='earn'&&r.amount>=0)||(pFilter==='redeem'&&r.amount<0));
       let earned=0,redeemed=0; items.forEach(r=>{ if(r.ym===curYm){ if(r.amount>=0)earned+=r.amount; else redeemed+=-r.amount; } });
-      const card=`<div class="wl-bal points"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用积分':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'永不过期':'NEVER EXPIRES'}</div></div><div class="wl-pts-row"><div class="wl-pts-amt">${points}</div>${pv>0?`<div class="wl-pts-cash">≈ ¥${(points*pv).toFixed(2)}</div>`:''}</div></div>`;
+      const card=`<div class="wl-bal points"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用积分':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'永不过期':'NEVER EXPIRES'}</div></div><div class="wl-pts-row"><div class="wl-pts-amt">${points}</div>${pv>0?`<div class="wl-pts-cash">≈ ${money(points*pv)}</div>`:''}</div></div>`;
       const statpair=`<div class="wl-statpair"><div class="wl-statbox"><div class="wl-stat-l">${cn?'本月获得':'EARNED'}</div><div class="wl-stat-v pos">+${earned}</div></div><div class="wl-statbox"><div class="wl-stat-l">${cn?'本月使用':'REDEEMED'}</div><div class="wl-stat-v neg">−${redeemed}</div></div></div>`;
       const filters=`<div class="wl-filters"><div class="wl-chip ${pFilter==='all'?'on':''}" data-pf="all">${cn?'全部':'ALL'}</div><div class="wl-chip ${pFilter==='earn'?'on':''}" data-pf="earn">${cn?'获得':'EARNED'}</div><div class="wl-chip ${pFilter==='redeem'?'on':''}" data-pf="redeem">${cn?'使用':'REDEEMED'}</div></div>`;
       const sec=`<div class="wl-sec"><div class="wl-sec-l">${cn?'记录':'RECORD'} · ${filtered.length}</div><div class="wl-sec-m">${monLbl}</div></div>`;
@@ -3814,21 +3824,21 @@ async function renderTopup(){
     const grid=tiers.map((x,i)=>`<div class="tu-tier ${i===sel?'on':''}" data-i="${i}" style="background:${i===sel?'var(--ink)':TIER_BGS[i%TIER_BGS.length]}">
       ${x.best?`<div class="tu-best">${cn?'最划算':'BEST VALUE'}</div>`:''}
       <div class="tu-lab">${esc(x.num+' · '+x.label)}</div>
-      <div class="tu-amt">¥${fmtN(x.amount)}</div>
+      <div class="tu-amt">${money0(x.amount)}</div>
       <div class="tu-bonus">+ ${x.bonus} PTS</div>
-      <div class="tu-foot">${x.pct}% ${cn?'赠送':'BONUS'} · ≈¥${fmtN(Number(x.total.toFixed(2)))} ${cn?'总价值':'VALUE'}</div>
+      <div class="tu-foot">${x.pct}% ${cn?'赠送':'BONUS'} · ≈${money(x.total)} ${cn?'总价值':'VALUE'}</div>
       ${i===sel?`<div class="tu-check">✓</div>`:''}
     </div>`).join('');
     const foot=tiers.length?`<div class="tu-payfoot">
       <div class="tu-pf-row">
-        <div><div class="tu-pf-l">${cn?'应付':'YOU PAY'}</div><div class="tu-pf-big">¥${fmtN(t.amount)}</div></div>
-        <div class="tu-pf-r"><div class="tu-pf-l">${cn?'到账':'YOU GET'}</div><div class="tu-pf-val">¥${fmtN(t.amount)} <span class="tu-pf-plus">+ ${t.bonus} ${cn?'积分':'pts'}</span></div><div class="tu-pf-value">≈¥${fmtN(Number((t.total||0).toFixed(2)))} ${cn?'总价值':'VALUE'}</div></div>
+        <div><div class="tu-pf-l">${cn?'应付':'YOU PAY'}</div><div class="tu-pf-big">${money0(t.amount)}</div></div>
+        <div class="tu-pf-r"><div class="tu-pf-l">${cn?'到账':'YOU GET'}</div><div class="tu-pf-val">${money0(t.amount)} <span class="tu-pf-plus">+ ${t.bonus} ${cn?'积分':'pts'}</span></div><div class="tu-pf-value">≈${money(t.total||0)} ${cn?'总价值':'VALUE'}</div></div>
       </div>
-      <button class="tu-cta" id="tuBtn">${cn?'充值 ¥':'TOP UP ¥'}${fmtN(t.amount)} →</button>
+      <button class="tu-cta" id="tuBtn">${cn?'充值 ':'TOP UP '}${money0(t.amount)} →</button>
       <div class="sp-msg" id="tuMsg" style="padding-left:0"></div>
     </div>`:`<div class="sp-empty">${cn?'暂无充值套餐':'No packages yet'}</div>`;
     v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'充值 · TOP UP':'TOP UP',headline,cn?'充值得积分，余额随时用':'Add credit, earn bonus points')}
-      <div class="tu-strip"><div><div class="l">${cn?'当前余额':'CURRENT BALANCE'}</div><div class="vals"><span class="amt">¥${(Number(c.balance)||0).toFixed(2)}</span><span class="pts">· ${Number(c.points_balance)||0} ${cn?'积分':'PTS'}</span></div></div><div class="link" data-go="#/wallet">${cn?'查看历史 →':'HISTORY →'}</div></div>
+      <div class="tu-strip"><div><div class="l">${cn?'当前余额':'CURRENT BALANCE'}</div><div class="vals"><span class="amt">${money(c.balance)}</span><span class="pts">· ${Number(c.points_balance)||0} ${cn?'积分':'PTS'}</span></div></div><div class="link" data-go="#/wallet">${cn?'查看历史 →':'HISTORY →'}</div></div>
       ${tiers.length?`<div class="tu-grid">${grid}</div>`:''}
       ${foot}</div>`;
     v.querySelectorAll('.tu-tier').forEach(el=>el.addEventListener('click',()=>{sel=Number(el.dataset.i);paint();}));
@@ -3861,7 +3871,7 @@ async function renderCoupons(){
   // Stable per-code stub accent (mirror of the mini-app's accentFor).
   const STUB_ACCENTS=['#CCD900','#FFAF60','#B2CFED','#F4B8CB','#F2CA6C','#E96174'];
   const accentFor=(code)=>{ if(!code)return STUB_ACCENTS[0]; let h=0; const s=String(code); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return STUB_ACCENTS[Math.abs(h)%STUB_ACCENTS.length]; };
-  const stubBig=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+'%'; if(t.type==='free_shipping')return cn?'免邮':'FREE'; return '¥'+(Number(t.value)||0); };
+  const stubBig=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+'%'; if(t.type==='free_shipping')return cn?'免邮':'FREE'; return money0(t.value); };
   const stubSub=(t)=>{ if(t.type==='free_shipping')return cn?'':'SHIP'; return cn?'优惠':'OFF'; };
 
   let mine=[],pub=[],used=[];
@@ -3881,7 +3891,7 @@ async function renderCoupons(){
 
   const activeTicket=(t)=>{
     const name=esc(pick(t.title_en,t.title_cn)||t.code||'');
-    const min=t.min_subtotal?`${cn?'满 ¥':'Over ¥'}${t.min_subtotal}`:'';
+    const min=t.min_subtotal?`${cn?'满 ':'Over '}${money0(t.min_subtotal)}`:'';
     const exp=t.expires_at?`${C.expires} ${String(t.expires_at).slice(0,10)}`:(cn?'长期有效':'No expiry');
     return `<div class="cpn"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
       `<div class="cpn-stub" style="background:${accentFor(t.code)}"><div class="cpn-big">${esc(stubBig(t))}</div><div class="cpn-stubsub">${esc(stubSub(t))}</div></div>`+
@@ -3891,7 +3901,7 @@ async function renderCoupons(){
   const usedTicket=(o)=>{
     const nm=(cn?'已使用 · 订单 #':'Used · Order #')+esc(o.order_no||'');
     return `<div class="cpn used"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
-      `<div class="cpn-stub"><div class="cpn-big">−¥${(Number(o.voucher_amount)||0).toFixed(0)}</div><div class="cpn-stubsub">${cn?'抵扣':'OFF'}</div></div>`+
+      `<div class="cpn-stub"><div class="cpn-big">−${money0(o.voucher_amount)}</div><div class="cpn-stubsub">${cn?'抵扣':'OFF'}</div></div>`+
       `<div class="cpn-body"><div class="cpn-name">${nm}</div>`+
       `<div class="cpn-foot"><div class="cpn-exp">${String(o.placed_at||'').slice(0,10)}</div><div class="cpn-state">${cn?'已使用':'USED'}</div></div></div></div>`;
   };
@@ -3922,7 +3932,7 @@ async function renderInvoices(){
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'发票':'Invoices','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
   let list; try{ list=await api('/api/retail/invoices')||[]; }catch(e){ list=[]; }
   const box=v.querySelector('.sp');
-  const rows=(list||[]).map(i=>{const issued=i.invoice_state==='issued';return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(i.invoice_title||i.order_no||'')} <span class="sp-chip">${i.invoice_type==='company'?(cn?'企业':'Company'):(cn?'个人':'Personal')}</span></div><div class="sp-d">${esc(i.order_no||'')} · ${String(i.placed_at||'').slice(0,10)} · ¥${(Number(i.total)||0).toFixed(2)}</div><div class="sp-d">${issued?(cn?'已开具':'Issued'):(cn?'处理中':'Processing')}${i.invoice_number?' · '+esc(i.invoice_number):''}</div>${issued&&i.invoice_file_url?`<div style="margin-top:8px"><a class="me-legal-a" href="${escAttr(i.invoice_file_url)}" target="_blank" rel="noopener">${cn?'查看发票 →':'View invoice →'}</a></div>`:''}</div></div>`;}).join('');
+  const rows=(list||[]).map(i=>{const issued=i.invoice_state==='issued';return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(i.invoice_title||i.order_no||'')} <span class="sp-chip">${i.invoice_type==='company'?(cn?'企业':'Company'):(cn?'个人':'Personal')}</span></div><div class="sp-d">${esc(i.order_no||'')} · ${String(i.placed_at||'').slice(0,10)} · ${money(i.total)}</div><div class="sp-d">${issued?(cn?'已开具':'Issued'):(cn?'处理中':'Processing')}${i.invoice_number?' · '+esc(i.invoice_number):''}</div>${issued&&i.invoice_file_url?`<div style="margin-top:8px"><a class="me-legal-a" href="${escAttr(i.invoice_file_url)}" target="_blank" rel="noopener">${cn?'查看发票 →':'View invoice →'}</a></div>`:''}</div></div>`;}).join('');
   box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'发票':'Invoices','')+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无发票':'No invoices yet'}</div>`);
 }
 
@@ -3934,7 +3944,7 @@ async function renderFavorites(){
   const box=v.querySelector('.sp');
   if(!list||!list.length){ box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收藏夹':'Favorites','')+`<div class="sp-empty">${cn?'还没有收藏 🌱':'No favorites yet 🌱'}<br><br><a class="me-viewall" href="#/shop">${cn?'去逛逛 →':'Browse →'}</a></div>`; return; }
   const grid=list.map(p=>{const price=Number(p.effective_price!=null?p.effective_price:p.price)||0;const img=p.image_url||p.image_data||'';const sold=Number(p.stock)<=0;
-    return `<div class="card"><a class="ph" href="#/product/${p.id}">${img?`<img src="${escAttr(img)}" alt="">`:''}${sold?`<span class="pill-sold">${cn?'售罄':'Sold out'}</span>`:''}</a><div class="body"><a class="nm" href="#/product/${p.id}">${esc(pick(p.name_en,p.name_cn))}</a><div class="prices"><span class="now">¥${price.toFixed(2)}</span></div><button class="me-legal-a" style="color:var(--berry);margin-top:6px;align-self:flex-start" data-unfav="${p.id}">${cn?'取消收藏':'Remove'}</button></div></div>`;}).join('');
+    return `<div class="card"><a class="ph" href="#/product/${p.id}">${img?`<img src="${escAttr(img)}" alt="">`:''}${sold?`<span class="pill-sold">${cn?'售罄':'Sold out'}</span>`:''}</a><div class="body"><a class="nm" href="#/product/${p.id}">${esc(pick(p.name_en,p.name_cn))}</a><div class="prices"><span class="now">${money(price)}</span></div><button class="me-legal-a" style="color:var(--berry);margin-top:6px;align-self:flex-start" data-unfav="${p.id}">${cn?'取消收藏':'Remove'}</button></div></div>`;}).join('');
   box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收藏夹':'Favorites','')+`<div class="fav-grid">${grid}</div>`;
   box.querySelectorAll('[data-unfav]').forEach(b=>b.addEventListener('click',async()=>{ try{ await apiSend('DELETE','/api/retail/favorites/'+b.dataset.unfav); renderFavorites(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
 }
@@ -3948,8 +3958,8 @@ async function renderMembership(){
   // fall back to the default ladder so the page still renders pre-login.
   const FALLBACK=[
     {key:'seed',name_en:'Seed',name_cn:'种子',threshold:0,perks_en:['5% off your first order','Member newsletter'],perks_cn:['首单 5% 折扣','会员通讯']},
-    {key:'sprout',name_en:'Sprout',name_cn:'幼苗',threshold:500,perks_en:['10% off all orders','Early access to drops','Free shipping ¥299+'],perks_cn:['全场 10% 折扣','新品优先购','满 ¥299 包邮']},
-    {key:'root',name_en:'Root',name_cn:'根',threshold:2000,perks_en:['15% off all orders','Early access to drops','Free shipping ¥199+','Birthday gift'],perks_cn:['全场 15% 折扣','新品优先购','满 ¥199 包邮','生日礼物']},
+    {key:'sprout',name_en:'Sprout',name_cn:'幼苗',threshold:500,perks_en:['10% off all orders','Early access to drops','Free shipping '+money0(299)+'+'],perks_cn:['全场 10% 折扣','新品优先购','满 '+money0(299)+' 包邮']},
+    {key:'root',name_en:'Root',name_cn:'根',threshold:2000,perks_en:['15% off all orders','Early access to drops','Free shipping '+money0(199)+'+','Birthday gift'],perks_cn:['全场 15% 折扣','新品优先购','满 '+money0(199)+' 包邮','生日礼物']},
     {key:'tree',name_en:'Tree',name_cn:'大树',threshold:5000,perks_en:['20% off all orders','Early access to drops','Free shipping (no minimum)','Birthday gift','Exclusive tasting events'],perks_cn:['全场 20% 折扣','新品优先购','免邮 (无门槛)','生日礼物','专属品鉴活动']},
   ];
   let tiers=((state.config&&state.config.roots_club&&state.config.roots_club.tiers)||[])
@@ -3962,14 +3972,14 @@ async function renderMembership(){
   const cur=tiers[curIdx], next=tiers[curIdx+1]||null, top=tiers[tiers.length-1];
   let pct=100, meta=cn?('最高等级 · '+pick(top.name_en,top.name_cn)):('Top tier · '+pick(top.name_en,top.name_cn));
   if(next){ const span=(next.threshold-cur.threshold)||1; pct=Math.max(0,Math.min(100,Math.round(((spend-cur.threshold)/span)*100)));
-    const left=Math.max(0,Math.floor(next.threshold-spend)); meta=cn?('还差 ¥'+left+' 升到 '+pick(next.name_en,next.name_cn)):('¥'+left+' to '+pick(next.name_en,next.name_cn)); }
+    const left=Math.max(0,Math.floor(next.threshold-spend)); meta=cn?('还差 '+money0(left)+' 升到 '+pick(next.name_en,next.name_cn)):(money0(left)+' to '+pick(next.name_en,next.name_cn)); }
   const markers=tiers.map((t,i)=>`<div class="mb-mk ${i===curIdx?'current':(i<curIdx?'reached':'')}"><div class="mb-mk-name">${esc(pick(t.name_en,t.name_cn))}</div>${i===curIdx?`<div class="mb-mk-dot">${cn?'当前':"You're here"}</div>`:''}</div>`).join('');
   const table=tiers.map((t,i)=>{ const perks=(cn?t.perks_cn:t.perks_en)||[];
-    return `<div class="mb-trc ${i===curIdx?'current':''}"><div class="mb-trc-head"><div class="mb-trc-name">${esc(pick(t.name_en,t.name_cn))}</div><div class="mb-trc-req">${cn?'累计 ¥':'Spend ¥'}${t.threshold}+</div></div><div class="mb-trc-perks">${perks.map(p=>`<div class="mb-trc-perk">· ${esc(p)}</div>`).join('')}</div></div>`; }).join('');
+    return `<div class="mb-trc ${i===curIdx?'current':''}"><div class="mb-trc-head"><div class="mb-trc-name">${esc(pick(t.name_en,t.name_cn))}</div><div class="mb-trc-req">${cn?'累计 ':'Spend '}${money0(t.threshold)}+</div></div><div class="mb-trc-perks">${perks.map(p=>`<div class="mb-trc-perk">· ${esc(p)}</div>`).join('')}</div></div>`; }).join('');
   v.innerHTML=`<div class="sp">${spBack()}
-    <div class="mb-hero"><div class="mb-kicker">${cn?'ROOTS 会员':'ROOTS CLUB'}</div><div class="mb-title">${cn?'一起成长。':'Grow with us.'}</div><div class="mb-sub">${cn?'每次下单解锁福利，向上生长。':'Earn perks on every order. Climb the tree.'}</div></div>
+    <div class="mb-hero"><div class="mb-kicker">${esc(cn?(state.brand+' 会员'):(state.brand+' Club'))}</div><div class="mb-title">${cn?'一起成长。':'Grow with us.'}</div><div class="mb-sub">${cn?'每次下单解锁福利，向上生长。':'Earn perks on every order. Climb the tree.'}</div></div>
     <div class="mb-markers">${markers}</div>
-    <div class="mb-card"><div class="mb-pc-label">${cn?'下一级':'NEXT'}: ${esc(pick((next||cur).name_en,(next||cur).name_cn))}</div><div class="mb-pc-amt">¥${spend.toFixed(0)}${next?' / ¥'+next.threshold:''}</div><div class="mb-pc-bar"><div class="mb-pc-fill" style="width:${pct}%"></div></div><div class="mb-pc-meta">${esc(meta)}</div></div>
+    <div class="mb-card"><div class="mb-pc-label">${cn?'下一级':'NEXT'}: ${esc(pick((next||cur).name_en,(next||cur).name_cn))}</div><div class="mb-pc-amt">${money0(spend)}${next?' / '+money0(next.threshold):''}</div><div class="mb-pc-bar"><div class="mb-pc-fill" style="width:${pct}%"></div></div><div class="mb-pc-meta">${esc(meta)}</div></div>
     ${lbOn?`<button class="mb-lb" data-go="#/leaderboard"><span class="mb-lb-label">${cn?'查看排行榜':'View leaderboard'}</span><span class="mb-lb-arrow">→</span></button>`:''}
     <div class="mb-table">${table}</div></div>`;
 }
@@ -3982,7 +3992,7 @@ async function renderLeaderboard(){
   const fmtVal=(value,metric)=>{ const n=Number(value)||0;
     if(metric==='points_balance')return n.toLocaleString()+(cn?' 分':' pts');
     if(metric==='orders_count')return n.toLocaleString()+(cn?' 单':' orders');
-    return '¥'+n.toFixed(0); };
+    return money0(n); };
   const metricLabel=(metric,period)=>{ if(metric==='points_balance')return cn?'按积分余额':'By points balance';
     if(metric==='orders_count')return cn?'按已付订单数':'By paid orders';
     return (period&&period!=='all')?(cn?'按消费':'By spend'):(cn?'按累计消费':'By lifetime spend'); };
@@ -4022,16 +4032,16 @@ async function renderAffiliate(){
   const box=v.querySelector('.sp');
   if(!d||d.enabled===false){ box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend','')+`<div class="sp-empty">${cn?'推广计划暂未开放':'The referral program isn’t live yet'}</div>`; return; }
   const st=d.stats||{}; const you=Number(d.reward_per_order)||0, them=Number(d.reward_referee)||0;
-  const tagline=them>0?(cn?`你得 ¥${you}，好友得 ¥${them}`:`¥${you} for you, ¥${them} for them`):(cn?`好友首单，你得 ¥${you}`:`¥${you} on a friend’s first order`);
-  const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+¥'+(Number(iv.reward_amount)||0).toFixed(0):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
+  const tagline=them>0?(cn?`你得 ${money0(you)}，好友得 ${money0(them)}`:`${money0(you)} for you, ${money0(them)} for them`):(cn?`好友首单，你得 ${money0(you)}`:`${money0(you)} on a friend’s first order`);
+  const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+'+money0(iv.reward_amount):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
   const youR=String(you);
   const how=`<div class="rf-how"><div class="rf-how-head">${cn?'流程':'HOW IT WORKS'}</div><div class="rf-how-row">`+
     `<div class="rf-how-cell"><div class="rf-how-num">01</div><div class="rf-how-t">${cn?'分享':'Share'}</div><div class="rf-how-sub">${cn?'把邀请码发给朋友':'Send your code'}</div></div>`+
     `<div class="rf-how-cell"><div class="rf-how-num">02</div><div class="rf-how-t">${cn?'下单':'They order'}</div><div class="rf-how-sub">${cn?'好友注册并完成首单':'Their first order'}</div></div>`+
-    `<div class="rf-how-cell"><div class="rf-how-num">03</div><div class="rf-how-t">${cn?'获奖':'You earn'}</div><div class="rf-how-sub">${cn?('到账 ¥'+youR):('¥'+youR+' to your wallet')}</div></div>`+
+    `<div class="rf-how-cell"><div class="rf-how-num">03</div><div class="rf-how-t">${cn?'获奖':'You earn'}</div><div class="rf-how-sub">${cn?('到账 '+money0(youR)):(money0(youR)+' to your wallet')}</div></div>`+
     `</div></div>`;
   box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend',tagline)+
-    `<div class="rf-stats"><div class="rf-stat"><div class="rf-stat-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="rf-stat-l">${cn?'已赚':'EARNED'}</div></div><div class="rf-stat mid"><div class="rf-stat-v">${Number(st.total_invites)||0}</div><div class="rf-stat-l">${cn?'邀请':'INVITED'}</div></div><div class="rf-stat"><div class="rf-stat-v">${Number(st.converted)||0}</div><div class="rf-stat-l">${cn?'下单':'ORDERED'}</div></div></div>`+
+    `<div class="rf-stats"><div class="rf-stat"><div class="rf-stat-v">${money0(st.earned)}</div><div class="rf-stat-l">${cn?'已赚':'EARNED'}</div></div><div class="rf-stat mid"><div class="rf-stat-v">${Number(st.total_invites)||0}</div><div class="rf-stat-l">${cn?'邀请':'INVITED'}</div></div><div class="rf-stat"><div class="rf-stat-v">${Number(st.converted)||0}</div><div class="rf-stat-l">${cn?'下单':'ORDERED'}</div></div></div>`+
     (d.code?`<div class="rf-code-card"><div class="rf-code-lbl">${cn?'我的邀请码':'YOUR CODE'}</div><div class="rf-code">${esc(d.code)}</div><div class="rf-share-row"><div class="rf-share" id="afShare">${cn?'分享':'SHARE'}</div><div class="rf-share" id="afCopyLink">${cn?'复制链接':'COPY LINK'}</div><div class="rf-share" id="afQr">${cn?'二维码':'QR CODE'}</div></div><div class="rf-copycode" id="afCopyCode">${cn?'仅复制邀请码':'COPY CODE ONLY'}</div></div>`:'')+
     how+
     (invites?`<div class="me-section"><div class="me-sec-title">${cn?'我的邀请':'Your invites'}</div><div class="sp-list" style="margin-top:8px">${invites}</div></div>`:'')+
@@ -4704,7 +4714,12 @@ const SL_VIEWS=[
   {key:'grid-3col',   icon:'⊟'},
 ];
 const SL_LIST=['list','list-compact'];
-function slMoney(v){return '¥'+(Number.isInteger(v)?v:v.toFixed(2));}
+/* The shop LISTING's prices. This was a third money format on a page that
+   already had two — and the only one that hardcoded yuan, so a merchant in any
+   other currency had their listing priced in ¥ while the rest of the same page
+   was priced correctly. Whole units when the price is whole, which is the
+   behaviour it always had; the symbol and its position are the merchant's. */
+function slMoney(v){return Number.isInteger(Number(v))?money0(v):money(v);}
 function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effective_price)>0?Number(p.effective_price):r;return e;}
 // Stock verdict for one catalog row, shared by the size pickers so a quick-add
 // reads a sold-out size exactly like the product page does.

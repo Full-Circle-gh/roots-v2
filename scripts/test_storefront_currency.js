@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+/**
+ * The web storefront prices in the MERCHANT's currency — audit D-03, D-04.
+ *
+ * D-03 was recorded as fixed: "188 hardcoded ¥ conversions across twelve files.
+ * Every amount now renders in the merchant's currency." The twelve files were
+ * all `public/retail-admin/*.js` — the merchant-facing admin. `public/shop.html`,
+ * the CUSTOMER-facing web storefront, was never in that pass and still carried
+ * THIRTY-FOUR of them: every wallet balance, the top-up screen end to end, the
+ * coupon stubs, the free-shipping nudge, the membership ladder, the
+ * leaderboard, the referral programme, the favourites card, and the shop
+ * listing's own third money helper.
+ *
+ * The page has had a correct money() — reading symbol, decimals and position
+ * from /api/retail/config — the whole time. Thirty-four places did not call it.
+ * So a merchant trading in dollars had their own admin showing dollars while
+ * the storefront their customers actually see showed yuan, on the same order.
+ *
+ * D-04 is the same shape one field over: the membership hero read "ROOTS CLUB"
+ * — the first tenant's loyalty programme — to every merchant's customers.
+ *
+ * This check is STATIC and it is a ban, because that is what the defect needs.
+ * A hardcoded symbol is never wrong on the screen of the account it was written
+ * for, and this product had exactly one account for years. It only becomes
+ * visible on an account nobody has opened yet, which is to say: after it
+ * matters.
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+const SHOP = path.join(ROOT, 'public', 'shop.html');
+const src = fs.readFileSync(SHOP, 'utf8');
+
+let pass = 0; let fail = 0;
+const ok = (m) => { pass++; console.log('  ✓ ' + m); };
+const bad = (m, extra) => { fail++; console.log('  ✗ ' + m + (extra ? '\n      ' + extra : '')); };
+const is = (a, e, m) => (a === e ? ok(m) : bad(m, `expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`));
+const yes = (c, m, extra) => (c ? ok(m) : bad(m, extra));
+const section = (t) => console.log('\n' + t);
+
+/* Comments stripped: this file's subject is the symbol itself, and the fixed
+   helpers carry notes that name it. */
+const CODE = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
+// ─────────────────────────────────────────────────────────────────────────
+section('1 · the symbol lives in exactly one place');
+
+/* THE FALLBACK IS ALLOWED, and only as a fallback. `c.symbol || '¥'` is the
+   deliberate default for an account whose config has not arrived yet — the
+   first tenant's value, not the platform's, exactly as td-datetime's timezone
+   fallback works. Every OTHER appearance is a price nobody chose. */
+const FALLBACK = /c\.symbol\s*\|\|\s*'¥'/g;
+const fallbacks = (CODE.match(FALLBACK) || []).length;
+yes(fallbacks >= 1 && fallbacks <= 3,
+  `the ¥ fallback appears ${fallbacks} time(s), inside the money helpers only`);
+
+const stray = CODE.replace(FALLBACK, ' ').split('¥').length - 1;
+is(stray, 0, 'no other ¥ anywhere in the storefront');
+if (stray) {
+  const lines = src.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => l.includes('¥') && !FALLBACK.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l));
+  for (const [n, l] of lines.slice(0, 12)) console.log(`      shop.html:${n}  ${l.trim().slice(0, 100)}`);
+  console.log('      use money() for an exact amount, money0() for whole units');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section('2 · two helpers, and both read the merchant');
+
+/* The pair mirrors the admin's acMoney / acMoneyCompact (I-01): one exact, one
+   for the places where a fen would be noise. A THIRD is how this started —
+   slMoney(), the shop listing's own, was the one that hardcoded yuan while the
+   two beside it were correct. */
+for (const [fn, what] of [['money', 'an exact amount'], ['money0', 'whole units']]) {
+  yes(new RegExp(`function ${fn}\\(n\\)\\{`).test(CODE), `${fn}() exists — ${what}`);
+  const body = (CODE.split(`function ${fn}(n){`)[1] || '').slice(0, 400);
+  yes(/state\.config\s*&&\s*state\.config\.currency/.test(body),
+    `${fn}() reads the merchant's currency from config`);
+  yes(/c\.position\s*===\s*'after'/.test(body),
+    `${fn}() honours symbol POSITION — a symbol that only ever prefixes is half a fix`);
+}
+yes(/function slMoney\(v\)\{return Number\.isInteger\(Number\(v\)\)\?money0\(v\):money\(v\);\}/.test(CODE),
+  'the shop listing delegates to the pair rather than being a third format');
+
+/* Called at RENDER time, never at module load. The currency arrives with
+   /api/retail/config after boot, so a helper evaluated in a module-level
+   constant would freeze the fallback and read as a whole fix — the exact trap
+   the D-03 commit recorded when it skipped RCTIER_DEFAULTS. */
+{
+  /* The earliest of the two definitions — money0 sits just above money — and
+     then any CALL before it. `function money0(` is a definition, not a call,
+     so the two declarations themselves are excluded by the lookbehind. */
+  const firstDef = Math.min(
+    ...['function money0(n){', 'function money(n){'].map((d) => CODE.indexOf(d)).filter((i) => i >= 0),
+  );
+  const head = CODE.slice(0, firstDef);
+  const early = head.match(/(?<!function\s)\bmoney0?\s*\(/g) || [];
+  is(early.length, 0,
+    'no money helper is called above its own definition, where config has not arrived');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section("3 · the club belongs to the shop whose customers are reading it");
+
+is((CODE.match(/ROOTS CLUB|ROOTS 会员/g) || []).length, 0,
+  'the membership hero no longer names the first tenant');
+yes(/mb-kicker">\$\{esc\(cn\?\(state\.brand \+ ' 会员'\)/.test(src)
+  || /mb-kicker">\$\{esc\(cn\?\(state\.brand\+' 会员'\)/.test(src),
+'…it is built from state.brand, which every page title already uses');
+
+// ─────────────────────────────────────────────────────────────────────────
+section('4 · what is deliberately still there');
+
+/* ABOUT_DEFAULTS is the first tenant's own brand copy — manifesto, founding
+   year, city, founder quote, the in/out list — handed to every merchant who
+   has not written an About page, and merged field by field so a merchant who
+   wrote HALF a page gets the other half from Roots. It is D-04 at full
+   strength and it is NOT fixed here, because what an unwritten About page
+   should show instead (nothing? neutral prompts?) is a product decision and
+   not mine to take. Pinned so it cannot be forgotten, and so the day it is
+   answered this check is the thing that fails. */
+yes(/const ABOUT_DEFAULTS=\{/.test(CODE),
+  'ABOUT_DEFAULTS still exists — an open D-04 item, see the note in this file');
+yes(/founder_quote_en:'I started Roots because/.test(src),
+  '…and still carries the first tenant\'s story, awaiting a decision on the empty state');
+
+// ─────────────────────────────────────────────────────────────────────────
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
