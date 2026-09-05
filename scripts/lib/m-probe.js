@@ -26,6 +26,33 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const APP = path.join(__dirname, '..', '..', 'public', 'm.html');
+const TD_DATETIME = path.join(__dirname, '..', '..', 'public', 'td-datetime.js');
+
+/**
+ * m.html has exactly one LOCAL script dependency — /assets/td-datetime.js,
+ * which every date and time in the app renders through. Every harness in this
+ * directory writes the page into a temp dir and opens it over file://, where
+ * an absolute path resolves against the filesystem ROOT and the fetch 404s.
+ * A page that loads without it does not degrade: tdWhen is undefined, the
+ * first list that formats a date throws, and the screen paints empty — which
+ * reads exactly like the bug a probe is looking for.
+ *
+ * So it is INLINED, from the same file the server sends. Not stubbed: the
+ * suites that assert on a rendered date are asserting on the real §1.18
+ * formatter, and a stub would let a format drift past them.
+ *
+ * The `data-vendor` attribute matters. Several suites lift the app's own
+ * source with /<script>([\s\S]*?)<\/script>/ — a BARE tag — and an inlined
+ * dependency with no attributes would be the first match, handing them the
+ * wrong file to check.
+ */
+function inlineTdDatetime(src) {
+  const js = fs.readFileSync(TD_DATETIME, 'utf8');
+  // Function replacement: `$&`/`$1` in the inlined source would otherwise be
+  // read as substitution patterns.
+  return src.replace(/<script src="\/assets\/td-datetime\.js"><\/script>/,
+    () => `<script data-vendor="td-datetime">${js}</script>`);
+}
 
 function findChrome() {
   if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
@@ -57,11 +84,11 @@ function run(label, cases, opts) {
   const settle = (opts && opts.settle) || 0;
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found. Set CHROME_BIN to run this check.'); process.exit(0); }
-  const src = fs.readFileSync(APP, 'utf8')
+  const src = inlineTdDatetime(fs.readFileSync(APP, 'utf8')
     // No network in a test runner: the CDN icon set and the font stylesheet
     // would each hold the page open until they time out.
     .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
-    .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
+    .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, ''));
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-probe-'));
   let asserted = 0; const failures = [];
@@ -111,4 +138,4 @@ function run(label, cases, opts) {
   console.log(`\nok — ${asserted} ${label} assertions across ${cases.length} cases.`);
 }
 
-module.exports = { run, findChrome, APP };
+module.exports = { run, findChrome, APP, inlineTdDatetime };

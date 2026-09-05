@@ -23422,7 +23422,13 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 // allowed through here and rejected below for anything that isn't a counter
 // sale. New form submissions must name a real origin.
 const MANUAL_ORDER_ORIGINS  = ['pickup', 'wechat_chat', 'wholesale', 'other'];
-const MANUAL_ORDER_CHANNELS = ['manual', ...MANUAL_ORDER_ORIGINS];
+// 'shop' is ACCEPTED but is deliberately NOT an origin, so it does not join the
+// form's picker. A shop sale is not an answer to "how did the customer reach
+// us?" — the customer is at the shop — it is the till or the QR menu writing
+// its own channel (§14, §44), which is the same reason 'manual' sits here and
+// not above. Accepted now so the first shop order is not met with a 400 from a
+// list nobody thought to widen; nothing posts it yet.
+const MANUAL_ORDER_CHANNELS = ['manual', 'shop', ...MANUAL_ORDER_ORIGINS];
 // delivery = ship/courier to an address · pickup = customer collects at a store
 // later · counter = handed over at the till now, nothing to ship or collect.
 const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
@@ -24217,7 +24223,12 @@ function buildOrderFilter(query) {
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(query.channel || '').toLowerCase())
+  // 'shop' is a sale that originated at a physical shop, till or QR menu (§14,
+  // §44). It is listed here because an unlisted value falls to '' — the filter
+  // is DISCARDED and the caller silently gets every order back, which reads as
+  // "the filter did nothing" rather than as an error. Nothing writes the value
+  // yet; it is accepted now so the facet works from the first shop order.
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual', 'shop'].includes(String(query.channel || '').toLowerCase())
     ? String(query.channel).toLowerCase() : '';
   let filterSql = 'WHERE 1=1';
   const params = [];
@@ -24644,7 +24655,12 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
   sql += ' GROUP BY ch';
 
-  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, manual: 0 };
+  // Keys are declared rather than derived, so a chip renders at zero instead of
+  // vanishing on a quiet day. `shop` joins them for the same reason: without a
+  // key here `if (r.ch in out)` drops its count entirely — the orders would
+  // still be in `all`, so the chips would not add up to the total and nothing
+  // would say why.
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, manual: 0, shop: 0 };
   for (const r of tdb().prepare(sql).all(...params)) {
     if (r.ch in out) out[r.ch] += r.n;
     out.all += r.n;

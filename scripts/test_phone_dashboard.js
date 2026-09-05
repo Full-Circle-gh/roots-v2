@@ -41,6 +41,7 @@ function it(name, fn) {
 
 const ROOT = path.join(__dirname, '..');
 const M_HTML = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
+const { tdWhen } = require('../public/td-datetime.js');
 
 /**
  * A braced block, anchor → its matching `}`. Works for a function declaration
@@ -84,13 +85,25 @@ const SRC = [
   // a fixed line count cut it mid-arrow, so the whole script failed to parse
   // and nothing here ran.
   sliceBlock(M_HTML, 'const _date=v=>'),
+  // The store's clock. opsFires stamps the channel-sync row with a time, and
+  // since C-02 that time is drawn in the STORE's zone through tdWhen rather
+  // than the handset's through toLocaleTimeString — so the three one-line
+  // helpers that decide "the shop's today" come along, from the shipped file.
+  sliceLines(M_HTML, 'const _tdL=', 1),
+  sliceLines(M_HTML, 'const shopToday=', 1),
+  sliceLines(M_HTML, 'const shopDayOf=', 1),
   sliceBlock(M_HTML, 'function oldestMins(items)'),
   sliceBlock(M_HTML, 'function oldestOf(items)'),
   sliceBlock(M_HTML, 'function opsFires()'),
 ].join(';\n');
 
 function ctxWith(state) {
-  const ctx = { state, T: (en) => en, Date, Math, Number, String, isNaN };
+  // tdWhen is the REAL module the page loads, not a stub: a stub would let the
+  // §1.18 shapes drift here without anything noticing. TD_TZ is left unset so
+  // its own fallback stands, which is the store zone the runner already pins
+  // the process to.
+  const ctx = { state, T: (en) => en, LANG: 'en', tdWhen,
+    Date, Math, Number, String, isNaN };
   vm.createContext(ctx);
   // `const` is block-scoped to the script and never lands on the context
   // object, unlike a function declaration — so the arrow helpers are published

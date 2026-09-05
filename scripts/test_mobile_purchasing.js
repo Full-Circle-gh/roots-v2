@@ -32,13 +32,14 @@ const { run } = require('./lib/m-probe');
 // printing the figure at all. A date typed into a fixture that the code reads
 // relative to now is a test with an expiry date on it.
 //
-// So they are computed from GZ_ISO(), the app's OWN Asia/Shanghai today, which
-// is the same clock the screen compares against — a fixture built from the
-// runner's UTC date would disagree with the page for eight hours a day.
+// So they are computed from shopToday(), the app's OWN idea of the store's
+// today, which is the same clock the screen compares against — a fixture built
+// from the runner's UTC date would disagree with the page for eight hours a
+// day. (It was GZ_ISO() until C-02; the store's zone is the account's now
+// rather than Guangzhou's, and this reads whatever that turns out to be.)
 const CLOCK = `
-  var TODAY=GZ_ISO(), MONTH=TODAY.slice(0,7), FIRST=MONTH+'-01';
-  var shift=function(iso,days){ var d=new Date(iso+'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate()+days); return d.toISOString().slice(0,10); };
+  var TODAY=shopToday(), MONTH=TODAY.slice(0,7), FIRST=MONTH+'-01';
+  var shift=function(iso,days){ return shopDayAdd(iso,days); };
   // Day 0 of this month is the last day of the previous one, whatever its length.
   var LAST_MONTH=shift(FIRST,-1), SOON=shift(TODAY,26);
 `;

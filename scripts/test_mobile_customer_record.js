@@ -29,6 +29,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { fakeServer } = require('./lib/m-fakeserver');
+const { inlineTdDatetime } = require('./lib/m-probe');
 
 const APP = path.join(__dirname, '..', 'public', 'm.html');
 
@@ -94,10 +95,10 @@ const PROBE = `
 function main() {
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found.'); process.exit(0); }
-  const src = fs.readFileSync(APP, 'utf8')
+  const src = inlineTdDatetime(fs.readFileSync(APP, 'utf8')
     .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '')
-    .replace('<script>', `<script>${fakeServer()}</script><script>`);
+    .replace('<script>', `<script>${fakeServer()}</script><script>`));
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-custrec-'));
   fs.writeFileSync(path.join(dir, 'host.html'),

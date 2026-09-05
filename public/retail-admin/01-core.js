@@ -36,6 +36,14 @@ const CHAN_ICON = {
   // Glyph copied byte-for-byte from the Orders channel dropdown, which had
   // it inline only and so never hit this fallback.
   manual:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+
+  // A sale that originated at a physical shop — till or QR menu (§14, §44).
+  // A storefront with a DOOR, deliberately not the scalloped awning gzgrocery
+  // carries: the two would be told apart only by counting the scallops at
+  // 16 pixels, and a glyph an operator has to squint at is the same fabricated
+  // claim as a wrong one. Registered here rather than left to chanIcon's ''
+  // fallback so `shop` is a first-class value from the day it can be written.
+  shop:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10l2-5.5a1 1 0 0 1 .94-.5h14.12a1 1 0 0 1 .94.5L22 10"/><path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9"/><path d="M10 20v-6h4v6"/></svg>',
 };
 // Resolve a channel string to its glyph. An UNKNOWN channel gets NO glyph —
 // never WeChat's (§1.17 rule 2). This used to end `|| CHAN_ICON.wechat`, which

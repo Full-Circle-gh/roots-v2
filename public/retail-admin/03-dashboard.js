@@ -958,6 +958,7 @@ function dashUnhandledRender() {
 const DASH_CHAN_SHORT = {
   wechat: ['WeChat', '微信'], web: ['Web', '网店'],
   meituan: ['Meituan', '美团'], gzgrocery: ['gzgrocery', 'gzgrocery'], manual: ['Manual', '手动'],
+  shop: ['Shop', '门店'],
 };
 async function dashOnroadLoad() {
   if (!['dispatch', 'customer_service', 'default'].includes(dashPos())) return;   // delivery-role + owner
