@@ -111,6 +111,7 @@ what a merchant notices.
 | **D-08 / H-01 / H-03** | High ×3 | *Q6.* A new merchant is asked where they trade, once, and currency, time zone and shop language follow from it. The yuan fee defaults are seeded only in yuan. An unknown country falls back to USD/UTC, deliberately not to China. A shop with no web address says so instead of finishing the checklist with a shop nobody can reach. |
 | **D-10** | High | *Q7.* Guangzhou's districts were written into delivery, orders and stock routing. The districts that may choose a dispatch method are the merchant's own now. |
 | **P-01** | High | *Q4.* Every alert says whose problem it is: `alertPlatform`, `alertMerchant`, `alertBoth`. A gate refuses an alert that declares no audience. |
+| **N-02** | High | *Q9.* An order can be taken on the phone. One screen, six sections, the same create endpoint the desktop and the till use — including the same fee quote, so the phone cannot charge a different delivery fee for the same basket. Counter sales stay at the till and drafts stay on the desktop, both for stated reasons. Nothing in the form re-renders the app while somebody is typing: on a phone that drops the keyboard. |
 | **E-05** | Larger | Products and customers can come in from a spreadsheet. The importer refuses an ambiguous comma decimal rather than guessing — `18,00` as 1800 is a hundredfold mis-price, and my own test caught it. |
 | **B-03** | Medium | Four endpoints for opening and closing the shop, and no screen. There is one now, above the store list. Wiring it up exposed a wrong answer: `master` counted a shop with no marketplace as closed, so a merchant with no integration would have been told their whole business was shut while it traded. |
 | **E-10** | Medium | Notifications can be tuned. Four events, each a switch, all on until somebody turns one off, filtered at the one place every send funnels through. No quiet hours, deliberately — an operational alert dropped by a clock is indistinguishable from one that failed. |
@@ -280,14 +281,29 @@ product.
 single rate per shop, rate per product, or rate per shipping destination? They
 are three different products.
 
-### Q9 — N-02 · A phone order cannot be taken on a phone *(High)*
+### Q9 — N-02 · A phone order cannot be taken on a phone *(High)*  ·  **ANSWERED: the cut-down one — done**
 
 The phone admin can do most things; it cannot create an order. A shopkeeper
 taking an order by telephone has to find a computer.
 
-**What I need:** should the phone get the full New-order flow, or a cut-down
-"name, phone, items, done" version? *(My recommendation: the cut-down one — the
-desktop wizard has six steps and none of them fit a phone.)*
+**Taken as recommended: the cut-down one.** Who, what, how, where it came from,
+payment, notes — one scrolling screen, no wizard, and it posts to the same
+`POST /api/retail-admin/orders` the desktop form and the counter till use, with
+the same field names and the same refusals read back in the same sentences.
+
+Three things it deliberately does not carry, each for a stated reason: **counter
+sales** (the till is a purpose-built screen one row away in More, and a walk-in
+has three extra server rules — a store, a named tender, a POS that is open),
+**drafts** (what was typed stays in memory instead, so Back and a second phone
+call do not lose it; nothing is written anywhere until Create), and **a
+grand-total override or per-line prices** (desk work).
+
+The fee quote is the same engine the customer checkout prices with, so the phone
+cannot quote a different delivery charge for the same basket. The one rule the
+form adds beyond the server's is a pickup at a multi-store shop having to name
+the store: the server allows an order with no store — a phone order taken before
+routing is decided legitimately has none — but a collection nobody can hand over
+is worth asking about while the customer is still on the line.
 
 ### Q10 — M-01 / M-02 · Language is a browser setting, not a person's *(Medium ×2)*  ·  **ANSWERED: account — done**
 
@@ -320,8 +336,6 @@ that could be done without one has been.
 **Waiting on an answer (the eight questions in §2):**
 - **I-03** — there is no tax anywhere. Q8. Table-stakes for a merchant outside
   China, and a product decision about inclusive/exclusive, per-line or per-order.
-- **N-02** — a phone order cannot be taken on a phone. Q9. A new surface, not a
-  repair.
 - **D-05** — the sales channel list is fixed in the interface. Q11, and yours per
   the brief.
 - **A-06 stage 2** — the storage migration itself. Stage 1 has shipped and the
