@@ -44,6 +44,8 @@ const inventory = require('../lib/inventory');
 const money = require('../lib/money');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
+// What was deleted, kept so it can be put back (audit E-07).
+const recycle = require('../lib/recycle');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
 // Materials Phase 1b (§28 addendum item 2): a retail PO line can carry
@@ -2427,6 +2429,17 @@ router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) 
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   if (po.status !== 'Requested') return res.status(409).json({ success: false, error: 'not_draft' });
+  /* Kept for sixty days, header and lines together, so a draft deleted by
+     mistake can be put back (audit E-07). Safe HERE and nowhere else in this
+     route's family: the refusal one line above means only a DRAFT reaches this
+     point — no expense posted, no stock moved, no delivery taken — so there is
+     nothing to re-derive on the way back. A delivered order that gets here has
+     already been stood down to Requested, and that transition reversed its
+     stock and unposted its books under its own all-or-nothing rule.
+
+     Captured BEFORE the lines go, because the lines are what the copy is for:
+     a purchase order without them is a purchase order for nothing. */
+  recycle.capture(tdb(), 'purchase_order', po.id, req.user && req.user.username);
   tdb().prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
   tdb().prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
   logActivity(req.user.id, req.user.username, 'delete', 'purchase_order', po.id, { po_number: po.po_number, scope: 'retail' }, req.ip);

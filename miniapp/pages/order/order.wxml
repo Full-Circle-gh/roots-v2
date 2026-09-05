@@ -234,6 +234,10 @@
         <view>{{copy.shippingLabel}}</view>
         <view class="f-bear">{{shipping}}</view>
       </view>
+      <view wx:if="{{tax}}" class="money-row">
+        <view>{{taxIncluded ? copy.taxIncludedLabel : copy.taxLabel}}</view>
+        <view class="f-bear">{{tax}}</view>
+      </view>
       <view class="money-row total">
         <view class="f-bear">{{copy.totalLabel}}</view>
         <view class="f-bear">{{total}}</view>

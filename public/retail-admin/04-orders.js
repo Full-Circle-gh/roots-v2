@@ -5855,7 +5855,14 @@ function ordMoneyGap(o) {
   const items = ordItemsTotal(o);
   const total = Number(o && o.total);
   if (items == null || !Number.isFinite(total)) return null;
-  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0);
+  // TAX IS A SURCHARGE WHEN IT WAS ADDED, AND NOTHING WHEN IT WAS ALREADY IN THE
+  // PRICE (audit I-03). Without this an exclusive shop's every order reads as a
+  // disagreement the moment its rate passes the tolerance below — an amber band
+  // over a correct order, on every order, which is how a warning stops being
+  // read. An inclusive tax is already inside the line totals and must not be
+  // added a second time.
+  const taxAdded = (o.tax_mode === 'exclusive' && o.tax_amount != null) ? Number(o.tax_amount) || 0 : 0;
+  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0) + taxAdded;
   const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
   const expected = Math.round((items + surcharges - deductions) * 100) / 100;
   const gap = Math.round((expected - total) * 100) / 100;
@@ -5886,6 +5893,17 @@ function orderMoneyGapBand(o) {
 function orderTotalSubline(o) {
   let s = `${cuT('subtotal','小计')} ${acMoney(o.subtotal)} · ${cuT('shipping','运费')} ${acMoney(o.shipping_fee)}`;
   if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ${acMoney(o.packing_fee)}`;
+  // Tax (audit I-03), and it has to say WHICH KIND, because the same figure
+  // means two different things: an exclusive tax was added to the charges to
+  // the left of it, an inclusive one was already inside them. A line that read
+  // only "tax ¥8.88" would make the subline stop adding up on half the shops
+  // that use it. Absent — not zero — on an order taken before the shop charged
+  // tax, or by a shop that never has.
+  if (o.tax_amount != null && o.tax_mode) {
+    s += o.tax_mode === 'inclusive'
+      ? ` · ${cuT('incl. tax','含税')} ${acMoney(o.tax_amount)}`
+      : ` · ${cuT('tax','税费')} ${acMoney(o.tax_amount)}`;
+  }
   // Deductions last, grouped. Points and wallet were missing entirely, so an
   // order paid partly from either showed charges that read like a total and
   // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is
@@ -6311,7 +6329,30 @@ function renderOpenOrder(o) {
   // buttons; the red refund-type ones (Refund / Cancel + refund) collapse
   // into a single menu button so the header isn't a wall of red.
   const allTx = nextStatusFor(o);
-  const dangerTx = allTx.filter(([next]) => next === 'cancelled' || next === 'refunded');
+  /* …and the red ones are FILTERED BY WHAT THIS OPERATOR MAY DO (audit K-01).
+     Not tagged with data-cap like the buttons elsewhere, because these two live
+     inside one wrapper button — "Refund / Cancel" — and a wrapper that opens
+     onto an empty list is worse than no wrapper. Filtering here lets
+     renderRefundMenu's own "nothing to offer" branch do the work.
+
+     Refunding money and cancelling an order are two different permissions and
+     always were: a cashier holds orders:edit and cancels all day; orders:refund
+     is a separate grant, marked `money: 'moves'` in lib/capabilities.js, and the
+     staff preset does not carry it. The audit's example of this whole finding
+     was this menu — "a shop-floor member of staff opening Orders sees every
+     button an owner sees, including refunds".
+
+     THIS CHANGES NO SERVER RULE, and one of the two is worth saying out loud:
+     a FULL refund travels through PATCH /orders/:id/status, which
+     requiredCapFor() answers `orders:edit` for, so the server would accept it
+     from a cashier today. That is a server-side gap and it is deliberately left
+     exactly as it is — closing it is a change to what an account can do, not to
+     what it is shown. What this line does is stop offering a cashier a button
+     the capability model says is not theirs. */
+  const DANGER_CAP = { refunded: 'orders:refund', cancelled: 'orders:edit' };
+  const dangerTx = allTx
+    .filter(([next]) => next === 'cancelled' || next === 'refunded')
+    .filter(([next]) => (typeof can === 'function' ? can(DANGER_CAP[next]) : true));
   const forwardTx = allTx.filter(([next]) => next !== 'cancelled' && next !== 'refunded')
     .map(([next, label]) => {
       // With multiple parcels the whole-order dispatch acts as "ship all at
@@ -6525,6 +6566,12 @@ function renderOpenOrder(o) {
   const body = $('#order-drawer .drawer-body');
   if (body) body.scrollTop = 0;
   ordBindHeadPin();
+  /* The drawer is built AFTER the page's one pass over [data-cap] elements, so
+     the tags on the refund panel's buttons would do nothing without this (audit
+     K-01). Same two lines the purchasing screen and the recycle panel already
+     use after their own renders, and the same shrug in the catch: the gate is a
+     nicety, and the server refuses these regardless of what is on the glass. */
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the server still refuses */ }
 }
 
 // Off-app tender options for the manual "Mark paid" button. value = what the
@@ -8151,20 +8198,34 @@ function renderRefundPanel(o) {
                        state === 'rejected' ? 'var(--danger)' :
                        state === 'withdrawn' ? 'var(--text-3)' : '#f2ca6c';
 
-  // Action buttons appropriate to current state.
+  /* Action buttons appropriate to current state.
+
+     EVERY ONE OF THEM CARRIES data-cap="orders:refund" (audit K-01). The audit's
+     own example of the gap was this exact panel: "a shop-floor member of staff
+     opening Orders sees every button an owner sees, including refunds". The
+     screen is gated on orders:view and a cashier holds that; the four buttons
+     below move money and are gated server-side on orders:refund
+     (lib/cap-routes.js), which a cashier does not hold. So they used to render,
+     and the operator found out by pressing one.
+
+     THE CAPABILITY IS THE SERVER'S, NOT A NEW ONE. Each tag names exactly what
+     requiredCapFor() answers for the endpoint that button calls — scripts/
+     test_role_tagged_controls.js asserts that pairing rather than trusting it.
+     Nothing here changes a rule: the server refused these before and refuses
+     them now. What changes is that the refusal is not a surprise. */
   let actions = '';
   if (state === 'pending') {
     actions = `
-      <button class="btn btn-sm" onclick="refundReview(${o.id})">Start review · 开始处理</button>
-      <button class="btn btn-primary btn-sm" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
-      <button class="btn btn-sm" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="refundReview(${o.id})">Start review · 开始处理</button>
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
   } else if (state === 'reviewing') {
     actions = `
-      <button class="btn btn-primary btn-sm" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
-      <button class="btn btn-sm" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
   } else if (state === 'approved') {
     actions = `
-      <button class="btn btn-primary btn-sm" onclick="openRefundPayoutDialog(${o.id})">Record payout · 记录退款</button>`;
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundPayoutDialog(${o.id})">Record payout · 记录退款</button>`;
   }
 
   const customerLinesBlock = (state === 'pending' || state === 'reviewing') && lines.length
@@ -8918,6 +8979,10 @@ function ordNewRender() {
     customersOnFile: null,   // from the roster response — tells (c) from (d)
     custQuery: '',
     phoneNote: null,         // { kind: match|blocked|shared, name, phone, count }
+    // The tax this cart attracts, as the fee quote reports it (audit I-03).
+    // Null until a quote lands and on every shop that charges none — and reset
+    // with the form, so one order's tax can never be shown against the next.
+    tax: null,
     // Which of the two fee fields the operator has typed in. A touched field is
     // never refilled from the zone quote again — see ordNewFeeTyped.
     feeTouched: { ship: false, pack: false },
@@ -9381,7 +9446,21 @@ function ordNewRecalc() {
   const ship = Number(document.getElementById('onw-ship')?.value) || 0;
   const pack = Number(document.getElementById('onw-pack')?.value) || 0;
   const ovrRaw = document.getElementById('onw-override')?.value;
-  const total = (ovrRaw != null && ovrRaw !== '') ? (Number(ovrRaw) || 0) : Math.round((sub + ship + pack) * 100) / 100;
+  const overridden = ovrRaw != null && ovrRaw !== '';
+  /* TAX (audit I-03), from the quote — the SAME figure the create route will
+     compute, because both come from lib/tax.js over the same base. Without it
+     this summary said ¥100 while the server charged ¥120 and the operator found
+     out after the customer did.
+
+     An OVERRIDDEN total is left exactly as typed, which is what the server does
+     with one: the operator has said what the customer pays, and the tax inside
+     it is backed out rather than added on top. So the row shows the tax and the
+     total does not move. */
+  const t = (ONW.tax && ONW.tax.enabled) ? ONW.tax : null;
+  const added = (t && !overridden) ? (Number(t.added) || 0) : 0;
+  const total = overridden
+    ? (Number(ovrRaw) || 0)
+    : Math.round((sub + ship + pack + added) * 100) / 100;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('onw-sum-items', onwMoney(sub));
   set('onw-sum-ship', onwMoney(ship));
@@ -9390,6 +9469,22 @@ function ordNewRecalc() {
   // to box. The row appears the moment there is a fee to explain.
   const packRow = document.getElementById('onw-sum-pack-row');
   if (packRow) packRow.hidden = !(pack > 0);
+  const taxRow = document.getElementById('onw-sum-tax-row');
+  if (taxRow) taxRow.hidden = !t;
+  if (t) {
+    const label = document.getElementById('onw-sum-tax-lbl');
+    // The shop's own word for it, and — where the price already contains the
+    // tax — the word that stops this row reading as an addition.
+    if (label) {
+      label.textContent = cuT(t.label?.en || 'Tax', t.label?.cn || '税费')
+        + (t.mode === 'inclusive' ? cuT(' (included)', '（已含）') : '');
+    }
+    set('onw-sum-tax', onwMoney(overridden
+      // An overridden total is inclusive by definition, so the tax inside it is
+      // recomputed here rather than taken from a quote of a different figure.
+      ? Math.round(((Number(ovrRaw) || 0) * (t.rate_micro || 0)) / (1000000 + (t.rate_micro || 0)) * 100) / 100
+      : Number(t.amount) || 0));
+  }
   set('onw-sum-total', onwMoney(total));
 }
 
@@ -9597,6 +9692,12 @@ async function ordNewFees() {
     if (!ONW.feeTouched.ship) set('onw-ship', Number(d.shipping_fee || 0));
     if (!ONW.feeTouched.pack) set('onw-pack', Number(d.packing_fee || 0));
   }
+  /* The tax on this cart, as the create route will compute it (audit I-03).
+     Kept whole rather than as a number: the summary needs the shop's own word
+     for it and which shape it is, and a bare figure cannot say either. Null on
+     a shop that charges none, which is every shop until one sets a rate — and
+     the row stays absent. */
+  ONW.tax = d.tax ? { enabled: true, ...d.tax } : null;
   ordNewPaintFeeNote(ft, d);
   ordNewRecalc();
 }

@@ -578,7 +578,7 @@ function renderZoneTable() {
           <button class="btn dz-rowact-btn" title="Duplicate · 复制配送区" onclick="duplicateZone(${z.id})" aria-label="Duplicate">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
+          <button class="btn dz-rowact-btn dz-rowact-del" data-cap="delivery:delete" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
       </tr>`);
   } else {
@@ -607,10 +607,14 @@ function renderZoneTable() {
           <button class="btn dz-rowact-btn" title="Duplicate · 复制配送区" onclick="duplicateZone(${z.id})" aria-label="Duplicate">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
+          <button class="btn dz-rowact-btn dz-rowact-del" data-cap="delivery:delete" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
       </tr>`);
   }
+  /* The rows are built after the page's one pass over [data-cap], so the row
+     delete needs the gate run again (audit K-01). Same two lines the order
+     drawer and the customer record use after their own renders. */
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the server still refuses */ }
 }
 
 function zoneLabel(z) {

@@ -677,6 +677,14 @@
       <view class="bd-label">{{lang === 'cn' ? '优惠券' : 'Coupon'}}</view>
       <view class="bd-val f-bear">−¥{{couponShown}}</view>
     </view>
+    <!-- Tax (audit I-03). Absent entirely until a shop sets a rate, and it says
+         WHICH KIND it is: on an inclusive shop the amount is already inside the
+         prices above it, so a bare "Tax ¥2.00" would make this column stop
+         adding up. The merchant's own word for it, in the reader's language. -->
+    <view wx:if="{{taxShown}}" class="bd-row">
+      <view class="bd-label">{{taxLabel}}{{taxMode === 'inclusive' ? (lang === 'cn' ? ' · 已含' : ' · included') : ''}}</view>
+      <view class="bd-val f-bear">¥{{taxShown}}</view>
+    </view>
     <view wx:if="{{paymentMethod === 'points' && pointsToUse > 0}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsToUse}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
       <view class="bd-val f-bear">−¥{{pointsDiscount}}</view>

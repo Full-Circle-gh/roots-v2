@@ -840,13 +840,21 @@ check('the override wins when set, and an empty override falls back to the sum',
 // prose — is unchanged, because a packing row only appears when there is a fee
 // to explain. `hidden` in the markup is what makes that true on first paint,
 // before ordNewRecalc has run; the toggle itself is ordNewRecalc's.
-check('summary is Items, Shipping, Packing, Total and nothing else',
+// TAX IS THE FIFTH, AND IT IS BORN `hidden` FOR THE SAME REASON (audit I-03).
+// A shop that charges no tax — every shop until one sets a rate — never sees
+// it, so the rule this check enforces is unchanged: the rows on screen are the
+// ones with something to explain, and there is still no prose among them. Its
+// label is filled in by ordNewRecalc rather than written in the markup, because
+// it is the shop's own word for the tax and says which shape it is.
+check('summary is Items, Shipping, Packing, Tax, Total and nothing else',
   [(newSection.match(/class="onw-sr[ "]/g) || []).length,
    /onw-sum-items/.test(newSection) && /onw-sum-ship/.test(newSection)
-     && /onw-sum-pack/.test(newSection) && /onw-sum-total/.test(newSection),
+     && /onw-sum-pack/.test(newSection) && /onw-sum-tax/.test(newSection)
+     && /onw-sum-total/.test(newSection),
    /id="onw-sum-pack-row" hidden/.test(newSection),
+   /id="onw-sum-tax-row" hidden/.test(newSection),
    /onw-cap/.test(newSection.slice(newSection.indexOf('onw-sum')))],
-  [4, true, true, false]);
+  [5, true, true, true, false]);
 
 // The two notes sit in visibly DIFFERENT containers — not the same field twice
 // with the word "staff" between them.

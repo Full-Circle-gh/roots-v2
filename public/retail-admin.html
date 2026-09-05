@@ -3007,6 +3007,10 @@
                 <div class="onw-sr"><span>Items · 商品</span><span class="v" id="onw-sum-items">¥0.00</span></div>
                 <div class="onw-sr"><span>Shipping · 运费</span><span class="v" id="onw-sum-ship">¥0.00</span></div>
                 <div class="onw-sr" id="onw-sum-pack-row" hidden><span>Packing · 包装费</span><span class="v" id="onw-sum-pack">¥0.00</span></div>
+                <!-- Tax · 税费 (audit I-03). Absent until the shop sets a rate,
+                     and its label is the shop's own word, so the text is filled
+                     in by ordNewRecalc rather than written here. -->
+                <div class="onw-sr" id="onw-sum-tax-row" hidden><span id="onw-sum-tax-lbl" data-no-i18n>Tax</span><span class="v" id="onw-sum-tax">¥0.00</span></div>
                 <div class="onw-sr onw-tot"><span>Total · 合计</span><span class="v" id="onw-sum-total">¥0.00</span></div>
               </div>
             </aside>
@@ -5104,7 +5108,11 @@
           <span class="pd-foot-sp"></span>
           <div class="pd-foot-acts">
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>Duplicate · 复制</button>
-            <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
+            <!-- products:delete, the cap requiredCapFor() answers for the DELETE
+                 this calls (audit K-01). Editing a product and deleting one are
+                 two grants and always were; the editor opens on products:edit
+                 and this button used to come with it. -->
+            <button class="btn" id="pd-delete-btn" type="button" data-cap="products:delete" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
             <button class="btn pd-versions-btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
@@ -10161,6 +10169,66 @@
             </div>
           </div>
 
+          <!-- TAX · 税费 (audit I-03). Sits with Currency: both decide what a
+               price MEANS rather than what it looks like, and a merchant
+               looking for one is looking for the other. Off until a rate is
+               set, so nothing about an existing shop changes.
+
+               The two shapes are not a preference. A US merchant must add tax
+               at the till because the rate depends on where the buyer is; an
+               EU or UK one must show a consumer price with the tax already in
+               it. Which is why the preview under the fields is the important
+               control here: a rate is abstract and "a ¥100 order becomes
+               ¥120.00" is not. -->
+          <div class="group-card" data-sees="customer">
+            <div class="group-card-head">
+              <h3>Tax · 税费 <span id="tax-chip" style="margin-left:8px;vertical-align:middle"></span></h3>
+              <div class="muted">Sales tax or VAT on what the customer pays. Choose whether your prices already include it or it is added at checkout, and the rate. The tax lands on the order, the receipt and the finance report. Leave it off if your prices carry no tax. · 顾客支付金额中的销售税/增值税。请选择价格是否已含税、以及税率。税额会记录在订单、小票与财务报表中。若价格不含税,保持关闭即可。</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:2px 2px 14px">
+              <input type="checkbox" id="cfg-tax-enabled" style="width:18px;height:18px" onchange="taxCardSync()">
+              <label for="cfg-tax-enabled" style="font-size:13px;color:var(--text-1)">Charge tax on orders · 订单收取税费</label>
+            </div>
+            <div id="tax-fields" hidden>
+              <div class="onw-row3" style="display:flex;flex-wrap:wrap;gap:16px">
+                <div class="field" style="margin:0;min-width:220px;flex:1">
+                  <label for="cfg-tax-mode" class="stacked">How prices are shown · 价格含税方式</label>
+                  <select id="cfg-tax-mode" onchange="taxCardSync()">
+                    <option value="exclusive">Tax added at checkout · 结账时另加</option>
+                    <option value="inclusive">Prices already include tax · 价格已含税</option>
+                  </select>
+                </div>
+                <div class="field" style="margin:0;min-width:160px">
+                  <label for="cfg-tax-rate" class="stacked">Rate % · 税率 %</label>
+                  <input type="number" id="cfg-tax-rate" min="0" max="100" step="0.0001" oninput="taxCardSync()">
+                </div>
+              </div>
+              <div class="onw-row3" style="display:flex;flex-wrap:wrap;gap:16px;margin-top:14px">
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-label-en" class="stacked">What to call it · 税费名称 (EN)</label>
+                  <input type="text" id="cfg-tax-label-en" maxlength="24" placeholder="VAT">
+                </div>
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-label-cn" class="stacked">What to call it · 税费名称 (中文)</label>
+                  <input type="text" id="cfg-tax-label-cn" maxlength="24" placeholder="增值税">
+                </div>
+                <div class="field" style="margin:0;min-width:200px;flex:1">
+                  <label for="cfg-tax-number" class="stacked">Registration number · 税号 <span style="color:var(--text-3);font-weight:400">— optional · 选填</span></label>
+                  <input type="text" id="cfg-tax-number" maxlength="40">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:14px 2px 2px">
+                <input type="checkbox" id="cfg-tax-shipping" style="width:18px;height:18px" onchange="taxCardSync()">
+                <label for="cfg-tax-shipping" style="font-size:13px;color:var(--text-1)">Tax the delivery fee too · 运费同样计税</label>
+              </div>
+              <div class="helper" id="tax-preview" data-no-i18n style="margin-top:12px"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+              <button type="button" class="btn" onclick="saveTaxSettings()">Save tax settings · 保存税费设置</button>
+              <span class="muted" id="tax-status" data-no-i18n style="font-size:12px"></span>
+            </div>
+          </div>
+
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款
@@ -10669,7 +10737,7 @@
           <div class="group-card">
             <div class="group-card-head"><h3>Recently deleted · 最近删除</h3></div>
             <div class="helper" style="margin:2px 0 10px;line-height:1.55">
-              Coupons, delivery zones and ledger rows removed in the last 60 days can be put back. Purchase orders are not kept — putting one back would mean re-deriving stock that has moved. · 最近 60 天内删除的优惠券、配送区域与账目行可以恢复。采购单不在其中：恢复采购单需重新推导已变动的库存。
+              Coupons, delivery zones, ledger rows and draft purchase orders removed in the last 60 days can be put back. A restored purchase order keeps its own date, so it still lands in the month it was placed. · 最近 60 天内删除的优惠券、配送区域、账目行与采购单草稿可以恢复。恢复的采购单保留原有日期，仍计入原来的月份。
             </div>
             <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
           </div>

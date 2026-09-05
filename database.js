@@ -3254,6 +3254,22 @@ addColumn('retail_orders', 'points_earned',    'INTEGER DEFAULT 0');
 // admin-created, or pre-feature orders). Ops surface the 0 case as a warning.
 addColumn('retail_orders', 'routed_by_distance', 'INTEGER');
 
+// ── Sales tax / VAT (audit I-03) ───────────────────────────────────────────
+// Three columns, and all three are a SNAPSHOT. A rate is a setting, and a
+// setting changes: a shop that moves from 20% to 17.5% in April must not have
+// March's orders restate themselves, and a report run in June has to be able to
+// say what was actually charged rather than what the rate is today. So the
+// order carries the money, the rate it was computed at, and the shape that was
+// in force — none of them re-derivable from settings afterwards.
+//
+// NULL means no tax was in force when this order was taken, which is a
+// different fact from zero tax on a taxed order (a fully discounted basket).
+// Every order that exists today is therefore NULL, and every screen reads it as
+// "there is no tax line here" rather than as "the tax was nothing".
+addColumn('retail_orders', 'tax_amount',    'REAL');
+addColumn('retail_orders', 'tax_rate_micro', 'INTEGER');   // the PERCENTAGE in micro: 20% = 200000
+addColumn('retail_orders', 'tax_mode',      'TEXT');       // 'exclusive' | 'inclusive'
+
 // Delivery scheduling. NULL scheduled_for = "right away" (deliver as soon as
 // the kitchen can). When set, contains the earliest time the customer wants
 // the order. delivery_slot_label snapshots the human-readable picker label

@@ -54,10 +54,19 @@ function freshDb() {
       description TEXT, po_id INTEGER);
     CREATE TABLE retail_vouchers (id INTEGER PRIMARY KEY, code TEXT, title_en TEXT, title_cn TEXT,
       is_active INTEGER DEFAULT 1);
+    CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT, supplier TEXT,
+      date TEXT, status TEXT, total_cost REAL);
+    CREATE TABLE po_line_items (id INTEGER PRIMARY KEY, po_id INTEGER, name TEXT, qty REAL,
+      cost_per_unit REAL);
   `);
   db.prepare("INSERT INTO retail_delivery_zones VALUES (4,'gz_district','Tianhe','天河区',12,399,1)").run();
   db.prepare("INSERT INTO expense_entries VALUES (9,'2026-08-01',45.5,'Packaging','Boxes',NULL)").run();
   db.prepare("INSERT INTO retail_vouchers VALUES (3,'WELCOME','Welcome','新人礼',1)").run();
+  // A DRAFT purchase order — the only kind the delete route lets through — with
+  // two lines and a date in a month that is not this one.
+  db.prepare("INSERT INTO purchase_orders VALUES (7,'RPO-0007','Fresh Co.','2026-03-14','Requested',260)").run();
+  db.prepare("INSERT INTO po_line_items VALUES (11,7,'Oat groats',20,8)").run();
+  db.prepare("INSERT INTO po_line_items VALUES (12,7,'Sesame',10,10)").run();
   return db;
 }
 
@@ -139,6 +148,53 @@ section('3 · a record goes back under its own id, or not at all');
     'a coupon whose row has since been removed outright says so, rather than half-succeeding');
 }
 
+// ── §3b · a record with children ──────────────────────────────────────────
+section('3b · a purchase order comes back whole, in its own month');
+{
+  const db = freshDb();
+  const copy = R.capture(db, 'purchase_order', 7, 'mei');
+  yes(copy > 0, 'a draft purchase order is copied before it goes');
+  const kept = db.prepare('SELECT * FROM deleted_records WHERE id = ?').get(copy);
+  is(kept.label, 'RPO-0007 · Fresh Co.', 'labelled by its number and its supplier — what an operator would search for');
+  const payload = JSON.parse(kept.payload_json);
+  is(payload.v, 2, 'kept in the versioned shape, because a bare row cannot hold its lines');
+  is(payload.children.po_line_items.length, 2, 'and both lines travel with it');
+
+  // The delete the route performs, in the order the route performs it.
+  db.prepare('DELETE FROM po_line_items WHERE po_id = 7').run();
+  db.prepare('DELETE FROM purchase_orders WHERE id = 7').run();
+  is(db.prepare('SELECT COUNT(*) c FROM po_line_items').get().c, 0, 'the lines are gone');
+
+  const r = R.restore(db, copy, 'ash');
+  is(r.ok, true, 'and it goes back');
+  const po = db.prepare('SELECT * FROM purchase_orders WHERE id = 7').get();
+  is(po.po_number, 'RPO-0007', 'under its own number');
+  is(po.date, '2026-03-14',
+     'AND ITS OWN DATE — the expense poster writes po.date onto every row it posts, so a purchase '
+     + 'restored in October still lands in the books in March, where it happened');
+  is(po.status, 'Requested', 'still a draft, which is what it was');
+  const lines = db.prepare('SELECT * FROM po_line_items ORDER BY id').all();
+  is(lines.length, 2, 'with both lines back');
+  is(lines[0].id, 11, 'under their own ids, so anything that referred to one still does');
+  is(lines[1].cost_per_unit, 10, 'and their own money');
+}
+{
+  // The half-restore this file exists to prevent.
+  const db = freshDb();
+  const copy = R.capture(db, 'purchase_order', 7, 'mei');
+  db.prepare('DELETE FROM po_line_items WHERE po_id = 7').run();
+  db.prepare('DELETE FROM purchase_orders WHERE id = 7').run();
+  // Something created since has taken one of the LINE ids — not the header's.
+  db.prepare("INSERT INTO po_line_items VALUES (12, 99, 'Something else', 1, 1)").run();
+  const r = R.restore(db, copy, 'ash');
+  is(r.ok, false, 'a line id taken by something created since refuses the whole restore');
+  is(r.error, 'taken', 'and says which of the two failures it was');
+  is(db.prepare('SELECT COUNT(*) c FROM purchase_orders WHERE id = 7').get().c, 0,
+     'leaving NOTHING behind — a header with one of its two lines is a purchase order for the wrong money');
+  is(db.prepare('SELECT * FROM deleted_records WHERE id = ?').get(copy).restored_at, null,
+     'and the copy is still there to try again once the collision is dealt with');
+}
+
 // ── §4 · the copy outlives the schema ─────────────────────────────────────
 section('4 · a copy taken before the table changed still goes back');
 {
@@ -201,8 +257,18 @@ section('6 · every delete this covers takes the copy, and there is a screen');
 
   const html = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
   yes(html.includes('ops-recycle-body'), 'the screen has somewhere to draw it');
-  yes(/Purchase orders are not kept/.test(html),
-    'and says plainly what is NOT kept, rather than letting somebody find out by looking');
+  yes(/draft purchase orders removed in the last 60 days/.test(html),
+    'and names what is kept, drafts included, rather than letting somebody find out by looking');
+  yes(/keeps its own date/.test(html),
+    'and says the thing an accountant will ask: a restored purchase order still belongs to its own month');
+  const pur = fs.readFileSync(path.join(ROOT, 'routes/retail-purchasing.js'), 'utf8');
+  const capAt = pur.indexOf("recycle.capture(tdb(), 'purchase_order'");
+  yes(capAt > 0, 'deleting a draft purchase order keeps a copy');
+  yes(capAt < pur.indexOf('DELETE FROM po_line_items', capAt),
+    'taken before the LINES go — they are what the copy is for');
+  const guardAt = pur.lastIndexOf("error: 'not_draft'", capAt);
+  yes(guardAt > 0 && guardAt < capAt,
+    'and only ever on a draft: the not-a-draft refusal is above it, which is what makes the restore safe');
   const ops = fs.readFileSync(path.join(ROOT, 'public/retail-admin/02-settings-ops.js'), 'utf8');
   yes(/loadRecycle\(\)/.test(ops), 'and something loads it');
   yes(/e\.message === 'taken'/.test(ops),
