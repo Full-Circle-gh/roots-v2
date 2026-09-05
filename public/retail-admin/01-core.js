@@ -1034,6 +1034,13 @@ function csRenderLocations() {
       return '<span class="sales-chip' + (on ? '' : ' off') + '"><span class="sales-chip-dot"></span>' + csName(c.channel) + '</span>';
     }).join('');
     const tgl = partial ? ' partial' : (allOn ? ' on' : '');
+    // The one link out, bottom of the card (A5 Board): the location's shop menu
+    // — its §41 shop record and §42 listings, a sub-page painted by
+    // 28-shops.js. Guarded so the card still paints if that part is not loaded.
+    const menuLink = (typeof window.shopMenuOpen === 'function')
+      ? '<div class="sales-ch-foot"><button class="btn btn-sm" type="button" onclick="shopMenuOpen(\'' + escapeHtml(l.storeCode) + '\')">'
+        + cuT('Shop menu', '门店商品') + ' →</button></div>'
+      : '';
     return '<div class="sales-ch" data-on="1">'
       + '<div class="sales-ch-top"><div class="sales-ch-id">'
       + '<span class="sales-ch-ico">' + storeIcon + '</span>'
@@ -1043,6 +1050,7 @@ function csRenderLocations() {
       + '" onclick="csLocation(\'' + l.storeCode + '\',' + (none ? 'true' : 'false') + ')"><span class="knob"></span></button>'
       + '</div>'
       + '<div class="sales-loc-chips">' + chips + '</div>'
+      + menuLink
       + '</div>';
   }).join('');
   box.innerHTML = '<div class="td-kicker sales-loc-kicker"><span>' + cuT('Locations', '门店') + '</span>'
@@ -1247,6 +1255,8 @@ const RAIL_STANDIN = {
   'materials-record': 'materials',
   // One recipe is a sub-page of Recipes, the same takeover (§29).
   'recipes-record': 'recipes',
+  // A shop's menu is a sub-page of Sales → Locations (§41/§42), the same takeover.
+  'shop-menu': 'sales',
 };
 
 var _railAnimTimer = null;  // var: the helpers below are hoisted and may be

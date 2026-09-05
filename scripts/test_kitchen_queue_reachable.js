@@ -251,8 +251,14 @@ check('nor archiving', () => {
 // The "what the kitchen has finished" count, which is the ASKING side's dot.
 // The route answers this role a zero anyway (_kitchenScopedSession), and it has
 // no screen in /stock that reads it — so it has no business on this list.
-check('nor the count of what is waiting to be collected', () => {
+check('nor the count of what the kitchen has finished — that is the ASKER\'s dot', () => {
   assert.strictEqual(stockAppOnlyAllows('GET', '/api/restock/kitchen-ready'), false);
+});
+// Reading the news is the asker's act. A confined kitchen role has no screen
+// that shows it, and letting this through would let the maker put the
+// warehouse's dot out on their behalf — for a warehouse still not told.
+check('nor marking that news read on the asker\'s behalf', () => {
+  assert.strictEqual(stockAppOnlyAllows('POST', '/api/restock/kitchen-ready/seen'), false);
 });
 
 check('the three the Add Stock app already had still work', () => {

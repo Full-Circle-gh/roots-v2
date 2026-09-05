@@ -3186,16 +3186,21 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
            A kitchen request closes at 'prepared' — nothing travels, nothing is
            counted in — so the person who asked for it heard once, in a push,
            and then never again. This is the standing answer to "is it made
-           yet", and the count IS this operator's own: it is their request, and
-           the number is what is waiting for them to come and get it.
+           yet".
+
+           IT DOES NOT SAY "WAITING FOR YOU", and it did until Ash read it on
+           the warehouse account. Nothing is waiting: at Roots the kitchen puts
+           what it makes on the shelf and records the stock itself, so this tile
+           reports a job that is already finished. Sending somebody to fetch
+           what is already in front of them is worse than saying nothing.
 
            It does not hide when empty, by the same rule as every tile beside
-           it: "Nothing waiting" is what teaches somebody the screen is here
+           it: the quiet state is what teaches somebody the screen is here
            before the morning they need it. */
         homeTileHtml('ready', t('Ready from the kitchen', '厨房已完成'),
-          krCount() ? t('Made and waiting for you', '已制作,等待领取')
-                    : t('Nothing waiting', '暂无待领取'),
-          krCount() ? t(krCount() + ' waiting', krCount() + ' 项待领取') : '',
+          krCount() ? t('Made and on the shelf', '已制作并上架')
+                    : t('What the kitchen has finished', '厨房已完成的申请'),
+          krCount() ? t(krCount() + ' new', krCount() + ' 项新完成') : '',
           'data-kropen')) +
         // The other end of the same request, for the people who make it, and on
         // its OWN probe: this is the one tile a kitchen operator gets, and the
@@ -3638,26 +3643,45 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      look, and there was nowhere to look — this app could raise the request and
      could not show it back.
 
-     THE ACKNOWLEDGEMENT IS THE POINT, not the list. "Collected" archives the
-     request (PUT /api/restock/:id/archive), which is what archiving already
-     means on this route, and that is a SERVER-SIDE fact: it drops the row out
-     of /api/restock/kitchen-ready, so the dot in /m goes out on every phone
-     rather than on the one that tapped it. A per-device "seen" stamp would have
-     lit again on the next handset and told the next person work was waiting
-     that somebody had already carried upstairs.
+     THERE IS NOTHING TO COLLECT, and this screen shipped once pretending there
+     was. It opened with a "Collected" button that archived the request, on the
+     reasoning that archiving is what "we have it" means elsewhere on this
+     route. That reasoning is right for a TRANSFER and wrong here: at Roots the
+     kitchen puts what it makes straight onto the shelf and records the stock
+     itself, so nothing is physically waiting for anybody and the tile telling
+     the warehouse its hummus was "waiting for you" was sending somebody to
+     fetch what was already in front of them. Ash: "the only thing needed is
+     that the warehouse knows the kitchen handled his request."
 
-     IT DOES NOT MOVE STOCK, and says so. The kitchen's own "record what you
-     made" step is what puts it on a shelf (see THE KITCHEN QUEUE below); this
-     button says a person has the goods, and confusing the two would have this
-     screen quietly double-counting every tray. */
+     SO OPENING IT IS THE ACKNOWLEDGEMENT. No button, and no confirmation of
+     anything — the screen posts kitchen-ready/seen for the rows it just drew,
+     and that is the whole ceremony. What is kept from the first attempt is the
+     half that was right: the stamp is SERVER-SIDE, so one person looking clears
+     the dot for the whole warehouse instead of each handset holding its own
+     opinion and chasing the next person about a request the team already knows.
+
+     THE LIST IS NOT THE DOT. It shows what the kitchen has finished, seen or
+     not, because it is a record — "what did they make today" has to still
+     answer the day after somebody glanced at it. Only the COUNT is unseen-only.
+
+     IT STILL MOVES NO STOCK, and still says so — but as a statement of where
+     the stock already went, not as a warning about what this button does. */
 
   var kr = {
     list: null,     // prepared, unarchived requests addressed to the kitchen
     order: null,    // the open one, with lines
+    seen: false,    // this visit has already stamped what it drew
     busy: false, err: '',
   };
 
-  function krCount() { return (kr.list || []).length; }
+  /* THE COUNT IS UNSEEN-ONLY AND THE LIST IS NOT. The tile answers "is there
+     anything I have not been told about", which is the same question the dot in
+     /m asks and must be the same number; the screen behind it answers "what has
+     the kitchen made", which stays true after somebody has looked. */
+  function krUnseen() {
+    return (kr.list || []).filter(function (o) { return !o.seen_at; });
+  }
+  function krCount() { return krUnseen().length; }
 
   /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
      defined for this direction as "prepared" (routes/restock.js: for
@@ -3677,6 +3701,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         return o.status === 'prepared';
       });
       homeLand();
+      krMarkSeen();
       if (state.view === 'home') homeRender();
       else if (state.view === 'kitchenready') krRender();
     }).catch(function (e) {
@@ -3690,10 +3715,38 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function krEnter() {
-    state.view = 'kitchenready'; kr.order = null; kr.err = '';
+    state.view = 'kitchenready'; kr.order = null; kr.err = ''; kr.seen = false;
     krRender(); krLoad();
   }
   function krExit() { kr.order = null; kr.err = ''; homeBack(); }
+
+  /* READING IT IS THE ACKNOWLEDGEMENT, and this is the whole of it. Only from
+     the list — krLoad also runs at boot for the tile's count, and a screen
+     nobody opened has told nobody anything.
+
+     THE IDS IT ACTUALLY DREW, never "everything unseen": the kitchen can mark
+     something made between this list rendering and the post landing, and
+     clearing a request nobody has laid eyes on is the one failure that would
+     make the dot worth ignoring.
+
+     A FAILURE IS SILENT AND HARMLESS. Nothing the operator did has gone wrong —
+     they are reading the screen either way — and the worst case is a dot that
+     is still lit next time, which is the safe direction to fail in. */
+  function krMarkSeen() {
+    if (kr.seen || state.view !== 'kitchenready') return;
+    var ids = krUnseen().map(function (o) { return o.id; });
+    if (!ids.length) return;
+    kr.seen = true;
+    rcFetch('/api/restock/kitchen-ready/seen', { method: 'POST', body: { ids: ids } })
+      .then(function () {
+        // Locally too, so the tile behind this screen is right on the way out
+        // without a second round trip.
+        (kr.list || []).forEach(function (o) {
+          if (ids.indexOf(o.id) >= 0) o.seen_at = new Date().toISOString();
+        });
+      })
+      .catch(function () { kr.seen = false; });
+  }
 
   function krOpen(id) {
     kr.busy = true; kr.err = ''; kr.order = null;
@@ -3703,26 +3756,6 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }).catch(function (e) {
       kr.busy = false; kr.err = e.message === 'norealm' ? '' : e.message; krRender();
     });
-  }
-
-  /* "We have it." The row leaves this list for everyone, on every device, which
-     is the whole reason the acknowledgement is written down rather than
-     remembered locally. */
-  function krCollect() {
-    if (kr.busy || !kr.order) return;
-    kr.busy = true; kr.err = ''; krRender();
-    rcFetch('/api/restock/' + kr.order.id + '/archive', { method: 'PUT', body: { archived: true } })
-      .then(function () {
-        kr.busy = false; kr.order = null;
-        return krLoad();
-      })
-      .catch(function (e) {
-        kr.busy = false;
-        kr.err = e.message === 'norealm'
-          ? t('This account cannot close a kitchen request.', '此账号无法关闭厨房申请。')
-          : e.message;
-        krRender();
-      });
   }
 
   function krMade(o) {
@@ -3737,7 +3770,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         '<button class="rc-back" data-krback>' + RC_CHEV + t('Back', '返回') + '</button>' +
         '<div class="rc-h1">' + t('Ready from the kitchen', '厨房已完成') + '</div>' +
         '<div class="rc-sub">' + (rows.length
-          ? t(rows.length + ' waiting for you', rows.length + ' 项待领取')
+          ? t(rows.length + ' made · already on the shelf', rows.length + ' 项已完成 · 已上架')
           : t('What the kitchen has finished', '厨房已完成的申请')) + '</div>' +
       '</div>' +
       (kr.err ? '<div class="rc-err">' + esc(kr.err) + '</div>' : '') +
@@ -3746,9 +3779,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           ? '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div>'
         : !rows.length
           ? '<div class="rc-empty"><div style="font-size:20px;font-weight:600;letter-spacing:-.02em">' +
-            t('Nothing waiting', '暂无待领取') + '</div>' +
+            t('Nothing finished yet', '暂无已完成') + '</div>' +
             '<div style="font-size:15px;color:var(--text2);margin-top:6px">' +
-            t('Everything the kitchen has made has been collected.', '厨房已完成的申请都已领取。') + '</div></div>'
+            t('What the kitchen makes for you shows up here.', '厨房为你制作完成的申请会显示在这里。') + '</div></div>'
         : rows.map(function (o) {
             var p = kqPurpose(o), when = krMade(o);
             return '<div class="rc-hr"></div>' +
@@ -3781,13 +3814,16 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           '<span class="rc-mid"><span class="rc-nm">' + esc(kqItemName(it)) + '</span>' +
           '<span class="rc-cap">' + esc(it.sku || '') + '</span></span></div>';
       }).join('') + '<div class="rc-hr"></div></div>' +
+      /* WHERE THE STOCK ALREADY WENT, which is not the same sentence as the one
+         this screen used to carry. That one warned what a button would not do;
+         this one says the job is finished — the kitchen shelved it and recorded
+         it, and there is no step left for the person reading. */
       '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
-        t('Collecting this clears it for everyone. It does not change stock — the kitchen records what it made, and that is the step that fills the shelf.',
-          '领取后所有人都不再看到该提醒。此操作不会变动库存 — 库存由厨房登记制作数量时变动。') + '</div></div>' +
+        t('The kitchen has put this on the shelf and recorded the stock. Nothing to do here.',
+          '厨房已将其上架并登记库存,此处无需操作。') + '</div></div>' +
       '<div class="rc-foot" style="background:transparent;border:none">' +
         '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
-        '<button class="rc-big"' + (kr.busy ? ' disabled' : ' data-krcollect') + '>' +
-          (kr.busy ? t('Saving…', '保存中…') : t('Collected', '已领取')) + '</button>' +
+        '<button class="rc-big" data-krlist>' + t('Done', '完成') + '</button>' +
         '</div></div></div>';
   }
 
@@ -3805,7 +3841,6 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     each('[data-kropen2]', function (b) {
       b.onclick = function () { krOpen(parseInt(b.getAttribute('data-kropen2'), 10)); };
     });
-    each('[data-krcollect]', function (b) { b.onclick = krCollect; });
   }
 
   /* ══ THE KITCHEN QUEUE ═════════════════════════════════════════════════════

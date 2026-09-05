@@ -43,6 +43,8 @@
     "verify:swallowed-errors": "node scripts/check-swallowed-errors.js",
     "test:awaiting-restock": "node scripts/test_awaiting_restock_client.js",
     "test:warehouse-pin": "node scripts/test_warehouse_store_pin.js",
+    "test:shop-listings": "node scripts/test_shop_listings.js",
+    "test:shop-menu-geometry": "node scripts/test_shop_menu_geometry.js",
     "test:restock-direction": "node scripts/test_restock_direction_default.js",
     "test:shop-channel": "node scripts/test_shop_channel.js",
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
