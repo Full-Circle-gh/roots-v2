@@ -424,8 +424,26 @@ that could be done without one has been.
   `/wallet-adjust`, which map to `customers:edit`. Both are one line each in
   `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
   closed the suite says so.
-- Everything under **K** (RBAC enforcement and the ~50 unmapped routes) and the
-  finance category data quality pass — both yours per the brief.
+- **K-02's second half.** The finding asks for two things. The first — a
+  bookkeeper preset, which did not exist — shipped with E-11. The second is
+  "split purchasing's money out of the stock person's grant": the `warehouse`
+  preset carries `...sect('purchasing')`, so a stock person sees supplier
+  prices and invoice totals, and that preset's own comments say money was
+  deliberately kept away from this role elsewhere. It is left because taking a
+  capability off a preset takes work away, silently, from people who can do it
+  today — the same reasoning that stopped K-01 tagging a control the server
+  accepts, pointing the other way — and *tag the controls only, change no
+  server rule* was the answer given on K. One line in
+  `lib/capabilities.js:519` when you want it: list purchasing's verbs
+  individually, as `materials` already is four lines below for exactly this
+  reason.
+- Everything else under **K** (RBAC enforcement and the ~50 unmapped routes) and
+  the finance category data quality pass — both yours per the brief.
+
+**Not findings.** H-04, K-02's table, N-03 and O-01 are the audit's evidence
+tables — screen-by-screen inventories carrying the severity "—" — rather than
+defects with a direction. They are the material the numbered findings around
+them were drawn from, and nothing in them is outstanding on its own.
 
 ---
 
