@@ -18,7 +18,7 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | merged and live (commit `56accb7`) |
 | **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | merged and live (commit `d347a59`) |
 | **Part seven** | D-03 on the counter till and the phone | merged and live (commit `48f0d1e`) |
-| **Part eight** | D-04 in the product-copy assistant's prompt | on the branch, deploys with the next merge |
+| **Part eight** | D-04 in the product-copy assistant's prompt and on the parcel label | on the branch, deploys with the next merge |
 
 ---
 
@@ -145,6 +145,7 @@ branch and deploys with the next merge; everything else here is live.
 | **D-03 / D-04** | High · part six | D-03 is recorded above as fixed — "188 hardcoded ¥ conversions across twelve files". The twelve files were all `public/retail-admin/*.js`, the merchant's own admin. **`public/shop.html`, the CUSTOMER-facing web storefront, was never in that pass**, and still carried thirty-four: every wallet balance, the top-up screen end to end, the coupon stubs, the free-shipping nudge, the membership ladder, the leaderboard, the referral programme, the favourites card, and the shop listing's own third money helper. The page has had a correct `money()` — symbol, decimals and position from `/api/retail/config` — the entire time; thirty-four places did not call it. So a merchant trading in dollars saw dollars in their admin and their CUSTOMERS saw yuan, on the same order. Now two helpers, `money()` and `money0()`, mirroring the admin's `acMoney` / `acMoneyCompact` pair. The membership hero also read "ROOTS CLUB" to every merchant's customers — D-04, a fourth place — and is built from the shop's own brand now. `scripts/test_storefront_currency.js` bans the symbol outside the two helpers' fallback. |
 | **D-03** | High · part seven | And two more surfaces, found by asking the same question of each one. **The counter till** rang up every sale in yuan: its money helper was literally called `yuan()` and hardcoded the symbol, across sixteen call sites and the printed receipt — so a merchant trading in anything else quoted their customer a figure in a currency neither of them uses, on the glass they are both looking at. It already read `/api/retail/config` for the tax settings, so the currency was one field away the whole time. One helper, renamed `money()`, reading symbol, decimals and position. **The phone admin** was already right — `money(cur, n)` and `money0(cur, n)` both take the currency — with exactly one amount written as a literal (`from ¥0 — everyone starts here` on the membership ladder). `scripts/test_customer_currency.js` now covers all four surfaces. |
 | **D-04** | High · part seven | One level below the copy: **the product-copy assistant's own premises.** `composeBlocksHandler` is mounted on two realms — the kitchen app's and `/api/retail-admin/ai/compose-blocks`, which any merchant reaches from their product editor — and its system prompt opened, as a statement of fact, "You are the layout assistant for **Roots**, a small bilingual plant-based food brand in Guangzhou", then four hundred words later forbade the model from using an animal-product emoji because "the shop is fully vegan". So every merchant's copy was organised by an assistant that believed it worked for a Guangzhou plant-based brand, and a merchant selling meat or cheese could not be given the emoji for their own product. Two variants now, chosen from `req.tenant`: the account it was written for reads a **byte-identical** prompt (asserted character for character — a prompt is the one kind of code a diff tells you nothing about), everyone else gets their own name, no category, no city, and an emoji rule about the product in front of it. The CHAT assistant's much larger "Roots context (verified business facts)" block is left alone and pinned: it is reachable only through `/api/ai/chat`, which is `requireAuth` — the kitchen realm, out of scope by the brief, exactly as the audit's own §8.4 says. |
+| **D-04** | High · part eight | And one more, twenty-four thousand lines below the helper written to prevent it. `tenantBrandLabel()` exists in `routes/retail.js` and its own note says why — "a shopper's payment screen never reads another company's name" — and the **JD waybill** set `senderName: 'Roots'` with a comment beside it claiming the field was the brand and "user-set". It was neither. Every account's parcels reached their customers with another company in the sender field, printed on the label that comes off the box. One line. `scripts/test_tenant_branding.js` bans the literal across the admin API and lists the four places it legitimately survives with the reason for each — the seed row the helper reads back, the two kitchen-realm AI prompts, the rider dispatch (out of scope by the brief), and a debug push that reaches only the caller's own device. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -510,7 +511,7 @@ earlier note here said it could not; that was wrong for two sessions, and it
 mattered — half the suites and every eslint run were being skipped on an
 assumption. With `npm ci` the whole thing runs locally.
 
-**The fast shard: 149 suites, 0 failures, 0 quarantined.** The quarantine list
+**The fast shard: 150 suites, 0 failures, 0 quarantined.** The quarantine list
 is empty — five of the six were fixed on `main` while this branch was in
 flight, and the sixth (`test_mobile_purchasing.js`) left on the evidence
 described below. `npx eslint` reports **0 errors** on every changed file, which
@@ -542,7 +543,8 @@ Suites added by this pass, each named for the finding it holds down:
 `test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
 `test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
 `test_role_tagged_controls.js`, `test_phone_dates.js`, `test_admin_dates.js`,
-`test_customer_currency.js`, `test_compose_prompt.js`.
+`test_customer_currency.js`, `test_compose_prompt.js`,
+`test_tenant_branding.js`.
 
 Also run, on every commit:
 

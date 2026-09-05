@@ -28620,7 +28620,15 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const payload = {
     orderId:        jdOrderId,
     product,
-    senderName:     'Roots',   // 寄件人 = brand (user-set); the store supplies the pickup address only
+    /* 寄件人 = THE MERCHANT'S OWN BRAND, which is what this line's note always
+       said it was ("user-set") and what it was not: it was the literal 'Roots',
+       so every account's JD parcels went out with another company's name in
+       the sender field, printed on the label the customer takes off the box.
+       tenantBrandLabel() is the helper written for exactly this — it is what
+       keeps another company's name off a shopper's payment screen — and it
+       returns 'Roots' for account #1, so nothing changes there. The store still
+       supplies the pickup address only. */
+    senderName:     tenantBrandLabel(),
     senderAddress,  senderMobile,
     receiveName:    String(o.order_no).slice(-4) + ' ' + o.recipient_name,
     receiveAddress: o.address_full,

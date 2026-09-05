@@ -35,6 +35,7 @@
     "test:admin-dates": "node scripts/test_admin_dates.js",
     "test:currency-surfaces": "node scripts/test_customer_currency.js",
     "test:compose-prompt": "node scripts/test_compose_prompt.js",
+    "test:tenant-branding": "node scripts/test_tenant_branding.js",
     "test:datetime": "node scripts/check-td-datetime.js",
     "test:asset-delivery": "node scripts/test_asset_delivery.js",
     "test:clear-filters": "node scripts/test_clear_filters.js",
