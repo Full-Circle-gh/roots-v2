@@ -417,6 +417,65 @@ const CASES = {
     expect: ['Production', 'To make'],
     absent: ['What you made'] },
 
+  /* ── A batch nobody asked for ─────────────────────────────────────────────
+     Tuesday is hummus day. It is most of what a kitchen makes, and it had no
+     door at all: every path into the production record went through a request,
+     so an unprompted batch could only reach the shelf as a bare stock add with
+     its yield and any breakage unrecorded. */
+  'log-a-batch-is-on-the-launcher-for-the-kitchen': { mode: 'add', kitchenOnly: true,
+    js: 'window.__done();',
+    expect: ['Log a batch', 'Made without a request'] },
+
+  // Not for somebody who recounts: stating what a batch yielded is the
+  // kitchen's job, and a warehouse recount has no batches.
+  'log-a-batch-is-not-offered-to-a-recount-operator': { kitchenOnly: true,
+    js: 'window.__done();',
+    absent: ['Log a batch'] },
+
+  'log-a-batch-picks-what-was-made': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-lbopen]'", '250']),
+    expect: ['Log a batch', 'What you made, with nobody asking', 'Hummus Asli',
+             'Set how many you MADE'],
+    // Nothing chosen yet, so there is nothing to record.
+    check: (out) => /data-send="disabled"/.test(out) ? null
+      : 'Next was live with nothing picked' },
+
+  /* IT HANDS OVER TO THE SAME RECORD SCREEN, which is the whole point — an
+     unprompted batch can come up short in exactly the ways a requested one can,
+     and it gets the same one question rather than a second, thinner flow. */
+  'log-a-batch-hands-over-to-the-record-screen': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-lbopen]'", '250', "'[data-lbinc=\"7\"]'", "'[data-lbinc=\"7\"]'",
+             "'[data-lbnext]'", '300']),
+    expect: ['What you made', '+2', '2 units'],
+    // No request behind it, so the head carries no PR number.
+    absent: ['RS-260904-002'] },
+
+  'an-unprompted-batch-can-be-short-too': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-lbopen]'", '250', "'[data-lbinc=\"7\"]'", "'[data-lbinc=\"7\"]'",
+             "'[data-lbnext]'", '300', "'[data-hddec=\"0\"]'", '250']),
+    expect: ['1 short — why?', 'Damaged'] },
+
+  'log-a-batch-records-with-no-request-id': { mode: 'add', kitchenOnly: true,
+    js: seq(["'[data-lbopen]'", '250', "'[data-lbinc=\"7\"]'", "'[data-lbinc=\"7\"]'",
+             "'[data-lbnext]'", '300', "'[data-hdadd]'", '400']),
+    expect: ['Recorded', '2 units on the shelf', 'Made without a request', 'Done'],
+    // No request existed, so the screen must not claim one was closed.
+    absent: ['The request is closed', 'Back to the queue'],
+    checkProd: (p) => {
+      if (p.length !== 1) return `${p.length} writes, expected 1`;
+      const w = p[0];
+      if (w.qty_made !== 2) return `qty_made ${w.qty_made}, expected 2`;
+      if (w.qty_shelved !== 2) return `qty_shelved ${w.qty_shelved}, expected 2`;
+      // The honest absence: nothing asked for this, so nothing is claimed to.
+      if (w.request_id != null) return `request_id ${w.request_id}, expected null`;
+      return null;
+    } },
+
+  'log-a-batch-in-cn': { mode: 'add', kitchenOnly: true,
+    pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: seq(["'[data-lbopen]'", '250']),
+    expect: ['登记批次', '主动制作,无对应申请'] },
+
   'made-hands-over-in-cn': { mode: 'add', kitchenOnly: true,
     pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',

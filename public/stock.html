@@ -949,6 +949,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (state.view === 'home') {
       return rc.on === true ? t('Transfers', '调拨') : t('Production', '生产');
     }
+    if (state.view === 'logbatch') return t('Log a batch', '登记批次');
     return state.mode === 'add' ? t('Add stock', '加库存') : t('Quick stock', '快速库存');
   }
 
@@ -3040,7 +3041,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      whatever answered first: a kitchen operator is 403'd on both transfer lists
      and answered on the queue, and reading only rc.on left them on the counting
      list with no way to the thing they were sent there to do. */
-  function homeAvailable() { return rc.on === true || kq.on === true; }
+  /* WHAT MAKES A LAUNCHER WORTH SHOWING. Any of the jobs it can offer — and
+     `quickstock:add` is one of them now, because "Log a batch" is a door in its
+     own right. Without this a kitchen operator whose queue probe answers empty
+     would be sent straight to the counting list and never see the one screen
+     that records what they spent the morning making. */
+  function homeAvailable() { return rc.on === true || kq.on === true || state.mode === 'add'; }
 
   function homeGreeting() {
     var d = new Date();
@@ -3116,6 +3122,16 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           toMake ? t('Make what was asked for', '制作已申请的商品')
                  : t('Nothing to make', '暂无待制作'),
           toMake ? t(toMake + ' waiting', toMake + ' 项待制作') : '', 'data-kqopen-home')) +
+        /* And the batches nobody asked for, which is most of them. Gated on the
+           kitchen's own mode rather than on the queue: an operator who adds
+           stock can record what they made whether or not a request exists, and
+           on a quiet day this is the only production door there is. The tile
+           does not hide when the queue is empty — that is the rule the launcher
+           already keeps, and this is the screen it matters most for. */
+        (state.mode === 'add'
+          ? homeTileHtml('logbatch', t('Log a batch', '登记批次'),
+              t('Made without a request', '无申请的制作'), '', 'data-lbopen')
+          : '') +
         // Only where there IS somewhere to ask. On a one-location tenant the
         // screen has nothing to offer, and a tile that opens onto "there is
         // nowhere else" is a door into a wall.
@@ -3144,6 +3160,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (k) k.onclick = akEnter;
     var kqb = m.querySelector('[data-kqopen-home]');
     if (kqb) kqb.onclick = kqEnter;
+    var lbb = m.querySelector('[data-lbopen]');
+    if (lbb) lbb.onclick = lbEnter;
     var a = m.querySelector('[data-asopen]');
     if (a) a.onclick = asEnter;
   }
@@ -3794,8 +3812,17 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var lines = hdResolve(order);
     if (!lines.length) return false;
     if (!lines.some(function (l) { return l.id != null; })) return false;
-    hd.rs = order.rs_number || ('#' + order.id);
-    hd.rsId = order.id;
+    return hdOpen(lines, order.rs_number || ('#' + order.id), order.id);
+  }
+
+  /* THE SAME SCREEN, WHETHER OR NOT ANYBODY ASKED. A batch made because it is
+     Tuesday needs recording exactly as much as one somebody requested, and it
+     can come up short in exactly the same ways — so it gets the same rows, the
+     same one question, and the same write. `rs` null is the only difference,
+     and it changes what the head says and where Back goes, nothing else. */
+  function hdOpen(lines, rs, rsId) {
+    hd.rs = rs || null;
+    hd.rsId = rsId || null;
     hd.lines = lines; hd.busy = false; hd.err = ''; hd.done = null; hd.openReason = -1;
     state.view = 'handoff';
     hdRender();
@@ -3830,9 +3857,127 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     return lang === 'cn' ? (r.cn || r.en) : (r.en || r.cn);
   }
 
+  // Back to wherever this was entered from: the queue for a request, the
+  // launcher for a batch nobody asked for. A screen that always returns to the
+  // queue would strand somebody who never came through it.
   function hdExit() {
-    hd.rs = null; hd.lines = null; hd.err = ''; hd.done = null;
-    kqEnter();
+    var hadRequest = hd.rsId != null;
+    hd.rs = null; hd.rsId = null; hd.lines = null; hd.err = ''; hd.done = null;
+    if (hadRequest) kqEnter(); else homeBack();
+  }
+
+  /* ══ LOG A BATCH ═══════════════════════════════════════════════════════════
+     Production nobody asked for — Tuesday is hummus day. It is the majority of
+     what a kitchen makes and it had no door at all: every path into the
+     production record went through a request, so a batch made on the kitchen's
+     own initiative could only reach the shelf as a bare stock add, with its
+     yield and any breakage unrecorded.
+
+     THE PICKER ONLY CHOOSES WHAT WAS MADE. The quantities set here are the
+     MADE figures; how many of them reached the shelf is the next screen's
+     question, which is the same screen a request uses. Two ways in, one way of
+     recording, so a short batch is handled identically whether or not anybody
+     ordered it. */
+  var lb = { qty: {}, q: '' };
+
+  function lbEnter() {
+    state.view = 'logbatch';
+    lb.qty = {}; lb.q = '';
+    lbRender();
+  }
+  function lbExit() { homeBack(); }
+
+  function lbBump(id, d) {
+    var n = (lb.qty[id] || 0) + d;
+    lb.qty[id] = n > 0 ? n : 0;
+    lbRender();
+  }
+
+  function lbChosen() {
+    return (state.items || []).filter(function (p) { return (lb.qty[p.id] || 0) > 0; });
+  }
+
+  function lbLines() {
+    var q = lb.q.trim().toLowerCase();
+    var all = state.items || [];
+    if (!q) return all;
+    return all.filter(function (p) {
+      return (p.name_en || '').toLowerCase().indexOf(q) >= 0
+          || (p.name_cn || '').indexOf(lb.q.trim()) >= 0
+          || (p.sku || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  // Hand the chosen quantities to the record screen as what was MADE. asked is
+  // set to the same figure so the short-batch arithmetic there reads the same
+  // as it does for a request: drop the shelf number and it asks why.
+  function lbContinue() {
+    var chosen = lbChosen();
+    if (!chosen.length) return;
+    hdOpen(chosen.map(function (p) {
+      return {
+        id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
+        asked: lb.qty[p.id], want: lb.qty[p.id], reason: '', st: '', msg: '',
+      };
+    }), null, null);
+  }
+
+  function lbHtml() {
+    var chosen = lbChosen();
+    var units = chosen.reduce(function (a, p) { return a + lb.qty[p.id]; }, 0);
+    var ready = chosen.length > 0;
+    var rows = lbLines().map(function (p) {
+      var n = lb.qty[p.id] || 0;
+      return '<div class="rc-hr"></div><div class="rc-row">' +
+        '<span class="rc-mid"><span class="rc-nm">' + esc(pname(p)) + '</span>' +
+        '<span class="rc-cap">' + esc(p.sku || ('#' + p.id)) + '</span></span>' +
+        '<span class="ak-step">' +
+          '<button data-lbdec="' + p.id + '"' + (n <= 0 ? ' disabled' : '') + '>' + HD_MINUS + '</button>' +
+          '<span class="n num">' + n + '</span>' +
+          '<button data-lbinc="' + p.id + '">' + HD_PLUS + '</button>' +
+        '</span></div>';
+    }).join('');
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-lbback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Log a batch', '登记批次') + '</div>' +
+        '<div class="rc-sub">' + t('What you made, with nobody asking', '主动制作,无对应申请') + '</div>' +
+      '</div>' +
+      '<div class="ak-search"><input id="lbQ" inputmode="search" enterkeyhint="search" ' +
+        'placeholder="' + t('Search products', '搜索商品') + '" value="' + esc(lb.q) + '"></div>' +
+      '<div class="rc-body">' + (rows || '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' +
+        t('Nothing on this store’s list matches.', '本店商品目录中没有匹配项。') + '</div></div>') +
+        (rows ? '<div class="rc-hr"></div>' : '') +
+        '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+          t('Set how many you MADE. The next screen asks how many reached the shelf.',
+            '请填写制作数量。下一步会询问实际入库数量。') +
+        '</div></div>' +
+      '</div>' +
+      '<div class="rc-foot"><div class="rc-footrow">' +
+        '<div class="rc-tally"><b>' + units + ' <span>' + t('units', '件') + '</span></b>' +
+        '<i>' + t(chosen.length + ' products', chosen.length + ' 种商品') + '</i></div>' +
+        '<button class="rc-cta' + (ready ? ' on' : '') + '"' + (ready ? ' data-lbnext' : ' disabled') + '>' +
+          t('Next', '下一步') + '</button>' +
+      '</div></div></div>';
+  }
+
+  function lbRender() {
+    if (state.view !== 'logbatch') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = lbHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-lbback]', function (b) { b.onclick = lbExit; });
+    each('[data-lbinc]', function (b) { b.onclick = function () { lbBump(parseInt(b.getAttribute('data-lbinc'), 10), 1); }; });
+    each('[data-lbdec]', function (b) { b.onclick = function () { lbBump(parseInt(b.getAttribute('data-lbdec'), 10), -1); }; });
+    each('[data-lbnext]', function (b) { b.onclick = lbContinue; });
+    var q = $('#lbQ');
+    if (q) {
+      q.oninput = function () { lb.q = q.value; lbRender(); var el = $('#lbQ'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } };
+    }
   }
 
   function hdBump(i, d) {
@@ -3986,14 +4131,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       return '<div class="rc-wrap">' +
         '<div class="rc-head">' +
           '<div class="rc-h1">' + t('Recorded', '已登记') + '</div>' +
-          '<div class="rc-sub">' + esc(hd.rs || '') + '</div>' +
+          '<div class="rc-sub">' + (hd.rs ? esc(hd.rs)
+            : t('Made without a request', '无申请的制作')) + '</div>' +
         '</div>' +
         '<div class="rc-body"><div style="padding:0 16px">' +
           '<div class="rc-flat"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em">' +
             t(hd.done.units + ' units on the shelf', '已入库 ' + hd.done.units + ' 件') + '</div>' +
             '<div class="rc-note" style="margin-top:4px">' +
-            t('Across ' + hd.done.added + ' products. The request is closed.',
-              '共 ' + hd.done.added + ' 种商品。该申请已关闭。') + '</div>' +
+            // A batch nobody asked for closes no request, and saying it did
+            // would describe a thing that never happened.
+            (hd.rs
+              ? t('Across ' + hd.done.added + ' products. The request is closed.',
+                  '共 ' + hd.done.added + ' 种商品。该申请已关闭。')
+              : t('Across ' + hd.done.added + ' products.',
+                  '共 ' + hd.done.added + ' 种商品。')) + '</div>' +
             // Said back, because it is the number the old flow could not hold.
             // Seeing "2 did not make it" recorded is what makes it worth asking.
             (hd.done.short ? '<div class="rc-note" style="margin-top:6px">' +
@@ -4003,7 +4154,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         '</div></div>' +
         '<div class="rc-foot" style="background:transparent;border:none">' +
           '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
-          '<button class="rc-big" data-hdback>' + t('Back to the queue', '返回制作队列') + '</button>' +
+          '<button class="rc-big" data-hdback>' +
+            (hd.rs ? t('Back to the queue', '返回制作队列') : t('Done', '完成')) + '</button>' +
           '</div></div></div>';
     }
 
