@@ -5325,3 +5325,68 @@ The order of preference per line is therefore **counted → sent (marked unverif
 **BOTH DOORS CARRY `in_yield` ACROSS THEIR DELETE-AND-REINSERT**, the kitchen Cost Sheet included, which has no control for it. A door that knows nothing about the flag must not be able to put a deliberately discarded ingredient back into the batch weight, silently, in the number every per-gram cost divides by. Same rule, same reason, as `lib/recipe-cost-data-write.js`'s absent-versus-cleared distinction.
 
 **WHAT THIS DOES NOT DECIDE.** Volume-to-mass stays unconvertible until a density is recorded on the material — the same open item §7's addendum left, now with a second consumer. A recipe whose lines are mostly in ml therefore still needs a typed batch size, and says so.
+
+## 41. A shop is a record attached to a location
+
+A location in Tacet is a stock-holding site. Some locations sell to walk-in customers; others, such as the Roots central kitchen, produce and ship and never face a customer. Shop capability is therefore a role that some locations have and others do not.
+
+Ruling: a shop is a separate record attached to a location, not a set of columns on the location itself. A location with no shop record has no menu, no QR code, no till configuration, no opening hours and no payment binding.
+
+The presence of the shop record is the module gate. Enabling physical-location features for a tenant means creating a shop; there is no separate feature flag for it.
+
+Rejected: adding nullable shop columns to every location. It would put menu, QR, till and payment fields on warehouses and production sites that will never use them.
+
+## 42. One catalogue; fulfilment mode lives on the shop listing
+
+There is one product catalogue. Tacet does not have a separate menu-items entity.
+
+A shop listing joins a product to a shop and carries the price at that shop and the fulfilment mode. Two modes:
+
+- **stocked** — the product is built elsewhere (typically the kitchen), arrives as finished goods, and a sale decrements finished-product stock at the shop.
+- **made here** — the product is built at the shop at the moment of sale. Finished-product stock never exists for it. A sale consumes the product's build lines against stock held at that shop.
+
+The same product may be stocked at one shop and made here at another. Mode is a property of the listing, never of the product.
+
+A product is available at a shop if and only if a listing exists. There is no global availability flag. This is how a product can be sold at one location only.
+
+Price lives on the listing, not on the product, so the same product may carry different prices at different shops.
+
+Availability behaves differently by mode. Stocked items become unavailable automatically when store stock reaches zero. Made-here items do not run out on paper and require a manual on/off switch on the listing for daily use — for example when a milk alternative runs out mid-shift.
+
+Rejected: a parallel menu-items table. The difference between a packaged product and a made-to-order one is when the build is consumed, not what kind of record it is.
+
+## 43. Materials may be held at any location, including shops
+
+Materials have historically been held only at the kitchen, because the kitchen was the only site that built anything. A shop selling made-here items consumes materials on site and therefore holds material stock.
+
+Ruling: materials at a shop are the same records as materials at the kitchen, distinguished only by location id. Stock is keyed on item and location and nothing else (see §34). There is no separate "shop material" concept and none is to be introduced.
+
+Materials transfer between locations on the same mechanism as finished goods. A transfer moves value between locations; it is not a cost event. Cost is recognised when the product is sold and its build lines are consumed. Expensing a material on transfer while also charging it into the sale would double-count it — the same failure mode as §37 on courier cost.
+
+A zero or negative material balance must not block a sale. The stock figure is an estimate that drifts with unrecorded staff consumption, over-pour and waste; a wrong number is not grounds for refusing a real transaction. Drift is corrected by periodic counts, not by gating the till.
+
+## 44. QR ordering: a public web page, not a mini-program
+
+The in-location ordering surface is a public web page served per shop, opened by scanning a QR code that carries the shop id. It is designed for the WeChat in-app browser and requires no app install and no login.
+
+The customer selects from that shop's listings, supplies a name, and submits. The order is created unpaid at `pending_payment`. The kitchen ticket prints on submit. The customer is called by name; a short order code is also issued and is what staff use to retrieve the order.
+
+Payment is taken at the counter on the existing terminal and the order is then marked paid, as counter sales work today. In-page payment is deferred (see below).
+
+Phone number is not collected. Name is sufficient for calling an order in a space where the customer is present, and the short code identifies the order for staff. Collecting a phone number would add friction at the point of highest abandonment and bring personal-information obligations for no operational gain.
+
+A staff-accept step between submit and print is to be supported in the design but left switched off. It is the remedy if phantom orders prove to be a problem in practice.
+
+The QR page is an additional entry point to the same shop listings the till uses. It is not a separate catalogue, a separate order type, or a separate revenue stream.
+
+## 45. Stock timing for counter and QR orders
+
+Existing behaviour, retained: physical stock is decremented on the paid transition, not at order creation. The reasoning recorded in the code stands — decrementing at creation takes stock for a sale that may never be paid, and the cancel-before-payment path has no reversal hook.
+
+Ruling: a QR order reserves stock on submit and decrements on paid. Reservation and release mechanisms already exist and are used by customer checkout; the counter path has never been wired to them. Reservation prevents the last unit being sold twice during the interval between submit and payment, without moving physical quantity and without requiring a new reversal path.
+
+Cancelling an unpaid order releases the reservation. No physical stock is returned because none was taken.
+
+The sweeps that cancel stale unpaid orders and expire reservations must not apply to counter-fulfilment orders on their existing timings. A customer walking from a table to the till must not have their order cancelled underneath them.
+
+An in-page WeChat payment path is not ruled out and the order lifecycle above is deliberately compatible with it: the cashier's confirmation would be replaced by a payment callback with no other change. It is blocked on a verified 服务号 bound to the existing merchant account — the mini-program appid cannot serve a web page, and no OAuth or JS-SDK code exists in the repo.
