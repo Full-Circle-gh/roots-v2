@@ -267,8 +267,15 @@ it('flagging never blocks the push', () => {
     assert.notStrictEqual(end, -1, `${name} is unterminated`);
     return src.slice(i, end + 2);
   };
+  //
+  // THE SENDER IS NOT PART OF THIS ASSERTION EITHER, for the same reason the
+  // census was dropped. It named sendOpsAlert literally and went red when the
+  // retail helper moved to sendTenantAlert — the merchant is the one who has to
+  // call this customer, so the alert is theirs (audit D-02 / P-01). The
+  // property under test is DETACHMENT: whichever channel it goes to, it must
+  // not be awaited inside the push.
   for (const [src, name] of [[retailSrc, 'maybeFlagUncallablePhone'], [daemonSrc, 'flagUncallablePhone']]) {
-    assert.ok(/Promise\.resolve\(sendOpsAlert\(/.test(bodyOf(src, name)),
+    assert.ok(/Promise\.resolve\(send(?:Ops|Tenant)Alert\(/.test(bodyOf(src, name)),
       `${name} is not detached from the request — a slow webhook would hold up the push`);
   }
 });

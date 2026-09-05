@@ -1652,6 +1652,18 @@ let ENTITLEMENTS = {};
     const u = me.user;
     // Resolve catalog ownership before any product UI renders, so upstream
     // tenants never see the catalog-write controls / stock modal.
+    // THE OPERATOR'S OWN LANGUAGE, before anything paints (audit M-01 / M-02).
+    // It used to live only in this browser's localStorage, so it belonged to a
+    // machine rather than to a person: sign in on the shop tablet and you got
+    // whatever the last person chose. The account's value now wins — and null,
+    // meaning "never chosen", deliberately does not, so nobody who has never
+    // expressed a preference is switched to English on the day this ships.
+    //
+    // First thing in this block on purpose: the i18n engine has already painted
+    // from localStorage by the time this runs, so adopting later would show a
+    // visible flip. It still can, on a slow /me — but a flip once at sign-in is
+    // the honest cost of the language being the person's rather than the desk's.
+    if (typeof cuAdoptAccountLang === 'function') cuAdoptAccountLang(u.language);
     CATALOG_MODE = (u.tenant && u.tenant.catalogMode) || 'self';
     document.body.classList.toggle('catalog-upstream', CATALOG_MODE === 'upstream');
     // Feature entitlements (platform ceiling). { key: false } = not entitled;

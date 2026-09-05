@@ -762,6 +762,13 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
       user: {
         name: req.user?.display_name || req.user?.username || null,
         full_access: fullAccess,
+        // The operator's own language (audit M-01 / M-02). Quick Stock is the
+        // surface most often run on a SHARED tablet, which is the exact case
+        // the finding names: sign in and get whatever the last person chose.
+        // 'en' | 'cn', or null for "never chosen" — the device's own value
+        // stands then, and nobody is switched on the day this ships.
+        language: (req.backendUser && (req.backendUser.language === 'en' || req.backendUser.language === 'cn'))
+          ? req.backendUser.language : null,
       },
       stores: slim,
     },

@@ -184,6 +184,23 @@ try { db.exec('ALTER TABLE tenant_users ADD COLUMN phone_verified INTEGER NOT NU
 // one-time backfill has a source; new code should not read these two columns).
 try { db.exec("ALTER TABLE tenant_users ADD COLUMN twofa_method TEXT NOT NULL DEFAULT 'email'"); } catch (e) { /* already added */ }
 
+// ── The operator's language, on the PERSON (audit M-01 / M-02) ─────────────
+// It lived in localStorage, so it belonged to a BROWSER rather than to a
+// member of staff: sign in on the shop tablet and you got whatever the last
+// person chose; sign in on a new computer and you got English. The desktop and
+// the phone even used different keys, so switching to Chinese on a phone left
+// the computer in English.
+//
+// NULL means "never chosen", which is a real third state and not the same as
+// 'en': a person who has never expressed a preference should keep following
+// whatever their browser already had, rather than being switched to English on
+// the day this ships. See /api/backend/language.
+//
+// STORED AS 'en' | 'cn'. The phone app speaks en/zh internally and maps at its
+// own boundary — one vocabulary here, so the column can never hold two words
+// for the same language.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN language TEXT'); } catch (e) { /* already added */ }
+
 // Two-step verification, per channel — email and SMS are independent switches
 // (both can be on at once), not a single preferred method. Turning one on takes
 // effect immediately: the channel's own address was already verified when it
@@ -583,7 +600,7 @@ router.post('/api/backend/logout', (req, res) => {
 
 router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
-  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all, language FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
   touchSession(req, u);   // keep the Devices index warm (surfaces pre-existing logins + heartbeat)
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
@@ -646,6 +663,9 @@ router.get('/api/backend/me', (req, res) => {
             home,                   // the tool list, when there is somewhere to go back to
             homeLabel,              // that screen's own name, so Back can say it
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
+            // 'en' | 'cn', or null for "never chosen" — the client keeps its
+            // browser value in that case (audit M-01 / M-02).
+            language: (u.language === 'en' || u.language === 'cn') ? u.language : null,
             caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
             // Co-brand identity — logo/mark served as bytes (kept out of this payload);
@@ -701,6 +721,29 @@ router.put('/api/backend/profile', express.json(), (req, res) => {
   db.prepare('UPDATE tenant_users SET display_name = ? WHERE id = ?').run(name, req.session.backendUserId);
   bumpBackendIdentity(req);
   res.json({ success: true, displayName: name });
+});
+
+// ── The operator's own language (audit M-01 / M-02) ────────────────────────
+// Written every time somebody uses a language toggle, on any surface. Cheap on
+// purpose: no confirmation, no settings screen to find, no separate save — the
+// toggle IS the setting, and it now follows the person to the next device
+// instead of belonging to the browser they happened to be at.
+//
+// 'en' | 'cn' only. The phone app speaks en/zh in its own state and maps at its
+// boundary, so this column never holds two words for one language.
+//
+// Best-effort by contract: the client has ALREADY applied the language and
+// written it to localStorage before calling this. A failure here means it does
+// not follow them to the next machine, which is worth a log line and is not
+// worth interrupting somebody who just pressed a toggle.
+router.put('/api/backend/language', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const raw = String((req.body && req.body.language) || '').trim().toLowerCase();
+  if (raw !== 'en' && raw !== 'cn') {
+    return res.status(400).json({ error: 'Language must be "en" or "cn" · 语言只能是 en 或 cn' });
+  }
+  db.prepare('UPDATE tenant_users SET language = ? WHERE id = ?').run(raw, req.session.backendUserId);
+  res.json({ success: true, language: raw });
 });
 
 // Set / clear own avatar (the Google-style profile circle). The client downscales

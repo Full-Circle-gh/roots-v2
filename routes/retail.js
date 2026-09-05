@@ -72,7 +72,11 @@ const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web 
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const wxaKnockout = require('../lib/wxacode-knockout');  // clears the 小程序码's white logo plate
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
-const { sendOpsAlert } = require('../lib/ops-alert'); // WeCom ops page on auto-shipping-upload failure
+// sendOpsAlert pages the PLATFORM; sendTenantAlert pages the MERCHANT and falls
+// back to the platform when they have no chat app configured (audit D-02/P-01).
+// Which one a site uses is the split: can only the platform act on this, or is
+// it the merchant's own day?
+const { sendOpsAlert, sendTenantAlert } = require('../lib/ops-alert');
 const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every customer-published surface
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -4609,7 +4613,9 @@ function maybeFlagUncallablePhone(order, storeCode) {
   try {
     if (phoneCn.isMainlandMobile(order.recipient_phone)) return;
     const shown = String(order.recipient_phone || '').trim() || '(空 / blank)';
-    Promise.resolve(sendOpsAlert(
+    // The MERCHANT's, not the platform's: the action this asks for is "call the
+    // customer", and only the shop can do that.
+    Promise.resolve(sendTenantAlert(currentTenantId(),
       `⚠️ 青云聚信 ${storeCode} 订单 ${order.order_no || '#' + order.id} 的收货电话可能无法接听：${shown}\n`
       + `Qingyun ${storeCode}: order ${order.order_no || '#' + order.id} has a recipient phone a rider likely can't call `
       + `(${shown}). The push still goes out — call the customer if it comes back refused.`
@@ -6566,7 +6572,10 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
   // the give-up alert covers the case where it never comes good.
   if (!opts.fromSweep && !transient) {
     try {
-      await sendOpsAlert(`微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
+      // The MERCHANT's: the message ends "go to the mini-program back office and
+      // ship it by hand", which is their back office and nobody else's.
+      await sendTenantAlert(currentTenantId(),
+        `微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
     } catch (_) { /* alerting never blocks */ }
   }
 }
@@ -7569,7 +7578,9 @@ async function retryWeChatShippingForTenant() {
   }
   if (gaveUp.length) {
     try {
-      await sendOpsAlert(`微信自动发货多次失败，已停止重试，请到小程序后台手动发货：${gaveUp.join('、')}`);
+      // The MERCHANT's, same reason as the single-order alert above.
+      await sendTenantAlert(currentTenantId(),
+        `微信自动发货多次失败，已停止重试，请到小程序后台手动发货：${gaveUp.join('、')}`);
     } catch (_) { /* alerting never blocks */ }
   }
   return uploaded;
@@ -7906,9 +7917,13 @@ function reconcileTier(customerId, spend, storedTier) {
       //    above has already happened and `want` is still returned.
       try {
         Promise.resolve(sendOpsAlert(
-          '⚠️ Roots Club 会员等级写入失败 — 积分与消费额记录正常，仅等级暂时未更新，会员下次登录时会自动修正。\n'
+          // Names the FEATURE, not the first merchant's version of it — this is
+          // shared code that fires for any account (audit D-04, same class).
+          // Stays on sendOpsAlert: it points at a server log, which is the
+          // platform's to read.
+          '⚠️ 会员等级写入失败 — 积分与消费额记录正常，仅等级暂时未更新，会员下次登录时会自动修正。\n'
           + '受影响的会员 ID 见 roots-v2 错误日志中的 [reconcileTier] 行。\n'
-          + 'Tacet: the Roots Club tier UPDATE is failing. Points and lifetime spend are still recorded correctly; '
+          + 'Tacet: the membership tier UPDATE is failing. Points and lifetime spend are still recorded correctly; '
           + 'only tier_key is stale, and it self-heals at the next customer sign-in. '
           + 'Affected customer ids are on the [reconcileTier] lines in roots-v2-error.log.'
         )).catch(err => console.warn('[reconcileTier] ops alert failed:', err && err.message));

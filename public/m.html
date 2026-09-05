@@ -748,8 +748,27 @@ function applyTheme(){
    'roots-admin-lang' speaks en/cn and this speaks en/zh, and a shared key
    would have one of them reading the other's word for Chinese as English. */
 const M_LANG_KEY='tacet-m-lang';
+/* ── The account speaks en/cn; this app speaks en/zh ──────────────────────
+   The comment above says why the KEY is its own, and that reasoning still
+   holds. What changed (audit M-01 / M-02) is that the choice now also belongs
+   to the PERSON, not just to this handset, so it follows them to the desk. One
+   vocabulary is stored — 'en' | 'cn', the one every other surface uses — and
+   this pair maps at the boundary, which is exactly the collision the original
+   comment was guarding against, handled once instead of avoided. */
+const mLangToAccount = (l) => (l === 'zh' ? 'cn' : 'en');
+const mLangFromAccount = (l) => (l === 'cn' ? 'zh' : (l === 'en' ? 'en' : null));
+/* Fire-and-forget, after the language is already applied and remembered here.
+   A failure means it does not follow them to the next device; it must never
+   interrupt somebody who just pressed a toggle. */
+function mSaveLang(l){
+  try{
+    fetch('/api/backend/language',{method:'PUT',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({language:mLangToAccount(l)})}).catch(()=>{});
+  }catch(e){}
+}
 reg('toggleLang', ()=>{ state.lang=state.lang==='en'?'zh':'en'; LANG=state.lang; document.documentElement.lang=state.lang;
-  try{ localStorage.setItem(M_LANG_KEY,state.lang); }catch(e){} render(); });
+  try{ localStorage.setItem(M_LANG_KEY,state.lang); }catch(e){} mSaveLang(state.lang); render(); });
 /* Both switches used to be decoration: they flipped a boolean nothing read and
    forgot it at the next launch. They are wired now — Live updates runs the
    new-order poll, Sound rings the chime it finds — and they are remembered for
@@ -10493,6 +10512,16 @@ async function loadMe(){
        FILTER BEFORE RENDER — never a port of applyCapGates or railSyncGroups. */
     state.caps=Array.isArray(u.caps)?u.caps:null;
     state.me={name:u.displayName||u.username||null, role:u.role||null, roleName:u.roleName||null};
+    /* The operator's own language, from their account (audit M-01 / M-02). It
+       wins over whatever this handset had — that is the point. null means they
+       have never chosen, and then the handset's value stands: nobody who has
+       never expressed a preference gets switched to English on the day this
+       ships. No write-back here, or adopting would echo straight home. */
+    const acct=mLangFromAccount(u.language);
+    if(acct && acct!==state.lang){
+      state.lang=acct; LANG=acct; document.documentElement.lang=acct;
+      try{ localStorage.setItem(M_LANG_KEY,acct); }catch(e){}
+    }
     landOnSomethingReachable();
   }catch(e){}
   finally{

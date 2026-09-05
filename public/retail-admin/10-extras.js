@@ -1882,9 +1882,55 @@ cuApplyThemeIcon();
     }
     processSubtree(document.body);  // pick up anything not yet registered
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    // ── And on the PERSON, not just the browser (audit M-01 / M-02) ────────
+    // The choice used to live only in localStorage, so it belonged to a machine:
+    // sign in on the shop tablet and you got whatever the last person picked;
+    // sign in on a new computer and you got English. It now follows the
+    // operator's account.
+    //
+    // Fire-and-forget, and after the language is already applied. The screen has
+    // changed and the browser has remembered it before this call is made; if the
+    // write fails the only consequence is that it does not follow them to the
+    // next machine, which is not worth interrupting somebody who pressed a
+    // toggle. Guarded on `_langSynced` so ADOPTING the account's own language on
+    // load does not immediately write it straight back.
+    if (!_adoptingAccountLang) {
+      try {
+        fetch('/api/backend/language', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ language: lang }),
+        }).catch(() => {});
+      } catch (e) { /* never let remembering a preference break changing it */ }
+    }
     updateBtn();
     _listeners.forEach(cb => { try { cb(lang); } catch {} });
   }
+
+  // True only while applyLang is being called BY the adoption below, so that
+  // path does not echo the account's own value back to the server.
+  let _adoptingAccountLang = false;
+
+  /* ── Adopt the signed-in operator's language ──────────────────────────────
+     Called once, by whoever first learns who is signed in (01-core.js, from
+     /api/backend/me). Three states, and the third is the one that matters:
+
+       'en' / 'cn'  — the person chose this. It wins over whatever this browser
+                      had, which is the whole point: their language follows them.
+       null         — they have never chosen. The browser's value stands, and
+                      nothing is written back. A person who has never expressed a
+                      preference must not be switched to English on the day this
+                      ships.
+
+     Idempotent and cheap: if the account agrees with the browser there is
+     nothing to repaint. */
+  window.cuAdoptAccountLang = function (lang) {
+    if (lang !== 'en' && lang !== 'cn') return;
+    if (lang === _lang) return;
+    _adoptingAccountLang = true;
+    try { applyLang(lang); } finally { _adoptingAccountLang = false; }
+  };
 
   function updateBtn() {
     const btn = document.getElementById('lang-toggle');
