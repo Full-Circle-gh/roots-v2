@@ -10535,6 +10535,26 @@
                 One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。
               </div>
             </div>
+            <!-- ══ Open / closed, per channel (audit B-03) ═════════════════
+                 Four endpoints implemented pausing and resuming the shop per
+                 sales channel — GET /store-status and three POSTs — and NOTHING
+                 called any of them. Closing for a day was done somewhere else,
+                 or not at all from here. This is that screen.
+
+                 It sits above the store list on purpose: "are we open?" is the
+                 question somebody arrives at this page holding, and the list of
+                 shops is what they read afterwards. -->
+            <div id="ops-openclose" style="margin:4px 0 18px">
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <strong style="color:var(--text-1);font-size:14px">Open for business · 营业状态</strong>
+                <span id="oc-master-pill" class="muted" style="font-size:12px"></span>
+              </div>
+              <div class="helper" style="margin:4px 0 10px;line-height:1.55">
+                Closing pauses new orders. Your marketplace shops are queued and follow within about a minute; the online store stops at once. · 关闭后将暂停接单。外卖平台会在约一分钟内跟随，线上商城立即生效。
+              </div>
+              <div id="oc-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+            </div>
+
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
             <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
             <div id="ops-store-form"></div>

@@ -12,6 +12,7 @@
 // were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
 // ═══════════════════════════════════════════════════════════════════════
 function loadOpsPanel() {
+  loadOpenClose();
   loadOpsStores();
   loadIntegrationsStatus();
   loadShippingIntegrations();
@@ -187,6 +188,135 @@ async function _saveAlipayManual() {
 // Mirrors the kitchen app's store editor but lives here so the online store
 // is fully independent. Uses the dual-realm /api/retail-admin/stores routes;
 // saving an address auto-re-geocodes the store in the background.
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OPEN / CLOSED, PER CHANNEL — audit B-03
+   ══════════════════════════════════════════════════════════════════════════
+   Four endpoints implemented pausing and resuming the shop per sales channel
+   and no page, drawer or phone screen called any of them. The merchant this
+   was written for closes the shop somewhere else, or not at all from here.
+
+   WHAT THE THREE CONTROLS MEAN, because they are not the same act:
+     Master      everything at once — online store AND every marketplace shop.
+                 The one somebody reaches for when the fridge dies.
+     Online      just the storefront the merchant owns. Immediate.
+     Per shop    one marketplace location. Queued; the daemon applies it within
+                 about a minute, which is why a pending row says so instead of
+                 pretending it already happened.
+
+   CLOSING IS NOT CONFIRMED AND OPENING IS NOT EITHER. Both are reversible in
+   one tap and both are urgent — a dialog between a merchant and "stop taking
+   orders" is a dialog in the way. What IS shown is the consequence, before and
+   after, in words.
+   ══════════════════════════════════════════════════════════════════════════ */
+let _ocState = null;
+let _ocBusy = false;
+
+async function loadOpenClose() {
+  const box = document.getElementById('oc-body');
+  if (!box) return;
+  try {
+    const j = await api('/api/retail-admin/store-status');
+    _ocState = j;
+    paintOpenClose();
+  } catch (e) {
+    // A shop that cannot READ its own open/closed state must not render a
+    // control that looks live. Say so, and offer the retry.
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Could not read the shop status', '无法读取营业状态')}: `
+      + `<span data-no-i18n>${escapeHtml(e.message)}</span></span> `
+      + `<button class="btn btn-sm" onclick="loadOpenClose()">${cuT('Try again', '重试')}</button>`;
+  }
+}
+window.loadOpenClose = loadOpenClose;
+
+function paintOpenClose() {
+  const box = document.getElementById('oc-body');
+  const pill = document.getElementById('oc-master-pill');
+  if (!box || !_ocState) return;
+  const st = _ocState;
+  const master = st.master;                       // 'open' | 'closed' | 'mixed'
+  if (pill) {
+    const label = master === 'open' ? cuT('Everything is open', '全部营业中')
+      : master === 'closed' ? cuT('Everything is closed', '全部已关闭')
+      : cuT('Some channels are closed', '部分渠道已关闭');
+    // Amber for mixed, never red: a shop that has deliberately closed one
+    // marketplace is not in an error state.
+    const tone = master === 'open' ? 'var(--sage-ink,#4d5a33)'
+      : master === 'mixed' ? 'var(--amber-ink,#7a5a12)' : 'var(--text-2)';
+    pill.textContent = label;
+    pill.style.color = tone;
+  }
+  const btn = (on, label, onclick, cap) =>
+    `<button class="btn btn-sm${on ? '' : ' btn-primary'}" data-cap="${cap}" onclick="${onclick}"${_ocBusy ? ' disabled' : ''}>`
+    + escapeHtml(label) + '</button>';
+
+  const online = st.online || {};
+  const rows = (st.meituan || []).map((m) => {
+    // A shop is open when it is taking orders. That is `fulfillmentOpen`, which
+    // is immediate and true of every shop; the marketplace status is a SECOND
+    // fact, and only for a shop that has a marketplace at all — an unlinked shop
+    // reports isOpen:false because nobody has ever pushed it, which is not the
+    // same as closed and must not be shown as closed.
+    const shopOpen = m.fulfillmentOpen && (m.linked ? m.isOpen : true);
+    const bits = [m.fulfillmentOpen ? cuT('taking orders', '接单中') : cuT('paused', '已暂停')];
+    if (m.linked) {
+      bits.push(!m.readOk ? cuT('marketplace status unknown', '外卖平台状态未知')
+        : m.isOpen ? cuT('open on the marketplace', '外卖平台营业中')
+        : cuT('closed on the marketplace', '外卖平台已关闭'));
+    }
+    const pending = m.pending ? ` <span style="color:var(--amber-ink,#7a5a12)">${escapeHtml(cuT('· change queued', '· 变更排队中'))}</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)">${escapeHtml(m.name || m.storeCode)}</div>
+        <div style="color:var(--text-3);font-size:12px">${escapeHtml(bits.join(' · '))}${pending}</div>
+      </div>
+      ${btn(shopOpen, shopOpen ? cuT('Close', '关闭') : cuT('Open', '营业'),
+            `ocSetStore('${escapeHtml(m.storeCode)}', ${shopOpen ? 'false' : 'true'})`, 'settings:edit')}
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${btn(master !== 'closed', master === 'closed' ? cuT('Open everything', '全部营业') : cuT('Close everything', '全部关闭'),
+            `ocMaster(${master === 'closed' ? 'true' : 'false'})`, 'settings:edit')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)">${escapeHtml(cuT('Online store', '线上商城'))}</div>
+        <div style="color:var(--text-3);font-size:12px">${escapeHtml(online.online_open ? cuT('open', '营业中') : cuT('closed', '已关闭'))}</div>
+      </div>
+      ${btn(!!online.online_open, online.online_open ? cuT('Close', '关闭') : cuT('Open', '营业'),
+            `ocSetOnline(${online.online_open ? 'false' : 'true'})`, 'settings:edit')}
+    </div>
+    ${rows || `<div style="padding:8px 0;border-top:1px solid var(--line);color:var(--text-3);font-size:12px">${escapeHtml(cuT('No shops yet — only the online store can be opened or closed.', '暂无门店 — 目前只能开关线上商城。'))}</div>`}`;
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the gate is a nicety; the server still refuses */ }
+}
+
+// The three writes. Each disables the panel while it runs, because two taps on
+// "close everything" while the first is in flight is how a merchant ends up
+// reopening a shop they meant to shut.
+async function _ocWrite(path, body, okEn, okCn) {
+  if (_ocBusy) return;
+  _ocBusy = true; paintOpenClose();
+  try {
+    await api(path, { method: 'POST', body });
+    toast(cuT(okEn, okCn), 'ok');
+  } catch (e) {
+    toast(cuT('Could not change the shop status', '修改营业状态失败') + ': ' + (e.message || ''), 'err');
+  }
+  _ocBusy = false;
+  await loadOpenClose();
+}
+window.ocMaster = (open) => _ocWrite('/api/retail-admin/store-status/master', { open },
+  open ? 'Opening every channel' : 'Closing every channel — marketplaces follow within about a minute',
+  open ? '正在开启全部渠道' : '正在关闭全部渠道 — 外卖平台约一分钟内跟随');
+window.ocSetOnline = (open) => _ocWrite('/api/retail-admin/store-status/online', { open },
+  open ? 'Online store is open' : 'Online store is closed',
+  open ? '线上商城已开启' : '线上商城已关闭');
+window.ocSetStore = (code, open) => _ocWrite('/api/retail-admin/store-status/store/' + encodeURIComponent(code), { open },
+  open ? 'Queued — the shop reopens within about a minute' : 'Queued — the shop closes within about a minute',
+  open ? '已排队 — 门店约一分钟内恢复营业' : '已排队 — 门店约一分钟内关闭');
+
 let _opsStores = [];
 async function loadOpsStores() {
   const box = document.getElementById('ops-stores-list');
@@ -367,6 +497,8 @@ async function _opsStoreSave(id) {
     toast('Saved · 已保存', 'success');
     document.getElementById('ops-store-form').innerHTML = '';
     loadOpsStores();
+    // A new or renamed shop is a new row in the open/closed panel above it.
+    loadOpenClose();
     loadIntegrationsStatus();
     // Address saves re-geocode in the background; refresh again shortly so the
     // 📍 GPS badge updates without a manual reload.
