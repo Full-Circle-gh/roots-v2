@@ -313,6 +313,15 @@ phone admin, the thermal receipt, and the finance summary as tax collected net
 of tax refunded. Settings sit beside Currency, with a preview of what a ¥100
 order becomes.
 
+*Points and store credit may pay the tax.* They are tenders, not discounts —
+the gross a customer pays is points + wallet + cash — and a tender settles the
+bill it is offered against. Shipping is excluded from what they may cover only
+because there is a switch that says so; there is no such switch for tax, and
+defaulting to "a tender may not pay the tax" would have been inventing one. It
+also matters practically: with the tax outside that base, a points-only order on
+a tax-charging shop would have been refused outright, naming a shipping fee that
+was not the problem.
+
 **One thing I did not do, and would ask before doing:** tax on a REFUND is
 computed proportionally at report time rather than stored on the refund. It is
 right for every case I can see; it would be wrong if you ever refund a

@@ -462,6 +462,35 @@ async function place(taxCfg, body) {
         'and tax.* is not a private config prefix, so /api/retail/config really hands it to the storefronts');
   }
 
+  // ── §7e · a tender pays the whole bill ──────────────────────────────────
+  section('7e · points and wallet may pay the tax');
+  {
+    /* Found by asking what a points-only order does on a tax-charging shop.
+       `payment_method: 'points'` refuses outright when the redeemable base is
+       short of the gross — so with the tax outside that base, EVERY such order
+       would have been rejected, and rejected with
+       `points_cannot_cover_shipping`, naming a fee that was not the problem.
+
+       Points and wallet are tenders: the audit's own note on orderTenders()
+       defines the gross a customer pays as points + balance + total. Shipping
+       is excluded from what they may cover only because a shop can say so;
+       there is no such switch for tax, and defaulting to "a tender may not pay
+       the tax" would have been inventing one. */
+    const base = RETAIL_SRC.slice(RETAIL_SRC.indexOf('function pointsRedeemableBase('));
+    yes(/taxAdded = 0\) \{/.test(base.slice(0, 400)), 'the points base takes the tax that was added on top');
+    yes(/\+ Number\(taxAdded \|\| 0\)/.test(base.slice(0, 600)), 'and adds it');
+    const wal = RETAIL_SRC.slice(RETAIL_SRC.indexOf('function walletSpendableBase('));
+    yes(/taxAdded = 0\) \{/.test(wal.slice(0, 400)), 'and so does the wallet base');
+    // Both call sites on both surfaces pass it, or the bases are decoration.
+    const calls = (RETAIL_SRC.match(/(?:pointsRedeemableBase|walletSpendForOrder|walletSpendableBase)\(/g) || []).length;
+    yes(calls >= 7, `${calls} references to the three helpers`);
+    yes(/money\.fromMinor\(taxLine\.addedMinor\)/.test(RETAIL_SRC), 'the order passes the tax it just computed');
+    yes(/money\.fromMinor\(quoteTax\.addedMinor\)/.test(RETAIL_SRC), 'and the quote passes its own');
+    // An INCLUSIVE tax adds nothing on top, so nothing changes for those shops.
+    const incl = tax.taxOn({ subtotalMinor: 10000 }, on({ mode: 'inclusive' }));
+    is(incl.addedMinor, 0, 'and on an inclusive shop the figure passed is zero — the price already contained it');
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is

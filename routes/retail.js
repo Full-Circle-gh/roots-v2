@@ -10819,7 +10819,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // shipping from points coverage, the residual (shipping) must always be
   // paid in cash — so the legacy points-only payment method can't settle
   // it alone and is rejected for orders that ship.
-  const redeemBase = pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount);
+  const redeemBase = pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount,
+    money.fromMinor(taxLine.addedMinor));
   if (paymentMethod === 'points') {
     sweepExpiredPoints(req.customer.id);
     const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
@@ -10893,7 +10894,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   if (body.use_balance && paymentMethod !== 'points') {
     const cust = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = Math.max(0, Number(cust?.balance) || 0);
-    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount);
+    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount,
+      money.fromMinor(taxLine.addedMinor));
   }
   const total = Math.max(0, grossTotal - pointsAmount - balanceUsed);
 
@@ -32619,9 +32621,25 @@ function pointsCoverShipping() {
 }
 // Cash base that points are allowed to redeem against. When shipping is
 // excluded by policy, the residual (shipping) is always paid in cash.
-function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount = 0) {
+/* `taxAdded` is the tax CHARGED ON TOP (audit I-03) — zero on a shop whose
+   prices already contain it, and zero on every shop that charges none.
+
+   IT IS INSIDE THE BASE, and that is a decision rather than an oversight.
+   Points are a TENDER, not a discount: the audit's own note on orderTenders()
+   says the gross a customer pays is `points_amount + balance_used + total`, and
+   a tender settles the bill it is offered against — tax included. Shipping is
+   excluded only because a shop can say so (pointsCoverShipping), and no such
+   switch exists for tax; defaulting to "points may not pay the tax" would be
+   inventing one.
+
+   Leaving it out was tried first and is worse than untidy: `payment_method:
+   'points'` refuses outright when the redeemable base is short of the gross, so
+   every points-only order on a tax-charging shop would have been rejected —
+   with `points_cannot_cover_shipping`, naming a fee that was not the problem. */
+function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount = 0, taxAdded = 0) {
   const ship = pointsCoverShipping() ? Number(shippingFee || 0) : 0;
-  return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0) - Number(voucherDiscount || 0));
+  return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0)
+    - Number(voucherDiscount || 0) + Number(taxAdded || 0));
 }
 // Cash base that prepaid wallet BALANCE may be spent against. HARD RULE
 // (operator-stated): store credit — balance OR points — never pays the
@@ -32629,16 +32647,18 @@ function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount
 // the portion not already covered by points (points apply first; see the order
 // endpoint). Shipping is ALWAYS settled in cash via WeChat/Alipay. No toggle —
 // unlike points there is no balance.coverShipping escape hatch by design.
-function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+// `taxAdded` for the same reason as the line above it: store credit is a tender
+// too, and the hard rule it obeys names SHIPPING, not tax.
+function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0, taxAdded = 0) {
   return Math.max(0,
-    Number(subtotal || 0) + Number(packingFee || 0)
+    Number(subtotal || 0) + Number(packingFee || 0) + Number(taxAdded || 0)
     - Number(voucherDiscount || 0) - Number(pointsAmount || 0));
 }
 // How much wallet balance THIS order can actually spend: the spendable base
 // (never shipping), capped at the customer's available balance. Rounded to
 // cents so we never charge sub-fen dust.
-function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
-  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount);
+function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0, taxAdded = 0) {
+  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount, taxAdded);
   return Math.round(Math.min(Math.max(0, Number(balanceAvailable || 0)), base) * 100) / 100;
 }
 
@@ -32999,7 +33019,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // When the store excludes shipping from points coverage, the redeemable
   // base is subtotal + packing only; the customer always pays shipping in
   // cash (so residual = shipping when the points side is "full").
-  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee);
+  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee, 0,
+    money.fromMinor(quoteTax.addedMinor));
   const pointsRequired   = pointsRequiredFor(redeemBase);
   const pointsAffordable = pointsBalance >= pointsRequired;
   const pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
@@ -33026,7 +33047,8 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // vouchers; the order endpoint re-prices with the real voucher discount.)
   const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
-  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount);
+  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount,
+    money.fromMinor(quoteTax.addedMinor));
   const balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
   const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
   const balanceApplied   = useBalance ? balanceMaxUsable : 0;
