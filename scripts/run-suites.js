@@ -79,11 +79,21 @@ const QUARANTINE = {
   /* test_mobile_purchasing.js is GONE from this list, and the entry is worth a
      word because it is the first one to leave. It asserted "¥6,080 this month"
      — the fixture's August total — while the screen sums the CURRENT month, so
-     it aged out of its own assertion on 1 September. Its fixture is dated
-     relative to the run now, so it cannot expire again, and it passes on the
-     month boundaries and the leap day besides. That also settled the green-in-
-     CI / red-locally disagreement by removing what the two environments could
-     disagree about; see the header of that file for what was ruled out. */
+     it aged out of its own assertion on 1 September. Its fixture is anchored to
+     the app's own GZ_ISO() today now (558eed3) and cannot expire again.
+
+     AND THE GREEN-IN-CI / RED-LOCALLY PUZZLE HAS AN ANSWER, which is worth
+     writing down because it will happen again to somebody else. It was not the
+     clock, the timezone, virtual time or the browser. `actions/checkout` on a
+     `pull_request` event checks out the MERGE COMMIT — the head merged with the
+     base — not the head. main had already been fixed by another branch, so CI
+     was running head+main, with the anchored fixture, while a local run of the
+     same head SHA had the August literals. Byte-identical commits, two
+     different files.
+
+     THE GENERAL LESSON FOR READING THIS RUNNER'S OUTPUT: a green CI shard and a
+     red local one on "the same commit" are not a contradiction when the base
+     has moved. Fetch and merge the base before believing either. */
   'test_mobile_trend.js':
     'mobile-trend: 2 of 10 cases — both ends of the line are not dated, and ' +
     'switching range does not re-ask the server for thirty days.',
