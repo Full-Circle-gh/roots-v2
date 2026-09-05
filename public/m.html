@@ -7505,8 +7505,25 @@ function loadTrend(force){
   if(state.trendKey===key&&!force) return;
   state.trendKey=key; state.trend=null; state.trendErr=null;
   const to=GZ_ISO().slice(0,10);
+  /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
+     actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
+     steps back in LOCAL days — but the result was serialised with
+     toISOString(), which is UTC. At UTC+8 local midnight is 16:00 the PREVIOUS
+     day in UTC, so the from-date came back a day early: "last 7 days" asked for
+     eight and "30 days" asked for thirty-one. Every figure on the screen was
+     computed over that window — the total, the busiest day, and the mean, which
+     divides by a day-count that did not match what was fetched.
+
+     It read correctly at UTC offset 0, where local midnight and UTC midnight
+     are the same instant, so it survived every run on a UTC box. The suite that
+     catches it only does so because the runner pins TZ=Asia/Shanghai to match
+     production.
+
+     Formatted from the local fields now, so the string that goes out is the
+     same day the arithmetic was done in. */
   const from=(()=>{ const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(key)-1));
-    return d.toISOString().slice(0,10); })();
+    const p=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); })();
   api('/dashboard?from='+from+'&to='+to).then(d=>{
     if(state.trendKey!==key) return;   // a later range won the race
     state.trend=Array.isArray(d&&d.trend)?d.trend:[];
