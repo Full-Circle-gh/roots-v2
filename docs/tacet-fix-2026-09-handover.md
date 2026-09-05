@@ -18,7 +18,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | merged and live (commit `56accb7`) |
 | **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | merged and live (commit `d347a59`) |
 | **Part seven** | D-03 on the counter till and the phone | merged and live (commit `48f0d1e`) |
-| **Part eight** | D-04 in the product-copy assistant's prompt and on the parcel label | on the branch, deploys with the next merge |
+| **Part eight** | D-04 in the product-copy assistant's prompt | merged and live (commit `60e7c67`) |
+| **Part nine** | D-04 on the parcel label | **merged to `main` (`d230ec0`) but NOT on the server** — see below |
 
 ---
 
@@ -392,6 +393,32 @@ sign-in and write it when the toggle is used.
 Left alone deliberately: your brief puts the sales-channel sync redesign out of
 scope. Flagging it only so it is not assumed forgotten — the fix belongs with
 that work.
+
+---
+
+## 2b. The one thing that is on `main` and not on the server
+
+**GitHub Actions stopped assigning runners at about 15:42 UTC on 5 September.**
+Every job in both workflows since then fails in three seconds with no runner
+assigned and no steps recorded — `runner_name: ""`, `steps: 0` — which is an
+account-level condition (a spending limit, a billing hold, or a GitHub
+incident), not anything in the tree. Re-running the deploy once produced the
+identical failure, so it is not a flake.
+
+What that leaves:
+
+- **The server is running `60e7c67`.** That was the last deploy to succeed, and
+  it succeeded normally.
+- **`main` is one commit ahead, at `d230ec0`** — the JD waybill's sender name,
+  its suite and this document. Both shards are green on it locally (150 fast,
+  34 slow); it simply never got a runner to ship it.
+- Nothing further was merged to `main` after that, deliberately: with no
+  runners, a merge only adds an undeployed commit and a red run.
+
+**To finish it:** once Actions has runners again, re-run the deploy for
+`d230ec0` (run `33975938690`) and the Tests run (`33975938744`). Both should go
+green with no code change — the tree is the tree that was already green on
+`d347a59`. If the cause was a spending limit, raising it is the whole fix.
 
 ---
 
