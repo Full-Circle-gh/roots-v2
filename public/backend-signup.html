@@ -72,6 +72,16 @@
       <label for="owner_name">Your name · 您的姓名</label>
       <input type="text" id="owner_name" name="owner_name">
     </div>
+    <!-- Audit D-08 / H-01. ONE question, not four. Currency, time zone and the
+         shop's language follow from the country and are all editable on the
+         next screen — four dropdowns on the first screen a merchant ever sees
+         is how a sign-up gets abandoned. What this replaces is worse than a
+         dropdown: none of the four was asked, and all four were decided. -->
+    <div class="field">
+      <label for="country">Where do you trade? · 在哪里经营？</label>
+      <select id="country" name="country" required></select>
+      <div class="hint" id="localeHint">Sets your currency, time zone and shop language — all changeable later · 决定货币、时区与店铺语言，稍后均可修改</div>
+    </div>
     <div class="field">
       <label for="username">Username · 用户名</label>
       <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
@@ -138,9 +148,41 @@
   // Whoever can actually provision (kitchen admin, or BACKEND_SIGNUP_OPEN=1) gets
   // the real provisioning form; everyone else gets the waitlist form. Public
   // self-provisioning stays closed until tenant data isolation is cut over.
+  // The country picker, and the three answers it stands in for. Named in
+  // English rather than localised: the list is short, and a merchant picking
+  // their own country from two-letter codes plus their own currency is clearer
+  // than a half-translated country list.
+  var LOCALES = {};
+  function paintLocaleHint() {
+    var sel = $('#country'), hint = $('#localeHint');
+    if (!sel || !hint) return;
+    var L = LOCALES[sel.value];
+    hint.textContent = L
+      ? 'Currency ' + L.currency + ' (' + L.symbol + ') · time zone ' + L.timezone
+        + ' · shop language ' + (L.language === 'bilingual' ? 'English + 中文' : L.language.toUpperCase())
+        + ' — all changeable later · 稍后均可修改'
+      : 'Sets your currency, time zone and shop language — all changeable later · 决定货币、时区与店铺语言，稍后均可修改';
+  }
   fetch('/api/backend/signup/status', { credentials: 'same-origin' }).then(r => r.json()).then(s => {
     if (s.open || s.canProvision) { $('#signupForm').style.display = ''; }
     else { $('#waitForm').style.display = ''; }
+    var sel = $('#country');
+    if (sel && Array.isArray(s.countries) && s.countries.length) {
+      sel.innerHTML = s.countries.map(function (c) {
+        LOCALES[c.code] = c;
+        return '<option value="' + c.code + '">' + c.code + ' — ' + c.currency + '</option>';
+      }).join('');
+      // No pre-selection that could be accepted by inaction: an empty first
+      // option makes the merchant answer, because a default here is exactly
+      // the thing that was wrong before.
+      sel.insertAdjacentHTML('afterbegin', '<option value="" selected disabled>Choose… · 请选择…</option>');
+      sel.addEventListener('change', paintLocaleHint);
+    } else if (sel) {
+      // The list could not be read. Do not block a sign-up over it — the server
+      // falls back to a neutral locale and the merchant can set it afterwards.
+      sel.innerHTML = '<option value="">Not sure yet · 暂不确定</option>';
+      sel.required = false;
+    }
   }).catch(() => { $('#waitForm').style.display = ''; });
 
   $('#signupForm').addEventListener('submit', async (e) => {
@@ -151,6 +193,7 @@
       owner_name: $('#owner_name').value.trim(),
       username: $('#username').value.trim(),
       password: $('#password').value,
+      country: $('#country').value,
     };
     if (!body.company || !body.username || body.password.length < 10) { show('Fill in company, username, and a 10+ char password · 请填写公司、用户名及至少 10 位密码', 'err'); return; }
     btn.disabled = true; btn.textContent = 'Creating… · 创建中…';
@@ -160,8 +203,23 @@
         body: JSON.stringify(body),
       }).then(r => r.json());
       if (j.success) {
-        show('Backend created. Sign in with “' + body.username + '”. · 后台已创建,请使用「' + body.username + '」登录。', 'ok');
-        setTimeout(() => location.href = '/backend/login', 1800);
+        // Audit D-08 / H-03. Say what they were actually given, and — when no
+        // web address could be issued — say THAT, rather than a cheerful line
+        // that lets them finish setup and open a shop nobody can reach.
+        var L = j.locale || {};
+        var cur = L.currency ? (L.currency.code + ' ' + L.currency.symbol) : null;
+        var parts = ['Backend created. Sign in with “' + body.username + '”.'];
+        if (cur) parts.push('Priced in ' + cur + ', on ' + L.timezone + ' time.');
+        if (j.storefront) parts.push('Your shop: ' + j.storefront);
+        else parts.push('Your shop has no web address yet — we are setting one up and will tell you. Nothing else is blocked.');
+        var cn = ['后台已创建,请使用「' + body.username + '」登录。'];
+        if (cur) cn.push('计价货币 ' + cur + '，时区 ' + L.timezone + '。');
+        if (j.storefront) cn.push('店铺地址：' + j.storefront);
+        else cn.push('店铺网址尚未开通，我们正在处理并会通知您。其他功能不受影响。');
+        show(parts.join(' ') + ' · ' + cn.join(''), 'ok');
+        // Longer when there is more to read, and longer still when the news is
+        // that something is missing — 1.8s was already brisk for one sentence.
+        setTimeout(() => location.href = '/backend/login', j.storefront ? 3200 : 6000);
         return;
       }
       show(j.error || 'Could not create backend · 创建失败', 'err');

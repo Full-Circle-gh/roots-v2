@@ -1346,6 +1346,9 @@ function ordFiltersActive() {
 function ordSyncClearBtn() {
   const b = document.getElementById('ord-clear-btn');
   if (b) b.hidden = !ordFiltersActive();
+  // The Views control sits beside it and tracks the same thing — whether there
+  // is anything on screen worth saving (audit E-08).
+  if (typeof viewsRepaint === 'function') viewsRepaint('orders');
 }
 
 // Put every Orders control back to "everything", in one click. Before this the
@@ -1360,6 +1363,75 @@ function ordClearFilters() {
   ordResetFacetsUI();
   ORD_CUSTOMER_FILTER = null;
   ordFilterChanged();          // page → 1 + one reload
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SAVED VIEWS ON THIS SCREEN (audit E-08)
+   ══════════════════════════════════════════════════════════════════════════
+   "Unpaid orders from the Web channel at the Tianhe shop" was three controls
+   to rebuild every morning and could not be handed to a colleague.
+
+   25-views.js owns the menu, the storage and the sharing; this is the whole of
+   what the Orders screen has to say for itself — what its filters ARE right
+   now, and how to put a set of them back. Both are written in this screen's own
+   control names, which is why adopting saved views is these two functions and
+   not a translation layer.
+
+   THE CUSTOMER SCOPE IS DELIBERATELY LEFT OUT of both. It arrives from a
+   customer drawer's "View all N orders", carries a name chip the view could not
+   restore, and "orders for customer #4192" is not a view of the shop's work —
+   it is one journey into one record.
+   ══════════════════════════════════════════════════════════════════════════ */
+function ordViewRead() {
+  const q = {};
+  for (const [k, v] of ordFilterQuery().entries()) {
+    if (k === 'customer_id') continue;
+    q[k] = v;
+  }
+  return q;
+}
+function ordViewApply(q) {
+  q = q || {};
+  // Start from "everything", so a view that does not mention the store filter
+  // leaves no store filter behind — otherwise applying two views in a row
+  // narrows by the union of both, which nobody asked for and nobody can see.
+  ordResetFacetsUI();
+  ORD_CUSTOMER_FILTER = null;
+  const st = document.getElementById('orders-status');
+  if (st && q.status) {
+    st.value = q.status;
+    $$('#orders-status-chips .status-chip').forEach(el =>
+      el.classList.toggle('active', (el.dataset.status || '') === q.status));
+  }
+  if (q.channel) {
+    // Go through the channel menu's own item so the button's icon, label and
+    // "is-set" fill all follow — three things the dropdown keeps in step and
+    // one of which reading wrong would be a filter you cannot see.
+    const item = document.querySelector(`#chd-pop .chd-item[data-channel="${CSS.escape(q.channel)}"]`);
+    if (item) setOrderChannel(item);
+    else { const h = document.getElementById('orders-channel'); if (h) h.value = q.channel; }
+  }
+  const store = document.getElementById('orders-store');
+  // A view saved when a shop existed can outlive the shop. Setting a <select>
+  // to an option it does not have leaves it blank, which reads as "all shops"
+  // — and showing MORE than the view promised is the safe direction.
+  if (store && q.store_id) store.value = q.store_id;
+  const qBox = document.getElementById('orders-q');
+  if (qBox && q.q) qBox.value = q.q;
+  ordFilterChanged();
+}
+if (typeof viewsRegister === 'function') {
+  viewsRegister({ screen: 'orders', mount: 'ord-views', read: ordViewRead, apply: ordViewApply });
+} else {
+  // 25-views.js loads after this file. Registering on the next tick keeps the
+  // load order of the ten parts a detail of the HTML rather than a rule this
+  // file has to know.
+  setTimeout(() => {
+    if (typeof viewsRegister === 'function') {
+      viewsRegister({ screen: 'orders', mount: 'ord-views', read: ordViewRead, apply: ordViewApply });
+      if (typeof viewsPaint === 'function') viewsPaint('orders');
+    }
+  }, 0);
 }
 
 // Download the orders the list is showing — every one of them, not just the
@@ -8843,6 +8915,9 @@ function ordNewRender() {
     // Which of the two fee fields the operator has typed in. A touched field is
     // never refilled from the zone quote again — see ordNewFeeTyped.
     feeTouched: { ship: false, pack: false },
+    // True while the fulfilment select holds a value the ORIGIN picker put there
+    // (Pick up → Pickup), not one the operator chose — see ordNewChannelChange.
+    fulFromOrigin: false,
   };
   // The busy latch and the two action buttons only ever get set BUSY/disabled
   // (ordNewSetBusy) — a successful create leaves them that way on purpose
@@ -9215,7 +9290,20 @@ function ordNewRenderLines() {
 // "Other" is the only origin that needs a follow-up question, so the note field
 // exists only while it is selected — and is cleared on the way out so a switch
 // away from Other can't leave a stale note attached to a real origin.
-function ordNewChannelChange() {
+//
+// "PICK UP" AS AN ORIGIN MEANS THE CUSTOMER COLLECTS. The form opens on
+// fulfilment = Delivery, and an operator who answered "Pick up" and went
+// straight to the products was still being quoted the delivery zone's shipping
+// (¥15 on a walk-in collection). The origin answer already says how this order
+// is fulfilled, so picking it moves the fulfilment select to Pickup — which is
+// what zeroes shipping and hides the address block (ordNewFulChange). Only the
+// operator's own pick does this (`userPick`): the open/reset and draft-restore
+// paths call this to re-reveal the note field and must not re-route an order
+// whose fulfilment the draft already holds. The hop is remembered
+// (ONW.fulFromOrigin) so a mis-click on "Pick up" that is then corrected to
+// another origin falls back to Delivery instead of leaving a silent Pickup
+// behind it; a fulfilment the operator chose by hand is never overridden.
+function ordNewChannelChange(userPick) {
   const sel  = document.getElementById('onw-channel');
   const wrap = document.getElementById('onw-channel-note-wrap');
   const note = document.getElementById('onw-channel-note');
@@ -9223,11 +9311,26 @@ function ordNewChannelChange() {
   const isOther = sel.value === 'other';
   wrap.hidden = !isOther;
   if (!isOther && note) note.value = '';
+  if (!userPick || !ONW) return;
+  const ful = document.getElementById('onw-ful');
+  if (!ful) return;
+  if (sel.value === 'pickup' && ful.value === 'delivery') {
+    ful.value = 'pickup';
+    ordNewFulChange();
+    ONW.fulFromOrigin = true;
+  } else if (sel.value !== 'pickup' && ONW.fulFromOrigin && ful.value === 'pickup') {
+    ful.value = 'delivery';
+    ordNewFulChange();
+  }
 }
 
 function ordNewFulChange() {
   const sel = document.getElementById('onw-ful');
   if (!sel || !ONW) return;
+  // Any change to the select — the operator's or a restore's — is a value the
+  // origin picker no longer owns (ordNewChannelChange re-sets the flag after
+  // its own call).
+  ONW.fulFromOrigin = false;
   const ft = sel.value;
   const addr = document.getElementById('onw-addr-blk');
   if (addr) addr.hidden = ft !== 'delivery';
@@ -9649,6 +9752,23 @@ async function ordOpenDraft(id) {
 }
 async function ordDeleteDraft(ev, id) {
   if (ev) ev.stopPropagation();
+  // AUDIT C-05. The one destructive call in the admin that did not ask — 31 of
+  // 32 did. The audit called it defensible, and it is: a draft is scratch work.
+  // But a draft can also be a half-typed phone order with twenty lines on it,
+  // the delete sits on a row in a list, and the one thing that cannot be undone
+  // here is the one thing with no confirmation. Asking costs a tap.
+  //
+  // The AUTOMATIC cleanup after a draft becomes a real order is deliberately
+  // left alone: nobody clicked it, there is nothing to confirm, and asking
+  // would be a dialog about housekeeping the operator did not ask for.
+  const ok = await askConfirm({
+    titleEn: 'Delete this draft?', titleCn: '删除这份草稿？',
+    bodyEn: 'It has not been placed as an order, and this cannot be undone.',
+    bodyCn: '该草稿尚未生成订单，删除后无法恢复。',
+    confirmEn: 'Delete draft', confirmCn: '删除草稿',
+    danger: true,
+  });
+  if (!ok) return;
   const btn = ev && ev.currentTarget;   // captured before the await
   if (btn) btn.disabled = true;
   try {

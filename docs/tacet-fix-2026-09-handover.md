@@ -5,8 +5,10 @@ This one says what has been changed, what has deliberately **not** been changed,
 and the eleven questions that need your answer before the rest can move. Three
 of the eleven are answered and built; eight are still waiting.
 
-Branch: `claude/tacet-audit-2026-09-tpkn60`. Nothing here is on `main`, so
-nothing here has deployed. Every commit carries `[skip deploy]` as well.
+Branch: `claude/tacet-audit-2026-09-tpkn60`. The first 36 findings were merged
+and deployed to production on 5 September (run 1703, commit `24f3991`); the work
+in §1b below has been built since and deploys with the next merge. Every commit
+on the branch carries `[skip deploy]`, so nothing ships until the merge.
 
 ---
 
@@ -92,6 +94,49 @@ thinking about the case, and turns an invisible decision into a reviewable one.
 when it is exceeded, so the pile cannot grow while it is worked down. Lower it
 with `--update`; list them with `--list`. The two worst offenders are
 `routes/retail.js` (72) and `database.js` (66).
+
+---
+
+## 1b. What has been fixed since the deploy
+
+Everything below was built after the first 36 shipped, working down what was
+left. It is grouped by what each one changes rather than by severity, because at
+this point the severities left are all Medium and Low and the useful question is
+what a merchant notices.
+
+| Finding | Severity | What changed |
+|---|---|---|
+| **A-06** | High | *Q1, stage 1.* `lib/money.js` — exact amounts in integer cents, and RATES kept as ten-thousandths, because the production measurement showed sub-cent values are concentrated in the rate columns (a per-gram cost of 0.042 is 4.2 cents, and rounding it moves every recipe's cost basis by 5%). No schema change: this is the vocabulary the storage migration moves into. `docs/tacet-money-migration-plan.md` carries the measured baseline. |
+| **A-05** | High | *Q2.* The business day is the shop's. 35 `'+8 hours'` literals replaced by the account's own offset, computed in MINUTES because India is +5:30 and Nepal +5:45. The limitation is stated in the code: one offset per query, so a DST zone is an hour out for rows near midnight for half the year — strictly better than always wrong. |
+| **D-08 / H-01 / H-03** | High ×3 | *Q6.* A new merchant is asked where they trade, once, and currency, time zone and shop language follow from it. The yuan fee defaults are seeded only in yuan. An unknown country falls back to USD/UTC, deliberately not to China. A shop with no web address says so instead of finishing the checklist with a shop nobody can reach. |
+| **D-10** | High | *Q7.* Guangzhou's districts were written into delivery, orders and stock routing. The districts that may choose a dispatch method are the merchant's own now. |
+| **P-01** | High | *Q4.* Every alert says whose problem it is: `alertPlatform`, `alertMerchant`, `alertBoth`. A gate refuses an alert that declares no audience. |
+| **E-05** | Larger | Products and customers can come in from a spreadsheet. The importer refuses an ambiguous comma decimal rather than guessing — `18,00` as 1800 is a hundredfold mis-price, and my own test caught it. |
+| **B-03** | Medium | Four endpoints for opening and closing the shop, and no screen. There is one now, above the store list. Wiring it up exposed a wrong answer: `master` counted a shop with no marketplace as closed, so a merchant with no integration would have been told their whole business was shut while it traded. |
+| **E-10** | Medium | Notifications can be tuned. Four events, each a switch, all on until somebody turns one off, filtered at the one place every send funnels through. No quiet hours, deliberately — an operational alert dropped by a clock is indistinguishable from one that failed. |
+| **E-08** | Medium | A filter set can be named, kept and shared with a colleague. Private until shared; a shared view stays its author's. Orders adopts it; the module is general. |
+| **E-07** | Medium | What was deleted can be put back — coupons, delivery zones and hand-typed ledger rows, for sixty days, from Settings → Operations. A purchase order is deliberately not covered: putting one back means re-deriving stock that has moved and books that have been reported. |
+| **I-02** | Medium | Money arithmetic in SQL no longer sets the rounding. A purchase order's expense rows, a customer's lifetime spend and the finance summary's `fen()` all round the product's way — which fixes two real cases: 1.005 became 1.00, and a negative net rounded the opposite way from the positive it should mirror. |
+| **G-03** | Medium | Settings has a search of its own, over the cards' own words, and fourteen of its twenty-seven cards are marked as things customers see. |
+| **J-03** | Medium | The shell is compressed on the way out and a stamped file is cached properly: 3,355 KB → 1,073 KB on the wire, and nothing at all between deploys. Loading a section on demand — the audit's direction — is still open, and why is written into `lib/static-assets.js`. |
+| **R-05** | Medium | The last part: about a hundred `onclick` handlers on elements that are not buttons are reachable from the keyboard, with a focus ring and without a row being called a button. |
+| **O-02** | Medium | The stores and team lists can be searched. |
+| **F-02** | Low | Both wizards open on the first question instead of a door screen, with the other routes beside it. |
+| **E-09** | Low | Four keys: j/k to move, / to search, ? for the list. Deliberately no status key — a single letter that WRITES is how the wrong order gets dispatched. |
+| **E-12** | Low | A stock count sheet for the shelves and a customer statement. Both carry the merchant's own name; the older purchase-order sheet had "Roots" written into the file, and no longer does. |
+| **Q-03** | Low | Three behaviours for "clear the filters". Customers and Products now follow Waste's, which Orders already did: the button is present while something is narrowing the list and absent otherwise. Empty-state-only was serving the wrong case — a filter that matched nothing announces itself; one that matched forty out of four hundred does not. |
+| **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
+| **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
+
+**Five audit findings were already fixed when the audit was written** — L-01,
+L-02, Q-02, A-03 and half of Q-01. Each is recorded in the commit that found it,
+not quietly skipped.
+
+**One audit finding was wrong and one of my own checks was wrong.** J-02 listed
+the inventory grid as clean when it was half-batched (§4). And I reported two
+orders as over-refunded: the check compared against `retail_orders.total` while
+the real ceiling is `points_amount + balance_used + total`. Both orders were
+correct. The correction is a visible block in the money plan, not a quiet edit.
 
 ---
 
@@ -267,31 +312,45 @@ that work.
 
 ---
 
-## 3. What is still open and needs no decision
+## 3. What is still open
 
-I can do all of these on a word from you. They are listed with what each costs.
+**Nothing on this list needs a decision except where it says so.** Everything
+that could be done without one has been.
 
-**Larger, worth their own pass:**
-- **E-05** — only suppliers can be imported. Products, customers and opening stock are the largest cost of switching to Tacet.
-- **E-07** — no undo except on products.
-- **G-03** — Settings is nine dropdowns deep with no explanation.
-- **J-03** — 970 KB of JavaScript before anything is fetched.
-- **I-02** — money arithmetic inside string-built SQL; the rounding is the database's, not the product's.
+**Waiting on an answer (the eight questions in §2):**
+- **I-03** — there is no tax anywhere. Q8. Table-stakes for a merchant outside
+  China, and a product decision about inclusive/exclusive, per-line or per-order.
+- **N-02** — a phone order cannot be taken on a phone. Q9. A new surface, not a
+  repair.
+- **D-05** — the sales channel list is fixed in the interface. Q11, and yours per
+  the brief.
+- **A-06 stage 2** — the storage migration itself. Stage 1 has shipped and the
+  plan is measured against production; the migration is its own piece of work
+  with a rehearsal, which is what Q1 asks for.
 
-**Medium, an afternoon each:**
-- **E-08** — filters cannot be saved.
-- **E-10** — notifications cannot be tuned (the low-stock digest is now the only one that can).
-- **B-03** — four endpoints for opening and closing the shop, and no screen.
-- **R-05** — one part remains: 385 `onclick` handlers on elements that are not buttons and so are not reachable by keyboard.
-- **C-02** — the phone admin still has its own date family. Its convention matches the shared formatter's, so converging is safe and fixes nothing visible; it is tidiness, and it is an untested surface.
-
-**Small:**
-- **C-05** — one confirmation gap out of 32.
-- **E-09**, **E-12**, **F-02**, **I-04**, **O-02** — as recorded in the audit.
-
-**Deliberately not touched:** everything under **K** (RBAC enforcement and the
-unmapped routes), the sales channel redesign, and the finance category data
-quality pass — all three are yours per the brief.
+**Deliberately left, with the reason:**
+- **C-02, the last part** — the phone admin still has its own date family. Its
+  convention matches the shared formatter's, so converging changes nothing
+  visible; it is tidiness on an untested surface, which is the worst ratio on
+  this list.
+- **I-04** — the platform's money is integer cents and the merchant's is a
+  float. That IS A-06; it stops being true when stage 2 lands, and doing
+  anything about it separately would be a second migration to undo.
+- **J-03's second half** — loading a section's code on demand. The 27 parts
+  share one global scope and call each other by name; there is no module
+  boundary to load across, and half-doing it is a screen that opens on a
+  ReferenceError. The wire cost is down 3× in the meantime.
+- **E-07 for purchase orders** — restoring one means re-deriving stock that has
+  moved and books that have been reported. The honest version is an accounting
+  policy decision, not a function.
+- **Q-04** — Purchasing is a stack of screens with its own back button while
+  every other section is a page with a drawer. Converging them is a redesign of
+  a working screen, and the audit records it as an observation rather than a
+  defect with a direction.
+- **H-02** — the public door is a waiting list. The audit's own suggested
+  direction is "none — this is a sequencing decision, not a defect".
+- Everything under **K** (RBAC enforcement and the ~50 unmapped routes) and the
+  finance category data quality pass — both yours per the brief.
 
 ---
 
@@ -314,24 +373,36 @@ note is in the document.
 
 ## 5. How to check this
 
-**`main` gained a CI test runner (#272) while this branch was in flight.** It is
-merged in, and it has been run.
+**The container this was built in can install dependencies after all.** The
+earlier note here said it could not; that was wrong for two sessions, and it
+mattered — half the suites and every eslint run were being skipped on an
+assumption. With `npm ci` the whole thing runs locally.
 
-**62 of the 117 fast suites pass** (60 of 115 before the two new gates below).
-The other 49 cannot run in this container —
-they need `better-sqlite3` or `express`, and there is no registry access to
-install them. Six more were already quarantined as red on `main` before this
-branch existed, and are unchanged by it. The slow shard needs Chromium and was
-not attempted.
+**The fast shard: 128 suites, 0 failures, 6 quarantined** — the same six that
+were already red on `main` before this branch existed. `npx eslint` reports **0
+errors** on every changed file, which is what the deploy gate blocks on. The
+slow shard (Chromium render passes) runs in CI.
 
-**The runner caught four failures, all of them mine, none a product defect** —
-and one of the four was a real bug. See the last commit for the detail; in
-short: two source-greps named a database handle that D-01 correctly changed, a
-VM sandbox was missing the currency helpers D-03 introduced, and the broadcast
-composer was echoing a typed time back shifted by the store's offset. That last
-one only shows up on a host that is not at UTC+8, which is why only a test could
-find it. It is fixed, with a zone-inversion helper that round-trips exactly at
-Asia/Shanghai, America/New_York and Europe/London.
+**CI caught five failures on the first real run, none of them a product
+defect**: two source-greps naming a database handle D-01 correctly changed, two
+VM sandboxes missing the currency helpers D-03 introduced, and a stale
+role-count assertion for the bookkeeper E-11 added. All fixed.
+
+**One suite left quarantine.** `test_mobile_purchasing.js` is green in two
+independent environments AND the cause its entry named is gone from the file
+(commit 558eed3 anchored the fixture to today, which is exactly what the entry
+said the fix had to be). Both halves were required: the entry warned against
+acting on one green run, because it had been green on CI and red locally on the
+same day with no explanation. Five remain quarantined, unchanged.
+
+Suites added by this pass, each named for the finding it holds down:
+`test_money.js`, `test_money_boundaries.js`, `test_business_day.js`,
+`test_csv_import.js`, `test_delivery_districts.js`, `test_alert_audience.js`,
+`test_new_merchant_locale.js`, `test_signin_code_delivery.js`,
+`test_open_close_panel.js`, `test_notification_choices.js`,
+`test_saved_views.js`, `test_keyboard_reach.js`, `test_wizard_first_question.js`,
+`test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
+`test_asset_delivery.js`, `test_clear_filters.js`.
 
 Also run, on every commit:
 

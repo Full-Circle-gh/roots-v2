@@ -585,8 +585,14 @@ const VW_GOAL_KICK = {
 
 async function vwOpen() {
   _vw = {
-    goal: null, step: 'front', showWho: false,
-    type: 'fixed_amount', value: 20,
+    // OPENS ON THE FIRST QUESTION (audit F-02). This used to open on a
+    // choose-your-goal screen — five doors before anything was asked. The five
+    // are starting points, not different wizards: each one sets the same three
+    // fields the first question edits. So the wizard opens on that question
+    // with the most ordinary of them already in it, and the other four are a
+    // row of chips above it, applied in place.
+    goal: 'public', step: 'deal', showWho: false,
+    type: 'fixed_amount', value: 10,
     path: 'public', showOnHome: false,
     min: 0, setMin: false, expires: '', endChip: 'none',
     perCust: 1, maxUses: '', setMax: false,
@@ -649,7 +655,9 @@ function vwApplyGoal(goal) {
   _vw.showWho = (goal === 'fresh');
   _vw.codeEdited = false; _vw.labelEdited = false;
   _vw.min = 0; _vw.setMin = false; _vw.expires = ''; _vw.endChip = 'none'; _vw.perCust = 1; _vw.maxUses = ''; _vw.setMax = false;
-  vwGoto('deal');
+  // Already on the deal step when a chip is picked (audit F-02) — vwGoto would
+  // play the slide transition against itself. Re-render in place instead.
+  if (_vw.step === 'deal') vwRender(); else vwGoto('deal');
 }
 
 // ── navigation ──
@@ -665,7 +673,9 @@ function vwNext() {
 function vwBack() {
   const steps = vwSteps();
   const i = steps.indexOf(_vw.step);
-  if (i <= 0) { vwGoto('front'); return; }
+  // The first step is the first step now (audit F-02) — there is no door screen
+  // behind it, and the footer does not draw a Back button there.
+  if (i <= 0) return;
   vwGoto(steps[i - 1]);
 }
 
@@ -747,8 +757,7 @@ function vwRender() {
   const s = _vw.step;
   title.textContent = VW_TITLES[s] || VW_TITLES.front;
   if (kick) kick.textContent = _vw.goal ? ('NEW COUPON · ' + VW_GOAL_KICK[_vw.goal]) : 'NEW COUPON · 新建优惠券';
-  foot.style.display = (s === 'front') ? 'none' : 'flex';
-  if (s === 'front') { body.innerHTML = vwFrontHtml(); return; }
+  foot.style.display = 'flex';
   if (s === 'deal')        body.innerHTML = vwPanes(vwDealHtml());
   else if (s === 'who')    body.innerHTML = vwPanes(vwWhoHtml());
   else if (s === 'rules')  body.innerHTML = vwPanes(vwRulesHtml());
@@ -764,7 +773,11 @@ function vwPanes(leftHtml, opts) {
 function vwFootHtml() {
   const steps = vwSteps();
   const dots = '<div class="vw-dots">' + steps.map(s => '<span class="vw-dot' + (s === _vw.step ? ' on' : '') + '"></span>').join('') + '</div>';
-  const back = '<button class="btn" onclick="vwBack()">Back · 返回</button>';
+  // No Back on the first step — it has nowhere to go. An empty span keeps the
+  // dots centred so Next does not jump between step one and step two.
+  const back = steps.indexOf(_vw.step) <= 0
+    ? '<span></span>'
+    : '<button class="btn" onclick="vwBack()">Back · 返回</button>';
   if (_vw.step === 'review') {
     return back + dots
       + '<span style="display:flex; gap:8px;">'
@@ -774,30 +787,31 @@ function vwFootHtml() {
   return back + dots + '<button class="btn" onclick="vwNext()">Next · 下一步</button>';
 }
 
-// ── screen 1: the door ──
-function vwFrontHtml() {
-  // The four starting points quote a MONEY amount, so they carry the tenant's
-  // own symbol — a merchant selling in dollars was being offered "¥20 off" on
-  // the first screen of the first coupon they ever made (audit D-03). The
-  // NUMBERS stay as they are: 20 and 10 are sensible starting points in most
-  // currencies, and this is a starting point the next screen lets them change.
+// ── The starting points, beside the first question (audit F-02) ──
+// This was a screen of its own: five doors before a single question. But the
+// five are not five wizards — each one sets the same three fields the first
+// question edits (what kind of discount, how much, who it reaches), so the
+// wizard opens on that question with the plainest of them in it and the rest
+// are a row above it, applied in place.
+//
+// Shown only on the first step. Picking one REPLACES the answers, which is
+// exactly what a starting point means; offering that over the small print
+// somebody has already filled in would be offering to throw it away.
+function vwGoalChipsHtml() {
   const cur = (typeof acCurrencySymbol === 'function') ? acCurrencySymbol() : '¥';
   const goals = [
-    ['welcome', 'gift', 'Welcome gift · 新人礼', 'Lands in every new customer\'s coupons. · 自动进入新顾客账户。', cur + '20 off · 立减', 'their first order · 首单'],
-    ['sale', 'tag', 'Store sale · 店铺促销', 'Applied for them at checkout — no code. · 结账自动,无需编码。', '10% off · 折扣', 'everything · 全场'],
-    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'Shows in the app; people tap to save. · 顾客自行领取。', cur + '10 off · 立减', 'any order · 任意订单'],
-    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off. · 减免运费。', cur + '0 delivery · 免运', 'every order · 每单'],
+    ['welcome', 'gift', 'Welcome gift · 新人礼', cur + '20 off a first order · 首单立减'],
+    ['sale', 'tag', 'Store sale · 店铺促销', '10% off everything, applied at checkout · 全场折扣,结账自动'],
+    ['public', 'ticket', 'Anyone can use · 人人可领', cur + '10 off any order · 任意订单立减'],
+    ['shipping', 'truck', 'Free shipping · 免运费', 'No delivery fee · 减免运费'],
+    ['fresh', 'pencil', 'Start fresh · 从头开始', 'Answer every question yourself · 全部自己设置'],
   ];
-  const cards = goals.map(g => '<button class="vw-door" onclick="vwApplyGoal(\'' + g[0] + '\')">'
-    + '<span class="vico">' + vwIcon(g[1], 24) + '</span>'
-    + '<span class="vw-door-txt"><span class="dt">' + g[2] + '</span><span class="ds">' + g[3] + '</span></span>'
-    + '<span class="vw-preset"><b>' + g[4] + '</b>' + g[5] + '</span></button>').join('');
-  const fresh = '<button class="vw-door fresh" onclick="vwApplyGoal(\'fresh\')">'
-    + '<span class="vico">' + vwIcon('pencil', 20) + '</span>'
-    + '<span class="vw-door-txt"><span class="dt">Start fresh · 从头开始</span><span class="ds">Answer every question yourself. · 全部自己设置。</span></span></button>';
-  return '<div class="vw-lab" style="margin-bottom:2px;">What do you want to do? · 你想做什么?</div>'
-    + '<div class="vw-doors">' + cards + fresh + '</div>'
-    + '<div class="vw-help" style="margin-top:14px;">Every choice is a starting point — change anything on the next screens. · 都是起点,后面都能改。</div>';
+  return '<div class="vw-alts">'
+    + '<span class="vw-help">Start from · 从以下开始</span>'
+    + goals.map(g => '<button type="button" class="vw-alt' + (_vw.goal === g[0] ? ' on' : '')
+        + '" title="' + escapeAttr(g[3]) + '" onclick="vwApplyGoal(\'' + g[0] + '\')">'
+        + '<span class="vico">' + vwIcon(g[1], 15) + '</span>' + g[2] + '</button>').join('')
+    + '</div>';
 }
 
 // ── screen 2: the deal ──
@@ -832,7 +846,8 @@ function vwDealHtml() {
       + '<span>' + vwWhoPlain() + '</span>'
       + '<button class="btn btn-ghost vw-chg" onclick="vwChangeWho()">Change · 更改</button></div>';
   }
-  return '<div class="vw-lab">What kind of discount? · 哪种优惠?</div>'
+  return vwGoalChipsHtml()
+    + '<div class="vw-lab">What kind of discount? · 哪种优惠?</div>'
     + '<div class="vw-kinds">' + cards + '</div>' + amt + answered;
 }
 function vwSetType(t) {

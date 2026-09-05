@@ -946,17 +946,29 @@ router.get('/api/retail-admin/store-status', requireRetailAdmin, (req, res) => {
     const byCode = {};
     for (const r of rows) byCode[r.store_code] = r;
     const meituan = stores.map((s) => {
-      const r = byCode[s.code] || {};
+      const r = byCode[s.code];
+      const row = r || {};
       return {
         storeCode: s.code, name: s.name,
-        isOpen: r.is_open === 1, readOk: r.read_ok === 1,
-        pending: r.target_open != null, statusDesc: r.status_desc || null,
-        fulfillmentOpen: r.fulfillment_open !== 0, // whether it still ships online orders
+        // `linked` — is this shop known to the marketplace channel AT ALL? A shop
+        // with no status row has never been read or pushed, which is a different
+        // fact from "closed" and must not be shown as one.
+        linked: !!r,
+        isOpen: row.is_open === 1, readOk: row.read_ok === 1,
+        pending: row.target_open != null, statusDesc: row.status_desc || null,
+        fulfillmentOpen: row.fulfillment_open !== 0, // whether it still ships online orders
       };
     });
     // Master reflects the union: open only if EVERYTHING is open, closed only if
     // EVERYTHING is closed, else 'mixed'.
-    const flags = [online.online_open, ...meituan.map((m) => m.isOpen)];
+    //
+    // A shop counts as open when it is still fulfilling orders AND — only if it
+    // is linked to the marketplace — the marketplace shop is open too. Counting
+    // an unlinked shop's `is_open` (which is false because there is no row, not
+    // because anybody closed anything) told a merchant with no marketplace
+    // integration that their whole business was closed while it was trading.
+    const flags = [online.online_open,
+      ...meituan.map((m) => m.fulfillmentOpen && (m.linked ? m.isOpen : true))];
     const master = flags.every(Boolean) ? 'open' : (flags.every((f) => !f) ? 'closed' : 'mixed');
     res.json({ success: true, online, meituan, master });
   } catch (e) {

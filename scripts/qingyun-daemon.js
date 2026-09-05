@@ -38,7 +38,22 @@ catch {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getQingyunBrowser, closeAllQingyun, resolveCdpUrl } = require('../lib/qingyun-browser');
-const { sendOpsAlert, alertEnabled } = require('../lib/ops-alert');
+const { alertPlatform, alertMerchant, alertBoth, alertEnabled } = require('../lib/ops-alert');
+// ── Whose problem is it? (audit P-01) ─────────────────────────────────────
+// Every alert below now says who is meant to ACT on it: alertMerchant for this
+// account's trading day, alertPlatform for ours to fix, alertBoth for the rare
+// thing that is genuinely both. Before this they all went to the platform's
+// group, so a merchant was never told their own marketplace account had logged
+// out.
+//
+// ONE ACCOUNT, TODAY, AND SAID PLAINLY. This daemon opens require('../database')
+// — account 1's database — so account 1 is the only account it can be about. The
+// addressing is real, not a placeholder; there is simply one addressee. When the
+// channel sync becomes per-account (audit D-05, out of scope in this pass) this
+// constant becomes a parameter and every alert below follows it with no second
+// pass over these files.
+const { ROOTS_TENANT_ID: ACCOUNT } = require('../lib/tenant-db');
+
 // Hold off on channel calls while a holder Chrome is freshly launched (mirrors
 // shangou-daemon) — a cold browser hit seconds after launch earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
@@ -204,7 +219,7 @@ function noteVerifyResult(storeCode, challenged) {
         cold
           ? `青云 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
           : `青云 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
-      sendOpsAlert(cold
+      alertMerchant(ACCOUNT, cold
         ? `🟠 青云聚信 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），配送跟踪暂停约 ${mins} 分钟后自动恢复，无需操作\nQingyun ${storeCode} risk-control right after a browser restart — NOT logged out, tracking auto-resumes in ~${mins} min, no action needed`
         : `🔴 青云聚信 ${storeCode} 风控/验证，配送跟踪已暂停，需要在盒子上重新登录\nQingyun ${storeCode} risk-control — delivery tracking paused, needs re-login`);
     }
@@ -216,7 +231,7 @@ function noteVerifyResult(storeCode, challenged) {
     if (verifyFlagged['verify:' + storeCode] && alertsAllowed(storeCode)) {
       verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — tracking resumed');
-      sendOpsAlert(`✅ 青云聚信 ${storeCode} 已恢复，配送跟踪继续\nQingyun ${storeCode} recovered — tracking resumed`);
+      alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 已恢复，配送跟踪继续\nQingyun ${storeCode} recovered — tracking resumed`);
     }
     s.strikes = 0; s.until = 0;
   }
@@ -264,11 +279,11 @@ function heartbeatTick(storeCode) {
     const mins = Math.round((now - lastPollOk[storeCode]) / 60000);
     logSync(storeCode, 'poll_stalled', 'error', null,
       `no clean poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process is likely crash-looping`);
-    sendOpsAlert(`🔴 青云聚信 ${storeCode} 约 ${mins} 分钟没有一次成功轮询（非登录/验证/代理原因），浏览器可能在反复崩溃，请检查\nQingyun ${storeCode} — no successful poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process may be crash-looping; please check`);
+    alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 约 ${mins} 分钟没有一次成功轮询（非登录/验证/代理原因），浏览器可能在反复崩溃，请检查\nQingyun ${storeCode} — no successful poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process may be crash-looping; please check`);
   } else if (!stale && heartbeatFlagged['stall:' + storeCode]) {
     heartbeatFlagged['stall:' + storeCode] = false;
     logSync(storeCode, 'poll_resumed', 'ok', null, 'polling succeeding again');
-    sendOpsAlert(`✅ 青云聚信 ${storeCode} 轮询已恢复\nQingyun ${storeCode} polling back to normal`);
+    alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 轮询已恢复\nQingyun ${storeCode} polling back to normal`);
   }
 }
 
@@ -494,7 +509,7 @@ function flagUncallablePhone(order, storeCode) {
     if (phoneCn.isMainlandMobile(order.recipient_phone)) return;
     const shown = String(order.recipient_phone || '').trim() || '(空 / blank)';
     const ref = order.order_no || `#${order.id}`;
-    Promise.resolve(sendOpsAlert(
+    Promise.resolve(alertMerchant(ACCOUNT, 
       `⚠️ 青云聚信 ${storeCode} 订单 ${ref} 的收货电话可能无法接听：${shown}\n`
       + `Qingyun ${storeCode}: order ${ref} has a recipient phone a rider likely can't call `
       + `(${shown}). The push still goes out — call the customer if it comes back refused.`
@@ -571,13 +586,13 @@ function checkGeoHoldAlert(storeCode) {
   if (decision.alert === 'page') {
     geoHoldAlerted = true; geoHoldLastAlertMs = Date.now();
     logSync(storeCode, 'push', 'error', { held: decision.heldCount }, 'pushes held — geocoder unavailable');
-    sendOpsAlert(`🟠 青云聚信 自动发单暂停：地图服务不可用（配额/超时），${decision.heldCount} 个订单已挂起约 ${decision.heldMin} 分钟，地址本身没有问题，服务恢复后会自动发出\n`
+    alertPlatform(`🟠 青云聚信 自动发单暂停：地图服务不可用（配额/超时），${decision.heldCount} 个订单已挂起约 ${decision.heldMin} 分钟，地址本身没有问题，服务恢复后会自动发出\n`
       + `Qingyun auto-push HELD — the geocoder is unavailable (quota/timeout). ${decision.heldCount} order(s) held ~${decision.heldMin} min. `
       + `Nothing is wrong with the addresses; they push themselves once it recovers. Check the Amap/Tencent key quota.`);
   } else if (decision.alert === 'clear') {
     geoHoldAlerted = false; geoHoldLastAlertMs = null;
     logSync(storeCode, 'push', 'ok', null, 'geocoder recovered — held pushes drained');
-    sendOpsAlert('✅ 青云聚信 地图服务已恢复，挂起的订单已全部发出\nQingyun geocoder recovered — every held push has gone out');
+    alertPlatform('✅ 青云聚信 地图服务已恢复，挂起的订单已全部发出\nQingyun geocoder recovered — every held push has gone out');
   }
 }
 
@@ -810,7 +825,7 @@ async function drainPushQueue(storeCode, br) {
         // correct the number, don't push it by hand — so it says so. Sent once,
         // on the same terminal branch, because the row is now 'error' and
         // nothing retries it until someone acts.
-        sendOpsAlert(phoneRefused
+        alertMerchant(ACCOUNT, phoneRefused
           ? `🔴 青云聚信 ${storeCode} 收货电话被拒（订单#${row.retail_order_id}）：${e.qyMsg}\n`
             + `Qingyun ${storeCode}: order #${row.retail_order_id} was refused because the recipient phone `
             + `isn't one a rider can call. Fix the number on the order (Edit ship-to), then press Retry push. `
@@ -841,7 +856,7 @@ async function pollStore(storeCode) {
           && alertsAllowed(storeCode)) {
         downFlagged['login:' + storeCode] = true;
         logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
-        sendOpsAlert(`🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
+        alertMerchant(ACCOUNT, `🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
       }
       heartbeat(storeCode, false);
       return;
@@ -858,7 +873,7 @@ async function pollStore(storeCode) {
     // toggle is on and rows are pending). Runs while logged in, before tracking, so
     // a push isn't held up by the tracking bootstrap. Never blocks the poll.
     try { await drainPushQueue(storeCode, br); } catch (e) { log(storeCode, `push drain error: ${e.message}`); }
-    if (wasDown) sendOpsAlert(`✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
+    if (wasDown) alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
     noteVerifyResult(storeCode, false);
 
     const { ok, bootstrap, orders, reason } = await br.getActiveDeliveries();
@@ -880,7 +895,7 @@ async function pollStore(storeCode) {
         bootstrapFlagged['bootstrap:' + storeCode] = true;
         const mins = Math.round((Date.now() - bootstrapSince[storeCode]) / 60000);
         const why = reason ? ` [${reason}]` : '';
-        sendOpsAlert(`🔴 青云聚信 ${storeCode} 订单接口连续约 ${mins} 分钟失败，自动修复无效，配送跟踪已停止 — 请在盒子上打开青云订单页，确认仍处于登录状态${why}\nQingyun ${storeCode} order/list failing for ~${mins} min and self-heal didn't fix it — tracking stopped; open the Qingyun order page on the box and check it's still logged in${why}`);
+        alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 订单接口连续约 ${mins} 分钟失败，自动修复无效，配送跟踪已停止 — 请在盒子上打开青云订单页，确认仍处于登录状态${why}\nQingyun ${storeCode} order/list failing for ~${mins} min and self-heal didn't fix it — tracking stopped; open the Qingyun order page on the box and check it's still logged in${why}`);
       }
       log(storeCode, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
       logSync(storeCode, 'bootstrap', 'error', null, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
@@ -888,7 +903,7 @@ async function pollStore(storeCode) {
     }
     if (bootstrapFlagged['bootstrap:' + storeCode] && alertsAllowed(storeCode)) {
       bootstrapFlagged['bootstrap:' + storeCode] = false;
-      sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} order/list answering again — tracking resumed`);
+      alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} order/list answering again — tracking resumed`);
     }
     bootstrapSince[storeCode] = 0;
     if (!ok) return;
@@ -978,7 +993,7 @@ async function main() {
         // The probe target is 青云聚信's own SaaS, not Meituan — say so, since this
         // string is what the admin Delivery card shows the operator.
         for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach 青云聚信 — tracking paused');
-        sendOpsAlert(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
+        alertPlatform(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
       }
       await sleep(jitter(POLL_MS));
       continue;
@@ -988,7 +1003,7 @@ async function main() {
       alerts[PROXY_LATCH] = false;
       console.log(`[qingyun-daemon] ${new Date().toISOString()} proxy recovered — resuming`);
       for (const s of STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — tracking resumed');
-      sendOpsAlert(`✅ 青云聚信 代理已恢复，配送跟踪继续\nQingyun proxy recovered — tracking resumed`);
+      alertPlatform(`✅ 青云聚信 代理已恢复，配送跟踪继续\nQingyun proxy recovered — tracking resumed`);
     }
 
     for (const s of STORES) heartbeatTick(s);

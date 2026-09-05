@@ -611,9 +611,18 @@
     // What removing it MEANS, not just "are you sure": the materials under it
     // keep the codes they have and future ones fall to the level above.
     const where = r.scope === 'subcategory' ? kindLabel(r.category) + ' ▸ ' + r.subcategory : T('All of ', '全部 ') + kindLabel(r.category);
-    const ok = confirm(T(
-      `Remove the rule for ${where}?\n\nMaterials already coded keep their SKUs. New ones will be numbered by the rule above it instead.`,
-      `删除 ${where} 的编码规则?\n\n已有物料的编码保持不变,新物料将改用上一层规则编号。`));
+    // The shared dialog, not the browser's. This was the last native confirm()
+    // in the admin — audit C-01 replaced five of them and this one, in a file
+    // added afterwards, was missed. `danger` because it removes a rule, and the
+    // body carries the consequence rather than repeating the question.
+    const ok = await askConfirm({
+      titleEn: `Remove the rule for ${where}?`,
+      titleCn: `删除 ${where} 的编码规则？`,
+      bodyEn: 'Materials already coded keep their SKUs. New ones will be numbered by the rule above it instead.',
+      bodyCn: '已有物料的编码保持不变，新物料将改用上一层规则编号。',
+      confirmEn: 'Remove', confirmCn: '删除',
+      danger: true,
+    });
     if (!ok) return;
     try {
       await api('/api/retail-admin/sku/' + ENTITY + '/rules/' + id, { method: 'DELETE' });

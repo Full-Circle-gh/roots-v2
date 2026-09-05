@@ -47,7 +47,22 @@ const db = seam(require('../database'));
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { stallTick } = require('../lib/meituan-queue-stall');
-const { sendOpsAlert } = require('../lib/ops-alert');
+const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
+// ── Whose problem is it? (audit P-01) ─────────────────────────────────────
+// Every alert below now says who is meant to ACT on it: alertMerchant for this
+// account's trading day, alertPlatform for ours to fix, alertBoth for the rare
+// thing that is genuinely both. Before this they all went to the platform's
+// group, so a merchant was never told their own marketplace account had logged
+// out.
+//
+// ONE ACCOUNT, TODAY, AND SAID PLAINLY. This daemon opens require('../database')
+// — account 1's database — so account 1 is the only account it can be about. The
+// addressing is real, not a placeholder; there is simply one addressee. When the
+// channel sync becomes per-account (audit D-05, out of scope in this pass) this
+// constant becomes a parameter and every alert below follows it with no second
+// pass over these files.
+const { ROOTS_TENANT_ID: ACCOUNT } = require('../lib/tenant-db');
+
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
@@ -226,7 +241,7 @@ async function ensureProxyFresh() {
     if (alerts['proxy_stale'] && byWatchdog) {
       alerts['proxy_stale'] = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy watchdog is writing again — leaving the choice to it`);
-      sendOpsAlert(`✅ 代理看门狗已恢复，外卖代理切换恢复自动\nproxy-watchdog is updating again — 外卖 proxy failover back on auto`);
+      alertPlatform(`✅ 代理看门狗已恢复，外卖代理切换恢复自动\nproxy-watchdog is updating again — 外卖 proxy failover back on auto`);
     }
     return;
   }
@@ -235,7 +250,7 @@ async function ensureProxyFresh() {
     alerts['proxy_stale'] = true;
     console.log(`[meituan-daemon] ${new Date().toISOString()} proxy choice is stale (proxy-watchdog not writing) — re-electing the path myself`);
     for (const s of getStoreConfigs()) logSync(s.storeCode, 'proxy_stale', 'error', null, 'proxy-watchdog not updating — daemon re-electing the proxy path');
-    sendOpsAlert(`🟠 代理看门狗未在更新（proxy-watchdog 可能已停止），外卖同步改为自行选路，请检查\nproxy-watchdog isn't updating — 外卖 is re-electing its own proxy path; check \`pm2 status proxy-watchdog\``);
+    alertPlatform(`🟠 代理看门狗未在更新（proxy-watchdog 可能已停止），外卖同步改为自行选路，请检查\nproxy-watchdog isn't updating — 外卖 is re-electing its own proxy path; check \`pm2 status proxy-watchdog\``);
   }
 
   let elected = null;
@@ -313,7 +328,7 @@ function noteBrowserHealth(storeCode, ok, errMsg) {
   if (ok) {
     if (alerts[latch]) {
       logSync(storeCode, 'browser_recovered', 'ok', null, 'browser back up — sync resumed');
-      sendOpsAlert(`✅ 美团外卖 ${storeCode} 浏览器已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} browser recovered — stock/order sync resumed`);
+      alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 浏览器已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} browser recovered — stock/order sync resumed`);
     }
     s.since = null; alerts[latch] = false;
     return;
@@ -326,7 +341,7 @@ function noteBrowserHealth(storeCode, ok, errMsg) {
     const mins = Math.round((now - s.since) / 60000);
     logSync(storeCode, 'browser_down', 'error', null,
       `browser keeps crashing (~${mins} min) — auto-relaunch not sticking, may need the box`);
-    sendOpsAlert(`🔴 美团外卖 ${storeCode} 浏览器持续崩溃 ~${mins} 分钟，库存/订单同步已停，可能需要在盒子上处理\nMeituan 外卖 ${storeCode} browser keeps crashing for ~${mins} min — stock/order sync down, auto-relaunch isn't sticking, may need hands-on the box`);
+    alertBoth(ACCOUNT, `🔴 美团外卖 ${storeCode} 浏览器持续崩溃 ~${mins} 分钟，库存/订单同步已停，可能需要在盒子上处理\nMeituan 外卖 ${storeCode} browser keeps crashing for ~${mins} min — stock/order sync down, auto-relaunch isn't sticking, may need hands-on the box`);
   }
 }
 
@@ -358,14 +373,14 @@ function noteVerifyResult(storeCode, challenged) {
       verifyFlagged['verify:' + storeCode] = true;
       logSync(storeCode, 'verify_required', 'error', null,
         `Meituan 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
-      sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} disconnected (验证中心) — sync paused, needs a human to pass the captcha`);
+      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} disconnected (验证中心) — sync paused, needs a human to pass the captcha`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
     if (verifyFlagged['verify:' + storeCode]) {
       verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
-      sendOpsAlert(`✅ 美团外卖 ${storeCode} 已恢复，同步继续\nMeituan 外卖 ${storeCode} recovered — sync resumed`);
+      alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 已恢复，同步继续\nMeituan 外卖 ${storeCode} recovered — sync resumed`);
     }
     s.strikes = 0;
     s.until = 0;
@@ -402,7 +417,7 @@ function noteBindingResult(storeCode, lost) {
   if (!lost) {
     if (alerts[latch]) {
       logSync(storeCode, 'binding_cleared', 'ok', null, 'store binding restored — sync resumed');
-      sendOpsAlert(`✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
+      alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
     }
     s.since = null; alerts[latch] = false;
     return;
@@ -413,7 +428,7 @@ function noteBindingResult(storeCode, lost) {
     alerts[latch] = true;
     logSync(storeCode, 'binding_lost', 'error', null,
       'session authed but lost store binding (acctId/region) — needs re-login');
-    sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
+    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
   }
 }
 
@@ -444,11 +459,11 @@ function heartbeatTick(storeCode) {
     heartbeatFlagged['heartbeat:' + storeCode] = true;
     const mins = Math.round((now - lastOrderFetchOk[storeCode]) / 60000);
     logSync(storeCode, 'sync_stalled', 'error', null, `no successful order read in ~${mins} min during open hours`);
-    sendOpsAlert(`🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} sync looks stalled — no successful order read in ~${mins} min during open hours; please check`);
+    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} sync looks stalled — no successful order read in ~${mins} min during open hours; please check`);
   } else if (!stale && heartbeatFlagged['heartbeat:' + storeCode]) {
     heartbeatFlagged['heartbeat:' + storeCode] = false;
     logSync(storeCode, 'sync_resumed', 'ok', null, 'order reads succeeding again');
-    sendOpsAlert(`✅ 美团外卖 ${storeCode} 同步恢复正常\nMeituan 外卖 ${storeCode} sync back to normal`);
+    alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 同步恢复正常\nMeituan 外卖 ${storeCode} sync back to normal`);
   }
 }
 
@@ -520,7 +535,7 @@ function queueStallTick(stores) {
       alerts[key] = true;
       logSync(storeCode, 'queue_stalled', 'error', { pending: d.pending },
         `oldest stock push waiting ~${d.waitedMin} min of open time (queued ~${d.ageMin} min ago)`);
-      sendOpsAlert(`🔴 美团外卖 ${storeCode} 库存推送卡住：${d.pending} 条待推送，最早一条在营业时间内已等待约 ${d.waitedMin} 分钟没有推出去，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${d.pending} queued, the oldest has sat ~${d.waitedMin} min of TRADING time without going out; listings on Meituan are stale`);
+      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 库存推送卡住：${d.pending} 条待推送，最早一条在营业时间内已等待约 ${d.waitedMin} 分钟没有推出去，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${d.pending} queued, the oldest has sat ~${d.waitedMin} min of TRADING time without going out; listings on Meituan are stale`);
     } else if (d.alert === 'clear') {
       alerts[key] = false;
       // An empty window is not proof the pushes landed: a row that burns its third
@@ -532,11 +547,11 @@ function queueStallTick(stores) {
       if (gaveUp) {
         logSync(storeCode, 'queue_resumed', 'error', null,
           'queue emptied by failed pushes, not successful ones — drift sweep will retry');
-        sendOpsAlert(`🟠 美团外卖 ${storeCode} 库存推送队列已清空，但最早一条是推送失败退出的，不是成功推出去的——美团上的库存仍然不对，等待补偿扫描重新入队\nMeituan 外卖 ${storeCode} stock push queue is empty, but the oldest row left by FAILING, not by landing — Meituan stock is still wrong until the drift sweep re-queues it`);
+        alertMerchant(ACCOUNT, `🟠 美团外卖 ${storeCode} 库存推送队列已清空，但最早一条是推送失败退出的，不是成功推出去的——美团上的库存仍然不对，等待补偿扫描重新入队\nMeituan 外卖 ${storeCode} stock push queue is empty, but the oldest row left by FAILING, not by landing — Meituan stock is still wrong until the drift sweep re-queues it`);
       } else {
         logSync(storeCode, 'queue_resumed', 'ok', { pending: d.pending },
           d.pending ? 'stock push queue moving again' : 'stock push queue drained');
-        sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
+        alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
       }
     }
   }
@@ -1450,7 +1465,7 @@ async function main() {
         alerts['proxy_down'] = true;
         console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
-        sendOpsAlert(`🔴 美团外卖 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 外卖 proxy down — can't reach Meituan, sync paused (not logged out)`);
+        alertPlatform(`🔴 美团外卖 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 外卖 proxy down — can't reach Meituan, sync paused (not logged out)`);
       }
       await sleep(jitter(QUEUE_CHECK_MS));
       continue;
@@ -1460,7 +1475,7 @@ async function main() {
       alerts['proxy_down'] = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of stores) logSync(s.storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
-      sendOpsAlert(`✅ 美团外卖 代理已恢复，同步继续\nMeituan 外卖 proxy recovered — sync resumed`);
+      alertPlatform(`✅ 美团外卖 代理已恢复，同步继续\nMeituan 外卖 proxy recovered — sync resumed`);
       // Grace the heartbeat clock: no polls ran during the outage, so don't let a
       // long outage make the first post-recovery tick look like a stall.
       for (const s of stores) noteOrderFetchOk(s.storeCode);
@@ -1515,7 +1530,7 @@ async function main() {
       lastDriftSweep = now;
       sweepStockDrift(db, {
         storeCodes: stores.map(s => s.storeCode), // getStoreConfigs already drops SKIP_STORES
-        channel: '外卖', log, logSync, sendOpsAlert, alerts,
+        channel: '外卖', log, logSync, notifyMerchant: (t) => alertMerchant(ACCOUNT, t), alerts,
       });
     }
 

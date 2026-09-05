@@ -226,6 +226,11 @@ router.delete('/api/retail-admin/finance/transactions/:kind/:id', requireRetailA
     const found = loadTyped(db, kind, id, ERR.poDelete);
     if (found.error) return res.status(found.status).json({ error: found.error });
 
+    // Copied before it goes (audit E-07). §36 decided a hand-typed row is
+    // freely deletable because mistakes here are typos — which is exactly the
+    // case that wants the row back rather than an offsetting entry.
+    require('../lib/recycle').capture(db, kind === 'in' ? 'finance_in' : 'finance_out', id,
+      req.user?.username || null);
     db.prepare(`DELETE FROM ${TABLE[kind]} WHERE id = ?`).run(id);
     logActivity(req.user?.id || null, req.user?.username || null, 'delete',
       kind === 'in' ? 'income' : 'expense', Number(id),
