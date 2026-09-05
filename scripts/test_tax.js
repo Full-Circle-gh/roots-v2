@@ -400,6 +400,27 @@ async function place(taxCfg, body) {
     is(seen, 2, 'both order INSERTs were found — the checkout and the manual one');
   }
 
+  // ── §7c · the warning that would have cried wolf ────────────────────────
+  section('7c · the drawer’s "these do not add up" band');
+  {
+    /* The order drawer prints an amber band when the lines, the fees and the
+       deductions do not reach the order's total, and it is tolerant to ¥5 or
+       30% of the basket. An exclusive tax lands squarely inside that tolerance
+       today and outside it at a high enough rate — so without counting it as
+       what it is, an exclusive shop would eventually get the band over every
+       correct order, which is how a warning stops being read. An inclusive tax
+       is already inside the line totals and must not be counted twice. */
+    const ord = fs.readFileSync(path.join(ROOT, 'public/retail-admin/04-orders.js'), 'utf8');
+    const at = ord.indexOf('function ordMoneyGap(');
+    const body = ord.slice(at, ord.indexOf('\n}', at));
+    yes(/tax_mode === 'exclusive'/.test(body),
+        'the gap check counts an exclusive tax as the surcharge it is');
+    yes(/const surcharges = [^\n]*taxAdded/.test(body),
+        'adding it to the surcharges rather than to the deductions');
+    yes(!/tax_mode === 'inclusive'/.test(body),
+        'and counts an inclusive one not at all — it was already inside the lines');
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is

@@ -5849,7 +5849,14 @@ function ordMoneyGap(o) {
   const items = ordItemsTotal(o);
   const total = Number(o && o.total);
   if (items == null || !Number.isFinite(total)) return null;
-  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0);
+  // TAX IS A SURCHARGE WHEN IT WAS ADDED, AND NOTHING WHEN IT WAS ALREADY IN THE
+  // PRICE (audit I-03). Without this an exclusive shop's every order reads as a
+  // disagreement the moment its rate passes the tolerance below — an amber band
+  // over a correct order, on every order, which is how a warning stops being
+  // read. An inclusive tax is already inside the line totals and must not be
+  // added a second time.
+  const taxAdded = (o.tax_mode === 'exclusive' && o.tax_amount != null) ? Number(o.tax_amount) || 0 : 0;
+  const surcharges = Number(o.shipping_fee || 0) + Number(o.packing_fee || 0) + taxAdded;
   const deductions = Number(o.voucher_amount || 0) + Number(o.points_amount || 0) + Number(o.balance_used || 0);
   const expected = Math.round((items + surcharges - deductions) * 100) / 100;
   const gap = Math.round((expected - total) * 100) / 100;
