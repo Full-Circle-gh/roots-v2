@@ -564,9 +564,9 @@ const ONW_CSS = (ONW_CSS_START !== -1 && ONW_CSS_END > ONW_CSS_START)
   ? CSS_SRC.slice(ONW_CSS_START, ONW_CSS_END) : '';
 check('the new page\'s CSS block was found (the slice anchors still match)',
   ONW_CSS.length > 4000, true);
-const ONW_WANTED = ['ordNewFulChange', 'ordNewPhoneBlur', 'ordNewPaintPhoneNote',
-                    'ordNewPaintCustResults', 'ordNewRenderLines', 'ordNewSubtotal',
-                    'ordNewRecalc'];
+const ONW_WANTED = ['ordNewFulChange', 'ordNewChannelChange', 'ordNewPhoneBlur',
+                    'ordNewPaintPhoneNote', 'ordNewPaintCustResults', 'ordNewRenderLines',
+                    'ordNewSubtotal', 'ordNewRecalc'];
 const onwSrc = {};
 for (const n of ONW_WANTED) onwSrc[n] = extractFn(n);
 const onwMissing = ONW_WANTED.filter(n => !onwSrc[n]);
@@ -633,6 +633,53 @@ check('counter opens Paid and Cash; leaving counter restores pending',
   [addrHarness('counter').status, addrHarness('counter').pay,
    addrHarness('delivery', 'counter').status, addrHarness('delivery', 'counter').pay],
   ['paid', 'offline', 'pending_payment', 'wechat']);
+
+// "PICK UP" AS THE ORIGIN IS A COLLECTION. The form opens on Delivery, so an
+// operator who answered "Pick up" and went on to the products was quoted the
+// delivery zone's shipping on a walk-in collection. Picking that origin now
+// moves fulfilment to Pickup — the same path that zeroes shipping and drops the
+// address block — and ONLY the operator's own pick does it: the open/reset and
+// draft-restore callers pass nothing and must leave a restored fulfilment alone.
+// A mis-click corrected to another origin falls back to Delivery; a fulfilment
+// the operator set by hand is never overridden by the origin.
+const originHarness = new Function(`
+  ${srcFulChange}
+  ${onwSrc.ordNewChannelChange}
+  function ordNewFees() {}
+  return function (steps) {
+    const nodes = {
+      'onw-channel':          { value: '' },
+      'onw-channel-note-wrap':{ hidden: true },
+      'onw-channel-note':     { value: '' },
+      'onw-ful':              { value: 'delivery' },
+      'onw-ship':             { value: '15' },
+      'onw-addr-blk':         { hidden: false },
+      'onw-status':           { value: 'pending_payment' },
+      'onw-pay':              { value: 'wechat' },
+    };
+    globalThis.document = { getElementById: (id) => nodes[id] || null };
+    globalThis.ONW = { ful: 'delivery', feeTouched: { ship: true, pack: false }, fulFromOrigin: false };
+    for (const [kind, v, userPick] of steps) {
+      if (kind === 'origin') { nodes['onw-channel'].value = v; ordNewChannelChange(userPick); }
+      else                   { nodes['onw-ful'].value = v;     ordNewFulChange(); }
+    }
+    return { ful: nodes['onw-ful'].value, ship: nodes['onw-ship'].value,
+             addrHidden: nodes['onw-addr-blk'].hidden, shipTouched: globalThis.ONW.feeTouched.ship };
+  };
+`)();
+check('origin "Pick up" (operator pick) → fulfilment Pickup, shipping 0, address absent',
+  originHarness([['origin', 'pickup', true]]),
+  { ful: 'pickup', ship: '0', addrHidden: true, shipTouched: false });
+check('origin set programmatically (open / draft restore) leaves fulfilment alone',
+  [originHarness([['origin', 'pickup']]).ful, originHarness([['origin', 'pickup', false]]).ship],
+  ['delivery', '15']);
+check('a mis-click on "Pick up" corrected to another origin falls back to Delivery',
+  originHarness([['origin', 'pickup', true], ['origin', 'wechat_chat', true]]).ful,
+  'delivery');
+check('a fulfilment the operator chose by hand is never overridden by the origin',
+  [originHarness([['ful', 'counter'], ['origin', 'pickup', true]]).ful,
+   originHarness([['origin', 'pickup', true], ['ful', 'pickup'], ['origin', 'wholesale', true]]).ful],
+  ['counter', 'pickup']);
 
 // THE BY-PHONE WARNING ON A BLOCKED MATCH (frame C). It must use the by-phone
 // endpoint — the identical equality the create path's reuse runs — never the
