@@ -253,6 +253,22 @@ section('2 · what actually gets posted');
 section('3 · the total');
 
 {
+  // Tax (audit I-03). The foot has to say the figure the SERVER will charge:
+  // the quote hands back what the create route will compute, and the total
+  // carries it. Without this the operator reads ¥100 down the telephone and the
+  // customer is billed ¥120.
+  const o = form({ ful: 'pickup' });
+  o.tax = { amount: 20, added: 20, mode: 'exclusive', rate_micro: 200000, label: { en: 'Tax', cn: '税费' } };
+  is(A.onwTotal(), 84, 'an exclusive tax is added to what the operator quotes');
+  yes(A.onwFootHtml().indexOf('Tax') > 0, 'and named in the foot, in the shop’s own word');
+  o.tax = { amount: 10.67, added: 0, mode: 'inclusive', rate_micro: 200000, label: { en: 'VAT', cn: '增值税' } };
+  is(A.onwTotal(), 64, 'an inclusive one adds nothing — the price already contained it');
+  yes(A.onwFootHtml().indexOf('VAT') > 0, 'but is still named, so the operator can say what the tax was');
+  o.tax = null;
+  is(A.onwTotal(), 64, 'and a shop that charges none is exactly as it was');
+}
+
+{
   const o = form({ ful: 'delivery', ship: 12, pack: 3, city: '上海市', street: 'x' });
   o.lines = [{ id: 7, en: 'A', cn: 'A', price: 32, qty: 2 }, { id: 8, en: 'B', cn: 'B', price: 10, qty: 3 }];
   is(A.onwSubtotal(), 94, 'the subtotal is the lines');

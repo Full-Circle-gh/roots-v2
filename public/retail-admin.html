@@ -2998,6 +2998,10 @@
                 <div class="onw-sr"><span>Items · 商品</span><span class="v" id="onw-sum-items">¥0.00</span></div>
                 <div class="onw-sr"><span>Shipping · 运费</span><span class="v" id="onw-sum-ship">¥0.00</span></div>
                 <div class="onw-sr" id="onw-sum-pack-row" hidden><span>Packing · 包装费</span><span class="v" id="onw-sum-pack">¥0.00</span></div>
+                <!-- Tax · 税费 (audit I-03). Absent until the shop sets a rate,
+                     and its label is the shop's own word, so the text is filled
+                     in by ordNewRecalc rather than written here. -->
+                <div class="onw-sr" id="onw-sum-tax-row" hidden><span id="onw-sum-tax-lbl" data-no-i18n>Tax</span><span class="v" id="onw-sum-tax">¥0.00</span></div>
                 <div class="onw-sr onw-tot"><span>Total · 合计</span><span class="v" id="onw-sum-total">¥0.00</span></div>
               </div>
             </aside>

@@ -4352,7 +4352,7 @@ function onwBlank(stores){
        still carries the store. */
     ful:'delivery',storeId:st.length===1?st[0].id:null,channel:'',channelNote:'',
     cityQ:'',city:'',province:'',cities:null,citiesTried:false,districts:null,district:'',street:'',
-    ship:0,pack:0,feeTouched:{ship:false,pack:false},feeNote:null,feeSeq:0,
+    ship:0,pack:0,feeTouched:{ship:false,pack:false},feeNote:null,feeSeq:0,tax:null,
     paid:false,pay:'cash',note:'',staffNote:'',busy:false,err:null};
 }
 /* The city catalogue is 300-odd rows and does not go stale, so it survives a
@@ -4381,7 +4381,8 @@ function onwAddress(){
 }
 function onwSubtotal(){ return state.onw.lines.reduce((s,l)=>s+(Number(l.qty)||0)*(Number(l.price)||0),0); }
 function onwTotal(){ const o=state.onw;
-  return onwSubtotal()+(o.ful==='delivery'?(Number(o.ship)||0):0)+(Number(o.pack)||0); }
+  return onwSubtotal()+(o.ful==='delivery'?(Number(o.ship)||0):0)+(Number(o.pack)||0)
+    + (o.tax?(Number(o.tax.added)||0):0); }
 /* Anything typed. Read by the Clear control — there is nothing to clear on an
    untouched form — and by nothing else: leaving this screen never asks, because
    leaving it KEEPS what is in it. */
@@ -4531,6 +4532,12 @@ function loadOnwFees(){
       if(!o.feeTouched.ship) onwSetFee('ship','mOnwShip',Number(d.shipping_fee||0));
       if(!o.feeTouched.pack) onwSetFee('pack','mOnwPack',Number(d.packing_fee||0));
     }
+    /* The tax this cart attracts, as the create route will compute it (audit
+       I-03) — same base, same module. Without it the foot said ¥100 while the
+       server charged ¥120, and the operator found out after the customer did.
+       Null on a shop that charges none, which is every shop until one sets a
+       rate, and the line stays absent. */
+    o.tax = d.tax ? d.tax : null;
     o.feeNote=onwFeeNote(o.ful,d);
     const n=document.getElementById('mOnwFeeNote');
     if(n) n.textContent=String(o.feeNote);
@@ -4675,6 +4682,10 @@ function onwFootHtml(){
   const parts=[T('Items','商品')+' '+money(CUR,onwSubtotal())];
   if(ship) parts.push(T('Shipping','运费')+' '+money(CUR,ship));
   if(pack) parts.push(T('Packing','包装费')+' '+money(CUR,pack));
+  /* The shop's own word for the tax, and — where the price already contains it
+     — the word that stops this reading as one more thing added to the list. */
+  if(o.tax) parts.push((T(o.tax.label&&o.tax.label.en||'Tax', o.tax.label&&o.tax.label.cn||'税费')
+    + (o.tax.mode==='inclusive'?T(' incl.','（已含）'):'')) + ' ' + money(CUR,Number(o.tax.amount)||0));
   return `<div style="font-size:13px;min-height:18px">${blocked
       ?`<span style="color:var(--amber-ink)">${blocked}</span>`
       :`<span class="num" style="color:var(--text-secondary)">${parts.join(' · ')}</span>`}</div>

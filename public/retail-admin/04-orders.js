@@ -8966,6 +8966,10 @@ function ordNewRender() {
     customersOnFile: null,   // from the roster response — tells (c) from (d)
     custQuery: '',
     phoneNote: null,         // { kind: match|blocked|shared, name, phone, count }
+    // The tax this cart attracts, as the fee quote reports it (audit I-03).
+    // Null until a quote lands and on every shop that charges none — and reset
+    // with the form, so one order's tax can never be shown against the next.
+    tax: null,
     // Which of the two fee fields the operator has typed in. A touched field is
     // never refilled from the zone quote again — see ordNewFeeTyped.
     feeTouched: { ship: false, pack: false },
@@ -9429,7 +9433,21 @@ function ordNewRecalc() {
   const ship = Number(document.getElementById('onw-ship')?.value) || 0;
   const pack = Number(document.getElementById('onw-pack')?.value) || 0;
   const ovrRaw = document.getElementById('onw-override')?.value;
-  const total = (ovrRaw != null && ovrRaw !== '') ? (Number(ovrRaw) || 0) : Math.round((sub + ship + pack) * 100) / 100;
+  const overridden = ovrRaw != null && ovrRaw !== '';
+  /* TAX (audit I-03), from the quote — the SAME figure the create route will
+     compute, because both come from lib/tax.js over the same base. Without it
+     this summary said ¥100 while the server charged ¥120 and the operator found
+     out after the customer did.
+
+     An OVERRIDDEN total is left exactly as typed, which is what the server does
+     with one: the operator has said what the customer pays, and the tax inside
+     it is backed out rather than added on top. So the row shows the tax and the
+     total does not move. */
+  const t = (ONW.tax && ONW.tax.enabled) ? ONW.tax : null;
+  const added = (t && !overridden) ? (Number(t.added) || 0) : 0;
+  const total = overridden
+    ? (Number(ovrRaw) || 0)
+    : Math.round((sub + ship + pack + added) * 100) / 100;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('onw-sum-items', onwMoney(sub));
   set('onw-sum-ship', onwMoney(ship));
@@ -9438,6 +9456,22 @@ function ordNewRecalc() {
   // to box. The row appears the moment there is a fee to explain.
   const packRow = document.getElementById('onw-sum-pack-row');
   if (packRow) packRow.hidden = !(pack > 0);
+  const taxRow = document.getElementById('onw-sum-tax-row');
+  if (taxRow) taxRow.hidden = !t;
+  if (t) {
+    const label = document.getElementById('onw-sum-tax-lbl');
+    // The shop's own word for it, and — where the price already contains the
+    // tax — the word that stops this row reading as an addition.
+    if (label) {
+      label.textContent = cuT(t.label?.en || 'Tax', t.label?.cn || '税费')
+        + (t.mode === 'inclusive' ? cuT(' (included)', '（已含）') : '');
+    }
+    set('onw-sum-tax', onwMoney(overridden
+      // An overridden total is inclusive by definition, so the tax inside it is
+      // recomputed here rather than taken from a quote of a different figure.
+      ? Math.round(((Number(ovrRaw) || 0) * (t.rate_micro || 0)) / (1000000 + (t.rate_micro || 0)) * 100) / 100
+      : Number(t.amount) || 0));
+  }
   set('onw-sum-total', onwMoney(total));
 }
 
@@ -9645,6 +9679,12 @@ async function ordNewFees() {
     if (!ONW.feeTouched.ship) set('onw-ship', Number(d.shipping_fee || 0));
     if (!ONW.feeTouched.pack) set('onw-pack', Number(d.packing_fee || 0));
   }
+  /* The tax on this cart, as the create route will compute it (audit I-03).
+     Kept whole rather than as a number: the summary needs the shop's own word
+     for it and which shape it is, and a bare figure cannot say either. Null on
+     a shop that charges none, which is every shop until one sets a rate — and
+     the row stays absent. */
+  ONW.tax = d.tax ? { enabled: true, ...d.tax } : null;
   ordNewPaintFeeNote(ft, d);
   ordNewRecalc();
 }
