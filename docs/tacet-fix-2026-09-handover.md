@@ -116,7 +116,7 @@ what a merchant notices.
 | **B-03** | Medium | Four endpoints for opening and closing the shop, and no screen. There is one now, above the store list. Wiring it up exposed a wrong answer: `master` counted a shop with no marketplace as closed, so a merchant with no integration would have been told their whole business was shut while it traded. |
 | **E-10** | Medium | Notifications can be tuned. Four events, each a switch, all on until somebody turns one off, filtered at the one place every send funnels through. No quiet hours, deliberately — an operational alert dropped by a clock is indistinguishable from one that failed. |
 | **E-08** | Medium | A filter set can be named, kept and shared with a colleague. Private until shared; a shared view stays its author's. Orders adopts it; the module is general. |
-| **E-07** | Medium | What was deleted can be put back — coupons, delivery zones and hand-typed ledger rows, for sixty days, from Settings → Operations. A purchase order is deliberately not covered: putting one back means re-deriving stock that has moved and books that have been reported. |
+| **E-07** | Medium | What was deleted can be put back — coupons, delivery zones, hand-typed ledger rows and draft purchase orders, for sixty days, from Settings → Operations. A purchase order comes back with its lines and with its own date, so it still belongs to the month it was placed in. Only a draft can get there: the delete route refuses anything else, and a delivered order has to be stood down first, which reverses its stock and unposts its books under its own all-or-nothing rule. |
 | **I-02** | Medium | Money arithmetic in SQL no longer sets the rounding. A purchase order's expense rows, a customer's lifetime spend and the finance summary's `fen()` all round the product's way — which fixes two real cases: 1.005 became 1.00, and a negative net rounded the opposite way from the positive it should mirror. |
 | **G-03** | Medium | Settings has a search of its own, over the cards' own words, and fourteen of its twenty-seven cards are marked as things customers see. |
 | **J-03** | Medium | The shell is compressed on the way out and a stamped file is cached properly: 3,355 KB → 1,073 KB on the wire, and nothing at all between deploys. Loading a section on demand — the audit's direction — is still open, and why is written into `lib/static-assets.js`. |
@@ -354,9 +354,6 @@ that could be done without one has been.
   share one global scope and call each other by name; there is no module
   boundary to load across, and half-doing it is a screen that opens on a
   ReferenceError. The wire cost is down 3× in the meantime.
-- **E-07 for purchase orders** — restoring one means re-deriving stock that has
-  moved and books that have been reported. The honest version is an accounting
-  policy decision, not a function.
 - **Q-04** — Purchasing is a stack of screens with its own back button while
   every other section is a page with a drawer. Converging them is a redesign of
   a working screen, and the audit records it as an observation rather than a
