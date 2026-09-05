@@ -1623,6 +1623,19 @@ const DRAWER_SANDBOX = `
   var localStorage = { getItem: () => null, setItem(){} };
   function escapeHtml(s){ return String(s == null ? '' : s); }
   function escapeAttr(s){ return escapeHtml(s); }
+  // The tenant's currency helpers, from 01-core.js. The drawer's money used to
+  // be a hardcoded ¥ and now goes through these (audit D-03 / I-01), so without
+  // them renderOrderTotalBanner and renderSortableItems throw a ReferenceError
+  // — which this suite correctly reported as "the helper does not survive".
+  // Stubbed to the default currency, the one these assertions are written for.
+  function acCurrencySymbol(){ return '¥'; }
+  function acWrap(formatted){ return '¥' + String(formatted); }
+  function acMoney(n, dp){
+    var places = Number.isInteger(dp) ? dp : 2;
+    return '¥' + Number(n || 0).toLocaleString('en-US',
+      { minimumFractionDigits: places, maximumFractionDigits: places });
+  }
+  function acMoneyCompact(n){ return acMoney(n, 0); }
   function fmt(n){ return Number(n || 0).toFixed(2); }
   function thumbUrl(){ return ''; }
   function paymentBrandHTML(){ return ''; }

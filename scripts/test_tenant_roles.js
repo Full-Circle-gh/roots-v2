@@ -113,11 +113,18 @@ function versionOf(tid) {
   mkUser(tA, 'a_owner', 'owner');
   roles.seedTenant(tA);
   const seeded = roles.listRoles(tA);
-  is(seeded.map(r => r.key), ['owner', 'admin', 'staff', 'warehouse'],
-    'a tenant with only an owner gets exactly the four starting roles');
-  is(seeded.map(r => r.nameEn), ['Owner', 'Manager', 'Shop floor', 'Stockroom'],
-    'named Owner, Manager, Shop floor, Stockroom');
-  is(seeded.map(r => r.nameCn), ['负责人', '经理', '门店', '仓库'],
+  // FIVE since audit E-11 added Bookkeeper, and this assertion is what noticed.
+  // It was four for as long as there was nowhere for a merchant's accountant to
+  // stand: every preset that could open the books could also edit products,
+  // refund an order or read the team, so "let the bookkeeper in" meant handing
+  // over the shop. Bookkeeper holds the books and nothing else, and it is
+  // SEEDED rather than offered, because a role a merchant has to think to
+  // create is one they give an owner login instead.
+  is(seeded.map(r => r.key), ['owner', 'admin', 'staff', 'warehouse', 'bookkeeper'],
+    'a tenant with only an owner gets exactly the five starting roles');
+  is(seeded.map(r => r.nameEn), ['Owner', 'Manager', 'Shop floor', 'Stockroom', 'Bookkeeper'],
+    'named Owner, Manager, Shop floor, Stockroom, Bookkeeper');
+  is(seeded.map(r => r.nameCn), ['负责人', '经理', '门店', '仓库', '会计'],
     'and named in Chinese too — no role ships with an English-only name');
   is(seeded.find(r => r.key === 'staff').caps.length, caps.presetCapsFor('staff').length,
     'Shop floor is stamped from the shipped staff preset, cap for cap');
