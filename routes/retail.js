@@ -27443,7 +27443,7 @@ function printOrderById(orderId, prefs, pcfg) {
   }
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
-  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit() });
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
   return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
@@ -27803,7 +27803,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
     ({ order, items, shipments } = _sampleOrderForPreview());
     sample = true;
   }
-  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
+  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
   res.json({ ok: true, content, sample, template: tpl });
 });
 
@@ -27825,7 +27825,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
     r = await printOrderById(last.id, prefs, printer);
   } else {
     const { order, items, shipments } = _sampleOrderForPreview();
-    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
+    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
     r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
   }
   if (r.ok) return res.json({ ok: true });

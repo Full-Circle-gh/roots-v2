@@ -320,6 +320,20 @@ async function place(taxCfg, body) {
 
     const none = feie.renderOrder('receipt', base, items, 'Shop');
     is(/\bTax\b/.test(none), false, 'and a shop that charges no tax prints no tax line at all');
+
+    /* THE REGISTRATION NUMBER. It is a settings field somebody types into, and
+       a field that has no effect is a control that lies — so it prints, under
+       the tax line, which is where a receipt has to show it. Only there: a
+       number on a receipt with no tax on it is a claim about a document that is
+       not a tax document. */
+    const withNo = feie.renderOrder('receipt', Object.assign({}, base, { tax_amount: 20, tax_mode: 'exclusive' }),
+                                    items, 'Shop', [], { taxNumber: 'GB123456789' });
+    yes(withNo.indexOf('Tax no. GB123456789') > 0, 'the seller’s registration number prints beside the tax');
+    const noTaxButNumber = feie.renderOrder('receipt', base, items, 'Shop', [], { taxNumber: 'GB123456789' });
+    is(/Tax no\./.test(noTaxButNumber), false, 'and not on an order that carried no tax');
+    const ret = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    is((ret.match(/taxNumber: taxSettings\(\)\.number/g) || []).length, 3,
+       'all three print call sites hand it over — a field nothing reads is a field that lies');
   }
 
   // ── §6 · the settings door ──────────────────────────────────────────────
