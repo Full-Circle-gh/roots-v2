@@ -274,8 +274,14 @@ it('flagging never blocks the push', () => {
   // call this customer, so the alert is theirs (audit D-02 / P-01). The
   // property under test is DETACHMENT: whichever channel it goes to, it must
   // not be awaited inside the push.
+  // …AND IT IS NOW SENDER-AGNOSTIC FOR REAL. The regex still named the two
+  // transports, so it went red a THIRD time when audit P-01 gave every alert an
+  // explicit audience and these two became alertMerchant(). The property is
+  // detachment; the channel is not this test's business, and naming it here has
+  // now cost three false failures.
+  const DETACHED = /Promise\.resolve\(\s*(?:alert(?:Merchant|Platform|Both)|send(?:Ops|Tenant)Alert)\(/;
   for (const [src, name] of [[retailSrc, 'maybeFlagUncallablePhone'], [daemonSrc, 'flagUncallablePhone']]) {
-    assert.ok(/Promise\.resolve\(send(?:Ops|Tenant)Alert\(/.test(bodyOf(src, name)),
+    assert.ok(DETACHED.test(bodyOf(src, name)),
       `${name} is not detached from the request — a slow webhook would hold up the push`);
   }
 });

@@ -39,7 +39,22 @@ catch {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getShangouBrowser, closeAllShangou, shangouCdpUrl } = require('../lib/shangou-browser');
-const { sendOpsAlert } = require('../lib/ops-alert');
+const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
+// ── Whose problem is it? (audit P-01) ─────────────────────────────────────
+// Every alert below now says who is meant to ACT on it: alertMerchant for this
+// account's trading day, alertPlatform for ours to fix, alertBoth for the rare
+// thing that is genuinely both. Before this they all went to the platform's
+// group, so a merchant was never told their own marketplace account had logged
+// out.
+//
+// ONE ACCOUNT, TODAY, AND SAID PLAINLY. This daemon opens require('../database')
+// — account 1's database — so account 1 is the only account it can be about. The
+// addressing is real, not a placeholder; there is simply one addressee. When the
+// channel sync becomes per-account (audit D-05, out of scope in this pass) this
+// constant becomes a parameter and every alert below follows it with no second
+// pass over these files.
+const { ROOTS_TENANT_ID: ACCOUNT } = require('../lib/tenant-db');
+
 // Hold off on channel calls while the holder Chrome is freshly launched — a cold
 // browser that gets hit seconds after launch is what earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
@@ -201,7 +216,7 @@ function noteVerifyResult(storeCode, challenged) {
         cold
           ? `闪购 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
           : `闪购 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
-      sendOpsAlert(cold
+      alertMerchant(ACCOUNT, cold
         ? `🟠 美团闪购 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），库存同步暂停约 ${mins} 分钟后自动恢复，无需操作\nMeituan 闪购 ${storeCode} risk-control right after a browser restart — NOT logged out, stock sync auto-resumes in ~${mins} min, no action needed`
         : `🔴 美团闪购 ${storeCode} 掉线：风控/验证，库存同步已暂停，需要在盒子上重新登录\nMeituan 闪购 ${storeCode} disconnected (risk-control 403) — stock sync paused, needs re-login`);
     }
@@ -210,7 +225,7 @@ function noteVerifyResult(storeCode, challenged) {
     if (verifyFlagged['verify:' + storeCode]) {
       verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
-      sendOpsAlert(`✅ 美团闪购 ${storeCode} 已恢复，库存同步继续\nMeituan 闪购 ${storeCode} recovered — stock sync resumed`);
+      alertMerchant(ACCOUNT, `✅ 美团闪购 ${storeCode} 已恢复，库存同步继续\nMeituan 闪购 ${storeCode} recovered — stock sync resumed`);
     }
     s.strikes = 0;
     s.until = 0;
@@ -352,13 +367,13 @@ async function processStockQueue() {
           downFlagged['login:' + storeCode] = true;
           logSync(storeCode, 'needs_login', 'error', null, '闪购 Chrome not logged in — a human must log in on the box');
           log(storeCode, 'not logged in — skipping stock push');
-          sendOpsAlert(`🔴 美团闪购 ${storeCode} 未登录，库存同步已停止，需要重新登录\nMeituan 闪购 ${storeCode} not logged in — stock sync stopped, needs re-login`);
+          alertMerchant(ACCOUNT, `🔴 美团闪购 ${storeCode} 未登录，库存同步已停止，需要重新登录\nMeituan 闪购 ${storeCode} not logged in — stock sync stopped, needs re-login`);
         }
         continue;
       }
       const wasDown = downFlagged['login:' + storeCode];
       downFlagged['login:' + storeCode] = false;
-      if (wasDown) sendOpsAlert(`✅ 美团闪购 ${storeCode} 重新登录成功，库存同步继续\nMeituan 闪购 ${storeCode} logged back in — stock sync resumed`);
+      if (wasDown) alertMerchant(ACCOUNT, `✅ 美团闪购 ${storeCode} 重新登录成功，库存同步继续\nMeituan 闪购 ${storeCode} logged back in — stock sync resumed`);
       noteVerifyResult(storeCode, false); // clean call — clear any prior cool-down
 
       for (const row of pushRows) {
@@ -884,7 +899,7 @@ async function main() {
         alerts['proxy_down'] = true;
         console.log(`[shangou-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of SHANGOU_STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
-        sendOpsAlert(`🔴 美团闪购 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 闪购 proxy down — can't reach Meituan, sync paused (not logged out)`);
+        alertPlatform(`🔴 美团闪购 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 闪购 proxy down — can't reach Meituan, sync paused (not logged out)`);
       }
       await sleep(jitter(QUEUE_CHECK_MS));
       continue;
@@ -894,7 +909,7 @@ async function main() {
       alerts['proxy_down'] = false;
       console.log(`[shangou-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of SHANGOU_STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
-      sendOpsAlert(`✅ 美团闪购 代理已恢复，同步继续\nMeituan 闪购 proxy recovered — sync resumed`);
+      alertPlatform(`✅ 美团闪购 代理已恢复，同步继续\nMeituan 闪购 proxy recovered — sync resumed`);
     }
 
     // Cold-browser gate. The holder Chrome relaunches on a crash, on a proxy
@@ -940,7 +955,7 @@ async function main() {
       lastDriftSweep = now;
       sweepStockDrift(db, {
         storeCodes: SHANGOU_STORES, // only this daemon's stores — the queue is shared
-        channel: '闪购', log, logSync, sendOpsAlert, alerts,
+        channel: '闪购', log, logSync, notifyMerchant: (t) => alertMerchant(ACCOUNT, t), alerts,
       });
     }
 
