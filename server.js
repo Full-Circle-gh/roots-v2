@@ -182,6 +182,18 @@ app.use((req, res, next) => {
 });
 
 // Static files
+//
+// JavaScript and CSS go through their own handler first (audit J-03): the admin
+// shell is about a megabyte of code, nginx in front does not gzip, and the
+// compression above wraps res.json only — so the API was compressed and the
+// code that calls it was not. It also gives a ?v=-stamped file a real cache
+// lifetime, which is safe precisely because the stamp changes on every deploy.
+// Everything else — images, fonts — falls straight through to express.static,
+// which is what should serve them: an already-compressed JPEG must never be
+// re-gzipped.
+app.use('/assets', require('./lib/static-assets').assetHandler({
+  root: path.join(__dirname, 'public'),
+}));
 app.use('/assets', express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     // iOS WeChat's wx.loadFontFace rejects responses with content-type
