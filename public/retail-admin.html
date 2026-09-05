@@ -10635,6 +10635,20 @@
             <div id="ops-store-staff"></div>
           </div>
 
+          <!-- Recently deleted (audit E-07). Products had version history and
+               nothing else in the admin had anything. It lives here rather than
+               on each screen it covers: somebody looking for something they
+               deleted usually cannot remember which screen they deleted it
+               from, and four half-lists in four places is four things to find
+               instead of one. -->
+          <div class="group-card">
+            <div class="group-card-head"><h3>Recently deleted · 最近删除</h3></div>
+            <div class="helper" style="margin:2px 0 10px;line-height:1.55">
+              Coupons, delivery zones and ledger rows removed in the last 60 days can be put back. Purchase orders are not kept — putting one back would mean re-deriving stock that has moved. · 最近 60 天内删除的优惠券、配送区域与账目行可以恢复。采购单不在其中：恢复采购单需重新推导已变动的库存。
+            </div>
+            <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+          </div>
+
           <!-- ── Quick Stock (mobile add-on) ── -->
           <!-- The on/off switch (.feat-bar) and the "off" card are injected at the
                top of #qs-home by mountFeatureControls() (05-marketing.js), driven by

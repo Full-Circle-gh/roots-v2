@@ -14,6 +14,7 @@
 function loadOpsPanel() {
   loadOpenClose();
   loadOpsStores();
+  loadRecycle();
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
@@ -141,6 +142,92 @@ window.cfgMarkAudience = cfgMarkAudience;
 if (typeof onLangChange === 'function') onLangChange(cfgMarkAudience);
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cfgMarkAudience);
 else setTimeout(cfgMarkAudience, 0);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RECENTLY DELETED (audit E-07)
+   ══════════════════════════════════════════════════════════════════════════
+   Products had version history and nothing else in the admin had anything. The
+   contents of a deleted coupon, delivery zone or ledger row are now kept for
+   sixty days, and this is where somebody puts one back.
+
+   IT LIVES IN OPERATIONS, not on each screen it covers. A merchant looking for
+   something they deleted does not remember which screen they deleted it from —
+   that is usually the whole problem — and four half-lists in four places is
+   four things to find instead of one.
+
+   RESTORING IS NOT CONFIRMED. It puts something back that somebody wanted back;
+   the reversible direction does not need a dialog in front of it. What IS said
+   is the outcome, including the two ways it can fail for a reason the operator
+   can act on: the id has been taken by something created since, or the record
+   it archived is gone entirely. */
+let _recycleRows = [];
+
+async function loadRecycle() {
+  const box = document.getElementById('ops-recycle-body');
+  if (!box) return;
+  try {
+    const j = await api('/api/retail-admin/deleted');
+    _recycleRows = j.data || [];
+    paintRecycle(j.days || 60);
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Could not read what was deleted', '无法读取删除记录')}: `
+      + `<span data-no-i18n>${escapeHtml(e.message)}</span></span> `
+      + `<button class="btn btn-sm" onclick="loadRecycle()">${cuT('Try again', '重试')}</button>`;
+  }
+}
+window.loadRecycle = loadRecycle;
+
+function paintRecycle(days) {
+  const box = document.getElementById('ops-recycle-body');
+  if (!box) return;
+  if (!_recycleRows.length) {
+    box.innerHTML = `<div class="muted" style="font-size:12.5px">${
+      cuT('Nothing has been deleted in the last ' + days + ' days.', '最近 ' + days + ' 天内没有删除记录。')}</div>`;
+    return;
+  }
+  box.innerHTML = _recycleRows.map((r, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)"><span data-no-i18n>${escapeHtml(r.label || ('#' + r.record_id))}</span></div>
+        <div style="color:var(--text-3);font-size:12px">
+          ${escapeHtml(cuT(r.kindEn, r.kindCn))} ·
+          <span data-no-i18n>${escapeHtml(r.deleted_at || '')}${r.deleted_by ? ' · ' + escapeHtml(r.deleted_by) : ''}</span>
+        </div>
+      </div>
+      <button class="btn btn-sm" data-cap="settings:edit" onclick="recycleRestore(${i})">${cuT('Put it back', '恢复')}</button>
+    </div>`).join('');
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the gate is a nicety; the server still refuses */ }
+}
+
+async function recycleRestore(i) {
+  const r = _recycleRows[i];
+  if (!r) return;
+  try {
+    await api('/api/retail-admin/deleted/' + r.id + '/restore', { method: 'POST' });
+    toast(cuT('Put back', '已恢复'), 'ok');
+  } catch (e) {
+    // The two an operator can act on get their own sentence. "taken" is the one
+    // that would otherwise read as a bug: nothing failed, something else has
+    // been created under that id since.
+    const msg = e.message === 'taken'
+      ? cuT('Something else now uses that record’s place. It cannot be put back.',
+            '该记录的位置已被其他内容占用，无法恢复。')
+      : e.message === 'gone'
+        ? cuT('The record itself is no longer here, so there is nothing to switch back on.',
+              '该记录已不存在，无法恢复。')
+        : cuT('Could not put it back', '恢复失败') + ': ' + (e.message || '');
+    toast(msg, 'err');
+  }
+  await loadRecycle();
+  // The record belongs to ANOTHER screen, which is still showing the list it
+  // loaded before this. Refresh the one it went back to, rather than leaving
+  // somebody to wonder why a zone they just restored is not on the Delivery
+  // page — a screen that is silently stale after a success is how a restore
+  // gets tried twice.
+  if (r.kind === 'delivery_zone' && typeof loadDeliveryZones === 'function') loadDeliveryZones();
+  if (r.kind === 'voucher' && typeof loadVouchers === 'function') loadVouchers();
+}
+window.recycleRestore = recycleRestore;
 
 // ── Manual-Alipay (静态收款码) fallback card ──────────────────────────────
 // Stopgap while 当面付 API access is blocked: operator uploads a static收款码 +

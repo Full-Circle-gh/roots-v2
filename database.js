@@ -1860,6 +1860,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_notification_log_entity ON notification_log(entity_type, entity_id);
   CREATE INDEX IF NOT EXISTS idx_notification_log_failed ON notification_log(tenant_id, ok, created_at);
 
+  -- What was deleted, kept for sixty days (audit E-07).
+  --
+  -- Products had proper version history and nothing else in the admin had
+  -- anything: a deleted coupon, a deleted delivery zone, a mistyped row removed
+  -- from the ledger were all one-way, and all everyday. The row is COPIED here
+  -- before it goes; the delete itself is unchanged, so every list and every
+  -- query behaves exactly as it did and nothing has to learn about a flag.
+  --
+  -- NOT AN AUDIT TRAIL. activity_log already records who deleted what and keeps
+  -- recording it. This holds the CONTENTS, so somebody can undo a mistake made
+  -- this morning; lib/recycle.js sweeps it past the window.
+  CREATE TABLE IF NOT EXISTS deleted_records (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind         TEXT NOT NULL,          -- lib/recycle.js KINDS key
+    record_id    INTEGER NOT NULL,       -- the id it had, and the id it goes back under
+    label        TEXT,                   -- what it was, for the list
+    payload_json TEXT NOT NULL,          -- the whole row, as it was
+    deleted_by   TEXT,
+    deleted_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    restored_at  DATETIME,
+    restored_by  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_deleted_records_when ON deleted_records(restored_at, deleted_at);
+
   -- A named set of filters, pinned to the screen it belongs to (audit E-08).
   --
   -- "Unpaid orders from the Web channel at the Tianhe shop" had to be rebuilt
@@ -4782,6 +4806,15 @@ if (RETENTION_DAYS > 0) {
   try {
     const n = db.prepare("DELETE FROM notification_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
     if (n.changes > 0) console.log(`[retention] purged ${n.changes} notification_log entries older than ${RETENTION_DAYS} days`);
+  } catch (e) { /* table not created yet — nothing to purge */ }
+  // Kept copies of deleted records (audit E-07) age out on their OWN window —
+  // sixty days, set in lib/recycle.js — not on the activity_log one. They are
+  // the only copy of something a merchant may want back, and how long that
+  // stays true is a decision about recovery rather than about log volume.
+  try {
+    const recycle = require('./lib/recycle');
+    const d = recycle.sweep(db);
+    if (d > 0) console.log(`[retention] purged ${d} deleted_records copies older than ${recycle.RETENTION_DAYS} days`);
   } catch (e) { /* table not created yet — nothing to purge */ }
 }
 

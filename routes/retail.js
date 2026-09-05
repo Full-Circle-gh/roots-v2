@@ -318,6 +318,8 @@ const businessDate = require('../lib/business-date');
 // thousand times is 9.999999999999831, not 10. The running totals below are
 // computed here instead, in whole cents.
 const money = require('../lib/money');
+// What was deleted, kept so it can be put back (audit E-07).
+const recycle = require('../lib/recycle');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -16393,7 +16395,12 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
 });
 
 router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) => {
-  tdb().prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(parseInt(req.params.id, 10));
+  const id = parseInt(req.params.id, 10);
+  // Kept before it goes (audit E-07). A coupon is archived rather than removed,
+  // so the copy is what puts it on the "recently deleted" list at all — without
+  // it, switching one back on means knowing it existed and finding it.
+  recycle.capture(tdb(), 'voucher', id, (req.user && req.user.username) || null);
+  tdb().prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
@@ -34373,6 +34380,10 @@ router.patch('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, express
 
 router.delete('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // Copied first (audit E-07) — a zone carries its fees, its caps and its free
+  // threshold, and retyping those from memory is how a delivery charge ends up
+  // quietly different from what it was.
+  recycle.capture(tdb(), 'delivery_zone', id, (req.user && req.user.username) || null);
   const r = tdb().prepare('DELETE FROM retail_delivery_zones WHERE id = ?').run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'delivery_zone', id, null, req.ip);
