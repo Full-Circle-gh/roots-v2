@@ -9735,6 +9735,19 @@
     <div class="settings-layout">
       <!-- ───────── sidebar nav ───────── -->
       <aside class="settings-nav" id="settings-nav">
+        <!-- Audit G-03. Settings holds more controls than any other screen and
+             had no search of its own. The command palette can already jump to a
+             single card — but only for somebody who knows the name of the thing
+             they are looking for, which on the screen a merchant is least
+             confident in is exactly what they do not have. This searches the
+             CARDS: their headings and their explanatory text, across all seven
+             panels, so "delivery fee" finds the card wherever it lives. -->
+        <div class="cfg-search">
+          <input type="text" id="cfg-search" autocomplete="off" oninput="cfgSearch()" data-kbd-search
+                 data-ph-en="Search settings…" data-ph-cn="搜索设置…" placeholder="Search settings…"
+                 aria-label="Search settings · 搜索设置">
+        </div>
+        <div id="cfg-search-results" hidden></div>
         <button data-sub="shop" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
           Shop tab · 商城页
@@ -9799,7 +9812,7 @@
           <h2>Shop tab · 商城页</h2>
 
           <!-- LAYOUT picker -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Layout · 布局</h3>
               <div class="muted">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top. · 顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</div>
@@ -9901,7 +9914,7 @@
           </div>
 
           <!-- DEFAULT SORT -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Default sort · 默认排序</h3>
               <div class="muted">The order products appear in when a customer opens the Shop. "Featured" follows the manual order you set on the Products page (drag-and-drop). · 顾客打开商城时的默认排序;"精选"沿用产品页手动排序(拖拽)。</div>
@@ -9939,7 +9952,7 @@
           </div>
 
           <!-- FILTER CHIPS -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Filter &amp; controls bar · 筛选与操作条</h3>
               <div class="muted">Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop. The preview below updates live to show what customers will see. · 控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。下方预览实时更新顾客看到的样式。</div>
@@ -10021,7 +10034,7 @@
         <div class="sub-panel" id="sub-push">
           <h2>Push notifications · 推送通知</h2>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3>
               <div class="muted">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates. · 微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</div>
@@ -10108,7 +10121,7 @@
           </div>
 
           <!-- DISPLAY CURRENCY — sits with payment; tenant-wide price display. -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Currency · 货币</h3>
               <div class="muted">The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。</div>
@@ -10123,7 +10136,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款
                 <span id="alipay-manual-chip" style="margin-left:8px;vertical-align:middle"></span>
@@ -10192,7 +10205,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
                 <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
@@ -10270,7 +10283,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>What customers receive · 顾客收到的内容</h3>
               <div class="muted">After opt-in, each status transition in Mini App Backend → Orders fires one push. Customers see it in the WeChat "Service notifications" feed. · 顾客订阅后,小程序后台 → 订单的每次状态变更都会触发一次推送,显示在微信"服务通知"中。</div>
@@ -10353,7 +10366,7 @@
           </div>
 
           <!-- Mode -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>How customers reach you · 顾客联系方式</h3>
               <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet. · 三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</div>
@@ -10389,7 +10402,7 @@
           </div>
 
           <!-- QR fallback -->
-          <div class="group-card" id="cs-qr-fields">
+          <div class="group-card" id="cs-qr-fields" data-sees="customer">
             <div class="group-card-head">
               <h3>QR code image · 二维码图片</h3>
               <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
@@ -10402,7 +10415,7 @@
           </div>
 
           <!-- Labels + hours -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Button label &amp; hours · 按钮文案与营业时间</h3>
               <div class="muted">Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide. · 两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。</div>
@@ -10435,7 +10448,7 @@
           </div>
 
           <!-- Placement -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Where to show · 显示位置</h3>
               <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
@@ -10458,7 +10471,7 @@
           </div>
 
           <!-- Floating-bubble appearance -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Floating bubble look · 悬浮按钮样式</h3>
               <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
@@ -10546,7 +10559,7 @@
 
           <!-- ── Support button · 客服按钮 — hide the floating platform-support
                launcher (bottom-right) for operators who don't want it. ── -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Support button · 客服按钮</h3>
               <div class="muted">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support. Turn it off to hide it. · 右下角悬浮的<b>客服</b>按钮用于联系平台客服。关闭即可隐藏。</div>

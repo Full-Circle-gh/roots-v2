@@ -14479,3 +14479,37 @@ main:focus { outline: none; }
 [data-kbd-added]:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
 }
+
+/* Settings: a search of its own, and a mark on what customers see (audit G-03).
+   The box sits at the top of the panel list because that list is the only
+   navigation this screen has, and the results say which panel each answer is in
+   — the thing somebody who cannot find a setting is actually missing. */
+.cfg-search { padding: 4px 4px 6px; }
+.cfg-search input {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg-input, var(--bg-elev-1)); color: var(--text-1);
+}
+.cfg-search input::placeholder { color: var(--text-3); }
+#cfg-search-results { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 6px; }
+#cfg-search-results[hidden] { display: none; }
+.cfg-hit {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  background: transparent; border: 0; padding: 7px 10px; border-radius: var(--r-md);
+  cursor: pointer; font: inherit;
+}
+.cfg-hit:hover { background: var(--bg-elev-1); }
+.cfg-hit-title { font-size: 13px; font-weight: 500; color: var(--text-1); line-height: 1.35; }
+.cfg-hit-where { font-size: 11.5px; color: var(--text-3); }
+.cfg-hit-none { font-size: 12.5px; color: var(--text-3); padding: 8px 10px; }
+/* The badge. Quiet — it is a fact about the card, not a warning about it: a
+   setting customers can see is normal, and colouring it like a hazard would
+   make the ordinary case look dangerous. */
+.cfg-sees {
+  display: inline-block; margin-left: 8px; vertical-align: 2px;
+  font-size: 10.5px; font-weight: 500; letter-spacing: .02em;
+  color: var(--text-2); background: var(--bg-elev-1);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+  white-space: nowrap;
+}
+.cfg-hit .cfg-sees { margin-left: 0; margin-top: 3px; align-self: flex-start; }

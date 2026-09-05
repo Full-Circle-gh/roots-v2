@@ -20,6 +20,128 @@ function loadOpsPanel() {
   loadAlipayManual();
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   FINDING WHAT YOU CAME TO SETTINGS FOR (audit G-03)
+   ══════════════════════════════════════════════════════════════════════════
+   Settings holds more controls than any other screen — nine dropdowns, seven
+   panels — and had no search of its own. The command palette can already jump
+   to a single card, and that was the mitigation, but it only works for somebody
+   who knows the NAME of the thing they want. On the screen a merchant is least
+   confident in, the name is precisely what they do not have.
+
+   This searches the cards themselves: the heading, and the explanatory text
+   under it. So "delivery fee", "announcement", "who changed" all land somewhere
+   even though none of them is a card title.
+
+   EVERY WORD HAS TO MATCH, not the whole phrase as a substring — "printer
+   receipt" finds "Receipt printing — Feie cloud printer", which a substring
+   search would not. Same rule as the stores and team boxes (audit O-02); one
+   search behaviour across the admin is worth more than a cleverer one here.
+
+   IT LISTS RESULTS RATHER THAN FILTERING THE PANELS. Hiding cards inside seven
+   panels would leave the panel headings, the sidebar counts and the scroll
+   position all describing a screen that is no longer there; a list says where
+   each answer LIVES, which is the thing somebody is actually missing. */
+function _cfgCards() {
+  const out = [];
+  document.querySelectorAll('#tab-config .sub-panel').forEach((panel) => {
+    const sub = (panel.id || '').replace(/^sub-/, '');
+    const navBtn = document.querySelector('#settings-nav button[data-sub="' + sub + '"]');
+    if (!navBtn) return;
+    // A panel the operator's role cannot open is not a place to send them.
+    if (navBtn.hidden || navBtn.offsetParent === null) return;
+    const panelName = (navBtn.textContent || '').replace(/\s+/g, ' ').trim();
+    panel.querySelectorAll('.group-card, .card').forEach((card) => {
+      const h3 = card.querySelector('h3');
+      if (!h3) return;
+      const title = (h3.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!title) return;
+      out.push({
+        sub, panelName, title, card,
+        sees: card.getAttribute('data-sees') === 'customer',
+        hay: ((title + ' ' + panelName + ' ' + (card.textContent || '')).replace(/\s+/g, ' ')).toLowerCase(),
+      });
+    });
+  });
+  return out;
+}
+
+function cfgSearch() {
+  const box = document.getElementById('cfg-search');
+  const out = document.getElementById('cfg-search-results');
+  if (!box || !out) return;
+  const q = (box.value || '').trim().toLowerCase();
+  if (!q) { out.hidden = true; out.innerHTML = ''; return; }
+  const words = q.split(/\s+/).filter(Boolean);
+  const hits = _cfgCards().filter((c) => words.every((w) => c.hay.includes(w))).slice(0, 12);
+  out.hidden = false;
+  if (!hits.length) {
+    out.innerHTML = '<div class="cfg-hit-none">' + cuT('Nothing here matches.', '没有匹配的设置。') + '</div>';
+    return;
+  }
+  out.innerHTML = hits.map((h, i) =>
+    '<button type="button" class="cfg-hit" onclick="cfgSearchGo(' + i + ')">'
+    + '<span class="cfg-hit-title" data-no-i18n>' + escapeHtml(h.title) + '</span>'
+    + '<span class="cfg-hit-where" data-no-i18n>' + escapeHtml(h.panelName) + '</span>'
+    + (h.sees ? '<span class="cfg-sees">' + cuT('Customers see this', '顾客可见') + '</span>' : '')
+    + '</button>').join('');
+  _cfgHits = hits;
+}
+let _cfgHits = [];
+function cfgSearchGo(i) {
+  const h = _cfgHits[i];
+  if (!h) return;
+  const btn = document.querySelector('#settings-nav button[data-sub="' + h.sub + '"]');
+  if (btn) btn.click();
+  // Same landing as the command palette's: switch, scroll, then flash, so the
+  // card says "here" rather than leaving somebody to find it again by eye.
+  setTimeout(() => {
+    h.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    h.card.classList.remove('gsearch-flash');
+    void h.card.offsetWidth;
+    h.card.classList.add('gsearch-flash');
+    setTimeout(() => h.card.classList.remove('gsearch-flash'), 1600);
+  }, 90);
+}
+window.cfgSearch = cfgSearch;
+window.cfgSearchGo = cfgSearchGo;
+
+/* MARK THE ONES CUSTOMERS SEE (audit G-03, second half).
+
+   Some settings change what a customer sees the moment they are saved, and
+   nothing on screen distinguished those from the ones that only change how the
+   shop is run. That is the difference somebody wants to know before pressing
+   save on a screen they are not confident in.
+
+   The badge is added from JavaScript rather than written into the markup so its
+   words follow the language toggle like everything else. `data-sees="customer"`
+   on the card is the claim; this only renders it.
+
+   AN UNMARKED CARD IS NOT A CLAIM THAT NOTHING IS PUBLIC. The badge says "this
+   one is visible to customers"; its absence says nothing, because a rule that
+   had to be right about all twenty-seven cards to be useful would be wrong
+   about one of them within a month. */
+function cfgMarkAudience() {
+  document.querySelectorAll('#tab-config [data-sees="customer"]').forEach((card) => {
+    const head = card.querySelector('.group-card-head') || card;
+    const h3 = head.querySelector('h3');
+    if (!h3) return;
+    let tag = head.querySelector('.cfg-sees');
+    if (!tag) {
+      tag = document.createElement('span');
+      tag.className = 'cfg-sees';
+      h3.insertAdjacentElement('afterend', tag);
+    }
+    tag.textContent = cuT('Customers see this', '顾客可见');
+  });
+}
+window.cfgMarkAudience = cfgMarkAudience;
+// Painted once the shell is up, and again on a language change so the badge is
+// never left in the language somebody switched away from.
+if (typeof onLangChange === 'function') onLangChange(cfgMarkAudience);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cfgMarkAudience);
+else setTimeout(cfgMarkAudience, 0);
+
 // ── Manual-Alipay (静态收款码) fallback card ──────────────────────────────
 // Stopgap while 当面付 API access is blocked: operator uploads a static收款码 +
 // payee label; customer scans/pays/uploads a screenshot; staff Mark paid.
