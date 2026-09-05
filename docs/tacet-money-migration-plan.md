@@ -3,8 +3,12 @@
 Answers Q1 of `docs/tacet-fix-2026-09-handover.md` (audit finding **A-06**, High).
 The question asked was "permission to plan it, or not now". This is the plan.
 
-Nothing here is built. Nothing here is scheduled. It is a proposal with a shape,
-an order, and the two or three things I would need from you before starting.
+Nothing here is built. Nothing here is scheduled.
+
+**§1a carries the measured baseline** taken from the live database on 2026-09-05,
+before any change. It answers the questions §8 originally asked, and it forces one
+correction to the approach that only the data could have shown: not every money
+column should become integer cents.
 
 ---
 
@@ -45,6 +49,128 @@ So the platform's own money is exact and the merchant's money is not. That split
 is not a design decision anybody made; it is where two eras of the codebase meet.
 It also means **the convention already exists** and this work extends it rather
 than inventing anything.
+
+---
+
+## 1a. MEASURED — the live numbers, 2026-09-05
+
+Run: `scripts/diagnose_money_precision.js` through `ro-query.yml`, read-only and
+proven so (the connection was handed a `CREATE TABLE` and rejected it). Actions
+run 89, exit 0. **This is the Stage 0 baseline. It predates any change, which is
+the only reason it is worth anything.**
+
+### The inventory is 93, not 51 and not 89
+
+**107 money-named columns across 49 tables — 93 REAL, 12 INTEGER, 1 DATE, 1 TEXT.**
+
+Both earlier counts were wrong. The audit's 51-of-61-across-32 under-counted; the
+source scan's 89-across-37 was closer but still missed columns and invented
+others. The live schema settles it — and the live list *also* over-captures on
+name alone (`tenants.commission_rate_bps` is a rate in basis points,
+`meituan_settlements.settled_on` is a date, `retail_customers.points_balance` and
+`retail_stock_ledger.balance_after` are points and stock, not money). So the
+human pass this plan opens with is still required. It now has a correct starting
+set rather than a guess.
+
+### The backfill is trivial. This question is closed.
+
+| rows | table |
+|---:|---|
+| 146,374 | `retail_checkout_quotes` |
+| 28,400 | `sales_entries` |
+| 22,446 | `miniapp_order_lines` |
+| 5,147 | `retail_order_items` |
+| 1,427 | `retail_orders` |
+| 834 | `retail_payments` |
+
+**325,091 non-null money values in total.** One `UPDATE` per column, sub-second.
+No batching, no live-service stall, no maintenance window. The question about
+production row counts is answered and needs nothing further.
+
+### 0.73% of stored money is already not a whole number of cents
+
+**2,381 dirty / 1,293 deep, of 325,091.** Not zero — so a rounding decision has
+to be made, and it is the one irreversible act in the migration.
+
+Where it is concentrated matters more than the total:
+
+| dirty / of | column | share |
+|---:|---|---:|
+| 264 / 285 | `retail_order_items.unit_cost_at_sale` | **93%** |
+| 454 / 760 | `ingredients.cost_per_unit` | **60%** |
+| 79 / 94 | `store_products.unit_cost` | 84% |
+| 65 / 187 | `guanyi_product_pricing.excel_gz_price` | 35% |
+| 498 / 2,070 | `ingredient_price_history.price` | 24% |
+| 280 / 5,147 | `retail_order_items.unit_price` | 5.4% |
+| 21 / 834 | `retail_payments.amount` | 2.5% |
+| 21 / 1,427 | `retail_orders.total` | 1.5% |
+
+Two of these are the bug itself, sitting in the data where anyone can look at it:
+`store_products.unit_cost` runs from `1.7342365999999998`, and
+`guanyi_product_pricing.excel_gz_price` from `7.699999999999999` to
+`131.20000000000002`. Those are not prices anybody typed. They are what a float
+does to `7.70`.
+
+### The correction this forces: amounts are not rates
+
+**"Convert everything to integer cents" is wrong, and the data is what shows it.**
+
+`ingredients.cost_per_unit` is 60% sub-cent because it is *not an amount*. It is a
+cost per gram — oat groats at `0.042` yuan/g. In cents that is 4.2, which is not
+an integer, and rounding it to 4 would move the cost basis of every recipe by 5%.
+`unit_cost_at_sale` is 93% sub-cent for the same reason.
+
+So the columns split into two kinds, and they need different targets:
+
+- **Amounts** — what somebody actually pays or is paid. `retail_orders.total`,
+  `retail_payments.amount`, `line_total`, the fees, the refunds. These are money
+  and they go to **integer cents**. They are also the cleanest today (1–5% dirty),
+  which is consistent with their being real amounts rather than computed rates.
+- **Rates** — a price per unit of something. `cost_per_unit`, `unit_cost_at_sale`,
+  and possibly `unit_price` where goods are priced per gram. Integer cents would
+  *destroy* precision here. These need a smaller unit (integer micro-units, 1/10⁴
+  of a yuan) or to keep numerator and denominator.
+
+Deciding which kind each of the 93 columns is *is* the inventory pass in §2a, and
+it is now the highest-value step in the plan. Getting it wrong on a rate column is
+not a rounding error, it is a 5% error in every recipe cost.
+
+### Today's failure baseline — recorded
+
+| result | n | check |
+|---|---:|---|
+| ok | 0 | payments refunded for more than was paid |
+| **FAIL** | **2** | orders refunded for more than the order total |
+| **FAIL** | **2** | orders approved to refund more than the order total |
+| ok | 0 | negative order totals |
+| ok | 0 | line totals that are not `unit_price × qty` to the cent |
+| — | 0 | lines priced on a fractional quantity |
+
+**Two orders are refunded for more than they cost.** That is a real defect
+sitting in production right now, and it is *not* caused by floating point —
+¥0.005 of drift cannot push a refund past a total. Something else did that. It is
+recorded here so it cannot later be blamed on this migration, and it is worth
+looking at on its own account.
+
+Zero fractional quantities is a useful negative: the sub-cent `unit_price` values
+are **not** from selling by weight, so they need explaining before that column is
+converted.
+
+### Channel settlement
+
+5 eleme orders, **2 do not settle** — but by ¥42.50 (`discount_unrecorded`) and
+¥5.00 (`delivery_not_billed`). Those are missing data, not rounding. Floating
+point is not implicated and this migration will not fix them. Noted so the 40%
+is not read as a precision finding. The sample is 5 orders; the channel mix is
+808 wechat, 377 gzgrocery, 221 meituan, 5 eleme.
+
+### What this settles for §8
+
+1. **Row counts — answered.** Trivial. No batching.
+2. **External readers — answered "no" by the owner.** The `_cents` rename is safe.
+3. **Channel tables — deferred with evidence.** The eleme gaps are a data-capture
+   problem, so including the channel tables would not fix them. They can wait for
+   the sync redesign without leaving a precision hole.
 
 ---
 
@@ -244,19 +370,20 @@ The control-plane billing tables are already `_cents` and are not touched.
 
 ## 8. What I need from you before starting
 
-1. **Row counts** on `retail_orders`, `retail_order_items` and `retail_payments`
-   in production. I cannot see the box. This decides whether the backfill is a
-   sub-second `UPDATE` or something that needs batching against a live service.
-2. **Does anything outside this codebase read these columns directly?** A report
-   tool, a spreadsheet export, a BI connection, anything pointed at the SQLite
-   file. The `_cents` rename breaks any such reader silently, and I have no way
-   to discover one from inside the repo.
-3. **Are the channel tables in or out?** Family 5 is 12 columns on
-   `meituan_orders` plus the settlement path. Your brief puts the sales-channel
-   sync redesign out of scope, and this would touch the same tables. My
-   inclination is to do families 1–4 and 6 and leave 5 with that redesign — but
-   that leaves `settlementGap()` on floats, which is one of the places the
-   problem is provably live.
+**All three original questions are now closed — see §1a.** Row counts came from
+the live database (trivial, no batching). External readers: answered "no", so the
+rename is safe. Channel tables: deferred with evidence, because the eleme gaps
+turned out to be missing data rather than rounding, so including them would not
+have fixed anything.
+
+What remains is not a question I can answer by measuring:
+
+1. **Go or no-go**, given that §1a moved the shape of the work. The rate-vs-amount
+   split means the inventory pass is no longer clerical — it is a judgement about
+   what each of 93 columns *means*, and it has to be right.
+2. **The two over-refunded orders** in §1a are a live defect this migration does
+   not cause and will not fix. Worth pulling on separately; say the word and I
+   will look.
 
 ---
 
