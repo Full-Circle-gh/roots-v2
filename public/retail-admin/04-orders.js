@@ -9649,6 +9649,23 @@ async function ordOpenDraft(id) {
 }
 async function ordDeleteDraft(ev, id) {
   if (ev) ev.stopPropagation();
+  // AUDIT C-05. The one destructive call in the admin that did not ask — 31 of
+  // 32 did. The audit called it defensible, and it is: a draft is scratch work.
+  // But a draft can also be a half-typed phone order with twenty lines on it,
+  // the delete sits on a row in a list, and the one thing that cannot be undone
+  // here is the one thing with no confirmation. Asking costs a tap.
+  //
+  // The AUTOMATIC cleanup after a draft becomes a real order is deliberately
+  // left alone: nobody clicked it, there is nothing to confirm, and asking
+  // would be a dialog about housekeeping the operator did not ask for.
+  const ok = await askConfirm({
+    titleEn: 'Delete this draft?', titleCn: '删除这份草稿？',
+    bodyEn: 'It has not been placed as an order, and this cannot be undone.',
+    bodyCn: '该草稿尚未生成订单，删除后无法恢复。',
+    confirmEn: 'Delete draft', confirmCn: '删除草稿',
+    danger: true,
+  });
+  if (!ok) return;
   const btn = ev && ev.currentTarget;   // captured before the await
   if (btn) btn.disabled = true;
   try {

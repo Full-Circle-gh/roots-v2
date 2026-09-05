@@ -199,7 +199,46 @@ async function loadOpsStores() {
       box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">No stores yet. Add one below. · 暂无门店,请在下方添加。</div>';
       return;
     }
-    box.innerHTML = _opsStores.map(s => {
+    _opsPaintStores();
+  } catch (e) {
+    box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// AUDIT O-02. Neither this list nor the team list had a search box. Fine at two
+// locations; not fine at twenty, which is the size of merchant the platform is
+// being built for. The box appears only once there are enough rows to need it —
+// a search field above three stores is furniture.
+let _opsStoreQ = '';
+const OPS_SEARCH_FROM = 6;
+window._opsStoreSearch = function (v) { _opsStoreQ = String(v || ''); _opsPaintStores(); };
+function _opsStoreMatches(s, q) {
+  if (!q) return true;
+  const hay = [s.code, s.name_en, s.name_cn, s.city, s.district, s.address]
+    .filter(Boolean).join(' ').toLowerCase();
+  // Every word must appear somewhere — "tianhe park" finds a Tianhe store on
+  // Park Road, which one substring match over the whole string would not.
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
+function _opsPaintStores() {
+  const box = document.getElementById('ops-stores-list');
+  if (!box) return;
+  const q = _opsStoreQ.trim();
+  const shown = _opsStores.filter(s => _opsStoreMatches(s, q));
+  const searchBar = _opsStores.length >= OPS_SEARCH_FROM
+    ? `<div style="padding:8px 0 4px"><input id="ops-store-q" type="search" value="${escapeHtml(_opsStoreQ)}"
+         placeholder="Search stores · 搜索门店" aria-label="Search stores · 搜索门店"
+         oninput="_opsStoreSearch(this.value)"
+         style="width:100%;max-width:320px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elev-1);color:var(--text-1)"></div>`
+    : '';
+  if (!shown.length) {
+    box.innerHTML = searchBar + `<div style="padding:10px 0;color:var(--text-3)">No store matches “${escapeHtml(q)}”. · 没有匹配的门店。</div>`;
+    _opsRestoreFocus();
+    return;
+  }
+  box.innerHTML = searchBar
+    + (q ? `<div style="padding:2px 0 6px;color:var(--text-3);font-size:12px">${shown.length} of ${_opsStores.length} · 共 ${_opsStores.length} 家</div>` : '')
+    + shown.map(s => {
       const loc = [s.city, s.district].filter(Boolean).join(' · ');
       const gps = (s.lat != null && s.lng != null)
         ? '<span style="color:#16a34a">📍 GPS located · 已定位</span>'
@@ -217,9 +256,21 @@ async function loadOpsStores() {
         </div>
       </div>`;
     }).join('');
-  } catch (e) {
-    box.innerHTML = `<span style="color:var(--danger)">${cuT('Failed to load stores', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></span>`;
-  }
+  _opsRestoreFocus();
+}
+
+// Typing rebuilds the list, which throws away the input the operator is typing
+// into. Put the caret back where it was, or the box loses focus on every
+// keystroke and is unusable with more than one word.
+function _opsRestoreFocus() {
+  const el = document.getElementById('ops-store-q');
+  if (!el) return;
+  if (document.activeElement === el) return;
+  const prev = _opsStoreQ.length;
+  el.focus();
+  // Same as above: type=search refuses setSelectionRange in some engines, and
+  // the focus is the part that makes the box usable.
+  try { el.setSelectionRange(prev, prev); } catch (e) { /* not selectable on this engine — focus is what matters */ }
 }
 
 function _opsStoreEdit(id) {
@@ -2119,12 +2170,39 @@ function tmPaintStats() {
   $('#tmStatNever').textContent = never;
   $('#tmStatLimited').textContent = limited;
 }
+// AUDIT O-02, the team half. Same rule as the stores list: the box appears only
+// once there are enough people to need it, and it matches on name, username,
+// role and store — the four things somebody actually remembers about a
+// colleague when they are looking for them.
+let _tmQ = '';
+window.tmSearch = function (v) { _tmQ = String(v || ''); tmRender(); };
+function tmMatches(u, q) {
+  if (!q) return true;
+  const hay = [u.displayName, u.username, tmRoleLabel(u.role),
+    (tmNeedsStore(u.role) && u.retailStoreId) ? tmStoreName(u.retailStoreId) : '']
+    .filter(Boolean).join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
 function tmRender() {
   tmPaintStats();
   const membersEl = $('#tmMembers');
   if (!membersEl) return;
   if (!TM_TEAM.length) { membersEl.innerHTML = `<div class="tm-empty">${cuT('No team members yet.', '暂无团队成员。')}</div>`; return; }
-  membersEl.innerHTML = TM_TEAM.map(u => {
+  const q = _tmQ.trim();
+  const shown = TM_TEAM.filter(u => tmMatches(u, q));
+  const bar = TM_TEAM.length >= 6
+    ? `<div class="tm-searchbar"><input id="tmQ" type="search" value="${escapeHtml(_tmQ)}"
+         placeholder="${cuT('Search name, username, role or store', '搜索姓名、用户名、角色或门店')}"
+         aria-label="${cuT('Search team', '搜索团队')}" oninput="tmSearch(this.value)"></div>`
+    : '';
+  if (!shown.length) {
+    membersEl.innerHTML = bar + `<div class="tm-empty">${cuT('Nobody matches', '没有匹配的成员')} “${escapeHtml(q)}”.</div>`;
+    tmRestoreFocus();
+    return;
+  }
+  membersEl.innerHTML = bar
+    + (q ? `<div class="tm-searchcount">${shown.length} / ${TM_TEAM.length}</div>` : '')
+    + shown.map(u => {
     const bits = [];
     bits.push(`<span class="tm-u">@${escapeHtml(u.username)}</span>`);
     if (tmNeedsStore(u.role) && u.retailStoreId) bits.push(`<span class="tm-dot"></span>${escapeHtml(tmStoreName(u.retailStoreId))}`);
@@ -2147,6 +2225,18 @@ function tmRender() {
   membersEl.querySelectorAll('.tm-edit').forEach(b => {
     b.addEventListener('click', () => tmOpenEdit(Number(b.getAttribute('data-id'))));
   });
+  tmRestoreFocus();
+}
+
+// The list is rebuilt on every keystroke, which destroys the input being typed
+// into. Put the caret back, or the box drops focus after one character.
+function tmRestoreFocus() {
+  const el = document.getElementById('tmQ');
+  if (!el || document.activeElement === el) return;
+  el.focus();
+  // An input of type=search refuses setSelectionRange in some engines. The
+  // focus above is the part that matters; the caret position is a nicety.
+  try { el.setSelectionRange(_tmQ.length, _tmQ.length); } catch (e) { /* not selectable on this engine — focus is what matters */ }
 }
 async function tmLoad() {
   try {
