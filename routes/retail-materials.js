@@ -22,8 +22,9 @@
 // the kitchen PO flow, unchanged.
 
 const express = require('express');
-const db = require('../database');
-// Per-tenant connection. `ingredients`, `ingredient_price_history` and
+// Per-tenant connection, for EVERY read and write in this file — the cost path
+// always used it; the list, the detail and the archive route did not, and an
+// archive is a write. `ingredients`, `ingredient_price_history` and
 // `price_alerts` are data-plane tables with no tenant_id column
 // (lib/tenant-db.js CONTROL_PLANE_TABLES lists what is shared, and none of
 // these are on it), so under data isolation they live in the tenant's own DB
@@ -52,6 +53,9 @@ const { materialConsumers } = require('../lib/recipe-materialize');
 // when the operator left the field blank; routes/sku.js is the settings door
 // onto the same two libraries.
 const skuRules = require('../lib/sku-rules');
+// The row ceiling for lists that grow without bound (audit J-01). This one is
+// every material a merchant has ever added, and it had none.
+const { listWindow, windowMeta } = require('../lib/list-window');
 
 const router = express.Router();
 
@@ -103,8 +107,8 @@ const LIST_COLS = `
 function skuClash(sku, excludeId) {
   if (!sku) return { error: 'sku_taken', message: 'SKU already exists' };
   const owner = excludeId
-    ? db.prepare('SELECT id, name_en, name_cn, is_active FROM ingredients WHERE sku = ? AND id != ?').get(sku, excludeId)
-    : db.prepare('SELECT id, name_en, name_cn, is_active FROM ingredients WHERE sku = ?').get(sku);
+    ? tdb().prepare('SELECT id, name_en, name_cn, is_active FROM ingredients WHERE sku = ? AND id != ?').get(sku, excludeId)
+    : tdb().prepare('SELECT id, name_en, name_cn, is_active FROM ingredients WHERE sku = ?').get(sku);
   if (!owner) return { error: 'sku_taken', message: 'SKU already exists' };
   return {
     error: 'sku_taken',
@@ -131,7 +135,7 @@ function readBody(b) {
     supplier: b.supplier || null,
     allergens: Array.isArray(b.allergens) ? b.allergens.join(', ') : (b.allergens || null),
     notes: b.notes || null,
-    accounting_category: storeCategory(db, b.accounting_category),
+    accounting_category: storeCategory(tdb(), b.accounting_category),
     item_kind: b.item_kind || 'food',
     free_by_design: b.free_by_design ? 1 : 0,
   };
@@ -198,9 +202,17 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
     : '';
   const kindClause = kind ? ' AND COALESCE(item_kind,\'food\') = ?' : '';
 
-  const rows = db.prepare(
-    `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause} ORDER BY name_en COLLATE NOCASE`
-  ).all(...base, ...(kind ? [kind] : []));
+  // How many match, before the ceiling — the number the screen's own counter
+  // must show, and the only honest way to know whether the list was cut.
+  const { limit, offset } = listWindow(req.query);
+  const listArgs = [...base, ...(kind ? [kind] : [])];
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM ingredients${where}${sourceClause}${kindClause}`
+  ).get(...listArgs).n;
+  const rows = tdb().prepare(
+    `SELECT ${LIST_COLS} FROM ingredients${where}${sourceClause}${kindClause}
+      ORDER BY name_en COLLATE NOCASE LIMIT ? OFFSET ?`
+  ).all(...listArgs, limit, offset);
   for (const r of rows) {
     r.has_image = !!r.has_image;
     r.has_supplier_qr = !!r.has_supplier_qr;
@@ -210,12 +222,12 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   // A chip reading "Packaging 146" beside a two-row table is describing a set
   // the operator cannot see, and a source tab reading "Made 122" while the
   // Packaging chip is on would be doing the same thing.
-  const counts = db.prepare(
+  const counts = tdb().prepare(
     `SELECT COALESCE(item_kind,'food') AS k, COUNT(*) AS n FROM ingredients${where}${sourceClause} GROUP BY 1`
   ).all(...base);
   const byKind = {};
   for (const c of counts) byKind[c.k] = c.n;
-  const srcRow = db.prepare(
+  const srcRow = tdb().prepare(
     `SELECT SUM(source_recipe_id IS NULL) AS bought, SUM(source_recipe_id IS NOT NULL) AS made
        FROM ingredients${where}${kindClause}`
   ).get(...base, ...(kind ? [kind] : []));
@@ -223,6 +235,7 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
   res.json({
     success: true, data: hideCost ? rows.map(stripMaterialCost) : rows, counts: byKind,
     sourceCounts: { bought: (srcRow && srcRow.bought) || 0, made: (srcRow && srcRow.made) || 0 },
+    ...windowMeta({ total, limit, offset, returned: rows.length }),
     ...(hideCost ? { costs_hidden: true } : {}),
   });
 });
@@ -231,14 +244,14 @@ router.get('/api/retail-admin/materials', requireRetailAdmin, (req, res) => {
 // The kitchen serves these from routes/lookups.js behind requireAuth, which a
 // backend operator does not hold. Same table, this realm's gate.
 router.get('/api/retail-admin/materials/meta/kinds', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(
+  const rows = tdb().prepare(
     "SELECT name FROM categories WHERE kind = 'item_kind' ORDER BY sort_order, name"
   ).all();
   res.json({ success: true, data: rows.map(r => r.name) });
 });
 
 router.get('/api/retail-admin/materials/meta/categories', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(
+  const rows = tdb().prepare(
     "SELECT DISTINCT category FROM ingredients WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category COLLATE NOCASE"
   ).all();
   res.json({ success: true, data: rows.map(r => r.category) });
@@ -249,7 +262,7 @@ router.get('/api/retail-admin/materials/meta/categories', requireRetailAdmin, (r
 // typed value onto one of these; this just lets the field offer them instead
 // of asking the operator to retype one from memory.
 router.get('/api/retail-admin/materials/meta/accounting-categories', requireRetailAdmin, (req, res) => {
-  const rows = db.prepare(
+  const rows = tdb().prepare(
     "SELECT name FROM categories WHERE kind = 'accounting' ORDER BY sort_order, name"
   ).all();
   res.json({ success: true, data: rows.map(r => r.name) });
@@ -257,14 +270,14 @@ router.get('/api/retail-admin/materials/meta/accounting-categories', requireReta
 
 // ═══ One material ══════════════════════════════════════════════════════════
 router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => {
-  const row = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);
+  const row = tdb().prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   // Base64 payloads stay out of the detail read, same as the supplier detail.
   const hasImage = !!row.image_data, hasQr = !!row.supplier_qr_data;
   delete row.image_data; delete row.supplier_qr_data;
   row.has_image = hasImage; row.has_supplier_qr = hasQr;
 
-  const priceHistory = db.prepare(
+  const priceHistory = tdb().prepare(
     'SELECT id, price, buy_unit, source, notes, recorded_at, recorded_by FROM ingredient_price_history WHERE ingredient_id = ? ORDER BY recorded_at DESC LIMIT 20'
   ).all(row.id);
 
@@ -273,7 +286,7 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
   // longer filter to scope='kitchen' only — a material bought through Roots'
   // online-store purchasing needs to show up here too. po_number's own prefix
   // (PO- vs RPO-) already tells the two apart, so no extra column is needed.
-  const purchases = db.prepare(`
+  const purchases = tdb().prepare(`
     SELECT po.id AS po_id, po.po_number, po.date, po.status, po.supplier,
            pli.qty, pli.unit, pli.cost_per_unit, pli.total_cost
       FROM po_line_items pli
@@ -299,12 +312,12 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
   //     (lib/recipe-rollup.js), the exact function the rollup itself calls,
   //     so this can never say something the rollup would disagree with.
   //     null/null when this row is an ordinary purchased material.
-  const usedByRecipes = materialConsumers(db, row.id);
+  const usedByRecipes = materialConsumers(tdb(), row.id);
   let sourceRecipe = null, sourceRecipeBlock = null;
   if (row.source_recipe_id) {
-    sourceRecipe = db.prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE id = ?').get(row.source_recipe_id);
+    sourceRecipe = tdb().prepare('SELECT id, name_en, name_cn, is_active FROM recipes WHERE id = ?').get(row.source_recipe_id);
     if (sourceRecipe) {
-      const r = costOneRecipe(db, sourceRecipe.id, new Map());
+      const r = costOneRecipe(tdb(), sourceRecipe.id, new Map());
       sourceRecipeBlock = { ok: r.ok, reason: r.ok ? null : r.reason, unpriced: r.unpriced || 0 };
     }
   }
@@ -468,10 +481,10 @@ router.put('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
 // point at the wrong thing. The kitchen half stopped nulling it; this door was
 // never allowed to.
 router.put('/api/retail-admin/materials/:id/archive', requireRetailAdmin, (req, res) => {
-  const row = db.prepare('SELECT id FROM ingredients WHERE id = ?').get(req.params.id);
+  const row = tdb().prepare('SELECT id FROM ingredients WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   const active = req.body && req.body.restore ? 1 : 0;
-  db.prepare('UPDATE ingredients SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+  tdb().prepare('UPDATE ingredients SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(active, req.params.id);
   res.json({ success: true, is_active: active });
 });

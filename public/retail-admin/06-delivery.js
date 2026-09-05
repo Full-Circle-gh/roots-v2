@@ -555,8 +555,8 @@ function renderZoneTable() {
   if (_zoneView === 'pricing') {
     head.innerHTML = `<tr>
       <th>Zone · 配送区</th>
-      <th class="numeric">Base ¥</th>
-      <th class="numeric">Free over ¥</th>
+      <th class="numeric">Base ${acCurrencySymbol()}</th>
+      <th class="numeric">Free over ${acCurrencySymbol()}</th>
       <th>Extras · 额外</th>
       <th style="text-align: center;">On · 启用</th>
       <th></th>
@@ -569,7 +569,7 @@ function renderZoneTable() {
       <tr class="dz-row" onclick="openZoneDrawer(${z.id})">
         <td>${zoneCellHtml(z)}</td>
         <td class="numeric">${zonePriceCellHtml(z)}</td>
-        <td class="numeric">${z.free_threshold == null ? '<span class="muted">default · 默认</span>' : '¥'+z.free_threshold}</td>
+        <td class="numeric">${z.free_threshold == null ? '<span class="muted">default · 默认</span>' : acWrap(z.free_threshold)}</td>
         <td>${zoneExtrasHtml(z)}</td>
         <td style="text-align: center;" onclick="event.stopPropagation()">
           <input type="checkbox" ${z.is_active?'checked':''} onchange="updateZone(${z.id},'is_active', this.checked ? 1 : 0)">
@@ -648,18 +648,18 @@ function zoneIsWeightPriced(z) {
 function zonePriceCellHtml(z) {
   if (zoneIsWeightPriced(z)) {
     const x = Number(z.weight_extra_kg_fee) || 0;
-    return `<span class="dz-wprice">¥${z.weight_first_kg_fee}${x ? ' +¥'+x+'/kg' : ''}</span>`;
+    return `<span class="dz-wprice">${acWrap(z.weight_first_kg_fee)}${x ? ' +' + acWrap(x) + '/kg' : ''}</span>`;
   }
-  return `¥${z.base_fee ?? 0}`;
+  return acWrap(z.base_fee ?? 0);
 }
 
 function zoneExtrasHtml(z) {
   const bits = [];
   if (zoneIsWeightPriced(z)) bits.push('by weight · 按重量');
-  if (z.zone_type === 'gz_district' && z.max_fee != null && z.max_fee !== '') bits.push(`MAX ¥${z.max_fee}`);
+  if (z.zone_type === 'gz_district' && z.max_fee != null && z.max_fee !== '') bits.push(`MAX ${acWrap(z.max_fee)}`);
   if (z.zone_type === 'city') {
-    if (z.packing_fee_per_item) bits.push(`Pack ¥${z.packing_fee_per_item}/ea`);
-    if (z.packing_fee_cap != null && z.packing_fee_cap !== '') bits.push(`cap ¥${z.packing_fee_cap}`);
+    if (z.packing_fee_per_item) bits.push(`Pack ${acWrap(z.packing_fee_per_item)}/ea`);
+    if (z.packing_fee_cap != null && z.packing_fee_cap !== '') bits.push(`cap ${acWrap(z.packing_fee_cap)}`);
   }
   return bits.length ? `<span class="dz-extras">${bits.join(' · ')}</span>` : '<span class="muted">—</span>';
 }
@@ -670,7 +670,7 @@ function sameDayCellHtml(z) {
   // Treat fee > 0 as same-day-on even when the allowed flag is stale —
   // matches what onSdFeeInput / save now enforce going forward.
   if (!z.same_day_allowed && !fee) return '<span class="dz-sd-no">✗</span>';
-  return `<span class="dz-sd-yes">✓ ${fee ? '+¥'+fee : 'free'}</span>`;
+  return `<span class="dz-sd-yes">✓ ${fee ? '+' + acWrap(fee) : 'free'}</span>`;
 }
 
 // ── Drawer ──
@@ -1236,19 +1236,19 @@ function dlvHubRender() {
   if (std === '' && free === '') {
     _dlvStat('dlv-st-fees', 'off', cuT('Using defaults', '使用默认值'));
   } else {
-    const freeEn = Number(free) > 0 ? ' · free over ¥' + free : ' · always free over ¥0';
-    const freeCn = Number(free) > 0 ? ' · 满 ¥' + free + ' 免运' : ' · 始终包邮';
+    const freeEn = Number(free) > 0 ? ' · free over ' + acWrap(free) : ' · always free over ' + acWrap(0);
+    const freeCn = Number(free) > 0 ? ' · 满 ' + acWrap(free) + ' 免运' : ' · 始终包邮';
     _dlvStat('dlv-st-fees', 'ok',
-      cuT('Standard ¥' + (std || 0) + freeEn + (min > 0 ? ' · min ¥' + min : ''),
-          '标准 ¥' + (std || 0) + freeCn + (min > 0 ? ' · 起送 ¥' + min : '')));
+      cuT('Standard ' + acWrap(std || 0) + freeEn + (min > 0 ? ' · min ' + acWrap(min) : ''),
+          '标准 ' + acWrap(std || 0) + freeCn + (min > 0 ? ' · 起送 ' + acWrap(min) : '')));
   }
 
   // Store pickup — global window + packing fee.
   const po = val('#cfg-pickup-open') || '10:00', pc = val('#cfg-pickup-close') || '20:00';
   const pack = Number(val('#cfg-fees-pickupPackingFee')) || 0;
   _dlvStat('dlv-st-pickup', 'ok',
-    cuT(po + '–' + pc + (pack > 0 ? ' · packing ¥' + pack : ''),
-        '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ¥' + pack : '')));
+    cuT(po + '–' + pc + (pack > 0 ? ' · packing ' + acWrap(pack) : ''),
+        '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ' + acWrap(pack) : '')));
 
   // Holiday mode — mirror the real checkbox onto the hub switch.
   const hol = !!document.getElementById('dlv-holiday-mode')?.checked;
@@ -1329,8 +1329,8 @@ function dlvCoverageRender() {
   const po = (document.getElementById('cfg-pickup-open')?.value) || '10:00';
   const pc = (document.getElementById('cfg-pickup-close')?.value) || '20:00';
   const pack = Number(document.getElementById('cfg-fees-pickupPackingFee')?.value) || 0;
-  const hoursTxt = cuT(po + '–' + pc + (pack > 0 ? ' · packing ¥' + pack : ''),
-                       '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ¥' + pack : ''));
+  const hoursTxt = cuT(po + '–' + pc + (pack > 0 ? ' · packing ' + acWrap(pack) : ''),
+                       '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ' + acWrap(pack) : ''));
   const nm = document.getElementById('dlv-new-pickup-meta');
   if (nm) nm.textContent = hoursTxt;
   const pm = document.getElementById('dlv-pickup-meta');

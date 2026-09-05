@@ -25,6 +25,10 @@ let _ordClampRetry = false;   // guards the one refetch when a page falls off th
 // "View all N orders" path from a customer's drawer). null = every customer.
 // Read by loadOrders() alongside the DOM filters; surfaced as a removable chip.
 let ORD_CUSTOMER_FILTER = null;
+// The rows currently painted. Held so the bulk bar can reason about what is
+// ticked — which step each selected order could actually move to — without
+// re-reading it out of the DOM.
+let ORD_ROWS = [];
 
 // A filter re-cuts the result set, so the current page number no longer
 // points at the same orders. Start over at page 1.
@@ -448,7 +452,7 @@ function refundBadge(o) {
     // rows that predate the accumulation fix.
     const paid = [o.refund_amount_paid, o.refund_amount_approved, o.refund_amount_requested]
       .map(Number).find(n => Number.isFinite(n) && n > 0);
-    const amt = paid ? ` ¥${fmt(paid)}` : '';
+    const amt = paid ? ` ${acMoney(paid)}` : '';
     return `<span class="pill refund-partial" title="Partial refund · 部分退款${amt}">↩ part refund${amt} · 部分退款</span>`;
   }
   const labels = {
@@ -557,8 +561,8 @@ function drawerRefundBanner(o) {
   };
   const l = labels[rs] || { en: `Refund · ${rs}`, cn: '' };
   const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
-    ? cuT(`¥${fmt(o.refund_amount_requested)} of ¥${fmt(o.total)}`, `¥${fmt(o.refund_amount_requested)} / 共 ¥${fmt(o.total)}`)
-    : cuT(`full ¥${fmt(o.total)}`, `全额 ¥${fmt(o.total)}`);
+    ? cuT(`${acMoney(o.refund_amount_requested)} of ${acMoney(o.total)}`, `${acMoney(o.refund_amount_requested)} / 共 ${acMoney(o.total)}`)
+    : cuT(`full ${acMoney(o.total)}`, `全额 ${acMoney(o.total)}`);
   const when = o.refund_requested_at ? ` · ${cuT('requested', '申请于')} ${formatDate(o.refund_requested_at)}` : '';
   return `
     <div class="drawer-refund-banner" data-state="${rs}" role="status">
@@ -594,7 +598,7 @@ function renderAlipayProof(o) {
 
   // What the AI read, one row each — only the fields it actually found.
   const facts = [];
-  if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">¥${Number(d.amount).toFixed(2)}</span></li>`);
+  if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">${acMoney(d.amount)}</span></li>`);
   // Two names can come off one 收钱码: the shop's display name on the success
   // screen and the registered 收款方全称 on the 账单详情 page. Show both when the
   // screenshot carried both, so staff can see at a glance it's the same code.
@@ -714,9 +718,9 @@ function splitSuggestionBanner(o) {
       <div class="ss-bucket ${cls}">
         <div class="bk-head">
           <span>${icon} ${labelEn} · ${labelCn}</span>
-          <span class="bk-cost">¥${fmt(b.cost)}</span>
+          <span class="bk-cost">${acMoney(b.cost)}</span>
         </div>
-        <div class="bk-meta">${b.item_ids.length} items · ¥${fmt(b.value)} · ${grams(b.grams)}</div>
+        <div class="bk-meta">${b.item_ids.length} items · ${acMoney(b.value)} · ${grams(b.grams)}</div>
       </div>`;
   };
   const detail = sug.suggested.plan.map(bucket).join('');
@@ -725,14 +729,14 @@ function splitSuggestionBanner(o) {
       <div class="ss-head">
         <div class="ss-title">
           <span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Suggested: split into 2 packages · 拆分为 2 个包裹</span>
-          <span class="save">save ¥${fmt(sug.savings)} · 节省 ¥${fmt(sug.savings)}</span>
+          <span class="save">save ${acMoney(sug.savings)} · 节省 ${acMoney(sug.savings)}</span>
         </div>
         <div class="ss-actions">
           <button class="btn btn-primary btn-sm" onclick="applySplitSuggestion(${o.id})">Apply · 拆分</button>
           <button class="btn btn-sm" onclick="dismissSplitSuggestion(${o.id})">Dismiss · 忽略</button>
         </div>
       </div>
-      <div class="ss-subtitle">Current freight ¥${fmt(sug.current.cost)} → split freight ¥${fmt(sug.suggested.cost)} · 当前 ¥${fmt(sug.current.cost)} → 拆后 ¥${fmt(sug.suggested.cost)}</div>
+      <div class="ss-subtitle">Current freight ${acMoney(sug.current.cost)} → split freight ${acMoney(sug.suggested.cost)} · 当前 ${acMoney(sug.current.cost)} → 拆后 ${acMoney(sug.suggested.cost)}</div>
       <div class="ss-detail">${detail}</div>
     </div>`;
 }
@@ -1058,10 +1062,10 @@ function ordRenderKpis() {
   const k = data.kpis || {};
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
-  dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
+  dashCountUp($('#ord-kpi-rev'), revenue, n => acMoneyCompact(n));
   // No orders means no average — which is ¥0, not an unreadable dash. A money
   // tile carries a number.
-  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '¥0';
+  $('#ord-kpi-aov').textContent = acMoneyCompact(orders ? revenue / orders : 0);
   ordRepaintKpiLabels();   // deltas (language-aware)
 }
 // The Orders strip's own delta badge. Same states, same arithmetic and the same
@@ -1121,7 +1125,7 @@ function ordRepaintKpiLabels() {
   const count   = (cur, avg) => Math.round(cur - avg);
   // One decimal, matching what the server already computes for baseline.delta.
   const pct     = (cur, avg) => Math.round(((cur - avg) / avg) * 1000) / 10;
-  const money   = v => '¥' + Math.round(v).toLocaleString();
+  const money   = v => acMoneyCompact(v);
   const perDay  = cuT('day', '日');
   ordSetDelta('#ord-kpi-orders-d', orders,  ordAvg, days, count, '',
     v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), perDay);
@@ -1137,6 +1141,234 @@ function ordRepaintKpiLabels() {
   const aovAvg = ordAvg  ? revAvg  / ordAvg  : 0;
   ordSetDelta('#ord-kpi-aov-d',    aov,     aovAvg, days, pct, '%',
     money, cuT('order', '单'));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BULK ACTIONS ON ORDERS (audit E-03 / F-01)
+
+   Orders is the screen a merchant lives in, and until now every row was acted
+   on one at a time: marking twenty orders dispatched was twenty trips into the
+   drawer, sixty clicks where three would do. Products has had a proper
+   selection bar for a long time; this is that bar, on the list that needed it
+   most, reusing the same .pa-bulkbar-sel / .pa-bm classes so the two screens
+   look and behave alike.
+
+   🔴 WHAT IS DELIBERATELY NOT HERE: refund and cancel. Both move real money,
+   both are irreversible, and neither has a shape where doing twenty at once is
+   safer than doing them one at a time. A bulk refund is the single most
+   expensive mis-click this admin could offer and it is not offered. Everything
+   here is a FORWARD step on the fulfilment track — the same PATCH /status call
+   the drawer's own buttons make, one order at a time, with the server's
+   transition guard applying to each.
+
+   Read-only channel rows (the Meituan / gzgrocery mirrors) cannot be selected
+   at all: their state belongs to the platform that owns them, so a tick would
+   promise something the row cannot do.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let ORD_SELECTED = new Set();
+let ORD_VISIBLE_SELECTABLE = [];
+
+// Which of the ticked orders this action could actually move, judged from the
+// rows on screen. Purely to word the confirmation honestly — the server's
+// STATUS_TRANSITIONS is the real authority and each order is still checked
+// there. Mirrors routes/retail.js STATUS_TRANSITIONS; if that gains a step,
+// this list is the other half to update.
+const ORD_BULK_FROM = {
+  preparing:  ['paid', 'awaiting_restock'],
+  dispatched: ['preparing', 'paid'],
+  delivered:  ['dispatched'],
+};
+
+function ordSelectableRows() {
+  return (ORD_ROWS || []).filter(o => !ordIsReadonlyChannel(o));
+}
+
+function ordToggleSelect(id, ev) {
+  if (ev) ev.stopPropagation();
+  const n = Number(id);
+  if (ORD_SELECTED.has(n)) ORD_SELECTED.delete(n); else ORD_SELECTED.add(n);
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+function ordSelectAllVisible(on) {
+  ORD_VISIBLE_SELECTABLE.forEach(id => on ? ORD_SELECTED.add(id) : ORD_SELECTED.delete(id));
+  document.querySelectorAll('#orders-table tbody input.ord-sel').forEach(cb => {
+    cb.checked = ORD_SELECTED.has(Number(cb.dataset.id));
+  });
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+function ordClearSelection() {
+  ORD_SELECTED = new Set();
+  document.querySelectorAll('#orders-table tbody input.ord-sel').forEach(cb => { cb.checked = false; });
+  ordRenderBulkBar();
+  ordSyncSelectAll();
+}
+
+// The header tick has three honest states, not two: all of this page, none of
+// it, or some — which is what indeterminate is for. Without it, "some selected"
+// renders as "none selected" and clicking once appears to do nothing.
+function ordSyncSelectAll() {
+  const all = document.getElementById('ord-sel-all');
+  if (!all) return;
+  const n = ORD_VISIBLE_SELECTABLE.filter(id => ORD_SELECTED.has(id)).length;
+  all.checked = n > 0 && n === ORD_VISIBLE_SELECTABLE.length;
+  all.indeterminate = n > 0 && n < ORD_VISIBLE_SELECTABLE.length;
+  all.disabled = ORD_VISIBLE_SELECTABLE.length === 0;
+}
+
+function ordRenderBulkBar() {
+  const bar = document.getElementById('ord-bulkbar');
+  if (!bar) return;
+  const n = ORD_SELECTED.size;
+  if (!n) { bar.className = ''; bar.innerHTML = ''; return; }
+
+  // How many of the ticked orders each step can actually move. A step that can
+  // move none of them is greyed and says why on hover, rather than being
+  // offered and then failing on every order.
+  const picked = (ORD_ROWS || []).filter(o => ORD_SELECTED.has(o.id));
+  const movable = to => picked.filter(o => (ORD_BULK_FROM[to] || []).includes(o.status)).length;
+
+  const step = (to, en, cn) => {
+    const k = movable(to);
+    const dis = k ? '' : 'disabled';
+    const title = k === n ? '' : (k
+      ? ` title="${escapeHtml(cuT(k + ' of the ' + n + ' selected can move to this step', n + ' 单中有 ' + k + ' 单可进入此步骤'))}"`
+      : ` title="${escapeHtml(cuT('None of the selected orders can move to this step', '所选订单均无法进入此步骤'))}"`);
+    return `<button type="button" class="pa-bm-trig" ${dis}${title} onclick="ordBulkStatus('${to}')">`
+      + escapeHtml(cuT(en, cn)) + (k && k !== n ? ` <span class="muted">${k}</span>` : '') + `</button>`;
+  };
+
+  const visN = ORD_VISIBLE_SELECTABLE.length;
+  const allVis = visN > 0 && ORD_VISIBLE_SELECTABLE.every(id => ORD_SELECTED.has(id));
+  bar.className = 'pa-bulkbar-sel';
+  bar.innerHTML =
+    `<span class="pa-bulk-count"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4L6 11 3 8"/></svg>`
+      + escapeHtml(cuT(n + ' selected', '已选 ' + n + ' 单')) + `</span>`
+    + `<button type="button" class="btn btn-sm" onclick="ordSelectAllVisible(${allVis ? 'false' : 'true'})">`
+      + escapeHtml(allVis ? cuT('Clear page', '清空本页') : cuT('Select all ' + visN, '全选 ' + visN)) + `</button>`
+    + `<button type="button" class="btn btn-sm" onclick="ordClearSelection()">${escapeHtml(cuT('Clear', '清除'))}</button>`
+    + `<span class="pa-bulk-actions">`
+      + step('preparing',  'Start preparing', '开始备货')
+      + step('dispatched', 'Mark dispatched', '标记发货')
+      + step('delivered',  'Mark delivered',  '标记送达')
+    + `</span>`;
+}
+
+// Move every ticked order one step forward. One PATCH per order — the same
+// call the drawer makes — so the server's transition guard applies to each and
+// an order that cannot move is reported rather than silently skipped.
+async function ordBulkStatus(to) {
+  const picked = (ORD_ROWS || []).filter(o => ORD_SELECTED.has(o.id));
+  const can = picked.filter(o => (ORD_BULK_FROM[to] || []).includes(o.status));
+  if (!can.length) return;
+  const label = { preparing: cuT('Start preparing', '开始备货'),
+                  dispatched: cuT('Mark dispatched', '标记发货'),
+                  delivered: cuT('Mark delivered', '标记送达') }[to] || to;
+
+  // The confirmation names BOTH numbers when they differ. "Move 20 orders" when
+  // only 14 can move is the kind of quiet arithmetic that makes an operator
+  // stop trusting the screen.
+  const skipped = picked.length - can.length;
+  if (!(await askConfirm({
+    titleEn: `${label} — ${can.length} order${can.length === 1 ? '' : 's'}?`,
+    titleCn: `${label} — ${can.length} 单?`,
+    bodyEn: skipped
+      ? `${skipped} of the ${picked.length} you selected ${skipped === 1 ? 'is' : 'are'} not at a step this can move from, and will be left alone.`
+      : '',
+    bodyCn: skipped ? `所选 ${picked.length} 单中有 ${skipped} 单当前状态无法进入此步骤,将保持不变。` : '',
+    confirmEn: label, confirmCn: label,
+  }))) return;
+
+  toast(cuT('Working…', '处理中…'));
+  let done = 0; const failed = [];
+  for (const o of can) {
+    try {
+      await api(`/api/retail-admin/orders/${o.id}/status`, { method: 'PATCH', body: { status: to } });
+      done++;
+    } catch (e) {
+      failed.push(ordShortNo(o.order_no) + ' — ' + e.message);
+    }
+  }
+  // A failure names the orders, not just a count: "3 failed" leaves the
+  // operator to find which three by hand across a paged list.
+  if (failed.length) {
+    await askConfirm({
+      titleEn: `${done} moved, ${failed.length} could not`,
+      titleCn: `${done} 单已处理,${failed.length} 单失败`,
+      bodyEn: failed.slice(0, 10).map(escapeHtml).join('<br>')
+        + (failed.length > 10 ? `<br>…and ${failed.length - 10} more` : ''),
+      bodyCn: failed.slice(0, 10).map(escapeHtml).join('<br>')
+        + (failed.length > 10 ? `<br>…还有 ${failed.length - 10} 单` : ''),
+      confirmEn: 'OK', confirmCn: '好',
+      hideCancel: true,
+    });
+  } else {
+    toast(cuT('Moved ' + done + ' ✓', '已处理 ' + done + ' 单 ✓'), 'ok');
+  }
+  ORD_SELECTED = new Set();
+  loadOrders();
+}
+
+// ── The Orders filter, read from the controls in ONE place ─────────────────
+// Three callers need the same answer: the list, the CSV export and the
+// clear-filters control. Returns the filter half of the query string only —
+// paging belongs to whoever is paging, and an export has no pages.
+function ordFilterQuery() {
+  const qs = new URLSearchParams();
+  const status  = ($('#orders-status') || {}).value || '';
+  const channel = (document.getElementById('orders-channel') || {}).value || '';
+  const q       = (($('#orders-q') || {}).value || '').trim();
+  const storeSel = document.getElementById('orders-store');
+  const storeId  = storeSel ? storeSel.value : '';
+  if (status)  qs.set('status', status);
+  if (channel) qs.set('channel', channel);
+  if (q)       qs.set('q', q);
+  if (storeId) qs.set('store_id', storeId);
+  if (ORD_CUSTOMER_FILTER) qs.set('customer_id', ORD_CUSTOMER_FILTER.id);
+  return qs;
+}
+
+// Is anything narrowing the list right now? Drives the Clear button's presence:
+// a control that is always there but does nothing four times out of five is
+// noise, and one that appears when there is something to clear is a status
+// line as well as a button.
+function ordFiltersActive() {
+  return [...ordFilterQuery().keys()].length > 0;
+}
+
+// Show or hide the Clear button to match. Called on every load, so it tracks
+// the controls however they were changed — chip, menu, typing, or a customer
+// drawer's "View all N orders".
+function ordSyncClearBtn() {
+  const b = document.getElementById('ord-clear-btn');
+  if (b) b.hidden = !ordFiltersActive();
+}
+
+// Put every Orders control back to "everything", in one click. Before this the
+// operator had to find and undo each one — the status chip, the channel menu,
+// the store select, the search box, the customer chip — and the commonest way
+// out was reloading the page.
+function ordClearFilters() {
+  // ordResetFacetsUI already puts the chips, the channel menu (tick, label,
+  // icon and fill), the store select and the search box back to their defaults
+  // without reloading — it was written for the "View all N orders" path and is
+  // the one place that knows every control on this row.
+  ordResetFacetsUI();
+  ORD_CUSTOMER_FILTER = null;
+  ordFilterChanged();          // page → 1 + one reload
+}
+
+// Download the orders the list is showing — every one of them, not just the
+// page on screen. Deliberately filtered, unlike the catalogue export: an
+// operator on the Refunds chip who presses Export wants the refunds, and a
+// file that silently held the whole year would be worse than none.
+function ordExportCsv() {
+  const qs = ordFilterQuery().toString();
+  window.location.href = '/api/retail-admin/orders/export.csv' + (qs ? '?' + qs : '');
 }
 
 async function loadOrders(opts = {}) {
@@ -1165,14 +1397,13 @@ async function loadOrders(opts = {}) {
     // tracking, total). The backend treats `status=refunds_open` as the
     // pseudo-filter `refund_status IN ('pending','reviewing','approved')`.
 
-    const qs = new URLSearchParams();
-    if (status)  qs.set('status', status);
-    if (channel) qs.set('channel', channel);
-    if (q)       qs.set('q', q);
-    if (storeId) qs.set('store_id', storeId);
-    if (ORD_CUSTOMER_FILTER) qs.set('customer_id', ORD_CUSTOMER_FILTER.id);
+    // Built by ordFilterQuery so this list, the CSV export and the
+    // clear-filters control all read the same set of controls. The four consts
+    // above stay for the log lines and the render below that still name them.
+    const qs = ordFilterQuery();
     // Reflect the customer scope as a removable chip above the list.
     ordRenderCustChip();
+    ordSyncClearBtn();
     // The page window. Sending these is what makes orders past the first 100
     // reachable at all — the server was already honouring limit/offset, the
     // list just never asked for a second page.
@@ -1180,7 +1411,7 @@ async function loadOrders(opts = {}) {
     qs.set('offset', (ORD_PAGE - 1) * ORD_PAGE_SIZE);
     const tbody = $('#orders-table tbody');
     if (!silent) {
-      tbody.innerHTML = '<tr><td colspan="10" class="muted">Loading…</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="muted">Loading…</td></tr>';
     }
     // Populate the store filter once stores are loaded.
     ensureOrdersStoreFilter();
@@ -1194,7 +1425,7 @@ async function loadOrders(opts = {}) {
       j = await api('/api/retail-admin/orders?' + qs);
     } catch (e) {
       if (!silent && myReq === _ORDERS_REQ_ID) {
-        tbody.innerHTML = `<tr><td colspan="10" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
       }
       return;
     }
@@ -1252,7 +1483,7 @@ async function loadOrders(opts = {}) {
            <p class="muted">Orders show up here when a customer asks for an invoice. · 顾客申请开票的订单会显示在这里。</p>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
-      tbody.innerHTML = `<tr><td colspan="10">
+      tbody.innerHTML = `<tr><td colspan="11">
         <div class="empty-state">
           <div class="icon">${ICONS.empty}</div>
           ${emptyMsg}
@@ -1280,6 +1511,17 @@ async function loadOrders(opts = {}) {
       ? j.data.filter(o => isActionable(o) && !prevNotified.has(o.id))
       : [];
 
+    ORD_ROWS = j.data;
+    ORD_VISIBLE_SELECTABLE = ordSelectableRows().map(o => o.id);
+    // A selection does not survive the rows it pointed at. Orders leave the
+    // filter on their own (a status change, an auto-refresh, the next page), and
+    // acting on an id that is no longer on screen is a bulk action on an unknown
+    // set. Drop anything that is no longer selectable here.
+    {
+      const live = new Set(ORD_VISIBLE_SELECTABLE);
+      ORD_SELECTED.forEach(id => { if (!live.has(id)) ORD_SELECTED.delete(id); });
+    }
+
     tbody.innerHTML = j.data.map(o => {
       // No flash / no NEW mark for unpaid orders — nothing to act on yet.
       const fresh = (isActionable(o) && prevSeen && !prevSeen.has(o.id)) ? ' is-fresh' : '';
@@ -1299,7 +1541,10 @@ async function loadOrders(opts = {}) {
       const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
+        <td class="oc-sel">${ro ? '' : `<input type="checkbox" class="ord-sel" data-id="${o.id}"${ORD_SELECTED.has(o.id) ? ' checked' : ''}
+             onclick="ordToggleSelect(${o.id}, event)"
+             aria-label="Select order ${escapeHtml(ordShortNo(o.order_no))}">`}</td>
+        <td class="oc-ord"><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -1311,12 +1556,15 @@ async function loadOrders(opts = {}) {
         </td>
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
-        <td class="numeric oc-total">¥${fmt(o.total)}</td>
+        <td class="numeric oc-total">${acMoney(o.total)}</td>
         <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${paymentCheckLine(o)}${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
+
+    ordRenderBulkBar();
+    ordSyncSelectAll();
 
     _ORDERS_SEEN_IDS = newIds;
     _ORDERS_NOTIFIED_IDS = actionableIds;
@@ -2054,7 +2302,7 @@ function renderShipByCell(o) {
     : (p.subEn != null) ? cuT(p.subEn, p.subCn) : '';
   const icon = p.icon === 'pickup' ? `${pickupIcon(12)} ` : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
-    ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
+    ? ` <span style="font-size: 10px; color: var(--warn);">+${acMoney(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
   // The column header reads "Ship by", which is correct for true ship deadlines
   // (out-of-city express, fresh-batch make-by, ship-now). But scheduled-delivery
   // and pickup orders carry a DIFFERENT meaning — the date is when the customer
@@ -2275,7 +2523,7 @@ function renderAddonTimeline(o) {
         <div style="font-weight:700; color:var(--text-1);">${names || cuT('Items added','已加单')}</div>
         <div class="sub" style="color:var(--text-3); margin-top:2px;">${cuT('Added','加单于')} · ${formatDate(a.paid_at)}</div>
       </div>
-      <div style="font-weight:800; white-space:nowrap; color:var(--text-1);">+¥${Number(a.amount || 0).toFixed(2)}</div>
+      <div style="font-weight:800; white-space:nowrap; color:var(--text-1);">+${acMoney(a.amount)}</div>
     </div>`;
   }).join('');
   return `<div class="order-items" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
@@ -2366,6 +2614,180 @@ function awaitingRestockStore(o) {
 // landing at the store flips the order back to Paid on its own. Without that
 // sentence the card reads as a task, and staff chase an order that is already
 // being watched.
+// ── The shop's own note on an order ─────────────────────────────────────────
+//
+// Orders have carried a `staff_note` since manual orders were built, and until
+// now the ONLY place it could be typed was the New order form: an order that
+// arrived from the shop, the website or a marketplace could never be annotated,
+// because the only endpoint that accepted a note was the status route and that
+// refuses a request carrying no status transition. "Customer rang, leave it
+// next door" had nowhere to go.
+//
+// Collapsed to a single line when empty so it costs nothing on a drawer nobody
+// needs it on; the Save button appears only once the text differs from what is
+// stored, so an operator reading an order never sees an action they have no
+// reason to take.
+/* ══════════════════════════════════════════════════════════════════════════
+   WAS THE CUSTOMER TOLD? (audit P-02)
+
+   Every message this service tries to send is recorded (P-03). But a record
+   nobody thinks to open does not answer the question a merchant actually asks,
+   and they ask it WHILE LOOKING AT AN ORDER: "did the customer get told?"
+
+   So the answer sits on the order. The latest attempt per kind, with its
+   outcome, and — when one did not arrive — a button that tries again.
+
+   THE PRINTER IS THE PATTERN. A failed print has been written onto the order
+   as print_status/print_error, with a reprint button right there, for a long
+   time; it is the one failure path in this service that was never silent. This
+   is that shape for everything else.
+
+   DRAWN ONLY WHEN THERE IS SOMETHING TO SAY. An order nobody has tried to send
+   anything about — most manual orders, every counter sale — gets no block at
+   all rather than an empty "no notifications" panel. Absence of a block means
+   nothing was attempted; that is different from "attempted and failed", and
+   the two must not look alike.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// What each message was about, in a shopkeeper's words. The same fallback rule
+// the change history and the send record use — an unknown kind reads as words,
+// so one added tomorrow is legible on the day it ships.
+const ORD_NOTIFY_KINDS = {
+  order_paid:       ['Payment received', '已收到付款'],
+  order_preparing:  ['Preparing', '备货中'],
+  order_dispatched: ['Dispatched', '已发货'],
+  order_delivered:  ['Delivered', '已送达'],
+  order_cancelled:  ['Cancelled', '已取消'],
+  order_refunded:   ['Refunded', '已退款'],
+  delivery_update:  ['Delivery update', '配送更新'],
+};
+function ordNotifyKindText(k) {
+  const e = ORD_NOTIFY_KINDS[k];
+  if (e) return cuT(e[0], e[1]);
+  const w = String(k || '').replace(/_/g, ' ').trim();
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+}
+const ORD_NOTIFY_CHANNELS = {
+  wechat: ['WeChat', '微信'], sms: ['Text', '短信'], email: ['Email', '邮件'],
+};
+function ordNotifyChannelText(c) {
+  const e = ORD_NOTIFY_CHANNELS[c];
+  return e ? cuT(e[0], e[1]) : String(c || '');
+}
+
+// Why it did not arrive, in words the merchant can act on. These are the
+// reasons that actually occur, and each one implies a different next move —
+// which is the whole reason a bare "failed" was not good enough.
+const ORD_NOTIFY_WHY = {
+  no_consent:              ['they have not agreed to be messaged in the mini app', '顾客未在小程序中同意接收通知'],
+  no_openid:               ['this customer has no linked mini-app account', '该顾客未绑定小程序账号'],
+  no_template_id:          ['no message template is set up yet — Settings → Push notifications', '尚未配置消息模板 — 设置 → 推送通知'],
+  no_access_token:         ['the WeChat connection is not working', '微信连接异常'],
+  dev_mode_nothing_sent:   ['this shop is in test mode, so nothing was actually sent', '本店处于测试模式,消息未真正发送'],
+  aliyun_sms_not_configured: ['text messaging is not set up yet', '短信服务尚未配置'],
+  bad_phone:               ['their phone number is not one we can text', '该号码无法发送短信'],
+};
+function ordNotifyWhy(err) {
+  const e = ORD_NOTIFY_WHY[err];
+  if (e) return cuT(e[0], e[1]);
+  return (typeof tdErrorText === 'function') ? tdErrorText(err, null) : String(err || '');
+}
+
+function wasCustomerToldBlock(o) {
+  const rows = Array.isArray(o.notifications) ? o.notifications : [];
+  if (!rows.length) return '';
+  const anyFailed = rows.some(r => !r.ok);
+  const line = (r) => `<div class="ord-told-row${r.ok ? '' : ' is-bad'}">`
+    + `<span class="ord-told-mark">${r.ok ? '✓' : '!'}</span>`
+    + `<span class="ord-told-what" data-no-i18n>${escapeHtml(ordNotifyKindText(r.kind))}`
+    + `<span class="muted"> · ${escapeHtml(ordNotifyChannelText(r.channel))}</span></span>`
+    + `<span class="ord-told-when muted" data-no-i18n>${escapeHtml(
+        (typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.created_at) || '')}</span>`
+    + (r.ok ? '' : `<span class="ord-told-why" data-no-i18n title="${escapeAttr(r.error || '')}">${escapeHtml(ordNotifyWhy(r.error))}</span>`)
+    + `</div>`;
+  return `<div class="full ord-told">`
+    + `<div class="kicker">${escapeHtml(cuT('Was the customer told · 顾客是否已收到通知', '顾客是否已收到通知'))}</div>`
+    + rows.map(line).join('')
+    + (anyFailed
+      ? `<div class="ord-told-foot"><button type="button" class="btn btn-sm" data-cap="orders:edit" onclick="ordRenotify(${o.id}, this)">`
+        + escapeHtml(cuT('Try telling them again', '重新通知顾客')) + `</button></div>`
+      : '')
+    + `</div>`;
+}
+
+// Re-run the notification for the order's CURRENT status. A failure shown with
+// no way to act on it is a nicer way of doing nothing.
+//
+// The sends are detached and record their own outcome, so this waits a moment
+// and then re-reads the order rather than claiming a result the endpoint could
+// not have observed. Reporting "sent ✓" the instant the request returned would
+// be exactly the lie this whole finding is about.
+async function ordRenotify(id, btn) {
+  let ok;
+  try {
+    ok = await adminWrite({
+      btn,
+      url: `/api/retail-admin/orders/${id}/renotify`,
+      method: 'POST',
+      errLabelEn: 'Could not try again', errLabelCn: '重新通知失败',
+      busyLabel: cuT('Sending…', '发送中…'),
+    });
+  } catch (e) { return; }
+  if (!ok) return;
+  toast(cuT('Trying again — the result appears below in a moment.', '正在重试,稍后在下方显示结果。'));
+  setTimeout(() => { try { openOrder(id, { instant: true }); } catch (e) {} }, 2500);
+}
+
+function staffNoteBlock(o) {
+  const note = o.staff_note || '';
+  return `<div class="full ord-note" data-order-id="${o.id}">
+    <div class="kicker">Shop note · 店铺备注</div>
+    <textarea class="ord-note-in" rows="${note ? 3 : 1}" maxlength="2000"
+      data-ph-en="Add a note for whoever handles this order" data-ph-cn="给处理这张订单的同事留个备注"
+      placeholder="Add a note for whoever handles this order"
+      oninput="ordNoteChanged(${o.id})">${escapeHtml(note)}</textarea>
+    <div class="ord-note-foot" id="ord-note-foot-${o.id}" hidden>
+      <button class="btn btn-sm" type="button" onclick="ordNoteReset(${o.id})">${cuT('Cancel', '取消')}</button>
+      <button class="btn btn-sm btn-primary" type="button" onclick="ordNoteSave(${o.id}, event)">${cuT('Save note', '保存备注')}</button>
+    </div>
+  </div>`;
+}
+// Show the footer only when the text has actually changed. `_ordNoteOriginal`
+// is read from the open order rather than stashed at render time, so reopening
+// the drawer can never leave a stale baseline behind.
+function _ordNoteOriginal() { return (_OPEN_ORDER && _OPEN_ORDER.staff_note) || ''; }
+function ordNoteChanged(id) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  const foot = document.getElementById('ord-note-foot-' + id);
+  if (!wrap || !foot) return;
+  const el = wrap.querySelector('.ord-note-in');
+  foot.hidden = (el.value === _ordNoteOriginal());
+}
+function ordNoteReset(id) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  if (!wrap) return;
+  wrap.querySelector('.ord-note-in').value = _ordNoteOriginal();
+  ordNoteChanged(id);
+}
+async function ordNoteSave(id, ev) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  if (!wrap) return;
+  const el = wrap.querySelector('.ord-note-in');
+  try {
+    const j = await adminWrite({
+      btn: ev && ev.currentTarget, url: `/api/retail-admin/orders/${id}/note`,
+      method: 'PATCH', body: { staff_note: el.value },
+      busyLabel: cuT('Saving…', '保存中…'),
+      errLabelEn: 'Note not saved', errLabelCn: '备注未保存',
+    });
+    // Keep the open order in step so the baseline and a later reopen agree.
+    if (_OPEN_ORDER && _OPEN_ORDER.id === id) _OPEN_ORDER.staff_note = j.staff_note || '';
+    el.value = j.staff_note || '';
+    ordNoteChanged(id);
+    toast(cuT('Note saved', '备注已保存'));
+  } catch (e) { /* adminWrite has already said what went wrong */ }
+}
+
 function awaitingRestockCard(o) {
   const pids = awaitingRestockPids(o);
   if (!pids.length) return '';
@@ -2485,7 +2907,7 @@ function renderShipByTile(o) {
   const mode = deliveryModeNote(o.delivery_mode);
   const paidSameDay = (Number(o.same_day_surcharge_fee) || 0) > 0;
   const surcharge = paidSameDay
-    ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
+    ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+${acMoney(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
   // Right-away ASAP orders: the customer DID ask for as-soon-as-possible, so
   // surface that plainly. For the plain no-date case the headline already reads
   // "Courier — ship when ready", so the old "no same-day paid · ship by courier"
@@ -3105,12 +3527,12 @@ function renderItemRow(it, opts = {}) {
       <div class="mf-body">
         <div class="mf-top">
           ${nameCell}
-          <span class="mf-total">¥${fmt(it.line_total)}</span>
+          <span class="mf-total">${acMoney(it.line_total)}</span>
         </div>
         <div class="mf-meta" data-no-i18n>
           ${itemSkuHtml(it)}
           ${itemQtyHtml(it)}
-          <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
+          <span class="item-unit">@ ${acMoney(it.unit_price)}</span>
           ${refundPill ? `<span class="mf-packs">${refundPill}</span>` : ''}
           ${waitPill}
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
@@ -4113,7 +4535,7 @@ async function qpPickPlace(orderId, idx, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT(`Picked ${j.name || label} — the daemon will push it within a minute`,
+        : cuT(`Picked ${j.name || label} — sending it to the channel, about a minute`,
               `已选择 ${j.name || label} — 约一分钟内发单`), 'success');
       openOrder(orderId, { instant: true });
       return;
@@ -4441,7 +4863,7 @@ async function qpConfirmPoint(orderId, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT('Point confirmed — the daemon will push it within a minute', '配送点已确认 — 约一分钟内发单'), 'success');
+        : cuT('Point confirmed — sending it to the channel, about a minute', '配送点已确认 — 约一分钟内发单'), 'success');
       delete qpPlaced[orderId];
       // The map and its search go with the point that has just been sent — the
       // drawer re-renders below onto a fresh element, and a stale handle would
@@ -4652,7 +5074,7 @@ async function qyRetryPush(orderId, btn) {
     if (j.success) {
       toast(j.already_created
         ? cuT('Already on the courier platform', '已在配送平台')
-        : cuT('Queued — the daemon will push it within a minute', '已排队 — 约一分钟内发单'), 'success');
+        : cuT('Queued — sending it to the channel, about a minute', '已排队 — 约一分钟内发单'), 'success');
       openOrder(orderId, { instant: true });
       return;
     }
@@ -4789,7 +5211,7 @@ async function qyLoadCarriers(orderId, btn) {
           <span class="qy-name"><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? `<span class="qy-cheap">${cuT('cheapest', '最便宜')}</span>` : ''}</span>
           <span class="qy-meta">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</span>
         </span>
-        <span class="qy-fee">¥${c.feeYuan}</span>
+        <span class="qy-fee">${acWrap(c.feeYuan)}</span>
       </label>`).join('');
     box.innerHTML =
       rows +
@@ -4826,7 +5248,7 @@ async function qyDispatch(orderId, btn) {
       const done = (j.carriers && j.carriers.length) ? j.carriers : (j.carrier ? [j.carrier] : []);
       const names = done.length > 1
         ? `${done.map(c => escapeHtml(c.name || '')).join(', ')} — ${cuT('first to accept wins', '谁先接单谁配送')}`
-        : `${escapeHtml(done[0]?.name || '')} ¥${done[0]?.fee_yuan ?? ''}`;
+        : `${escapeHtml(done[0]?.name || '')} ${acWrap(done[0]?.fee_yuan ?? '')}`;
       if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${names}</div>`;
       loadOrders();
     } else {
@@ -5076,12 +5498,61 @@ function onDrawerClose(sel, fn) { _drawerCloseHooks.set(sel, fn); }
 // rather than the last one in DOM source order. The order and customer
 // drawers share z-index:200, so z-index alone can't say which is on top.
 let _drawerOpenSeq = 0;
+/* ── Focus trap for drawers (audit R-05) ──────────────────────────────────
+   Same problem the shared dialogs had: Tab out of an open drawer and the
+   browser walked the page behind it — the whole list, in order, while the
+   drawer sat on top. A keyboard operator could not tell they had left, and
+   could activate a row the drawer was covering.
+
+   ONE listener for every drawer, bound once, resolving the topmost open one at
+   the moment Tab is pressed — because two drawers can be open at a time (an
+   order opened from a customer) and the trap has to hold the one on top, not
+   whichever was wired first.
+
+   Wrapped, not blocked: Tab past the last control returns to the first. Escape
+   still closes, so nobody is stuck. */
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), '
+  + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+if (!window._drawerTrapBound) {
+  window._drawerTrapBound = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    // A shared dialog on top of a drawer owns the keyboard — it runs its own
+    // trap, and two traps fighting over one Tab is worse than none.
+    if (document.querySelector('.tdlg-scrim.on')) return;
+    const open = document.querySelectorAll('.side-drawer.open');
+    if (!open.length) return;
+    const d = topmostOpenDrawer(open);
+    if (!d) return;
+    const items = [].slice.call(d.querySelectorAll(DRAWER_FOCUSABLE))
+      .filter(el => el.offsetParent !== null || el === document.activeElement);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (!d.contains(document.activeElement)) {
+      e.preventDefault(); (e.shiftKey ? last : first).focus(); return;
+    }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
+
 function openDrawer(sel) {
   const d = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!d) return;
   d.dataset.openSeq = String(++_drawerOpenSeq);
   d.classList.add('open');
   d.setAttribute('aria-hidden', 'false');
+  // Where focus came from, so closing can put it back on the row that opened
+  // the drawer rather than dropping the keyboard operator at the top of the
+  // page (audit R-05).
+  d._returnFocus = document.activeElement;
+  // Move focus INTO the drawer. Without this the trap has nothing to hold and
+  // the operator's next Tab starts from wherever they were in the list behind.
+  setTimeout(() => {
+    if (!d.classList.contains('open')) return;
+    const f = d.querySelector(DRAWER_FOCUSABLE);
+    if (f) f.focus();
+  }, 60);
   // Order drawer opens in focus mode: raise the blur+dim scrim behind it.
   // Drawers that open in focus mode raise a blur+dim scrim behind them. Keyed
   // by id so no other drawer changes behaviour.
@@ -5104,6 +5575,12 @@ function closeDrawer(sel) {
     if (sc) sc.classList.remove('show');
   }
   d.setAttribute('aria-hidden', 'true');
+  // Hand the keyboard back where it came from (audit R-05). Guarded on the
+  // element still being on the page — the row that opened this drawer may have
+  // been repainted away by a reload while the drawer was open.
+  const back = d._returnFocus;
+  d._returnFocus = null;
+  if (back && back.isConnected && back.focus) { try { back.focus(); } catch (e) {} }
   const key = typeof sel === 'string' ? sel : '#' + d.id;
   const hook = _drawerCloseHooks.get(key);
   if (hook) setTimeout(hook, 240);
@@ -5212,6 +5689,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const row = document.activeElement && document.activeElement.closest && document.activeElement.closest('tr.order-row');
   if (!row) return;
+  // The row's own selection checkbox is inside the row, so without this Space
+  // would tick it AND open the drawer, and the preventDefault below would stop
+  // the tick from registering at all. Same bail the click handler makes.
+  if (document.activeElement.matches('input, button, a, select, textarea')) return;
   e.preventDefault();
   const id = row.dataset.orderId;
   if (id) openOrder(Number(id));
@@ -5315,25 +5796,25 @@ function orderMoneyGapBand(o) {
   const chan = ordChannelLabel(o);
   return `
     <div style="margin: 0 0 var(--s5); padding: 10px 14px; border-radius: var(--r-lg); background: #FBF0DC; color: #8A6516; font-size: 12px; line-height: 1.5; font-weight: 600;">
-      ${cuT(`Items add up to ¥${fmt(g.items)}, but this order records ¥${fmt(g.total)}.`,
-            `商品合计 ¥${fmt(g.items)}，但订单金额为 ¥${fmt(g.total)}。`)}
-      ${cuT(`Refunds on this order are capped at ¥${fmt(g.total)} — check ${escapeHtml(chan)} before refunding.`,
-            `本单退款上限为 ¥${fmt(g.total)}，退款前请先核对 ${escapeHtml(chan)}。`)}
+      ${cuT(`Items add up to ${acMoney(g.items)}, but this order records ${acMoney(g.total)}.`,
+            `商品合计 ${acMoney(g.items)}，但订单金额为 ${acMoney(g.total)}。`)}
+      ${cuT(`Refunds on this order are capped at ${acMoney(g.total)} — check ${escapeHtml(chan)} before refunding.`,
+            `本单退款上限为 ${acMoney(g.total)}，退款前请先核对 ${escapeHtml(chan)}。`)}
     </div>`;
 }
 // Money breakdown under the order total: subtotal · shipping · (packing) · (voucher).
 // Packing fee only renders when one was actually charged (zero on most delivery
 // orders), mirroring how the voucher segment is conditional.
 function orderTotalSubline(o) {
-  let s = `${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}`;
-  if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ¥${fmt(o.packing_fee)}`;
+  let s = `${cuT('subtotal','小计')} ${acMoney(o.subtotal)} · ${cuT('shipping','运费')} ${acMoney(o.shipping_fee)}`;
+  if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ${acMoney(o.packing_fee)}`;
   // Deductions last, grouped. Points and wallet were missing entirely, so an
   // order paid partly from either showed charges that read like a total and
   // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is
   // what the Customers page calls balance_used, so the two surfaces agree.
-  if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −¥${fmt(o.voucher_amount)}`;
-  if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −¥${fmt(o.points_amount)}`;
-  if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −¥${fmt(o.balance_used)}`;
+  if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −${acMoney(o.voucher_amount)}`;
+  if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −${acMoney(o.points_amount)}`;
+  if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −${acMoney(o.balance_used)}`;
   return s;
 }
 function renderOrderTotalBanner(o) {
@@ -5343,7 +5824,7 @@ function renderOrderTotalBanner(o) {
         <div class="otb-label">Order total · 订单总额</div>
         <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
-      <div class="otb-amount">¥${fmt(o.total)}</div>
+      <div class="otb-amount">${acMoney(o.total)}</div>
     </div>
     ${orderMoneyGapBand(o)}
     ${renderChannelMoneyPanel(o)}`;
@@ -5638,7 +6119,7 @@ function renderReadonlyOrder(o) {
         </div>` : ''}
         <div>
           <div class="kicker">Total · 合计</div>
-          <div class="val"><b>¥${fmt(o.total)}</b></div>
+          <div class="val"><b>${acMoney(o.total)}</b></div>
           <div class="sub">${cuT(`${items.length} line${items.length === 1 ? '' : 's'}`, `${items.length} 项`)}</div>
         </div>
         ${(() => {
@@ -5649,8 +6130,8 @@ function renderReadonlyOrder(o) {
           if (!g) return '';
           return `<div class="full" style="color:#8A6516;">
             <div class="kicker">${cuT('Total disagrees with the items', '金额与商品不符')}</div>
-            <div class="sub">${cuT(`Items add up to ¥${fmt(g.items)} — check ${escapeHtml(chan)}.`,
-                                   `商品合计 ¥${fmt(g.items)}，请核对 ${escapeHtml(chan)}。`)}</div>
+            <div class="sub">${cuT(`Items add up to ${acMoney(g.items)} — check ${escapeHtml(chan)}.`,
+                                   `商品合计 ${acMoney(g.items)}，请核对 ${escapeHtml(chan)}。`)}</div>
           </div>`;
         })()}
       </div>
@@ -5864,6 +6345,8 @@ function renderOpenOrder(o) {
           ${awaitingRestockCard(o)}
           ${renderAlipayProof(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
+          ${staffNoteBlock(o)}
+          ${wasCustomerToldBlock(o)}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
         </div>
@@ -6111,7 +6594,7 @@ function orderHeadMarks(o) {
     marks.push(`<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>`);
   }
   if (o.addons && o.addons.length) {
-    marks.push(`<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>`);
+    marks.push(`<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+${acMoney(o.addon_total)})</span>`);
   }
   const refund = refundBadge(o);
   if (refund) marks.push(refund);
@@ -7612,21 +8095,21 @@ function renderRefundPanel(o) {
          ${lines.map(l => {
            const it = lineMap.get(l.item_id);
            const label = it ? (it.name_en || it.name_cn || ('item #' + l.item_id)) : ('item #' + l.item_id);
-           return `<div style="display:flex; justify-content: space-between;"><span>${escapeHtml(label)} × ${l.qty}</span><b>¥${fmt(l.amount)}</b></div>`;
+           return `<div style="display:flex; justify-content: space-between;"><span>${escapeHtml(label)} × ${l.qty}</span><b>${acMoney(l.amount)}</b></div>`;
          }).join('')}
        </div>` : '';
 
   const amountSummary = isApproved || state === 'paying' || state === 'paid'
     ? `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 10px; font-size: 12px;">
-        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>¥${fmt(total)}</b></div>
-        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
-        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
-        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
-        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>¥${fmt(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>¥${fmt(creditAmt)}</b></div>` : ''}
+        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>${acMoney(total)}</b></div>
+        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>${acMoney(reqAmt)}</b></div>` : ''}
+        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>${acMoney(apvAmt)}</b></div>` : ''}
+        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>${acMoney(paidAmt)}</b></div>` : ''}
+        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>${acMoney(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>${acMoney(creditAmt)}</b></div>` : ''}
         ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method · 方式</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
       </div>` : reqAmt != null
-        ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b>`, `顾客申请退 <b>¥${fmt(reqAmt)}</b> / 共 <b>¥${fmt(total)}</b>`)}</div>`
+        ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>${acMoney(reqAmt)}</b> of <b>${acMoney(total)}</b>`, `顾客申请退 <b>${acMoney(reqAmt)}</b> / 共 <b>${acMoney(total)}</b>`)}</div>`
         : '';
 
   return `
@@ -7724,15 +8207,15 @@ function openDirectRefundDialog(orderId) {
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">${cuT('How much', '退款方式')}</label>
           <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="full" checked> ${cuT('Full', '全额')} ¥${fmt(total)}</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="full" checked> ${cuT('Full', '全额')} ${acMoney(total)}</label>
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="amount"> ${cuT('Part — by amount', '部分 — 按金额')}</label>
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="lines"> ${cuT('Part — by items', '部分 — 按商品')}</label>
           </div>
         </div>
         <div class="field" id="drf-amt-wrap" style="margin-bottom: 14px; display: none;">
-          <label class="stacked">${cuT('Amount', '金额')} (¥)</label>
+          <label class="stacked">${cuT('Amount', '金额')} (${acCurrencySymbol()})</label>
           <input type="number" id="drf-amt" step="0.01" min="0" max="${total}" value="${total.toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ${acMoney(total)}</div>
         </div>
         <div class="field" id="drf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">${cuT('Items to refund', '退款商品')}</label>
@@ -7753,12 +8236,12 @@ function openDirectRefundDialog(orderId) {
                   <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}${already > 0 ? ` <span class="muted" style="font-size:10px;">(${already} ${cuT('already refunded', '已退')})</span>` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${remain}" value="${remain}" style="width: 80px;">
-                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * remain)}</b></span>
+                <span class="muted" style="font-size: 11px;">× ${acMoney(it.unit)} = <b id="drf-line-amt-${it.id}">${acMoney(it.unit * remain)}</b></span>
               </div>`;
               }).join('');
             })()}
           </div>
-          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">¥0.00</b></div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">${acMoney(0)}</b></div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">${cuT('Reason / note', '原因 / 备注')}</label>
@@ -7779,10 +8262,10 @@ function openDirectRefundDialog(orderId) {
       const unit = Number(chk.dataset.unit) || 0;
       const qty = Number(bg.querySelector(`.drf-line-qty[data-item="${it}"]`).value) || 0;
       const amt = chk.checked ? +(unit * qty).toFixed(2) : 0;
-      bg.querySelector(`#drf-line-amt-${it}`).textContent = '¥' + fmt(amt);
+      bg.querySelector(`#drf-line-amt-${it}`).textContent = acMoney(amt);
       sum += amt;
     });
-    bg.querySelector('#drf-lines-total').textContent = '¥' + fmt(sum);
+    bg.querySelector('#drf-lines-total').textContent = acMoney(sum);
   };
   bg.querySelectorAll('.drf-line-chk, .drf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
@@ -7843,10 +8326,10 @@ function openDirectRefundDialog(orderId) {
       // Saying only "Refunded" there reads as "done", and the customer waits.
       if (j.method === 'manual') {
         toast(cuT(
-          `Recorded ¥${fmt(j.amount || 0)} — pay the customer back by hand (paid off-app)`,
-          `已记录 ¥${fmt(j.amount || 0)} — 该订单为线下支付,请手动退款给顾客`), 'warn', 7000);
+          `Recorded ${acMoney(j.amount || 0)} — pay the customer back by hand (paid off-app)`,
+          `已记录 ${acMoney(j.amount || 0)} — 该订单为线下支付,请手动退款给顾客`), 'warn', 7000);
       } else {
-        toast(cuT('Refunded', '已退款') + ` ¥${fmt(j.amount || 0)}`);
+        toast(cuT('Refunded', '已退款') + ` ${acMoney(j.amount || 0)}`);
       }
       bg.remove();
       openOrder(orderId, { instant: true });
@@ -7898,9 +8381,9 @@ function openRefundApproveDialog(orderId) {
           </div>
         </div>
         <div class="field" id="rf-amt-wrap" style="margin-bottom: 14px;">
-          <label class="stacked">Amount · 金额 (¥)</label>
+          <label class="stacked">Amount · 金额 (${acCurrencySymbol()})</label>
           <input type="number" id="rf-amt" step="0.01" min="0" max="${total}" value="${(initialMode === 'amount' ? defaultAmount : total).toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ¥' + fmt(o.refund_amount_requested) : ''}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ${acMoney(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ' + acMoney(o.refund_amount_requested) : ''}</div>
         </div>
         <div class="field" id="rf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">Lines · 商品</label>
@@ -7913,10 +8396,10 @@ function openRefundApproveDialog(orderId) {
                   <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="rf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${preMap.get(it.id) ?? it.qty}" style="width: 80px;">
-                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="rf-line-amt-${it.id}">¥${fmt(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
+                <span class="muted" style="font-size: 11px;">× ${acMoney(it.unit)} = <b id="rf-line-amt-${it.id}">${acMoney(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
               </div>`).join('') : `<div class="muted" style="padding: 8px;">${cuT('No items', '无商品')}</div>`}
           </div>
-          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Lines total', '商品合计')}: <b id="rf-lines-total">¥0.00</b></div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Lines total', '商品合计')}: <b id="rf-lines-total">${acMoney(0)}</b></div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Staff note (shown to customer) · 客服备注(顾客可见)</label>
@@ -7943,10 +8426,10 @@ function openRefundApproveDialog(orderId) {
       const unit = Number(chk.dataset.unit) || 0;
       const qty = Number(bg.querySelector(`.rf-line-qty[data-item="${it}"]`).value) || 0;
       const amt = chk.checked ? +(unit * qty).toFixed(2) : 0;
-      bg.querySelector(`#rf-line-amt-${it}`).textContent = '¥' + fmt(amt);
+      bg.querySelector(`#rf-line-amt-${it}`).textContent = acMoney(amt);
       sum += amt;
     });
-    bg.querySelector('#rf-lines-total').textContent = '¥' + fmt(sum);
+    bg.querySelector('#rf-lines-total').textContent = acMoney(sum);
   };
   bg.querySelectorAll('.rf-line-chk, .rf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
@@ -7989,7 +8472,7 @@ function openRefundApproveDialog(orderId) {
         btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/refund/approve`,
         method: 'POST', body, errLabelEn: 'Approve failed', errLabelCn: '批准失败',
       });
-      toast(`Approved · 已批准 ¥${fmt(j.amount || 0)}`);
+      toast(`Approved · 已批准 ${acMoney(j.amount || 0)}`);
       bg.remove();
       openOrder(orderId);
       loadOrders();
@@ -8057,9 +8540,9 @@ function openRefundPayoutDialog(orderId) {
           <input type="text" id="rfp-ref" data-ph-en="Provider txn id, bank ref, etc." data-ph-cn="第三方交易号、银行参考号等" placeholder="Provider txn id, bank ref, etc." style="width: 100%;">
         </div>
         <div class="field" style="margin-bottom: 14px;">
-          <label class="stacked">Amount · 金额 (¥)</label>
+          <label class="stacked">Amount · 金额 (${acCurrencySymbol()})</label>
           <input type="number" id="rfp-amt" step="0.01" min="0" max="${apv}" value="${apv.toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Approved ¥${fmt(apv)} — usually paid in full · 已批准金额,通常一次性退还</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Approved ${acMoney(apv)} — usually paid in full · 已批准金额,通常一次性退还</div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Note (optional) · 备注(可选)</label>
@@ -8097,7 +8580,7 @@ function openRefundPayoutDialog(orderId) {
         btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/refund/payout`,
         method: 'POST', body, errLabelEn: 'Payout failed', errLabelCn: '记录失败',
       });
-      toast(`Payout recorded · 退款已记录 ¥${fmt(j.amount || 0)}`);
+      toast(`Payout recorded · 退款已记录 ${acMoney(j.amount || 0)}`);
       bg.remove();
       openOrder(orderId);
       loadOrders();
@@ -8117,7 +8600,7 @@ function formatRefundMeta(meta) {
       const name = item ? (item.name_en || item.name_cn || ('item#' + l.item_id))
                         : ('item#' + (l.item_id ?? l.product_id ?? '?'));
       const qty = l.qty != null ? ` × ${l.qty}` : '';
-      const amt = l.amount != null ? ` — ¥${fmt(l.amount)}` : '';
+      const amt = l.amount != null ? ` — ${acMoney(l.amount)}` : '';
       return `<div>· ${escapeHtml(name)}${qty}${amt}</div>`;
     }).join('');
     bits.push(`<div style="margin-top: 4px;"><div class="muted" style="font-size:10px; letter-spacing:.08em; text-transform:uppercase;">Lines · 退款明细</div>${lineHtml}</div>`);
@@ -8162,7 +8645,7 @@ async function openRefundEvents(orderId) {
       <div style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-soft);">
         <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-3); min-width: 120px;">${formatDate(ev.created_at)}</div>
         <div style="flex: 1;">
-          <div><b>${escapeHtml(ev.event)}</b>${ev.amount != null ? ` <span class="muted">¥${fmt(ev.amount)}</span>` : ''}</div>
+          <div><b>${escapeHtml(ev.event)}</b>${ev.amount != null ? ` <span class="muted">${acMoney(ev.amount)}</span>` : ''}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px;">${cuT('by', '操作人')} ${escapeHtml(ev.user_username || ev.customer_nickname || (ev.user_id ? 'staff#' + ev.user_id : cuT('customer', '顾客')))}</div>
           ${ev.note ? `<div style="font-size: 12px; margin-top: 4px;">${escapeHtml(ev.note)}</div>` : ''}
           ${formatRefundMeta(ev.meta)}
@@ -8341,7 +8824,7 @@ const ONW_ICONS = {
 function onwMoney(n) {
   const v = Number(n) || 0;
   const s = Math.abs(v).toFixed(2).split('.');
-  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+  return (v < 0 ? '-' : '') + acWrap(s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1]);
 }
 
 // Reset to frame A — nothing entered — and paint every dynamic region.
@@ -9150,7 +9633,7 @@ function ordRenderDrafts() {
 function ordMoney(n) {
   const v = Number(n) || 0;
   const s = Math.abs(v).toFixed(2).split('.');
-  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+  return (v < 0 ? '-' : '') + acWrap(s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1]);
 }
 // Open restores everything — the header is identical and the commit is still
 // "Create order", because a draft becomes an order the same way any other

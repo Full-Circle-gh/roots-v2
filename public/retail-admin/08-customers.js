@@ -43,6 +43,14 @@ let CU_TIER_FILTERS = new Set();
 // Filters on each customer's MOST RECENT order's channel (backend default
 // 'wechat' for customers with zero orders yet, the only signup path today).
 let CU_CHAN_FILTER = '';
+// Tag facet (audit E-02). A Set, not a single value, because tags are the one
+// facet where "vip OR wholesale" is an ordinary thing to ask for — a person is
+// in one tier and signed up through one channel, but can carry several tags.
+let CU_TAG_FILTERS = new Set();
+// Every tag the account actually uses, with counts, from the roster response.
+// Built server-side from the stored column, so the menu can only ever offer a
+// group that exists.
+let CU_TAG_VOCAB = [];
 const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
 
 function cuSearchDebounced() {
@@ -131,6 +139,17 @@ function cuPickChan(v) {
 }
 // The × on an applied pill. It must actually clear the filter — an × that only
 // closes a menu is an inert control.
+function cuToggleTag(v) {
+  if (!v) CU_TAG_FILTERS.clear();
+  else if (CU_TAG_FILTERS.has(v)) CU_TAG_FILTERS.delete(v);
+  else CU_TAG_FILTERS.add(v);
+  // The menu stays OPEN on a tag pick, unlike Tier and Channel: picking several
+  // is the point, and closing after each one would make choosing three tags
+  // three round trips through the trigger.
+  cuPaintFilterBar();
+  cuFilterChanged();
+}
+function cuClearTags(e) { if (e) e.stopPropagation(); CU_TAG_FILTERS.clear(); cuMenuClose(); cuFilterChanged(); }
 function cuClearTier(e) { if (e) e.stopPropagation(); cuPickTier(''); }
 function cuClearChan(e) { if (e) e.stopPropagation(); cuPickChan(''); }
 
@@ -166,6 +185,29 @@ function cuPaintFilterBar() {
     chanBtn.innerHTML = `${cuT('Channel', '渠道')}: ${cuT(opt[1], opt[2])} `
       + (on ? cuClearSvg('cuClearChan') : cuCaretSvg());
   }
+  const tagBtn = document.getElementById('cu-tag-btn');
+  if (tagBtn) {
+    const n = CU_TAG_FILTERS.size;
+    // Hidden entirely until the account has tagged somebody. A facet with
+    // nothing behind it is a control that can only disappoint.
+    tagBtn.closest('.cul-selwrap').hidden = !(CU_TAG_VOCAB.length || n);
+    tagBtn.classList.toggle('on', n > 0);
+    const label = n === 0 ? cuT('All', '全部')
+                : n === 1 ? [...CU_TAG_FILTERS][0]
+                : cuT(n + ' tags', n + ' 个标签');
+    tagBtn.innerHTML = `${cuT('Tags', '标签')}: ${escapeHtml(label)} `
+      + (n ? cuClearSvg('cuClearTags') : cuCaretSvg());
+  }
+  const tagMenu = document.getElementById('cu-tag-menu');
+  if (tagMenu) {
+    tagMenu.hidden = CU_MENU_OPEN !== 'tag';
+    tagMenu.innerHTML =
+      `<button type="button" class="${CU_TAG_FILTERS.size ? '' : 'sel'}" onclick="cuToggleTag('')">${escapeHtml(cuT('All tags', '全部标签'))}</button>`
+      + CU_TAG_VOCAB.map(({ tag, count }) =>
+          `<button type="button" class="${CU_TAG_FILTERS.has(tag) ? 'sel' : ''}" onclick="cuToggleTag('${escapeAttr(tag)}')">`
+          + `${escapeHtml(tag)} <span class="muted">${count}</span></button>`).join('');
+  }
+
   const tierMenu = document.getElementById('cu-tier-menu');
   const chanMenu = document.getElementById('cu-chan-menu');
   if (tierMenu) {
@@ -189,6 +231,7 @@ function cuPaintFilterBar() {
 // Clears every filter — used by the "no results" state's own action.
 function cuFilterClearAll() {
   CU_TIER_FILTERS.clear();
+  CU_TAG_FILTERS.clear();
   CU_CHAN_FILTER = '';
   CU_SEGMENT = '';
   const q = document.getElementById('cu-q'); if (q) q.value = '';
@@ -200,7 +243,7 @@ function cuFilterClearAll() {
 // True when anything is narrowing the roster — drives which empty state shows.
 function cuAnyFilter() {
   const q = document.getElementById('cu-q');
-  return !!(CU_SEGMENT || CU_TIER_FILTERS.size || CU_CHAN_FILTER || (q && q.value.trim()));
+  return !!(CU_SEGMENT || CU_TIER_FILTERS.size || CU_TAG_FILTERS.size || CU_CHAN_FILTER || (q && q.value.trim()));
 }
 
 // ── Customers stat strip — three figures, then the roster ────────────────
@@ -372,9 +415,9 @@ function cuNum(v) { return Number(v || 0).toLocaleString('en-US'); }
 function cuMoneyPlain(v) {
   const n = Number(v || 0);
   const whole = Math.round(n * 100) % 100 === 0;
-  return '¥' + n.toLocaleString('en-US', whole
+  return acWrap(n.toLocaleString('en-US', whole
     ? { maximumFractionDigits: 0 }
-    : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 }
 
 // Order status, spelled the way the whole product spells it. humanStatus()
@@ -433,7 +476,7 @@ function cuMoney(v) {
   const s = n.toLocaleString('en-US', whole
     ? { maximumFractionDigits: 0 }
     : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return '<span class="cur">¥</span>' + s;
+  return '<span class="cur">' + acCurrencySymbol() + '</span>' + s;
 }
 
 // The Channel cell — glyph on the left, the channel's name on the right.
@@ -605,6 +648,9 @@ function _cuFp(rows) {
     r.id, r.nickname || '', r.phone || '', r.channel || '', r.tier_key || '',
     r.orders_count || 0, r.lifetime_spend || 0, r.points_balance || 0,
     r.balance || 0, r.last_login_at || '', r.is_blocked ? 1 : 0, r.seen_at ? 1 : 0,
+    // Tags are drawn on the row, so a tag edit has to break the fingerprint —
+    // otherwise the silent tick decides nothing changed and never repaints.
+    r.tags || '',
   ].join(',')).join(';');
 }
 
@@ -612,8 +658,28 @@ function _cuFp(rows) {
 // different baseline: reset the fingerprint so the next load rebuilds, and
 // the seen-ids so rows arriving from a filter switch don't fake-flash.
 function _cuFilterKey() {
-  return [$('#cu-q').value.trim(), [...CU_TIER_FILTERS].join(','), CU_CHAN_FILTER,
-          CU_SEGMENT, CU_PAGE, CU_PAGE_SIZE].join('|');
+  return [$('#cu-q').value.trim(), [...CU_TIER_FILTERS].join(','), [...CU_TAG_FILTERS].join(','),
+          CU_CHAN_FILTER, CU_SEGMENT, CU_PAGE, CU_PAGE_SIZE].join('|');
+}
+
+// Download the customers the roster is showing — every one of them, not just
+// the page on screen. Filtered exactly as the roster is: an operator looking at
+// the Sleeping segment who presses Export wants the sleepers. Blocked records
+// follow the roster's own rule, so the file matches what was on screen.
+//
+// Sort and paging are deliberately not sent: an export has no pages, and a
+// spreadsheet is sorted in the spreadsheet.
+function cuExportCsv() {
+  const params = new URLSearchParams({
+    q: ($('#cu-q') || {}).value ? $('#cu-q').value.trim() : '',
+    tier: [...CU_TIER_FILTERS].join(','),
+    tags: [...CU_TAG_FILTERS].join(','),
+    channel: CU_CHAN_FILTER,
+    segment: CU_SEGMENT,
+  });
+  for (const k of [...params.keys()]) if (!params.get(k)) params.delete(k);
+  const qs = params.toString();
+  window.location.href = '/api/retail-admin/customers/export.csv' + (qs ? '?' + qs : '');
 }
 
 // opts.silent — see the note above. Split in two so the page-clamp below can
@@ -631,6 +697,7 @@ async function _cuLoad(opts) {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
     tier: [...CU_TIER_FILTERS].join(','),
+    tags: [...CU_TAG_FILTERS].join(','),
     channel: CU_CHAN_FILTER,
     sort: CU_SORT,
     dir: CU_SORT_DIR,
@@ -671,6 +738,11 @@ async function _cuLoad(opts) {
   // Null whenever the search genuinely found nothing, so the empty state can
   // only make this claim when the server actually counted the rows.
   CU_HIDDEN = j.hidden_by_filters || null;
+  // The tag menu is built from what the account uses, so it has to be repainted
+  // whenever that changes — a tag added in the drawer must appear in the filter
+  // on the very next load, not on the next full page refresh.
+  CU_TAG_VOCAB = j.tag_vocabulary || [];
+  cuPaintFilterBar();
   const rows = j.data || [];
 
   // Clamp: blocking a customer (or a filter's cut draining) can shrink the
@@ -742,6 +814,11 @@ async function _cuLoad(opts) {
             <span class="main">
               <span class="nm" data-no-i18n>${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
               ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
+              ${cuTagList(r.tags).length
+                ? `<span class="cul-tags" data-no-i18n>${cuTagList(r.tags).slice(0, 3)
+                    .map(t => `<span class="cul-tag">${escapeHtml(t)}</span>`).join('')
+                  }${cuTagList(r.tags).length > 3 ? `<span class="cul-tag more">+${cuTagList(r.tags).length - 3}</span>` : ''}</span>`
+                : ''}
             </span>
           </div>
         </td>
@@ -825,6 +902,8 @@ async function cuOpenDetail(id, restore = null) {
     return;
   }
   CU_CURRENT = j.data;
+  // A different person, so the tag draft from the last one is not theirs.
+  CU_TAG_DRAFT = null;
   // The GET above stamps seen_at server-side, so this row is no longer unopened.
   // Clear it HERE rather than waiting for the next cuLoad(): dropping the class
   // lets the row's own 600ms transition settle the surface and the Sage edge out
@@ -892,6 +971,7 @@ onDrawerClose('#cu-drawer', () => {
   $('#cu-detail-body').innerHTML = '';
   $('#cu-drawer-actions').innerHTML = '';
   CU_CURRENT = null;
+  CU_TAG_DRAFT = null;
 });
 // Backwards-compat shim — older modal save handlers still call
 // cuShowList() to return to the list after saving. Now that the list
@@ -1107,6 +1187,152 @@ function cuCopyDiagnostics() {
   } else { fail(); }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   A NOTE AND TAGS ON A CUSTOMER (audit E-02)
+
+   A customer record held a name, a phone, addresses, orders, points and a
+   wallet, and there was nowhere to write "allergic to nuts", "always calls
+   before collecting" or "wholesale — invoice monthly", and no way to mark a
+   group so it could be found again. Reviews had tags; the people did not.
+
+   Both are edited in place in the drawer. Save appears only once something has
+   changed and disappears again on Reset, so the card is quiet while it is only
+   being read — which is most of the time.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// Split the stored comma-separated column into a list. One place, because the
+// drawer, the roster row and the filter all have to agree about what a tag is.
+function cuTagList(tags) {
+  return String(tags == null ? '' : tags).split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function cuNotesCardHtml(c) {
+  const tags = cuTagList(c.tags);
+  const chips = tags.length
+    ? tags.map(t => `<span class="cu-tagchip" data-no-i18n>${escapeHtml(t)}`
+        + `<button type="button" class="x" title="${escapeAttr(cuT('Remove this tag', '移除该标签'))}"`
+        + ` aria-label="${escapeAttr(cuT('Remove tag ' + t, '移除标签 ' + t))}" onclick="cuTagRemove('${escapeAttr(t)}')">×</button></span>`).join('')
+    : `<span class="muted">${escapeHtml(cuT('No tags yet', '暂无标签'))}</span>`;
+  return `
+    <div class="cux-card" id="cu-notes-card">
+      <div class="cux-kicker">Notes &amp; tags · 备注与标签</div>
+      <div class="cu-tagrow" id="cu-tagrow">${chips}</div>
+      <div class="cu-tagadd">
+        <input type="text" id="cu-tag-new" maxlength="40"
+               placeholder="${escapeAttr(cuT('Add a tag — e.g. wholesale', '添加标签,如 批发'))}"
+               aria-label="${escapeAttr(cuT('Add a tag', '添加标签'))}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();cuTagAdd();}">
+        <button type="button" class="btn btn-sm" onclick="cuTagAdd()">${escapeHtml(cuT('Add', '添加'))}</button>
+      </div>
+      <textarea id="cu-note" class="cu-note-in" rows="3" maxlength="2000"
+                aria-label="${escapeAttr(cuT('Note about this customer', '关于该顾客的备注'))}"
+                placeholder="${escapeAttr(cuT('Anything your team should know — allergies, delivery quirks, invoicing.', '团队需要知道的事 — 过敏、配送要求、开票方式等。'))}"
+                oninput="cuNoteChanged()">${escapeHtml(c.note || '')}</textarea>
+      <div class="cu-note-foot" id="cu-note-foot" hidden>
+        <button type="button" class="btn btn-sm" onclick="cuNotesReset()">${escapeHtml(cuT('Reset', '还原'))}</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="cuNotesSave(this)">${escapeHtml(cuT('Save', '保存'))}</button>
+      </div>
+    </div>`;
+}
+
+// The tags being edited right now. Held apart from CU_CURRENT so Reset has
+// something true to go back to — CU_CURRENT is the last SAVED state and must
+// stay that way until a save actually lands.
+let CU_TAG_DRAFT = null;
+
+function _cuSavedTags() { return cuTagList(CU_CURRENT && CU_CURRENT.customer && CU_CURRENT.customer.tags); }
+function _cuSavedNote() { return (CU_CURRENT && CU_CURRENT.customer && CU_CURRENT.customer.note) || ''; }
+function _cuDraftTags() { return CU_TAG_DRAFT || _cuSavedTags(); }
+
+function cuTagAdd() {
+  const input = document.getElementById('cu-tag-new');
+  if (!input) return;
+  // Same normalisation the server applies, so what the chip shows is what will
+  // be stored — a chip reading "VIP" that saves as "vip" is a small lie the
+  // operator finds out about on the next open.
+  const raw = String(input.value || '').replace(/,/g, ' ').trim().toLowerCase().slice(0, 40);
+  input.value = '';
+  if (!raw) return;
+  const list = _cuDraftTags();
+  if (list.includes(raw)) { input.focus(); return; }
+  if (list.length >= 20) {
+    toast(cuT('Twenty tags is the limit — a longer list stops being a way to find anyone.',
+              '标签最多 20 个,再多就失去筛选意义了。'), 'err');
+    return;
+  }
+  CU_TAG_DRAFT = list.concat(raw);
+  cuNotesRepaint();
+  const again = document.getElementById('cu-tag-new'); if (again) again.focus();
+}
+
+function cuTagRemove(tag) {
+  CU_TAG_DRAFT = _cuDraftTags().filter(t => t !== tag);
+  cuNotesRepaint();
+}
+
+// Repaint only the chip row, not the card: rebuilding the card would blow away
+// whatever the operator has typed into the note beneath it.
+function cuNotesRepaint() {
+  const row = document.getElementById('cu-tagrow');
+  if (row) {
+    const list = _cuDraftTags();
+    row.innerHTML = list.length
+      ? list.map(t => `<span class="cu-tagchip" data-no-i18n>${escapeHtml(t)}`
+          + `<button type="button" class="x" title="${escapeAttr(cuT('Remove this tag', '移除该标签'))}"`
+          + ` aria-label="${escapeAttr(cuT('Remove tag ' + t, '移除标签 ' + t))}" onclick="cuTagRemove('${escapeAttr(t)}')">×</button></span>`).join('')
+      : `<span class="muted">${escapeHtml(cuT('No tags yet', '暂无标签'))}</span>`;
+  }
+  cuNoteChanged();
+}
+
+// Show the Save/Reset foot only when there is something to save.
+function cuNoteChanged() {
+  const foot = document.getElementById('cu-note-foot');
+  const ta = document.getElementById('cu-note');
+  if (!foot || !ta) return;
+  const noteDirty = String(ta.value || '') !== String(_cuSavedNote() || '');
+  const tagsDirty = _cuDraftTags().join(',') !== _cuSavedTags().join(',');
+  foot.hidden = !(noteDirty || tagsDirty);
+}
+
+function cuNotesReset() {
+  CU_TAG_DRAFT = null;
+  const ta = document.getElementById('cu-note');
+  if (ta) ta.value = _cuSavedNote();
+  cuNotesRepaint();
+}
+
+async function cuNotesSave(btn) {
+  const d = CU_CURRENT; if (!d || !d.customer) return;
+  const ta = document.getElementById('cu-note');
+  const note = ta ? String(ta.value || '') : '';
+  const tags = _cuDraftTags();
+  // adminWrite THROWS on a failed write (it has already toasted the reason), so
+  // the catch is what stops an unhandled rejection — and, more to the point,
+  // what stops the lines below recording an edit that never landed.
+  let j;
+  try {
+    j = await adminWrite({
+      btn,
+      url: '/api/retail-admin/customers/' + d.customer.id,
+      method: 'PATCH',
+      body: { note, tags },
+      errLabelEn: 'Could not save the note', errLabelCn: '备注保存失败',
+      busyLabel: cuT('Saving…', '保存中…'),
+    });
+  } catch (e) { return; }
+  // The saved state IS what came back, so a later Reset goes to the truth
+  // rather than to what this page hoped it wrote.
+  d.customer.note = (j.changed && 'note' in j.changed) ? j.changed.note : (note.trim() || null);
+  d.customer.tags = (j.changed && 'tags' in j.changed) ? j.changed.tags : (tags.length ? tags.join(',') : null);
+  CU_TAG_DRAFT = null;
+  cuNotesRepaint();
+  toast(cuT('Saved', '已保存'));
+  // The roster row shows the tags, and the tag filter is built from what is in
+  // use — both are now behind by one edit.
+  cuLoad({ silent: true });
+}
+
 function cuRenderDetail() {
   const d = CU_CURRENT;
   const c = d.customer;
@@ -1127,13 +1353,23 @@ function cuRenderDetail() {
   const yuan = v => {
     const n = Number(v || 0);
     const whole = Math.round(n * 100) % 100 === 0;
-    return '¥' + n.toLocaleString('en-US', whole
+    return acWrap(n.toLocaleString('en-US', whole
+      ? { maximumFractionDigits: 0 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  };
+  // Money WITHOUT the symbol, for attribute values (the chart tooltip prints
+  // its own). Same .00-dropping, comma-grouping rule as yuan().
+  //
+  // Formats the number directly rather than slicing the symbol back off what
+  // yuan() just added: .slice(1) assumed a one-character symbol in front, so a
+  // tenant on 'CHF' or on a symbol-after currency had a digit eaten instead.
+  const yuanBare = v => {
+    const n = Number(v || 0);
+    const whole = Math.round(n * 100) % 100 === 0;
+    return n.toLocaleString('en-US', whole
       ? { maximumFractionDigits: 0 }
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
-  // Money WITHOUT the symbol, for attribute values (the chart tooltip prints
-  // its own ¥). Same .00-dropping, comma-grouping rule as yuan().
-  const yuanBare = v => yuan(v).slice(1);
 
   // Drawer action bar — two everyday buttons (Message, Edit profile). The
   // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
@@ -1463,6 +1699,11 @@ function cuRenderDetail() {
       </div>
     </div>
 
+    <!-- Notes & tags — the first thing an operator wants when they open a
+         person, so it sits above the numbers (audit E-02). Read-write in place;
+         Save appears only once something has actually changed. -->
+    ${cuNotesCardHtml(c)}
+
     <!-- Orders by month — a card like the others: title left, summary right,
          on the SAME line. Below three orders the bars are HIDDEN and the card
          keeps its title and summary: eleven empty stubs and one bar is not a
@@ -1603,7 +1844,7 @@ function renderAffiliateBlock(aff) {
         <tr>
           <td><a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || cuT('No name', '未填姓名'))}</a><div class="muted" data-no-i18n style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
           <td>${afStatusPill(i.status)}</td>
-          <td class="numeric">¥${fmt(i.reward_amount || 0)}</td>
+          <td class="numeric">${acMoney(i.reward_amount || 0)}</td>
           <td>${escapeHtml(cuFmtDate(i.joined_at) || '')}</td>
           <td>${i.first_paid_order_id ? '#' + i.first_paid_order_id : ''}</td>
         </tr>`).join('')
@@ -1624,14 +1865,14 @@ function renderAffiliateBlock(aff) {
       </div>
       <div class="field" style="margin: 0;">
         <label class="stacked">Conversions · 转化数</label>
-        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned · 已赚</span></div>
+        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ${acMoney(sum.earned || 0)} earned · 已赚</span></div>
       </div>
       ${renderAffiliateBlockToggle(aff)}
       ${renderLifetimeEligibility(aff)}
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ¥ · 奖励</th><th>Joined · 加入时间</th><th>First order · 首单</th></tr></thead>
+        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ${acCurrencySymbol()} · 奖励</th><th>Joined · 加入时间</th><th>First order · 首单</th></tr></thead>
         <tbody>${invRows}</tbody>
       </table>
     </div>
@@ -1949,22 +2190,30 @@ async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn =
     const res = await fetch(url, opts);
     const j = await res.json().catch(() => ({ success: false, error: 'bad_response' }));
     if (!j.success) {
-      // Show the server's logical reason, never a bare code. Prefer the human
-      // `message`; append the stable `error` code in brackets so it can be
-      // quoted in support ("… [use_refund_payout]").
+      // Show the server's logical reason, never a bare code (audit A-09). The
+      // server's own `message` wins when it sent one; otherwise tdErrorText
+      // turns the code into a sentence, and at worst into words. The code
+      // itself moves to the toast's title so it can still be quoted in support
+      // without being what the merchant reads.
       const code = j.error || 'unknown';
-      const reason = j.message ? `${j.message} [${code}]` : code;
+      const reason = (typeof tdErrorText === 'function') ? tdErrorText(code, j.message) : (j.message || code);
       const extra = j.current !== undefined ? ` (current · 当前: ${j.current})` : '';
-      if (!silent) toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err');
-      const err = new Error(j.error || 'request_failed');
+      if (!silent) toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err', { title: code });
+      const err = new Error(reason);
       err.code = code;
+      err.rawMessage = j.message || null;
+      err.failed = true;          // what the catch below tests, not the message text
       err.payload = j;            // silent callers render the reason themselves
       throw err;
     }
     return j;
   } catch (e) {
-    if (!silent && (!e.message || (e.message !== 'request_failed' && !e.message.startsWith('Error')))) {
-      toast(`${errLabelEn} · ${errLabelCn}: ${e.message || 'network'}`, 'err');
+    // `e.failed` marks the throw above, which has ALREADY toasted. Tested on a
+    // flag rather than on the message text, because the message is now a human
+    // sentence (audit A-09) and matching it against 'request_failed' would
+    // double-toast every server refusal.
+    if (!silent && !e.failed) {
+      toast(`${errLabelEn} · ${errLabelCn}: ${e.message || cuT('no connection', '网络不可用')}`, 'err');
     }
     throw e;
   } finally {

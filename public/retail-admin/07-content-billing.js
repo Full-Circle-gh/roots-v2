@@ -477,7 +477,7 @@ const invT = (en, cn) => (window.cuT ? cuT(en, cn) : en);
 // a present tax ID so the export stays accurate for pre-existing invoices.
 function invoiceIsCompany(o) { return o.invoice_type ? o.invoice_type === 'company' : !!o.invoice_tax_id; }
 function invoiceAccountingText(o) {
-  const money = n => '¥' + Number(n || 0).toFixed(2);
+  const money = n => acMoney(Number(n || 0));
   const company = invoiceIsCompany(o);
   const L = [];
   L.push('开票申请 Invoice request');
@@ -760,8 +760,8 @@ function mpOutcome() {
       const topMult = top ? (Number(top.points_mult) || 1) : 1;
       const topName = top ? (cuLang() === 'cn' ? (top.name_cn || top.name_en) : (top.name_en || top.name_cn)) : '';
       let s = cuT(
-        `So a ¥${SAMPLE} order earns <b>${mpFmt(basePts)} points = ¥${mpFmt(baseVal)}</b> off a future order (${mpFmt(pct)}% back).`,
-        `一笔 ¥${SAMPLE} 订单可得 <b>${mpFmt(basePts)} 积分 = ¥${mpFmt(baseVal)}</b>,可抵扣后续订单(回馈 ${mpFmt(pct)}%)。`);
+        `So a ${acWrap(SAMPLE)} order earns <b>${mpFmt(basePts)} points = ${acWrap(mpFmt(baseVal))}</b> off a future order (${mpFmt(pct)}% back).`,
+        `一笔 ${acWrap(SAMPLE)} 订单可得 <b>${mpFmt(basePts)} 积分 = ${acWrap(mpFmt(baseVal))}</b>,可抵扣后续订单(回馈 ${mpFmt(pct)}%)。`);
       if (top && topMult > 1) {
         s += ' ' + cuT(
           `A ${escapeHtml(topName)} member at ${mpFmt(topMult)}× earns <b>${mpFmt(basePts * topMult)} points</b> on the same order.`,
@@ -830,8 +830,8 @@ function mpPreview() {
     const remain = Math.max(0, (Number(next.threshold) || 0) - sampleSpend);
     const nextName = cn ? (next.name_cn || next.name_en) : (next.name_en || next.name_cn);
     nextLine = cuT(
-      `¥${Math.round(remain).toLocaleString('en-US')} more to reach ${escapeHtml(nextName)}`,
-      `再消费 ¥${Math.round(remain).toLocaleString('en-US')} 即达 ${escapeHtml(nextName)}`);
+      `${acMoneyCompact(remain)} more to reach ${escapeHtml(nextName)}`,
+      `再消费 ${acMoneyCompact(remain)} 即达 ${escapeHtml(nextName)}`);
   } else {
     nextLine = escapeHtml(cuT('Top tier — nothing higher to climb.', '最高等级 — 已达顶端。'));
   }
@@ -843,14 +843,19 @@ function mpPreview() {
     <div class="mp-pv-tabs">${tabs}</div>
     <div class="mp-phone">
       <div class="mp-pv-scr">
-        <div class="mp-pv-eyebrow">${escapeHtml(cuT('Roots Club', '会员俱乐部'))}</div>
+        <!-- The eyebrow above the tier card in the preview. Was the first
+             merchant's own programme name, shown to every merchant editing
+             their own tiers (audit D-04). A generic word, because this screen
+             has nowhere to read a programme name from — the ladder has tier
+             names, not a name for itself. -->
+        <div class="mp-pv-eyebrow">${escapeHtml(cuT('Membership', '会员'))}</div>
         <div class="mp-pv-tier">${escapeHtml(nameMain || '—')}${nameSub ? `<small>${escapeHtml(nameSub)}</small>` : ''}</div>
         <span class="mp-pv-mult">${escapeHtml(cuT(mpFmt(mult) + '× points', mpFmt(mult) + '× 积分'))}</span>
         <div class="mp-pv-bar"><i style="width:${barPct}%"></i></div>
         <div class="mp-pv-next">${nextLine}</div>
         <div class="mp-pv-pts">
           <span class="n">${escapeHtml(Math.round(earnedPts).toLocaleString('en-US'))}</span>
-          <span class="l">${escapeHtml(cuT(`points · ¥${mpFmt(spendVal)} to spend`, `积分 · 可抵 ¥${mpFmt(spendVal)}`))}</span>
+          <span class="l">${escapeHtml(cuT(`points · ${acWrap(mpFmt(spendVal))} to spend`, `积分 · 可抵 ${acWrap(mpFmt(spendVal))}`))}</span>
         </div>
         <ul class="mp-pv-perks">${perksHtml}</ul>
       </div>
@@ -902,7 +907,7 @@ async function updateTopup(id, field, val) {
 }
 
 async function deleteTopupPackage(id, amt) {
-  if (!(await askConfirm({ title: `Delete ¥${amt} top-up package? · 删除 ¥${amt} 充值套餐？`, confirmLabel: 'Delete package', danger: true }))) return;
+  if (!(await askConfirm({ title: `Delete ${acWrap(amt)} top-up package? · 删除 ${acWrap(amt)} 充值套餐？`, confirmLabel: 'Delete package', danger: true }))) return;
   try {
     await api(`/api/retail-admin/topup-packages/${id}`, { method: 'DELETE' });
     toast('Package deleted · 套餐已删除');
@@ -1014,8 +1019,8 @@ function renderRctierCards() {
     const nameCn = t.name_cn && t.name_cn !== t.name_en ? `<span class="cn">${escapeHtml(t.name_cn)}</span>` : '';
     const mult = mpFmt(Number(t.points_mult) || 1);
     const from = (i === lowIdx || (Number(t.threshold) || 0) === 0)
-      ? cuT('from <b>¥0</b> — everyone starts here', '从 <b>¥0</b> 起 — 人人有份')
-      : cuT(`from <b>¥${Number(t.threshold || 0).toLocaleString('en-US')}</b> lifetime spend`, `累计消费 <b>¥${Number(t.threshold || 0).toLocaleString('en-US')}</b> 起`);
+      ? cuT(`from <b>${acWrap(0)}</b> — everyone starts here`, `从 <b>${acWrap(0)}</b> 起 — 人人有份`)
+      : cuT(`from <b>${acWrap(Number(t.threshold || 0).toLocaleString('en-US'))}</b> lifetime spend`, `累计消费 <b>${acWrap(Number(t.threshold || 0).toLocaleString('en-US'))}</b> 起`);
     let members = '';
     if (RCTIER_COUNTS) {
       const n = Number(RCTIER_COUNTS[rctierKey(t)] || 0);
@@ -1065,7 +1070,7 @@ function renderRctierEditor() {
         </div>
         <div class="mp-field">
           <label>${escapeHtml(cuT('Reached at lifetime spend', '达到门槛(累计消费)'))}</label>
-          <span class="mp-aff"><span class="u">¥</span><input type="number" min="0" step="100" value="${escapeAttr(t.threshold)}" oninput="updateRctier(${i},'threshold',this.value)"></span>
+          <span class="mp-aff"><span class="u">${acCurrencySymbol()}</span><input type="number" min="0" step="100" value="${escapeAttr(t.threshold)}" oninput="updateRctier(${i},'threshold',this.value)"></span>
         </div>
         <div class="mp-field">
           <label>${escapeHtml(cuT('Points multiplier', '积分倍率'))}</label>
@@ -1157,7 +1162,7 @@ async function saveRctiers() {
   }
   if (!RCTIER_STATE.length) return toast('At least one tier is required · 至少需要一个等级', 'err');
   const lowest = RCTIER_STATE.reduce((m, t) => Math.min(m, Number(t.threshold) || 0), Infinity);
-  if (lowest !== 0) return toast('The lowest tier must start at ¥0 · 最低等级门槛必须为 0', 'err');
+  if (lowest !== 0) return toast(cuT('The lowest tier must start at ' + acWrap(0), '最低等级门槛必须为 0'), 'err');
   // Sort by threshold ascending so storage matches what customers see.
   const sorted = RCTIER_STATE.slice().sort((a, b) => (Number(a.threshold) || 0) - (Number(b.threshold) || 0));
   try {
@@ -2475,7 +2480,7 @@ function fsHeroTile(p, now) {
     <div class="fsm-hero-top">
       <div class="fsm-thumb">${fsThumbHtml(p)}</div>
       <div class="fsm-who"><div class="fsm-name">${escapeHtml(name)} ${sku}${draft}</div>
-        <div class="fsm-prc"><span class="fsm-now">¥${fmt(flash)}</span>${reg > 0 ? `<span class="fsm-was">¥${fmt(reg)}</span>` : ''}${off ? `<span class="fsm-off">−${off}%</span>` : ''}</div></div>
+        <div class="fsm-prc"><span class="fsm-now">${acMoney(flash)}</span>${reg > 0 ? `<span class="fsm-was">${acMoney(reg)}</span>` : ''}${off ? `<span class="fsm-off">−${off}%</span>` : ''}</div></div>
     </div>
     <div class="fsm-cd-row">
       <span class="fsm-cd" data-end="${ends}">${fsHms(ends - now)}</span>
@@ -2519,7 +2524,7 @@ function fsTableRow(p, now) {
     <div class="fsm-tw"><div class="fsm-tthumb">${fsThumbHtml(p)}</div>
       <div class="fsm-tmeta"><div class="fsm-tname">${escapeHtml(name)}</div><div class="fsm-tsub">${sku}</div></div></div>
     <div class="fsm-tcell fsm-cw">${when}</div>
-    <div class="fsm-tcell"><span class="fsm-now">¥${fmt(flash)}</span> ${reg > 0 ? `<span class="fsm-was">¥${fmt(reg)}</span>` : ''}</div>
+    <div class="fsm-tcell"><span class="fsm-now">${acMoney(flash)}</span> ${reg > 0 ? `<span class="fsm-was">${acMoney(reg)}</span>` : ''}</div>
     <div class="fsm-tcell fsm-cs">${soldTxt}</div>
     <div class="fsm-tact">${st === 'upcoming' ? badge + ' ' : ''}${act}</div>
   </div>`;
@@ -2736,7 +2741,7 @@ function fscRender() {
     + `<div class="fsc-step${s2done ? ' done' : ''}" id="fsc-step2"><span class="fsc-num">2</span><div class="fsc-body">`
     +   `<div class="fsc-title">${cuT('Price &amp; cap', '价格与限量')}</div>`
     +   `<div class="fsc-row2">`
-    +     `<div><input class="fsc-input mono" id="fsc-price" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(_fsc.price || ''))}" placeholder="${escapeAttr(cuT('¥ price', '¥ 价格'))}" oninput="fscLivePrice(this.value)">`
+    +     `<div><input class="fsc-input mono" id="fsc-price" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(_fsc.price || ''))}" placeholder="${escapeAttr(cuT(acCurrencySymbol() + ' price', acCurrencySymbol() + ' 价格'))}" oninput="fscLivePrice(this.value)">`
     +       `<div class="fsc-help" id="fsc-price-help">${fscPriceHelpHtml()}</div></div>`
     +     `<div><input class="fsc-input mono" id="fsc-cap" inputmode="numeric" autocomplete="off" value="${escapeAttr(String(_fsc.cap || ''))}" placeholder="${escapeAttr(cuT('No cap', '不限量'))}" oninput="fscLiveCap(this.value)">`
     +       `<div class="fsc-help">${cuT('stock cap', '库存上限')}</div></div>`
@@ -2781,7 +2786,7 @@ function fscPickerHtml() {
   const reg = fscRegular();
   const stock = fscProductStock(p);
   const bits = [];
-  if (reg > 0) bits.push(cuT('Regular', '原价') + ' ¥' + fmt(reg));
+  if (reg > 0) bits.push(cuT('Regular', '原价') + ' ' + acMoney(reg));
   if (stock != null) bits.push(stock + ' ' + cuT('in stock', '库存'));
   return `<button class="fsc-picker" onclick="fscOpenPicker()">`
     + `<span class="fsc-pthumb">${fsThumbHtml(p)}</span>`
@@ -2799,7 +2804,7 @@ function fscProductListHtml(q) {
   if (!filtered.length) return `<div class="fsc-pempty">${cuT('No products match — try another search.', '无匹配产品 — 换个关键词。')}</div>`;
   return filtered.slice(0, 200).map(p => {
     const subBits = []; if (p.sku) subBits.push(p.sku); if (p.size) subBits.push(p.size);
-    const price = p.sell_price ? `<b>¥${fmt(p.sell_price)}</b>${cuT('regular', '原价')}` : '';
+    const price = p.sell_price ? `<b>${acMoney(p.sell_price)}</b>${cuT('regular', '原价')}` : '';
     return `<button class="fsc-prow" onclick="fscPick(${p.id})">`
       + `<span class="th">${fsThumbHtml(p)}</span>`
       + `<span><span class="pn">${escapeHtml(fsName(p))}</span>${subBits.length ? `<span class="ps">${escapeHtml(subBits.join(' · '))}</span>` : ''}</span>`
@@ -2835,9 +2840,9 @@ function fscPriceHelpHtml() {
   const reg = fscRegular(), f = fscPriceNum();
   if (reg > 0 && f > 0) {
     if (f >= reg) return cuT('Must be lower than regular', '必须低于原价');
-    return cuT('', '省 ') + `<b>${fscOffPct()}% ${cuT('off', '')}</b> ` + cuT('¥', '· 原价 ¥') + fmt(reg);
+    return cuT('', '省 ') + `<b>${fscOffPct()}% ${cuT('off', '')}</b> ` + cuT('', '· 原价 ') + acMoney(reg);
   }
-  if (reg > 0) return cuT('Regular', '原价') + ' ¥' + fmt(reg);
+  if (reg > 0) return cuT('Regular', '原价') + ' ' + acMoney(reg);
   return cuT('flash price', '秒杀价');
 }
 function fscLivePrice(v) {
@@ -2923,8 +2928,8 @@ function fscPreviewHtml() {
   if (!(f > 0)) return cuT('Fill in a price to preview.', '填写价格后预览。');
   const off = fscOffPct();
   return cuT('Customers see ', '顾客看到 ')
-    + `<span class="f">¥${fmt(f)}</span>`
-    + (reg > 0 ? `, <span class="r">¥${fmt(reg)}</span>` : '')
+    + `<span class="f">${acMoney(f)}</span>`
+    + (reg > 0 ? `, <span class="r">${acMoney(reg)}</span>` : '')
     + (off ? ` · ${cuT('save', '省')} ${off}%` : '');
 }
 function fscUpdatePreview() { const el = document.getElementById('fsc-prev'); if (el) el.innerHTML = fscPreviewHtml(); fscRenderPvCard(); }
@@ -2946,12 +2951,12 @@ function fscRenderPvCard() {
   html += `<div class="fspv-card">`
     + `<div class="fspv-img"><span class="fspv-bolt">${cuT('Flash', '秒杀')}</span>${fsThumbHtml(p)}</div>`
     + `<div class="fspv-b"><div class="fspv-n">${escapeHtml(fsName(p))}</div>`
-    +   `<div class="fspv-prc"><span class="fspv-now">¥${fmt(f)}</span>${reg > 0 ? `<span class="fspv-was">¥${fmt(reg)}</span>` : ''}${off ? `<span class="fspv-save">${cuT('save', '省')} ${off}%</span>` : ''}</div>`
+    +   `<div class="fspv-prc"><span class="fspv-now">${acMoney(f)}</span>${reg > 0 ? `<span class="fspv-was">${acMoney(reg)}</span>` : ''}${off ? `<span class="fspv-save">${cuT('save', '省')} ${off}%</span>` : ''}</div>`
     +   (endTxt ? `<div class="fspv-meta">${cuT('Ends ', '结束 ')}${escapeHtml(endTxt)}</div>` : '')
     +   (cap != null ? `<div class="fspv-meta">${cuT('Limited to ', '限 ')}${cap}${cuT('', ' 份')}</div>` : '')
     + `</div></div>`
     + `<div class="fspv-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>`
-    +   (reg > 0 ? cuT(`Reverts to ¥${fmt(reg)} on its own when the clock runs out.`, `倒计时结束后自动恢复 ¥${fmt(reg)}。`) : cuT('Reverts to the regular price when the clock runs out.', '倒计时结束后自动恢复原价。'))
+    +   (reg > 0 ? cuT(`Reverts to ${acMoney(reg)} on its own when the clock runs out.`, `倒计时结束后自动恢复 ${acMoney(reg)}。`) : cuT('Reverts to the regular price when the clock runs out.', '倒计时结束后自动恢复原价。'))
     + `</div>`;
   el.innerHTML = html;
 }

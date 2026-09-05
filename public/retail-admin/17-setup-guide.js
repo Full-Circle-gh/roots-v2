@@ -772,7 +772,7 @@ async function suPayAlipaySave() {
     suRenderGuide();
     suRefreshChrome();
   } catch (e) {
-    const msg = e.message === 'qr_required' || e.message === 'image_too_big'
+    const msg = e.code === 'qr_required' || e.code === 'image_too_big'
       ? cuT('That image didn’t work — try a clearer, smaller QR', '这张图不行 — 换一张更清晰、更小的收款码')
       : cuT('Save failed', '保存失败') + ': ' + e.message;
     toast(msg, 'error');

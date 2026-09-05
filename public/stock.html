@@ -910,6 +910,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       state.home = typeof d.home === 'string' ? d.home : null;
       state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
       state.userName = d.user.name || '';
+      // The operator's own language wins over this tablet's (audit M-01/M-02).
+      // null means they have never chosen, and then the tablet's value stands.
+      if (d.user.language === 'en' || d.user.language === 'cn') {
+        if (d.user.language !== lang) setLang(d.user.language, true);
+      }
       state.stores = d.stores || [];
       mountAccount();
       if (!state.enabled) return showScreen('off');
@@ -1145,10 +1150,26 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }).catch(function () {});
   }
 
-  function setLang(next) {
+  // `fromAccount` is true only when this is ADOPTING the operator's stored
+  // language, so that path does not echo the account's own value back.
+  function setLang(next, fromAccount) {
     if (next !== 'en' && next !== 'cn') return;
     lang = next;
     try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+    // ── And on the PERSON (audit M-01 / M-02) ────────────────────────────
+    // This screen is the one most often run on a SHARED tablet, which is the
+    // exact case the finding names. Fire-and-forget, after the language is
+    // already applied and remembered here: a failure means it does not follow
+    // them to the next device, and must never interrupt a toggle.
+    if (!fromAccount) {
+      try {
+        fetch('/api/backend/language', {
+          method: 'PUT', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: lang }),
+        }).catch(function () {});
+      } catch (e) {}
+    }
     applyLang();
     paintSeg();
     if (state.view === 'list') render();

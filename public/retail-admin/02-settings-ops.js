@@ -449,7 +449,7 @@ async function loadShippingIntegrations() {
       : cuT('paste app_secret', '粘贴 app_secret');
     if (jAt) jAt.placeholder = d.access_token_masked
       ? cuT(d.access_token_masked + ' — leave blank to keep', d.access_token_masked + ' — 留空保持不变')
-      : cuT('paste access_token', '粘贴 access_token');
+      : cuT('Paste the token JD issued · 粘贴京东签发的令牌', '粘贴京东签发的令牌');
     if (jCc) jCc.value = d.customer_code || '';
     if (jEv) jEv.value = d.env || 'production';
     const jChip = document.getElementById('jd-chip');
@@ -1591,7 +1591,9 @@ let CATALOG_MODE = 'self';
 // is the operator-on default when the tenant has never touched the Features tab.
 const FEATURE_CATALOG = [
   { key: 'membership',  en: 'Membership & points', cn: '会员与积分', def: true,
-    desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
+    // Describes the FEATURE, not one merchant's version of it (audit D-04).
+    // Kept in step with lib/features.js, which carries the same sentence.
+    desc: 'Spending tiers you name yourself, and the points shown to shoppers. · 由你自行命名的消费等级,以及向顾客展示的积分。' },
   { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
     desc: 'On/off for the whole referral program — when off, shoppers can\'t apply codes or earn rewards, and the admin tab is hidden. · 推荐计划总开关:关闭后顾客无法使用邀请码或获得奖励,后台标签页也会隐藏。' },
   // A4: the master switch says what STATE the feature is in, not what it is.
@@ -1650,6 +1652,18 @@ let ENTITLEMENTS = {};
     const u = me.user;
     // Resolve catalog ownership before any product UI renders, so upstream
     // tenants never see the catalog-write controls / stock modal.
+    // THE OPERATOR'S OWN LANGUAGE, before anything paints (audit M-01 / M-02).
+    // It used to live only in this browser's localStorage, so it belonged to a
+    // machine rather than to a person: sign in on the shop tablet and you got
+    // whatever the last person chose. The account's value now wins — and null,
+    // meaning "never chosen", deliberately does not, so nobody who has never
+    // expressed a preference is switched to English on the day this ships.
+    //
+    // First thing in this block on purpose: the i18n engine has already painted
+    // from localStorage by the time this runs, so adopting later would show a
+    // visible flip. It still can, on a slow /me — but a flip once at sign-in is
+    // the honest cost of the language being the person's rather than the desk's.
+    if (typeof cuAdoptAccountLang === 'function') cuAdoptAccountLang(u.language);
     CATALOG_MODE = (u.tenant && u.tenant.catalogMode) || 'self';
     document.body.classList.toggle('catalog-upstream', CATALOG_MODE === 'upstream');
     // Feature entitlements (platform ceiling). { key: false } = not entitled;
@@ -2169,9 +2183,13 @@ function tmPaintEnforce() {
 async function tmToggleEnforce() {
   const btn = $('#tmEnforceBtn');
   const turningOn = !TM_RBAC_ENFORCE;
-  if (turningOn && !window.confirm(cuT(
-    'Turn on enforcement? Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
-    '开启强制权限？成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。'))) return;
+  if (turningOn && !(await askConfirm({
+    titleEn: 'Turn on enforcement?', titleCn: '开启强制权限？',
+    bodyEn: 'Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
+    bodyCn: '成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。',
+    confirmEn: 'Turn it on', confirmCn: '开启',
+    cancelEn: 'Not yet', cancelCn: '暂不',
+  }))) return;
   btn.disabled = true;
   try {
     const res = await api('/api/backend/rbac-enforce', { method: 'PUT', body: { enforce: turningOn ? 1 : 0 } });
@@ -3052,11 +3070,19 @@ function rlBindPane() {
   const del = $('#rlDelete'); if (del) del.addEventListener('click', rlDeleteRole);
 }
 
-function rlSelect(key, force) {
+// async ONLY for the unsaved-changes question below. Both internal callers pass
+// force=true, which skips it, so their bodies still run to completion
+// synchronously before the promise is returned — the click handler is
+// fire-and-forget either way.
+async function rlSelect(key, force) {
   if (!force && RL_SEL === key && RL_DRAFT) { rlRenderPane(); return; }
-  if (!force && rlDirty() && !window.confirm(cuT(
-    'Leave this role without saving? Your changes will be lost.',
-    '未保存就离开该角色？更改将丢失。'))) return;
+  if (!force && rlDirty() && !(await askConfirm({
+    titleEn: 'Leave this role without saving?', titleCn: '未保存就离开该角色？',
+    bodyEn: 'Your changes to it will be lost.', bodyCn: '对该角色的更改将丢失。',
+    confirmEn: 'Discard changes', confirmCn: '放弃更改',
+    cancelEn: 'Keep editing', cancelCn: '继续编辑',
+    danger: true,
+  }))) return;
   RL_SEL = key;
   const r = rlRole(key);
   RL_DRAFT = r && !r.isFixed
@@ -3118,7 +3144,12 @@ async function rlSave() {
 }
 
 async function rlAddRole() {
-  const name = window.prompt(cuT('Name the new role', '新角色的名称'), '');
+  const name = await askPrompt({
+    titleEn: 'Name the new role', titleCn: '新角色的名称',
+    labelEn: 'Role name', labelCn: '角色名称',
+    phEn: 'Bookkeeper, Weekend staff…', phCn: '会计、周末店员…',
+    submitEn: 'Create role', submitCn: '创建角色',
+  });
   if (name === null) return;
   if (!String(name).trim()) { toast(cuT('Give the role a name', '请为角色命名'), 'err'); return; }
   try {
@@ -3139,8 +3170,13 @@ async function rlDeleteRole() {
   const r = rlRole(RL_SEL);
   if (!r || r.isFixed) return;
   if (!r.people) {
-    if (!window.confirm(cuT('Delete “' + cuT(r.nameEn, r.nameCn) + '”? Nobody holds it.',
-                           '删除“' + cuT(r.nameEn, r.nameCn) + '”？当前无人使用。'))) return;
+    if (!(await askConfirm({
+      titleEn: 'Delete “' + r.nameEn + '”?', titleCn: '删除“' + r.nameCn + '”？',
+      bodyEn: 'Nobody holds this role, so nothing changes for anyone.',
+      bodyCn: '当前无人使用该角色，删除不会影响任何人。',
+      confirmEn: 'Delete role', confirmCn: '删除角色',
+      danger: true,
+    }))) return;
     try {
       await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: {} });
       RL_SEL = null; await rlLoad(); tmLoad();
@@ -3150,22 +3186,38 @@ async function rlDeleteRole() {
   }
   const others = RL_ROLES.filter(x => x.key !== r.key);
   if (!others.length) { toast(cuT('There is nowhere to move them', '没有可迁移的角色'), 'err'); return; }
-  const menu = others.map((x, i) => (i + 1) + ') ' + cuT(x.nameEn, x.nameCn)).join('\n');
   const who = r.people === 1 ? cuT('1 person holds this role', '1 人使用此角色')
                              : cuT(r.people + ' people hold this role', r.people + ' 人使用此角色');
   const exc = r.exceptions
-    ? '\n' + cuT(r.exceptions + (r.exceptions === 1 ? ' of them has an exception; it stays, on top of the new role.'
-                                                   : ' of them have exceptions; they stay, on top of the new role.'),
-                 '其中 ' + r.exceptions + ' 人设有例外权限，迁移后仍保留。')
+    ? ' ' + cuT(r.exceptions + (r.exceptions === 1 ? ' of them has an exception; it stays, on top of the new role.'
+                                                  : ' of them have exceptions; they stay, on top of the new role.'),
+                '其中 ' + r.exceptions + ' 人设有例外权限，迁移后仍保留。')
     : '';
-  const pick = window.prompt(who + '. ' + cuT('Where do they go? Type a number:', '他们迁移到哪个角色？请输入编号：')
-    + '\n\n' + menu + exc, '');
-  if (pick === null) return;
-  const dest = others[parseInt(pick, 10) - 1];
-  if (!dest) { toast(cuT('Pick one of the numbers listed', '请输入列表中的编号'), 'err'); return; }
-  if (!window.confirm(cuT(
-    'Delete “' + cuT(r.nameEn, r.nameCn) + '” and move ' + r.people + ' to “' + cuT(dest.nameEn, dest.nameCn) + '”? They get its permissions on their next screen.',
-    '删除“' + cuT(r.nameEn, r.nameCn) + '”并将 ' + r.people + ' 人迁移到“' + cuT(dest.nameEn, dest.nameCn) + '”？他们下次打开页面即按新角色权限生效。'))) return;
+  // A PICKER, NOT A NUMBER TYPED INTO A BROWSER POP-UP. This used to be
+  // window.prompt() carrying a hand-numbered list and the instruction "Type a
+  // number:" — the merchant reading their own staff list off a grey system
+  // dialog and answering it with an index. askChoice is the same question with
+  // the roles as choices, and no default: picking is the point.
+  const destKey = await askChoice({
+    titleEn: 'Delete “' + r.nameEn + '” — where do its people go?',
+    titleCn: '删除“' + r.nameCn + '” — 这些成员迁移到哪里？',
+    sub: who + '.' + exc,
+    labelEn: 'Move them to', labelCn: '迁移到',
+    options: others.map(x => ({ value: x.key, label: cuT(x.nameEn, x.nameCn) })),
+    submitEn: 'Continue', submitCn: '继续',
+    danger: true,
+  });
+  if (destKey === null) return;
+  const dest = others.find(x => x.key === destKey);
+  if (!dest) return;
+  if (!(await askConfirm({
+    titleEn: 'Delete “' + r.nameEn + '” and move ' + r.people + ' to “' + dest.nameEn + '”?',
+    titleCn: '删除“' + r.nameCn + '”并将 ' + r.people + ' 人迁移到“' + dest.nameCn + '”？',
+    bodyEn: 'They get its permissions on their next screen.',
+    bodyCn: '他们下次打开页面即按新角色权限生效。',
+    confirmEn: 'Delete and move', confirmCn: '删除并迁移',
+    danger: true,
+  }))) return;
   try {
     await api('/api/backend/roles/' + encodeURIComponent(r.key), { method: 'DELETE', body: { move_to: dest.key } });
     RL_SEL = dest.key; await rlLoad(dest.key); tmLoad();
@@ -3215,12 +3267,13 @@ function tmdRelTime(s) {
   var d = Math.round(h / 24); if (d < 30) return cuT(d + (d > 1 ? ' days ago' : ' day ago'), d + ' 天前');
   return cuT('over a month ago', '一个月前');
 }
+// The shared formatter, not a fourth one (audit C-02). This built its own with
+// toLocaleDateString('en-US'/'zh-CN'), so a device's "last seen" read in a
+// different shape from every other date in the product — and, worse, on the
+// BROWSER's clock rather than the shop's, which tdWhen exists to fix.
 function tmdDateFmt(s) {
   if (!s) return '';
-  var t = tmdToDate(s);
-  var opts = { month: 'short', day: 'numeric' };
-  if (t.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-  return t.toLocaleDateString((window.cuLang && cuLang() === 'cn') ? 'zh-CN' : 'en-US', opts);
+  return (typeof tdWhen === 'function') ? tdWhen(tmdToDate(s), 'date') : String(s);
 }
 function tmdInitials(name) {
   var s = String(name || '').trim(); if (!s) return '?';
@@ -3285,7 +3338,12 @@ function tmdLoad() {
     .catch(function () { box.innerHTML = '<div class="tm-dev-empty">' + cuT('Couldn’t load devices.', '无法加载设备。') + '</div>'; });
 }
 async function tmdRevoke(sid, isCurrent, btn) {
-  if (isCurrent && !window.confirm(cuT('Sign out of this device? You’ll be returned to the login page.', '登出此设备？您将返回登录页面。'))) return;
+  if (isCurrent && !(await askConfirm({
+    titleEn: 'Sign out of this device?', titleCn: '登出此设备？',
+    bodyEn: 'You’ll be returned to the login page.', bodyCn: '您将返回登录页面。',
+    confirmEn: 'Sign out', confirmCn: '登出',
+    danger: true,
+  }))) return;
   if (btn) { btn.disabled = true; btn.textContent = cuT('Signing out…', '正在登出…'); }
   try {
     var res = await api('/api/backend/sessions/revoke', { method: 'POST', body: { sid: sid } });
@@ -3382,3 +3440,399 @@ function tmInit() {
   tmLoad();
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHANGE HISTORY — Settings → Change history (audit E-01)
+
+   Every significant write in the admin has been calling logActivity() and
+   landing a row in `activity_log` for as long as the admin has existed. Until
+   now nothing read them, so a merchant who found a price changed, a product
+   unpublished or an order refunded could not find out who did it.
+
+   This is a READING SURFACE ONLY. There is no edit, no delete and no bulk
+   action, deliberately: a history somebody can tidy is not a history.
+
+   Not the Products screen's "Stock activity" — that answers "how did this
+   number get here". This answers "who touched this record".
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let CH_LIMIT = 100;
+let CH_OFFSET = 0;
+let CH_ROWS = [];
+let CH_TOTAL = 0;
+let _CH_SEARCH_T = null;
+
+function chSearchDebounced() {
+  clearTimeout(_CH_SEARCH_T);
+  _CH_SEARCH_T = setTimeout(() => { CH_OFFSET = 0; chLoad(); }, 250);
+}
+
+function chFilterQuery() {
+  const qs = new URLSearchParams();
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  if (v('ch-who'))  qs.set('who', v('ch-who'));
+  if (v('ch-what')) qs.set('entity_type', v('ch-what'));
+  if (v('ch-from')) qs.set('from', v('ch-from'));
+  if (v('ch-to'))   qs.set('to', v('ch-to'));
+  if (v('ch-q'))    qs.set('q', v('ch-q'));
+  return qs;
+}
+
+function chClearFilters() {
+  ['ch-who', 'ch-what', 'ch-from', 'ch-to', 'ch-q'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  CH_OFFSET = 0;
+  chLoad();
+}
+
+function chExportCsv() {
+  const qs = chFilterQuery().toString();
+  window.location.href = '/api/retail-admin/activity-log/export.csv' + (qs ? '?' + qs : '');
+}
+
+function chMore() { CH_OFFSET += CH_LIMIT; chLoad({ append: true }); }
+
+// Turn an action key into something a shopkeeper reads without decoding. The
+// keys are the code's own vocabulary ('update_product', 'refund_approve') and
+// showing them raw is exactly the developer-vocabulary problem the audit
+// records elsewhere. Anything not in the list falls back to the key with its
+// underscores opened out, so a new action added tomorrow still reads as words.
+const CH_ACTIONS = {
+  create: ['Created', '新建'], update: ['Edited', '修改'], delete: ['Deleted', '删除'],
+  login: ['Signed in', '登录'], logout: ['Signed out', '退出'],
+  publish: ['Published', '上架'], unpublish: ['Unpublished', '下架'],
+  refund: ['Refunded', '退款'], cancel: ['Cancelled', '取消'],
+  approve: ['Approved', '批准'], reject: ['Rejected', '拒绝'],
+  receive: ['Received', '收货'], adjust: ['Adjusted', '调整'],
+  block: ['Blocked', '封禁'], unblock: ['Unblocked', '解封'],
+  import: ['Imported', '导入'], export: ['Exported', '导出'],
+};
+function chActionText(action) {
+  const key = String(action || '').toLowerCase();
+  // Longest matching prefix first, so 'update_product' beats a bare 'update'
+  // only when a more specific entry exists.
+  if (CH_ACTIONS[key]) return cuT(CH_ACTIONS[key][0], CH_ACTIONS[key][1]);
+  for (const k of Object.keys(CH_ACTIONS)) {
+    if (key.startsWith(k + '_') || key.endsWith('_' + k)) {
+      const noun = key.replace(new RegExp('_?' + k + '_?'), '').replace(/_/g, ' ');
+      return (cuT(CH_ACTIONS[k][0], CH_ACTIONS[k][1]) + (noun ? ' ' + noun : '')).trim();
+    }
+  }
+  return key.replace(/_/g, ' ');
+}
+
+// The details column is a JSON blob written by 139 different call sites, so
+// there is no schema to render against. Show it as "field: value" pairs, which
+// is what it is nearly always shaped like, and fall back to the raw text when
+// it is not. Long values are cut — the full text stays in the title attribute
+// and in the CSV, where a spreadsheet can hold it.
+function chDetailsText(details) {
+  if (!details) return '';
+  let o = null;
+  try { o = JSON.parse(details); } catch { return String(details); }
+  if (o == null || typeof o !== 'object') return String(details);
+  return Object.entries(o)
+    .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v == null ? '—' : (typeof v === 'object' ? JSON.stringify(v) : v)}`)
+    .join(' · ');
+}
+
+async function chLoad(opts = {}) {
+  const tbody = document.querySelector('#ch-table tbody');
+  if (!tbody) return;
+  const append = !!opts.append;
+  if (!append) { CH_OFFSET = 0; tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Loading…', '加载中…'))}</td></tr>`; }
+
+  const qs = chFilterQuery();
+  qs.set('limit', CH_LIMIT);
+  qs.set('offset', CH_OFFSET);
+
+  let j;
+  try {
+    const res = await fetch('/api/retail-admin/activity-log?' + qs.toString());
+    j = await res.json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the change history. Check your connection and try again.',
+      '无法加载修改记录,请检查网络后重试。'))}</td></tr>`;
+    return;
+  }
+  if (!j || !j.success) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the change history.', '无法加载修改记录。'))}</td></tr>`;
+    return;
+  }
+
+  CH_ROWS = append ? CH_ROWS.concat(j.data || []) : (j.data || []);
+  CH_TOTAL = j.total || 0;
+  chFillFilterOptions(j.people || [], j.kinds || []);
+  chRender();
+}
+
+// The two dropdowns are populated from what this account has actually done, so
+// they can never offer a dead end. Rebuilt on each load but the current choice
+// is carried across, or a filter would clear itself the moment it was applied.
+function chFillFilterOptions(people, kinds) {
+  const fill = (id, values, allEn, allCn) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">${escapeHtml(cuT(allEn, allCn))}</option>`
+      + values.map(v => `<option value="${escapeHtml(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(String(v).replace(/_/g, ' '))}</option>`).join('');
+    // A filtered read returns only the values that survive the filter, so the
+    // active choice can vanish from the list it was chosen from. Put it back.
+    if (keep && sel.value !== keep) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(keep)}" selected>${escapeHtml(keep.replace(/_/g, ' '))}</option>`);
+    }
+  };
+  fill('ch-who', people, 'Everyone', '全部人员');
+  fill('ch-what', kinds, 'Everything', '全部类型');
+}
+
+function chRender() {
+  const tbody = document.querySelector('#ch-table tbody');
+  if (!tbody) return;
+
+  const filtered = [...chFilterQuery().keys()].length > 0;
+  const clearBtn = document.getElementById('ch-clear');
+  if (clearBtn) clearBtn.hidden = !filtered;
+
+  if (!CH_ROWS.length) {
+    // Two empty states, never one (§1.12): "your filters matched nothing" and
+    // "nothing has happened yet" are different facts and lead to different next
+    // moves. Telling a merchant on their first day that their filter matched
+    // nothing, when they have no history at all, is the worse of the two errors.
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="padding:22px 8px;text-align:center">`
+      + (filtered
+        ? escapeHtml(cuT('Nothing matches those filters.', '没有符合条件的记录。'))
+          + ` <a href="#" onclick="chClearFilters();return false;">${escapeHtml(cuT('Clear them', '清除筛选'))}</a>`
+        : escapeHtml(cuT(
+            'Nothing has been changed yet. Every edit your team makes will appear here.',
+            '暂无修改记录。团队的每次修改都会显示在这里。')))
+      + `</td></tr>`;
+    const c = document.getElementById('ch-count'); if (c) c.textContent = '';
+    const m = document.getElementById('ch-more'); if (m) m.hidden = true;
+    return;
+  }
+
+  tbody.innerHTML = CH_ROWS.map(r => {
+    const det = chDetailsText(r.details);
+    const rec = [r.entity_type ? String(r.entity_type).replace(/_/g, ' ') : '', r.entity_id ? '#' + r.entity_id : '']
+      .filter(Boolean).join(' ');
+    return `<tr>`
+      // The shop's own clock, not a hardcoded Guangzhou one — tdWhen reads
+      // window.TD_TZ, which the config load sets from the account's first store.
+      + `<td data-no-i18n>${escapeHtml((typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.at_local) || '')}</td>`
+      + `<td data-no-i18n>${escapeHtml(r.username || cuT('(unknown)', '(未知)'))}</td>`
+      + `<td>${escapeHtml(chActionText(r.action))}</td>`
+      + `<td data-no-i18n>${escapeHtml(rec)}</td>`
+      + `<td class="muted" data-no-i18n title="${escapeHtml(det)}" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(det)}</td>`
+      + `</tr>`;
+  }).join('');
+
+  const c = document.getElementById('ch-count');
+  if (c) c.textContent = cuT(`Showing ${CH_ROWS.length} of ${CH_TOTAL}`, `显示 ${CH_ROWS.length} / ${CH_TOTAL}`);
+  const m = document.getElementById('ch-more');
+  if (m) m.hidden = CH_ROWS.length >= CH_TOTAL;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WHAT WAS SENT — Settings → What was sent (audit P-03 / P-02)
+
+   Twenty kinds of notification can leave this service and no screen listed any
+   of them. A merchant asking "did the customer get told?" had no answer, and
+   one whose staff had silently stopped receiving orders had no way to notice —
+   a dead push subscription was pruned without a word.
+
+   Read-only, like the change history beside it, and for the same reason: a
+   delivery record somebody can edit is not a record.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let NL_LIMIT = 100;
+let NL_OFFSET = 0;
+let NL_ROWS = [];
+let NL_TOTAL = 0;
+let NL_FAILED = 0;
+let NL_ONLY_FAILED = false;
+let _NL_SEARCH_T = null;
+
+function nlSearchDebounced() {
+  clearTimeout(_NL_SEARCH_T);
+  _NL_SEARCH_T = setTimeout(() => { NL_OFFSET = 0; nlLoad(); }, 250);
+}
+
+function nlFilterQuery() {
+  const qs = new URLSearchParams();
+  const v = id => ((document.getElementById(id) || {}).value || '').trim();
+  if (v('nl-channel')) qs.set('channel', v('nl-channel'));
+  if (v('nl-kind'))    qs.set('kind', v('nl-kind'));
+  if (v('nl-from'))    qs.set('from', v('nl-from'));
+  if (v('nl-to'))      qs.set('to', v('nl-to'));
+  if (v('nl-q'))       qs.set('q', v('nl-q'));
+  if (NL_ONLY_FAILED)  qs.set('failed', '1');
+  return qs;
+}
+
+function nlToggleFailed() { NL_ONLY_FAILED = !NL_ONLY_FAILED; NL_OFFSET = 0; nlLoad(); }
+
+function nlClearFilters() {
+  ['nl-channel', 'nl-kind', 'nl-from', 'nl-to', 'nl-q'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  NL_ONLY_FAILED = false;
+  NL_OFFSET = 0;
+  nlLoad();
+}
+
+function nlMore() { NL_OFFSET += NL_LIMIT; nlLoad({ append: true }); }
+
+// How it was sent, in the words a shopkeeper uses rather than the transport's.
+const NL_CHANNELS = {
+  push:    ['Phone alert', '手机推送'],
+  email:   ['Email', '邮件'],
+  sms:     ['Text message', '短信'],
+  wechat:  ['WeChat message', '微信消息'],
+  wecom:   ['Work chat', '企业微信'],
+  webhook: ['Chat app', '聊天应用'],
+};
+function nlChannelText(c) {
+  const e = NL_CHANNELS[c];
+  return e ? cuT(e[0], e[1]) : String(c || '').replace(/_/g, ' ');
+}
+
+// What it was about. Same fallback rule as the change history's action names:
+// unknown kinds read as words rather than as a key, so one added tomorrow is
+// legible on the day it ships.
+const NL_KINDS = {
+  order_paid:        ['A customer paid', '顾客已付款'],
+  ship_reminder:     ['Time to ship an order', '订单该发货了'],
+  pickup_reminder:   ['A collection is due', '自提订单临近'],
+  low_stock_digest:  ['Daily low-stock list', '每日低库存清单'],
+  signin_code:       ['Sign-in code', '登录验证码'],
+  restock_request:   ['A stock request', '补货申请'],
+  new_order:         ['A new order', '新订单'],
+};
+function nlKindText(k) {
+  const e = NL_KINDS[k];
+  if (e) return cuT(e[0], e[1]);
+  const w = String(k || '').replace(/_/g, ' ').trim();
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+}
+
+// The result column. A broadcast says how many phones it reached; a send to one
+// person says whether it arrived. A failure says WHY, because "failed" on its
+// own tells the merchant nothing they can act on.
+function nlResultHtml(r) {
+  if (r.ok) {
+    const d = r.detail || {};
+    if (typeof d.sent === 'number' && typeof d.total === 'number' && d.total > 1) {
+      const extra = [];
+      if (d.muted)  extra.push(cuT(d.muted + ' muted', d.muted + ' 已静音'));
+      if (d.pruned) extra.push(cuT(d.pruned + ' device gone', d.pruned + ' 设备失效'));
+      return `<span class="nl-ok">${escapeHtml(cuT(d.sent + ' of ' + d.total + ' reached', d.total + ' 台中 ' + d.sent + ' 台已送达'))}</span>`
+        + (extra.length ? ` <span class="muted">· ${escapeHtml(extra.join(' · '))}</span>` : '');
+    }
+    return `<span class="nl-ok">${escapeHtml(cuT('Sent', '已发送'))}</span>`;
+  }
+  // The stored reason is the provider's code as often as not, so it goes
+  // through the same dictionary the toasts use — and keeps the raw text on
+  // hover for support.
+  const why = (typeof tdErrorText === 'function') ? tdErrorText(r.error, null) : (r.error || '');
+  return `<span class="nl-bad" title="${escapeAttr(r.error || '')}">${escapeHtml(cuT('Did not arrive', '未送达'))}</span>`
+    + (why ? ` <span class="muted">· ${escapeHtml(why)}</span>` : '');
+}
+
+async function nlLoad(opts = {}) {
+  const tbody = document.querySelector('#nl-table tbody');
+  if (!tbody) return;
+  const append = !!opts.append;
+  if (!append) { NL_OFFSET = 0; tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Loading…', '加载中…'))}</td></tr>`; }
+
+  const qs = nlFilterQuery();
+  qs.set('limit', NL_LIMIT);
+  qs.set('offset', NL_OFFSET);
+
+  let j;
+  try {
+    const res = await fetch('/api/retail-admin/notification-log?' + qs.toString());
+    j = await res.json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT(
+      'Could not load the send record. Check your connection and try again.',
+      '无法加载发送记录,请检查网络后重试。'))}</td></tr>`;
+    return;
+  }
+  if (!j || !j.success) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escapeHtml(cuT('Could not load the send record.', '无法加载发送记录。'))}</td></tr>`;
+    return;
+  }
+
+  NL_ROWS = append ? NL_ROWS.concat(j.data || []) : (j.data || []);
+  NL_TOTAL = j.total || 0;
+  NL_FAILED = j.failed || 0;
+  nlFillFilterOptions(j.channels || [], j.kinds || []);
+  nlRender();
+}
+
+function nlFillFilterOptions(channels, kinds) {
+  const fill = (id, values, allEn, allCn, label) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">${escapeHtml(cuT(allEn, allCn))}</option>`
+      + values.map(v => `<option value="${escapeAttr(v)}"${v === keep ? ' selected' : ''}>${escapeHtml(label(v))}</option>`).join('');
+    if (keep && sel.value !== keep) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(keep)}" selected>${escapeHtml(label(keep))}</option>`);
+    }
+  };
+  fill('nl-channel', channels, 'Every way', '全部方式', nlChannelText);
+  fill('nl-kind', kinds, 'Everything', '全部内容', nlKindText);
+}
+
+function nlRender() {
+  const tbody = document.querySelector('#nl-table tbody');
+  if (!tbody) return;
+
+  const filtered = [...nlFilterQuery().keys()].length > 0;
+  const clearBtn = document.getElementById('nl-clear');
+  if (clearBtn) clearBtn.hidden = !filtered;
+
+  // The failed-only toggle carries its own count, and lights up when it is on.
+  const failBtn = document.getElementById('nl-failed');
+  if (failBtn) {
+    failBtn.classList.toggle('btn-primary', NL_ONLY_FAILED);
+    failBtn.textContent = NL_FAILED
+      ? cuT('Did not arrive (' + NL_FAILED + ')', '未送达(' + NL_FAILED + ')')
+      : cuT('Did not arrive', '未送达');
+    // Nothing failed and we are not already filtered to failures: the control
+    // has nothing to show, so it does not sit there offering an empty list.
+    failBtn.hidden = !NL_FAILED && !NL_ONLY_FAILED;
+  }
+
+  if (!NL_ROWS.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="padding:22px 8px;text-align:center">`
+      + (filtered
+        ? escapeHtml(cuT('Nothing matches those filters.', '没有符合条件的记录。'))
+          + ` <a href="#" onclick="nlClearFilters();return false;">${escapeHtml(cuT('Clear them', '清除筛选'))}</a>`
+        : escapeHtml(cuT(
+            'Nothing has been sent yet. Every push, email and text will appear here.',
+            '暂无发送记录。每条推送、邮件与短信都会显示在这里。')))
+      + `</td></tr>`;
+    const c = document.getElementById('nl-count'); if (c) c.textContent = '';
+    const m = document.getElementById('nl-more'); if (m) m.hidden = true;
+    return;
+  }
+
+  tbody.innerHTML = NL_ROWS.map(r => `<tr>`
+    + `<td data-no-i18n>${escapeHtml((typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.created_at) || '')}</td>`
+    + `<td>${escapeHtml(nlChannelText(r.channel))}</td>`
+    + `<td>${escapeHtml(nlKindText(r.kind))}${r.subject ? `<div class="muted" data-no-i18n style="font-size:11px">${escapeHtml(r.subject)}</div>` : ''}</td>`
+    + `<td data-no-i18n>${escapeHtml(r.recipient || '')}${r.recipient ? '' : `<span class="muted">${escapeHtml(cuT('your team', '团队'))}</span>`}</td>`
+    + `<td>${nlResultHtml(r)}</td>`
+    + `</tr>`).join('');
+
+  const c = document.getElementById('nl-count');
+  if (c) c.textContent = cuT(`Showing ${NL_ROWS.length} of ${NL_TOTAL}`, `显示 ${NL_ROWS.length} / ${NL_TOTAL}`);
+  const m = document.getElementById('nl-more');
+  if (m) m.hidden = NL_ROWS.length >= NL_TOTAL;
+}

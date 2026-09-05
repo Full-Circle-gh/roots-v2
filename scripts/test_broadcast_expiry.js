@@ -348,6 +348,13 @@ function loadComposer(values) {
     $: (sel) => els[String(sel).replace('#', '')] || null,
     cuT: (en) => en,                                  // assert on the EN half
     escapeHtml: (s) => String(s),
+    // The REAL shared date formatter, not a stub. The composer used to build
+    // dates from its own month table and now calls tdWhen (audit C-02), so the
+    // sandbox has to supply it — and supplying the real one is what makes the
+    // assertion below ("until Jun 8, 10:00") a test of the product's one date
+    // shape rather than of a copy of it kept here.
+    tdWhen: require(path.join(__dirname, '..', 'public', 'td-datetime.js')).tdWhen,
+    tdFromShopLocal: require(path.join(__dirname, '..', 'public', 'td-datetime.js')).tdFromShopLocal,
     api: async () => ({ data: [] }),
     toast: () => {}, askConfirm: async () => false,
     document: {
@@ -415,7 +422,10 @@ it('send-now measures from now', () => {
 it('the When summary says where the broadcast ends', () => {
   const c = loadComposer({ 'bc-schedule-mode': 'now', 'bc-expire-mode': 'at',
     'bc-expire-at': '2026-06-08T10:00' });
-  assert.match(c.bxUntilSuffix(), /until Jun 8, 10:00/);
+  // 12-hour in English is tdWhen's documented convention (Chinese renders
+  // 24-hour); this asserted the composer's own retired 24-hour format. The
+  // TIME is what matters and it is unchanged: 10:00 typed, 10:00 echoed.
+  assert.match(c.bxUntilSuffix(), /until Jun 8, 10:00 AM/);
 });
 
 it('picking "on a date" without a date says so rather than reading as no end', () => {

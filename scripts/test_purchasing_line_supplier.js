@@ -59,7 +59,12 @@ const SOURCE_CHECKS = [
   {
     file: 'routes/retail-purchasing.js', src: () => ROUTE_SRC,
     name: 'the route writes the LINE, never the PO header — the header sits ahead of the item master in the chain, so stamping it would move lines nobody picked',
-    anchor: '  const upd = db.prepare(`UPDATE po_line_items SET supplier_name = ?',
+    // Anchored on the SQL, not on the handle in front of it. Audit D-01 moved
+    // this file from the module-level `db` onto the signed-in account's
+    // connection, and an anchor that spelled `db.prepare(` went red for a
+    // correct change — which is the failure mode a source-grep assertion is
+    // most prone to. What matters here is which TABLE is written.
+    anchor: 'UPDATE po_line_items SET supplier_name = ?',
     present: true,
   },
   {

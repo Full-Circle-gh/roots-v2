@@ -30,12 +30,28 @@
 <!-- Full Circle backend chrome type — IBM Plex Sans / Mono (+ SC for 中文).
      Same stack the Mini App Editor (/cms) loads. Brand display fonts below
      stay for the mini-app product previews. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- ── Web fonts, loaded so a blocked host costs nothing (audit D-09) ───────
+     This service's only live merchant trades in mainland China, where this font
+     host is unreachable. As blocking <link rel="stylesheet"> tags these cost
+     every page load a connection timeout before first paint, on the one network
+     that matters most.
+     media="print" + onload makes the request non-blocking: the page paints
+     immediately in the fallback stack (which every --f-* variable already
+     names), and the web faces swap in if and when they arrive. `display=swap`
+     was already set, so text was never going to be invisible — only late.
+     The <noscript> copy keeps the fonts for a scripting-disabled browser, where
+     the onload trick cannot run.
+     The preconnect hints are gone with them: a warmed connection to a host that
+     does not answer is a wasted one.
+     THE REAL FIX is to serve these faces from the application, as the brand
+     display fonts in /assets/fonts already are. That needs the files, which is
+     a deliberate step and not this change. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="/assets/retail-admin.css">
 <!-- Tacet type: Inter for the reskinned surfaces + Fraunces for the wordmark. -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet"></noscript>
 <!-- ═══════════════════════════════════════════════════════════════════════
      TACET SKIN — scoped to Orders, Invoices, and the order drawer ONLY.
      Behaviour is untouched; this only restyles. It remaps the app's own CSS
@@ -870,6 +886,13 @@
      applyFeatureGates() then removes the class for any feature an operator (or
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
+<!-- Skip link (audit R-05). The rail and the tab strip are ~30 focusable
+     controls before the page's own content, and a keyboard operator had to walk
+     every one of them on every screen. FIRST element in the body so it is the
+     first thing Tab reaches; visually hidden until it takes focus, which is the
+     whole convention — a skip link that is always visible is furniture, and one
+     that never appears is not a link. -->
+<a href="#main" class="skip-link">Skip to content · 跳到内容</a>
 <!-- Restore the rail collapse state before first paint so the icon-only strip
      doesn't flash open on load. Full wiring lives in 01-core.js. -->
 <script>try{if(localStorage.getItem('ra:navCollapsed')==='1')document.body.classList.add('nav-collapsed');}catch(e){}</script>
@@ -1545,7 +1568,7 @@
   </div>
 </div>
 
-<main>
+<main id="main" tabindex="-1">
 
   <!-- ─── SETUP GUIDE (new tenant) ─── -->
   <!-- Filled by part 17 (suRenderGuide). A router-style checklist that opens the
@@ -1994,7 +2017,7 @@
 
     <!-- Activity drill-through drawer — populated by dashFeedClick (rows in
          The Recap's "Show the work" fold). Reuses the global .side-drawer chrome. -->
-    <aside id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
+    <aside role="dialog" id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -2012,7 +2035,7 @@
          behind the card's "and N more". Read drawer (dw-dismiss: Esc or an
          outside click closes it). Body + pill filled by dashStockDrawer*
          (03-dashboard); reuses the global .side-drawer chrome. -->
-    <aside id="db-stock-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+    <aside role="dialog" id="db-stock-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-stock-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -2288,7 +2311,7 @@
          The Dusk "New order" CTA left this row for the page header in 291202f0;
          bulk tracking is last, which is what puts it at the right-hand end. -->
     <div class="row ord-filterbar" style="margin-bottom: var(--s4)">
-      <select id="orders-store" onchange="ordFilterChanged()">
+      <select id="orders-store" aria-label="Filter orders by location · 按门店筛选订单" onchange="ordFilterChanged()">
         <option value="">All stores · 全部门店</option>
       </select>
 
@@ -2330,6 +2353,18 @@
       <!-- The Dusk "New order" CTA moved to the page header 2026-07-27 (§1.7:
            the primary action sits top-right, level with the title). Brief 3
            rebuilds this row onto one line; the gap it leaves is expected. -->
+      <!-- Clear filters — present only while something is actually narrowing
+           the list (ordSyncClearBtn). Before this the only way back to the
+           whole list was to undo the status chip, the channel menu, the store
+           select, the search box and the customer chip one at a time. -->
+      <button class="btn btn-sm ord-clear-btn" id="ord-clear-btn" type="button" hidden
+              onclick="ordClearFilters()"
+              title="Show every order again · 显示全部订单">Clear filters · 清除筛选</button>
+      <!-- Download the orders currently listed — all of them, not just this
+           page. Filtered on purpose: the file should match the screen it was
+           taken from. -->
+      <button class="btn btn-sm" id="ord-export-btn" type="button" onclick="ordExportCsv()"
+              title="Download these orders as a spreadsheet · 下载当前订单表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
       <!-- Bulk attach tracking — hidden by default; a tenant turns it on from
            Settings → Delivery (delivery.bulkTracking → body.ord-bulk-tracking).
            Kept as a secondary button so it never competes with the one Dusk CTA. -->
@@ -2372,11 +2407,11 @@
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
           <div class="field" style="margin: 0 0 14px;">
-            <label class="stacked">Default carrier · 默认快递</label>
-            <select id="bulk-trk-carrier" style="width: 100%;"></select>
+            <label for="bulk-trk-carrier" class="stacked">Default carrier · 默认快递</label>
+            <select id="bulk-trk-carrier" aria-label="Default carrier · 默认快递" style="width: 100%;"></select>
           </div>
           <div class="field" style="margin: 0 0 6px;">
-            <label class="stacked">Entries — <code>order#  waybill#</code> on each line (comma, tab, or space-separated) · 条目 — 每行一个 订单号  运单号(逗号、制表或空格分隔)</label>
+            <label for="bulk-trk-text" class="stacked">Entries — <code>order#  waybill#</code> on each line (comma, tab, or space-separated) · 条目 — 每行一个 订单号  运单号(逗号、制表或空格分隔)</label>
             <textarea id="bulk-trk-text" rows="10" style="width:100%; font-family: var(--f-mono); font-size: 12px; line-height: 1.5; resize: vertical;" placeholder="R260517000123, JD0012345678&#10;R260517000124  SF1234567890&#10;R260517000125;EMS9999"></textarea>
           </div>
           <div class="muted" style="font-size: 11px; margin-bottom: 14px;">
@@ -2408,8 +2443,10 @@
          a mangled multi-line header row. */
       #orders-table thead th { white-space: nowrap; }
       /* Order # cell — fixed-width digit alignment so the live-poll refresh
-         doesn't jitter the column when a row swaps in. */
-      #orders-table td:first-child { font-variant-numeric: tabular-nums; }
+         doesn't jitter the column when a row swaps in. Addressed by CLASS, not
+         :first-child: the selection column now sits to its left, and a
+         positional selector would have quietly moved this to the checkbox. */
+      #orders-table td.oc-ord { font-variant-numeric: tabular-nums; }
       /* Read-only channel rows (Meituan / gzgrocery) — a mirrored ledger, not a
          worklist item. They open a view-only detail drawer (product / SKU / qty)
          but carry no fulfilment actions. The channel cell renders identically to
@@ -2625,16 +2662,26 @@
          query switching to px widths, or a min-width on the table plus
          horizontal scroll — and the latter is already ruled out above. */
       #orders-table { table-layout: fixed; }
+      /* The selection column (bulk actions) costs 3%, taken one point each from
+         Channel, Status and Delivery — the three with slack. Items (6%) and
+         Placed (12%) are NOT touched: both are at a measured floor, stated
+         below and enforced by the overflow rule further down. The eleven
+         percentages still sum to exactly 100. */
+      #orders-table col.oc-c-sel      { width:  3%; }
       #orders-table col.oc-c-ord      { width:  9%; }
-      #orders-table col.oc-c-chan     { width: 10%; }
+      #orders-table col.oc-c-chan     { width:  9%; }
       #orders-table col.oc-c-cust     { width: 10%; }
       #orders-table col.oc-c-store    { width:  8%; }
       #orders-table col.oc-c-shipto   { width:  9%; }
       #orders-table col.oc-c-items    { width:  6%; }
       #orders-table col.oc-c-total    { width:  8%; }
-      #orders-table col.oc-c-status   { width: 15%; }
-      #orders-table col.oc-c-delivery { width: 13%; }
+      #orders-table col.oc-c-status   { width: 14%; }
+      #orders-table col.oc-c-delivery { width: 12%; }
       #orders-table col.oc-c-placed   { width: 12%; }
+      /* The checkbox cell is a target, not a text cell: centred, tight, and
+         with a hit area big enough to press on a laptop trackpad. */
+      #orders-table th.oc-sel, #orders-table td.oc-sel { text-align: center; padding-left: 4px; padding-right: 4px; }
+      #orders-table th.oc-sel input, #orders-table td.oc-sel input { width: 16px; height: 16px; cursor: pointer; margin: 0; vertical-align: middle; }
       /* 6% is Items' floor, and the binding constraint is its own HEADER, not
          its data: "Items" needs ~58px, the digit needs ~45. At 5% the header
          overflows into Total at 996px — measured, not assumed. Placed at 12%
@@ -2671,16 +2718,26 @@
     <!-- Customer-scope chip: shown only when the list is filtered to one
          customer (the "View all N orders" path from a customer's drawer). -->
     <div id="orders-cust-chip" class="ord-cust-chip" hidden></div>
+    <!-- Bulk selection bar. A MODE, not furniture: it is absent until the
+         operator ticks something, exactly as the Products bar behaves. Painted
+         by ordRenderBulkBar(). -->
+    <div id="ord-bulkbar"></div>
     <div class="list-card">
       <div class="table-wrap">
         <table id="orders-table">
           <colgroup>
-            <col class="oc-c-ord"><col class="oc-c-chan"><col class="oc-c-cust"><col class="oc-c-store"><col class="oc-c-shipto"><col class="oc-c-items"><col class="oc-c-total"><col class="oc-c-status"><col class="oc-c-delivery"><col class="oc-c-placed">
+            <col class="oc-c-sel"><col class="oc-c-ord"><col class="oc-c-chan"><col class="oc-c-cust"><col class="oc-c-store"><col class="oc-c-shipto"><col class="oc-c-items"><col class="oc-c-total"><col class="oc-c-status"><col class="oc-c-delivery"><col class="oc-c-placed">
           </colgroup>
           <thead><tr>
+            <!-- Select-all applies to THIS PAGE, which is why its label says so.
+                 A tick that silently selected orders on pages the operator
+                 cannot see would be a bulk action on an unknown set. -->
+            <th class="oc-sel"><input type="checkbox" id="ord-sel-all" onchange="ordSelectAllVisible(this.checked)"
+                                      title="Select every order on this page · 选择本页全部订单"
+                                      aria-label="Select every order on this page"></th>
             <th>Order # · 订单号</th><th>Channel · 渠道</th><th>Customer · 顾客</th><th>Store · 门店</th><th>Ship to · 收货地</th><th>Items · 商品</th><th class="numeric">Total · 合计</th><th>Status · 状态</th><th>Delivery · 配送</th><th>Placed · 下单时间</th>
           </tr></thead>
-          <tbody><tr><td colspan="10" class="muted">Loading · 加载中…</td></tr></tbody>
+          <tbody><tr><td colspan="11" class="muted">Loading · 加载中…</td></tr></tbody>
         </table>
       </div>
 
@@ -3386,6 +3443,20 @@
       }
       #tab-customers .cul-menu button:hover { background: var(--bg-elev-1); }
       #tab-customers .cul-menu button.sel { font-weight: 500; }
+      /* Tag menu: the name left, its count right, so the list reads as "how
+         many people are in this group" and not just a list of words. */
+      #tab-customers #cu-tag-menu button { justify-content: space-between; gap: 12px; }
+      #tab-customers #cu-tag-menu button.sel { background: var(--bg-elev-1); }
+      /* Tag chips on a roster row — under the phone, small and quiet. They are
+         a mark, not a column: three at most, then a "+N" so a heavily tagged
+         customer cannot push the row taller than its neighbours. */
+      #tab-customers .cul-tags { display: flex; gap: 4px; flex-wrap: nowrap; overflow: hidden; margin-top: 3px; }
+      #tab-customers .cul-tag {
+        font: 400 10.5px/1.5 var(--f-sans); color: var(--text-2);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 999px; padding: 0 7px; white-space: nowrap;
+      }
+      #tab-customers .cul-tag.more { color: var(--text-3); }
       /* Channel options carry their glyph, matching the Orders dropdown. */
       #tab-customers .cul-menu button.cul-menu-chan { align-items: center; gap: 9px; }
       #tab-customers .cul-menu-ico { display: inline-flex; align-items: center; color: var(--text-2); flex: none; }
@@ -3831,6 +3902,33 @@
          their NATURAL height and top-align — neither stretches to match its
          neighbour, so an uneven bottom edge is correct. */
       #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; align-items: start; }
+      /* ── Notes & tags card (audit E-02) ──────────────────────────────────
+         The tag row, the add field and the note share the card. The Save/Reset
+         foot is hidden until something has actually changed, so the card is
+         silent while it is only being read. */
+      #cu-drawer .cu-tagrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 10px; min-height: 24px; }
+      #cu-drawer .cu-tagchip {
+        display: inline-flex; align-items: center; gap: 5px;
+        font: 400 12px/1.6 var(--f-sans); color: var(--text-1);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 999px; padding: 1px 4px 1px 10px;
+      }
+      #cu-drawer .cu-tagchip .x {
+        background: none; border: 0; cursor: pointer; color: var(--text-3);
+        font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 999px;
+      }
+      #cu-drawer .cu-tagchip .x:hover { color: var(--danger); }
+      #cu-drawer .cu-tagadd { display: flex; gap: 6px; margin-bottom: 10px; }
+      #cu-drawer .cu-tagadd input { flex: 1; min-width: 0; }
+      #cu-drawer .cu-note-in {
+        width: 100%; box-sizing: border-box; resize: vertical; min-height: 62px;
+        font: 400 13.5px/1.6 var(--f-sans); color: var(--text-1);
+        background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: 10px; padding: 9px 11px;
+      }
+      #cu-drawer .cu-note-in:focus { outline: none; border-color: var(--accent); }
+      #cu-drawer .cu-note-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
       #cu-drawer .cux-card {
         background: var(--bg-pane); border: 1px solid var(--td-border); border-radius: 14px;
         padding: 24px; min-width: 0; align-self: start;
@@ -4020,10 +4118,22 @@
           <button type="button" class="cul-sel" id="cu-chan-btn" onclick="cuMenuToggle('chan', event)" aria-haspopup="true"></button>
           <div class="cul-menu" id="cu-chan-menu" hidden></div>
         </span>
+        <!-- Tags. Hidden by cuPaintFilterBar until the account has tagged
+             somebody: a facet with nothing behind it can only disappoint.
+             Several tags are an OR, unlike Tier and Channel — a person carries
+             one tier and one signup channel but any number of tags. -->
+        <span class="cul-selwrap" hidden>
+          <button type="button" class="cul-sel" id="cu-tag-btn" onclick="cuMenuToggle('tag', event)" aria-haspopup="true"></button>
+          <div class="cul-menu" id="cu-tag-menu" hidden></div>
+        </span>
         <span class="cul-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
           <input type="text" id="cu-q" data-ph-en="Search name or phone" data-ph-cn="搜索姓名或电话" placeholder="Search name or phone" oninput="cuSearchDebounced()">
         </span>
+        <!-- Download the customers currently listed — all of them, not just this
+             page, and filtered exactly as the roster is. -->
+        <button class="btn btn-sm" id="cu-export-btn" type="button" onclick="cuExportCsv()"
+                title="Download these customers as a spreadsheet · 下载当前顾客表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -4075,17 +4185,17 @@
           <button type="button" class="cu-modal-x" onclick="cuCloseEdit()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
-          <div class="field"><label class="stacked">Nickname · 昵称</label><input type="text" id="cu-edit-nickname"></div>
-          <div class="field" id="cu-edit-phone-field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-edit-phone" placeholder="+86…"><div class="cu-err" id="cu-edit-phone-err" data-no-i18n></div></div>
-          <div class="field" id="cu-edit-email-field"><label class="stacked">Email · 邮箱</label><input type="text" id="cu-edit-email"><div class="cu-err" id="cu-edit-email-err" data-no-i18n></div></div>
-          <div class="field"><label class="stacked">Gender · 性别</label>
+          <div class="field"><label for="cu-edit-nickname" class="stacked">Nickname · 昵称</label><input type="text" id="cu-edit-nickname"></div>
+          <div class="field" id="cu-edit-phone-field"><label for="cu-edit-phone" class="stacked">Phone · 电话</label><input type="text" id="cu-edit-phone" placeholder="+86…"><div class="cu-err" id="cu-edit-phone-err" data-no-i18n></div></div>
+          <div class="field" id="cu-edit-email-field"><label for="cu-edit-email" class="stacked">Email · 邮箱</label><input type="text" id="cu-edit-email"><div class="cu-err" id="cu-edit-email-err" data-no-i18n></div></div>
+          <div class="field"><label for="cu-edit-gender" class="stacked">Gender · 性别</label>
             <select id="cu-edit-gender">
               <option value="">— unknown —</option>
               <option value="1">Male · 男</option>
               <option value="2">Female · 女</option>
             </select>
           </div>
-          <div class="field" style="margin-bottom: 0;"><label class="stacked">Birthday · 生日</label><input type="date" id="cu-edit-birthday"></div>
+          <div class="field" style="margin-bottom: 0;"><label for="cu-edit-birthday" class="stacked">Birthday · 生日</label><input type="date" id="cu-edit-birthday"></div>
           <!-- Tier · 等级 is auto-derived from lifetime spend (thresholds in routes/retail.js → TIER_THRESHOLDS). The detail header already shows the current pill — no manual override here. -->
         </div>
         <div class="pu-editor-foot">
@@ -4105,9 +4215,9 @@
           <button type="button" class="cu-modal-x" onclick="cuCloseCreate()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
-          <div class="field"><label class="stacked">Name · 姓名</label><input type="text" id="cu-new-nickname" maxlength="60" placeholder="e.g. 王小姐 / Ms Wang"></div>
-          <div class="field" id="cu-new-phone-field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-new-phone" maxlength="20" placeholder="+86…"><div class="cu-err" id="cu-new-phone-err" data-no-i18n></div></div>
-          <div class="field" id="cu-new-email-field" style="margin-bottom: 0;"><label class="stacked">Email · 邮箱 <span class="muted">(optional · 选填)</span></label><input type="text" id="cu-new-email" maxlength="120" placeholder="name@example.com"><div class="cu-err" id="cu-new-email-err" data-no-i18n></div>
+          <div class="field"><label for="cu-new-nickname" class="stacked">Name · 姓名</label><input type="text" id="cu-new-nickname" maxlength="60" placeholder="e.g. 王小姐 / Ms Wang"></div>
+          <div class="field" id="cu-new-phone-field"><label for="cu-new-phone" class="stacked">Phone · 电话</label><input type="text" id="cu-new-phone" maxlength="20" placeholder="+86…"><div class="cu-err" id="cu-new-phone-err" data-no-i18n></div></div>
+          <div class="field" id="cu-new-email-field" style="margin-bottom: 0;"><label for="cu-new-email" class="stacked">Email · 邮箱 <span class="muted">(optional · 选填)</span></label><input type="text" id="cu-new-email" maxlength="120" placeholder="name@example.com"><div class="cu-err" id="cu-new-email-err" data-no-i18n></div>
             <div class="helper">Enter a name or a phone (or both). If the phone already belongs to a customer, we link to that record instead of creating a duplicate. · 填写姓名或电话(可都填)。若该电话已有顾客,将关联到现有记录而非新建。</div>
           </div>
         </div>
@@ -4129,7 +4239,7 @@
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div id="cu-msg-who" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
           <div class="field" style="margin-bottom: 0;">
-            <label class="stacked">Message · 消息</label>
+            <label for="cu-msg-text" class="stacked">Message · 消息</label>
             <textarea id="cu-msg-text" maxlength="4000" placeholder="Write a message to this customer…"></textarea>
             <div class="helper">Lands in their in-app inbox (mini app + web). They can reply and you'll see it in the Feedback tab. · 会进入顾客的站内消息（小程序和网页）。顾客可回复，回复显示在“反馈”标签页。</div>
           </div>
@@ -4158,12 +4268,12 @@
                  no pair here for the walker to split and nothing to shield. -->
           <div id="cu-adjust-current" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
           <div class="field">
-            <label class="stacked">Amount · 金额</label>
+            <label for="cu-adjust-delta" class="stacked">Amount · 金额</label>
             <input type="number" id="cu-adjust-delta" step="any" placeholder="e.g. 50 or -20">
             <div class="helper">Writes a ledger row so the audit trail stays intact. Cannot push the balance below zero. · 会写入流水以保留审计轨迹。不可将余额扣至负数。</div>
           </div>
           <div class="field" id="cu-adjust-reason-field" style="margin-bottom: 0;">
-            <label class="stacked">Reason · 原因</label>
+            <label for="cu-adjust-reason" class="stacked">Reason · 原因</label>
             <textarea id="cu-adjust-reason" placeholder="e.g. Goodwill credit for late delivery"></textarea>
             <div class="cu-err" id="cu-adjust-reason-err" data-no-i18n></div>
           </div>
@@ -4194,11 +4304,11 @@
                absence of a marker means required, and nothing is coloured to
                say it. -->
           <div class="field">
-            <label class="stacked">Recipient name · 收件人</label>
+            <label for="cu-addr-recipient" class="stacked">Recipient name · 收件人</label>
             <input type="text" id="cu-addr-recipient">
           </div>
           <div class="field">
-            <label class="stacked">Phone · 电话</label>
+            <label for="cu-addr-phone" class="stacked">Phone · 电话</label>
             <input type="text" id="cu-addr-phone">
             <!-- The phone arrives pre-filled from the customer's own record on
                  a NEW address. Helpful, but silent prefill is indistinguishable
@@ -4206,27 +4316,27 @@
             <div class="helper" id="cu-addr-phone-note" hidden data-no-i18n></div>
           </div>
           <div class="field">
-            <label class="stacked">Province · 省份 <span class="muted">(optional · 选填)</span></label>
+            <label for="cu-addr-province" class="stacked">Province · 省份 <span class="muted">(optional · 选填)</span></label>
             <select id="cu-addr-province" onchange="cuAddrProvinceChanged()"><option value="">Select province · 选择省份</option></select>
           </div>
           <div class="field">
-            <label class="stacked">City · 城市 <span class="muted">(optional · 选填)</span></label>
+            <label for="cu-addr-city" class="stacked">City · 城市 <span class="muted">(optional · 选填)</span></label>
             <select id="cu-addr-city" onchange="cuAddrCityChanged()"><option value="">Select city · 选择城市</option></select>
           </div>
           <div class="field">
-            <label class="stacked">District · 区/县 <span class="muted">(optional · 选填)</span></label>
+            <label for="cu-addr-district" class="stacked">District · 区/县 <span class="muted">(optional · 选填)</span></label>
             <select id="cu-addr-district"><option value="">Select district · 选择区/县</option></select>
           </div>
           <div class="field">
-            <label class="stacked">Postal code · 邮编 <span class="muted">(optional · 选填)</span></label>
+            <label for="cu-addr-postal" class="stacked">Postal code · 邮编 <span class="muted">(optional · 选填)</span></label>
             <input type="text" id="cu-addr-postal">
           </div>
           <div class="field cu-addr-wide">
-            <label class="stacked">Street address · 详细地址</label>
+            <label for="cu-addr-address" class="stacked">Street address · 详细地址</label>
             <input type="text" id="cu-addr-address" placeholder="Street, building number">
           </div>
           <div class="field cu-addr-wide">
-            <label class="stacked">Detail · 详情 <span class="muted">(optional · 选填)</span></label>
+            <label for="cu-addr-detail" class="stacked">Detail · 详情 <span class="muted">(optional · 选填)</span></label>
             <input type="text" id="cu-addr-detail" placeholder="Floor, unit, apt">
           </div>
           <div class="cu-addr-wide">
@@ -4385,7 +4495,10 @@
       <div class="pa-split-list">
         <div id="pa-bulkbar"></div>
         <div id="pa-grid" class="pa-grid"></div>
-        <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
+        <!-- Filled by paRender(): a catalogue with nothing in it gets a first action,
+             a filter that matched nothing gets its filters back. Two different
+             nothings — one message used to answer both. -->
+        <div id="pa-empty" class="pa-empty" style="display:none"></div>
         <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:var(--s3) 0 0;font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
       </div>
 
@@ -4498,8 +4611,8 @@
                      heading does not (Photos, Sourcing, Shipping…). -->
                 <div class="pd-sec-h" data-dock-only="1">Basics · 基础</div>
                 <div class="pdb-fields">
-                  <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
-                  <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
+                  <div class="field"><label for="pd-name-en" class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
+                  <div class="field"><label for="pd-name-cn" class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
                   <!-- PRICE, COST AND WAS-PRICE MOVED TO THE "Cost & price"
                        PANE (Step 3, docs/tacet-product-build-lines-design.md).
                        They are the SAME nodes with the SAME ids, relocated —
@@ -4516,7 +4629,7 @@
                        product, not a fact about how many you have — and on the
                        Stock tab it sat directly above the counts, pushing the
                        numbers people came for below the fold. -->
-                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" data-ph-en="required" data-ph-cn="必填" placeholder="required"></div>
+                  <div class="field"><label for="pd-sku" class="stacked">SKU · 货号</label><input type="text" id="pd-sku" data-ph-en="required" data-ph-cn="必填" placeholder="required"></div>
                 </div>
               </section>
 
@@ -4556,11 +4669,11 @@
               <section class="pdb-card pdb-c7" id="pd-sec-where">
                 <div class="pd-sec-h" data-dock-only="1">Where it shows · 分类与陈列</div>
                 <div class="pdb-fields">
-                  <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
+                  <div class="field"><label for="pd-top-category" class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
                     <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
-                  <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
+                  <div class="field"><label for="pd-subcategory" class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
                     <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
-                  <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
+                  <div class="field"><label for="pd-badge" class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
                     <select id="pd-badge">
                       <option value="">None · 无</option>
                       <option value="auto">Auto · 自动 (by sales · 按销量)</option>
@@ -4570,7 +4683,7 @@
                       <option value="hot">HOT · 推荐</option>
                     </select>
                   </div>
-                  <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+                  <div class="field"><label for="pd-weight" class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
                 </div>
               </section>
 
@@ -4635,8 +4748,8 @@
               <aside class="pd-bl-rail">
                 <section class="pdb-card">
                   <div class="pdb-fields">
-                    <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-                    <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+                    <div class="field"><label for="pd-price" class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                    <div class="field"><label for="pd-compare" class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
                   </div>
                 </section>
 
@@ -4712,14 +4825,14 @@
                   <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
                     <div id="pd-store-stocks">—</div>
                   </div>
-                  <div class="field"><label class="stacked">Low-stock alert at · 低库存提醒阈值 <span class="muted" style="font-weight:400;">(optional)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Flag this product as low when stock falls to this many units or fewer. Leave blank to use the store default. · 库存降到该数量(含)及以下时标记为低库存。留空则使用全店默认值。</span></span></label>
+                  <div class="field"><label for="pd-low-stock" class="stacked">Low-stock alert at · 低库存提醒阈值 <span class="muted" style="font-weight:400;">(optional)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Flag this product as low when stock falls to this many units or fewer. Leave blank to use the store default. · 库存降到该数量(含)及以下时标记为低库存。留空则使用全店默认值。</span></span></label>
                     <input type="number" id="pd-low-stock" min="0" step="1" placeholder="" style="max-width:140px">
                   </div>
                 </div>
                 <div id="pd-stock-supplier-note" class="muted" style="display:none;font-weight:400;font-size:12px;line-height:1.5;">No stock tracked — this ships from the supplier and is always available. Manage availability with “Supplier out — pause selling” below. · 不跟踪库存——由供应商直发,始终有货。可用下方的“供应商缺货,暂停销售”控制是否可售。</div>
                 <div id="pd-oos-block" style="border-top:1px solid var(--line-soft);padding-top:10px;">
                   <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。</span></span></div>
-                  <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
+                  <select id="pd-oos-policy" aria-label="What happens when this product is out of stock · 缺货时的处理方式" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
                     <option value="strict">Sold out everywhere · 全国售罄停售</option>
                     <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
                   </select>
@@ -4901,7 +5014,7 @@
               <!-- Internal notes -->
               <section class="pdb-card pdb-c12" id="pd-sec-notes">
                 <div class="pd-sec-h">Internal notes · 内部备注 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(staff only — never shown to shoppers)</span></div>
-                <textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
+                <textarea id="pd-notes" aria-label="Internal notes, never shown to shoppers · 内部备注,顾客不可见" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
               </section>
 
             </div>
@@ -5040,9 +5153,9 @@
     <div id="act-tabs"></div>
 
     <div class="act-toolbar">
-      <input id="act-from" type="date" class="act-date" onchange="actLoad(true)">
+      <input id="act-from" aria-label="From date · 起始日期" type="date" class="act-date" onchange="actLoad(true)">
       <span class="act-arrow">→</span>
-      <input id="act-to" type="date" class="act-date" onchange="actLoad(true)">
+      <input id="act-to" aria-label="To date · 结束日期" type="date" class="act-date" onchange="actLoad(true)">
       <span class="act-quick">
         <button type="button" onclick="actSetRange('today')">Today · 今天</button>
         <button type="button" onclick="actSetRange('week')">7d · 近7天</button>
@@ -5142,7 +5255,7 @@
             <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);font-weight:600;margin-bottom:3px;">NEW PRODUCT · 新增产品</div>
             <h3 id="pw-title" style="margin: 0; font-size: 15px;">Add a product · 添加产品</h3>
           </div>
-          <button class="btn" onclick="pwClose()">Close · 关闭</button>
+          <button class="btn" onclick="pwTryClose()">Close · 关闭</button>
         </div>
         <div id="pw-body" style="display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; max-height: 78vh; overflow: auto;"></div>
         <div id="pw-foot" class="vw-foot"></div>
@@ -5193,7 +5306,7 @@
          switches, label edit, grants, on/off. dw-dismiss = outside click
          closes it; tr.vch-row is exempted in 04-orders.js so the opening
          click doesn't instantly close it. -->
-    <aside id="vch-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+    <aside role="dialog" id="vch-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
       <button type="button" class="drawer-close" onclick="closeDrawer('#vch-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -5212,7 +5325,7 @@
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div class="field" style="margin: 0;">
-            <label class="stacked">Note (optional, internal only) · 备注(可选,仅内部可见)</label>
+            <label for="grant-note" class="stacked">Note (optional, internal only) · 备注(可选,仅内部可见)</label>
             <input type="text" id="grant-note" placeholder="e.g. Goodwill credit for late delivery" style="width: 100%;">
           </div>
           <div style="margin-top: 14px; padding: 12px; background: var(--bg-elev-1); border-radius: var(--r-md); display: flex; align-items: center; justify-content: space-between; gap: 12px;">
@@ -5223,7 +5336,7 @@
             <button class="btn btn-primary" onclick="grantToAll()">Grant to all · 全部发放</button>
           </div>
           <div class="field" style="margin-top: 18px;">
-            <label class="stacked">Or grant to a specific customer · 或发放给指定顾客</label>
+            <label for="grant-search" class="stacked">Or grant to a specific customer · 或发放给指定顾客</label>
             <input type="text" id="grant-search" data-ph-en="Search by name, phone, or openid…" data-ph-cn="搜索姓名、电话或 openid…" placeholder="Search by name, phone, or openid…" oninput="searchGrantCustomers()" style="width: 100%;">
           </div>
           <div>
@@ -5994,7 +6107,7 @@
   <!-- Pop-up editor — centered modal (not an edge drawer) so the customer
        preview has room to breathe, matching the Flash sale composer. -->
   <div id="pu-editor-scrim" onclick="closeDrawer('#pu-editor-bg')"></div>
-  <aside id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
+  <aside role="dialog" id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
     <div class="drawer-head">
       <div style="font-size: 14px; font-weight: 600;" id="pu-editor-title">Pop-up · 弹窗</div>
       <button class="btn btn-ghost btn-icon" onclick="closeDrawer('#pu-editor-bg')" title="Close · 关闭 (Esc)">
@@ -6006,7 +6119,7 @@
         <div class="pu-form">
           <input type="hidden" id="pu-id">
 
-          <label class="pg-label" style="margin-bottom: 6px;">Internal name <span class="opt">— admin only, never shown to customers · 仅管理员可见</span></label>
+          <label for="pu-name" class="pg-label" style="margin-bottom: 6px;">Internal name <span class="opt">— admin only, never shown to customers · 仅管理员可见</span></label>
           <input type="text" id="pu-name" class="pg-in" placeholder="e.g. Spring promo · home">
 
           <div class="pg-ed-eyebrow gap">The message · 内容</div>
@@ -6042,7 +6155,7 @@
             <input type="text" id="pu-cta_label_cn" class="pg-in" placeholder="立即购买">
           </div>
           <div style="height: 10px;"></div>
-          <select id="pu-cta_target_kind" class="pg-sel">
+          <select id="pu-cta_target_kind" aria-label="What the button opens · 按钮打开的内容" class="pg-sel">
             <option value="">— No button, just close · 无按钮,仅关闭</option>
             <option value="shop">Opens Shop tab · 打开商城页</option>
             <option value="cart">Opens Cart tab · 打开购物车页</option>
@@ -6058,11 +6171,11 @@
           <!-- Secondary picker: product -->
           <div id="pu-cta_product_wrap" style="margin-top: 8px; display: none;">
             <input type="text" id="pu-cta_product_search" class="pg-in" data-ph-en="Type to search products by name or SKU…" data-ph-cn="按名称或货号搜索" placeholder="Type to search products by name or SKU…" style="margin-bottom: 6px;">
-            <select id="pu-cta_target_product" size="6" class="pg-sel" style="font-family: var(--f-mono); font-size: 12px;"></select>
+            <select id="pu-cta_target_product" aria-label="Which product the button opens · 按钮打开的商品" size="6" class="pg-sel" style="font-family: var(--f-mono); font-size: 12px;"></select>
           </div>
           <!-- Secondary picker: category -->
           <div id="pu-cta_category_wrap" style="margin-top: 8px; display: none;">
-            <select id="pu-cta_target_category" class="pg-sel"></select>
+            <select id="pu-cta_target_category" aria-label="Which category the button opens · 按钮打开的分类" class="pg-sel"></select>
           </div>
           <input type="hidden" id="pu-cta_target">
           <div class="pg-hint" id="pu-cta_target_preview"></div>
@@ -6092,16 +6205,16 @@
                 <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
               </div>
               <div class="pg-step-body">
-                <label class="pg-label">Appears · 触发时机</label>
+                <label for="pu-trigger" class="pg-label">Appears · 触发时机</label>
                 <select id="pu-trigger" class="pg-sel">
                   <option value="on_load">The moment the page opens · 打开页面即弹出</option>
                   <option value="after_seconds">A few seconds after · 数秒后弹出</option>
                 </select>
                 <div id="pu-delay-wrap" style="margin-top: 12px;">
-                  <label class="pg-label">Delay in seconds · 延时(秒)</label>
+                  <label for="pu-delay" class="pg-label">Delay in seconds · 延时(秒)</label>
                   <input type="number" id="pu-delay" min="0" value="3" class="pg-in">
                 </div>
-                <label class="pg-label" style="margin-top: 14px;">How often · 频率</label>
+                <label for="pu-frequency" class="pg-label" style="margin-top: 14px;">How often · 频率</label>
                 <select id="pu-frequency" class="pg-sel">
                   <option value="once">Once per customer, ever · 每位顾客仅一次</option>
                   <option value="daily">Once a day · 每天一次</option>
@@ -6121,11 +6234,11 @@
               <div class="pg-step-body">
                 <div class="pg-two">
                   <div>
-                    <label class="pg-label">Start · 开始 <span class="opt">(optional)</span></label>
+                    <label for="pu-start_at" class="pg-label">Start · 开始 <span class="opt">(optional)</span></label>
                     <input type="date" id="pu-start_at" class="pg-in">
                   </div>
                   <div>
-                    <label class="pg-label">End · 结束 <span class="opt">(optional)</span></label>
+                    <label for="pu-end_at" class="pg-label">End · 结束 <span class="opt">(optional)</span></label>
                     <input type="date" id="pu-end_at" class="pg-in">
                   </div>
                 </div>
@@ -6378,7 +6491,7 @@
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
-              <label class="bx-label">Activity · 活跃度</label>
+              <label for="bc-activity" class="bx-label">Activity · 活跃度</label>
               <select id="bc-activity" class="bx-sel" onchange="bcAudienceChanged()">
                 <option value="all">All active customers · 所有活跃客户</option>
                 <option value="buyers">Has ordered · 曾下单</option>
@@ -6411,18 +6524,18 @@
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
-              <select id="bc-schedule-mode" class="bx-sel" onchange="bcScheduleMode()">
+              <select id="bc-schedule-mode" aria-label="When to send · 发送时间" class="bx-sel" onchange="bcScheduleMode()">
                 <option value="now">Send now · 立即发送</option>
                 <option value="later">Schedule for later · 定时发送</option>
               </select>
-              <input id="bc-schedule-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
+              <input id="bc-schedule-at" aria-label="Date and time to send · 发送日期与时间" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
               <div class="bx-gap"></div>
-              <label class="bx-label">Stops showing · 停止显示 <span class="bx-opt">— when it should drop out of the inbox · 何时从收件箱消失</span></label>
+              <label for="bc-expire-mode" class="bx-label">Stops showing · 停止显示 <span class="bx-opt">— when it should drop out of the inbox · 何时从收件箱消失</span></label>
               <select id="bc-expire-mode" class="bx-sel" onchange="bcExpireMode()">
                 <option value="never">Never — stays until recalled · 一直保留,直到撤回</option>
                 <option value="at">On a date · 到期时间</option>
               </select>
-              <input id="bc-expire-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
+              <input id="bc-expire-at" aria-label="Date it drops out of the inbox · 从收件箱消失的日期" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
             </div>
           </div>
 
@@ -6435,7 +6548,7 @@
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
-              <label class="bx-label">Tapping the notification opens · 点击通知后打开</label>
+              <label for="bc-deeplink-preset" class="bx-label">Tapping the notification opens · 点击通知后打开</label>
               <select id="bc-deeplink-preset" class="bx-sel" onchange="bcDeeplinkPreset()">
                 <option value="">Nothing — just show the message · 不跳转,仅显示消息</option>
                 <option value="/pages/shop/shop">Shop · 商城</option>
@@ -6887,7 +7000,7 @@
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Flat fee · 统一运费</label>
-            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" min="0" step="0.01" value="25" style="width: 90px;"></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" aria-label="Flat delivery fee · 统一运费" min="0" step="0.01" value="25" style="width: 90px;"></span>
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Free over · 满额免运</label>
@@ -6895,7 +7008,7 @@
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Packing / item · 每件包装费</label>
-            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" min="0" step="0.01" value="0" style="width: 80px;"></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" aria-label="Packing fee per item · 每件包装费" min="0" step="0.01" value="0" style="width: 80px;"></span>
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Packing cap · 包装费上限</label>
@@ -6903,7 +7016,7 @@
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Lead time · 备货天数</label>
-            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" aria-label="Lead time in days · 备货天数" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
           </div>
           <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
         </div>
@@ -6917,7 +7030,7 @@
           <h3 class="fc-sec" style="margin-bottom: 12px;">Kitchen address (customer-facing) · 厨房地址(顾客可见)</h3>
           <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
             <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-              <label class="stacked">Address · 地址</label>
+              <label for="dlv-kitchen-address" class="stacked">Address · 地址</label>
               <input type="text" id="dlv-kitchen-address" placeholder="广州市天河区 (Roots Kitchen)" style="width: 100%;">
             </div>
             <button class="btn btn-primary" onclick="saveDeliveryDefaults()">Save · 保存</button>
@@ -6955,7 +7068,7 @@
           <div class="ctrl" style="flex: 1;">
             <div class="field" style="margin: 0;">
               <label class="stacked">Threshold · 门槛</label>
-              <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
+              <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold" aria-label="Free-shipping threshold · 包邮门槛"></span>
             </div>
             <div class="helper" style="margin-top: 10px;">
               Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee. · 设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。
@@ -6974,7 +7087,7 @@
           <div class="ctrl" style="flex: 1;">
             <div class="field" style="margin: 0;">
               <label class="stacked">Standard fee · 标准费</label>
-              <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
+              <span class="yen-input"><input type="number" id="cfg-fees-standardShipping" aria-label="Standard delivery fee · 标准运费"></span>
             </div>
             <div class="helper" style="margin-top: 10px;">
               Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold. · 每笔标准配送订单都会收取,除非小计达到包邮门槛。
@@ -6993,7 +7106,7 @@
           <div class="ctrl" style="flex: 1;">
             <div class="field" style="margin: 0;">
               <label class="stacked">Same-day fee · 当日达费用</label>
-              <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
+              <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery" aria-label="Same-day delivery fee · 当日达费用"></span>
             </div>
             <div class="helper" style="margin-top: 10px;">
               Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout. · 每笔当日达订单都会收取,与购物车大小无关。顾客会在结算页选项旁看到此费用。
@@ -7012,7 +7125,7 @@
           <div class="ctrl" style="flex: 1;">
             <div class="field" style="margin: 0;">
               <label class="stacked">Minimum subtotal · 起送金额</label>
-              <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
+              <span class="yen-input"><input type="number" id="cfg-fees-minOrder" aria-label="Minimum order subtotal · 起送金额"></span>
             </div>
             <div class="helper" style="margin-top: 10px;">
               Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。
@@ -7046,15 +7159,15 @@
           <div class="ctrl" style="flex: 1;">
             <div style="display: flex; gap: 14px; flex-wrap: wrap;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Opens · 开始</label>
+                <label for="cfg-pickup-open" class="stacked">Opens · 开始</label>
                 <input type="time" id="cfg-pickup-open">
               </div>
               <div class="field" style="margin: 0;">
-                <label class="stacked">Closes · 结束</label>
+                <label for="cfg-pickup-close" class="stacked">Closes · 结束</label>
                 <input type="time" id="cfg-pickup-close">
               </div>
               <div class="field" style="margin: 0;">
-                <label class="stacked">Earliest pickup · 最早可取</label>
+                <label for="cfg-pickup-lead" class="stacked">Earliest pickup · 最早可取</label>
                 <input type="number" id="cfg-pickup-lead" min="0" step="5" placeholder="0" style="width: 120px;">
               </div>
             </div>
@@ -7076,7 +7189,7 @@
           <div class="ctrl" style="flex: 1;">
             <div class="field" style="margin: 0;">
               <label class="stacked">Packing fee · 包装费</label>
-              <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
+              <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee" aria-label="Pickup packing fee · 自提包装费"></span>
             </div>
             <div class="helper" style="margin-top: 10px;">
               Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。
@@ -7109,11 +7222,11 @@
             </label>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-            <label class="stacked">Message (English) · 英文消息</label>
+            <label for="dlv-holiday-msg-en" class="stacked">Message (English) · 英文消息</label>
             <textarea id="dlv-holiday-msg-en" rows="2" style="width: 100%;" placeholder="We're closed for a short holiday — your order will ship as soon as we're back."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-            <label class="stacked">消息(中文)· Message (Chinese)</label>
+            <label for="dlv-holiday-msg-cn" class="stacked">消息(中文)· Message (Chinese)</label>
             <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
           </div>
           <button class="btn btn-primary" onclick="saveHolidayMode()" style="align-self: flex-end;">Save · 保存</button>
@@ -7134,16 +7247,16 @@
           <div class="field" style="margin: 0;">
             <label class="stacked">Cutoff · 截单时间</label>
             <span class="row" style="gap: 6px; align-items: center;">
-              <input type="number" id="dlv-cutoff-minutes" min="0" max="180" step="1" style="width: 80px;">
+              <input type="number" id="dlv-cutoff-minutes" aria-label="Order cutoff, in minutes · 截单时间(分钟)" min="0" max="180" step="1" style="width: 80px;">
               <span class="muted" style="font-size: 12px;">min before close · 分钟(关门前)</span>
             </span>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-            <label class="stacked">Message (English) · 英文消息 <span class="muted" style="font-weight: 400;">— optional, leave blank for the default</span></label>
+            <label for="dlv-cutoff-msg-en" class="stacked">Message (English) · 英文消息 <span class="muted" style="font-weight: 400;">— optional, leave blank for the default</span></label>
             <textarea id="dlv-cutoff-msg-en" rows="2" style="width: 100%;" placeholder="Too late for same-day delivery — we stop taking today's orders 10 min before we close at 8pm. Please choose a time for tomorrow."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-            <label class="stacked">消息(中文)· Message (Chinese) <span class="muted" style="font-weight: 400;">— 可留空,使用默认文案</span></label>
+            <label for="dlv-cutoff-msg-cn" class="stacked">消息(中文)· Message (Chinese) <span class="muted" style="font-weight: 400;">— 可留空,使用默认文案</span></label>
             <textarea id="dlv-cutoff-msg-cn" rows="2" style="width: 100%;" placeholder="已过今日配送截单时间 — 关门前 10 分钟停止接单(今日 20:00 关门)。请选择明天的配送时段。"></textarea>
           </div>
           <button class="btn btn-primary" onclick="saveCutoffSettings()" style="align-self: flex-end;">Save · 保存</button>
@@ -7175,50 +7288,50 @@
             </label>
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">A batch day · 某个制作日</label>
+            <label for="batch-anchor" class="stacked">A batch day · 某个制作日</label>
             <input type="date" id="batch-anchor" style="width: 170px;">
           </div>
           <div class="field" style="margin: 0;">
             <label class="stacked">Make every · 每隔</label>
-            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" aria-label="Make every N days · 每隔几天制作" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-            <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期)</label>
+            <label for="batch-skip" class="stacked">Skip these dates (vacations) · 跳过这些日期(假期)</label>
             <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
             <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文)</label>
+            <label for="batch-kicker-en" class="stacked">Popup eyebrow — English · 弹窗小标题(英文)</label>
             <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
+            <label for="batch-kicker-cn" class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
             <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">Popup title — English · 弹窗标题(英文)</label>
+            <label for="batch-title-en" class="stacked">Popup title — English · 弹窗标题(英文)</label>
             <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
+            <label for="batch-title-cn" class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
             <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">Checkout notice — English · 结账提示(英文)</label>
+            <label for="batch-msg-en" class="stacked">Checkout notice — English · 结账提示(英文)</label>
             <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
+            <label for="batch-msg-cn" class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
             <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">Freshness tip — English · 新鲜提示(英文)</label>
+            <label for="batch-tip-en" class="stacked">Freshness tip — English · 新鲜提示(英文)</label>
             <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
+            <label for="batch-tip-cn" class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
             <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%;">
@@ -7233,27 +7346,27 @@
             </div>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">GZ popup eyebrow — English · 广州弹窗小标题(英文)</label>
+            <label for="batch-local-kicker-en" class="stacked">GZ popup eyebrow — English · 广州弹窗小标题(英文)</label>
             <input id="batch-local-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Next fresh batch">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">广州弹窗小标题(中文)· GZ popup eyebrow — Chinese</label>
+            <label for="batch-local-kicker-cn" class="stacked">广州弹窗小标题(中文)· GZ popup eyebrow — Chinese</label>
             <input id="batch-local-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="下一批现做">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">GZ popup title — English · 广州弹窗标题(英文)</label>
+            <label for="batch-local-title-en" class="stacked">GZ popup title — English · 广州弹窗标题(英文)</label>
             <input id="batch-local-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh on {make_date}">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">广州弹窗标题(中文)· GZ popup title — Chinese</label>
+            <label for="batch-local-title-cn" class="stacked">广州弹窗标题(中文)· GZ popup title — Chinese</label>
             <input id="batch-local-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="{make_date} 新鲜现做">
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">GZ checkout notice — English · 广州结账提示(英文)</label>
+            <label for="batch-local-msg-en" class="stacked">GZ checkout notice — English · 广州结账提示(英文)</label>
             <textarea id="batch-local-msg-en" rows="2" style="width: 100%;" placeholder="Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">广州结账提示(中文)· GZ checkout notice — Chinese</label>
+            <label for="batch-local-msg-cn" class="stacked">广州结账提示(中文)· GZ checkout notice — Chinese</label>
             <textarea id="batch-local-msg-cn" rows="2" style="width: 100%;" placeholder="您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 {make_date} 制作下一批 — 制作完成后会尽快为您配送。"></textarea>
           </div>
           <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
@@ -7269,7 +7382,7 @@
           <div class="field" style="margin: 0;">
             <label class="stacked">Lock at hour, evening before · 前一晚锁定时间</label>
             <span style="display:inline-flex;align-items:center;gap:6px;">
-              <input type="number" id="fresh-resched-cutoff" min="0" max="23" step="1" value="20" style="width: 80px;">
+              <input type="number" id="fresh-resched-cutoff" aria-label="Hour the evening before that locks the slot · 前一晚锁定时段的时间" min="0" max="23" step="1" value="20" style="width: 80px;">
               <span style="font-size:12px;">:00 &nbsp;(0–23)</span>
             </span>
           </div>
@@ -7291,20 +7404,20 @@
         <div class="muted" style="margin-bottom:14px">Free subscribe-push API. Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
         <div class="ops-grid">
           <div>
-            <label class="field-label">Customer ID · 客户编号</label>
+            <label for="kd100-customer" class="field-label">Customer ID · 客户编号</label>
             <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
           </div>
           <div>
-            <label class="field-label">Authorization key · 授权 Key</label>
+            <label for="kd100-key" class="field-label">Authorization key · 授权 Key</label>
             <input type="password" id="kd100-key" data-ph-en="paste authorization key" data-ph-cn="粘贴授权 Key" placeholder="paste authorization key">
           </div>
           <div style="grid-column:1/-1">
-            <label class="field-label">Callback URL · 回调地址</label>
+            <label for="kd100-callback" class="field-label">Callback URL · 回调地址</label>
             <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
             <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update. · 在快递100后台将其加入白名单;每次轨迹更新都会触发回调。</div>
           </div>
           <div style="grid-column:1/-1">
-            <label class="field-label">Callback secret · 回调密钥</label>
+            <label for="kd100-secret" class="field-label">Callback secret · 回调密钥</label>
             <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
             <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone. · 用于验证回调确实来自我们发起的请求;设置一次后请勿改动。</div>
           </div>
@@ -7387,25 +7500,36 @@
       <div class="card" style="margin-bottom: var(--s4);" id="logpanel-jd">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>App keys · 应用密钥</strong> <span id="jd-chip"></span></div>
         <div class="muted" style="margin-bottom:14px">Request LOP API access from your JD account manager. · 请向您的京东客户经理申请 LOP API 权限。</div>
+        <!-- Where each of these four comes from (audit G-01). The names are JD's
+             own words and cannot be renamed without making them un-findable on
+             JD's site; what was missing was a sentence saying where to look.
+             Same shape as the WeChat payment wizard's own credential help. -->
+        <div class="helper" style="margin-bottom:14px;line-height:1.6">
+          <b>Where to find these · 在哪里找到这些</b><br>
+          <b>app_key</b> and <b>app_secret</b> — on your app's page at lop.jd.com, under 应用管理. · 在 lop.jd.com 的「应用管理」中查看你的应用。<br>
+          <b>access_token</b> — issued when you authorise the app against your merchant account; JD's account manager runs this with you once. · 授权应用绑定商家账号时签发,由京东客户经理协助完成一次。<br>
+          <b>customer_code</b> — your merchant code, in the JD Logistics merchant back office at jdl.com. · 商家编码,在 jdl.com 商家后台可见。<br>
+          Keep <b>API environment</b> on <b>production</b> unless JD has given you sandbox credentials to test with. · 除非京东给了沙箱凭证用于测试,否则保持 production。
+        </div>
         <div class="ops-grid">
           <div>
-            <label class="field-label">app_key</label>
+            <label for="jd-app_key" class="field-label">app_key</label>
             <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
           </div>
           <div>
-            <label class="field-label">app_secret</label>
+            <label for="jd-app_secret" class="field-label">app_secret</label>
             <input type="password" id="jd-app_secret" placeholder="paste app_secret">
           </div>
           <div style="grid-column:1/-1">
-            <label class="field-label">access_token</label>
+            <label for="jd-access_token" class="field-label">access_token</label>
             <input type="password" id="jd-access_token" placeholder="OAuth token">
           </div>
           <div>
-            <label class="field-label">customer_code · 商家编码</label>
+            <label for="jd-customer_code" class="field-label">customer_code · 商家编码</label>
             <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
           </div>
           <div>
-            <label class="field-label">API environment</label>
+            <label for="jd-env" class="field-label">API environment</label>
             <select id="jd-env">
               <option value="production">production</option>
               <option value="sandbox">sandbox</option>
@@ -7435,7 +7559,7 @@
             <div style="font-weight:600">Auto-send paid orders to Qingyun · 付款后自动发到青云</div>
             <div class="muted" style="font-size:11px;margin-top:2px">When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing. · 开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。</div>
           </div>
-          <input type="checkbox" id="qy-autopush" onchange="_setQingyunAutoPush(this.checked)" style="width:20px;height:20px;flex-shrink:0;cursor:pointer">
+          <input type="checkbox" id="qy-autopush" aria-label="Send paid delivery orders to the courier automatically · 自动将已付款配送订单推送给运力" onchange="_setQingyunAutoPush(this.checked)" style="width:20px;height:20px;flex-shrink:0;cursor:pointer">
         </div>
         <div id="qy-stores" class="muted">Loading… · 加载中…</div>
       </div>
@@ -7491,8 +7615,8 @@
             <span class="dlvwiz-cl">
               <span class="dlvwiz-ct">One flat price · 统一运费</span>
               <span class="dlvwiz-inl">
-                Charge · 每单收 ¥<input type="number" inputmode="decimal" id="dlvwiz-flat" class="dlvwiz-in" value="8" onclick="event.stopPropagation()">
-                &nbsp;· free over · 满 ¥<input type="number" inputmode="decimal" id="dlvwiz-free" class="dlvwiz-in" value="99" onclick="event.stopPropagation()">
+                Charge · 每单收 ¥<input type="number" inputmode="decimal" id="dlvwiz-flat" aria-label="Flat charge per order · 每单统一运费" class="dlvwiz-in" value="8" onclick="event.stopPropagation()">
+                &nbsp;· free over · 满 ¥<input type="number" inputmode="decimal" id="dlvwiz-free" aria-label="Free over this amount · 满此金额包邮" class="dlvwiz-in" value="99" onclick="event.stopPropagation()">
               </span>
             </span>
           </button>
@@ -7503,8 +7627,8 @@
               <span class="dlvwiz-ct">By weight · 按重量计费</span>
               <span class="dlvwiz-cs">Courier-style: a price for the first kg, then per extra kg. · 快递式:首重一个价,续重每公斤加价。</span>
               <span class="dlvwiz-inl">
-                First kg · 首重 ¥<input type="number" inputmode="decimal" id="dlvwiz-w1" class="dlvwiz-in" value="10" onclick="event.stopPropagation()">
-                &nbsp;· each extra kg · 续重每公斤 ¥<input type="number" inputmode="decimal" id="dlvwiz-wx" class="dlvwiz-in" value="3" onclick="event.stopPropagation()">
+                First kg · 首重 ¥<input type="number" inputmode="decimal" id="dlvwiz-w1" aria-label="Price for the first kilogram · 首重价格" class="dlvwiz-in" value="10" onclick="event.stopPropagation()">
+                &nbsp;· each extra kg · 续重每公斤 ¥<input type="number" inputmode="decimal" id="dlvwiz-wx" aria-label="Price per extra kilogram · 续重每公斤价格" class="dlvwiz-in" value="3" onclick="event.stopPropagation()">
               </span>
             </span>
           </button>
@@ -7535,7 +7659,7 @@
             <span class="dlvwiz-radio"></span>
             <span class="dlvwiz-cl">
               <span class="dlvwiz-ct">Same day · 当日达</span>
-              <span class="dlvwiz-inl">if they order before · 需在此时间前下单 <input type="time" id="dlvwiz-cutoff" class="dlvwiz-in wide" value="16:00" onclick="event.stopPropagation()"></span>
+              <span class="dlvwiz-inl">if they order before · 需在此时间前下单 <input type="time" id="dlvwiz-cutoff" aria-label="Order-by time for same day · 当日达截单时间" class="dlvwiz-in wide" value="16:00" onclick="event.stopPropagation()"></span>
             </span>
           </button>
 
@@ -7577,7 +7701,7 @@
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
-  <aside id="dz-edit-bg" class="side-drawer" aria-hidden="true">
+  <aside role="dialog" id="dz-edit-bg" class="side-drawer" aria-hidden="true">
     <div class="drawer-head">
       <div>
         <h3 style="margin: 0; font-size: 14px;" id="dz-edit-title">Add zone · 添加配送区</h3>
@@ -7619,11 +7743,11 @@
                each zone auto-names from its own district/city CN+EN. -->
           <div id="dz-display-row" class="dz-grid" style="display: none;">
             <div class="field" style="margin: 0;">
-              <label class="stacked">Display · 中</label>
+              <label for="dz-gz-name-cn" class="stacked">Display · 中</label>
               <input type="text" id="dz-gz-name-cn" placeholder="天河">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Display · EN · 英文</label>
+              <label for="dz-gz-name-en" class="stacked">Display · EN · 英文</label>
               <input type="text" id="dz-gz-name-en" placeholder="Tianhe">
             </div>
           </div>
@@ -7632,15 +7756,15 @@
           <h4>Pricing · 定价</h4>
           <div class="dz-grid">
             <div class="field" style="margin: 0;">
-              <label class="stacked">Base fee ¥ · 基础运费</label>
+              <label for="dz-gz-base" class="stacked">Base fee ¥ · 基础运费</label>
               <input type="number" id="dz-gz-base" placeholder="15">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Free over ¥ · 满 ¥ 免运费</label>
+              <label for="dz-gz-free" class="stacked">Free over ¥ · 满 ¥ 免运费</label>
               <input type="number" id="dz-gz-free" placeholder="(use default)">
             </div>
             <div class="field dz-only-gz" style="margin: 0;">
-              <label class="stacked">MAX flat ¥ · 任意距离封顶</label>
+              <label for="dz-gz-max" class="stacked">MAX flat ¥ · 任意距离封顶</label>
               <input type="number" id="dz-gz-max" placeholder="(no MAX)">
             </div>
             <!-- Packing is NOT a city-zone-only fee. These two carried
@@ -7651,11 +7775,11 @@
                  nothing for it. Visible for both zone types now; the id keeps
                  its `dz-city-` prefix so every reference to it still resolves. -->
             <div class="field" style="margin: 0;">
-              <label class="stacked">Packing ¥/item · 每件包装费</label>
+              <label for="dz-city-pack" class="stacked">Packing ¥/item · 每件包装费</label>
               <input type="number" id="dz-city-pack" placeholder="1.5">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Packing cap ¥ · 包装费上限</label>
+              <label for="dz-city-pack-cap" class="stacked">Packing cap ¥ · 包装费上限</label>
               <input type="number" id="dz-city-pack-cap" placeholder="20">
             </div>
             <div class="field" style="margin: 0; grid-column: 1 / -1;">
@@ -7672,11 +7796,11 @@
           <h4>Scheduling · 时间</h4>
           <div class="dz-grid">
             <div class="field" style="margin: 0;">
-              <label class="stacked">Earliest lead (days) · 提前天数</label>
+              <label for="dz-edit-lead" class="stacked">Earliest lead (days) · 提前天数</label>
               <input type="number" id="dz-edit-lead" placeholder="0">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Furthest day · 最远天数</label>
+              <label for="dz-edit-maxlead" class="stacked">Furthest day · 最远天数</label>
               <input type="number" id="dz-edit-maxlead" placeholder="14">
             </div>
             <div class="field" style="margin: 0;">
@@ -7688,7 +7812,7 @@
               </span>
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Slot length (min) · 时段长度</label>
+              <label for="dz-edit-slot" class="stacked">Slot length (min) · 时段长度</label>
               <input type="number" id="dz-edit-slot" placeholder="120">
             </div>
           </div>
@@ -7799,19 +7923,19 @@
       <h3 style="font-size: 13px; margin-bottom: 12px;">New top-up package · 新建充值套餐</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
-          <label class="stacked">Amount ¥ · 金额</label>
+          <label for="tp-amount" class="stacked">Amount ¥ · 金额</label>
           <input type="number" id="tp-amount" placeholder="200" style="width: 120px;">
         </div>
         <div class="field" style="margin: 0;">
-          <label class="stacked">Bonus points · 赠送积分</label>
+          <label for="tp-bonus" class="stacked">Bonus points · 赠送积分</label>
           <input type="number" id="tp-bonus" placeholder="50" style="width: 120px;">
         </div>
         <div class="field" style="margin: 0; flex: 1; min-width: 180px;">
-          <label class="stacked">Title · EN · 标题 · 英文</label>
+          <label for="tp-title-en" class="stacked">Title · EN · 标题 · 英文</label>
           <input type="text" id="tp-title-en" placeholder="¥200 + 50 bonus pts" style="width: 100%;">
         </div>
         <div class="field" style="margin: 0; flex: 1; min-width: 180px;">
-          <label class="stacked">Title · 中</label>
+          <label for="tp-title-cn" class="stacked">Title · 中</label>
           <input type="text" id="tp-title-cn" placeholder="充200送50积分" style="width: 100%;">
         </div>
         <button class="btn btn-primary" onclick="addTopupPackage()">
@@ -8456,7 +8580,7 @@
                data-ph-en="Search reviews and products…" data-ph-cn="搜索评价与商品…"
                placeholder="Search reviews and products…">
       </label>
-      <select id="rv-rating" onchange="rvwGo(0)">
+      <select id="rv-rating" aria-label="Filter reviews by rating · 按评分筛选评价" onchange="rvwGo(0)">
         <option value="">Any rating · 任意评分</option>
         <option value="5">5 stars · 5 星</option>
         <option value="4">4 stars · 4 星</option>
@@ -8507,14 +8631,14 @@
           <div class="rvw-set-label">Points per review · 每条评价积分</div>
           <div class="rvw-set-desc">Credited when the review posts. · 评价提交后立即到账。</div>
         </div>
-        <div class="rvw-set-ctl"><input type="number" id="rrw-points" class="rvw-set-num" min="0" max="10000" step="1" value="20" onchange="saveReviewReward()"></div>
+        <div class="rvw-set-ctl"><input type="number" id="rrw-points" aria-label="Points per review · 每条评价积分" class="rvw-set-num" min="0" max="10000" step="1" value="20" onchange="saveReviewReward()"></div>
       </div>
       <div class="rvw-set-row is-last">
         <div class="rvw-set-rowl">
           <div class="rvw-set-label">Most rewarded per order · 每单最多奖励</div>
           <div class="rvw-set-desc">Stops a ten-item order becoming ten rewards. · 避免十件商品的订单产生十份奖励。</div>
         </div>
-        <div class="rvw-set-ctl"><input type="number" id="rrw-max" class="rvw-set-num" min="1" max="50" step="1" value="1" onchange="saveReviewReward()"></div>
+        <div class="rvw-set-ctl"><input type="number" id="rrw-max" aria-label="Most rewarded per order · 每单最多奖励条数" class="rvw-set-num" min="1" max="50" step="1" value="1" onchange="saveReviewReward()"></div>
       </div>
       <div class="rvw-set-foot">
         <span id="rrw-stats" class="rvw-set-hint"></span>
@@ -8542,14 +8666,14 @@
           <div class="rvw-set-label">Minimum reviews per product · 每个商品最少评价数</div>
           <div class="rvw-set-desc">A new product arrives with reviews already on it. · 新品上架即带有评价,不会出现空白评分。</div>
         </div>
-        <div class="rvw-set-ctl"><input type="number" id="rtu-min" class="rvw-set-num" min="1" max="20" step="1" value="3" onchange="saveReviewTopup()"></div>
+        <div class="rvw-set-ctl"><input type="number" id="rtu-min" aria-label="Minimum reviews per product · 每个商品最少评价数" class="rvw-set-num" min="1" max="20" step="1" value="3" onchange="saveReviewTopup()"></div>
       </div>
       <div class="rvw-set-row is-last">
         <div class="rvw-set-rowl">
           <div class="rvw-set-label">Most to add per run · 每次最多添加</div>
           <div class="rvw-set-desc">Stops the first run flooding the whole catalogue. · 避免首次运行时一次性铺满整个商品库。</div>
         </div>
-        <div class="rvw-set-ctl"><input type="number" id="rtu-max" class="rvw-set-num" min="1" max="500" step="1" value="50" onchange="saveReviewTopup()"></div>
+        <div class="rvw-set-ctl"><input type="number" id="rtu-max" aria-label="Most to add per run · 每次最多添加条数" class="rvw-set-num" min="1" max="500" step="1" value="50" onchange="saveReviewTopup()"></div>
       </div>
       <div class="rvw-set-foot">
         <button class="rvw-set-act" type="button" onclick="runReviewTopupNow()">Run now · 立即运行</button>
@@ -8604,7 +8728,7 @@
     </div>
     <!-- Feedback thread drawer — read the conversation + reply. Reuses the
          global .side-drawer chrome; bubbles + composer styled below. -->
-    <aside id="fb-drawer" class="side-drawer dw-compact" aria-hidden="true">
+    <aside role="dialog" id="fb-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#fb-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -8770,31 +8894,31 @@
           <div class="muted">Shown on the leaderboard hero. Keep the kicker short — it's the small all-caps line above the title. · 显示在排行榜顶部;引题简短为佳 — 标题上方的大写小字行。</div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Kicker · EN · 引题 · 英文</label>
+              <label for="lb-kicker-en">Kicker · EN · 引题 · 英文</label>
               <input type="text" id="lb-kicker-en" oninput="updateLeaderboardPreview()" placeholder="ROOTS CLUB · LEADERBOARD"/>
             </div>
             <div class="lb-field">
-              <label>Kicker · 中文</label>
+              <label for="lb-kicker-cn">Kicker · 中文</label>
               <input type="text" id="lb-kicker-cn" oninput="updateLeaderboardPreview()" placeholder="ROOTS 会员 · 排行榜"/>
             </div>
           </div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Title · EN · 标题 · 英文</label>
+              <label for="lb-title-en">Title · EN · 标题 · 英文</label>
               <input type="text" id="lb-title-en" oninput="updateLeaderboardPreview()" placeholder="Top growers"/>
             </div>
             <div class="lb-field">
-              <label>Title · 中文</label>
+              <label for="lb-title-cn">Title · 中文</label>
               <input type="text" id="lb-title-cn" oninput="updateLeaderboardPreview()" placeholder="排行榜"/>
             </div>
           </div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Subhead · EN · 副标题 · 英文</label>
+              <label for="lb-subhead-en">Subhead · EN · 副标题 · 英文</label>
               <textarea id="lb-subhead-en" oninput="updateLeaderboardPreview()" placeholder="The members who keep our garden growing."></textarea>
             </div>
             <div class="lb-field">
-              <label>Subhead · 中文</label>
+              <label for="lb-subhead-cn">Subhead · 中文</label>
               <textarea id="lb-subhead-cn" oninput="updateLeaderboardPreview()" placeholder="让花园持续生长的会员们。"></textarea>
             </div>
           </div>
@@ -8805,7 +8929,7 @@
           <div class="muted">What members are ranked by, and over what window. · 排名所用的指标及统计区间。</div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Metric · 指标</label>
+              <label for="lb-metric">Metric · 指标</label>
               <select id="lb-metric" onchange="updateLeaderboardPreview()">
                 <option value="lifetime_spend">Lifetime spend (¥) · 累计消费</option>
                 <option value="points_balance">Points balance · 积分余额</option>
@@ -8813,7 +8937,7 @@
               </select>
             </div>
             <div class="lb-field">
-              <label>Period · 周期</label>
+              <label for="lb-period">Period · 周期</label>
               <select id="lb-period" onchange="updateLeaderboardPreview()">
                 <option value="all">All time · 全部时间</option>
                 <option value="year">Last 12 months · 近 12 个月</option>
@@ -8825,11 +8949,11 @@
           <div class="muted" id="lb-period-note" style="margin-top: 4px;"></div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Show top N · 显示前 N 名</label>
+              <label for="lb-top-n">Show top N · 显示前 N 名</label>
               <input type="number" id="lb-top-n" min="3" max="100" step="1" value="20" oninput="updateLeaderboardPreview()"/>
             </div>
             <div class="lb-field">
-              <label>Reveal nicknames · 显示昵称</label>
+              <label for="lb-reveal">Reveal nicknames · 显示昵称</label>
               <select id="lb-reveal" onchange="updateLeaderboardPreview()">
                 <option value="first_char">First character + asterisks (recommended) · 首字 + 星号(推荐)</option>
                 <option value="full">Full nickname + avatar · 完整昵称 + 头像</option>
@@ -8844,31 +8968,31 @@
           <div class="muted">Plain-text reward callouts shown under the list. Leave blank to hide. · 列表下方的奖励说明纯文本;留空则隐藏。</div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Top 1 reward · EN · 第 1 名奖励 · 英文</label>
+              <label for="lb-r1-en">Top 1 reward · EN · 第 1 名奖励 · 英文</label>
               <input type="text" id="lb-r1-en" oninput="updateLeaderboardPreview()" placeholder="¥500 store credit + harvest box"/>
             </div>
             <div class="lb-field">
-              <label>Top 1 reward · 中文</label>
+              <label for="lb-r1-cn">Top 1 reward · 中文</label>
               <input type="text" id="lb-r1-cn" oninput="updateLeaderboardPreview()" placeholder="¥500 储值 + 丰收礼盒"/>
             </div>
           </div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Top 3 reward · EN · 前 3 名奖励 · 英文</label>
+              <label for="lb-r3-en">Top 3 reward · EN · 前 3 名奖励 · 英文</label>
               <input type="text" id="lb-r3-en" oninput="updateLeaderboardPreview()" placeholder="¥200 store credit"/>
             </div>
             <div class="lb-field">
-              <label>Top 3 reward · 中文</label>
+              <label for="lb-r3-cn">Top 3 reward · 中文</label>
               <input type="text" id="lb-r3-cn" oninput="updateLeaderboardPreview()" placeholder="¥200 储值"/>
             </div>
           </div>
           <div class="lb-row-2">
             <div class="lb-field">
-              <label>Top 10 reward · EN · 前 10 名奖励 · 英文</label>
+              <label for="lb-r10-en">Top 10 reward · EN · 前 10 名奖励 · 英文</label>
               <input type="text" id="lb-r10-en" oninput="updateLeaderboardPreview()" placeholder="500 bonus points"/>
             </div>
             <div class="lb-field">
-              <label>Top 10 reward · 中文</label>
+              <label for="lb-r10-cn">Top 10 reward · 中文</label>
               <input type="text" id="lb-r10-cn" oninput="updateLeaderboardPreview()" placeholder="500 积分奖励"/>
             </div>
           </div>
@@ -8889,11 +9013,11 @@
           </div>
           <div class="lb-row-2" style="margin-top: 10px;">
             <div class="lb-field">
-              <label>Top spender (¥) · 榜首消费</label>
+              <label for="lb-seed-max">Top spender (¥) · 榜首消费</label>
               <input type="number" id="lb-seed-max" min="50" step="50" value="3000"/>
             </div>
             <div class="lb-field">
-              <label>How many members · 会员数量</label>
+              <label for="lb-seed-count">How many members · 会员数量</label>
               <input type="number" id="lb-seed-count" min="3" max="50" step="1" value="18"/>
             </div>
           </div>
@@ -8902,7 +9026,7 @@
             <span id="lb-seed-summary" class="muted" style="font-size: 12px;"></span>
           </div>
           <div class="lb-field" style="margin-top: 14px;">
-            <label>Hide these real members · 隐藏指定真实会员</label>
+            <label for="lb-hide-names">Hide these real members · 隐藏指定真实会员</label>
             <input type="text" id="lb-hide-names" oninput="updateLeaderboardPreview()" placeholder="mimi, asher, steve"/>
             <div class="muted" style="font-size: 11px; margin-top: 4px;">Comma-separated nicknames (e.g. staff or test accounts). They stay active everywhere else — just hidden from the board. · 逗号分隔的昵称(如员工或测试账号);仅从榜单隐藏,其他功能不受影响。</div>
           </div>
@@ -9097,11 +9221,11 @@
         The line under the "Your say" headline. Use <code>{pts}</code> where the points number should appear — it auto-fills from the featured poll's reward. Saves instantly; no app republish needed. · 显示在“你说了算”标题下方的文字。在需要显示积分数字的位置使用 <code>{pts}</code> —— 它会自动填入精选投票的奖励分值。即时保存,无需重新发布小程序。
       </div>
       <div class="field">
-        <label>English</label>
+        <label for="vot-intro-en">English</label>
         <input type="text" id="vot-intro-en" maxlength="240" placeholder="Every poll closes Sundays. Voting earns {pts} pts."/>
       </div>
       <div class="field">
-        <label>中文</label>
+        <label for="vot-intro-cn">中文</label>
         <input type="text" id="vot-intro-cn" maxlength="240" placeholder="每周日截止,投票得 {pts} 积分。"/>
       </div>
       <div class="field" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px;">
@@ -9146,7 +9270,7 @@
       <div>
         <div class="ml-toolbar">
           <input type="text" id="ml-search" data-ph-en="Search filename or alt text" data-ph-cn="搜索文件名/alt" placeholder="Search filename or alt text" oninput="debouncedMediaLoad()">
-          <select id="ml-mime" onchange="loadMedia()">
+          <select id="ml-mime" aria-label="Filter files by type · 按类型筛选文件" onchange="loadMedia()">
             <option value="">All types · 全部类型</option>
             <option value="image/jpeg">JPEG</option>
             <option value="image/png">PNG</option>
@@ -9208,7 +9332,7 @@
   </div>
 
   <!-- Media detail / edit drawer (slide-in side drawer) -->
-  <aside id="ml-edit-bg" class="side-drawer" aria-hidden="true">
+  <aside role="dialog" id="ml-edit-bg" class="side-drawer" aria-hidden="true">
     <div class="drawer-head">
       <div>
         <h3 style="margin: 0; font-size: 14px;" id="ml-edit-title">Media · 媒体</h3>
@@ -9220,17 +9344,17 @@
         <div class="ml-preview" id="ml-edit-preview"><img id="ml-edit-img" alt=""></div>
 
         <div class="field" style="margin-top: 14px;">
-          <label class="stacked">Filename · 文件名</label>
+          <label for="ml-edit-filename" class="stacked">Filename · 文件名</label>
           <input type="text" id="ml-edit-filename" placeholder="(optional)">
         </div>
 
         <div class="field">
-          <label class="stacked">Alt text · 替代文字 <span class="muted" style="font-weight: 400;">(for screen readers and SEO)(用于读屏与 SEO)</span></label>
+          <label for="ml-edit-alt" class="stacked">Alt text · 替代文字 <span class="muted" style="font-weight: 400;">(for screen readers and SEO)(用于读屏与 SEO)</span></label>
           <input type="text" id="ml-edit-alt" placeholder="Coconut milk in a glass jar, top-down">
         </div>
 
         <div class="field">
-          <label class="stacked">Folder · 文件夹</label>
+          <label for="ml-edit-folder" class="stacked">Folder · 文件夹</label>
           <select id="ml-edit-folder" style="width: 100%;">
             <option value="">(unsorted) · 未分组</option>
           </select>
@@ -9247,7 +9371,7 @@
           <div style="flex: 1; min-width: 220px;">
             <div class="muted" style="font-size: 11px; margin-bottom: 4px;">URL</div>
             <div class="row" style="gap: 6px;">
-              <input type="text" id="ml-edit-url" readonly style="flex: 1; font-family: var(--f-mono); font-size: 11px;">
+              <input type="text" id="ml-edit-url" aria-label="File address · 文件地址" readonly style="flex: 1; font-family: var(--f-mono); font-size: 11px;">
               <button class="btn" onclick="copyMediaUrl()">Copy · 复制</button>
             </div>
           </div>
@@ -9557,6 +9681,22 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
           Operations · 运营
         </button>
+        <!-- Change history — who changed what. The rows have been written since
+             long before there was anywhere to read them (audit E-01); this is
+             the reading surface. Not gated: an operator who can reach Settings
+             can see what was done to the shop they work in, and the endpoint
+             scopes every row to their own account. -->
+        <button data-sub="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
+          Change history · 修改记录
+        </button>
+        <!-- What was sent — the delivery record (audit P-03). Twenty kinds of
+             notification could leave the system and no screen listed any of
+             them, so "did the customer get told?" had no answer. -->
+        <button data-sub="sent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          What was sent · 发送记录
+        </button>
         <!-- SKU codes. Gated on materials:view because that is whose catalogue
              the rules number — an operator who cannot see materials has no use
              for a screen about how materials are coded. The write endpoints are
@@ -9594,7 +9734,7 @@
               <h3>Layout · 布局</h3>
               <div class="muted">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top. · 顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</div>
             </div>
-            <select id="cfg-shop-layout" class="picker-source">
+            <select id="cfg-shop-layout" aria-label="Shop layout · 商城布局" class="picker-source">
               <option value="list">List with sidebar · 列表 + 侧栏</option>
               <option value="list-compact">List compact · 紧凑列表</option>
               <option value="grid-2col">Grid — 2 col · 网格 — 2 列</option>
@@ -9710,7 +9850,7 @@
               </div>
               <div class="ctrl">
                 <div class="field" style="margin: 0;">
-                  <select id="cfg-shop-defaultSort" style="width: 100%; max-width: 320px;">
+                  <select id="cfg-shop-defaultSort" aria-label="Default product sort · 默认商品排序" style="width: 100%; max-width: 320px;">
                     <option value="">Featured (curated order) · 精选(手动排序)</option>
                     <option value="newest">Newest · 最新</option>
                     <option value="price_asc">Price ↑ (low to high) · 价格升序</option>
@@ -9835,7 +9975,7 @@
               </div>
               <div class="ctrl">
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">Template ID · 模板 ID</label>
+                  <label for="cfg-notifications-order_status_template_id" class="stacked">Template ID · 模板 ID</label>
                   <input type="text" id="cfg-notifications-order_status_template_id"
                          placeholder="e.g. WrA_C5n8KuQ0vWBg…"
                          style="width: 100%; font-family: monospace;">
@@ -9870,15 +10010,15 @@
               </div>
               <div class="ctrl">
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">Company ID (CorpID) · 企业 ID</label>
+                  <label for="wecom-app-corp_id" class="stacked">Company ID (CorpID) · 企业 ID</label>
                   <input type="text" id="wecom-app-corp_id" placeholder="ww… (我的企业 → 企业信息)" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">App ID (AgentId) · 应用 AgentId</label>
+                  <label for="wecom-app-agent_id" class="stacked">App ID (AgentId) · 应用 AgentId</label>
                   <input type="text" id="wecom-app-agent_id" placeholder="e.g. 1000002" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">App Secret · 应用 Secret</label>
+                  <label for="wecom-app-secret" class="stacked">App Secret · 应用 Secret</label>
                   <input type="password" id="wecom-app-secret" autocomplete="off" data-ph-en="paste app Secret" data-ph-cn="粘贴应用 Secret" placeholder="paste app Secret" style="width: 100%; font-family: monospace;">
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -9906,7 +10046,7 @@
             <div class="illus-row">
               <div class="ctrl" style="flex: 1;">
                 <div class="field" style="margin: 0; max-width: 340px;">
-                  <label class="stacked">Display currency · 显示货币</label>
+                  <label for="cfg-currency" class="stacked">Display currency · 显示货币</label>
                   <select id="cfg-currency"></select>
                 </div>
               </div>
@@ -9926,11 +10066,11 @@
                   <input type="checkbox" id="alipay-manual-enabled"> Enable manual Alipay · 启用手动支付宝收款
                 </label>
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">Payee label (shown to customer) · 收款方名称(展示给顾客)</label>
+                  <label for="alipay-manual-account" class="stacked">Payee label (shown to customer) · 收款方名称(展示给顾客)</label>
                   <input type="text" id="alipay-manual-account" placeholder="e.g. 哈素萌 / 柏玲" style="width: 100%;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">收款码 image · 收款二维码图片</label>
+                  <label for="alipay-manual-file" class="stacked">收款码 image · 收款二维码图片</label>
                   <input type="file" id="alipay-manual-file" accept="image/*" onchange="_alipayManualPickFile(event)">
                   <img id="alipay-manual-preview" alt="" style="display:none; max-width:160px; max-height:220px; margin-top:8px; border:1px solid var(--line); border-radius:8px;">
                 </div>
@@ -9946,21 +10086,21 @@
                        stay visible even if that toggle never runs. -->
                   <div id="alipay-ocr-fields" style="margin-top:10px;">
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Anthropic API key (sk-…) · 密钥</label>
+                      <label for="alipay-manual-key" class="stacked">Anthropic API key (sk-…) · 密钥</label>
                       <input type="password" id="alipay-manual-key" autocomplete="off" data-ph-en="sk-ant-… · paste once, leave blank to keep" data-ph-cn="留空则保持不变" placeholder="sk-ant-… · paste once, leave blank to keep" style="width: 100%; font-family: monospace;">
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Accepted payee names · 收款方名称(可多个)</label>
+                      <label for="alipay-manual-payee" class="stacked">Accepted payee names · 收款方名称(可多个)</label>
                       <input type="text" id="alipay-manual-payee" data-ph-en="哈素萌, 玲 — separate with commas" data-ph-cn="多个用逗号分隔" placeholder="哈素萌, 玲 — separate with commas" style="width: 100%;">
                       <div class="muted" style="margin-top:4px; line-height:1.5;">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored. · 请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</label>
+                      <label for="alipay-manual-window" class="stacked">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</label>
                       <input type="number" id="alipay-manual-window" min="0" max="1440" placeholder="30" style="width: 100%; font-family: monospace;">
                       <div class="muted" style="margin-top:4px; line-height:1.5;">The deadline shown to the customer: an Alipay order with no screenshot uploaded by then is auto-cancelled and its stock released. Keep it tight. · 顾客看到的付款期限:到期仍未上传截图的支付宝订单会自动取消并释放库存,建议设短一些。</div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Screenshot may be up to (minutes old, 0 = same as above) · 截图最长可早于上传(分钟,0=同上)</label>
+                      <label for="alipay-manual-proof-age" class="stacked">Screenshot may be up to (minutes old, 0 = same as above) · 截图最长可早于上传(分钟,0=同上)</label>
                       <input type="number" id="alipay-manual-proof-age" min="0" max="1440" placeholder="120" style="width: 100%; font-family: monospace;">
                       <div class="muted" style="margin-top:4px; line-height:1.5;">Only affects the AI check: the gap between the payment time printed on the screenshot and the moment the customer uploads it. Keep this generous (120 is a good start) even with a tight deadline above — paying, then digging the receipt out of the Alipay bill history a while later is normal, and a re-used screenshot is already blocked by the image/transaction check. · 仅影响 AI 核对:截图上的付款时间与上传时间之间的间隔。即使上面期限较短,这里也建议放宽(120 分钟起步) — 顾客付完款过一会儿再去账单里翻截图很常见;重复使用的截图已由图片/交易号去重拦截。</div>
                     </div>
@@ -10001,27 +10141,27 @@
               </div>
               <div class="ctrl">
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">AccessKey ID · 访问密钥 ID</label>
+                  <label for="aliyun_sms-ak_id" class="stacked">AccessKey ID · 访问密钥 ID</label>
                   <input type="text" id="aliyun_sms-ak_id" placeholder="LTAI… (RAM 用户, 仅授权 AliyunDysmsFullAccess)" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">AccessKey Secret · 访问密钥</label>
+                  <label for="aliyun_sms-ak_secret" class="stacked">AccessKey Secret · 访问密钥</label>
                   <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" data-ph-en="paste AccessKey Secret" data-ph-cn="粘贴 AccessKey Secret" placeholder="paste AccessKey Secret" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
-                  <label class="stacked">Signature (签名) · 短信签名</label>
+                  <label for="aliyun_sms-sign_name" class="stacked">Signature (签名) · 短信签名</label>
                   <input type="text" id="aliyun_sms-sign_name" placeholder="e.g. 满圆 (must be approved in 签名管理)" style="width: 100%;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">Delivered template code (模板CODE) · 送达模板编号</label>
+                  <label for="aliyun_sms-template_delivered" class="stacked">Delivered template code (模板CODE) · 送达模板编号</label>
                   <input type="text" id="aliyun_sms-template_delivered" placeholder="e.g. SMS_123456789" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">Login OTP template code (模板CODE) · 网页登录验证码模板编号</label>
+                  <label for="aliyun_sms-template_otp" class="stacked">Login OTP template code (模板CODE) · 网页登录验证码模板编号</label>
                   <input type="text" id="aliyun_sms-template_otp" placeholder="e.g. SMS_987654321 (template variable must be code)" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 10px 0 0;">
-                  <label class="stacked">Test to this phone · 测试发送至此手机号</label>
+                  <label for="aliyun_sms-testphone" class="stacked">Test to this phone · 测试发送至此手机号</label>
                   <input type="text" id="aliyun_sms-testphone" data-ph-en="11-digit mainland mobile" data-ph-cn="11 位手机号" placeholder="11-digit mainland mobile" style="width: 100%; font-family: monospace;">
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -10048,7 +10188,7 @@
             <div class="illus-row">
               <div class="ctrl">
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <label for="cfg-notifications-wecom_order_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
                   <input type="text" id="cfg-notifications-wecom_order_webhook"
                          placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
                          style="width: 100%; font-family: monospace;">
@@ -10116,7 +10256,7 @@
               <div class="ctrl">
                 <label class="ckbox" style="margin-bottom:10px;display:block"><input type="checkbox" id="cfg-system_alerts-enabled"> <span>Enable system alerts · 开启系统告警</span></label>
                 <div class="field" style="margin: 0;">
-                  <label class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <label for="cfg-system_alerts-wecom_webhook" class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
                   <input type="text" id="cfg-system_alerts-wecom_webhook"
                          placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
                          style="width: 100%; font-family: monospace;">
@@ -10148,7 +10288,7 @@
               <h3>How customers reach you · 顾客联系方式</h3>
               <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet. · 三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</div>
             </div>
-            <select id="cfg-cs-mode" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+            <select id="cfg-cs-mode" aria-label="How customers reach you · 顾客联系方式" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
               <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
               <option value="wecom">WeCom (企业微信) — recommended · 推荐</option>
               <option value="kf">WeChat 客服 — public-account customer service · 公众号客服</option>
@@ -10169,11 +10309,11 @@
               <div class="muted">Both values come from your WeCom 客服 admin page after you bind the mini-program AppID. The mini-app calls <code>wx.openCustomerServiceChat({ corpId, url })</code> with these.</div>
             </div>
             <div class="field">
-              <label class="stacked">Corp ID (企业ID)</label>
+              <label for="cfg-cs-corp_id" class="stacked">Corp ID (企业ID)</label>
               <input type="text" id="cfg-cs-corp_id" placeholder="ww1234abcd567890ef" style="width: 100%; font-family: monospace;">
             </div>
             <div class="field" style="margin-bottom: 0">
-              <label class="stacked">Service URL (客服链接)</label>
+              <label for="cfg-cs-url" class="stacked">Service URL (客服链接)</label>
               <input type="text" id="cfg-cs-url" placeholder="https://work.weixin.qq.com/kfid/kfc..." style="width: 100%; font-family: monospace;">
             </div>
           </div>
@@ -10185,7 +10325,7 @@
               <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
             </div>
             <div class="field" style="margin: 0;">
-              <input type="file" id="cfg-cs-qr-file" accept="image/*">
+              <input type="file" id="cfg-cs-qr-file" accept="image/*" aria-label="Upload a QR code image · 上传二维码图片">
               <div id="cfg-cs-qr-preview" style="margin-top: 12px;"></div>
               <input type="hidden" id="cfg-cs-qr_image_url">
             </div>
@@ -10199,26 +10339,26 @@
             </div>
             <div class="row" style="gap: var(--s3);">
               <div class="field" style="flex: 1;">
-                <label class="stacked">EN label · 英文标签</label>
+                <label for="cfg-cs-label_en" class="stacked">EN label · 英文标签</label>
                 <input type="text" id="cfg-cs-label_en" placeholder="Help" style="width: 100%;">
               </div>
               <div class="field" style="flex: 1;">
-                <label class="stacked">中文 label</label>
+                <label for="cfg-cs-label_cn" class="stacked">中文 label</label>
                 <input type="text" id="cfg-cs-label_cn" placeholder="联系客服" style="width: 100%;">
               </div>
             </div>
             <div class="row" style="gap: var(--s3); margin-top: var(--s3);">
               <div class="field" style="flex: 1;">
-                <label class="stacked">EN hours line · 英文营业时间</label>
+                <label for="cfg-cs-hours_en" class="stacked">EN hours line · 英文营业时间</label>
                 <input type="text" id="cfg-cs-hours_en" placeholder="Mon–Sat · 9am–6pm" style="width: 100%;">
               </div>
               <div class="field" style="flex: 1;">
-                <label class="stacked">中文营业时间</label>
+                <label for="cfg-cs-hours_cn" class="stacked">中文营业时间</label>
                 <input type="text" id="cfg-cs-hours_cn" placeholder="周一至周六 · 9:00–18:00" style="width: 100%;">
               </div>
             </div>
             <div class="field" style="margin-top: var(--s3); margin-bottom: 0;">
-              <label class="stacked">Phone number (optional) · 电话(可选)</label>
+              <label for="cfg-cs-phone" class="stacked">Phone number (optional) · 电话(可选)</label>
               <input type="text" id="cfg-cs-phone" placeholder="+86 20 1234 5678" style="width: 100%; font-family: monospace;">
               <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide. · 显示为常见问题帮助页上的<b>拨打</b>按钮;留空则隐藏。</div>
             </div>
@@ -10255,7 +10395,7 @@
             </div>
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
               <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
+                <label for="cfg-cs-fab_size" class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
                 <select id="cfg-cs-fab_size" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
                   <option value="sm">Small · 小</option>
                   <option value="md">Medium · 中</option>
@@ -10263,7 +10403,7 @@
                 </select>
               </div>
               <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Shape · 形状</label>
+                <label for="cfg-cs-fab_shape" class="muted" style="display:block; margin-bottom:4px;">Shape · 形状</label>
                 <select id="cfg-cs-fab_shape" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
                   <option value="circle">Circle · 圆形</option>
                   <option value="rounded">Rounded square · 圆角方形</option>
@@ -10273,7 +10413,7 @@
             </div>
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
               <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Icon · 图标</label>
+                <label for="cfg-cs-fab_icon" class="muted" style="display:block; margin-bottom:4px;">Icon · 图标</label>
                 <select id="cfg-cs-fab_icon" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
                   <option value="dots">Dots ••• · 圆点</option>
                   <option value="bubble">Chat bubble 💬 · 对话气泡</option>
@@ -10283,7 +10423,7 @@
                 </select>
               </div>
               <div style="flex: 1; min-width: 160px;" id="cs-fab-emoji-wrap">
-                <label class="muted" style="display:block; margin-bottom:4px;">Custom emoji · 自定义</label>
+                <label for="cfg-cs-fab_icon_emoji" class="muted" style="display:block; margin-bottom:4px;">Custom emoji · 自定义</label>
                 <input type="text" id="cfg-cs-fab_icon_emoji" placeholder="🌱" maxlength="4" style="width:100%;text-align:center;font-size:18px;">
               </div>
             </div>
@@ -10291,21 +10431,21 @@
               <div style="min-width: 120px;">
                 <label class="muted" style="display:block; margin-bottom:4px;">Colour · 颜色</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="color" id="cfg-cs-fab_color" value="#365329" style="width:48px;height:38px;padding:0;border:1px solid #d8d2c4;border-radius:8px;background:#fff;cursor:pointer;">
+                  <input type="color" id="cfg-cs-fab_color" aria-label="Button colour · 按钮颜色" value="#365329" style="width:48px;height:38px;padding:0;border:1px solid #d8d2c4;border-radius:8px;background:#fff;cursor:pointer;">
                   <span class="cs-swatch" data-color="#365329" title="Forest green" style="width:24px;height:24px;border-radius:6px;background:#365329;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
                   <span class="cs-swatch" data-color="#E8DCCB" title="Oat" style="width:24px;height:24px;border-radius:6px;background:#E8DCCB;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
                   <span class="cs-swatch" data-color="#C2674A" title="Terracotta" style="width:24px;height:24px;border-radius:6px;background:#C2674A;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
                 </div>
               </div>
               <div style="flex: 1; min-width: 130px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Side · 位置</label>
+                <label for="cfg-cs-fab_side" class="muted" style="display:block; margin-bottom:4px;">Side · 位置</label>
                 <select id="cfg-cs-fab_side" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
                   <option value="right">Right · 右</option>
                   <option value="left">Left · 左</option>
                 </select>
               </div>
               <div style="flex: 1; min-width: 130px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Height off bottom (rpx) · 距底高度</label>
+                <label for="cfg-cs-fab_bottom" class="muted" style="display:block; margin-bottom:4px;">Height off bottom (rpx) · 距底高度</label>
                 <input type="number" id="cfg-cs-fab_bottom" placeholder="220" min="0" max="800" style="width:100%;">
               </div>
             </div>
@@ -10360,9 +10500,30 @@
               <label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag any product low when it drops to this many units. Each store can set its own number below. · 商品降到此数量时提醒;每个门店可在下方单独设置。</span></label>
               <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
                 <span style="color:var(--text-2);font-size:15px">≤</span>
-                <input type="number" id="cfg-low-stock" min="0" step="1" value="5" style="width:90px" onchange="paSaveLowStockDefault(this.value)">
+                <input type="number" id="cfg-low-stock" aria-label="Flag a product low at this many units · 低库存提醒数量" min="0" step="1" value="5" style="width:90px" onchange="paSaveLowStockDefault(this.value)">
                 <span style="color:var(--text-3);font-size:13px">units · 件</span>
                 <span id="cfg-low-stock-status" style="color:var(--accent);font-size:12px"></span>
+              </div>
+              <!-- The daily digest (audit E-06). The threshold above fed a
+                   dashboard card and nothing else, so a merchant who did not
+                   open the admin never found out they were running out. Sits
+                   here, under the number that drives it, rather than in Push
+                   notifications — a setting belongs beside the thing it acts on.
+                   Saves itself; the Operations panel has no shared Save bar. -->
+              <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+                <input type="checkbox" id="cfg-lowstock-digest" style="width:18px;height:18px"
+                       onchange="saveLowStockDigest()">
+                <label for="cfg-lowstock-digest" style="font-size:13px;color:var(--text-1)">
+                  Send me a daily list of what is running low · 每天发送库存偏低清单
+                </label>
+                <span style="color:var(--text-3);font-size:13px">at · 时间</span>
+                <input type="time" id="cfg-lowstock-hour" step="3600" value="09:00"
+                       aria-label="Hour to send the daily low-stock list"
+                       onchange="saveLowStockDigest()" style="width:110px">
+                <span id="cfg-lowstock-status" style="color:var(--accent);font-size:12px"></span>
+              </div>
+              <div class="helper" style="margin-top:6px;line-height:1.55">
+                One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。
               </div>
             </div>
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
@@ -10447,11 +10608,11 @@
             <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below. · <b>USERKEY</b> 来自你的 feieyun.com 开发者后台 —— <em>不是</em>设备标签上的 secret/KEY。一个账号管理所有打印机;各门店的 <b>SN</b> 在下方逐店设置。</div>
             <div class="ops-grid">
               <div>
-                <label class="field-label">Account · 账号 (USER)</label>
+                <label for="feie-user" class="field-label">Account · 账号 (USER)</label>
                 <input type="text" id="feie-user" style="font-family:monospace" data-ph-en="feieyun login phone/email" data-ph-cn="飞鹅登录手机号/邮箱" placeholder="feieyun login phone/email">
               </div>
               <div>
-                <label class="field-label">USERKEY · 用户密钥 (UKEY)</label>
+                <label for="feie-ukey" class="field-label">USERKEY · 用户密钥 (UKEY)</label>
                 <input type="password" id="feie-ukey" data-ph-en="paste USERKEY from dev console" data-ph-cn="粘贴开发者后台的 USERKEY" placeholder="paste USERKEY from dev console">
               </div>
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
@@ -10467,7 +10628,7 @@
                 <label for="feie-auto-refund" style="font-size:13px;color:var(--text-1)">Print a refund-request slip when a customer files a refund · 顾客申请退款后自动打印退款申请单</label>
               </div>
               <div style="grid-column:1/-1">
-                <label class="field-label">Receipt header · 小票抬头</label>
+                <label for="feie-shop" class="field-label">Receipt header · 小票抬头</label>
                 <input type="text" id="feie-shop" maxlength="40" data-ph-en="shop name shown at top of receipt" data-ph-cn="小票顶部显示的店名" placeholder="shop name shown at top of receipt">
               </div>
             </div>
@@ -10480,7 +10641,7 @@
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
             <div class="muted" style="font-size:12px;margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</div>
-            <select id="feie-ooc" style="margin-bottom:14px">
+            <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:14px">
               <option value="">— Use each order's own store · 按订单所属门店 —</option>
             </select>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -10497,6 +10658,85 @@
              baked by cuT(), the same way the Materials screens work. The rules
              live in the tenant's own database (sku_rules / sku_counters), so
              this is not a Roots screen with Roots' letters in it. -->
+        <!-- ────── CHANGE HISTORY ────── -->
+        <div class="sub-panel" id="sub-history">
+          <h2>Change history · 修改记录</h2>
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Who changed what · 谁改了什么</h3>
+              <div class="muted">Every edit anyone on your team makes to products, orders, stock, purchases and settings, newest first. Read-only — nothing here can be altered, which is what makes it worth having. · 团队成员对商品、订单、库存、采购与设置所做的每一次修改,最新在前。只读,不可更改。</div>
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <select id="ch-who" onchange="chLoad()" aria-label="Filter by person"><option value="">Everyone · 全部人员</option></select>
+              <select id="ch-what" onchange="chLoad()" aria-label="Filter by record type"><option value="">Everything · 全部类型</option></select>
+              <label class="sr-only" for="ch-from">From date</label>
+              <input type="date" id="ch-from" onchange="chLoad()" aria-label="From date">
+              <span style="color:var(--text-3)">–</span>
+              <label class="sr-only" for="ch-to">To date</label>
+              <input type="date" id="ch-to" onchange="chLoad()" aria-label="To date">
+              <input type="text" id="ch-q" oninput="chSearchDebounced()" placeholder="Search · 搜索" aria-label="Search the change history" style="flex:1;min-width:180px">
+              <button class="btn btn-sm" type="button" id="ch-clear" hidden onclick="chClearFilters()">Clear filters · 清除筛选</button>
+              <button class="btn btn-sm" type="button" onclick="chExportCsv()" title="Download this history as a spreadsheet · 下载记录表格">Export CSV · 导出</button>
+            </div>
+            <div class="table-wrap">
+              <table id="ch-table">
+                <thead><tr>
+                  <th>When · 时间</th>
+                  <th>Who · 谁</th>
+                  <th>Did what · 做了什么</th>
+                  <th>To what · 对象</th>
+                  <th>Details · 详情</th>
+                </tr></thead>
+                <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-top:10px">
+              <span class="muted" id="ch-count" data-no-i18n></span>
+              <button class="btn btn-sm" type="button" id="ch-more" hidden onclick="chMore()">Show more · 显示更多</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────── WHAT WAS SENT ────── -->
+        <div class="sub-panel" id="sub-sent">
+          <h2>What was sent · 发送记录</h2>
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Every message the system tried to deliver · 系统尝试发送的每条消息</h3>
+              <div class="muted">Pushes to your team's phones, sign-in codes, texts to customers, delivery reminders — what went out, to whom, and whether it landed. Read-only. · 团队手机推送、登录验证码、顾客短信、配送提醒 —— 发了什么、发给谁、是否送达。只读。</div>
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <select id="nl-channel" onchange="nlLoad()" aria-label="Filter by how it was sent · 按发送方式筛选"><option value="">Every way · 全部方式</option></select>
+              <select id="nl-kind" onchange="nlLoad()" aria-label="Filter by what it was about · 按内容筛选"><option value="">Everything · 全部内容</option></select>
+              <input type="date" id="nl-from" onchange="nlLoad()" aria-label="From date · 起始日期">
+              <span style="color:var(--text-3)">–</span>
+              <input type="date" id="nl-to" onchange="nlLoad()" aria-label="To date · 结束日期">
+              <input type="text" id="nl-q" oninput="nlSearchDebounced()" placeholder="Search · 搜索" aria-label="Search what was sent · 搜索发送记录" style="flex:1;min-width:160px">
+              <!-- The cut an operator actually reaches for. Its count is taken
+                   with every other filter applied and this one not, so the
+                   number and the list it produces cannot disagree. -->
+              <button class="btn btn-sm" type="button" id="nl-failed" onclick="nlToggleFailed()">Did not arrive · 未送达</button>
+              <button class="btn btn-sm" type="button" id="nl-clear" hidden onclick="nlClearFilters()">Clear filters · 清除筛选</button>
+            </div>
+            <div class="table-wrap">
+              <table id="nl-table">
+                <thead><tr>
+                  <th>When · 时间</th>
+                  <th>How · 方式</th>
+                  <th>What · 内容</th>
+                  <th>To · 发给</th>
+                  <th>Result · 结果</th>
+                </tr></thead>
+                <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="row" style="justify-content:space-between;align-items:center;margin-top:10px">
+              <span class="muted" id="nl-count" data-no-i18n></span>
+              <button class="btn btn-sm" type="button" id="nl-more" hidden onclick="nlMore()">Show more · 显示更多</button>
+            </div>
+          </div>
+        </div>
+
         <div class="sub-panel" id="sub-sku">
           <div id="sku-root" data-no-i18n></div>
         </div>
@@ -10554,7 +10794,7 @@
             </label>
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Max items shown · 最多展示数量</label>
+                <label for="cfg-upsell-max" class="stacked">Max items shown · 最多展示数量</label>
                 <input type="number" min="1" max="6" id="cfg-upsell-max" style="width: 90px;">
               </div>
               <button class="btn btn-primary" onclick="saveCheckoutUpsell()" style="margin: 0;">Save · 保存</button>
@@ -10574,19 +10814,19 @@
             </label>
             <div class="row" style="gap: 16px; flex-wrap: wrap;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Min today · 今日最低</label>
+                <label for="cfg-social-bc-min_today" class="stacked">Min today · 今日最低</label>
                 <input type="number" min="1" id="cfg-social-bc-min_today" style="width: 90px;">
               </div>
               <div class="field" style="margin: 0;">
-                <label class="stacked">Min this week · 本周最低</label>
+                <label for="cfg-social-bc-min_week" class="stacked">Min this week · 本周最低</label>
                 <input type="number" min="1" id="cfg-social-bc-min_week" style="width: 90px;">
               </div>
               <div class="field" style="margin: 0;">
-                <label class="stacked">Min this month · 本月最低</label>
+                <label for="cfg-social-bc-min_month" class="stacked">Min this month · 本月最低</label>
                 <input type="number" min="1" id="cfg-social-bc-min_month" style="width: 90px;">
               </div>
               <div class="field" style="margin: 0;">
-                <label class="stacked">Min all-time · 全部最低</label>
+                <label for="cfg-social-bc-min_all" class="stacked">Min all-time · 全部最低</label>
                 <input type="number" min="1" id="cfg-social-bc-min_all" style="width: 90px;">
               </div>
             </div>
@@ -10598,9 +10838,9 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Extra buyers per day · 每日额外买家</label>
                 <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-bc-boost_min" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-bc-boost_min" aria-label="Extra buyers per day, lowest · 每日额外买家下限" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-bc-boost_max" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-bc-boost_max" aria-label="Extra buyers per day, highest · 每日额外买家上限" style="width: 90px;">
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
@@ -10627,21 +10867,21 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Look-back window · 回溯时间</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="1" max="60" id="cfg-social-rb-window_days" style="width: 90px;">
+                  <input type="number" min="1" max="60" id="cfg-social-rb-window_days" aria-label="Look-back window in days · 回溯天数" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">days · 天</span>
                 </div>
               </div>
               <div class="field" style="margin: 0;">
                 <label class="stacked">On screen · 显示时长</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-visible_secs" style="width: 90px;">
+                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-visible_secs" aria-label="Seconds on screen · 显示秒数" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">sec · 秒</span>
                 </div>
               </div>
               <div class="field" style="margin: 0;">
                 <label class="stacked">Gap between · 间隔</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-gap_secs" style="width: 90px;">
+                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-gap_secs" aria-label="Seconds between · 间隔秒数" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">sec · 秒</span>
                 </div>
               </div>
@@ -10681,7 +10921,7 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Viewer freshness · 在线时长</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="5" max="600" id="cfg-social-vn-ttl_sec" style="width: 90px;">
+                  <input type="number" min="5" max="600" id="cfg-social-vn-ttl_sec" aria-label="Viewer freshness in seconds · 在线时长(秒)" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">seconds · 秒</span>
                 </div>
               </div>
@@ -10694,9 +10934,9 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Fake viewers at peak · 高峰虚拟在线</label>
                 <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-vn-boost_min" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-vn-boost_min" aria-label="Fake viewers at peak, lowest · 高峰虚拟在线下限" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-vn-boost_max" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-vn-boost_max" aria-label="Fake viewers at peak, highest · 高峰虚拟在线上限" style="width: 90px;">
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
@@ -10722,7 +10962,7 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Hide if older than · 超时则隐藏</label>
                 <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="1" max="720" id="cfg-social-lo-max_hours" style="width: 90px;">
+                  <input type="number" min="1" max="720" id="cfg-social-lo-max_hours" aria-label="Hide if older than this many hours · 超过多少小时则隐藏" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">hours · 小时</span>
                 </div>
               </div>
@@ -10735,9 +10975,9 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Freshness for active products · 活跃商品的新鲜度</label>
                 <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_min_minutes" style="width: 90px;">
+                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_min_minutes" aria-label="Freshness for active products, lowest minutes · 活跃商品新鲜度下限(分钟)" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_max_minutes" style="width: 90px;">
+                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_max_minutes" aria-label="Freshness for active products, highest minutes · 活跃商品新鲜度上限(分钟)" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">min</span>
                 </div>
               </div>
@@ -10763,7 +11003,7 @@
             </label>
             <div class="row" style="gap: 16px; flex-wrap: wrap;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Minimum units to show · 最低显示销量</label>
+                <label for="cfg-social-sb-min_units" class="stacked">Minimum units to show · 最低显示销量</label>
                 <input type="number" min="1" id="cfg-social-sb-min_units" style="width: 110px;">
               </div>
             </div>
@@ -10775,9 +11015,9 @@
               <div class="field" style="margin: 0;">
                 <label class="stacked">Starting "sold" baseline · 起始“已售”基数</label>
                 <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-sb-boost_min" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-sb-boost_min" aria-label="Starting sold baseline, lowest · 起始已售基数下限" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-sb-boost_max" style="width: 90px;">
+                  <input type="number" min="0" id="cfg-social-sb-boost_max" aria-label="Starting sold baseline, highest · 起始已售基数上限" style="width: 90px;">
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
@@ -10829,12 +11069,12 @@
         </div>
         <div class="ctrl">
           <div class="field">
-            <label class="stacked">English body · 英文正文</label>
+            <label for="cfg-legal-privacy-en" class="stacked">English body · 英文正文</label>
             <textarea id="cfg-legal-privacy-en" placeholder="What we collect, why, how we store it, how to delete it. One paragraph per double-newline."
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
           <div class="field" style="margin-bottom: 0">
-            <label class="stacked">中文正文</label>
+            <label for="cfg-legal-privacy-cn" class="stacked">中文正文</label>
             <textarea id="cfg-legal-privacy-cn" placeholder="收集的信息、用途、储存方式、删除方式。每段用双行分隔。"
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
@@ -10866,12 +11106,12 @@
         </div>
         <div class="ctrl">
           <div class="field">
-            <label class="stacked">English body · 英文正文</label>
+            <label for="cfg-legal-terms-en" class="stacked">English body · 英文正文</label>
             <textarea id="cfg-legal-terms-en" placeholder="Order policy, refunds, food-safety. One paragraph per double-newline; sections start with a numbered heading on its own line."
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
           <div class="field" style="margin-bottom: 0">
-            <label class="stacked">中文正文</label>
+            <label for="cfg-legal-terms-cn" class="stacked">中文正文</label>
             <textarea id="cfg-legal-terms-cn" placeholder="订单规则、退款、食品安全。每段用双行分隔。"
                       style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
           </div>
@@ -11057,6 +11297,12 @@
       <div class="fin-tx-filter">
         <input class="fin-tx-search" id="fin-tx-search" type="text"
                oninput="finTxRender()" aria-label="Filter these transactions">
+        <!-- Download the ledger for the range bar's window. The search box above
+             is a client-side narrowing of rows already fetched, so it is NOT in
+             the file: the export is the window, which is what a bookkeeper asks
+             for and the only thing the server can be asked for exactly. -->
+        <button class="fin-btn-sec" id="fin-tx-export" type="button" onclick="finTxExportCsv()"
+                title="Download this window as a spreadsheet · 下载该时间段表格">Export CSV · 导出</button>
       </div>
       <div id="fin-tx-list"></div>
     </div>
@@ -11419,7 +11665,7 @@
     <div id="mt-view-products" class="mt-view">
       <div class="mt-chips" id="mt-chips" data-no-i18n></div>
       <div class="mt-tools">
-        <select class="mt-sel" id="mt-store-filter" data-no-i18n onchange="mtSetStore(this.value)"></select>
+        <select class="mt-sel" id="mt-store-filter" aria-label="Filter by location · 按门店筛选" data-no-i18n onchange="mtSetStore(this.value)"></select>
         <input class="mt-search" id="mt-search" type="text"
                data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或美团商品名…"
                placeholder="Search product, SKU or listing name…" oninput="mtFilterProducts()">
@@ -11923,7 +12169,7 @@
     <div id="el-view-products" class="el-view">
       <div class="el-chips" id="el-chips" data-no-i18n></div>
       <div class="el-tools">
-        <select class="el-sel" id="el-store-filter" data-no-i18n onchange="elSetStore(this.value)"></select>
+        <select class="el-sel" id="el-store-filter" aria-label="Filter by location · 按门店筛选" data-no-i18n onchange="elSetStore(this.value)"></select>
         <input class="el-search" id="el-search" type="text"
                data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或饿了么商品名…"
                placeholder="Search product, SKU or listing name…" oninput="elFilterProducts()">
@@ -12458,7 +12704,7 @@
        in-flow page in the content area (body.ord-viewing hides the tab sections
        and drops this to position:static) — no fixed overlay, no slide. On phones
        (<721px) it keeps the full-screen drawer behaviour. -->
-  <aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
+  <aside role="dialog" aria-modal="true" id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
     <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -12500,7 +12746,7 @@
      once, in one rule. The list stays VISIBLE behind it — that is what
      makes this a drawer and not a modal — but reads as inactive. -->
 <div id="cu-scrim" class="ord-scrim" aria-hidden="true" onclick="closeDrawer('#cu-drawer')"></div>
-<aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
+<aside role="dialog" aria-modal="true" id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
@@ -12874,7 +13120,7 @@
 <script src="/assets/retail-admin/23-sku.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
-<aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
+<aside role="dialog" id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
   <div class="drawer-head">
     <div>
       <h3 style="margin: 0; font-size: 14px;">Live Preview · 实时预览</h3>

@@ -78,7 +78,7 @@ const afT = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
 function afxWhy(e) {
   const code = (e && (e.code || e.message)) || '';
   const map = {
-    bad_reward:          () => afT('A reward has to be between ¥0 and ¥10,000.', '奖励金额需在 ¥0 到 ¥10,000 之间。'),
+    bad_reward:          () => afT('A reward has to be between ' + acWrap(0) + ' and ' + acWrap('10,000') + '.', '奖励金额需在 ' + acWrap(0) + ' 到 ' + acWrap('10,000') + ' 之间。'),
     bad_lifetime_rate:   () => afT('The repeat-order share has to be between 0% and 50%.', '复购分成比例需在 0% 到 50% 之间。'),
     bad_lifetime_months: () => afT('The share can last up to 120 months. Use 0 for no end date.', '分成最长 120 个月。设为 0 表示不设期限。'),
     bad_lifetime_mode:   () => afT('Who earns the repeat-order share could not be saved. Reload the page and set it again.', '复购分成的可获得范围保存失败。请刷新页面后重新设置。'),
@@ -296,19 +296,19 @@ function afxRenderVerdict() {
   const paid = Number(o.money.paidOut);
   const spend = Number(o.money.friendSpend);
   const figs =
-    afxFig(afT('You have paid out', '已发出奖励'), '¥' + afxMoney(paid),
+    afxFig(afT('You have paid out', '已发出奖励'), acWrap(afxMoney(paid)),
            paid > 0
              ? (o.money.lifetimePaid > 0
-                 ? afT('incl. ¥' + afxMoney(o.money.lifetimePaid) + ' from repeat orders', '含复购分成 ¥' + afxMoney(o.money.lifetimePaid))
+                 ? afT('incl. ' + acWrap(afxMoney(o.money.lifetimePaid)) + ' from repeat orders', '含复购分成 ' + acWrap(afxMoney(o.money.lifetimePaid)))
                  : afT('to referrer and friend wallets', '进入推荐人与好友钱包'))
              : afT('no referral has converted', '尚无推荐达成')) +
-    afxFig(afT('Referred friends have spent', '被推荐好友消费'), '¥' + afxMoney(spend),
+    afxFig(afT('Referred friends have spent', '被推荐好友消费'), acWrap(afxMoney(spend)),
            spend > 0
              ? afT('since they joined', '自加入起')
              : afT('nothing to weigh it against', '暂无可对比的数字')) +
-    afxFig(afT('Each referral costs', '每次推荐成本'), '¥' + afxMoney(cost),
-           afT('¥' + afxMoney(o.offer.referrer) + ' to them, ¥' + afxMoney(o.offer.friend) + ' to the friend',
-               '推荐人 ¥' + afxMoney(o.offer.referrer) + ',好友 ¥' + afxMoney(o.offer.friend)));
+    afxFig(afT('Each referral costs', '每次推荐成本'), acWrap(afxMoney(cost)),
+           afT(acWrap(afxMoney(o.offer.referrer)) + ' to them, ' + acWrap(afxMoney(o.offer.friend)) + ' to the friend',
+               '推荐人 ' + acWrap(afxMoney(o.offer.referrer)) + ',好友 ' + acWrap(afxMoney(o.offer.friend))));
 
   host.innerHTML = `<div class="afx-verdict">
       <div class="lead">${lead}</div>
@@ -387,8 +387,8 @@ function afxRenderOffer() {
       <div class="afx-offerline">
         <div class="ot">
           <div class="afx-card-lbl" style="margin-bottom: 0">${afT('The offer', '奖励方案')}</div>
-          <div class="h">${afT('Give ¥' + afxMoney(c.rewardReferee) + ', get ¥' + afxMoney(c.rewardPerOrder) + tail + qualEn + '.',
-                               '给出 ¥' + afxMoney(c.rewardReferee) + ',获得 ¥' + afxMoney(c.rewardPerOrder) + tail + qualCn + '。')}</div>
+          <div class="h">${afT('Give ' + acWrap(afxMoney(c.rewardReferee)) + ', get ' + acWrap(afxMoney(c.rewardPerOrder)) + tail + qualEn + '.',
+                               '给出 ' + acWrap(afxMoney(c.rewardReferee)) + ',获得 ' + acWrap(afxMoney(c.rewardPerOrder)) + tail + qualCn + '。')}</div>
           <div class="s">${afT('Paid into the referrer’s wallet the moment a friend’s first order is marked paid.',
                                '好友首单标记为已付款时,奖励即刻进入推荐人钱包。')}</div>
         </div>
@@ -432,9 +432,9 @@ function afxRenderSettings() {
       <div class="afx-card-lbl">${afT('The offer', '奖励方案')}</div>
       <div class="afx-lead">${afT('When a friend places their first paid order:', '当好友完成首笔付费订单时:')}</div>
       <div class="afx-sent">
-        <span class="who">${afT('the friend gets', '好友获得')}</span>${afxField('rewardReferee', c.rewardReferee, { prefix: '¥', label: afT('Reward for the friend', '好友奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
+        <span class="who">${afT('the friend gets', '好友获得')}</span>${afxField('rewardReferee', c.rewardReferee, { prefix: acCurrencySymbol(), label: afT('Reward for the friend', '好友奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
         <span class="who"> · </span>
-        <span class="who">${afT('the referrer gets', '推荐人获得')}</span>${afxField('rewardPerOrder', c.rewardPerOrder, { prefix: '¥', label: afT('Reward for the referrer', '推荐人奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
+        <span class="who">${afT('the referrer gets', '推荐人获得')}</span>${afxField('rewardPerOrder', c.rewardPerOrder, { prefix: acCurrencySymbol(), label: afT('Reward for the referrer', '推荐人奖励') })}<span class="who">${afT('in store credit', '店铺余额')}</span>
       </div>
       <div class="afx-restate" id="afx-restate">${afxRestate()}</div>
       <div class="afx-note">${afT(
@@ -684,8 +684,8 @@ async function afxOpenEligible() {
 
 function afxRestate() {
   const c = AFX.cfg || {};
-  return afT('Give <b>¥' + afxMoney(c.rewardReferee) + '</b>, get <b>¥' + afxMoney(c.rewardPerOrder) + '</b>.',
-             '给出 <b>¥' + afxMoney(c.rewardReferee) + '</b>,获得 <b>¥' + afxMoney(c.rewardPerOrder) + '</b>。');
+  return afT('Give <b>' + acWrap(afxMoney(c.rewardReferee)) + '</b>, get <b>' + acWrap(afxMoney(c.rewardPerOrder)) + '</b>.',
+             '给出 <b>' + acWrap(afxMoney(c.rewardReferee)) + '</b>,获得 <b>' + acWrap(afxMoney(c.rewardPerOrder)) + '</b>。');
 }
 // 0 months is a real setting, not an empty field — say what it does (the dash
 // and the silent "reloads as 12" flip are both banned).
@@ -805,8 +805,8 @@ function afxRow(r) {
   // page claiming a payment that never happened.
   const paid = r.status === 'ordered' ? (Number(r.reward_amount) || 0) : 0;
   const earned = paid > 0
-    ? `<span class="afx-num">¥${afxMoney(paid)}</span>`
-    : `<span class="afx-dim afx-num">¥0</span>`;
+    ? `<span class="afx-num">${acWrap(afxMoney(paid))}</span>`
+    : `<span class="afx-dim afx-num">${acWrap(afxMoney(0))}</span>`;
   return `<tr>
       <td><a data-afx="cust:${r.referrer_id}">${referrer}</a></td>
       <td><a data-afx="cust:${r.invitee_id}">${friend}</a></td>
@@ -1543,6 +1543,8 @@ cuApplyThemeIcon();
   // like text) because many placeholders carry a decorative " · " that is NOT a
   // translation divider (e.g. "Mon–Sat · 9am–6pm", "ROOTS CLUB · LEADERBOARD").
   const _phReg = [];
+  // Fields whose accessible name we derived — see nameField (audit G-02).
+  const _nameReg = [];
   // Native HTML title="" hover tooltips. Same "EN · CN" model as data-tip,
   // but the text-node/data-tip walkers never see title attributes — so without
   // this, bilingual title labels stay frozen and always show the Chinese half
@@ -1669,6 +1671,92 @@ cuApplyThemeIcon();
     scope.querySelectorAll && scope.querySelectorAll(sel).forEach(processTip);
   }
 
+
+  /* ── An accessible name on every field (audit G-02 / R-02) ────────────────
+     Of 436 form controls in the shell, 280 had no accessible name at all: no
+     `for=`, not inside a label, no aria-label. They relied on a placeholder,
+     which a screen reader may or may not announce, which several announce only
+     until the field has content, and which is gone from the screen the moment
+     the merchant types — so it fails the sighted operator who forgot what a
+     field was for, too.
+
+     Done HERE, in the i18n walker, rather than as 280 markup edits, for two
+     reasons that matter more than tidiness:
+
+       • Most of these fields do not exist in the markup. The admin builds its
+         forms in JavaScript, so a static pass over retail-admin.html would have
+         missed the drawers, the modals and the wizards — which is most of them.
+         This runs on the same MutationObserver that already localises them, so
+         a field gets its name whenever and however it appears.
+       • The name has to follow the language. A bilingual placeholder swaps on
+         the toggle; an aria-label copied from it once would be stale in the
+         other language from the first toggle onwards.
+
+     It never overwrites an authored name. A field that already has aria-label,
+     aria-labelledby, a <label for=>, or sits inside a <label> is left exactly
+     as it is — those are somebody's decision and better than anything derived.
+
+     Last resort only: the name comes from the bilingual placeholder pair, then
+     the plain placeholder, then title. A field with none of those gets nothing
+     here, because there is nothing true to say about it; those are the ones
+     worth finding by hand. */
+  const NAMEABLE = 'input, select, textarea';
+  // Types that carry their own name from the control itself, or are not
+  // announced as fields at all.
+  const NO_NAME_NEEDED = { hidden: 1, submit: 1, button: 1, reset: 1, image: 1 };
+
+  function hasAccessibleName(el) {
+    if ((el.getAttribute('aria-label') || '').trim()) return true;
+    if ((el.getAttribute('aria-labelledby') || '').trim()) return true;
+    if (el.closest && el.closest('label')) return true;
+    const id = el.getAttribute('id');
+    if (id) {
+      // CSS.escape guards ids with characters a selector would choke on —
+      // several are template-built ("trk-number-12", but also colon forms).
+      const sel = 'label[for="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+      try { if (document.querySelector(sel)) return true; } catch (e) { /* bad id, fall through */ }
+    }
+    return false;
+  }
+
+  function nameField(el) {
+    if (el.__i18nNamed) return;
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (NO_NAME_NEEDED[type]) return;
+    if (hasAccessibleName(el)) return;
+    const en = el.getAttribute('data-ph-en'), cn = el.getAttribute('data-ph-cn');
+    if (en != null && cn != null) {
+      el.__i18nNamed = true;
+      el.setAttribute('aria-label', _lang === 'cn' ? cn : en);
+      _nameReg.push({ el, en, cn });
+      return;
+    }
+    const fallback = (el.getAttribute('placeholder') || el.getAttribute('title') || '').trim();
+    if (!fallback) return;
+    el.__i18nNamed = true;
+    // A glued "English · 中文" pair — the product's own convention, and the
+    // shape most of these placeholders and titles are in. Split it and register
+    // both halves rather than reading the whole string aloud in two languages.
+    const cut = fallback.indexOf(' · ');
+    if (cut > 0) {
+      const a = fallback.slice(0, cut).trim(), b = fallback.slice(cut + 3).trim();
+      if (a && b) {
+        el.setAttribute('aria-label', _lang === 'cn' ? b : a);
+        _nameReg.push({ el, en: a, cn: b });
+        return;
+      }
+    }
+    el.setAttribute('aria-label', fallback);
+  }
+
+  function nameFields(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    try {
+      if (scope.matches && scope.matches(NAMEABLE)) nameField(scope);
+      scope.querySelectorAll && scope.querySelectorAll(NAMEABLE).forEach(nameField);
+    } catch (e) { /* a detached or exotic node — never break the walker for it */ }
+  }
+
   // Opt-in bilingual placeholders — see _phReg note above.
   function processPh(el) {
     if (el.__i18nPhDone) return;
@@ -1700,6 +1788,34 @@ cuApplyThemeIcon();
     el.setAttribute('title', _lang === 'cn' ? cn : en);
     _titleReg.push({ el, en, cn });
   }
+
+  // aria-label, on exactly the same rule (audit G-02). An authored label is
+  // written in the product's own "English · 中文" shape, and a screen reader
+  // handed the glued pair reads both languages aloud, every time. Same
+  // conservative guard as titles: only split when the half after " · " actually
+  // contains Chinese, so a label carrying data ("Select order R2609-0041")
+  // is left alone. Registered on _titleReg's twin so a toggle updates it.
+  function processAria(el) {
+    if (el.__i18nAriaDone) return;
+    const raw = el.getAttribute('aria-label') || '';
+    const idx = raw.indexOf(' · ');
+    if (idx === -1) return;
+    const en = raw.slice(0, idx).trim();
+    const cn = raw.slice(idx + 3).trim();
+    if (!en || !cn || !hasChinese(cn)) return;
+    el.__i18nAriaDone = true;
+    // Also stops nameField() from touching it later: it already has a name.
+    el.__i18nNamed = true;
+    el.setAttribute('aria-label', _lang === 'cn' ? cn : en);
+    _nameReg.push({ el, en, cn });
+  }
+  function processArias(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    try {
+      if (scope.hasAttribute && scope.hasAttribute('aria-label')) processAria(scope);
+      scope.querySelectorAll && scope.querySelectorAll('[aria-label]').forEach(processAria);
+    } catch (e) { /* never break the walker for one node */ }
+  }
   function processTitles(root) {
     const scope = (root && root.nodeType === 1) ? root : document.body;
     if (scope.hasAttribute && scope.hasAttribute('title')) processTitle(scope);
@@ -1709,7 +1825,16 @@ cuApplyThemeIcon();
   function processSubtree(root) {
     if (!root) return;
     if (root.nodeType === 3) { processNode(root); return; }
-    if (root.nodeType !== 1 || inSkippedContext(root)) return;
+    if (root.nodeType !== 1) return;
+    // Field naming runs BEFORE the i18n skip and independently of it (audit
+    // G-02). Naming a control is not localising text: inSkippedContext returns
+    // true for an <input> or <textarea> ITSELF — which is exactly the node the
+    // observer hands over when one is added on its own — and for anything under
+    // data-no-i18n, which several real forms are. Skipping either would leave
+    // the fields that need this most without a name.
+    processArias(root);
+    nameFields(root);
+    if (inSkippedContext(root)) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
     let n;
@@ -1748,11 +1873,64 @@ cuApplyThemeIcon();
       if (!e.el.isConnected) { _titleReg.splice(i, 1); continue; }
       e.el.setAttribute('title', lang === 'cn' ? e.cn : e.en);
     }
+    // Derived field names follow the language too — an aria-label frozen in
+    // English is worse than none for an operator working in Chinese.
+    for (let i = _nameReg.length - 1; i >= 0; i--) {
+      const e = _nameReg[i];
+      if (!e.el.isConnected) { _nameReg.splice(i, 1); continue; }
+      e.el.setAttribute('aria-label', lang === 'cn' ? e.cn : e.en);
+    }
     processSubtree(document.body);  // pick up anything not yet registered
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    // ── And on the PERSON, not just the browser (audit M-01 / M-02) ────────
+    // The choice used to live only in localStorage, so it belonged to a machine:
+    // sign in on the shop tablet and you got whatever the last person picked;
+    // sign in on a new computer and you got English. It now follows the
+    // operator's account.
+    //
+    // Fire-and-forget, and after the language is already applied. The screen has
+    // changed and the browser has remembered it before this call is made; if the
+    // write fails the only consequence is that it does not follow them to the
+    // next machine, which is not worth interrupting somebody who pressed a
+    // toggle. Guarded on `_langSynced` so ADOPTING the account's own language on
+    // load does not immediately write it straight back.
+    if (!_adoptingAccountLang) {
+      try {
+        fetch('/api/backend/language', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ language: lang }),
+        }).catch(() => {});
+      } catch (e) { /* never let remembering a preference break changing it */ }
+    }
     updateBtn();
     _listeners.forEach(cb => { try { cb(lang); } catch {} });
   }
+
+  // True only while applyLang is being called BY the adoption below, so that
+  // path does not echo the account's own value back to the server.
+  let _adoptingAccountLang = false;
+
+  /* ── Adopt the signed-in operator's language ──────────────────────────────
+     Called once, by whoever first learns who is signed in (01-core.js, from
+     /api/backend/me). Three states, and the third is the one that matters:
+
+       'en' / 'cn'  — the person chose this. It wins over whatever this browser
+                      had, which is the whole point: their language follows them.
+       null         — they have never chosen. The browser's value stands, and
+                      nothing is written back. A person who has never expressed a
+                      preference must not be switched to English on the day this
+                      ships.
+
+     Idempotent and cheap: if the account agrees with the browser there is
+     nothing to repaint. */
+  window.cuAdoptAccountLang = function (lang) {
+    if (lang !== 'en' && lang !== 'cn') return;
+    if (lang === _lang) return;
+    _adoptingAccountLang = true;
+    try { applyLang(lang); } finally { _adoptingAccountLang = false; }
+  };
 
   function updateBtn() {
     const btn = document.getElementById('lang-toggle');
@@ -1876,8 +2054,8 @@ function lbUpdateSeedSummary() {
   if (!LB_SEED_ENTRIES.length) { el.textContent = cuT('No placeholder members yet.', '尚未生成占位会员。'); return; }
   const top = LB_SEED_ENTRIES[0], bottom = LB_SEED_ENTRIES[LB_SEED_ENTRIES.length - 1];
   el.textContent = cuT(
-    LB_SEED_ENTRIES.length + ' members · ¥' + top.value + ' → ¥' + bottom.value,
-    LB_SEED_ENTRIES.length + ' 位会员 · ¥' + top.value + ' → ¥' + bottom.value
+    LB_SEED_ENTRIES.length + ' members · ' + acWrap(top.value) + ' → ' + acWrap(bottom.value),
+    LB_SEED_ENTRIES.length + ' 位会员 · ' + acWrap(top.value) + ' → ' + acWrap(bottom.value)
   );
 }
 // Build a believable descending spend distribution from the top value down,
@@ -1991,7 +2169,7 @@ async function lbLoadPreview() {
   }
 }
 function lbFormatValue(value, metric) {
-  if (metric === 'lifetime_spend') return '¥' + Number(value || 0).toFixed(0);
+  if (metric === 'lifetime_spend') return acWrap(Number(value || 0).toFixed(0));
   if (metric === 'points_balance') return Number(value || 0).toLocaleString() + ' pts';
   if (metric === 'orders_count')   return Number(value || 0).toLocaleString() + ' orders';
   return String(value || 0);
@@ -2844,12 +3022,26 @@ window.onLangChange(function () {
 // lazy-loaded; it also kept a cross-file hoisting dependency alive).
 // Deep-link: /retail-admin?tab=orders opens that tab directly. Used by the
 // new-order push notification so clicking it lands the operator on Orders.
+//
+// `&filter=` narrows the tab it opened, so a push can land on the WORK rather
+// than on a page the operator then has to filter themselves. Only Products
+// carries one today (the daily low-stock digest sends filter=low); the guard is
+// an allow-list, so a filter this build does not know about opens the plain tab
+// instead of throwing or, worse, silently showing the wrong set.
 (function () {
   try {
-    const want = new URLSearchParams(location.search).get('tab');
+    const qs = new URLSearchParams(location.search);
+    const want = qs.get('tab');
     if (!want || !/^[a-z_]+$/.test(want)) return;
     const b = document.querySelector('.tabs [data-tab="' + want + '"]');
-    if (b) b.click();
+    if (!b) return;
+    b.click();
+    const filter = qs.get('filter');
+    if (want === 'products' && ['low', 'oos', 'restock', 'drafts', 'live'].includes(filter)
+        && typeof paSetStatus === 'function') {
+      // After the tab's own first load, or paRender would repaint over it.
+      setTimeout(() => { try { paSetStatus(filter, false); } catch (e) {} }, 350);
+    }
   } catch (e) {}
 })();
 

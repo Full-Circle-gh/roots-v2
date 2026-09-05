@@ -287,6 +287,18 @@ const ctx = {
   Date, Math, Number, String, JSON, isNaN,
   cuT: (en) => en,
   escapeHtml: (s) => String(s == null ? '' : s),
+  // The tenant's currency helpers, which live in 01-core.js. This screen used
+  // to print a hardcoded ¥ and now goes through them (audit D-03 / I-01), so
+  // the sandbox has to supply them or every render helper throws a
+  // ReferenceError. Stubbed to the default currency — symbol in front, two
+  // places, thousands grouped en-US — which is what these assertions read.
+  acCurrencySymbol: () => '¥',
+  acWrap: (formatted) => '¥' + String(formatted),
+  acMoney: (n, dp) => '¥' + Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(dp) ? dp : 2,
+    maximumFractionDigits: Number.isInteger(dp) ? dp : 2,
+  }),
+  acMoneyCompact: (n) => '¥' + Math.round(Number(n || 0)).toLocaleString('en-US'),
 };
 vm.createContext(ctx);
 new vm.Script(

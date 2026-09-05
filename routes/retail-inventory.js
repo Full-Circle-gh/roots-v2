@@ -53,6 +53,9 @@ const router = express.Router();
 // 401 (from the orders store-filter on load) bounced retail-admin.html into a
 // /backend/login → /retail-admin redirect loop.
 const { requireRetailAdmin } = require('./retail');
+// The row ceiling for the cross-store grid (audit J-01) — every product times
+// every location, the fastest-growing read in the admin.
+const { listWindow, windowMeta } = require('../lib/list-window');
 
 // Read-only access to inventory data. A Mini App Backend operator passes the
 // same dual-realm gate as everywhere else; a kitchen session is allowed for
@@ -203,13 +206,22 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
   const extraWhere = publishedOnly ? ' AND p.is_published = 1' : '';
 
   const stores = inventory.listStores({ activeOnly: true });
+  // Row ceiling (audit J-01). This grid is every product × every location, so
+  // it is the fastest-growing read in the admin — an 800-product catalogue
+  // across four shops is 3,200 cells. `total` is the real product count, so the
+  // screen can say what it is showing rather than looking complete.
+  const { limit, offset } = listWindow(req.query, { defaultLimit: 1000, maxLimit: 5000 });
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM store_products p WHERE COALESCE(p.is_active, 1) = 1${extraWhere}`
+  ).get().n;
   const products = tdb().prepare(`
     SELECT id AS product_id, name_en, name_cn, sku, retail_price, weight,
            COALESCE(is_published, 0) AS is_published
-      FROM store_products
+      FROM store_products p
      WHERE COALESCE(is_active, 1) = 1${extraWhere}
      ORDER BY is_published DESC, name_en COLLATE NOCASE
-  `).all();
+     LIMIT ? OFFSET ?
+  `).all(limit, offset);
 
   const stockByPair = new Map();
   if (stores.length && products.length) {
@@ -220,24 +232,46 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
     for (const r of rows) stockByPair.set(`${r.store_id}:${r.product_id}`, r);
   }
 
+  // ── Availability, ONE query set per store — not three per cell ────────────
+  // This called inventory.getAvailable() inside the double loop below: three
+  // queries for every product in every store. A 500-product catalogue across
+  // four shops was 6,000 queries to paint one screen. getAvailableMap is the
+  // batch twin that already existed for exactly this — one shelf scan plus one
+  // reservation rollup per store — and returns the same shape per product.
+  //
+  // (The audit's J-02 said this grid batched correctly. It batched the SHELF
+  // rows, which is what stockByPair above does; the availability call under
+  // them was still per cell. Recorded here rather than left as a silent fix.)
+  const availByStore = new Map();
+  const pids = products.map(p => p.product_id);
+  for (const s of stores) {
+    availByStore.set(s.id, pids.length ? inventory.getAvailableMap(s.id, pids, 'wechat') : new Map());
+  }
+
   const out = products.map(p => {
     const stocks = stores.map(s => {
       const row = stockByPair.get(`${s.id}:${p.product_id}`);
       const physical = row?.physical_qty ?? 0;
-      const av = inventory.getAvailable(s.id, p.product_id, 'wechat');
+      // Absent from the map = no shelf row at this store, which is exactly what
+      // getAvailable's `exists: false` meant here.
+      const av = availByStore.get(s.id).get(p.product_id) || null;
       return {
         store_id: s.id,
         physical_qty: physical,
         restock_target: row?.restock_target ?? null,
-        active_reservations: av.activeThisChannel || 0,
-        available_wechat: av.exists ? av.available : 0,
+        active_reservations: (av && av.activeThisChannel) || 0,
+        available_wechat: av ? av.available : 0,
         stocked: !!row,
       };
     });
     return { ...p, stocks };
   });
 
-  res.json({ success: true, data: { stores, products: out } });
+  res.json({
+    success: true,
+    data: { stores, products: out },
+    ...windowMeta({ total, limit, offset, returned: out.length }),
+  });
 });
 
 // GET /api/retail-admin/stores/:id/stock
@@ -370,7 +404,31 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
       });
     }
   } else if ('physical_qty' in b) {
-    const newQty = parseInt(b.physical_qty, 10) || 0;
+    // A RECOUNT IS A NUMBER SOMEBODY TYPED, AND `|| 0` READ EVERY MISTAKE AS
+    // ZERO. An empty box, a stray letter, a pasted value with a stray character
+    // — all of them parsed to NaN and then fell to 0, which wrote "this shelf
+    // is empty" and answered success. The shelf count is the one figure in the
+    // product that decides whether a customer can buy something, so a value
+    // this route cannot read is refused rather than guessed at.
+    //
+    // Deliberately NOT accepting a negative count either: the delta path a few
+    // lines up already refuses one and says why, and a shelf holding minus
+    // forty is not a count anybody meant to record. Both refusals name the
+    // field so the operator can see which box to fix.
+    const rawQty = typeof b.physical_qty === 'string' ? b.physical_qty.trim() : b.physical_qty;
+    const newQty = (rawQty === '' || rawQty === null || rawQty === undefined) ? NaN : Number(rawQty);
+    if (!Number.isFinite(newQty) || !Number.isInteger(newQty)) {
+      return res.status(400).json({
+        success: false, error: 'physical_qty_invalid',
+        message: 'Enter the number of units on the shelf — a whole number, 0 or more.',
+      });
+    }
+    if (newQty < 0) {
+      return res.status(400).json({
+        success: false, error: 'physical_qty_negative',
+        message: 'A shelf count cannot be less than zero. Enter what is there, or 0 if it is empty.',
+      });
+    }
     out.adjust = inventory.adjustStock({
       storeId, productId, newPhysicalQty: newQty,
       // actor_user_id is just an audit integer (no FK) — but it can't be
@@ -704,6 +762,13 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
       user: {
         name: req.user?.display_name || req.user?.username || null,
         full_access: fullAccess,
+        // The operator's own language (audit M-01 / M-02). Quick Stock is the
+        // surface most often run on a SHARED tablet, which is the exact case
+        // the finding names: sign in and get whatever the last person chose.
+        // 'en' | 'cn', or null for "never chosen" — the device's own value
+        // stands then, and nobody is switched on the day this ships.
+        language: (req.backendUser && (req.backendUser.language === 'en' || req.backendUser.language === 'cn'))
+          ? req.backendUser.language : null,
       },
       stores: slim,
     },

@@ -519,7 +519,7 @@
   // rides along because it is often the only thing telling two blanks apart.
   function elSpecLabel(sp, i) {
     const base = (sp.name || '').trim()
-      || (sp.price != null ? '¥' + sp.price : '')
+      || (sp.price != null ? acWrap(sp.price) : '')
       || (cuT('Size ', '规格 ') + (i + 1));
     return sp.stock != null ? base + ' · ' + sp.stock : base;
   }

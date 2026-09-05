@@ -87,6 +87,17 @@ const sandbox = {
   escapeHtml: (v) => String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
   fmt: (n) => Number(n || 0).toFixed(2),
+  // The tenant's currency helpers (01-core.js). These slices used to print a
+  // hardcoded ¥ and now go through acMoney, so the sandbox has to supply it —
+  // the audit's D-03 pass is what made these a dependency. Stubbed to the
+  // default currency, which is what the assertions below are written against.
+  acMoney: (n, dp) => '¥' + Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(dp) ? dp : 2,
+    maximumFractionDigits: Number.isInteger(dp) ? dp : 2,
+  }),
+  acMoneyCompact: (n) => '¥' + Math.round(Number(n || 0)).toLocaleString('en-US'),
+  acWrap: (formatted) => '¥' + String(formatted),
+  acCurrencySymbol: () => '¥',
   orderItemNames: (it) => (LANG === 'cn' && it.name_cn)
     ? { primary: it.name_cn, secondary: it.name_en || '' }
     : { primary: it.name_en || it.name_cn || '', secondary: '' },

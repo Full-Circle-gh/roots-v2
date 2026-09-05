@@ -54,6 +54,20 @@ addColumn('ingredients', 'image_data',        'TEXT');
 addColumn('recipes',     'is_favorite',       'INTEGER DEFAULT 0');
 addColumn('po_line_items', 'lot_number',      'TEXT');
 addColumn('po_line_items', 'expiry_date',     'DATE');
+// Which account an activity row belongs to. `activity_log` is a CONTROL-PLANE
+// table (lib/tenant-db.js) — one shared file, never cloned per account — so
+// without this column there is no way to show an operator their own history
+// without showing them everybody else's. NULL means "written before this column
+// existed"; those rows are Roots', because Roots is the only account that has
+// written any. Readers must filter on it explicitly — see the note on
+// GET /api/retail-admin/activity-log.
+addColumn('activity_log', 'tenant_id', 'INTEGER');
+// Created HERE and not in schema.sql: schema.sql runs before the ALTER above,
+// so on an existing database the column does not exist yet when its indexes are
+// declared. The reading screen filters on (tenant_id, created_at) and nothing
+// else, which is exactly this index.
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_activity_log_tenant ON activity_log(tenant_id, created_at)'); }
+catch (e) { console.error('[migrate] activity_log tenant index:', e.message); }
 // Retail purchasing (online store buying dept) shares the kitchen PO engine.
 // scope splits the two worlds' lists ('kitchen' | 'retail'); retail POs pin a
 // retail_stores.id they restock into, and their lines reference store_products
@@ -1807,6 +1821,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_orders_customer ON retail_orders(customer_id);
   CREATE INDEX IF NOT EXISTS idx_retail_orders_status   ON retail_orders(status);
   CREATE INDEX IF NOT EXISTS idx_retail_orders_placed   ON retail_orders(placed_at);
+
+  -- ── What the system TRIED TO DELIVER (audit P-03) ──────────────────────
+  -- One row per send attempt, across every channel: a push, an email code, a
+  -- text message, a WeChat subscribe message, a chat-app webhook. Twenty kinds
+  -- of notification could leave this service and there was no screen listing
+  -- what went out, so a merchant asking "did the customer get told?" had no way
+  -- to find out — and a merchant whose staff had silently stopped receiving
+  -- orders had no way to notice.
+  --
+  -- ONE ROW PER ATTEMPT, NOT PER RECIPIENT. A push to eleven phones is one row
+  -- saying eleven were tried and nine reached; the question is "did this go
+  -- out", and eleven rows answers a question nobody asked while burying the
+  -- one that matters. The recipient column is filled only when the send was to
+  -- one named person, where who it went to IS the fact.
+  --
+  -- NOT A QUEUE. Nothing reads these rows to decide whether to send again, and
+  -- lib/notify-log.js swallows every failure of its own — a log that can break
+  -- the thing it logs is worse than no log.
+  --
+  -- Distinct from retail_notifications below, which is the customer's in-app
+  -- message centre: a product feature, not a delivery record.
+  CREATE TABLE IF NOT EXISTS notification_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id    INTEGER,
+    channel      TEXT NOT NULL,        -- push | email | sms | wechat | wecom | webhook
+    kind         TEXT NOT NULL,        -- order_paid | ship_reminder | low_stock_digest | signin_code | …
+    subject      TEXT,                 -- the line that was sent, or what it was for
+    recipient    TEXT,                 -- one named person; NULL for a broadcast
+    entity_type  TEXT,                 -- what it was ABOUT, so it can be found
+    entity_id    INTEGER,              -- from the order or customer it concerns
+    ok           INTEGER NOT NULL DEFAULT 0,
+    error        TEXT,                 -- the reason when it did not land
+    detail_json  TEXT,                 -- counts for a broadcast: tried/sent/pruned/muted
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_notification_log_when   ON notification_log(tenant_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_notification_log_entity ON notification_log(entity_type, entity_id);
+  CREATE INDEX IF NOT EXISTS idx_notification_log_failed ON notification_log(tenant_id, ok, created_at);
 
   -- Customer in-app notification center. One row per event (order status,
   -- refund transition, invoice issued, …). read_at NULL = unread. ref_type +
@@ -4393,6 +4445,19 @@ addColumn('retail_customers', 'created_by',               'INTEGER');
 // "you haven't". Chosen 2026-07-25 to match Orders rather than build a
 // per-operator seen table — do not "correct" this into per-operator.
 addColumn('retail_customers', 'seen_at',                  'DATETIME');
+// ── A note and tags on the customer record (audit E-02) ────────────────────
+// A customer held a name, a phone, addresses, orders, points and a wallet, and
+// there was nowhere to write "allergic to nuts", "always calls before
+// collecting" or "wholesale — invoice monthly", and no way to mark a group so
+// they could be found again. Reviews had tags; the people did not.
+//
+// `note` is free text the operator types, shown in the drawer and searchable.
+// `tags` is a COMMA-SEPARATED list, the same shape store_products.tags already
+// uses on this database rather than a second convention — one storage idea per
+// codebase is worth more than the cleaner one nobody remembers. Matching is
+// done on ','||tags||',' LIKE '%,x,%' so 'vip' never matches 'vip-trial'.
+addColumn('retail_customers', 'note',                     'TEXT');
+addColumn('retail_customers', 'tags',                     'TEXT');
 // One-shot backfill: stamp every customer that existed when the column
 // landed as already seen, so only records created from this point on read
 // as unopened. Decided 2026-07-25, same call the Orders backfill made.
@@ -4679,6 +4744,14 @@ if (RETENTION_DAYS > 0) {
     const r = db.prepare("DELETE FROM activity_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
     if (r.changes > 0) console.log(`[retention] purged ${r.changes} activity_log entries older than ${RETENTION_DAYS} days`);
   } catch (e) { /* best-effort */ }
+  // The delivery record (audit P-03) ages out on the same schedule and for the
+  // same reason: it exists to answer "what happened last week", not to be an
+  // archive. Its own try/catch so a table that has not been created yet on some
+  // path cannot stop the activity purge above from having run.
+  try {
+    const n = db.prepare("DELETE FROM notification_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
+    if (n.changes > 0) console.log(`[retention] purged ${n.changes} notification_log entries older than ${RETENTION_DAYS} days`);
+  } catch (e) { /* table not created yet — nothing to purge */ }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

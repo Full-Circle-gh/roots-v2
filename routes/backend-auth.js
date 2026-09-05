@@ -184,6 +184,23 @@ try { db.exec('ALTER TABLE tenant_users ADD COLUMN phone_verified INTEGER NOT NU
 // one-time backfill has a source; new code should not read these two columns).
 try { db.exec("ALTER TABLE tenant_users ADD COLUMN twofa_method TEXT NOT NULL DEFAULT 'email'"); } catch (e) { /* already added */ }
 
+// ── The operator's language, on the PERSON (audit M-01 / M-02) ─────────────
+// It lived in localStorage, so it belonged to a BROWSER rather than to a
+// member of staff: sign in on the shop tablet and you got whatever the last
+// person chose; sign in on a new computer and you got English. The desktop and
+// the phone even used different keys, so switching to Chinese on a phone left
+// the computer in English.
+//
+// NULL means "never chosen", which is a real third state and not the same as
+// 'en': a person who has never expressed a preference should keep following
+// whatever their browser already had, rather than being switched to English on
+// the day this ships. See /api/backend/language.
+//
+// STORED AS 'en' | 'cn'. The phone app speaks en/zh internally and maps at its
+// own boundary — one vocabulary here, so the column can never hold two words
+// for the same language.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN language TEXT'); } catch (e) { /* already added */ }
+
 // Two-step verification, per channel — email and SMS are independent switches
 // (both can be on at once), not a single preferred method. Turning one on takes
 // effect immediately: the channel's own address was already verified when it
@@ -436,6 +453,60 @@ function dedupeSessions(tenantUserId, currentSid) {
   } catch (e) { /* index-only; never blocks auth */ }
 }
 
+// ── A sign-in code that never left the building (audit P-02) ─────────────
+// Both senders return { ok:false, error } rather than throwing, and every call
+// to them below was `try { await send… } catch (e) {}` with the result dropped
+// on the floor. An expired SMS access key, a mail provider refusing the
+// account, a network blip — each of them produced exactly the same screen as a
+// code that arrived: "enter the 6-digit code we sent you". The operator then
+// waits for a message that is never coming, shut out of their own admin, with
+// nothing anywhere saying why.
+//
+// It is safe to say so at this point: the password has already been checked,
+// so whoever reads the answer is the account holder. (The forgotten-password
+// path is not — its reply stays deliberately identical for every username, so
+// there the failure is recorded rather than shown. See password-reset/start.)
+//
+// THIS IS NOT A FAIL-OPEN. A channel that is switched on but momentarily
+// failing does not sign the operator in without a code. The fail-open a few
+// lines below is for a channel that is not SET UP at all, which is a different
+// condition; turning a provider outage into a two-step bypass is the account
+// holder's decision to make, not a side effect of a bug fix.
+async function sendLoginCode(channel, u, code, ctx) {
+  let r;
+  try {
+    r = channel === 'sms'
+      ? await aliyunSms.sendOtpSms(u.phone, code, ctx.smsCreds)
+      : await emailSender.sendOtpEmail(u.recovery_email, code, null,
+          { ...emailBrandOpts(ctx.req, u.tenant_id), kind: ctx.kind || 'signin_code' });
+  } catch (e) {
+    // A sender that throws instead of returning is a bug in the sender, but it
+    // must still come back here as an ordinary failure — the operator's screen
+    // is the same either way.
+    r = { ok: false, error: 'send_threw:' + e.message };
+  }
+  if (r && r.ok) return { ok: true };
+  const why = (r && r.error) || 'unknown';
+  console.warn(`[backend-auth] sign-in code not sent · user=${u.id} channel=${channel} · ${why}`);
+  return { ok: false, error: why };
+}
+
+// What the operator is told when it fails. Names the channel, and points at the
+// other one when they have both, because "try again" on a channel that is down
+// is not advice. The provider's own error is deliberately not shown: it means
+// nothing to the person reading it, and it is already in the send record and
+// the log for whoever goes looking.
+function codeSendFailedMessage(channel, hasOther) {
+  if (channel === 'sms') {
+    return hasOther
+      ? 'We couldn’t send the text message — try email instead · 短信发送失败,请改用邮箱接收'
+      : 'We couldn’t send the text message — please try again in a moment · 短信发送失败,请稍后再试';
+  }
+  return hasOther
+    ? 'We couldn’t send the email — try SMS instead · 邮件发送失败,请改用短信接收'
+    : 'We couldn’t send the email — please try again in a moment · 邮件发送失败,请稍后再试';
+}
+
 // ── Brute-force guard, same posture as the kitchen login ─────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -477,14 +548,17 @@ router.post('/api/backend/login', loginLimiter, express.json(), async (req, res)
       const channel = smsOk ? 'sms' : 'email';
       const code = genCode();
       req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now(), channel };
-      if (channel === 'sms') {
-        insertCode(u.id, 'login_2fa', u.phone, code, 10);
-        try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
-        return res.json({ success: false, twofa: true, channel: 'sms', hint: maskPhone(u.phone) });
-      }
-      insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
-      try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
-      return res.json({ success: false, twofa: true, channel: 'email', hint: maskEmail(u.recovery_email) });
+      const to = channel === 'sms' ? maskPhone(u.phone) : maskEmail(u.recovery_email);
+      insertCode(u.id, 'login_2fa', channel === 'sms' ? u.phone : u.recovery_email, code, 10);
+      const sent = await sendLoginCode(channel, u, code, { req, smsCreds });
+      // The code step is still shown on a failure, and the pending login is
+      // still held: a code from a minute ago may well be live and typeable, and
+      // dropping them back to the password screen would only send them round
+      // the same loop. What changes is that the screen says what happened.
+      return res.json({
+        success: false, twofa: true, channel, hint: to,
+        ...(sent.ok ? {} : { sendFailed: true, error: codeSendFailedMessage(channel, false) }),
+      });
     }
     // No deliverable channel — fall through to a normal password-only sign-in.
   }
@@ -527,14 +601,18 @@ router.post('/api/backend/login/2fa/channel', loginLimiter, express.json(), asyn
   pending.channel = channel;
   pending.at = Date.now();
   req.session.pending2fa = pending;
-  if (channel === 'sms') {
-    insertCode(u.id, 'login_2fa', u.phone, code, 10);
-    try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
-    return res.json({ success: true, channel: 'sms', hint: maskPhone(u.phone) });
+  insertCode(u.id, 'login_2fa', channel === 'sms' ? u.phone : u.recovery_email, code, 10);
+  const sent = await sendLoginCode(channel, u, code, { req, smsCreds });
+  if (!sent.ok) {
+    // Hand the choice back. `pending.channel` is what this endpoint refuses a
+    // second call on, so leaving it set would answer the operator's next pick
+    // with "your sign-in expired" — the one channel that still works, closed
+    // off by the one that didn't.
+    pending.channel = null;
+    req.session.pending2fa = pending;
+    return res.json({ success: false, error: codeSendFailedMessage(channel, channel === 'sms' ? emailOk : smsOk) });
   }
-  insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
-  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
-  res.json({ success: true, channel: 'email', hint: maskEmail(u.recovery_email) });
+  res.json({ success: true, channel, hint: channel === 'sms' ? maskPhone(u.phone) : maskEmail(u.recovery_email) });
 });
 
 // Two-step verification — second step. Consumes the pending login held on this
@@ -583,7 +661,7 @@ router.post('/api/backend/logout', (req, res) => {
 
 router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
-  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all, language FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
   touchSession(req, u);   // keep the Devices index warm (surfaces pre-existing logins + heartbeat)
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
@@ -646,6 +724,9 @@ router.get('/api/backend/me', (req, res) => {
             home,                   // the tool list, when there is somewhere to go back to
             homeLabel,              // that screen's own name, so Back can say it
             lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
+            // 'en' | 'cn', or null for "never chosen" — the client keeps its
+            // browser value in that case (audit M-01 / M-02).
+            language: (u.language === 'en' || u.language === 'cn') ? u.language : null,
             caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
             // Co-brand identity — logo/mark served as bytes (kept out of this payload);
@@ -701,6 +782,29 @@ router.put('/api/backend/profile', express.json(), (req, res) => {
   db.prepare('UPDATE tenant_users SET display_name = ? WHERE id = ?').run(name, req.session.backendUserId);
   bumpBackendIdentity(req);
   res.json({ success: true, displayName: name });
+});
+
+// ── The operator's own language (audit M-01 / M-02) ────────────────────────
+// Written every time somebody uses a language toggle, on any surface. Cheap on
+// purpose: no confirmation, no settings screen to find, no separate save — the
+// toggle IS the setting, and it now follows the person to the next device
+// instead of belonging to the browser they happened to be at.
+//
+// 'en' | 'cn' only. The phone app speaks en/zh in its own state and maps at its
+// boundary, so this column never holds two words for one language.
+//
+// Best-effort by contract: the client has ALREADY applied the language and
+// written it to localStorage before calling this. A failure here means it does
+// not follow them to the next machine, which is worth a log line and is not
+// worth interrupting somebody who just pressed a toggle.
+router.put('/api/backend/language', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const raw = String((req.body && req.body.language) || '').trim().toLowerCase();
+  if (raw !== 'en' && raw !== 'cn') {
+    return res.status(400).json({ error: 'Language must be "en" or "cn" · 语言只能是 en 或 cn' });
+  }
+  db.prepare('UPDATE tenant_users SET language = ? WHERE id = ?').run(raw, req.session.backendUserId);
+  res.json({ success: true, language: raw });
 });
 
 // Set / clear own avatar (the Google-style profile circle). The client downscales
@@ -1160,7 +1264,7 @@ router.post('/api/backend/push/test', async (req, res) => {
   const r = await _push.sendPushToOperator(req.session.backendUserId, {
     title: '🌿 Test notification · 测试通知',
     body: 'Push is working on this device. · 此设备的推送已生效。',
-    url: '/retail-admin',
+    url: '/',
     tag: 'operator-test',
   });
   res.json({ success: true, sent: (r && r.sent) || 0 });
@@ -1261,7 +1365,11 @@ router.post('/api/backend/password-reset/start', codeLimiter, express.json(), as
   if (!u || !u.recovery_email || !u.recovery_email_verified || !emailSender.isConfigured()) return res.json(generic);
   const code = genCode();
   insertCode(u.id, 'password_reset', u.recovery_email, code, 15);
-  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
+  // The reply stays generic whether or not the mail went out — "that address
+  // bounced" is still an answer to "does this username exist". The failure goes
+  // to the send record and the log instead, which is where somebody looking
+  // into "I asked for a reset and nothing came" can actually find it.
+  await sendLoginCode('email', u, code, { req, kind: 'password_reset_code' });
   res.json(generic);
 });
 

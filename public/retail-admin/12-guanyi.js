@@ -431,18 +431,18 @@
   // The Overview "Billing snapshot" — headline numbers without the full table.
   function gyRenderTeaser(r) {
     const s = r.summary || {};
-    const yuan = (n) => '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const yuan = (n) => acWrap(Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setText('gy-t-owed', yuan(s.owed));
     setText('gy-t-units', Number(s.units || 0).toLocaleString());
     setText('gy-t-products', s.products || 0);
     const amt = document.getElementById('gy-nav-bill-amt');
-    if (amt) amt.textContent = '¥' + Math.round(s.owed || 0).toLocaleString();
+    if (amt) amt.textContent = acMoneyCompact(s.owed || 0);
   }
 
   function gyRenderAnalytics(r) {
     const wrap = document.getElementById('gy-analytics');
     if (!wrap) return;
-    const yuan = (n) => '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const yuan = (n) => acWrap(Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     const s = r.summary || {};
     const prods = r.products || [];
     const ts = r.timeSeries || [];

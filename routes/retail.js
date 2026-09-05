@@ -72,7 +72,11 @@ const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web 
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const wxaKnockout = require('../lib/wxacode-knockout');  // clears the 小程序码's white logo plate
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
-const { sendOpsAlert } = require('../lib/ops-alert'); // WeCom ops page on auto-shipping-upload failure
+// sendOpsAlert pages the PLATFORM; sendTenantAlert pages the MERCHANT and falls
+// back to the platform when they have no chat app configured (audit D-02/P-01).
+// Which one a site uses is the split: can only the platform act on this, or is
+// it the merchant's own day?
+const { sendOpsAlert, sendTenantAlert } = require('../lib/ops-alert');
 const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every customer-published surface
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -4609,7 +4613,9 @@ function maybeFlagUncallablePhone(order, storeCode) {
   try {
     if (phoneCn.isMainlandMobile(order.recipient_phone)) return;
     const shown = String(order.recipient_phone || '').trim() || '(空 / blank)';
-    Promise.resolve(sendOpsAlert(
+    // The MERCHANT's, not the platform's: the action this asks for is "call the
+    // customer", and only the shop can do that.
+    Promise.resolve(sendTenantAlert(currentTenantId(),
       `⚠️ 青云聚信 ${storeCode} 订单 ${order.order_no || '#' + order.id} 的收货电话可能无法接听：${shown}\n`
       + `Qingyun ${storeCode}: order ${order.order_no || '#' + order.id} has a recipient phone a rider likely can't call `
       + `(${shown}). The push still goes out — call the customer if it comes back refused.`
@@ -4818,7 +4824,7 @@ function markOrderPaid(orderId) {
           _push.sendPushByPermission('retail', {
             title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
             body: `${o.order_no} · ¥${Number(o.total || 0).toFixed(2)}`,
-            url: '/retail-admin?tab=orders',
+            url: '/?tab=orders',
             tag: 'retail-order-' + orderId,
           });
         }
@@ -4834,7 +4840,7 @@ function markOrderPaid(orderId) {
         if (op) _push.sendPushToTenantOperators(currentTenantId(), {
           title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
           body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
-          url: '/retail-admin?tab=orders',
+          url: '/?tab=orders',
           tag: 'retail-order-' + orderId,
         });
       }
@@ -6133,15 +6139,36 @@ router.post('/api/wx/callback/:tid', wxPushBody, (req, res) => {
 // Push a subscribeMessage to a customer if they have an unused consent for
 // the given template. Idempotent — marks consent used after send so it
 // can't fire twice. In DEV mode (no WECHAT_APP_ID set), logs only.
-async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/me/me') {
-  if (!templateId) return { sent: false, reason: 'no_template_id' };
+// `about` — { type, id, kind, subject } — ties the delivery record to the thing
+// the message was ABOUT, so a customer who was never told shows up ON their
+// order rather than only in a log somebody has to think to open (audit P-02).
+//
+// EVERY EXIT IS RECORDED, including the ones that are not failures at all:
+// "no consent" and "dev mode" are the commonest reasons a customer hears
+// nothing, and a merchant asking "did they get told?" is owed that answer as
+// much as they are owed a network error. `ok` separates them.
+async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/me/me', about) {
+  const _log = (ok, reason) => {
+    try {
+      require('../lib/notify-log').logNotification({
+        channel: 'wechat',
+        kind: (about && about.kind) || 'subscribe_message',
+        subject: (about && about.subject) || null,
+        recipient: customerId == null ? null : `customer #${customerId}`,
+        entityType: about && about.type,
+        entityId: about && about.id,
+        ok, error: ok ? null : reason,
+      });
+    } catch (e) { /* the log must never be able to fail a send */ }
+  };
+  if (!templateId) { _log(false, 'no_template_id'); return { sent: false, reason: 'no_template_id' }; }
   const sub = tdb().prepare(
     'SELECT id FROM retail_subscriptions WHERE customer_id = ? AND template_id = ? AND used = 0 ORDER BY id DESC LIMIT 1'
   ).get(customerId, templateId);
-  if (!sub) return { sent: false, reason: 'no_consent' };
+  if (!sub) { _log(false, 'no_consent'); return { sent: false, reason: 'no_consent' }; }
 
   const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(customerId);
-  if (!cust?.openid) return { sent: false, reason: 'no_openid' };
+  if (!cust?.openid) { _log(false, 'no_openid'); return { sent: false, reason: 'no_openid' }; }
 
   // WeChat one-shot consent is precious: it is only spent on WeChat's side by a
   // SUCCESSFUL send. So consume it (used=1) ONLY after a confirmed success (or a
@@ -6153,12 +6180,13 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   if (getTenantCreds(currentTenantId()).wechat.devMode || cust.openid.startsWith('dev:')) {
     markUsed();   // dev: nothing is sent; treat as a consumed no-op (matches prior behavior)
     console.log(`[subscribe-message] DEV — would send template=${templateId} to=${cust.openid}, data=${JSON.stringify(data)}`);
+    _log(false, 'dev_mode_nothing_sent');
     return { sent: false, dev: true };
   }
 
   try {
     const token = await getWeChatAccessToken();
-    if (!token) return { sent: false, reason: 'no_access_token' };   // transient → consent intact for retry
+    if (!token) { _log(false, 'no_access_token'); return { sent: false, reason: 'no_access_token' }; }   // transient → consent intact for retry
     const body = {
       touser: cust.openid,
       template_id: templateId,
@@ -6168,15 +6196,17 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
       lang: 'zh_CN',
     };
     const j = (await wxApiPost('/cgi-bin/message/subscribe/send', body)).json || {};
-    if (j.errcode === 0) { markUsed(); return { sent: true, response: j }; }
+    if (j.errcode === 0) { markUsed(); _log(true); return { sent: true, response: j }; }
     console.warn('[subscribe-message] send failed:', j);
     // 43101 = user has no / revoked subscription for this template — genuinely
     // non-retryable, so consume to stop pointless re-attempts. Any other errcode
     // is treated as transient and leaves the consent unused for a later retry.
     if (j.errcode === 43101) markUsed();
+    _log(false, `wechat ${j.errcode || '?'} ${j.errmsg || ''}`.trim());
     return { sent: false, response: j };
   } catch (e) {
     console.error('[subscribe-message]', e);
+    _log(false, 'exception: ' + (e && e.message ? e.message : e));
     return { sent: false, reason: 'exception' };   // transient → consent intact for retry
   }
 }
@@ -6235,7 +6265,7 @@ function maybeSendDeliveredSms(orderId) {
     if (claimed.changes !== 1) return;               // lost the race
 
     const tid = currentTenantId();
-    _aliyunSms.sendDeliveredSms(phone, { orderNo: o.order_no }, creds)
+    _aliyunSms.sendDeliveredSms(phone, { orderNo: o.order_no, orderId }, creds)
       .then((r) => {
         if (r.ok) { console.log('[sms-delivered] sent', o.order_no, r.bizId || ''); return; }
         console.warn('[sms-delivered]', orderId, r.error || r.code);
@@ -6373,7 +6403,9 @@ function notifyOrderStatusChange(orderId, newStatus) {
     // delayed tip short, Chinese-first, punctuation-free.
     const tip = airDelayed ? '送达延误 请勿食用生鲜' : ORDER_STATUS_TIP[newStatus];
     const data = buildOrderStatusData(orderId, o.order_no, tip);
-    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
+    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`,
+      { type: 'retail_order', id: orderId, kind: 'order_' + newStatus,
+        subject: `${o.order_no} → ${newStatus}` })
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
 }
@@ -6566,7 +6598,10 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
   // the give-up alert covers the case where it never comes good.
   if (!opts.fromSweep && !transient) {
     try {
-      await sendOpsAlert(`微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
+      // The MERCHANT's: the message ends "go to the mini-program back office and
+      // ship it by hand", which is their back office and nobody else's.
+      await sendTenantAlert(currentTenantId(),
+        `微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
     } catch (_) { /* alerting never blocks */ }
   }
 }
@@ -6629,7 +6664,9 @@ function notifyTrackingScenario(orderId, scenario) {
     if (scenario.pickup_code) phrase = `${scenario.label_cn}取件码${scenario.pickup_code}`;
     else if (scenario.signer) phrase = `${scenario.label_cn}签收人${scenario.signer}`;
     const data = buildOrderStatusData(orderId, o.order_no, phrase);
-    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
+    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`,
+      { type: 'retail_order', id: orderId, kind: 'delivery_update',
+        subject: `${o.order_no} — ${scenario.label_cn || ''}`.trim() })
       .catch(e => console.warn('[notify-scenario]', e));
   } catch (e) { console.error('[notify-scenario]', e); }
 }
@@ -7569,7 +7606,9 @@ async function retryWeChatShippingForTenant() {
   }
   if (gaveUp.length) {
     try {
-      await sendOpsAlert(`微信自动发货多次失败，已停止重试，请到小程序后台手动发货：${gaveUp.join('、')}`);
+      // The MERCHANT's, same reason as the single-order alert above.
+      await sendTenantAlert(currentTenantId(),
+        `微信自动发货多次失败，已停止重试，请到小程序后台手动发货：${gaveUp.join('、')}`);
     } catch (_) { /* alerting never blocks */ }
   }
   return uploaded;
@@ -7906,9 +7945,13 @@ function reconcileTier(customerId, spend, storedTier) {
       //    above has already happened and `want` is still returned.
       try {
         Promise.resolve(sendOpsAlert(
-          '⚠️ Roots Club 会员等级写入失败 — 积分与消费额记录正常，仅等级暂时未更新，会员下次登录时会自动修正。\n'
+          // Names the FEATURE, not the first merchant's version of it — this is
+          // shared code that fires for any account (audit D-04, same class).
+          // Stays on sendOpsAlert: it points at a server log, which is the
+          // platform's to read.
+          '⚠️ 会员等级写入失败 — 积分与消费额记录正常，仅等级暂时未更新，会员下次登录时会自动修正。\n'
           + '受影响的会员 ID 见 roots-v2 错误日志中的 [reconcileTier] 行。\n'
-          + 'Tacet: the Roots Club tier UPDATE is failing. Points and lifetime spend are still recorded correctly; '
+          + 'Tacet: the membership tier UPDATE is failing. Points and lifetime spend are still recorded correctly; '
           + 'only tier_key is stale, and it self-heals at the next customer sign-in. '
           + 'Affected customer ids are on the [reconcileTier] lines in roots-v2-error.log.'
         )).catch(err => console.warn('[reconcileTier] ops alert failed:', err && err.message));
@@ -14474,6 +14517,222 @@ function activityRows({ where, params }, limit, offset) {
   `).all(limit != null ? { ...params, limit, offset } : params);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   WHO CHANGED WHAT — the change history (audit E-01)
+
+   Every significant write in the admin already calls logActivity(); 139 call
+   sites across four route files have been writing rows into `activity_log`
+   since long before this endpoint existed. Nothing read them. A merchant who
+   found a price changed, a product unpublished or an order refunded had no way
+   to find out who did it.
+
+   THIS IS NOT the Products screen's "Stock activity". That reads
+   `retail_stock_ledger` and answers "how did this number get here" — movements,
+   with balances. This answers "who touched this record, and when".
+
+   🔴 TENANT SCOPING IS THE WHOLE OF THE SECURITY HERE, AND IT IS NOT tdb().
+   `activity_log` is a CONTROL-PLANE table (lib/tenant-db.js
+   CONTROL_PLANE_TABLES): one shared file, never cloned per account, so tdb()
+   would return the same rows to everybody. The read goes through the shared
+   handle deliberately and filters on `tenant_id` — the column added for exactly
+   this reason. Rows written before that column existed are NULL and belong to
+   Roots, the only account that had written any; that is why account 1 also
+   takes the NULLs and no other account ever can.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// The filter, built once for the page, its COUNT and its CSV — the same rule as
+// Orders and Customers, for the same reason.
+function buildChangeLogFilter(req) {
+  const tid = currentTenantId() || ROOTS_TENANT_ID;
+  // Account 1 also owns every row written before tenant_id existed. Any other
+  // account matches its own id and nothing else — a NULL row is never theirs.
+  const where = [tid === ROOTS_TENANT_ID
+    ? '(a.tenant_id = ? OR a.tenant_id IS NULL)'
+    : 'a.tenant_id = ?'];
+  const params = [tid];
+
+  const who = String(req.query.who || '').trim();
+  if (who) { where.push('a.username = ?'); params.push(who); }
+
+  const what = String(req.query.entity_type || '').trim();
+  if (what) { where.push('a.entity_type = ?'); params.push(what); }
+
+  // Free text over the action, the record type and the details blob — the three
+  // places an operator's own words end up ("refund", "price", an order number).
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    where.push('(a.action LIKE ? OR a.entity_type LIKE ? OR a.details LIKE ? OR CAST(a.entity_id AS TEXT) = ?)');
+    const s = `%${q}%`; params.push(s, s, s, q);
+  }
+
+  // Day bounds, read as Guangzhou days because that is what the screen shows.
+  const from = String(req.query.from || '').trim();
+  const to   = String(req.query.to   || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(a.created_at,'+8 hours') >= ?"); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(a.created_at,'+8 hours') <= ?"); params.push(to); }
+
+  return { whereSql: 'WHERE ' + where.join(' AND '), params };
+}
+
+// `created_at` is returned RAW (UTC, as stored) as well as pre-shifted. The
+// screen renders the raw one through tdWhen(), which uses the shop's own
+// timezone — the point of A-04's fix. `at_local` is the fixed +8 rendering the
+// CSV column is labelled with, matching every other export in this service.
+const CHANGE_LOG_SELECT = `
+  SELECT a.id, a.username, a.action, a.entity_type, a.entity_id, a.details, a.ip_address,
+         a.created_at,
+         datetime(a.created_at,'+8 hours') AS at_local
+    FROM activity_log a`;
+
+// GET /api/retail-admin/activity-log — the change history, newest first.
+//
+// Named activity-LOG, not activity: /api/retail-admin/activity is the stock
+// ledger and has been since before this existed. Two different questions, two
+// names, and neither shadows the other.
+router.get('/api/retail-admin/activity-log', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildChangeLogFilter(req);
+    const limit  = Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM activity_log a ${whereSql}`).get(...params).n;
+    const rows  = db.prepare(`${CHANGE_LOG_SELECT} ${whereSql} ORDER BY a.id DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset);
+
+    // The two filter dropdowns are populated from what this account actually
+    // has, not from a hard-coded list: a list naming record types the merchant
+    // has never touched is a list of dead ends, and one that missed a type
+    // would hide rows the operator could see in the table below it.
+    const people = db.prepare(
+      `SELECT DISTINCT a.username FROM activity_log a ${whereSql} AND a.username IS NOT NULL
+        ORDER BY a.username`).all(...params).map(r => r.username);
+    const kinds = db.prepare(
+      `SELECT DISTINCT a.entity_type FROM activity_log a ${whereSql} AND a.entity_type IS NOT NULL
+        ORDER BY a.entity_type`).all(...params).map(r => r.entity_type);
+
+    res.json({ success: true, data: rows, total, limit, offset, people, kinds });
+  } catch (e) {
+    console.error('[activity-log]', e);
+    res.status(500).json({ success: false, error: 'activity_log_failed', message: e.message });
+  }
+});
+
+// The same history as a spreadsheet, same filters, no page window.
+router.get('/api/retail-admin/activity-log/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildChangeLogFilter(req);
+    const rows = db.prepare(`${CHANGE_LOG_SELECT} ${whereSql} ORDER BY a.id DESC`).all(...params);
+    const head = ['When (UTC+8)', 'Who', 'Did what', 'To what', 'Record', 'Details', 'IP address'];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([r.at_local, r.username, r.action, r.entity_type, r.entity_id, r.details, r.ip_address]
+        .map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="change_history_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[activity-log csv]', e);
+    res.status(500).json({ success: false, error: 'activity_log_csv_failed', message: e.message });
+  }
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WHAT WAS SENT (audit P-03, and the visible half of P-02)
+
+   Twenty kinds of notification can leave this service — a push to an operator's
+   phone, a sign-in code by email, a text to a customer, a delivery reminder —
+   and there was no screen anywhere listing what went out, to whom, or whether
+   it landed. A merchant asking "did the customer get told?" had no way to find
+   out, and one whose staff had silently stopped receiving orders had no way to
+   notice.
+
+   `notification_log` is an ACCOUNT table, not control-plane — it is cloned per
+   account like every other data table — so this reads through tdb() and needs
+   no tenant filter of its own. (Contrast the change history above, which reads
+   a shared table and filters on tenant_id explicitly. The difference is real
+   and is why the two endpoints do not look alike.)
+   ══════════════════════════════════════════════════════════════════════════ */
+function buildNotifyLogFilter(req) {
+  const where = ['1=1'];
+  const params = [];
+
+  const channel = String(req.query.channel || '').trim();
+  if (channel) { where.push('n.channel = ?'); params.push(channel); }
+
+  const kind = String(req.query.kind || '').trim();
+  if (kind) { where.push('n.kind = ?'); params.push(kind); }
+
+  // The cut an operator actually reaches for: show me what did not arrive.
+  if (String(req.query.failed || '') === '1') where.push('n.ok = 0');
+
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    where.push('(n.subject LIKE ? OR n.recipient LIKE ? OR n.error LIKE ? OR n.kind LIKE ?)');
+    const t = `%${q}%`; params.push(t, t, t, t);
+  }
+
+  const from = String(req.query.from || '').trim();
+  const to   = String(req.query.to   || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(n.created_at,'+8 hours') >= ?"); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(n.created_at,'+8 hours') <= ?"); params.push(to); }
+
+  return { whereSql: 'WHERE ' + where.join(' AND '), params };
+}
+
+router.get('/api/retail-admin/notification-log', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params } = buildNotifyLogFilter(req);
+    const limit  = Math.min(Math.max(parseInt(req.query.limit || '100', 10) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+
+    const total = tdb().prepare(`SELECT COUNT(*) AS n FROM notification_log n ${whereSql}`).get(...params).n;
+    const rows = tdb().prepare(
+      `SELECT n.id, n.channel, n.kind, n.subject, n.recipient, n.entity_type, n.entity_id,
+              n.ok, n.error, n.detail_json, n.created_at
+         FROM notification_log n ${whereSql}
+        ORDER BY n.id DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset);
+    for (const r of rows) {
+      if (typeof r.detail_json === 'string' && r.detail_json) {
+        try { r.detail = JSON.parse(r.detail_json); } catch { r.detail = null; }
+      } else { r.detail = null; }
+      delete r.detail_json;
+      r.ok = !!r.ok;
+    }
+
+    // How many did not arrive, in the SAME window the rows are drawn from but
+    // ignoring the failed-only toggle — otherwise the count and the toggle
+    // would describe each other in a circle.
+    const failedParams = buildNotifyLogFilter({ query: { ...req.query, failed: '' } });
+    const failed = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM notification_log n ${failedParams.whereSql} AND n.ok = 0`
+    ).get(...failedParams.params).n;
+
+    // The two dropdowns, built from what this account has actually sent, so
+    // neither can offer a dead end.
+    const channels = tdb().prepare(
+      `SELECT DISTINCT n.channel FROM notification_log n ORDER BY n.channel`
+    ).all().map(r => r.channel);
+    const kinds = tdb().prepare(
+      `SELECT DISTINCT n.kind FROM notification_log n ORDER BY n.kind`
+    ).all().map(r => r.kind);
+
+    res.json({ success: true, data: rows, total, failed, limit, offset, channels, kinds });
+  } catch (e) {
+    // The table may not exist yet on a database that has not restarted since
+    // this shipped. An empty log is the honest answer, not a 500.
+    if (/no such table/i.test(e.message || '')) {
+      return res.json({ success: true, data: [], total: 0, failed: 0, channels: [], kinds: [] });
+    }
+    console.error('[notification-log]', e);
+    res.status(500).json({ success: false, error: 'notification_log_failed', message: e.message });
+  }
+});
+
 // JSON: paginated rows + per-source summary for the current filter window.
 router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
   try {
@@ -16289,8 +16548,10 @@ function customerSearchWhere(q) {
   if (!term) return null;
 
   const like = '%' + term + '%';
-  const ors = ['nickname LIKE ?', 'phone LIKE ?', 'openid LIKE ?'];
-  const params = [like, like, like];
+  // note and tags join the search because the whole point of writing "wholesale
+  // — invoice monthly" on a record is being able to find it again (audit E-02).
+  const ors = ['nickname LIKE ?', 'phone LIKE ?', 'openid LIKE ?', 'note LIKE ?', 'tags LIKE ?'];
+  const params = [like, like, like, like, like];
 
   if (/^\d+$/.test(term)) {
     // numeric → the CUSTOMER's own id FIRST. An account with no nickname is
@@ -16338,25 +16599,26 @@ function customerSearchWhere(q) {
 // Customers admin tab (paginated, filterable). Backward compatible: same URL,
 // same `data` field shape (plus extra columns), older callers ignore the new
 // `page/pageSize/total` fields.
-router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
-  const q              = String(req.query.q || '').trim();
+// The Customers filter clause, built in ONE place because THREE readers need
+// to agree about it: the roster page, the COUNT that feeds its pager, and the
+// CSV export. The export must return exactly the customers on screen — the
+// operator picked those filters, and a file that quietly widened or narrowed
+// them is a file nobody can check. Pagination and sort stay with the page
+// reader below; an export has neither.
+function buildCustomerFilter(query) {
+  const q              = String(query.q || '').trim();
   // Comma-separated so the Tier column header can filter by several tiers at
   // once (e.g. "root,tree"); a single value still works the same as before.
-  const tiers          = String(req.query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+  const tiers          = String(query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
   // Same pattern for the Channel filter. Values are SIGNUP channels —
   // 'wechat' | 'web' | 'manual' | 'unknown' — derived from openid by
   // CHANNEL_SQL below, which the SELECT and this WHERE both read so the icon
   // on a row and the filter that returns it can never disagree.
-  const channels       = String(req.query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
-  const segment        = String(req.query.segment || '').trim();
+  const channels       = String(query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+  const segment        = String(query.segment || '').trim();
   // The roster asks for one segment at a time; the stat strip still calls this
   // with includeBlocked=1 (pageSize=1) purely to count every account.
-  const includeBlocked = req.query.includeBlocked === '1' || segment === 'blocked';
-  const sort           = String(req.query.sort || 'recent_login');
-  const dir            = req.query.dir === 'asc' ? 'ASC' : (req.query.dir === 'desc' ? 'DESC' : null);
-  const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
-  const offset         = (page - 1) * pageSize;
+  const includeBlocked = query.includeBlocked === '1' || segment === 'blocked';
 
   // ── Signup channel — WHERE THEY SIGNED UP, not where they last ordered ──
   //
@@ -16401,6 +16663,17 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   if (!includeBlocked) where.push('is_blocked = 0');
   if (tiers.length)    { where.push(`tier_key IN (${tiers.map(() => '?').join(',')})`); params.push(...tiers); }
   if (channels.length) { where.push(`${CHANNEL_SQL} IN (${channels.map(() => '?').join(',')})`); params.push(...channels); }
+  // Tag facet (audit E-02). Stored comma-separated, so matching wraps BOTH
+  // sides in commas: ',vip,wholesale,' LIKE '%,vip,%' is true and
+  // '%,vip,%' can never match 'vip-trial' the way a bare '%vip%' would.
+  // Several tags are an OR — an operator asking for "vip, wholesale" wants
+  // everyone in either group, which is what a facet chip row means everywhere
+  // else on this screen.
+  const tags = String(query.tags || '').trim().split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (tags.length) {
+    where.push('(' + tags.map(() => "',' || COALESCE(tags,'') || ',' LIKE ?").join(' OR ') + ')');
+    params.push(...tags.map(t => `%,${t},%`));
+  }
 
   // Roster segments — the cuts an operator actually reaches for. Timestamps are
   // UTC text, so SQLite's datetime() comparisons work on them directly.
@@ -16434,6 +16707,73 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const search = customerSearchWhere(q);
   if (search) { where.push(search.sql); params.push(...search.params); }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  return { whereSql, params, CHANNEL_SQL, search, SEG_PAID_EXISTS };
+}
+
+
+// ── CSV: the customers the roster is showing, all of them ──────────────────
+// Registered ABOVE /customers/:id on purpose: Express matches in order and
+// `export.csv` would otherwise be parsed as a customer id.
+//
+// Same filters as the roster (buildCustomerFilter), no page window. This is the
+// merchant's own contact list — the thing they need to mail a promotion, hand
+// to an accountant, or take with them if they leave. BOM-prefixed UTF-8 so
+// Excel renders the Chinese names correctly.
+//
+// Blocked customers follow the roster's rule exactly: absent unless the caller
+// asked for them (?includeBlocked=1 or ?segment=blocked), because that is what
+// the screen was showing when the button was pressed.
+router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { whereSql, params, CHANNEL_SQL } = buildCustomerFilter(req.query);
+    const rows = tdb().prepare(
+      `SELECT id, nickname, phone, email, openid, tier_key, tags, note,
+              lifetime_spend, points_balance, balance, is_blocked,
+              ${CHANNEL_SQL} AS channel,
+              (SELECT COUNT(*) FROM retail_orders o WHERE o.customer_id = retail_customers.id) AS orders_count,
+              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '+8 hours') AS last_order_at,
+              datetime(created_at,     '+8 hours') AS joined_local,
+              datetime(last_login_at,  '+8 hours') AS last_seen_local
+         FROM retail_customers
+         ${whereSql}
+        ORDER BY id ASC`
+    ).all(...params);
+
+    const yn = v => (Number(v) ? 'Yes' : 'No');
+    const head = [
+      'ID', 'Name', 'Phone', 'Email', 'Tier', 'Signed up via', 'Tags',
+      'Orders', 'Lifetime spend', 'Points', 'Wallet balance',
+      'Blocked', 'Joined (UTC+8)', 'Last order (UTC+8)', 'Last seen (UTC+8)', 'Note',
+    ];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([
+        r.id, r.nickname, r.phone, r.email, r.tier_key, r.channel, r.tags,
+        r.orders_count, r.lifetime_spend, r.points_balance, r.balance,
+        yn(r.is_blocked), r.joined_local, r.last_order_at, r.last_seen_local, r.note,
+      ].map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="customers_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[customers csv]', e);
+    res.status(500).json({ success: false, error: 'customers_csv_failed', message: e.message });
+  }
+});
+
+router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
+  // Sort and paging belong to the page reader; the filter itself is shared with
+  // the CSV export (see buildCustomerFilter).
+  const sort           = String(req.query.sort || 'recent_login');
+  const dir            = req.query.dir === 'asc' ? 'ASC' : (req.query.dir === 'desc' ? 'DESC' : null);
+  const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
+  const offset         = (page - 1) * pageSize;
+  const { whereSql, params, CHANNEL_SQL, search, SEG_PAID_EXISTS } = buildCustomerFilter(req.query);
+
 
   // Column-header sort: one column at a time, either direction. `orders_count`
   // and `balance` (Orders / Wallet columns) aren't sortable columns on the
@@ -16496,6 +16836,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
             points_balance, balance, is_blocked, created_at, last_login_at, seen_at,
+            note, tags,
             (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count,
             ${CHANNEL_SQL} AS channel
        FROM retail_customers
@@ -16539,8 +16880,27 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     segments = { all: seg.all_count, new_week: seg.new_week, sleeping: seg.sleeping, blocked: seg.blocked };
   }
 
+  // Every tag anybody on this account has actually used, so the filter offers
+  // real groups rather than a list somebody has to remember. Built from the
+  // stored comma-separated column with no schema of its own: a separate tag
+  // table would be a second source of truth for the same fact, and the day it
+  // disagreed with the column nobody could say which was right.
+  const tagRows = tdb().prepare(
+    "SELECT tags FROM retail_customers WHERE tags IS NOT NULL AND tags != ''"
+  ).all();
+  const tagCounts = new Map();
+  for (const r of tagRows) {
+    for (const t of String(r.tags).split(',')) {
+      const k = t.trim();
+      if (k) tagCounts.set(k, (tagCounts.get(k) || 0) + 1);
+    }
+  }
+  const tagVocabulary = [...tagCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, n]) => ({ tag, count: n }));
+
   res.json({ success: true, data: rows, page, pageSize, total, customers_on_file: customersOnFile,
-             hidden_by_filters: hidden, returning, segments });
+             hidden_by_filters: hidden, returning, segments, tag_vocabulary: tagVocabulary });
 });
 
 // Would a "save as a customer" tick attach this order to somebody already on
@@ -17090,6 +17450,40 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
     }
     updates.push('birthday = ?'); params.push(v); changed.birthday = v;
   }
+  // ── The note and the tags (audit E-02) ───────────────────────────────────
+  // A note is free text the operator types about a person — "allergic to nuts",
+  // "always calls before collecting", "wholesale, invoice monthly". 2000
+  // characters, the same ceiling an order's staff note takes. An empty string
+  // clears it, which is a legitimate edit.
+  if (b.note !== undefined) {
+    if (b.note !== null && typeof b.note !== 'string') {
+      return res.status(400).json({ success: false, error: 'note_invalid', message: 'A note must be text.' });
+    }
+    const v = (b.note == null || String(b.note).trim() === '') ? null : String(b.note).slice(0, 2000);
+    updates.push('note = ?'); params.push(v); changed.note = v;
+  }
+  // Tags arrive as either an array or a comma-separated string; both are
+  // normalised to ONE stored shape — comma-separated, trimmed, lowercased,
+  // de-duplicated, no empties. Lowercased because "VIP" and "vip" are the same
+  // mark to the person typing them and two different rows to a LIKE, and the
+  // whole value of a tag is that it finds the group again.
+  if (b.tags !== undefined) {
+    const raw = Array.isArray(b.tags) ? b.tags : String(b.tags == null ? '' : b.tags).split(',');
+    const seen = new Set();
+    const list = [];
+    for (const t of raw) {
+      // Commas are the separator, so a tag cannot contain one — stripped rather
+      // than rejected, because the operator typing "vip, wholesale" meant two
+      // tags and an error there would be pedantry.
+      const clean = String(t == null ? '' : t).replace(/,/g, ' ').trim().toLowerCase().slice(0, 40);
+      if (!clean || seen.has(clean)) continue;
+      seen.add(clean); list.push(clean);
+      if (list.length >= 20) break;     // a bounded list stays a list
+    }
+    const v = list.length ? list.join(',') : null;
+    updates.push('tags = ?'); params.push(v); changed.tags = v;
+  }
+
   // tier_key is intentionally not editable here — it's auto-derived from
   // lifetime_spend (see tierFromSpend / reconcileTier). Any tier_key in the
   // payload is silently ignored so older admin builds don't error.
@@ -20329,7 +20723,27 @@ router.get('/api/retail/media/:id/sec-status', requireRetailAuth, (req, res) => 
 
 // Storefront config — read full + bulk write.
 router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
-  res.json({ success: true, data: loadConfig() });
+  // THE ADMIN'S CLOCK. public/td-datetime.js renders every timestamp in the
+  // shop's zone and reads it from `window.TD_TZ`, falling back to Asia/Shanghai
+  // — and nothing anywhere set that variable, so every account's orders,
+  // reports and "today" were drawn on Guangzhou's clock whatever the shop's own
+  // was. The zone the product actually stores is per location
+  // (`retail_stores.timezone`, the same column lib/business-date.js reads), so
+  // the shell takes the first active location that carries one.
+  //
+  // NULL WHEN NO LOCATION HAS SET ONE, deliberately: the client leaves TD_TZ
+  // alone in that case and the existing fallback stands, so an install whose
+  // locations carry no zone renders exactly as it did before this line existed.
+  let timezone = null;
+  try {
+    const row = tdb().prepare(
+      `SELECT timezone FROM retail_stores
+        WHERE is_active = 1 AND timezone IS NOT NULL AND TRIM(timezone) <> ''
+        ORDER BY sort_order, id LIMIT 1`
+    ).get();
+    timezone = (row && String(row.timezone).trim()) || null;
+  } catch (e) { timezone = null; }   // column absent on an old account DB → fallback
+  res.json({ success: true, data: { ...loadConfig(), timezone } });
 });
 
 // Live per-tier member counts — context for the Membership tier editor so the
@@ -22470,12 +22884,26 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM store_products p WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
+  // Collected separately as well as appended, so the count below can be built
+  // from exactly the same conditions without re-deriving them.
+  let where = '';
   if (q) {
-    sql += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
+    where += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
     const s = `%${q}%`; params.push(s, s, s);
   }
-  if (published === '1') sql += ' AND is_published = 1';
-  if (published === '0') sql += ' AND is_published = 0';
+  if (published === '1') where += ' AND is_published = 1';
+  if (published === '0') where += ' AND is_published = 0';
+  sql += where;
+  // HOW MANY THERE ACTUALLY ARE. The cap below used to be the whole answer:
+  // the grid asked with no limit, received at most 500 rows and paged over them
+  // in the browser, so its pager read "of 500" for a catalogue of nine hundred
+  // and four hundred products were unreachable from the screen with nothing
+  // saying so. This is what the same filters match, shipped alongside the rows
+  // so the grid can say when it is holding only part of the catalogue. One
+  // COUNT over the same WHERE — no ORDER BY, no columns, no image work.
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM store_products p WHERE COALESCE(is_active, 1) = 1${where}`
+  ).get(...params).n;
   // Optional cap (used by the global search palette, which only shows a few
   // hits and shouldn't pull the whole catalogue per keystroke). Defaults to
   // the full grid limit of 500.
@@ -22605,7 +23033,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // that matters most. Stripped after applyBundleCost has run: a bundle's
   // cost is derived on the way out, and deriving it into a field nobody may
   // read would just be work.
-  res.json({ success: true, data: stripProductCosts(req, rows) });
+  // `total` is what the filters match; `data` is at most `limit` of them. The
+  // grid needs both to tell the truth about how much of the catalogue it holds.
+  res.json({ success: true, data: stripProductCosts(req, rows), total, limit: lim, truncated: total > rows.length });
 });
 
 // GET /api/retail-admin/products/:id/image — stream a product's primary photo
@@ -23587,13 +24017,184 @@ router.delete('/api/retail-admin/order-drafts/:id', requireRetailAdmin, (req, re
   res.json({ success: true });
 });
 
-router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
-  const { status, q, from, to, store_id, customer_id } = req.query;
+// The Orders filter clause, built in ONE place because THREE readers need to
+// agree about it: the list page, the COUNT that feeds the list's pager, and the
+// CSV export. An export that quietly returned a different set of orders from
+// the screen it was taken from is worse than no export — the spreadsheet is
+// what gets mailed to the accountant, long after anyone can check it against
+// the list. Anything appended here must be expressible against
+// `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all the
+// COUNT and the export join.
+function buildOrderFilter(query) {
+  const { status, q, from, to, store_id, customer_id } = query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(req.query.channel || '').toLowerCase())
-    ? String(req.query.channel).toLowerCase() : '';
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(query.channel || '').toLowerCase())
+    ? String(query.channel).toLowerCase() : '';
+  let filterSql = 'WHERE 1=1';
+  const params = [];
+  // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
+  // this combined list read-only instead of being excluded; an explicit
+  // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
+  if (channel) { filterSql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
+  // `refunds_open` is a pseudo-status that pulls every order currently in
+  // the refund pipeline regardless of primary status — so open requests
+  // are reachable from the main orders table, not only the chip view.
+  if (status === 'refunds_open') {
+    filterSql += " AND o.refund_status IN ('pending','reviewing','approved')";
+  } else if (status === 'needs_invoice') {
+    // Pseudo-status: every order carrying a fapiao request, whatever its
+    // primary status. Dead orders drop out (a cancelled order owes no fapiao);
+    // issued ones stay browsable in this view but sort below the open work.
+    filterSql += ` AND o.needs_invoice = 1
+             AND o.status NOT IN ('cancelled','pending_payment')`;
+  } else if (status === 'paid') {
+    // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
+    // multi-parcel order that's had only SOME parcels shipped flips to
+    // 'dispatched' as a whole, yet still owes the customer an unshipped parcel.
+    // Keep it in this tab (alongside the real `paid` orders) until every parcel
+    // is out, so the leftover parcel can't be forgotten. It still appears in the
+    // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
+    // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
+    filterSql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
+               SELECT 1 FROM retail_shipments shx
+                WHERE shx.order_id = o.id
+                  AND shx.delivered_at IS NULL
+                  AND COALESCE(shx.tracking_status,'') != 'delivered'
+                  AND shx.dispatched_at IS NULL
+                  AND COALESCE(shx.tracking_number,'') = '')))`;
+  } else if (status) {
+    filterSql += ' AND o.status = ?'; params.push(status);
+  }
+  if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (q) {
+    filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
+    const s = `%${q}%`; params.push(s, s, s, s);
+  }
+  if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
+  if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
+  // Scope to a single customer — an exact FK match (the "View all N orders"
+  // path from a customer's drawer), NOT the free-text q search. Rides
+  // o.customer_id (already selected) and the retail_customers c join the COUNT
+  // below shares, so the pager total stays exact for the scoped list.
+  if (customer_id) {
+    const cid = parseInt(customer_id, 10);
+    if (Number.isFinite(cid)) { filterSql += ' AND o.customer_id = ?'; params.push(cid); }
+  }
+  return { filterSql, params, channel };
+}
+
+// ── CSV: the orders the screen is showing, all of them ─────────────────────
+// Registered ABOVE /orders/:id on purpose: Express matches in order and
+// `export.csv` would otherwise be parsed as an order id.
+//
+// Same filters as the list (buildOrderFilter), no LIMIT. The merchant's
+// bookkeeper wants last quarter's sales and the merchant wants to be able to
+// leave with their own data; both needed a spreadsheet and there was no door.
+// BOM-prefixed UTF-8 so Excel renders the Chinese names correctly (same as the
+// products and activity exports).
+//
+// ONE ROW PER ORDER, not per line item. A per-item file is the right shape for
+// a product-sales report and the wrong shape for reconciling takings against a
+// bank statement, which is what this is for; the item detail is summarised in
+// two columns (how many lines, and what they were) so the row is still legible
+// without a second file.
+router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const { filterSql, params } = buildOrderFilter(req.query);
+    const rows = tdb().prepare(
+      `SELECT o.id, o.order_no, o.status, o.channel, o.fulfillment_type,
+              o.payment_method, o.subtotal, o.shipping_fee, o.same_day_surcharge_fee, o.total,
+              o.refund_status, o.refund_amount_approved, o.refund_amount_paid,
+              o.recipient_name, o.recipient_phone, o.address_full,
+              o.customer_id, c.nickname AS customer_name, c.phone AS customer_phone,
+              o.store_id, s.code AS store_code,
+              COALESCE(NULLIF(s.name_en,''), NULLIF(s.name_cn,''), s.code) AS store_label,
+              o.scheduled_for, o.delivery_slot_label, o.delivery_mode,
+              o.tracking_carrier, o.tracking_number, o.tracking_status,
+              o.needs_invoice, o.invoice_status, o.invoice_number, o.invoice_title,
+              o.staff_note,
+              datetime(o.placed_at,     '+8 hours') AS placed_local,
+              datetime(o.paid_at,       '+8 hours') AS paid_local,
+              datetime(o.dispatched_at, '+8 hours') AS dispatched_local,
+              datetime(o.delivered_at,  '+8 hours') AS delivered_local
+         FROM retail_orders o
+    LEFT JOIN retail_customers c ON c.id = o.customer_id
+    LEFT JOIN retail_stores    s ON s.id = o.store_id
+        ${filterSql}
+     ORDER BY o.placed_at DESC`
+    ).all(...params);
+
+    // The line items for every exported order in ONE query keyed by order —
+    // never one query per row. An unfiltered export is the largest read in the
+    // admin and a per-row lookup is where it would stop finishing.
+    const itemsBy = new Map();
+    if (rows.length) {
+      const ids = rows.map(r => r.id);
+      // SQLite's parameter ceiling is 999; chunk rather than assume the export
+      // is small, because the whole point of this endpoint is that it isn't.
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500);
+        const ph = chunk.map(() => '?').join(',');
+        const its = tdb().prepare(
+          `SELECT order_id, qty,
+                  COALESCE(NULLIF(name_en,''), NULLIF(name_cn,''), sku, '') AS label
+             FROM retail_order_items WHERE order_id IN (${ph})
+            ORDER BY id ASC`
+        ).all(...chunk);
+        for (const it of its) {
+          if (!itemsBy.has(it.order_id)) itemsBy.set(it.order_id, []);
+          itemsBy.get(it.order_id).push(it);
+        }
+      }
+    }
+
+    const yn = v => (Number(v) ? 'Yes' : 'No');
+    const head = [
+      'Order no', 'Status', 'Channel', 'Fulfilment',
+      'Placed (UTC+8)', 'Paid (UTC+8)', 'Dispatched (UTC+8)', 'Delivered (UTC+8)',
+      'Payment method', 'Subtotal', 'Delivery fee', 'Same-day surcharge', 'Total',
+      'Refund status', 'Refund approved', 'Refund paid',
+      'Customer', 'Customer phone', 'Recipient', 'Recipient phone', 'Address',
+      'Location', 'Scheduled for', 'Delivery window', 'Delivery mode',
+      'Carrier', 'Tracking number', 'Tracking status',
+      'Invoice requested', 'Invoice status', 'Invoice number', 'Invoice title',
+      'Items', 'What was ordered', 'Staff note',
+    ];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      const its = itemsBy.get(r.id) || [];
+      lines.push([
+        r.order_no, r.status, r.channel || 'wechat', r.fulfillment_type,
+        r.placed_local, r.paid_local, r.dispatched_local, r.delivered_local,
+        r.payment_method, r.subtotal, r.shipping_fee, r.same_day_surcharge_fee, r.total,
+        r.refund_status, r.refund_amount_approved, r.refund_amount_paid,
+        r.customer_name, r.customer_phone, r.recipient_name, r.recipient_phone, r.address_full,
+        r.store_label, r.scheduled_for, r.delivery_slot_label, r.delivery_mode,
+        r.tracking_carrier, r.tracking_number, r.tracking_status,
+        yn(r.needs_invoice), r.invoice_status, r.invoice_number, r.invoice_title,
+        its.reduce((n, it) => n + Number(it.qty || 0), 0),
+        its.map(it => `${it.qty} × ${it.label}`).join('; '),
+        r.staff_note,
+      ].map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="orders_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[orders csv]', e);
+    res.status(500).json({ success: false, error: 'orders_csv_failed', message: e.message });
+  }
+});
+
+router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
+  // Only the ORDER BY below still reads a filter value directly (the
+  // needs-invoice worklist sorts differently); everything else that narrows the
+  // list now lives in buildOrderFilter.
+  const status = req.query.status;
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
 
@@ -23678,61 +24279,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_stores    s ON s.id = o.store_id
           LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
               `;
-  // The filter clause is built once and reused by BOTH the page query and the
-  // COUNT that feeds the list's pager, so the two can never disagree about
-  // which orders match. Anything appended here must be expressible against
-  // `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all
-  // the COUNT below joins.
-  let filterSql = 'WHERE 1=1';
-  const params = [];
-  // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
-  // this combined list read-only instead of being excluded; an explicit
-  // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
-  if (channel) { filterSql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
-  // `refunds_open` is a pseudo-status that pulls every order currently in
-  // the refund pipeline regardless of primary status — so open requests
-  // are reachable from the main orders table, not only the chip view.
-  if (status === 'refunds_open') {
-    filterSql += " AND o.refund_status IN ('pending','reviewing','approved')";
-  } else if (status === 'needs_invoice') {
-    // Pseudo-status: every order carrying a fapiao request, whatever its
-    // primary status. Dead orders drop out (a cancelled order owes no fapiao);
-    // issued ones stay browsable in this view but sort below the open work.
-    filterSql += ` AND o.needs_invoice = 1
-             AND o.status NOT IN ('cancelled','pending_payment')`;
-  } else if (status === 'paid') {
-    // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
-    // multi-parcel order that's had only SOME parcels shipped flips to
-    // 'dispatched' as a whole, yet still owes the customer an unshipped parcel.
-    // Keep it in this tab (alongside the real `paid` orders) until every parcel
-    // is out, so the leftover parcel can't be forgotten. It still appears in the
-    // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
-    // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
-    filterSql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
-               SELECT 1 FROM retail_shipments shx
-                WHERE shx.order_id = o.id
-                  AND shx.delivered_at IS NULL
-                  AND COALESCE(shx.tracking_status,'') != 'delivered'
-                  AND shx.dispatched_at IS NULL
-                  AND COALESCE(shx.tracking_number,'') = '')))`;
-  } else if (status) {
-    filterSql += ' AND o.status = ?'; params.push(status);
-  }
-  if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
-  if (q) {
-    filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
-    const s = `%${q}%`; params.push(s, s, s, s);
-  }
-  if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
-  if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
-  // Scope to a single customer — an exact FK match (the "View all N orders"
-  // path from a customer's drawer), NOT the free-text q search. Rides
-  // o.customer_id (already selected) and the retail_customers c join the COUNT
-  // below shares, so the pager total stays exact for the scoped list.
-  if (customer_id) {
-    const cid = parseInt(customer_id, 10);
-    if (Number.isFinite(cid)) { filterSql += ' AND o.customer_id = ?'; params.push(cid); }
-  }
+  // Built by buildOrderFilter so the page, the pager COUNT and the CSV export
+  // are answering the same question.
+  let { filterSql, params } = buildOrderFilter(req.query);
 
   // How many orders match, ignoring the page window. Without this the list
   // silently truncated at `limit` with nothing on screen saying so — orders
@@ -24163,7 +24712,74 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // will never fire. A pending accept still lands in meituan_order_actions either way.
   o.meituan_writeback = process.env.MEITUAN_WRITEBACK === '1';
 
+  /* ── WAS THE CUSTOMER TOLD? (audit P-02) ─────────────────────────────────
+     Every message this service tries to send is recorded (P-03), but a record
+     nobody thinks to open does not answer the question a merchant actually
+     asks, which is asked WHILE LOOKING AT AN ORDER: "did they get told?"
+
+     The LATEST attempt per kind, not every attempt and not only the failures.
+     Only-failures would answer half the question and leave "we tried three
+     times and the third worked" reading as a failure; every attempt would make
+     a busy order's drawer a log file. One row per kind, most recent, with its
+     outcome, is the answer.
+
+     The printer is the pattern being copied: a failed print has been written
+     onto the order as print_status/print_error with a reprint button in the
+     drawer for a long time, and it is the one failure path in this service
+     that was never silent. This is the same shape for everything else.
+
+     Best-effort: an install that has not restarted since notification_log
+     shipped has no table, and an order drawer must open regardless. */
+  try {
+    o.notifications = tdb().prepare(
+      `SELECT n.id, n.channel, n.kind, n.subject, n.recipient, n.ok, n.error, n.created_at
+         FROM notification_log n
+        WHERE n.entity_type = 'retail_order' AND n.entity_id = ?
+          AND n.id = (SELECT MAX(m.id) FROM notification_log m
+                       WHERE m.entity_type = n.entity_type AND m.entity_id = n.entity_id
+                         AND m.kind = n.kind)
+        ORDER BY n.id DESC`
+    ).all(id).map(r => ({ ...r, ok: !!r.ok }));
+  } catch (e) { o.notifications = []; }
+
   res.json({ success: true, data: o });
+});
+
+/* Try again to tell the customer (audit P-02).
+   A failure shown with no way to act on it is a nicer way of doing nothing, so
+   the drawer's "did not arrive" row carries this. Re-runs the SAME notify path
+   the status change runs, which is what keeps one code path deciding what a
+   customer is told and in what words.
+
+   NOT a general "send anything" door: it re-sends the notification for the
+   order's CURRENT status, and nothing else. Gated as orders:edit by
+   lib/cap-routes.js like every other write under /orders. */
+router.post('/api/retail-admin/orders/:id/renotify', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const o = tdb().prepare('SELECT id, status, order_no FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  try {
+    // The delivered-SMS claim stamp is cleared first, or the atomic claim inside
+    // the hook sees it already set and returns without sending — which would
+    // report success while doing nothing, the exact failure this endpoint is
+    // here to fix.
+    tdb().prepare('UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?').run(id);
+  } catch (e) { /* column not present on an older row — the hook handles it */ }
+  try {
+    // Synchronous: it FIRES the sends and returns. Each send is detached and
+    // records its own outcome, which is why this endpoint reports only that it
+    // tried — see below.
+    notifyOrderStatusChange(id, o.status);
+  } catch (e) {
+    console.error('[renotify]', e);
+    return res.status(500).json({ success: false, error: 'renotify_failed', message: e.message });
+  }
+  logActivity(req.user.id, req.user.username, 'order_renotify', 'retail_order', id, { status: o.status }, req.ip);
+  // The attempt is already recorded by the senders, so the client re-reads the
+  // order rather than being told an outcome this endpoint cannot see: the sends
+  // are detached, and answering "sent" here would be a guess.
+  res.json({ success: true });
 });
 
 // Queue a Meituan write-back action for the daemon to click (currently only 接单).
@@ -28158,6 +28774,37 @@ function orderHasRefundableGatewayMoney(orderId) {
   ).get(orderId, ...offline, WX_OUT_TRADE_PREFIX + '%');
 }
 
+// A NOTE ON AN ORDER, WITHOUT MOVING IT.
+//
+// `staff_note` has existed on every order since manual orders were built, and
+// until now there were exactly two ways to write one: type it into the New
+// order form, or send it alongside a STATUS CHANGE on the route below — which
+// refuses any request without a valid transition (`invalid_status`). So an
+// order that arrived from the shop, the website or a marketplace could not be
+// annotated at all: "customer called, leave it with the neighbour" had nowhere
+// to go, and the drawer never offered a field for it.
+//
+// Its own endpoint, because a note is not a state change and must not have to
+// pretend to be one. Gated as `orders:edit` automatically — lib/cap-routes.js
+// maps everything under /orders that is not a refund or a courier dispatch to
+// that capability. 2000 characters, the same ceiling the manual-order form
+// applies. An empty string clears the note; that is a legitimate edit.
+router.patch('/api/retail-admin/orders/:id/note', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const raw = (req.body || {}).staff_note;
+  if (raw != null && typeof raw !== 'string') {
+    return res.status(400).json({ success: false, error: 'staff_note_invalid', message: 'A note must be text.' });
+  }
+  const note = raw == null ? null : String(raw).slice(0, 2000);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('UPDATE retail_orders SET staff_note = ? WHERE id = ?').run(note && note.trim() ? note : null, id);
+  logActivity(req.user.id, req.user.username, 'order_note', 'retail_order', id,
+    { length: note ? note.length : 0 }, req.ip);
+  res.json({ success: true, staff_note: note && note.trim() ? note : null });
+});
+
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status, reason, staff_note, pay_method } = req.body || {};
@@ -28398,7 +29045,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
           if (op) _push.sendPushToTenantOperators(currentTenantId(), {
             title: '🌿 New paid order · 新订单已付款',
             body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
-            url: '/retail-admin?tab=orders',
+            url: '/?tab=orders',
             tag: 'retail-order-' + id,
           });
         }

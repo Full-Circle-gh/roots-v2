@@ -369,10 +369,18 @@ section('6. Both doors: the stamp, and the flag nobody may drop');
 // ═══════════════════════════════════════════════════════════════════════════
 
 check('the retail door stamps the row BEFORE the material recompute divides by it', () => {
-  const at = RETAIL_ROUTE.indexOf('applyAutoYield(db, req.params.id)');
+  // The HANDLE is deliberately not part of these assertions. They named `db`
+  // literally, and the multi-tenant fix (audit D-01) moved this file onto the
+  // signed-in account's connection — so a grep meant to assert ORDERING failed
+  // for a change to a variable name. What matters is that the stamp lands
+  // before the recompute that divides by it; which connection carries it is
+  // retail-recipes.js's business and scripts/check-tenant-als.js's.
+  const HANDLE = '(?:db|tdb\\(\\))';
+  const find = (src, re) => src.search(new RegExp(re));
+  const at = find(RETAIL_ROUTE, 'applyAutoYield\\(' + HANDLE + ', req\\.params\\.id\\)');
   const fire = RETAIL_ROUTE.indexOf('fireRecompute(tdb()');
   assert.ok(at > 0 && fire > at, 'applyAutoYield must run before fireRecompute in the update');
-  assert.ok(RETAIL_ROUTE.includes('applyAutoYield(db, recipeId)'), 'and on create');
+  assert.ok(find(RETAIL_ROUTE, 'applyAutoYield\\(' + HANDLE + ', recipeId\\)') > 0, 'and on create');
 });
 
 check('the kitchen door stamps it too', () => {

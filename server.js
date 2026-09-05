@@ -529,6 +529,18 @@ app.get('/backend/brand', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-brand.html'));
 });
 
+// The AI brand studio (audit B-04). A finished screen — brief form, progress
+// state, preview, apply — backed by five working endpoints, with no route and
+// no link: reachable only by typing /assets/brand-studio.html, because the
+// static server exposes the whole public folder. Work paid for and unused.
+// Same gate shape as /backend/brand above: signed in here, and the endpoints
+// behind it enforce the role.
+app.get('/backend/brand-studio', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'brand-studio.html'));
+});
+
 // SaaS-admin console — platform owner only (a kitchen `admin` session).
 app.get('/saas-admin', (req, res) => {
   const dbx = require('./database');
@@ -1013,6 +1025,18 @@ app.listen(PORT, () => {
       getTenantDb: tenantDb.getTenantDb,
     });
   } catch (e) { console.warn('[ship.reminder] start failed:', e.message); }
+  // Daily low-stock digest (audit E-06). A low-stock threshold has existed per
+  // merchant and per shop all along and fed a dashboard card only — so a
+  // merchant who did not open the admin never found out they were running out.
+  // ONE message a day naming the shortest lines, at the hour the account chose
+  // (09:00 by default), on by default. Runs every 10 min; the day-claim makes a
+  // missed tick free. No-op when push is off.
+  try {
+    require('./lib/low-stock-digest').startLowStockDigestSweeper({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+    });
+  } catch (e) { console.warn('[lowstock.digest] start failed:', e.message); }
   // Seeded-review top-up sweeper. Holds every published product at the review
   // floor the operator set on Inbox → Reviews. OFF unless they turned it on, and
   // a no-op once the catalogue sits at the floor, so it costs nothing when idle.

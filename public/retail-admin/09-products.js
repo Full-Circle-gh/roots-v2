@@ -30,6 +30,11 @@ let PA_STORES = [];
 let PA_STORE  = (() => { try { const v = localStorage.getItem('pa-store'); return v && v !== 'all' ? (parseInt(v, 10) || 'all') : 'all'; } catch { return 'all'; } })();
 let PA_STOCK  = {};
 let PA_STOCK_LOADED = false;
+// How many products the catalogue holds, and whether the server sent them all.
+// The list endpoint caps at 500 and has no page number, so these two are what
+// let the grid distinguish "this is everything" from "this is the first 500".
+let PA_SERVER_TOTAL = 0;
+let PA_TRUNCATED = false;
 // Tenant-wide default low-stock threshold (units). Hydrated by loadConfig() from
 // storefront_config 'inventory.lowStockThreshold'; a product can override it via
 // its own low_stock_threshold. Drives the amber dot, the Low-stock KPI tile +
@@ -94,6 +99,50 @@ async function paSaveLowStockDefault(val) {
     if (st) st.textContent = cuT('Save failed', '保存失败');
   }
 }
+// ── The daily low-stock digest (audit E-06) ────────────────────────────────
+// The threshold above has always fed a dashboard card and nothing else, so a
+// merchant who did not open the admin never found out they were running out.
+// This is the switch and the hour; lib/low-stock-digest.js is the sweeper.
+//
+// Saves itself on change, like the threshold beside it — the Operations panel
+// has no shared Save bar, and a setting that needs a second click to take
+// effect is a setting people believe they have set when they have not.
+async function saveLowStockDigest() {
+  const on   = document.getElementById('cfg-lowstock-digest');
+  const time = document.getElementById('cfg-lowstock-hour');
+  const st   = document.getElementById('cfg-lowstock-status');
+  if (!on) return;
+  // <input type="time"> gives "HH:MM"; the digest is a once-a-day message, so
+  // only the hour is kept. Storing a minute we then ignore would be a promise
+  // the sweeper does not keep.
+  const hour = Math.min(23, Math.max(0, parseInt(String((time && time.value) || '09:00').slice(0, 2), 10) || 9));
+  const value = { enabled: !!on.checked, hour };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockDigest': value } });
+    if (typeof _cfgCache !== 'undefined' && _cfgCache) {
+      _cfgCache.inventory = _cfgCache.inventory || {};
+      _cfgCache.inventory.lowStockDigest = value;
+    }
+    if (st) { st.textContent = cuT('Saved ✓', '已保存 ✓'); setTimeout(() => { if (st) st.textContent = ''; }, 2000); }
+  } catch (e) {
+    if (st) st.textContent = cuT('Save failed', '保存失败');
+  }
+}
+
+// Paint the two controls from the loaded config. Called by loadConfig, so the
+// switch shows what is actually stored rather than the markup's default — the
+// digest is ON unless the account turned it off, and a checkbox that renders
+// unticked while the sweeper is sending would be the worst of both.
+function paSyncLowStockDigestUi(cfg) {
+  const on   = document.getElementById('cfg-lowstock-digest');
+  const time = document.getElementById('cfg-lowstock-hour');
+  const d = (cfg && cfg.inventory && cfg.inventory.lowStockDigest) || null;
+  const enabled = (d && d.enabled !== undefined) ? !!d.enabled : true;
+  const hour = (d && Number.isInteger(d.hour) && d.hour >= 0 && d.hour <= 23) ? d.hour : 9;
+  if (on) on.checked = enabled;
+  if (time && document.activeElement !== time) time.value = String(hour).padStart(2, '0') + ':00';
+}
+
 // Product layout: 'grid' (rich cards) | 'list' (the table). Separate from the
 // "View" display-tweaks popover; persisted per-browser. 'compact' is retired —
 // its button was hidden, so the mode could only be reached by an old stored
@@ -128,6 +177,20 @@ function paSetStatus(v, toggle) {
   PA_STATUS = (toggle !== false && PA_STATUS === v) ? 'all' : v;
   PA_PAGE = 1;
   paSyncStatusFilter();
+  paRender();
+}
+// Put the whole catalogue back. Every narrowing control on this page in one
+// action — search box, category, subcategory, status — because an operator who
+// has filtered down to nothing should not have to remember which four things
+// they set. Offered from the empty state; safe to call at any time.
+function paClearFilters() {
+  const q = document.getElementById('pa-search');            if (q) q.value = '';
+  const f = document.getElementById('pa-filter');            if (f) f.value = 'all';
+  const s = document.getElementById('pa-subfilter');         if (s) s.value = 'all';
+  PA_STATUS = 'all';
+  PA_PAGE = 1;
+  paSyncStatusFilter();
+  paFillSubFilter();   // category back to All → the subcategory picker hides itself
   paRender();
 }
 function paSyncStatusFilter() {
@@ -249,7 +312,15 @@ function _paPagerHtml(total, pages, start, shown, showSizeSel) {
           ${sizeOpt(50, '50')}${sizeOpt(100, '100')}${sizeOpt(200, '200')}${sizeOpt('all', cuT('All', '全部'))}
         </select>
       </label>` : '';
-  return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
+  // WHEN THE SERVER SENT ONLY PART OF THE CATALOGUE, SAY SO. The pager's own
+  // numbers describe the rows on screen, which is right — but for a catalogue
+  // bigger than the endpoint's 500-row cap those rows are not the whole
+  // catalogue, and "of 500" read as if they were. This line is drawn only when
+  // the server reported more than it sent.
+  const capNote = PA_TRUNCATED
+    ? `<span class="pa-cap-note"><span data-lang-block="en">First <b>${PA_PRODUCTS.length}</b> of <b>${PA_SERVER_TOTAL}</b> products — search or filter to reach the rest</span><span data-lang-block="cn">仅显示 <b>${PA_SERVER_TOTAL}</b> 件中的前 <b>${PA_PRODUCTS.length}</b> 件 — 请搜索或筛选以查看其余</span></span>`
+    : '';
+  return `${capNote}<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
     <div style="display:flex;align-items:center;gap:12px">
       ${sizeSel}
       <div style="display:flex;align-items:center;gap:8px">
@@ -468,6 +539,12 @@ async function paLoad() {
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_PRODUCTS = j.data || [];
+    // What the server says the catalogue actually holds, against what it sent.
+    // The endpoint caps at 500 rows and takes no page number, so a bigger
+    // catalogue arrives silently short; the grid says so rather than paging a
+    // truncated array and reporting its length as the total.
+    PA_SERVER_TOTAL = Number.isFinite(j.total) ? j.total : PA_PRODUCTS.length;
+    PA_TRUNCATED    = !!j.truncated;
     paFillCatFilter();                       // category options from the catalogue
     pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
@@ -475,7 +552,15 @@ async function paLoad() {
     paLoadHighlights();   // fills the Going nowhere / On promotion jump tiles
     paLoadStoreStock();   // per-store stock + store list (drives the switcher)
   } catch (e) {
-    grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">Failed to load products: ${escapeHtml(e.message)}</div>`;
+    // The operator gets a sentence they can act on; the developer detail goes to
+    // the console, where it belongs. It used to print the raw error text — an
+    // HTTP status and a SQLite message — into the middle of the page.
+    console.error('[products] load failed', e);
+    grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">`
+      + cuT('The catalogue did not load. Check the connection and try again.',
+            '商品目录未能加载。请检查网络后重试。')
+      + ` <button class="btn btn-sm" type="button" onclick="paLoad()" style="margin-left:10px">`
+      + cuT('Try again', '重试') + `</button></div>`;
   }
 }
 
@@ -487,7 +572,11 @@ async function paLoad() {
 async function paLoadStoreStock() {
   if (CATALOG_MODE === 'upstream') return;
   try {
-    const res = await fetch('/api/retail-admin/inventory/grid');
+    // The grid carries a row ceiling now (audit J-01). Ask for enough to cover
+    // the products list, which is itself capped at 500 — so on any catalogue
+    // where the list is complete, the stock map behind it is too. Past that,
+    // the list's own "first N of M" note is already on screen saying so.
+    const res = await fetch('/api/retail-admin/inventory/grid?limit=1000');
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_STORES = (j.data && j.data.stores) || [];
@@ -582,7 +671,23 @@ function _paStockMirror(productId, storeId, qty) {
 // records a ledger row), then keeps the local maps + effective_stock in sync so
 // the KPI tiles and grid badges stay honest without a full reload.
 async function paSaveStoreStock(productId, storeId, raw, el) {
-  const qty = Math.max(0, parseInt(raw, 10) || 0);
+  // A COUNT THIS BOX CANNOT READ IS NOT ZERO. `parseInt(raw) || 0` turned an
+  // emptied box, a stray letter and a bad paste all into 0 and saved it — the
+  // shelf was emptied by a slip of the hand, with a green tick to say so. Now
+  // an unreadable value puts the previous count back and says what is wrong;
+  // nothing is sent. The server refuses the same shapes (retail-inventory.js),
+  // so neither side can write a guess.
+  const txt = String(raw == null ? '' : raw).trim();
+  const qty = txt === '' ? NaN : Number(txt);
+  if (!Number.isInteger(qty) || qty < 0) {
+    el.value = _paStoreQty(productId, storeId);   // put back what was there
+    el.classList.remove('is-saved');
+    el.classList.add('is-err');
+    setTimeout(() => el.classList.remove('is-err'), 2000);
+    toast(cuT('Enter the number on the shelf — a whole number, 0 or more.',
+              '请输入货架上的数量 — 0 或以上的整数。'), 'err');
+    return;
+  }
   el.classList.remove('is-saved', 'is-err');
   el.disabled = true;
   try {
@@ -1450,7 +1555,7 @@ function _paPriceCell(u) {
   // Single price keeps the cents (¥89.00); a range drops trailing .00 so it
   // reads compact (¥57–89), matching the catalogue mockup.
   const short = n => fmt(n).replace(/\.00$/, '');
-  const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${short(pr.min)}–${short(pr.max)}`;
+  const body = pr.min === pr.max ? `${acMoney(pr.min)}` : `${acWrap(short(pr.min))}–${short(pr.max)}`;
   return `<span class="pa-col-price">${body}</span>`;
 }
 // ── The "cost is not complete" mark ──────────────────────────────────────────
@@ -2217,6 +2322,24 @@ function paRender() {
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   PA_FILTERED_IDS = rows.map(p => p.id);
+  // TWO DIFFERENT NOTHINGS. One message — "No products match this filter" —
+  // used to answer both a filter that matched nothing AND a catalogue with
+  // nothing in it, so a shop that had just signed up opened the screen that
+  // matters most on day one and was told its filter was wrong. A first
+  // catalogue now gets a first action, the way Suppliers already does; a
+  // narrowed one gets its filters back.
+  if (!total) {
+    const narrowed = !!q || (filter && filter !== 'all') || (subFilter && subFilter !== 'all') || PA_STATUS !== 'all';
+    empty.innerHTML = narrowed
+      ? `<div class="pa-empty-t">${cuT('No products match this filter', '没有匹配此筛选条件的产品')}</div>
+         <div class="pa-empty-s">${cuT('Nothing here matches what you searched for. Clear it and the whole catalogue comes back.',
+                                       '没有符合当前筛选的产品。清除筛选即可看到全部商品。')}</div>
+         <button class="btn pa-empty-b" type="button" onclick="paClearFilters()">${cuT('Clear the filters', '清除筛选')}</button>`
+      : `<div class="pa-empty-t">${cuT('No products yet', '还没有商品')}</div>
+         <div class="pa-empty-s">${cuT('This is your catalogue — what customers see in the shop. Add the first one and it can be on sale in a couple of minutes.',
+                                       '这里是你的商品目录 —— 顾客在店里看到的就是它。添加第一件商品,几分钟就能上架。')}</div>
+         <button class="btn btn-primary pa-empty-b" type="button" onclick="pwOpen()">${cuT('Add your first product', '添加第一件商品')}</button>`;
+  }
   empty.style.display = total ? 'none' : 'block';
   // Docked editor → fixed 18-row pages (list ends near the editor's bottom edge,
   // no dead gap / extra scroll). Overview → operator's "Per page" choice.
@@ -3020,7 +3143,7 @@ async function pdLoadSales(id) {
   }
   const d = j.data;
   setText('pd-sales-units', Number(d.units || 0).toLocaleString());
-  setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
+  setText('pd-sales-revenue', acWrap(Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })));
   setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
   setText('pd-sales-context', pdSalesContext(d));
 }
@@ -3141,20 +3264,29 @@ async function pdRevert() {
 // roll back to any of them. Replaces the old single-step "revert to last save".
 // Format a server UTC timestamp ('YYYY-MM-DD HH:MM:SS') as GZ-local "Today
 // 14:32" / "Yesterday 09:10" / "Jun 14, 18:05".
+// The shared formatter, not a fourth one (audit C-02). This built "Jan 5, 14:30"
+// by hand out of UTC arithmetic against a hardcoded +8, so a version list read
+// in a different shape from every other timestamp in the product AND on
+// Guangzhou's clock for a shop in any other zone — which is exactly what
+// tdWhen's TD_TZ exists to fix.
+//
+// The Today / Yesterday shortcut is KEPT, because it is the point of this
+// particular list: a version history is read as "how long ago", and "Today
+// 14:30" answers that where "Sep 4, 14:30" makes the reader do the subtraction.
+// It is asked of tdWhen rather than derived: tdWhen('date') on today's date and
+// on this row's date agreeing is the same comparison, in the shop's timezone
+// rather than in a constant.
 function pdFmtVersionTime(s) {
   if (!s) return '';
   const d = new Date(String(s).replace(' ', 'T') + 'Z');
   if (isNaN(d.getTime())) return String(s);
-  const gz = new Date(d.getTime() + 8 * 3600 * 1000);
-  const now = new Date(Date.now() + 8 * 3600 * 1000);
-  const key = x => x.toISOString().slice(0, 10);
-  const hh = String(gz.getUTCHours()).padStart(2, '0'), mm = String(gz.getUTCMinutes()).padStart(2, '0');
-  const t = hh + ':' + mm;
-  const k = key(gz);
-  if (k === key(now)) return cuT('Today ', '今天 ') + t;
-  if (k === key(new Date(now.getTime() - 86400000))) return cuT('Yesterday ', '昨天 ') + t;
-  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][gz.getUTCMonth()];
-  return cuT(mon + ' ' + gz.getUTCDate() + ', ' + t, (gz.getUTCMonth() + 1) + '月' + gz.getUTCDate() + '日 ' + t);
+  if (typeof tdWhen !== 'function') return String(s);
+  const t = tdWhen(d, 'time');
+  const day = tdWhen(d, 'date');
+  const now = new Date();
+  if (day === tdWhen(now, 'date')) return cuT('Today ', '今天 ') + t;
+  if (day === tdWhen(new Date(now.getTime() - 86400000), 'date')) return cuT('Yesterday ', '昨天 ') + t;
+  return tdWhen(d, 'dateTime');
 }
 async function pdOpenVersions() {
   const id = document.getElementById('pd-id').value;
@@ -3526,7 +3658,7 @@ function pdSyncPageHead() {
     const bits = [];
     if (sku) bits.push(cuT('SKU ', '货号 ') + sku);
     if (where) bits.push(where);
-    if (price) bits.push('¥' + price);
+    if (price) bits.push(acWrap(price));
     sub.textContent = bits.join(' · ');
   }
 }
@@ -3738,7 +3870,7 @@ function vaRender() {
   const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span>` +
     `<span>${cuT('Name', '名称')}</span><span>${cuT('Label', '规格标签')}</span>` +
     `<span>${cuT('SKU', '货号')}</span><span>${cuT('Weight', '规格')}</span>` +
-    `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
+    `<span class="va-num">${acCurrencySymbol()}</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map((v, i) => {
     const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
@@ -4105,7 +4237,7 @@ function buRender() {
     `</div>` +
     `<div class="bu-chips">${chips}</div>` +
     `<div class="bu-row2">` +
-      `<div class="field"><label class="stacked">${cuT('Set price ¥ (optional)', '搭配价 ¥(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Set price ' + acCurrencySymbol() + ' (optional)', '搭配价 ' + acCurrencySymbol() + '(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
       `<div class="field"><label class="stacked">${cuT('Auto voucher (optional)', '自动优惠券(可选)')}</label><input type="text" value="${escapeAttr(BU.voucher)}" placeholder="${cuT('code', '券码')}" oninput="buField('voucher', this.value)"></div>` +
     `</div>` +
     `<div class="va-actions">` +
@@ -4486,7 +4618,7 @@ function _optChoiceRow(o, oi, c, ci) {
     def +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
-    (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
+    (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+${acCurrencySymbol()}<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
     link +
     `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
   `</div>` + picker;
@@ -5886,12 +6018,42 @@ function pwClose() {
   const bg = document.getElementById('pw-bg'); if (bg) bg.classList.remove('show');
   _pw = null;
 }
-// Esc closes (parity with the coupon wizard); backdrop click does NOT, so an
-// in-progress product is never discarded by a stray click.
+// Has the operator actually put anything into this wizard? Compared against the
+// shape pwOpen() starts from, so "opened it and pressed Escape" closes without
+// a question while "typed a name, three sizes and a photo" does not.
+function pwHasWork() {
+  if (!_pw) return false;
+  if (_pw.step !== 'front' && _pw.source) {
+    const t = ['name_en', 'name_cn', 'sku', 'top', 'sub', 'photo', 'price', 'compare', 'stock', 'weight', 'descEn', 'descCn'];
+    if (t.some(k => String(_pw[k] || '').trim())) return true;
+    if (_pw.hasSizes || (_pw.options || []).length) return true;
+    if (Object.keys(_pw.facts || {}).length || Object.keys(_pw.freeOf || {}).length) return true;
+    // Past the first question with a route chosen but nothing typed yet still
+    // counts as work in progress — the operator is mid-task either way.
+    return _pw.step !== 'front-paste' && _pw.step !== 'front-copy';
+  }
+  return false;
+}
+// Esc closes; backdrop click does NOT, so an in-progress product is never
+// discarded by a stray click. Escape used to discard it with no question at all,
+// which is the same loss by a different key — five steps of typing gone, and no
+// draft behind it the way the order form has one. It asks first now, and only
+// when there is something to lose.
+async function pwTryClose() {
+  if (pwHasWork() && !(await askConfirm({
+    titleEn: 'Discard this product?', titleCn: '放弃这件产品？',
+    bodyEn: 'What you have filled in will be lost. Nothing has been saved yet.',
+    bodyCn: '已填写的内容将会丢失，目前尚未保存。',
+    confirmEn: 'Discard it', confirmCn: '放弃',
+    cancelEn: 'Keep editing', cancelCn: '继续编辑',
+    danger: true,
+  }))) return;
+  pwClose();
+}
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !_pw) return;
   const bg = document.getElementById('pw-bg');
-  if (bg && bg.classList.contains('show')) pwClose();
+  if (bg && bg.classList.contains('show')) pwTryClose();
 });
 function pwGoto(step) {
   if (!_pw) return;
@@ -6067,10 +6229,10 @@ function pwPriceHtml() {
   let core;
   if (!_pw.hasSizes) {
     core = '<div class="pw-row2">'
-      + '<div class="field"><label class="vw-lab">' + cuT('Price', '价格') + ' ¥</label><input type="number" min="0" step="0.01" value="' + (_pw.price === '' ? '' : _pw.price) + '" oninput="pwSet(\'price\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
+      + '<div class="field"><label class="vw-lab">' + cuT('Price', '价格') + ' ' + acCurrencySymbol() + '</label><input type="number" min="0" step="0.01" value="' + (_pw.price === '' ? '' : _pw.price) + '" oninput="pwSet(\'price\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
       + '<div class="field"><label class="vw-lab">' + cuT('In stock', '库存') + '</label><input type="number" min="0" step="1" value="' + (_pw.stock === '' ? '' : _pw.stock) + '" oninput="pwSet(\'stock\', this.value)" style="width:100%;box-sizing:border-box;"></div></div>'
       + '<label class="pw-check"><input type="checkbox"' + (_pw.compare !== '' ? ' checked' : '') + ' onchange="pwToggleSale(this.checked)"> ' + cuT('It’s on sale', '正在促销') + '</label>'
-      + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ¥</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
+      + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ' + acCurrencySymbol() + '</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
   } else {
     core = '<div class="vw-help" style="margin-bottom:8px;">' + cuT('Give each option a name (a size or a flavor). Weight is optional.', '为每个选项起个名字(规格或口味)。重量可选。') + '</div>'
       + '<div class="pw-vars">'
@@ -6083,7 +6245,7 @@ function pwPriceHtml() {
         + '</div>'
         + '<div class="pw-var-line">'
         + '<input type="text" class="pw-var-wt" placeholder="' + cuT('Weight — e.g. 250g', '重量 — 如 250克') + '" value="' + escapeAttr(s.weight) + '" oninput="pwSizeField(' + i + ', \'weight\', this.value)">'
-        + '<span class="pw-size-cur">¥<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
+        + '<span class="pw-size-cur">' + acCurrencySymbol() + '<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
         + '<input type="number" min="0" step="1" class="pw-var-stk" placeholder="' + cuT('stock', '库存') + '" value="' + (s.stock === '' ? '' : s.stock) + '" oninput="pwSizeField(' + i + ', \'stock\', this.value)">'
         + '</div>'
         + '</div>').join('')
@@ -6187,7 +6349,7 @@ function pwChoiceRow(o, oi, c, ci) {
     ? '<input type="radio" name="pw-def-' + oi + '" title="' + cuT('Show one as the usual pick', '设为默认选项') + '"' + (c.is_default ? ' checked' : '') + ' onchange="pwOptDefault(' + oi + ', ' + ci + ')">'
     : '<span class="pw-radio-spacer"></span>';
   const lab = '<input type="text" class="pw-clab" placeholder="' + (paid ? cuT('e.g. Extra pickles', '如 加酸黄瓜') : cuT('e.g. Ranch', '如 牧场酱')) + '" value="' + escapeAttr(c[labKey] || '') + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'' + labKey + '\', this.value)">';
-  const price = paid ? '<span class="pw-cur">+¥<input type="number" min="0" step="0.01" value="' + (c.price_delta || 0) + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'price_delta\', this.value)"></span>' : '';
+  const price = paid ? '<span class="pw-cur">+' + acCurrencySymbol() + '<input type="number" min="0" step="0.01" value="' + (c.price_delta || 0) + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'price_delta\', this.value)"></span>' : '';
   let link = '';
   if (paid) {
     if (c.stock_product_id) {
@@ -6235,9 +6397,9 @@ function pwReviewHtml() {
   const priceTxt = _pw.hasSizes
     ? _pw.sizes.filter(s => s.name_en || s.name_cn || s.price !== '').map(s => {
       const nm = cuT(s.name_en || s.name_cn || '—', s.name_cn || s.name_en || '—');
-      return escapeHtml(nm + (s.weight ? ' (' + s.weight + ')' : '')) + ' ¥' + (s.price || '?');
+      return escapeHtml(nm + (s.weight ? ' (' + s.weight + ')' : '')) + ' ' + acWrap(s.price || '?');
     }).join(' · ')
-    : ('¥' + (_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">¥' + _pw.compare + '</span>' : ''));
+    : (acWrap(_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">' + acWrap(_pw.compare) + '</span>' : ''));
   const cat = _pw.sub ? (_pw.top + ' › ' + _pw.sub) : (_pw.top || cuT('No category yet', '尚未分类'));
   const factCount = Object.values(_pw.facts).filter(v => (v || '').trim()).length;
   const freeOf = PW_FREE_OF.filter(([id]) => _pw.freeOf[id]).map(([, en, cn]) => cuT(en, cn));
@@ -6250,7 +6412,7 @@ function pwReviewHtml() {
   _pw.options.forEach(o => {
     const paid = o.type === 'multi';
     const q = (pwPrimaryLang() === 'cn' ? o.question_cn : o.question_en) || (paid ? cuT('Extras', '加项') : cuT('Pick', '选择'));
-    const items = o.choices.filter(c => c.label_en || c.label_cn).map(c => (pwPrimaryLang() === 'cn' ? c.label_cn : c.label_en) + (paid && c.price_delta ? ' +¥' + c.price_delta : '')).join(', ');
+    const items = o.choices.filter(c => c.label_en || c.label_cn).map(c => (pwPrimaryLang() === 'cn' ? c.label_cn : c.label_en) + (paid && c.price_delta ? ' +' + acWrap(c.price_delta) : '')).join(', ');
     lines.push([paid ? 'They can add' : 'They can pick', paid ? '可添加' : '可选择', escapeHtml(q + (items ? ' — ' + items : ''))]);
   });
   const photo = _pw.photo ? '<div class="pw-rev-photo" style="background-image:url(' + escapeAttr(_pw.photo) + ')"></div>' : '<div class="pw-rev-photo pw-rev-photo-empty">🛍</div>';

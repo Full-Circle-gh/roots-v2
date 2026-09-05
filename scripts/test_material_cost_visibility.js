@@ -63,6 +63,12 @@ function fakeDb() {
       const s = String(sql).replace(/\s+/g, ' ');
       return {
         get: () => {
+          // The list's match count, asked before the row ceiling is applied
+          // (audit J-01). It has to come FIRST: the list read is now two
+          // queries, and a fake that answers only the second one hands the
+          // route an undefined it immediately dereferences — which is exactly
+          // how this suite failed when the ceiling landed.
+          if (/COUNT\(\*\) AS n FROM ingredients/.test(s)) return { n: 1 };
           if (/FROM ingredients WHERE id/.test(s)) return { ...ROW };
           if (/SUM\(source_recipe_id IS NULL\)/.test(s)) return { bought: 1, made: 0 };
           return undefined;

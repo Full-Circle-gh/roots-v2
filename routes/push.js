@@ -219,12 +219,41 @@ async function sendPushByPermission(permKey, payload) {
   return sendPushToUsers(users.map(u => u.id), payload);
 }
 
+
+// ── The delivery record for a push (audit P-03 / P-02) ─────────────────────
+// One row per fan-out, not per phone: the question is "did this go out", and
+// eleven rows would bury it. Wrapped and swallowed — a failed LOG must never
+// become a failed SEND.
+function _logPush(tenantId, payload, res) {
+  try {
+    const nl = require('../lib/notify-log');
+    const row = {
+      channel: 'push',
+      kind: (payload && payload.tag) || 'push',
+      subject: (payload && payload.title) || null,
+      ok: !!res.ok,
+      error: res.error || null,
+      detail: res.detail || null,
+    };
+    if (tenantId != null) {
+      nl.logNotificationOn(require('../lib/tenant-db').getTenantDb(tenantId), tenantId, row);
+    } else {
+      nl.logNotification(row);
+    }
+  } catch (e) { /* never able to fail a send */ }
+}
+
 // The one place every send funnels through, which is why the mute is
 // enforced HERE rather than in each caller: a sender added later cannot
 // forget it. Every SELECT above aliases its owner column to `subject_id`
 // for this filter. A row without one, or a call without a scope, passes
 // through unfiltered and behaves exactly as before.
-async function _sendMany(subs, payload, scope) {
+// `tenantId` is passed explicitly by the operator path, which is called from
+// background sweepers that hold an account id but are NOT inside a request's
+// tenant scope. Without it the delivery record below would file every sweeper's
+// push under account 1 — which is the same class of bug D-01 fixed, and not one
+// to reintroduce in a log.
+async function _sendMany(subs, payload, scope, tenantId) {
   let sent = 0, pruned = 0, muted = 0;
   let live = subs;
   if (scope && subs.length) {
@@ -248,7 +277,25 @@ async function _sendMany(subs, payload, scope) {
     if (r.ok) sent++;
     if (r.pruned) pruned++;
   }));
-  return { sent, pruned, muted, total: subs.length };
+  const result = { sent, pruned, muted, total: subs.length };
+  // ── The delivery record (audit P-03 / P-02) ────────────────────────────
+  // This is the one place every push funnels through, which is why the log
+  // goes here rather than in each caller — the same reason the mute check is
+  // here. A sender added later cannot forget it.
+  //
+  // ONE ROW for the whole fan-out, not one per phone: the question is "did
+  // this go out", and eleven rows would bury it. A push that reached NOBODY is
+  // marked failed and carries its reason, which is the case P-02 names — a
+  // merchant whose staff have silently stopped receiving orders had nothing
+  // anywhere that said so.
+  _logPush(tenantId, payload, {
+    ok: sent > 0,
+    error: sent > 0 ? null
+      : (subs.length === 0 ? 'no_subscriptions'
+        : muted === subs.length ? 'all_muted' : 'no_device_reachable'),
+    detail: result,
+  });
+  return result;
 }
 
 // ─── Backend-operator push (tenant_users) ──────────────────────────────────
@@ -331,6 +378,11 @@ async function sendPushToOperator(tenantUserId, payload) {
 // request middleware does — and memoised for the call, so a fan-out costs one
 // resolution per distinct operator rather than one per device.
 async function sendPushToOperatorsWithCaps(tenantId, needCaps, payload, opts = {}) {
+  // 🔴 EVERY EXIT FROM HERE IS RECORDED (audit P-02). Four of them returned
+  // { sent: 0 } and said nothing further, and one of those four — nobody on the
+  // account holds the capability — is the exact shape of D-06: for every
+  // account but the first, the reminder that exists to protect a delivery had
+  // no possible recipient and went unmentioned. That is now a row saying so.
   if (!ENABLED || !tenantId) return { sent: 0, pruned: 0, skipped: 'disabled' };
   const need = (Array.isArray(needCaps) ? needCaps : [needCaps]).filter(Boolean);
   if (!need.length) return { sent: 0, pruned: 0, total: 0 };
@@ -338,8 +390,14 @@ async function sendPushToOperatorsWithCaps(tenantId, needCaps, payload, opts = {
   try {
     subs = db.prepare(`SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id
                          FROM tenant_operator_push_subs WHERE tenant_id = ?`).all(tenantId);
-  } catch (e) { return { sent: 0, pruned: 0, error: e.message }; }
-  if (!subs.length) return { sent: 0, pruned: 0, total: 0 };
+  } catch (e) {
+    _logPush(tenantId, payload, { ok: false, error: 'subscription_read_failed: ' + e.message });
+    return { sent: 0, pruned: 0, error: e.message };
+  }
+  if (!subs.length) {
+    _logPush(tenantId, payload, { ok: false, error: 'no_operator_has_a_phone_registered' });
+    return { sent: 0, pruned: 0, total: 0 };
+  }
 
   let tenant = null;
   try { tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId); } catch { tenant = null; }
@@ -363,8 +421,15 @@ async function sendPushToOperatorsWithCaps(tenantId, needCaps, payload, opts = {
     return ok;
   };
   const live = subs.filter(s => s.subject_id != null && s.subject_id !== exclude && eligible(s.subject_id));
-  if (!live.length) return { sent: 0, pruned: 0, total: subs.length };
-  return _sendMany(live, payload, 'operator');
+  if (!live.length) {
+    _logPush(tenantId, payload, {
+      ok: false,
+      error: 'nobody_holds_' + need.join('_or_'),
+      detail: { total: subs.length, sent: 0, eligible: 0 },
+    });
+    return { sent: 0, pruned: 0, total: subs.length };
+  }
+  return _sendMany(live, payload, 'operator', tenantId);
 }
 
 // Fan out to every operator of a tenant (used for new-order alerts). Failed

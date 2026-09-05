@@ -32,8 +32,14 @@
 
     --text-1:     #E8E5DC;   /* Deeper Paper */
     --text-2:     #AEABA2;
-    --text-3:     #7d7a72;
-    --text-4:     #56544f;
+    /* --text-3 was #7d7a72, which reads at 3.61:1 on --bg-elev-1 and 3.21:1 on
+       --bg-elev-2 — below the 4.5:1 the standard asks of normal-sized text, and
+       this token dresses 192 rules, several of them at 10 and 11 pixels. #9a978f
+       clears 4.5 on every dark surface in the palette (4.72:1 at the worst, the
+       most-raised one) and stays a step quieter than --text-2 above it, so the
+       hierarchy the two were drawn for survives. */
+    --text-3:     #9a978f;
+    --text-4:     #56544f;   /* decorative only — see the note below */
 
     /* Tacet remap of the two Full Circle brand colours. Tea Green → Tacet
        sage (same "active / live / positive" role); Aged Brass → graphite
@@ -4438,6 +4444,18 @@
     background: var(--td-surface); border: 1px dashed var(--td-border);
     border-radius: 14px;
   }
+  /* Two states share this box: a catalogue with nothing in it (title, a sentence
+     saying what a catalogue is for, and the first action) and a filter that
+     matched nothing (title, and the filters back). Same shape as the Suppliers
+     empty state, which is the pattern this page was measured against. */
+  /* Drawn only when the list endpoint capped what it sent — see _paPagerHtml. */
+  .pa-cap-note {
+    font-size: 12px; font-family: var(--f-sans); color: var(--td-amber-ink); background: var(--td-amber-tint); border-radius: 8px;
+    padding: 4px 10px; margin-right: 12px;
+  }
+  .pa-empty-t { font-size: 16px; font-weight: 500; color: var(--td-text); margin-bottom: 6px; }
+  .pa-empty-s { max-width: 380px; margin: 0 auto; line-height: 1.55; }
+  .pa-empty-b { margin-top: 16px; }
 
   /* The per-operator View tweaks are gone with their popover — the defaults
      they varied from (square crop, badge status, icon empty-state) are the
@@ -4745,8 +4763,19 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pa-inspector-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-  .pa-inspector-actions { display: flex; gap: 4px; flex-shrink: 0; }
-  .pa-inspector-actions .btn { padding: 5px 9px; font-size: 11px; }
+  .pa-inspector-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  /* A real target (audit R-04). These were padding: 5px 9px at 11px — about 26
+     pixels tall against a 44-pixel guideline, the smallest controls anywhere in
+     the admin. This is a mouse-driven desktop surface, so it was a comfort
+     problem rather than a blocker, but "comfortable for a mouse" still means a
+     target somebody can hit without aiming.
+     36px is the height the rest of the admin's small buttons use; the inspector
+     header has room for it, and min-height rather than more padding keeps the
+     label centred without the button growing wider. */
+  .pa-inspector-actions .btn {
+    min-height: 36px; padding: 6px 12px; font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
   .pa-inspector-actions .btn.danger {
     color: var(--danger); border-color: rgba(232, 85, 106, .35);
   }
@@ -7269,6 +7298,20 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
   .order-detail .full { grid-column: 1 / -1; }
+  /* The shop's own note on an order. One line until there is something in it,
+     and its Save/Cancel pair appears only once the text has changed — an
+     operator reading an order should not be shown an action they have no
+     reason to take. */
+  .ord-note-in {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    font: 500 14px var(--f-sans); line-height: 1.5;
+    color: var(--text-1); background: var(--bg-input, var(--td-surface));
+    border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px;
+  }
+  .ord-note-in::placeholder { color: var(--text-3); font-weight: 400; }
+  .ord-note-in:focus { outline: none; border-color: var(--td-dusk, var(--text-2)); }
+  .ord-note-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .ord-note-foot[hidden] { display: none; }
   /* Info labels — mono, wider tracking, to match the design's field labels. */
   .order-detail .kicker {
     font-family: var(--f-mono);
@@ -14272,7 +14315,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500;
 }
 #tab-finance .fin-tx-n { font-variant-numeric: tabular-nums; opacity: .7; }
-#tab-finance .fin-tx-filter { margin-top: 16px; }
+/* Search box and the Export button share one line; the search still owns the
+   slack, so the button sits at its right-hand end rather than the page's. */
+#tab-finance .fin-tx-filter { margin-top: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 #tab-finance .fin-tx-search {
   width: 100%; max-width: 420px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
   background: var(--td-surface); border: 1px solid var(--td-border);
@@ -14368,3 +14413,59 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
 #tab-finance .fin-modal-del { color: var(--td-brick-ink, var(--td-text)); }
 @media (prefers-reduced-motion: reduce) { #tab-finance .fin-chev { transition: none; } }
+
+/* "This list is not all of it" — the row-ceiling notice (audit J-01). Amber,
+   not red: the list is honest and usable, it is simply not the whole set. */
+.td-trunc {
+  margin: 0 0 10px; padding: 8px 12px;
+  font: 400 12.5px/1.5 var(--f-sans); color: var(--text-1);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
+  border-radius: 10px;
+}
+
+/* Skip link (audit R-05). Off-screen until focused, then a real, visible target
+   at the top-left — the only way a keyboard operator gets past ~30 rail and tab
+   controls to the screen they opened. `top` rather than `display` so it can be
+   focused at all: a display:none link is not in the tab order.
+   <main> carries tabindex="-1" so the jump actually moves focus, not just the
+   scroll position — without it several browsers scroll and leave focus in the
+   rail, and the next Tab walks the rail again. */
+.skip-link {
+  position: fixed; left: 8px; top: -60px; z-index: 9999;
+  padding: 10px 16px; border-radius: 10px;
+  background: var(--bg-pane, #fff); color: var(--text-1, #16161a);
+  border: 1px solid var(--line, #d9d3c6);
+  font: 500 14px/1.2 var(--f-sans); text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  transition: top 120ms ease;
+}
+.skip-link:focus { top: 8px; outline: 2px solid var(--accent, #365329); outline-offset: 2px; }
+main:focus { outline: none; }
+
+/* The send record's result column (audit P-03). Green for landed, clay for
+   not — never red: a message that did not arrive is a thing to look at, not an
+   emergency, and the calm rule holds here as everywhere else. */
+#sub-sent .nl-ok  { color: var(--accent); font-weight: 500; }
+#sub-sent .nl-bad { color: var(--warn); font-weight: 500; }
+
+/* "Was the customer told" on the order drawer (audit P-02). Reads as a short
+   receipt, not a table: one line per kind of message, the outcome first.
+   Amber for "did not arrive", never red — the order is fine, the message is
+   not, and the calm rule holds. */
+.ord-told { display: flex; flex-direction: column; gap: 4px; }
+.ord-told-row {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font: 400 12.5px/1.6 var(--f-sans); color: var(--text-2);
+}
+.ord-told-mark {
+  flex: none; width: 16px; text-align: center; font-weight: 700;
+  color: var(--accent);
+}
+.ord-told-row.is-bad .ord-told-mark { color: var(--warn); }
+.ord-told-what { color: var(--text-1); font-weight: 500; }
+.ord-told-when { margin-left: auto; font-size: 11.5px; white-space: nowrap; }
+/* The reason drops to its own line so a long one never squeezes the timestamp
+   off the row — it is the part the merchant acts on. */
+.ord-told-why { flex-basis: 100%; padding-left: 24px; color: var(--warn); }
+.ord-told-foot { margin-top: 8px; }
