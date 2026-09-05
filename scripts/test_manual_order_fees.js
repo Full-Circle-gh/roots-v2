@@ -125,6 +125,26 @@ const db = openTablesDb(DB_SRC, ['retail_delivery_zones', 'storefront_config']);
 const sandbox = {
   console,
   tdb: () => db,
+  /* THE `db` MODULE, NOT THE HANDLE — and deliberately carrying one property.
+     computeDeliveryAndPacking reads db.FREE_SHIPPING_THRESHOLD_DEFAULT, the
+     shipped default behind `fees.freeShippingThreshold`. In routes/retail.js
+     `db` is the database MODULE, which is a handle and a bag of constants at
+     once; this sandbox only ever provided the handle, through tdb(), so the
+     lifted function threw "db is not defined" and two cases failed with that
+     instead of a fee.
+
+     Read out of database.js rather than typed, so a change to the shipped
+     default cannot leave this test asserting against a number the product no
+     longer uses. Only the constant is exposed: a lifted function that starts
+     calling db.prepare() should fail loudly here rather than quietly query a
+     handle nobody chose for it. */
+  db: {
+    FREE_SHIPPING_THRESHOLD_DEFAULT: (() => {
+      const m = /^const FREE_SHIPPING_THRESHOLD_DEFAULT = (\d+);/m.exec(DB_SRC);
+      assert.ok(m, 'FREE_SHIPPING_THRESHOLD_DEFAULT not found in database.js');
+      return Number(m[1]);
+    })(),
+  },
   phoneCn: require(path.join(ROOT, 'lib', 'phone-cn')),
   CHINA_REGIONS: require(path.join(ROOT, 'reference', 'china_regions.json')),
   _cityProvinceMap: null,

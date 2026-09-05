@@ -165,6 +165,33 @@ function makeHandler(db, spies) {
       'tdb',
       `${extractFunction(RETAIL_SRC, 'nextOrderNo')}\nreturn nextOrderNo;`
     )(() => db),
+    /* THE LINE RESOLVER, EXTRACTED FOR THE SAME REASON AS THE TWO ABOVE.
+       The route body was refactored to call resolveManualOrderLines(), and this
+       scope did not have it — so seven cases failed with "resolveManualOrderLines
+       is not defined", which reads like a conversion defect and is not one. A
+       stub would have been worse than the error: this helper decides what each
+       line costs and what it snapshots, and the cases below assert the committed
+       row sets. Given a stub they would have asserted the stub.
+       It carries costAtSale, its own dependency, extracted the same way — the
+       cost snapshot the operator cannot override. */
+    resolveManualOrderLines: new Function(
+      'tdb', 'productUnitCostYuan',
+      `${extractFunction(RETAIL_SRC, 'costAtSale')}\n`
+      + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+      // The REAL cost resolver, not left undefined. costAtSale swallows its own
+      // errors and answers null, so an absent dependency here would not fail —
+      // it would quietly snapshot a null cost on every line while these cases
+      // assert the committed rows. A silent null is the shape of an assertion
+      // that stops meaning anything.
+    )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+    /* The counter-sale gate the handler consults before taking money. Extracted
+       rather than stubbed true/false: whether the till is shut for a store is a
+       real read, and a stub would decide it here instead of letting the fixture
+       decide it. */
+    posClosedForStore: new Function(
+      'tdb',
+      `${extractFunction(RETAIL_SRC, 'posClosedForStore')}\nreturn posClosedForStore;`
+    )(() => db),
     ...spies,
   };
   const keys = Object.keys(scope);
@@ -214,6 +241,17 @@ const ORDER = (over = {}) => ({
   items: [{ product_id: 1, qty: 2 }],
   recipient_name: 'Ada',
   fulfillment_type: 'counter',
+  // A COUNTER SALE MUST NAME ITS STORE, and this request predated that rule.
+  // The handler answers 'store_required_for_counter' without one, so every case
+  // below got a 400 and reported it as a transaction defect — "commits the exact
+  // row sets" failing with 400 !== 200 reads like the conversion broke, when the
+  // handler was refusing a request the fixture had simply not kept up with. The
+  // fixture already inserts this store; only the request omitted it.
+  store_id: 1,
+  // …and must say how it was paid, for the same reason: a sale rung at the
+  // counter is money taken now, so the handler refuses one that does not say
+  // how. Both rules arrived together and this request predated both.
+  payment_method: 'cash',
   ...over,
 });
 
@@ -235,7 +273,12 @@ await it('commits the exact row sets: 1 order, 1 item, 1 pending payment', async
   const res = makeRes();
   await makeHandler(db, spies)(makeReq(ORDER()), res);
 
-  assert.strictEqual(res.code, 200, `expected 200, got ${res.code}`);
+  // The BODY, not just the code. "expected 200, got 400" names the symptom and
+  // hides the reason, and every case in this file that ever goes red goes red
+  // through this line — twice already for a validation the handler had gained
+  // and this fixture had not. The error name turns a bisect into a read.
+  assert.strictEqual(res.code, 200,
+    `expected 200, got ${res.code} — ${JSON.stringify(res.body)}`);
   const orders = all(db, 'retail_orders');
   assert.strictEqual(orders.length, 1, 'expected exactly one order');
   assert.strictEqual(orders[0].order_no, 'TC000001');

@@ -529,7 +529,20 @@ async function extraSuites() {
     // / delivered or not-same-city, and an edit is no evidence about either.
     // That exclusion is the invariant this test exists for; the membership list
     // grows as parked states are added.
-    assert.match(qingyunQueue.REQUEUE_SQL, /status IN \('error', 'needs_point', 'awaiting_choice'\)/);
+    // ASSERTED AS MEMBERSHIP, NOT AS A TUPLE. This pinned the exact list and so
+    // went red the day 'ready' joined it — a parked state that requeueEligible
+    // already accepts, so the SQL and the JS agreed and only the test did not.
+    // The comment above already said the list GROWS as parked states are added;
+    // the assertion did not, which made it a change-detector for the one kind of
+    // change it explicitly expected. What matters is that the three below are in
+    // and that 'skipped' is out, and that is now what is checked.
+    const inList = (st) => new RegExp(`status IN \\([^)]*'${st}'`).test(qingyunQueue.REQUEUE_SQL);
+    for (const st of ['error', 'needs_point', 'awaiting_choice']) {
+      assert.ok(inList(st), `${st} dropped out of the requeue statement`);
+    }
+    assert.ok(!inList('skipped'),
+      "'skipped' entered the requeue statement — cancelled, refunded, delivered and "
+      + 'not-same-city rows would be re-pushed, and an edit is no evidence about any of them');
     assert.doesNotMatch(qingyunQueue.REQUEUE_SQL, /'skipped'/);
     assert.match(qingyunQueue.REQUEUE_SQL, /attempts = 0/);
   });
