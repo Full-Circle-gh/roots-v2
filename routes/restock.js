@@ -256,8 +256,9 @@ function _fireRestockPush(orderId, kind, actorTenantUserId) {
     // /stock reads ?go= itself and refuses one the operator was not answered
     // for, so a link can never grant access to a screen a capability does not.
     const url = audience.go ? '/stock?go=' + audience.go : '/stock';
+    // `event` names the switch this alert answers to (audit E-10).
     Promise.resolve(_push.sendPushToOperatorsWithCaps(currentTenantId(), audience.caps, {
-      title, body, url, tag: 'rs-' + orderId + '-' + kind,
+      title, body, url, tag: 'rs-' + orderId + '-' + kind, event: 'restock',
     }, { storeId, excludeTenantUserId: actorTenantUserId || null }))
       .catch(e => console.warn('[fireRestockPush operators]', e.message));
   } catch (e) { console.warn('[fireRestockPush]', e.message); }

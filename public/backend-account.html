@@ -465,6 +465,16 @@
           </div>
           <button class="sw" id="ntfPush" type="button" role="switch" aria-label="Push to this device"></button>
         </div>
+
+        <!-- WHICH alerts, not just whether (audit E-10). One switch for the
+             whole thing was a choice between everybody's work and none of it,
+             and the switch that gets used in that situation is "off" — after
+             which the pick that mattered arrives nowhere. These are per person,
+             not per device: they apply wherever that person has push on. -->
+        <h2 class="sect-h" style="margin-top:26px"><span class="en">Which alerts</span><span class="cn">接收哪些通知</span></h2>
+        <p class="lead" style="margin-top:-6px"><span class="en">All of these are on until you turn one off.</span><span class="cn">默认全部开启，可自行关闭。</span></p>
+        <div id="ntfEventMsg" class="msg" role="status"><span></span></div>
+        <div id="ntfEvents"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
       </div>
 
     </section>
@@ -907,6 +917,12 @@
       var pushEl = $('ntfPush');
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
         pushEl.classList.add('busy'); setMsg($('ntfPushMsg'), null, ''); $('ntfPushMsg').querySelector('span').textContent = L('This browser doesn’t support push notifications.','此浏览器不支持推送通知。'); $('ntfPushMsg').classList.add('show');
+        // The event switches are the person's, not the browser's — a desktop
+        // that cannot receive push still sets what reaches their phone.
+        fetch('/api/backend/push/pref', { credentials:'same-origin' })
+          .then(function(r){ return r.json(); })
+          .then(function(pref){ paintNtfEvents((pref || {}).events, false); })
+          .catch(function(){ $('ntfEvents').innerHTML = ''; });
         return;
       }
       Promise.all([
@@ -921,6 +937,70 @@
         // as soon as another page re-enrolled the device.
         var on = pref.enabled !== false && !!sub && Notification.permission === 'granted';
         setSw('ntfPush', on); $('ntfPushTest').hidden = !on;
+        paintNtfEvents(pref.events, on);
+      });
+    }
+
+    // ── Which alerts (audit E-10) ────────────────────────────────────────
+    // The switches are per PERSON, not per device, so they are painted even
+    // when push is off on this browser — they still describe what reaches that
+    // person's other phone. What changes is the sentence above them, which says
+    // so rather than leaving a row of live-looking switches over a silent
+    // device.
+    function paintNtfEvents(events, pushOn){
+      var box = $('ntfEvents'); if (!box) return;
+      if (!events || !events.length) { box.innerHTML = ''; return; }
+      box.innerHTML = events.map(function(e){
+        // An event this person's job never reaches them is shown, disabled, and
+        // says why. Hiding it would leave somebody hunting for a switch that
+        // was never the reason they hear nothing.
+        var off = !e.reaches;
+        return '<div class="ntf-row"' + (off ? ' style="opacity:.55"' : '') + '>'
+          + '<div class="ntf-txt"><div class="ntf-t">'
+          +   '<span class="en">' + esc(e.labelEn) + '</span><span class="cn">' + esc(e.labelCn) + '</span>'
+          + '</div><div class="ntf-d">'
+          +   '<span class="en">' + esc(e.descEn) + (off ? ' Your role doesn’t receive these.' : '') + '</span>'
+          +   '<span class="cn">' + esc(e.descCn) + (off ? ' 您的角色不会收到此类通知。' : '') + '</span>'
+          + '</div></div>'
+          + '<button class="sw' + (e.on && !off ? ' on' : '') + '" type="button" role="switch"'
+          +   ' data-ntf-event="' + esc(e.key) + '"' + (off ? ' disabled' : '')
+          +   ' aria-checked="' + (e.on && !off ? 'true' : 'false') + '"'
+          +   ' aria-label="' + esc(lang === 'cn' ? e.labelCn : e.labelEn) + '"></button>'
+          + '</div>';
+      }).join('');
+      // A plain note, not an error: setMsg() only shows a message when it is
+      // given a kind, and neither of these is a failure.
+      var note = $('ntfEventMsg');
+      setMsg(note, null, '');
+      if (!pushOn) {
+        note.querySelector('span').textContent = L('Push is off on this device — these still apply anywhere else you have it on.',
+                                                   '此设备已关闭推送 — 以下设置仍适用于您开启推送的其他设备。');
+        note.classList.add('show');
+      }
+    }
+    function bindNtfEvents(){
+      // Delegated: the rows are repainted from the server's answer after every
+      // change, so a handler bound to a row would be bound to a row that is
+      // already gone.
+      $('ntfEvents').addEventListener('click', function(ev){
+        var el = ev.target.closest ? ev.target.closest('[data-ntf-event]') : null;
+        if (!el || el.disabled || el.classList.contains('busy')) return;
+        var turningOn = !el.classList.contains('on');
+        el.classList.add('busy');
+        fetch('/api/backend/push/events', {
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+          body:JSON.stringify({ event: el.getAttribute('data-ntf-event'), on: turningOn })
+        }).then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+          .then(function(j){
+            // Repaint from what the SERVER now holds, never from what was
+            // clicked: a switch that shows "off" over a preference that did not
+            // save is the failure mode this whole pane exists to remove.
+            paintNtfEvents(j.events, $('ntfPush').classList.contains('on'));
+          })
+          .catch(function(){
+            el.classList.remove('busy');
+            setMsg($('ntfEventMsg'), 'err', L('Couldn’t save that — please try again.','保存失败，请重试。'));
+          });
       });
     }
     function bindNotifToggles(){
@@ -990,6 +1070,7 @@
       });
     }
     bindNotifToggles();
+    bindNtfEvents();
     /* ── digit-box code entry — shared by the email and phone verify steps.
          Six single-char boxes stand in for one text input; a hidden input
          keeps the joined value under the original id so the rest of the

@@ -71,6 +71,50 @@ function mutedLink(scope, subjectId) {
   } catch { return null; }
 }
 
+// ─── Per-event mute list (audit E-10) ───────────────────────────────────
+// The table above answers "does this person want push at all". This one
+// answers "which of it" — a row means this subject has switched THAT event
+// off. No row means on, so nobody's phone goes quiet because this shipped,
+// and nothing needs backfilling.
+//
+// Same two identity spaces as push_optouts, same `scope` column, for the same
+// reason. The event vocabulary lives in lib/push-events.js; a key not in it is
+// never enforced, so an alert added later reaches people until somebody adds
+// its switch — the safe direction to fail in.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS push_event_optouts (
+    scope      TEXT    NOT NULL,          -- 'user' | 'operator'
+    subject_id INTEGER NOT NULL,
+    event      TEXT    NOT NULL,          -- lib/push-events.js key
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (scope, subject_id, event)
+  )`);
+} catch (e) {
+  console.warn('[push] could not create push_event_optouts: ' + e.message);
+}
+
+const pushEvents = require('../lib/push-events');
+
+/** The event keys this subject has switched off. */
+function mutedEvents(scope, subjectId) {
+  try {
+    return new Set(db.prepare('SELECT event FROM push_event_optouts WHERE scope = ? AND subject_id = ?')
+      .all(scope, subjectId).map((r) => r.event));
+  } catch { return new Set(); }
+}
+/** Switch one event on or off for one subject. Unknown keys are refused. */
+function setEventMuted(scope, subjectId, event, on) {
+  if (!pushEvents.known(event)) return { ok: false, error: 'unknown_event' };
+  if (on) {
+    db.prepare('DELETE FROM push_event_optouts WHERE scope = ? AND subject_id = ? AND event = ?')
+      .run(scope, subjectId, event);
+  } else {
+    db.prepare(`INSERT INTO push_event_optouts (scope, subject_id, event) VALUES (?, ?, ?)
+                ON CONFLICT(scope, subject_id, event) DO NOTHING`).run(scope, subjectId, event);
+  }
+  return { ok: true, event, on: !!on };
+}
+
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_CONTACT = process.env.VAPID_CONTACT     || 'mailto:owner@rootskitchen.cn';
@@ -256,6 +300,7 @@ function _logPush(tenantId, payload, res) {
 async function _sendMany(subs, payload, scope, tenantId) {
   let sent = 0, pruned = 0, muted = 0;
   let live = subs;
+  const eventKey = (payload && payload.event) || null;
   if (scope && subs.length) {
     const ids = [...new Set(subs.map(s => s.subject_id).filter(v => v != null))];
     if (ids.length) {
@@ -266,6 +311,20 @@ async function _sendMany(subs, payload, scope, tenantId) {
           `SELECT subject_id FROM push_optouts WHERE scope = ? AND subject_id IN (${ph})`
         ).all(scope, ...ids).map(r => r.subject_id));
       } catch { /* table missing — nobody is muted */ }
+      // Then the per-event switch (audit E-10), on the SAME subjects and in the
+      // same place, for the same reason: a sender added later cannot forget it.
+      // Only a payload that says which event it is can be filtered — one that
+      // does not, or one naming an event nobody has published a switch for,
+      // goes to everybody exactly as before.
+      if (pushEvents.known(eventKey)) {
+        try {
+          const ph2 = ids.map(() => '?').join(',');
+          for (const r of db.prepare(
+            `SELECT subject_id FROM push_event_optouts
+              WHERE scope = ? AND event = ? AND subject_id IN (${ph2})`
+          ).all(scope, eventKey, ...ids)) mutedIds.add(r.subject_id);
+        } catch { /* table missing — nobody has switched an event off */ }
+      }
       if (mutedIds.size) {
         live = subs.filter(s => !mutedIds.has(s.subject_id));
         muted = subs.length - live.length;
@@ -277,7 +336,9 @@ async function _sendMany(subs, payload, scope, tenantId) {
     if (r.ok) sent++;
     if (r.pruned) pruned++;
   }));
-  const result = { sent, pruned, muted, total: subs.length };
+  // `event` rides along in the record so a "nobody heard this" row says WHICH
+  // alert nobody heard — and, when the reason is a preference, which switch.
+  const result = { sent, pruned, muted, total: subs.length, event: eventKey };
   // ── The delivery record (audit P-03 / P-02) ────────────────────────────
   // This is the one place every push funnels through, which is why the log
   // goes here rather than in each caller — the same reason the mute check is
@@ -437,7 +498,10 @@ async function sendPushToOperatorsWithCaps(tenantId, needCaps, payload, opts = {
 async function sendPushToTenantOperators(tenantId, payload) {
   if (!ENABLED || !tenantId) return { sent: 0, pruned: 0, skipped: 'disabled' };
   const subs = db.prepare('SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id FROM tenant_operator_push_subs WHERE tenant_id = ?').all(tenantId);
-  return _sendMany(subs, payload, 'operator');
+  // The account goes with it, so the delivery record files this under the
+  // account it belongs to rather than under the first one — the same reason
+  // sendPushToOperatorsWithCaps passes it.
+  return _sendMany(subs, payload, 'operator', tenantId);
 }
 
 module.exports = router;
@@ -446,6 +510,8 @@ module.exports.operatorSubscribe = operatorSubscribe;
 module.exports.operatorUnsubscribe = operatorUnsubscribe;
 module.exports.operatorPref       = operatorPref;
 module.exports.operatorSetPref    = operatorSetPref;
+module.exports.mutedEvents        = mutedEvents;
+module.exports.setEventMuted      = setEventMuted;
 module.exports.isMuted            = isMuted;
 module.exports.sendPushToOperator = sendPushToOperator;
 module.exports.sendPushToTenantOperators = sendPushToTenantOperators;

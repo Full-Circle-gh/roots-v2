@@ -4875,6 +4875,7 @@ function markOrderPaid(orderId) {
           body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
           url: '/?tab=orders',
           tag: 'retail-order-' + orderId,
+          event: 'new_order',      // the switch this answers to (audit E-10)
         });
       }
     } catch (e) { console.warn('[markOrderPaid operator push]', e.message); }
@@ -29129,6 +29130,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
             body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
             url: '/?tab=orders',
             tag: 'retail-order-' + id,
+            event: 'new_order',    // the switch this answers to (audit E-10)
           });
         }
       } catch (e) { console.warn('[admin mark-paid operator push]', e.message); }
