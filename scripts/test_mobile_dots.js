@@ -36,6 +36,10 @@ const ROWS = `DB.orders=[]; state.ordersView=[
 const dotOn = (tab) =>
   `[].slice.call(document.querySelectorAll('.tabbar button')).some(function(b){` +
   `return b.innerText.trim().indexOf(${JSON.stringify(tab)})===0 && b.querySelector('span span[style*="border-radius:50%"]');})`;
+// The same 6px dot, on a row of the More list rather than on the folder.
+const rowDot = (label) =>
+  `[].slice.call(document.querySelectorAll('#content .row')).some(function(b){` +
+  `return b.innerText.trim().indexOf(${JSON.stringify(label)})===0 && b.querySelector('span[style*="border-radius:50%"]');})`;
 
 const CASES = [
   ['an unread order lights the Orders dot', ROWS + `APP.cmd('tab','orders');`, [
@@ -76,6 +80,64 @@ const CASES = [
     ['feedback too — the dot covers both, and the old Set covered only reviews',
      `window.__sent.some(function(u){return u.indexOf('/feedback/unseen-count?since=2026-08-22')>=0})`],
   ]],
+
+  /* ── The third dot: the kitchen finished what the warehouse asked for ─────
+     A warehouse account raises a kitchen request from /stock and, until this,
+     heard nothing in this app ever again: warehouse→kitchen closes at
+     'prepared', so there is no delivery to watch, and the only announcement was
+     a push — one moment, on one phone, regularly in a pocket or on silent. */
+  ['a request the kitchen finished lights the More dot',
+   `state.kitchenReady=2; APP.cmd('tab','home'); render();`, [
+    ['the More dot is on', dotOn('More')],
+  ]],
+  ['and the row inside More says which one it meant',
+   `state.kitchenReady=2; APP.cmd('tab','more');`, [
+    // Thirty rows behind one folder dot is a guessing game. On a warehouse role
+    // with no tab bar at all this list IS the home screen, so the row's dot is
+    // the only one there is.
+    ['Transfers carries the dot', rowDot('Transfers')],
+    // Counted rather than spot-checked: "Purchasing has no dot" would also be
+    // true of a More list that failed to render a single row.
+    ['and it is the only row that does',
+     `[].slice.call(document.querySelectorAll('#content .row'))` +
+     `.filter(function(b){return b.querySelector('span[style*="border-radius:50%"]')}).length === 1`],
+    ['on a list that really has other rows',
+     `document.querySelectorAll('#content .row').length > 5`],
+  ]],
+  ['nothing waiting is no dot',
+   `state.kitchenReady=0; APP.cmd('tab','more'); render();`, [
+    ['not on the folder', `!(${dotOn('More')})`],
+    ['nor on the row',    `!(${rowDot('Transfers')})`],
+  ]],
+  ['an operator who cannot open Transfers is never told about it',
+   // A dot promising work over a door this role cannot open — the same rule the
+   // inbox dot keeps.
+   `state.caps=['dashboard:view']; state.kitchenReady=2; APP.cmd('tab','home'); render();`, [
+    ['no folder dot', `!(${dotOn('More')})`],
+    ['and readyFromKitchen() answers zero', `readyFromKitchen() === 0`],
+  ]],
+  ['the count is the server\'s fact, not this phone\'s memory',
+   `window.__sent=[]; var _f=window.fetch;
+    window.fetch=function(u,o){ window.__sent.push(String(u));
+      return Promise.resolve({ok:true,json:function(){return Promise.resolve({success:true,data:{count:3,latest:null}})}}); };
+    state.kitchenReady=0; pollKitchenReady();`, [
+    // No ?since= and no localStorage stamp: archiving is what clears it, so one
+    // person collecting the tray puts the dot out on every other phone.
+    ['it asks the shared endpoint',
+     `window.__sent.some(function(u){return u.indexOf('/api/restock/kitchen-ready')>=0})`],
+    ['with no per-device stamp',
+     `!window.__sent.some(function(u){return u.indexOf('since=')>=0})`],
+    ['and takes the answer', `state.kitchenReady === 3`],
+   ]],
+  ['a role that cannot ask is never polled',
+   `state.caps=['dashboard:view']; window.__sent=[]; var _f=window.fetch;
+    window.fetch=function(u,o){ window.__sent.push(String(u)); return _f(u,o); };
+    pollKitchenReady();`, [
+    ['no request is made',
+     `!window.__sent.some(function(u){return u.indexOf('/api/restock/kitchen-ready')>=0})`],
+   ]],
 ];
 
-run('attention dots', CASES);
+/* One settle for the whole run: the kitchen-ready case starts a fetch, and a
+   promise continuation cannot be asserted on in the task that began it. */
+run('attention dots', CASES, { settle: 150 });
