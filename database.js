@@ -6761,6 +6761,83 @@ try {
   }
 } catch (e) { console.error('[sku] default rule code migration', e); }
 
+// ─────────────────────────────────────────────────────────────────────────
+// SHOPS and SHOP LISTINGS — docs/tacet-consolidation-decisions.md §41, §42,
+// §44 (2026-09-05). The first build step of the location commerce module.
+//
+// A SHOP IS A RECORD ATTACHED TO A LOCATION, NOT COLUMNS ON IT (§41). A
+// retail_stores row with no shops row is unchanged in every respect — it keeps
+// its hours, its pickup flag, its stock and its till exactly as today. The
+// shops row is what a location gains when it starts selling from a menu, and
+// `location_id` is UNIQUE so a location has at most one.
+//
+// THE PUBLIC CODE IS OPAQUE (§44 Routing). Eight characters from the same
+// confusable-free alphabet the affiliate referral code uses, minted by
+// lib/shop-code.js from crypto.randomBytes, never sequential, never derived
+// from shops.id, retail_stores.id or retail_stores.code. It is the only thing a
+// QR carries, so a guessable one would expose other shops' — and other tenants'
+// — menus to anyone editing an address bar. It is NEVER reused as, or derived
+// from, retail_stores.code, which is a human-typed slug joined on by ~20 tables.
+//
+// A LISTING JOINS A PRODUCT TO A SHOP (§42) and carries the price AT THAT SHOP
+// and the fulfilment mode — `stocked` (built elsewhere, arrives as finished
+// goods) or `made_here` (built at the shop at the moment of sale). Mode is a
+// property of the listing and never of the product: the same product may be
+// stocked at one shop and made here at another. UNIQUE(shop_id,
+// store_product_id) so a product appears on a menu once.
+//
+// IT JOINS store_products, NOT products. §42's "one catalogue" means there is
+// no separate menu-items entity; it is not a statement about the kitchen
+// `products` / storefront `store_products` fork (database.js STORE_PRODUCTS).
+// Everything customer-facing sells store_products — the till included
+// (routes/retail.js GET /api/retail-admin/products reads FROM store_products)
+// — and a menu is customer-facing, so that is the table a listing points at.
+// The FK is written against store_products directly rather than left for
+// store_products_seed_fk_v1 to repoint.
+//
+// PRICE IS DECIMAL YUAN (§24 MONEY IS STORED AS DECIMAL, NOT WHOLE CENTS), the
+// same unit as store_products.sell_price, which is what a new listing's price
+// defaults to.
+//
+// READ BY NOTHING YET. The till, the storefronts and every order path ignore
+// these two tables after this migration; wiring them in is a later step and a
+// separate decision. Additive only: no existing column changes, no backfill.
+//
+// Tenant DBs receive both tables and the index through lib/tenant-db.js
+// initTenantSchema, which copies every data-plane CREATE from the main DB.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shops (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id      INTEGER NOT NULL UNIQUE,          -- retail_stores.id; at most one shop per location (§41)
+    public_code      TEXT    NOT NULL UNIQUE,          -- opaque, 8 chars, lib/shop-code.js; never derived (§44)
+    display_name_en  TEXT,                             -- NULL = show the location's own name
+    display_name_cn  TEXT,
+    is_active        INTEGER NOT NULL DEFAULT 1,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (location_id) REFERENCES retail_stores(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS shop_listings (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id           INTEGER NOT NULL,
+    store_product_id  INTEGER NOT NULL,                -- store_products.id, NOT products.id (see above)
+    price             REAL    NOT NULL,                -- decimal yuan at THIS shop (§42)
+    fulfilment_mode   TEXT    NOT NULL DEFAULT 'stocked',  -- 'stocked' | 'made_here' (§42)
+    is_available      INTEGER NOT NULL DEFAULT 1,      -- the staff daily on/off switch (§42)
+    sort_position     INTEGER NOT NULL DEFAULT 0,      -- menu order, ascending
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (shop_id, store_product_id),
+    CHECK (fulfilment_mode IN ('stocked', 'made_here')),
+    CHECK (price >= 0),
+    FOREIGN KEY (shop_id)          REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY (store_product_id) REFERENCES store_products(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_shop_listings_shop_sort ON shop_listings(shop_id, sort_position, id);
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;

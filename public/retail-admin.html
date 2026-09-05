@@ -12010,6 +12010,19 @@
     <div id="wst-root" data-no-i18n></div>
   </section>
 
+  <!-- SHOP MENU (门店商品) — a shop's listings, §41/§42/§44 step 2. A sub-page
+       behind each Sales → Locations card (A5 Board: the Board is its only door,
+       no rail entry — RAIL_STANDIN lights Sales). Same §1.7a takeover as
+       Materials → record: body.shp-viewing pins main, this section owns the
+       content height and scrolls inside .shp-scroll.
+       data-no-i18n because every string is baked by cuT() at paint time and
+       repainted on language change (retail-admin/28-shops.js). -->
+  <section id="tab-shop-menu">
+    <div class="shp-scroll" id="shp-scroll">
+      <div class="shp-page" id="shp-root" data-no-i18n></div>
+    </div>
+  </section>
+
   <section id="tab-recipes-record">
     <div class="rcp-scroll" id="rcp-rec-scroll">
       <div class="rcp-page" data-no-i18n>
@@ -13340,6 +13353,7 @@
 <script src="/assets/retail-admin/24-import.js"></script>
 <script src="/assets/retail-admin/25-views.js"></script>
 <script src="/assets/retail-admin/26-print.js"></script>
+<script src="/assets/retail-admin/28-shops.js"></script>
 <script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
