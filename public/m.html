@@ -3489,7 +3489,9 @@ function screenMembership(){
       '会员等级在电脑端设置。设置后会连同各等级人数显示在这里。'));
   const card=t=>{
     const th=Number(t.threshold)||0;
-    const from = th===0 ? T('from ¥0 — everyone starts here','从 ¥0 起 — 人人有份')
+    /* The merchant's own zero, not a yuan one (audit D-03) — this is the only
+       amount on the phone that was written as a literal rather than formatted. */
+    const from = th===0 ? T('from '+money0(CUR,0)+' — everyone starts here','从 '+money0(CUR,0)+' 起 — 人人有份')
       : T('from '+money0(CUR,th)+' lifetime spend','累计消费 '+money0(CUR,th)+' 起');
     const n = state.tierCounts ? Number(state.tierCounts[tierKey(t)]||0) : null;
     const perks = LANG==='en'

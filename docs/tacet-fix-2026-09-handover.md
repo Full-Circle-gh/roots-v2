@@ -16,7 +16,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | merged and live (commit `dae3a5f`) |
 | **Part four** | C-02's last part — the phone's date family | merged and live (commit `9ae4673`) |
 | **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | merged and live (commit `56accb7`) |
-| **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | on the branch, deploys with the next merge |
+| **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | merged and live (commit `d347a59`) |
+| **Part seven** | D-03 on the counter till and the phone | on the branch, deploys with the next merge |
 
 ---
 
@@ -110,8 +111,8 @@ with `--update`; list them with `--list`. The two worst offenders are
 Everything below was built after the first 36 shipped, working down what was
 left. It is grouped by what each one changes rather than by severity: at this
 point the severities left are mostly Medium and Low, and the useful question is
-what a merchant notices. One row is marked **part six** — it is on the branch
-and deploys with the next merge; everything else here is live.
+what a merchant notices. One row is marked **part seven** — it is on the
+branch and deploys with the next merge; everything else here is live.
 
 | Finding | Severity | What changed |
 |---|---|---|
@@ -141,6 +142,7 @@ and deploys with the next merge; everything else here is live.
 | **C-02** | Medium · part four | The phone admin had its own date family — its own parser, its own English and Chinese branches, and its own idea of what "today" is. Its SHAPES matched the desktop's; its ZONE did not. Every stamp on the phone was drawn on the handset's clock while every stamp on the desktop is drawn on the store's, so an owner abroad read two different times for the same order on two screens — the same defect A-05 fixed on the server, pointing the other way. Three "today" computations were hardcoded to UTC+8 on top of that, which is right for exactly one account. The phone now loads `/assets/td-datetime.js` and renders through it, so there is one formatter and one clock. Nothing changes for Roots: Guangzhou is UTC+8 and the module's fallback is the same zone. `scripts/test_phone_dates.js` runs the shipped helpers under two store zones, which is the only way to see this at all.|
 | **C-02** | Medium · part five | And the DESKTOP still had the same two mistakes, which is the half the finding was actually written about ("four date formats across the admin, and one shared formatter most screens ignore"). **Eighteen call sites across nine parts** computed today as `Date.now() + 8 * 3600 * 1000` — Guangzhou, spelled out — so on any account outside UTC+8 the dashboard's range presets, Finance's presets, the KPI rows on Orders / Customers / Products, Purchasing's late-delivery pill and the default date on a new ledger row were a day out, asking a server that since A-05 counts its business day on the ACCOUNT's clock about a city it has never heard of. A dozen more rendered with `toLocaleDateString` / `toLocaleTimeString`: the browser's zone, in whatever locale each call site named — `en-GB` ("29 Jul") on the dashboard's purchase-order cards beside `en-US` ("Jul 29") on its own range label, and NO locale at all on two printed documents, where the operator's operating system decided whether a count sheet read 29/07/2026 or 7/29/2026. All of it now goes through `tdWhen` and a new `tdToday()`. Two things fell out on the way: the printed purchase order carried **the first tenant's name and city hardcoded into a shared template** — every account's purchase orders went to their suppliers under it — and `scripts/td-datetime-check.js`, the executable §1.18 contract, sat outside the runner's `(test|check|verify)[-_]` discovery prefix, so **the one formatting contract that could be run was the one nothing ran**. Renamed `check-td-datetime.js`; it runs on every commit now. |
 | **D-03 / D-04** | High · part six | D-03 is recorded above as fixed — "188 hardcoded ¥ conversions across twelve files". The twelve files were all `public/retail-admin/*.js`, the merchant's own admin. **`public/shop.html`, the CUSTOMER-facing web storefront, was never in that pass**, and still carried thirty-four: every wallet balance, the top-up screen end to end, the coupon stubs, the free-shipping nudge, the membership ladder, the leaderboard, the referral programme, the favourites card, and the shop listing's own third money helper. The page has had a correct `money()` — symbol, decimals and position from `/api/retail/config` — the entire time; thirty-four places did not call it. So a merchant trading in dollars saw dollars in their admin and their CUSTOMERS saw yuan, on the same order. Now two helpers, `money()` and `money0()`, mirroring the admin's `acMoney` / `acMoneyCompact` pair. The membership hero also read "ROOTS CLUB" to every merchant's customers — D-04, a fourth place — and is built from the shop's own brand now. `scripts/test_storefront_currency.js` bans the symbol outside the two helpers' fallback. |
+| **D-03** | High · part seven | And two more surfaces, found by asking the same question of each one. **The counter till** rang up every sale in yuan: its money helper was literally called `yuan()` and hardcoded the symbol, across sixteen call sites and the printed receipt — so a merchant trading in anything else quoted their customer a figure in a currency neither of them uses, on the glass they are both looking at. It already read `/api/retail/config` for the tax settings, so the currency was one field away the whole time. One helper, renamed `money()`, reading symbol, decimals and position. **The phone admin** was already right — `money(cur, n)` and `money0(cur, n)` both take the currency — with exactly one amount written as a literal (`from ¥0 — everyone starts here` on the membership ladder). `scripts/test_customer_currency.js` now covers all four surfaces. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -538,7 +540,7 @@ Suites added by this pass, each named for the finding it holds down:
 `test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
 `test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
 `test_role_tagged_controls.js`, `test_phone_dates.js`, `test_admin_dates.js`,
-`test_storefront_currency.js`.
+`test_customer_currency.js`.
 
 Also run, on every commit:
 

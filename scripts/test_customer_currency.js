@@ -19,6 +19,10 @@
  * D-04 is the same shape one field over: the membership hero read "ROOTS CLUB"
  * — the first tenant's loyalty programme — to every merchant's customers.
  *
+ * Two more surfaces turned up the same way: the counter till hardcoded the
+ * symbol in a helper actually CALLED yuan(), and the phone had one amount
+ * written as a literal.
+ *
  * This check is STATIC and it is a ban, because that is what the defect needs.
  * A hardcoded symbol is never wrong on the screen of the account it was written
  * for, and this product had exactly one account for years. It only becomes
@@ -112,7 +116,40 @@ yes(/mb-kicker">\$\{esc\(cn\?\(state\.brand \+ ' 会员'\)/.test(src)
 '…it is built from state.brand, which every page title already uses');
 
 // ─────────────────────────────────────────────────────────────────────────
-section('4 · what is deliberately still there');
+section('4 · the counter till and the phone');
+
+/* THE TILL rang up every sale in yuan. Its money helper was called yuan() and
+   hardcoded the symbol, on sixteen call sites and on the printed receipt — so a
+   merchant trading in anything else quoted the customer a figure in a currency
+   neither of them uses, on the glass they are both looking at. It already read
+   /api/retail/config for the tax settings (I-03), so the currency was one field
+   away the whole time. */
+{
+  const till = fs.readFileSync(path.join(ROOT, 'public', 'till.html'), 'utf8');
+  const code = till.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  is((code.match(/\byuan\s*\(/g) || []).length, 0,
+    'the till has no yuan() — the helper is money() and reads the shop');
+  yes(/S\.cur\s*=\s*curCfg/.test(code) || /if \(curCfg && typeof curCfg/.test(code),
+    'the till seeds its currency from the config read it already makes');
+  yes(/c\.position === 'after'/.test(code),
+    '…and honours symbol position, like every other surface');
+  const stray = code.split('¥').length - 1;
+  /* One fallback in the state default, one in the helper. Nothing else. */
+  yes(stray <= 2, `the till carries ${stray} ¥ fallback(s) and no hardcoded price`);
+}
+
+/* THE PHONE was already correct — money(cur, n) and money0(cur, n) both take
+   the currency — with exactly one amount written as a literal instead. */
+{
+  const m = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
+  const code = m.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  const literals = code.match(/¥\d/g) || [];
+  is(literals.length, 0, 'no amount on the phone is written as a yuan literal');
+  if (literals.length) console.log('      ' + literals.join(', ') + ' — use money0(CUR, n)');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section('5 · what is deliberately still there');
 
 /* ABOUT_DEFAULTS is the first tenant's own brand copy — manifesto, founding
    year, city, founder quote, the in/out list — handed to every merchant who

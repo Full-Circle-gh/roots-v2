@@ -862,15 +862,31 @@ button{font:inherit;color:inherit;margin:0}
     // I-03). Null is the state every shop starts in and the only one that
     // existed before this, so every line that reads it falls through to what
     // the till has always shown.
-    tax: null
+    tax: null,
+    /* The shop's own currency, from the same /api/retail/config read the tax
+       settings come from (audit D-03). The default is the fallback every other
+       surface uses — account #1's, not the platform's — so a till whose config
+       read fails prints exactly what it always printed. */
+    cur: { symbol: '¥', decimals: 2, position: 'before' }
   };
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(v) { var d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
-  function yuan(n) {
+  /* Was money(), and hardcoded the symbol — so a merchant trading in anything
+     else rang up every sale on this glass, and printed every receipt from it,
+     in yuan. Sixteen call sites, one function: the symbol, its decimals and its
+     POSITION are the shop's now. Kept as one helper on purpose; a till with two
+     money formats is how a subtotal and a total come to disagree. */
+  function money(n) {
+    var c = S.cur || {};
+    var sym = c.symbol || '¥';
+    var dec = c.decimals != null ? c.decimals : 2;
     var v = Number(n) || 0;
-    var p = Math.abs(v).toFixed(2).split('.');
-    return (v < 0 ? '-¥' : '¥') + p[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + p[1];
+    var p = Math.abs(v).toFixed(dec).split('.');
+    var body = p[0].replace(/\B(?=(\d{3})+$)/g, ',') + (p[1] ? '.' + p[1] : '');
+    /* The minus stays in front of the number in both positions: "-12.00 kr",
+       never "12.00- kr". */
+    return (v < 0 ? '-' : '') + (c.position === 'after' ? (body + sym) : (sym + body));
   }
   function api(path, opts) {
     return fetch(path, Object.assign({ credentials: 'same-origin' }, opts || {}))
@@ -985,6 +1001,9 @@ button{font:inherit;color:inherit;margin:0}
       .then(function (r) {
         var j = r[0], cs = r[1], me = r[2], cfg = r[3];
         S.tax = taxFrom(cfg && cfg.data);
+        var curCfg = cfg && cfg.data && cfg.data.currency;
+        if (curCfg && typeof curCfg === 'object' && curCfg.symbol) S.cur = curCfg;
+        else if (typeof curCfg === 'string' && curCfg) S.cur = { symbol: curCfg, decimals: 2, position: 'before' };
         var caps = me && me.user && Array.isArray(me.user.caps) ? me.user.caps : null;
         // The way back, from the same read as the permission above. Null on any
         // hiccup, which simply means no control is drawn — the till itself is
@@ -1224,7 +1243,7 @@ button{font:inherit;color:inherit;margin:0}
               ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
               // In stock: code, price, and a single digit when the shelf is low.
               : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
-                + '<span class="pr">' + yuan(p.sell_price) + '</span>'
+                + '<span class="pr">' + money(p.sell_price) + '</span>'
                 + (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
          + '</span></button>';
     });
@@ -1253,7 +1272,7 @@ button{font:inherit;color:inherit;margin:0}
       el.className = 'cust on';
       el.innerHTML = head + '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
         + '<div class="sub">' + esc(T('points')) + ' ' + (Number(S.customer.points) || 0)
-        + ' · ' + esc(T('wallet')) + ' ' + yuan(S.customer.balance) + '</div></span>'
+        + ' · ' + esc(T('wallet')) + ' ' + money(S.customer.balance) + '</div></span>'
         + '<button class="cbtn" type="button" data-cust="clear">' + esc(T('remove')) + '</button>';
     } else {
       el.className = 'cust';
@@ -1275,8 +1294,8 @@ button{font:inherit;color:inherit;margin:0}
       h += '<button class="ln' + (sel ? ' sel' : '') + '" type="button" data-line="' + i + '">'
          + '<span class="nm">' + (l.qty > 1 ? '<span class="q">×' + l.qty + '</span>' : '') + esc(l.name)
          + '<div class="sb">' + (l.sku ? '<span class="sku">' + esc(l.sku) + '</span>' : '')
-         + '<span>' + yuan(l.price) + '</span></div></span>'
-         + '<span class="tt">' + yuan(l.qty * l.price) + '</span></button>';
+         + '<span>' + money(l.price) + '</span></div></span>'
+         + '<span class="tt">' + money(l.qty * l.price) + '</span></button>';
       // ALWAYS EMITTED, never conditional. On a tablet CSS shows this only for
       // the selected line, which is exactly the old behaviour; on a phone the
       // sheet is opened on purpose and has the room, so every line carries its
@@ -1315,14 +1334,14 @@ button{font:inherit;color:inherit;margin:0}
     // as what it is, a share of the one figure, and still prints no subtotal.
     $('sums').innerHTML = !S.tax || !S.lines.length ? ''
       : (S.tax.mode === 'exclusive'
-          ? '<div><span>' + esc(T('subtotal')) + '</span><span>' + yuan(sub) + '</span></div>'
-            + '<div><span>' + esc(S.tax.label) + '</span><span>' + yuan(taxOn(sub)) + '</span></div>'
-          : '<div><span>' + esc(S.tax.label) + '</span><span>' + yuan(taxOn(sub)) + '</span></div>');
+          ? '<div><span>' + esc(T('subtotal')) + '</span><span>' + money(sub) + '</span></div>'
+            + '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>'
+          : '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>');
     $('tot-lb').textContent = T('total');
-    $('tot-amt').textContent = yuan(due);
+    $('tot-amt').textContent = money(due);
     var b = $('pay');
     b.disabled = !S.lines.length;
-    b.textContent = S.lines.length ? T('markPaid') + '  ' + yuan(due) : T('markPaid');
+    b.textContent = S.lines.length ? T('markPaid') + '  ' + money(due) : T('markPaid');
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
     // so this is the only always-true statement of what the customer owes.
@@ -1334,10 +1353,10 @@ button{font:inherit;color:inherit;margin:0}
     // WHAT THE CUSTOMER OWES, tax included — the same figure as the button in
     // the sheet above. The bar is the only always-true statement of the amount
     // on a phone, so it must not be the pre-tax one.
-    $('bar-amt').textContent = yuan(due);
+    $('bar-amt').textContent = money(due);
     var bb = $('bar-pay');
     bb.disabled = !any;
-    bb.textContent = any ? T('markPaid') + '  ' + yuan(due) : T('markPaid');
+    bb.textContent = any ? T('markPaid') + '  ' + money(due) : T('markPaid');
     // With nothing rung up there is no order to open, so the summary row goes
     // rather than sitting there inert.
     document.querySelector('.bar-sum').hidden = !any;
@@ -1371,9 +1390,9 @@ button{font:inherit;color:inherit;margin:0}
       + esc(T('back')) + '</button></div>'
       + '<div class="smain">'
       +   '<div class="samt"><div class="lb">' + esc(T('amount')) + '</div>'
-      +     '<div class="amt">' + yuan(due) + '</div>'
+      +     '<div class="amt">' + money(due) + '</div>'
       +     '<div class="sb">' + esc(T('counterSale'))
-      +       (S.tax ? ' · ' + esc(S.tax.label) + ' ' + yuan(taxOn(sub)) : '') + '</div></div>'
+      +       (S.tax ? ' · ' + esc(S.tax.label) + ' ' + money(taxOn(sub)) : '') + '</div></div>'
       +   '<div class="spick"><div class="lb">' + esc(T('payMethod')) + '</div>'
       +     lead.map(walletBtn).join('')
       +     (S.moreOpen ? rest.map(walletBtn).join('')
@@ -1402,7 +1421,7 @@ button{font:inherit;color:inherit;margin:0}
     return '<div class="stop"></div>'
       + '<div class="smain"><div class="done">'
       +   '<span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.5 5.5L20 7"/></svg></span>'
-      +   '<h2>' + esc(T('completed')) + ' ' + yuan(d.total) + '</h2>'
+      +   '<h2>' + esc(T('completed')) + ' ' + money(d.total) + '</h2>'
       +   '<div class="meta">' + esc(w ? cuT(w.en, w.cn) : '') + ' · ' + esc(d.order_no || '') + '</div>'
       +   '<div class="drow">'
       +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
@@ -1605,7 +1624,7 @@ button{font:inherit;color:inherit;margin:0}
         + '<span class="cwho">' + esc(who)
         + '<span class="cmeta">' + esc(c.phone || '') + '</span></span>'
         + '<span class="cbal">' + esc(T('points')) + ' ' + (Number(c.points) || 0)
-        + '<span class="cmeta">' + esc(T('wallet')) + ' ' + yuan(c.balance) + '</span></span>'
+        + '<span class="cmeta">' + esc(T('wallet')) + ' ' + money(c.balance) + '</span></span>'
         + '</button>';
     });
     box.innerHTML = h;
