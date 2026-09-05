@@ -39,7 +39,6 @@ data/alert-latch/
 .idea/
 .vscode/
 .claude/
-CLAUDE.md
 AGENTS.md
 .cursor/
 .aider*
