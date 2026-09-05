@@ -1880,14 +1880,18 @@
     const w = window.open('', '_blank', 'width=900,height=1100');
     if (!w) { toast(T('Allow pop-ups, then Print again', '请允许弹窗后再打印'), 'err'); return; }
     const doc = `<!DOCTYPE html>
-<html lang="zh"><head><meta charset="UTF-8"><title>${e2(p.po_number)} — Roots</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<html lang="zh"><head><meta charset="UTF-8"><title>${e2(p.po_number)}${(window.TD_SHOP_NAME ? ' — ' + e2(window.TD_SHOP_NAME) : '')}</title>
+<!-- The MERCHANT'S name, read from the account (audit E-12). This said
+     "Roots" — written into the file — which is the wrong name for every
+     merchant but one, on a document that goes to a supplier.
+     And NO WEBFONT: the admin's own fonts were taken off a host that is
+     unreachable where the first merchant trades (audit D-09), and a print
+     window stalling on a font request is the same defect on the one screen
+     where somebody is standing at a printer waiting. -->
 <style>
   @page { size: A4; margin: 12mm; }
   :root { --ink:#000; --graphite:#000; --hair:#C9C4B6;
-          --sans:'Inter','Noto Sans SC','IBM Plex Sans',-apple-system,'Segoe UI',sans-serif; }
+          --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','IBM Plex Sans',sans-serif; }
   * { box-sizing:border-box; }
   body { margin:0; background:#F2F1EC; font-family:var(--sans); color:var(--ink); font-weight:400; -webkit-font-smoothing:antialiased; }
   .num { font-variant-numeric:tabular-nums; }

@@ -91,8 +91,8 @@ function load(els) {
   };
   sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
   vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/retail-admin/26-keyboard.js'), 'utf8'),
-    sandbox, { filename: '26-keyboard.js' });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/retail-admin/27-keyboard.js'), 'utf8'),
+    sandbox, { filename: '27-keyboard.js' });
   return { doc, sandbox };
 }
 // One keydown, as the browser would deliver it to the focused element.
@@ -194,11 +194,11 @@ section('5 · it can run again without doing it twice');
 section('6 · it is loaded, and it is the last word');
 {
   const html = fs.readFileSync(path.join(ROOT, 'public/retail-admin.html'), 'utf8');
-  yes(html.includes('26-keyboard.js'), 'the shell loads it');
-  const at = html.indexOf('26-keyboard.js');
+  yes(html.includes('27-keyboard.js'), 'the shell loads it');
+  const at = html.indexOf('27-keyboard.js');
   const others = [...html.matchAll(/retail-admin\/(\d\d)-[a-z-]+\.js/g)].map((m) => m.index);
   yes(others.every((i) => i <= at), 'after every part that paints, so the first sweep sees them all');
-  const src = fs.readFileSync(path.join(ROOT, 'public/retail-admin/26-keyboard.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'public/retail-admin/27-keyboard.js'), 'utf8');
   yes(/MutationObserver/.test(src),
     'and re-sweeps on repaint — every list here is painted from JavaScript');
   yes(/_kbdQueued/.test(src),
@@ -264,7 +264,7 @@ section('8 · the search key, and the one key that is deliberately missing');
   eqNum(box.focused, 1, '/ jumps to the search box on this screen');
 }
 {
-  const src = fs.readFileSync(path.join(ROOT, 'public/retail-admin/26-keyboard.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'public/retail-admin/27-keyboard.js'), 'utf8');
   yes(/kbdHelp/.test(src), '? says what the keys are — a shortcut nobody can find is not one');
   // The audit suggests a status key on the Orders list. There is deliberately
   // none: advancing an order is a WRITE, and a single unmodified letter that

@@ -1959,6 +1959,13 @@ let ENTITLEMENTS = {};
 // tab (favicon + title) always stays Tacet, regardless of tenant branding.
 function applyBrand(tenant) {
   if (!tenant) return;
+  // The MERCHANT'S name, for anything that leaves this screen on paper (audit
+  // E-12). Set even when there is no logo and the admin chrome stays Tacet:
+  // a statement handed to a customer, or a count sheet on a clipboard, is the
+  // shop's document and has to carry the shop's name — the older purchase-order
+  // sheet had "Roots" written into the file, which is the wrong name for every
+  // merchant but one.
+  window.TD_SHOP_NAME = tenant.brand || tenant.name || '';
   const logoUrl = tenant.brandLogoUrl || null;
   const markUrl = tenant.brandMarkUrl || logoUrl;
   // The admin's default identity is ALWAYS "tacet". A tenant only takes over the
