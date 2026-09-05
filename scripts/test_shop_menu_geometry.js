@@ -41,6 +41,41 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
+// THE SHARED LOOKUP, COPIED RATHER THAN REINVENTED — byte-for-byte from
+// scripts/test_stock_home.js, which is the fullest of the copies the render
+// suites share (test_mobile_geometry.js's omits '/opt/pw-browsers/chromium'
+// from the direct list).
+//
+// THIS FILE USED TO ASK A NARROWER QUESTION AND CI PAID FOR IT. It probed only
+// '/opt/pw-browsers/chromium' and otherwise handed Playwright an empty launch
+// options object, so it depended on Playwright having a browser downloaded of
+// its own. On the CI runner it has not, and the launch threw — the suite
+// printed its SKIP line and REQUIRE_BROWSER=1 turned that into a failure,
+// while thirty-three sibling render suites in the same job found Chromium and
+// ran. Neither CHROME_BIN nor the /usr/bin/* system paths were consulted, and
+// those are what the runner actually provides.
+//
+// So the SKIP is now reached only when there genuinely is no browser anywhere,
+// which is the case a developer's laptop is entitled to, and never because
+// this file looked in fewer places than its siblings.
+function findChrome() {
+  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+  try {
+    const p = require('playwright').chromium.executablePath();
+    if (p && fs.existsSync(p)) return p;
+  } catch (e) { /* playwright not installed here */ }
+  for (const g of ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome']) if (fs.existsSync(g)) return g;
+  const pw = '/opt/pw-browsers';
+  if (fs.existsSync(pw)) {
+    for (const d of fs.readdirSync(pw)) {
+      const p = path.join(pw, d, 'chrome-linux', 'chrome');
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
 const ROOT = path.join(__dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
@@ -124,22 +159,19 @@ function shell(lang) {
 }
 
 (async () => {
-  let browser;
-  try {
-    const { chromium } = require('playwright');
-    const PW_CHROME = '/opt/pw-browsers/chromium';
-    const launchOpts = () => {
-      try { if (fs.existsSync(PW_CHROME)) return { executablePath: fs.realpathSync(PW_CHROME) }; }
-      catch (e) { /* fall through to Playwright's own resolution */ }
-      return {};
-    };
-    browser = await chromium.launch(launchOpts());
-  } catch (e) {
-    console.log('\nSKIP — no Chromium found; the mounted-geometry checks did not run.');
+  // Resolve the browser BEFORE launching, the way every sibling render suite
+  // does. A null here is the only honest skip; a throw from launch() with a
+  // real binary in hand is a fault and must not be swallowed as "no Chromium".
+  const chrome = findChrome();
+  if (!chrome) {
+    console.log('\nSKIP — no Chromium found. Set CHROME_BIN to run the render pass.');
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
     return;
   }
+  let browser;
+  const { chromium } = require('playwright');
+  browser = await chromium.launch({ executablePath: chrome });
 
   // Open the page as the Sales card does and wait for the paint that follows
   // the fixture fetches, then measure the named elements.
