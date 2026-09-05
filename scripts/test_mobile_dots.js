@@ -121,8 +121,10 @@ const CASES = [
     window.fetch=function(u,o){ window.__sent.push(String(u));
       return Promise.resolve({ok:true,json:function(){return Promise.resolve({success:true,data:{count:3,latest:null}})}}); };
     state.kitchenReady=0; pollKitchenReady();`, [
-    // No ?since= and no localStorage stamp: archiving is what clears it, so one
-    // person collecting the tray puts the dot out on every other phone.
+    // No ?since= and no localStorage stamp: a server-side `seen_at` is what
+    // clears it, so one person opening the list in /stock puts the dot out on
+    // every other phone. Nothing is collected — the kitchen shelves what it
+    // makes and records the stock itself, so this is news, not a job.
     ['it asks the shared endpoint',
      `window.__sent.some(function(u){return u.indexOf('/api/restock/kitchen-ready')>=0})`],
     ['with no per-device stamp',
