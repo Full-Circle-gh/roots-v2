@@ -322,6 +322,16 @@ also matters practically: with the tax outside that base, a points-only order on
 a tax-charging shop would have been refused outright, naming a shipping fee that
 was not the problem.
 
+**The mini app needs a rebuild before a shop turns tax on.** `miniapp/` is not
+in the deploy's allowlist — it never has been, because the mini app is published
+through WeChat rather than shipped to the server — so the checkout page's half
+of this reaches customers only when a new build clears WeChat review. Nothing
+breaks in the meantime: the create route accepts a total declared by a client
+that predates the tax, precisely so a settings change cannot take an old build
+out of the checkout. But until that build is live, a customer on the old one
+sees a total without the tax line and is charged the taxed figure at the
+gateway, so the sensible order is: publish the build, then set the rate.
+
 **One thing I did not do, and would ask before doing:** tax on a REFUND is
 computed proportionally at report time rather than stored on the refund. It is
 right for every case I can see; it would be wrong if you ever refund a
