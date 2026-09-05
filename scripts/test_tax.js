@@ -421,6 +421,47 @@ async function place(taxCfg, body) {
         'and counts an inclusive one not at all — it was already inside the lines');
   }
 
+  // ── §7d · the client that has to keep its own arithmetic in step ────────
+  section('7d · the mini-app checkout, which recomputes between quotes');
+  {
+    /* This is the one place the tax arithmetic is duplicated rather than read,
+       and the reason is not convenience: the checkout page recomputes its own
+       total between quotes — a voucher applied, a slot surcharge picked, points
+       toggled — and the create route REFUSES an order whose declared total
+       disagrees with its own. A tax figure frozen at the last quote would not
+       be a cosmetic problem; it would be a checkout that stops working.
+
+       So two properties are asserted here. The formula matches lib/tax.js — the
+       same rounding, the same inclusive divisor — and the settings reach the
+       page by BOTH roads, because a collection never quotes at all. */
+    const co = fs.readFileSync(path.join(ROOT, 'miniapp/pages/checkout/checkout.js'), 'utf8');
+    const at = co.indexOf('  taxOn(subtotal, deliveryFee, packingFee, voucherDiscount, surcharge) {');
+    yes(at > 0, 'the page has its own taxOn');
+    const fn = co.slice(at, co.indexOf('\n  },', at));
+    yes(/MAXM \+ micro/.test(fn), 'an inclusive rate is divided by 100% + the rate, as lib/tax.js does');
+    yes(/Math\.floor\(\(base \* micro\) \/ MAXM \+ 0\.5\)/.test(fn),
+        'and an exclusive one is rounded half away from zero on one base, once');
+    yes(/inclusive' \? 0 :/.test(fn), 'an inclusive tax adds nothing to the total');
+
+    yes(/function taxDataFrom\(/.test(co), 'the settings are normalised in one place');
+    yes(/rate_micro != null \? t\.rate_micro : t\.rateMicro/.test(co),
+        'reading both the quote’s wire name and the config’s stored name, so the two cannot drift');
+    yes(/\.\.\.taxDataFrom\(cfg && cfg\.tax/.test(co),
+        'the storefront config is one road — a PICKUP order never quotes, and would otherwise declare an untaxed total and be refused');
+    yes(/applyQuoteTax\(data\.tax\)/.test(co), 'and the quote is the other');
+    // Every local recompute has to carry it, or the declared total is stale.
+    const grosses = (co.match(/const (?:gross|grossTotal) = Math\.max\(0,[^\n]*/g) || []);
+    yes(grosses.length >= 4, `${grosses.length} local total computations`);
+    for (const g of grosses) {
+      yes(/tax\.added|taxWithSurcharge/.test(g) || /\+ tax\.added/.test(g),
+          'each one carries the tax', g.trim().slice(0, 90));
+    }
+    // And the storefront config really does carry it: tax.* is not private.
+    const ret = RETAIL_SRC.slice(RETAIL_SRC.indexOf('const PRIVATE_CONFIG_PREFIXES'), RETAIL_SRC.indexOf('const PRIVATE_CONFIG_PREFIXES') + 200);
+    yes(!/tax\./.test(ret.split(']')[0]),
+        'and tax.* is not a private config prefix, so /api/retail/config really hands it to the storefronts');
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is

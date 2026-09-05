@@ -6,6 +6,33 @@
 const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
+
+/* ── Tax, normalised (audit I-03) ────────────────────────────────────────────
+   TWO SOURCES, ONE SHAPE. The shop's settings arrive on every delivery quote
+   (as `tax`, computed by lib/tax.js over the same base the create route uses)
+   and on the storefront config at page load. Both are read through this, so a
+   collection — which never quotes — and a delivery cannot disagree about the
+   rate, the shape, or what the shop calls it.
+
+   Two forms of the key, deliberately: the quote sends snake_case over the wire
+   (`rate_micro`) and storefront_config stores the admin's own camelCase
+   (`rateMicro`). Normalising here is a line; a second normaliser somewhere else
+   is a bug waiting for the day the two drift.
+
+   Everything about it is OFF unless a rate is set — which is every shop until
+   one sets one, and is why nothing on this page moves for anybody today. */
+function taxDataFrom(t, L) {
+  const micro = Number(t && (t.rate_micro != null ? t.rate_micro : t.rateMicro)) || 0;
+  const on = !!(t && micro > 0 && (t.enabled === undefined || t.enabled === true));
+  if (!on) return { taxRateMicro: 0, taxShown: '', taxLabel: '' };
+  const label = (t.label && (L === 'cn' ? t.label.cn : t.label.en)) || '';
+  return {
+    taxRateMicro: Math.round(micro),
+    taxMode: t.mode === 'inclusive' ? 'inclusive' : 'exclusive',
+    taxShippingTaxable: !!(t.shipping_taxable || t.shippingTaxable),
+    taxLabel: label || (L === 'cn' ? '税费' : 'Tax'),
+  };
+}
 const lang   = require('../../utils/lang');
 const notify = require('../../utils/notifications');
 const phone  = require('../../utils/phone');
@@ -378,6 +405,14 @@ Page({
       const deliveryEnabled = !(cfg && cfg.delivery && cfg.delivery.available === false);
       const patch = {
         kitchenAddress: cfg?.delivery?.kitchenAddress || '',
+        /* Tax, from the shop's own config (audit I-03). It also rides every
+           delivery QUOTE, and that is the copy the delivery path uses — but a
+           PICKUP order never quotes (refreshQuote returns early for it), so
+           without reading it here a collection would show an untaxed total
+           while the server charged tax, and the order would then be REFUSED:
+           the create route compares what this page declares against what it
+           computes and will not commit a disagreement. */
+        ...taxDataFrom(cfg && cfg.tax, this.data.lang),
         // Alipay is selectable only when the server says it'll work (manual
         // 收款码 configured or auto 当面付 live); otherwise it stays greyed.
         alipayEnabled: !!(cfg && cfg.payments && cfg.payments.alipay),
@@ -983,14 +1018,7 @@ Page({
   // Fold a quote's tax block into page data. Absent block = a shop that
   // charges no tax, which is every shop until one turns it on.
   applyQuoteTax(t) {
-    if (!t) { this.setData({ taxRateMicro: 0, taxShown: '', taxLabel: '' }); return; }
-    const L = this.data.lang;
-    this.setData({
-      taxRateMicro: Number(t.rate_micro) || 0,
-      taxMode: t.mode === 'inclusive' ? 'inclusive' : 'exclusive',
-      taxShippingTaxable: !!t.shipping_taxable,
-      taxLabel: lang.pick((t.label && t.label.en) || 'Tax', (t.label && t.label.cn) || '税费', L),
-    });
+    this.setData(taxDataFrom(t, this.data.lang));
   },
 
   // best auto-apply promo} is worth more (best one wins). Mirrors the server's
