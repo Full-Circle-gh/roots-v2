@@ -30,6 +30,7 @@
     "test:recycle": "node scripts/test_recycle.js",
     "test:phone-order": "node scripts/test_phone_order.js",
     "test:tax": "node scripts/test_tax.js",
+    "test:role-tags": "node scripts/test_role_tagged_controls.js",
     "test:asset-delivery": "node scripts/test_asset_delivery.js",
     "test:clear-filters": "node scripts/test_clear_filters.js",
     "test:money-invariants": "node scripts/test_money_invariants.js",

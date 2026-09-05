@@ -505,8 +505,13 @@ async function loadGrantedList() {
         </div>
         ${!standing && g.used_at
           ? ''
-          : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
+          : `<button class="btn btn-sm" data-cap="coupons:grant" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
       </div>`).join('');
+    /* Built after the page's one pass over [data-cap] (audit K-01). Revoking a
+       coupon somebody already holds is coupons:grant — the same cap
+       requiredCapFor() answers for the DELETE this calls, and a different grant
+       from editing the coupon definition that opened this panel. */
+    try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e2) { /* the server still refuses */ }
   } catch (e) {
     mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }

@@ -6316,7 +6316,30 @@ function renderOpenOrder(o) {
   // buttons; the red refund-type ones (Refund / Cancel + refund) collapse
   // into a single menu button so the header isn't a wall of red.
   const allTx = nextStatusFor(o);
-  const dangerTx = allTx.filter(([next]) => next === 'cancelled' || next === 'refunded');
+  /* …and the red ones are FILTERED BY WHAT THIS OPERATOR MAY DO (audit K-01).
+     Not tagged with data-cap like the buttons elsewhere, because these two live
+     inside one wrapper button — "Refund / Cancel" — and a wrapper that opens
+     onto an empty list is worse than no wrapper. Filtering here lets
+     renderRefundMenu's own "nothing to offer" branch do the work.
+
+     Refunding money and cancelling an order are two different permissions and
+     always were: a cashier holds orders:edit and cancels all day; orders:refund
+     is a separate grant, marked `money: 'moves'` in lib/capabilities.js, and the
+     staff preset does not carry it. The audit's example of this whole finding
+     was this menu — "a shop-floor member of staff opening Orders sees every
+     button an owner sees, including refunds".
+
+     THIS CHANGES NO SERVER RULE, and one of the two is worth saying out loud:
+     a FULL refund travels through PATCH /orders/:id/status, which
+     requiredCapFor() answers `orders:edit` for, so the server would accept it
+     from a cashier today. That is a server-side gap and it is deliberately left
+     exactly as it is — closing it is a change to what an account can do, not to
+     what it is shown. What this line does is stop offering a cashier a button
+     the capability model says is not theirs. */
+  const DANGER_CAP = { refunded: 'orders:refund', cancelled: 'orders:edit' };
+  const dangerTx = allTx
+    .filter(([next]) => next === 'cancelled' || next === 'refunded')
+    .filter(([next]) => (typeof can === 'function' ? can(DANGER_CAP[next]) : true));
   const forwardTx = allTx.filter(([next]) => next !== 'cancelled' && next !== 'refunded')
     .map(([next, label]) => {
       // With multiple parcels the whole-order dispatch acts as "ship all at
@@ -6530,6 +6553,12 @@ function renderOpenOrder(o) {
   const body = $('#order-drawer .drawer-body');
   if (body) body.scrollTop = 0;
   ordBindHeadPin();
+  /* The drawer is built AFTER the page's one pass over [data-cap] elements, so
+     the tags on the refund panel's buttons would do nothing without this (audit
+     K-01). Same two lines the purchasing screen and the recycle panel already
+     use after their own renders, and the same shrug in the catch: the gate is a
+     nicety, and the server refuses these regardless of what is on the glass. */
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the server still refuses */ }
 }
 
 // Off-app tender options for the manual "Mark paid" button. value = what the
@@ -8156,20 +8185,34 @@ function renderRefundPanel(o) {
                        state === 'rejected' ? 'var(--danger)' :
                        state === 'withdrawn' ? 'var(--text-3)' : '#f2ca6c';
 
-  // Action buttons appropriate to current state.
+  /* Action buttons appropriate to current state.
+
+     EVERY ONE OF THEM CARRIES data-cap="orders:refund" (audit K-01). The audit's
+     own example of the gap was this exact panel: "a shop-floor member of staff
+     opening Orders sees every button an owner sees, including refunds". The
+     screen is gated on orders:view and a cashier holds that; the four buttons
+     below move money and are gated server-side on orders:refund
+     (lib/cap-routes.js), which a cashier does not hold. So they used to render,
+     and the operator found out by pressing one.
+
+     THE CAPABILITY IS THE SERVER'S, NOT A NEW ONE. Each tag names exactly what
+     requiredCapFor() answers for the endpoint that button calls — scripts/
+     test_role_tagged_controls.js asserts that pairing rather than trusting it.
+     Nothing here changes a rule: the server refused these before and refuses
+     them now. What changes is that the refusal is not a surprise. */
   let actions = '';
   if (state === 'pending') {
     actions = `
-      <button class="btn btn-sm" onclick="refundReview(${o.id})">Start review · 开始处理</button>
-      <button class="btn btn-primary btn-sm" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
-      <button class="btn btn-sm" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="refundReview(${o.id})">Start review · 开始处理</button>
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
   } else if (state === 'reviewing') {
     actions = `
-      <button class="btn btn-primary btn-sm" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
-      <button class="btn btn-sm" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundApproveDialog(${o.id})">Approve · 批准</button>
+      <button class="btn btn-sm" data-cap="orders:refund" onclick="rejectRefund(${o.id})">Reject · 拒绝</button>`;
   } else if (state === 'approved') {
     actions = `
-      <button class="btn btn-primary btn-sm" onclick="openRefundPayoutDialog(${o.id})">Record payout · 记录退款</button>`;
+      <button class="btn btn-primary btn-sm" data-cap="orders:refund" onclick="openRefundPayoutDialog(${o.id})">Record payout · 记录退款</button>`;
   }
 
   const customerLinesBlock = (state === 'pending' || state === 'reviewing') && lines.length

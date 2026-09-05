@@ -127,6 +127,7 @@ what a merchant notices.
 | **E-12** | Low | A stock count sheet for the shelves and a customer statement. Both carry the merchant's own name; the older purchase-order sheet had "Roots" written into the file, and no longer does. |
 | **Q-03** | Low | Three behaviours for "clear the filters". Customers and Products now follow Waste's, which Orders already did: the button is present while something is narrowing the list and absent otherwise. Empty-state-only was serving the wrong case — a filter that matched nothing announces itself; one that matched forty out of four hundred does not. |
 | **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
+| **K-01** | Medium | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -360,6 +361,16 @@ that could be done without one has been.
   defect with a direction.
 - **H-02** — the public door is a waiting list. The audit's own suggested
   direction is "none — this is a sequencing decision, not a defect".
+- **Two capabilities the server does not enforce**, both found by K-01's work
+  and both left alone because closing either changes what an account may DO,
+  which is yours: a **full refund** travels through `PATCH /orders/:id/status`,
+  which `requiredCapFor()` answers `orders:edit` for, so the server would accept
+  one from a cashier today; and **`customers:adjust`** — a capability that
+  exists, that the role editor offers, and that `lib/capabilities.js` marks as
+  moving money — is not required by `/customers/:id/points-adjust` or
+  `/wallet-adjust`, which map to `customers:edit`. Both are one line each in
+  `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
+  closed the suite says so.
 - Everything under **K** (RBAC enforcement and the ~50 unmapped routes) and the
   finance category data quality pass — both yours per the brief.
 
