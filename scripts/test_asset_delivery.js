@@ -19,9 +19,12 @@
  * suggested direction and remains right; the 23 parts share one global scope
  * and call each other by name, so there is no boundary to load across yet.
  *
- * The handler is driven directly with request objects rather than over a
- * socket: what is being checked is the headers and the bytes, and a real server
- * would add a port and a race without adding a fact.
+ * Sections 1-4 drive the handler directly with request objects: what is being
+ * checked there is the RULE — which files it touches, which it leaves alone, and
+ * what headers each one carries. Section 5 then mounts it in express behind the
+ * static server it sits in front of and fetches over TCP, because a
+ * Content-Length that disagrees with the body does not fail a fake response
+ * object — it hangs a real client.
  */
 'use strict';
 
@@ -136,5 +139,45 @@ section('4 · the part of the finding that is still open');
     'which is written down as the open half, not left to be discovered');
 }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+// ── §5 · over a real socket ───────────────────────────────────────────────
+// The sections above drive the handler directly, which checks the rule. This
+// one runs it inside express, behind the same static server it sits in front
+// of, and fetches over TCP — because a Content-Length that disagrees with the
+// body does not fail a fake response object, it hangs a real client.
+section('5 · mounted, and fetched');
+{
+  const express = require('express');
+  const app = express();
+  app.use('/assets', assetHandler({ root: path.join(ROOT, 'public') }));
+  app.use('/assets', express.static(path.join(ROOT, 'public')));
+  const srv = app.listen(0);
+  const base = () => 'http://127.0.0.1:' + srv.address().port;
+
+  (async () => {
+    const raw = fs.readFileSync(path.join(ROOT, 'public/retail-admin/01-core.js'), 'utf8');
+    let r = await fetch(base() + '/assets/retail-admin/01-core.js?v=abc');
+    is(r.status, 200, 'a stamped file is served');
+    is(r.headers.get('content-encoding'), 'gzip', 'compressed');
+    is(await r.text(), raw, 'and what arrives is the file, exactly — the round trip is lossless');
+    is(r.headers.get('cache-control'), 'public, max-age=31536000, immutable', 'cached for a year');
+
+    const et = r.headers.get('etag');
+    r = await fetch(base() + '/assets/retail-admin/01-core.js?v=abc', { headers: { 'If-None-Match': et } });
+    is(r.status, 304, 'and the second visit is a 304 over the wire, not just in a fake');
+
+    r = await fetch(base() + '/assets/retail-admin.css');
+    is(r.status, 200, 'the stylesheet is served');
+    is(r.headers.get('cache-control'), 'public, max-age=300', 'on the short lifetime, being unstamped');
+
+    r = await fetch(base() + '/assets/does-not-exist.js');
+    is(r.status, 404, 'a missing file reaches the static server behind and 404s there');
+
+    r = await fetch(base() + '/assets/retail-admin/01-core.js', { method: 'HEAD' });
+    is(r.status, 200, 'HEAD answers');
+    yes(Number(r.headers.get('content-length')) > 0, 'with a length, and no body');
+
+    srv.close();
+    console.log(`\n${pass} passed, ${fail} failed\n`);
+    process.exit(fail ? 1 : 0);
+  })();
+}
