@@ -64,10 +64,10 @@ function section(t) { console.log(`\n${t}`); }
 const STORE = 9251;         // the kitchen's own store
 const OTHER = 9252;         // somebody else's, for the scope refusal
 const PROD  = 9253;
-// A SKU nothing else can own. The first draft used '4-670' — a REAL SKU in a
-// developer's database — and store_products.sku is UNIQUE, so the seed collided
-// with the shop's own peanut butter.
-const SKU   = 'PRODTEST-9253';
+// A SKU nothing else can own, used at the seed below. The first draft used
+// '4-670' — a REAL SKU in a developer's database — and store_products.sku is
+// UNIQUE, so the seed collided with the shop's own peanut butter.
+const SKU   = 'PRODTEST-' + PROD;
 
 // ── The door, before the route ─────────────────────────────────────────────
 // A screen and its door go in together. #262 shipped the kitchen queue without
@@ -127,7 +127,7 @@ function seed() {
   db.prepare('INSERT INTO retail_stores (id,name_en,name_cn,code,is_active) VALUES (?,?,?,?,1)')
     .run(OTHER, 'ProdTest2', '生产测试二', 'PRODTEST-' + OTHER);
   db.prepare('INSERT INTO store_products (id,name_en,name_cn,sku,is_active) VALUES (?,?,?,?,1)')
-    .run(PROD, 'Peanut Butter', '花生酱', 'PRODTEST-9253');
+    .run(PROD, 'Peanut Butter', '花生酱', SKU);
   inventory.adjustStock({ storeId: STORE, productId: PROD, newPhysicalQty: 0, reason: 'seed' });
 }
 
@@ -205,6 +205,28 @@ async function main() {
   });
   // recipe_name is NOT NULL and is what the desktop log prints; for a
   // product-shaped row the honest snapshot is the product's own name.
+  /* THREE PRODUCTS ARE NOT THREE BATCHES. batches_made carries DEFAULT 1, so
+     omitting it filed every product row as one batch and the desktop summary
+     (routes/production.js: `totalBatches += batches`) reported a morning of
+     three products as "3 batches". Twenty jars might be one batch or four —
+     this row counted jars and does not know. NULL contributes nothing to that
+     total; a 1 contributed a fiction. */
+  check('a product row claims no batch count at all', () => {
+    const b = db.prepare(
+      'SELECT batches_made FROM production_batches WHERE store_id = ? ORDER BY id').all(STORE);
+    for (const r of b) {
+      assert.strictEqual(r.batches_made, null,
+        `batches_made was ${r.batches_made} — a product row counted as a recipe batch`);
+    }
+  });
+  // servings_made IS meaningful for a product row: a jar is a serving, so the
+  // desktop log's servings figures stay right where its batch figures cannot.
+  check('but servings still carry what was made', () => {
+    const r = db.prepare(
+      'SELECT servings_made FROM production_batches WHERE store_id = ? ORDER BY id').get(STORE);
+    assert.strictEqual(r.servings_made, 20);
+  });
+
   check('the row names what was made', () => {
     assert.strictEqual(rows()[0].recipe_name, 'Peanut Butter');
     assert.strictEqual(rows()[0].product_id, PROD);

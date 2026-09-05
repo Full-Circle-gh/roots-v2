@@ -186,14 +186,33 @@ router.post('/api/retail-admin/production', requireRetailAdmin, express.json(), 
 
   try {
     const out = conn.transaction(() => {
+      /* batches_made IS WRITTEN AS NULL, EXPLICITLY, and that is the whole
+         reason it appears in this column list at all.
+
+         The column carries `DEFAULT 1`, so omitting it filed every product row
+         as one batch — and routes/production.js's summary does
+         `totalBatches += batches`. A morning of 20 jars, 12 hummus and 8 banana
+         reported "3 batches", which is three PRODUCTS counted as three BATCHES.
+         Twenty jars might be one batch or four; this row does not know, because
+         the operator counted jars.
+
+         NULL rather than a figure derived from the recipe (qty ÷ servings).
+         That derivation is available where store_products.recipe_id resolves —
+         and it would be precision for a screen nobody opens: the Production Log
+         lives in the kitchen realm, which is out of use. An honest absence beats
+         a computed number no one reads, and `parseFloat(null) || 0` contributes
+         nothing to the total instead of a fiction.
+
+         servings_made still carries qty_made, and that one IS meaningful: a jar
+         is a serving. So the desktop log's servings figures stay right. */
       const ins = conn.prepare(`
         INSERT INTO production_batches
-          (date, recipe_id, recipe_name, recipe_sku, servings_made, notes, created_by,
+          (date, recipe_id, recipe_name, recipe_sku, batches_made, servings_made, notes, created_by,
            store_id, product_id, qty_made, qty_shelved, gap_reason, request_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(
         today, product.recipe_id || null, madeName, product.sku || null,
-        madeQty, b.note || null, actorId,
+        null, madeQty, b.note || null, actorId,
         storeId, product.id, madeQty, qtyShelved, gapReason, requestId
       );
       const batchId = Number(ins.lastInsertRowid);
