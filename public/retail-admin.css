@@ -14612,7 +14612,11 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA3B2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat: no-repeat; background-position: right 10px center;
 }
+/* The base `select { color-scheme: dark }` (retail-admin.css:5460) would open a
+   dark dropdown on the light theme — restated per theme, as Materials does. */
+#tab-shop-menu select.shp-sel { color-scheme: dark; }
 :root[data-theme="light"] #tab-shop-menu select.shp-sel {
+  color-scheme: light;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
 }
 

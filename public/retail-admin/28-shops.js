@@ -46,10 +46,16 @@
    the mode column, 现做 / 备货 as the modes) or a pair already shipping in this
    admin, reused verbatim: 价格, 上架 / 已上架 / 未上架, 排序, 门店, 销售, 产品,
    + 添加商品, 搜索商品以添加…, 移除, 取消, 保存中…, 添加中…, 返回, 加载中…, 重试,
-   已停用, 未开通, 还没有商品, 中文名, 英文名(可选), 已保存. The four strings with
-   NO source use the T(en, '') marker — English in both languages, listed in
-   the PR for Ash — rather than a blank or an invention: Create shop, Shop
-   active, No products match, Couldn’t load this shop.
+   已停用, 未开通, 还没有商品, 中文名, 英文名(可选), 已保存. FOUR LABELS WERE
+   RESTRUCTURED TO FIT A LIVE PAIR rather than minted: the create action is the
+   Board's own "Set up · 设置" under its "Not set up · 未开通" state; the shop
+   switch carries the state word "On · 已开启" / "Off · 已停用" and no label of
+   its own; the picker's no-results line is the catalogue's "No products match
+   this filter · 没有匹配此筛选条件的产品"; the load banner is "Load failed ·
+   加载失败". The ONE string with no source — the label for the public code —
+   is not rendered at all; the value is shown unlabelled (see above). The
+   T(en, '') marker therefore has no live user in this file today; it stays
+   because the next string added here will need it.
 
    PREFIX is shp-*. sh- reads as shipping; shop- is a word the base stylesheet
    already uses in class names. */
@@ -192,7 +198,7 @@
     if (!el) return;
     if (_loading && !_loc) { el.innerHTML = head() + `<div class="shp-note">${esc(T('Loading…', '加载中…'))}</div>`; return; }
     if (_err && !_loc) {
-      el.innerHTML = head() + `<div class="shp-banner"><div class="shp-banner-t">${esc(T('Couldn’t load this shop', ''))}</div>`
+      el.innerHTML = head() + `<div class="shp-banner"><div class="shp-banner-t">${esc(T('Load failed', '加载失败'))}</div>`
         + `<div class="shp-banner-b">${esc(_err)}</div>`
         + `<button type="button" class="shp-btn sm" onclick="shopMenuBack()">${esc(T('Back', '返回'))}</button></div>`;
       return;
@@ -208,7 +214,7 @@
     const cta = !_loc ? ''
       : _shop
         ? `<button type="button" class="shp-btn primary" id="shp-add" data-cap="stores:edit" onclick="shpPickerToggle()">${esc(T('+ Add product', '+ 添加商品'))}</button>`
-        : `<button type="button" class="shp-btn primary" id="shp-create" data-cap="stores:edit" onclick="shpCreate(this)">${esc(T('Create shop', ''))}</button>`;
+        : `<button type="button" class="shp-btn primary" id="shp-create" data-cap="stores:edit" onclick="shpCreate(this)">${esc(T('Set up', '设置'))}</button>`;
     const code = _shop
       ? `<div class="shp-code"><code>${esc(_shop.public_code)}</code></div>`   // unlabelled on purpose — see header
       : '';
@@ -249,7 +255,7 @@
         <input class="shp-in" id="shp-name-cn" value="${esc(_shop.display_name_cn || '')}" placeholder="${esc(_loc.name_cn || '')}"
                onchange="shpSaveName('display_name_cn', this)"${dis}></label>
       <label class="shp-f shp-f-sw">
-        <span class="shp-f-l">${esc(T('Shop active', ''))}</span>
+        <span class="shp-f-l">${esc(_shop.is_active ? T('On', '已开启') : T('Off', '已停用'))}</span>
         <label class="shp-sw${_shop.is_active ? ' is-on' : ''}">
           <input type="checkbox" ${_shop.is_active ? 'checked' : ''}${dis} onchange="shpToggleActive(this)">
           <span class="shp-knob"></span>
@@ -263,7 +269,7 @@
   function picker() {
     let list;
     if (_pickLoading) list = `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
-    else if (!_pick.length) list = `<div class="shp-note sm">${esc(_pickQ ? T('No products match', '') : T('No products yet', '还没有商品'))}</div>`;
+    else if (!_pick.length) list = `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
     else list = `<ul class="shp-pick-list">` + _pick.map(p => `<li>
         <span class="shp-pick-name">${nameOf(p.name_en, p.name_cn)}</span>
         <span class="shp-pick-sku">${esc(p.sku || '')}</span>
@@ -343,7 +349,7 @@
       toast(T('Saved', '已保存'));
       paint();
     } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = T('Create shop', ''); }
+      if (btn) { btn.disabled = false; btn.textContent = T('Set up', '设置'); }
       toast(errText(e, 'save_failed'), 'err');
     }
   };

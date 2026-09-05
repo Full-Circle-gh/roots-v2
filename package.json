@@ -35,6 +35,7 @@
     "test:awaiting-restock": "node scripts/test_awaiting_restock_client.js",
     "test:warehouse-pin": "node scripts/test_warehouse_store_pin.js",
     "test:shop-listings": "node scripts/test_shop_listings.js",
+    "test:shop-menu-geometry": "node scripts/test_shop_menu_geometry.js",
     "test:restock-direction": "node scripts/test_restock_direction_default.js",
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
