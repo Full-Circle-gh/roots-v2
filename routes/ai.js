@@ -548,7 +548,38 @@ const COMPOSE_TOOL = {
   },
 };
 
-const COMPOSE_SYSTEM = `You are the layout assistant for **Roots**, a small bilingual (English + 中文) plant-based food brand in Guangzhou. The operator pastes raw product copy — a label, a supplier blurb, scattered notes — and your job is to divide it into the product page's structured "blocks", choosing the right block type for each piece of content.
+/* THE SHOP THIS IS WRITING FOR — and it is not always the same one.
+   composeBlocksHandler below is mounted on TWO realms: /api/ai/compose-blocks
+   (requireAuth — the kitchen app, which is Roots' own) and
+   /api/retail-admin/ai/compose-blocks (requireRetailAdmin), which ANY merchant
+   on the platform reaches from their product editor.
+
+   Until now the prompt opened "You are the layout assistant for **Roots**, a
+   small bilingual plant-based food brand in Guangzhou" and, four hundred words
+   later, forbade the model from using an animal-product emoji because "the
+   shop is fully vegan". Both were stated as fact. So a merchant selling
+   anything else had their copy organised by an assistant that believed it
+   worked for a Guangzhou plant-based brand — and a butcher could not be given
+   a 🥩 for a product that is one.
+
+   Two variants. THE ROOTS ONE IS BYTE-IDENTICAL to the string that shipped
+   before this, which scripts/test_compose_prompt.js asserts character for
+   character — a prompt is the one kind of code where a diff tells you almost
+   nothing about the behaviour, so the guarantee has to be mechanical.
+
+   Still cached, both of them: callLLM keys the cacheable half on its own text,
+   so a second variant is a second cache rather than no cache. */
+function composeSystem(shop) {
+  const name = (shop && shop.name) ? shop.name : '';
+  const who = name
+    ? `You are the layout assistant for **${name}**`
+    : 'You are the layout assistant for a small shop';
+  const brand = (shop && shop.vegan)
+    ? `${who}, a small bilingual (English + 中文) plant-based food brand in Guangzhou.`
+    /* No category and no city for anybody else: the platform does not know
+       either one, and a guess here becomes a claim in the copy. */
+    : `${who}. It sells bilingually where the operator gives both languages.`;
+  return brand + ` The operator pastes raw product copy — a label, a supplier blurb, scattered notes — and your job is to divide it into the product page's structured "blocks", choosing the right block type for each piece of content.
 
 Return your answer ONLY by calling the \`emit_blocks\` tool. Do not write prose.
 
@@ -561,7 +592,7 @@ BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
 - **ingredients_chips** — ingredient list as pills. Fields: items[] of { name_en, name_cn, pct (string % or ""), lead (boolean: true for a hero ingredient) }.
 - **ingredients_line** — same data as a typographic run instead of pills. Only use ONE of chips/line, not both.
 - **allergen_card** — Fields: contains_en/cn, may_contain_en/cn (comma-separated allergens).
-- **how_to_use** — usage ideas as a grid. Fields: tiles[] of { icon (one emoji), label_en/cn, sub_en/cn (optional). 6 tiles ideal. PLANT-BASED ONLY: the shop is fully vegan — never use an animal-product emoji (no 🥚🍳🧀🧈🥓🍖🍗🥩🐟🦐🍯 etc.); use plant/cookware glyphs (🥘🍲🥣🔥♨🌱🥗). For a microwave tile use ♨ (Unicode has no microwave emoji — never 📡).
+- **how_to_use** — usage ideas as a grid. Fields: tiles[] of { icon (one emoji), label_en/cn, sub_en/cn (optional). 6 tiles ideal. ${(shop && shop.vegan) ? 'PLANT-BASED ONLY: the shop is fully vegan — never use an animal-product emoji (no 🥚🍳🧀🧈🥓🍖🍗🥩🐟🦐🍯 etc.); use plant/cookware glyphs (🥘🍲🥣🔥♨🌱🥗).' : 'Pick the emoji that matches what the product actually IS — never one for an ingredient the copy does not mention.'} For a microwave tile use ♨ (Unicode has no microwave emoji — never 📡).
 - **storage_box** — storage conditions. Fields: left & right each { icon, head_en/cn, num (e.g. "0–4°"), unit_en/cn, alt (boolean) }; plus note_en/cn.
 - **notes_callout** — fine-print note. Fields: text_en/cn.
 - **big_stat** — one big number. Fields: stat (the number/figure), what_en/cn (what it measures), claim_en/cn (short line), bg ("lime").
@@ -575,6 +606,7 @@ RULES:
 - Don't duplicate content across blocks. Each fact lives in one block.
 - Don't fabricate: only emit a block type when the source genuinely has that content, and never pad a block with invented fields. This is NOT licence to skip sections that ARE present — when in doubt, include a block for a section you can see rather than omit it.
 - pct is a string ("12%" or "") and lead/alt are booleans.`;
+}
 
 // Build the language directive from which source texts are present + whether
 // the operator opted into drafting the empty side. Both texts present is the
@@ -622,6 +654,17 @@ const composeBlocksHandler = async (req, res) => {
     });
   }
 
+  /* WHICH SHOP this paste belongs to. requireRetailAdmin puts the tenant row on
+     the request; the kitchen realm (requireAuth) has none, and the kitchen IS
+     account #1. So an absent tenant and account #1 are the same answer, which
+     is the account this prompt was written for and whose wording it keeps
+     exactly — the same reasoning the currency and timezone fallbacks use, where
+     the default is account #1's value rather than the platform's. */
+  const _t = req.tenant;
+  const shop = (!_t || Number(_t.id) === 1)
+    ? { name: 'Roots', vegan: true }
+    : { name: String(_t.brand_name || _t.name || '').trim(), vegan: false };
+
   const textEn    = (req.body && req.body.text_en ? String(req.body.text_en) : '').trim();
   const textCn    = (req.body && req.body.text_cn ? String(req.body.text_cn) : '').trim();
   // Back-compat: an older client may still send a single `text` field.
@@ -661,7 +704,7 @@ const composeBlocksHandler = async (req, res) => {
     const composeOnce = async (directive, userText, maxTok = 12000) => {
       const result = await callLLM({
         max_tokens: maxTok,
-        system: { static: COMPOSE_SYSTEM, dynamic: directive },
+        system: { static: composeSystem(shop), dynamic: directive },
         tools: [COMPOSE_TOOL],
         messages: [{ role: 'user', content: userText }],
       });
