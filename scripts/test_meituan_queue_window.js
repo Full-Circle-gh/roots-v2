@@ -167,6 +167,18 @@ function enqueueDb({ active = 1 } = {}) {
     CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER);
     CREATE TABLE meituan_bundles (id INTEGER PRIMARY KEY, retail_store_id INTEGER, store_code TEXT, sync_enabled INTEGER, meituan_name TEXT, max_qty INTEGER);
     CREATE TABLE meituan_bundle_components (bundle_id INTEGER, product_id INTEGER, qty INTEGER);
+    /* store_products, WHICH THIS FIXTURE OUTGREW.
+       enqueueProductStock reaches lib/bundle-stock through lib/meituan-bundles
+       now, and that reads bundle_items off store_products to answer what a ROOTS
+       bundle can be assembled from — a feature that landed after this schema was
+       written. The read is wrapped in a try/catch, so a missing table did not
+       throw: it logged "no such table: store_products" and returned nothing,
+       and five cases here failed with 0 !== 1 about queue rows, which points at
+       the queue and not at the shelf underneath it.
+       is_active carries its default because bundlesContaining filters on
+       COALESCE(is_active, 1) — a column absent from the fixture would make every
+       bundle invisible rather than error. */
+    CREATE TABLE store_products (id INTEGER PRIMARY KEY, bundle_items TEXT, is_active INTEGER DEFAULT 1);
   `);
   db.prepare('INSERT INTO retail_stores (id, code, is_active) VALUES (7, ?, ?)').run('yuexiu', active);
   db.prepare('INSERT INTO meituan_product_map VALUES (7, 42, ?, 1)').run('yuexiu');
