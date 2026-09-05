@@ -24498,18 +24498,67 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   res.json({ success: true, data: out });
 });
 
-// Guangzhou districts where the operator may CHOOSE the dispatch method at
-// dispatch time — send by a same-city rider (arrival time) OR by JD logistics
-// (waybill) — rather than the method being locked by the routing at checkout.
-// These are the outer five opt-in same-day districts (花都/番禺/南沙/从化/增城)
-// plus 白云, where both a rider and a courier are realistic. Central districts
-// (越秀/天河/海珠/荔湾/黄埔…) stay rider-only. District names are matched with
-// the trailing 区 stripped so "白云区"/"白云" both hit.
+// Districts where the operator may CHOOSE the dispatch method at dispatch time
+// — send by a same-city rider (arrival time) OR by a courier (waybill) — rather
+// than the method being locked by the routing at checkout.
+//
+// ── AUDIT D-10 ────────────────────────────────────────────────────────────
+// This was a hard-coded set of six Guangzhou district names behind a hard-coded
+// "is this Guangzhou?" gate, so a merchant anywhere else could never offer the
+// choice at all: the function returned false on the city test before it ever
+// looked at a district. Delivery areas are the merchant's to describe, and the
+// pattern for that already existed one file over — lib/inventory.js reads
+// `routing.gz_express_excluded_districts` from storefront_config and falls back
+// to a default. This does the same thing.
+//
+// THE FALLBACK IS THE OLD BEHAVIOUR, EXACTLY. An account that has not set the
+// key gets the Guangzhou rule it has always had, city gate included, so nothing
+// moves for the merchant this was written for. An account that HAS set one is
+// taken at its word and the city gate does not apply — the whole point is that
+// somewhere else is somewhere else.
+//
+// The six defaults are the outer five opt-in same-day districts
+// (花都/番禺/南沙/从化/增城) plus 白云, where both a rider and a courier are
+// realistic; the central districts stay rider-only. Names are matched with a
+// trailing 区 stripped, and case-folded, so "白云区"/"白云"/"Baiyun" all hit —
+// a merchant typing their own list should not have to guess the house spelling.
+const METHOD_CHOICE_CFG = 'delivery.methodChoiceDistricts';
 const GZ_METHOD_TOGGLE_DISTRICTS = new Set(['白云', '花都', '番禺', '南沙', '从化', '增城']);
+
+// TRIM FIRST. Stripping the suffix before trimming leaves "  白云区 " as
+// "白云区" — the $ anchor cannot see the 区 through a trailing space — so a
+// merchant whose spreadsheet carried a stray space would silently not match
+// their own district. Trim, strip, trim again, fold.
+const normDistrict = (s) => String(s == null ? '' : s).trim().replace(/[区縣县市]$/, '').trim().toLowerCase();
+
+/**
+ * The merchant's own list, or null when they have not set one.
+ * A present-but-empty list is a DECISION — "nowhere may choose" — and is
+ * returned as an empty Set rather than collapsing to the default, because
+ * turning a rule off must not silently turn the old one back on.
+ */
+function methodChoiceDistricts() {
+  try {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(METHOD_CHOICE_CFG);
+    if (!row) return null;
+    const arr = JSON.parse(row.value_json);
+    if (!Array.isArray(arr)) return null;
+    return new Set(arr.filter(Boolean).map(normDistrict));
+  } catch (e) {
+    // A malformed config row must not decide dispatch. Fall back to the rule
+    // this account had before it was configurable.
+    return null;
+  }
+}
+
 function gzMethodToggleAllowed(address) {
-  if (!address || !isGuangzhou(address.city || '')) return false;
-  const d = String(address.district || '').replace(/区$/, '').trim();
-  return GZ_METHOD_TOGGLE_DISTRICTS.has(d);
+  if (!address) return false;
+  const own = methodChoiceDistricts();
+  const d = normDistrict(address.district);
+  if (own) return d ? own.has(d) : false;
+  // Unconfigured: the Guangzhou rule, unchanged.
+  if (!isGuangzhou(address.city || '')) return false;
+  return GZ_METHOD_TOGGLE_DISTRICTS.has(String(address.district || '').replace(/区$/, '').trim());
 }
 
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
