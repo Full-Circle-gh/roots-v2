@@ -14513,3 +14513,204 @@ main:focus { outline: none; }
   white-space: nowrap;
 }
 .cfg-hit .cfg-sees { margin-left: 0; margin-top: 3px; align-self: flex-start; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Shop menu (门店商品) — #tab-shop-menu
+   Painted by public/retail-admin/28-shops.js. A shop's listings (§41/§42):
+   a sub-page behind each Sales → Locations card, §1.7a takeover.
+
+   ONE layer, on the --td-* tokens. Every class is shp-* and every rule is
+   scoped to the section, because the base stylesheet owns short names like
+   .num / .act and an unscoped rule here would reach them across the admin.
+   Radii 14px card / 8px control / 999px pill (§1.4). No hex (§1.2).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── the takeover (same mechanism as body.mat-viewing) ─────────────────────
+   While body.shp-viewing is set, main pins below the 56px topbar and clips,
+   every other section is display:none, and this one — out-specificity-ing the
+   generic `main > section { display:none }` via its id — owns the fixed content
+   height and scrolls inside .shp-scroll. Rail + topbar stay put. */
+body.shp-viewing main > section { display: none; }
+body.shp-viewing main { padding: 56px 0 0; overflow: hidden; }
+body.shp-viewing main > section#tab-shop-menu.active {
+  display: flex; flex-direction: column;
+  height: calc(100vh - 56px); min-height: 0; overflow: hidden;
+}
+body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: auto; }
+#tab-shop-menu .shp-page { padding: 22px var(--s6) var(--s6); max-width: 1120px; }
+
+/* ── header (§1.7a: back link is the eyebrow · title · one Dusk exit) ─────── */
+#tab-shop-menu .shp-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 24px; margin-bottom: 24px;
+}
+#tab-shop-menu .shp-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 13px/1.4 var(--f-sans); color: var(--td-text2);
+  background: transparent; border: 0; cursor: pointer;
+  padding: 4px 8px 4px 2px; margin: 0 0 6px -2px; border-radius: 8px;
+}
+#tab-shop-menu .shp-back:hover { color: var(--td-text); background: var(--td-raised); }
+#tab-shop-menu .shp-back svg { width: 14px; height: 14px; }
+#tab-shop-menu .shp-title {
+  display: flex; align-items: center; gap: 10px;
+  font: 500 24px/1.25 var(--f-sans); letter-spacing: -0.01em;
+  color: var(--td-text); margin: 0; text-transform: none;
+}
+#tab-shop-menu .shp-sub { font: 400 15px/1.5 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+/* The public code — unlabelled by decision (no locked source for its label),
+   mono so it reads as a code and not a word. */
+#tab-shop-menu .shp-code { margin-top: 8px; }
+#tab-shop-menu .shp-code code {
+  font: 500 13px/1 var(--f-mono, ui-monospace, monospace); letter-spacing: .08em;
+  color: var(--td-text2); background: var(--td-raised);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 5px 9px;
+}
+#tab-shop-menu .shp-head-r { flex-shrink: 0; padding-top: 28px; }
+
+/* ── buttons ──────────────────────────────────────────────────────────────── */
+#tab-shop-menu .shp-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--td-border); background: var(--td-surface);
+  color: var(--td-text); font: 400 15px/1 var(--f-sans);
+  cursor: pointer; transition: background .2s var(--ease-out, ease), border-color .2s;
+}
+#tab-shop-menu .shp-btn:hover { border-color: var(--td-text2); }
+/* The page's ONE Dusk element — §1.8 rule 1, the header CTA has first claim. */
+#tab-shop-menu .shp-btn.primary {
+  background: var(--td-dusk); border-color: var(--td-dusk); color: var(--td-paper);
+}
+#tab-shop-menu .shp-btn.primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+#tab-shop-menu .shp-btn.ghost { background: transparent; border-color: transparent; color: var(--td-text2); }
+#tab-shop-menu .shp-btn.ghost:hover { background: var(--td-raised); color: var(--td-text); }
+#tab-shop-menu .shp-btn.sm { padding: 6px 10px; font-size: 13px; }
+#tab-shop-menu .shp-btn[disabled] { opacity: .5; cursor: default; }
+
+/* ── the shop's own fields ────────────────────────────────────────────────── */
+#tab-shop-menu .shp-details {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px 24px; align-items: end;
+  padding: 16px 24px; margin-bottom: 24px;
+  background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-shop-menu .shp-f { display: flex; flex-direction: column; gap: 4px; }
+#tab-shop-menu .shp-f-sw { align-items: flex-start; }
+#tab-shop-menu .shp-f-l { font: 500 13px/1.4 var(--f-sans); color: var(--td-text2); }
+#tab-shop-menu .shp-in, #tab-shop-menu .shp-sel {
+  padding: 9px 12px; border-radius: 8px; width: 100%; box-sizing: border-box;
+  border: 1px solid var(--td-border); background-color: var(--td-surface);
+  color: var(--td-text); font: 400 15px/1.2 var(--f-sans);
+  font-variant-numeric: tabular-nums;
+}
+#tab-shop-menu .shp-in:focus, #tab-shop-menu .shp-sel:focus { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
+#tab-shop-menu .shp-in[disabled], #tab-shop-menu .shp-sel[disabled] { opacity: .55; }
+#tab-shop-menu .shp-in-n { text-align: right; padding: 6px 10px; }
+/* background-COLOR above, never the shorthand — the global <select> chevron
+   tiles across the control otherwise (see the Waste block's note). */
+#tab-shop-menu select.shp-sel {
+  appearance: none; -webkit-appearance: none; cursor: pointer; padding: 6px 28px 6px 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239AA3B2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+:root[data-theme="light"] #tab-shop-menu select.shp-sel {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+
+/* ── the switch (the daily control; same knob language as the Sales toggles) ── */
+#tab-shop-menu .shp-sw {
+  position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0;
+  border-radius: 999px; background: var(--td-border); cursor: pointer;
+  transition: background .2s var(--ease-out, ease);
+}
+#tab-shop-menu .shp-sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+#tab-shop-menu .shp-sw .shp-knob {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--td-paper); transition: transform .2s var(--ease-out, ease);
+}
+/* Sage is "live" (§1.10) — an available listing is exactly that. */
+#tab-shop-menu .shp-sw.is-on { background: var(--td-sage-ink); }
+#tab-shop-menu .shp-sw.is-on .shp-knob { transform: translateX(18px); }
+#tab-shop-menu .shp-sw:has(input[disabled]) { opacity: .55; cursor: default; }
+#tab-shop-menu .shp-sw:has(input:focus-visible) { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+
+/* ── picker (in-flow panel above the table — grows with the search) ───────── */
+#tab-shop-menu .shp-picker {
+  padding: 16px 24px; margin-bottom: 24px;
+  background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-shop-menu .shp-pick-row { display: flex; gap: 8px; align-items: center; }
+#tab-shop-menu .shp-pick-row .shp-in { flex: 1; }
+#tab-shop-menu .shp-pick-list { list-style: none; margin: 12px 0 0; padding: 0; }
+#tab-shop-menu .shp-pick-list li {
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center;
+  padding: 10px 0; border-top: 1px solid var(--td-border);
+  font: 400 15px/1.4 var(--f-sans); color: var(--td-text);
+}
+#tab-shop-menu .shp-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-shop-menu .shp-pick-sku { font-size: 13px; color: var(--td-text2); }
+#tab-shop-menu .shp-pick-price { font-variant-numeric: tabular-nums; color: var(--td-text2); }
+
+/* ── table (§1.19 — fixed layout, classed cols, percentages summing to 100;
+   the measurement table is in 28-shops.js beside the markup) ──────────────── */
+#tab-shop-menu .shp-tablewrap { overflow-x: auto; }
+#tab-shop-menu .shp-table {
+  width: 100%; table-layout: fixed; border-collapse: collapse;
+  background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 14px;
+}
+#tab-shop-menu col.shp-c-pos   { width: 8%; }
+#tab-shop-menu col.shp-c-prod  { width: 38%; }
+#tab-shop-menu col.shp-c-price { width: 16%; }
+#tab-shop-menu col.shp-c-mode  { width: 16%; }
+#tab-shop-menu col.shp-c-avail { width: 12%; }
+#tab-shop-menu col.shp-c-act   { width: 10%; }
+#tab-shop-menu .shp-table thead th {
+  background: var(--td-raised); color: var(--td-text2);
+  font: 500 13px/1.4 var(--f-sans); text-align: left; white-space: nowrap;
+  text-transform: none; letter-spacing: 0;
+  padding: 12px 16px; border-bottom: 1px solid var(--td-border);
+}
+#tab-shop-menu .shp-table tbody td {
+  padding: 10px 16px; font: 400 15px/1.5 var(--f-sans);
+  color: var(--td-text); border-bottom: 1px solid var(--td-border);
+  vertical-align: middle;
+}
+#tab-shop-menu .shp-table tbody tr:last-child td { border-bottom: none; }
+#tab-shop-menu .shp-table tbody tr.is-busy td { color: var(--td-text2); }
+#tab-shop-menu .shp-table th.num, #tab-shop-menu .shp-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#tab-shop-menu .shp-table td.act { text-align: right; }
+#tab-shop-menu .shp-ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-shop-menu .shp-sku { font: 400 13px/1.4 var(--f-sans); color: var(--td-text2); }
+#tab-shop-menu .shp-money { display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: flex-end; }
+#tab-shop-menu .shp-sym { color: var(--td-text2); font-size: 13px; }
+#tab-shop-menu .shp-money .shp-in-n { width: 96px; }
+#tab-shop-menu td .shp-in-n[type="number"] { width: 64px; }
+#tab-shop-menu .shp-money .shp-in-n[type="number"] { width: 96px; }
+
+/* ── pills and states (§1.10, §1.12) ──────────────────────────────────────── */
+#tab-shop-menu .shp-pill {
+  display: inline-flex; align-items: center; padding: 2px 10px;
+  border-radius: 999px; font: 500 13px/1.5 var(--f-sans); white-space: nowrap;
+}
+#tab-shop-menu .shp-pill.off { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
+#tab-shop-menu .shp-note, #tab-shop-menu .shp-empty {
+  padding: 48px 24px; text-align: center;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+#tab-shop-menu .shp-note.sm { padding: 16px 0 4px; text-align: left; font-size: 13px; }
+#tab-shop-menu .shp-empty { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; }
+#tab-shop-menu .shp-empty-t { margin-bottom: 8px; color: var(--td-text); }
+#tab-shop-menu .shp-empty p { margin: 0; }
+#tab-shop-menu .shp-banner {
+  padding: 16px 24px; border-radius: 14px;
+  background: var(--td-brick-tint); color: var(--td-brick-ink);
+  border: 1px solid var(--td-border);
+}
+#tab-shop-menu .shp-banner-t { font: 500 15px/1.5 var(--f-sans); }
+#tab-shop-menu .shp-banner-b { font: 400 13px/1.6 var(--f-sans); margin: 4px 0 12px; }
+
+@media (max-width: 720px) {
+  #tab-shop-menu .shp-details { grid-template-columns: 1fr; }
+  #tab-shop-menu .shp-head { flex-direction: column; }
+  #tab-shop-menu .shp-head-r { padding-top: 0; }
+}
