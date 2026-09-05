@@ -37,6 +37,11 @@ const { tdb, currentTenantId } = require('../lib/tenant-db');
 // data and goes through tdb().
 const sharedDb = require('../database');
 const inventory = require('../lib/inventory');
+// Money, exact to the cent (audit I-02). The sums below are computed by SQLite
+// over REAL columns, so their last digits are the database's rounding rather
+// than the product's; every figure that goes back INTO the books goes through
+// here first.
+const money = require('../lib/money');
 // Finance category text — the one normalisation. See lib/category-text.js.
 const { storeCategory } = require('../lib/category-text');
 const { logActivity } = require('../middleware/auth');
@@ -142,21 +147,31 @@ function postRetailPOExpenses(poId) {
      GROUP BY 1
   `).all(poId);
   const insert = tdb().prepare('INSERT INTO expense_entries (date, amount, category, description, po_id) VALUES (?,?,?,?,?)');
-  let inserted = 0, total = 0;
+  let inserted = 0;
+  const posted = [];
   for (const g of groups) {
-    if (!g.amount || g.amount <= 0) continue;
+    // ROUNDED ONCE, HERE (audit I-02). `SUM(qty * cost_per_unit)` is computed by
+    // SQLite over floating-point columns, so a category of four lines can come
+    // back as 45.999999999999996 — and that is what used to be written into the
+    // books, where it is both wrong to the cent and the seed of the next
+    // discrepancy. The rounding is now the product's.
+    const amount = money.round(g.amount);
+    if (!amount || amount <= 0) continue;
     const desc = `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · ${g.line_count} line${g.line_count === 1 ? '' : 's'}`;
-    insert.run(po.date, +g.amount, g.category, desc, poId);
-    inserted++; total += +g.amount;
+    insert.run(po.date, amount, g.category, desc, poId);
+    inserted++; posted.push(amount);
   }
   // Landed-cost extras (freight/tax/handling) post as one shipping & fees line.
-  const extras = (+po.extra_freight || 0) + (+po.extra_tax || 0) + (+po.extra_handling || 0);
+  const extras = money.addMajor(po.extra_freight, po.extra_tax, po.extra_handling);
   if (extras > 0) {
     insert.run(po.date, extras, '运费及杂费 Freight & fees',
       `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · shipping & fees`, poId);
-    inserted++; total += extras;
+    inserted++; posted.push(extras);
   }
-  return { inserted, total };
+  // The reported total is the sum of what was actually WRITTEN, added exactly —
+  // not a running float beside it, which could disagree with the rows by a cent
+  // and leave nobody able to say which of the two was the truth.
+  return { inserted, total: money.addMajor(...posted) };
 }
 
 // A copy pulled out of the kitchen list shares its purchase with the kitchen

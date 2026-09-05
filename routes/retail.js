@@ -313,6 +313,11 @@ const MEDIA_INLINE_MIME = new Set([
 const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
 
 const businessDate = require('../lib/business-date');
+// Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
+// is addition performed by SQLite over a floating-point column: 0.01 added a
+// thousand times is 9.999999999999831, not 10. The running totals below are
+// computed here instead, in whole cents.
+const money = require('../lib/money');
 // ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
 // Thirty-five day-boundary calculations in this file were the literal string
 // '+8 hours', so today's takings, the dashboard, the finance window and "new
@@ -32680,9 +32685,13 @@ function awardOrderPoints(orderId) {
   // — otherwise sub-rate orders (subtotal below points.earnRate) would be
   // double-counted on retries.
   const tx = tdb().transaction(() => {
+    // The NEW TOTAL, added exactly, rather than `lifetime_spend + ?` in SQL
+    // (audit I-02). Inside the transaction, so the read it adds to cannot move
+    // between the read and the write.
+    const before = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(o.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
-    ).run(spend, pts, o.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance + ? WHERE id = ?'
+    ).run(money.addMajor(before ? before.s : 0, spend), pts, o.customer_id);
     const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(o.customer_id);
     // Auto-promote tier_key off the new lifetime_spend in the same transaction
     // so leaderboards / admin lists / next reads all agree without waiting on
@@ -32727,9 +32736,12 @@ function reverseOrderPoints(orderId) {
   const o = tdb().prepare('SELECT subtotal FROM retail_orders WHERE id = ?').get(orderId);
   const spend = Math.max(0, Number(o?.subtotal) || 0);
   const tx = tdb().transaction(() => {
+    // Subtracted exactly, and still floored at zero — a refund must not be able
+    // to drive a lifetime total negative (audit I-02).
+    const before = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(earn.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = MAX(0, COALESCE(lifetime_spend, 0) - ?), points_balance = points_balance - ? WHERE id = ?'
-    ).run(spend, reverseDelta, earn.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance - ? WHERE id = ?'
+    ).run(Math.max(0, money.addMajor(before ? before.s : 0, -spend)), reverseDelta, earn.customer_id);
     const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(earn.customer_id);
     // Refunds reduce lifetime_spend, so the tier may need to demote in the
     // same transaction. Sticky-upward semantics would skip this — current
@@ -33610,9 +33622,11 @@ function finalizeOrderAddon(addonId) {
     // a distinct source so awardOrderPoints' idempotency marker is untouched.
     // (Known v1 gap: a later refund of the whole order reverses only the
     // original order_earn row, not this add-on row — small amounts, rare.)
+    // Same exact addition as the order-earn path above (audit I-02).
+    const beforeAddon = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(a.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
-    ).run(Math.max(0, Number(a.amount) || 0), pts, a.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance + ? WHERE id = ?'
+    ).run(money.addMajor(beforeAddon ? beforeAddon.s : 0, Math.max(0, Number(a.amount) || 0)), pts, a.customer_id);
     const fresh = tdb().prepare(
       'SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?'
     ).get(a.customer_id);
