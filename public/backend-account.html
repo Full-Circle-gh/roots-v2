@@ -286,6 +286,14 @@
   .play-btn:focus-visible{ outline:2px solid var(--dusk); outline-offset:2px; }
   .test-label{ font-size:12.5px; color:var(--text-2); }
 </style>
+<!-- The shared date formatter (§1.18). This page had its own dateFmt built on
+     toLocaleDateString — the BROWSER's zone and its own year rule, so a
+     device's "last seen" read in a different shape from the same fact on the
+     Team → Team devices screen four clicks away. That screen's twin of this
+     function was converted with C-02 (tmdDateFmt, 02-settings-ops.js) and this
+     one was missed. Standalone by design: this page never loads the
+     retail-admin parts, which is the case td-datetime.js's own header names. -->
+<script src="/assets/td-datetime.js"></script>
 </head>
 <body>
 
@@ -651,12 +659,12 @@
     function toDate(s){
       return new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
     }
+    // The language is passed explicitly: td-datetime asks cuLang(), which is
+    // the retail-admin's live switch and does not exist on this page. The year
+    // rule it applies is the same one this function used to hand-roll.
     function dateFmt(s){
       if (!s) return '';
-      var t = toDate(s);
-      var opts = { month:'short', day:'numeric' };
-      if (t.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-      return t.toLocaleDateString(lang === 'cn' ? 'zh-CN' : 'en-US', opts);
+      return tdWhen(toDate(s), 'date', { lang: lang === 'cn' ? 'cn' : 'en' });
     }
 
     // Personal devices only. Team-wide device management (owner/admin viewing

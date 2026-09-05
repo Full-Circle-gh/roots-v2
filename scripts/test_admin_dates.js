@@ -144,6 +144,40 @@ is(typeof TD.tdToday, 'function', 'tdToday is exported');
 yes(TD.NAMES.indexOf('today') === -1, 'and is NOT a ninth name');
 
 // ─────────────────────────────────────────────────────────────────────────
+section('3b · the two pages that are not made of parts');
+
+/* td-datetime.js's own header names them: "the pages with the same drift
+   (backend-account, backend-billing, pos, cms, app.html) never load the
+   retail-admin parts". Two of them formatted dates and are converted here.
+
+   backend-account is the one that proves the rule. Its dateFmt() was the SAME
+   function as the Team → Team devices screen's tmdDateFmt() — a device's "last
+   seen" — and that twin was converted with C-02 while this one was missed, so
+   the same fact rendered in two shapes four clicks apart.
+
+   app.html is deliberately NOT here. It is the kitchen SPA, and the kitchen is
+   out of scope for this audit by the brief that commissioned it. */
+for (const [page, why] of [
+  ['backend-account.html', "the operator's own devices list"],
+  ['product-editor.html', 'the save stamp'],
+]) {
+  const src = fs.readFileSync(path.join(ROOT, 'public', page), 'utf8');
+  const code = strip(src);
+  yes(/<script src="\/assets\/td-datetime\.js"><\/script>/.test(src),
+    `${page} loads the shared formatter`);
+  yes(!/\.toLocaleDateString\s*\(|\.toLocaleTimeString\s*\(/.test(code),
+    `${page} has no formatter of its own — ${why}`);
+}
+
+/* backend-account has no cuLang(), so td-datetime would silently answer
+   English to an operator reading Chinese. The language has to be passed. */
+{
+  const src = fs.readFileSync(path.join(ROOT, 'public', 'backend-account.html'), 'utf8');
+  yes(/tdWhen\([\s\S]{0,80}\{ lang: lang === 'cn' \? 'cn' : 'en' \}\)/.test(src),
+    'backend-account passes its own language — it has no cuLang() to be read');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 section("4 · tdToday, under three shops' clocks");
 
 /* The whole point, and the reason §1 is a ban rather than a review. 20:30 UTC

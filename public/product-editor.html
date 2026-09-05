@@ -1592,6 +1592,10 @@
   <div id="pe-loading">Loading product… · 加载产品中…</div>
   <div id="pe-toast"></div>
 
+  <!-- The shared date formatter (§1.18) — the save stamp below printed the
+       operator's OPERATING SYSTEM locale, which is neither of this product's
+       two conventions. -->
+  <script src="/assets/td-datetime.js"></script>
   <script src="/assets/tacet-dialogs.js"></script>
   <script>
 // ── Utilities ───────────────────────────────────────────────────────────
@@ -3128,7 +3132,7 @@ async function paSaveEdit() {
     const idx = PA_ALL_PRODUCTS.findIndex(x => x.id === PA_CURRENT.id);
     if (idx !== -1) PA_ALL_PRODUCTS[idx] = { ...PA_ALL_PRODUCTS[idx], ...j.data };
     PA_SAVED_SNAPSHOT = peSerializeState();
-    status.textContent = 'Saved ✓ · 已保存 ' + new Date().toLocaleTimeString();
+    status.textContent = 'Saved ✓ · 已保存 ' + tdWhen(new Date(), 'time');
     toast('Saved ✓ · 已保存');
   } catch (e) {
     status.textContent = '';
