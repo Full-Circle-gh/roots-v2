@@ -1043,8 +1043,27 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   function mountShell() {
     state.view = 'list';
-    $('#pageHead').hidden = false;
-    $('#band').hidden = false;
+    /* THE FIRST SCREEN IS THE ONLY SCREEN. Boot used to reveal the counting
+       list — head, search band, chips, skeleton, then rows — and homeLand()
+       replaced it a moment later with whatever the open was actually for. So
+       everybody who arrived through a named door watched a list they had not
+       asked for paint itself and vanish. Ash, on the Kitchen queue row: "it
+       doesn't go smooth to the tool page, it blink and then land on the page."
+       Nothing was broken by it and nothing was slower for it; it just made
+       every deep link look like a mistake being corrected.
+
+       So an open that NAMES its screen holds the boot logo until the landing is
+       decided. The hold is appearance only — the context is already in, the
+       shelf request is already out, and the screen it lands on is drawn from
+       data that arrived while the logo was still up.
+
+       A BARE OPEN IS NOT HELD, deliberately. Nothing in that URL says where it
+       lands, so holding it would mean holding the counting list behind a probe
+       that belongs to the launcher — a tax on the people who open this app to
+       count, which is the one thing the launcher is not allowed to cost them.
+       Their list still paints first and the launcher still lands over it. */
+    _hold = !!homeDeep();
+    if (!_hold) { $('#pageHead').hidden = false; $('#band').hidden = false; }
     // Add mode hides the All/Low/Out chips — those count current stock, which
     // kitchen staff are deliberately never shown.
     $('#filters').style.display = state.mode === 'add' ? 'none' : '';
@@ -1367,7 +1386,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function selectStore(id) {
     // Which transfers are inbound, and which run is waiting, both depend on
     // which shelf is on screen.
-    setTimeout(function () { rcLoad(); pkLoad(); kqLoad(); }, 0);
+    /* krLoad is NOT one of the landing probes, deliberately. PROBE_COUNT gates
+       which screen this app opens on, and the ready list decides nothing about
+       that — it is behind rc.on like Pick and Receive. Counting it would hold
+       the landing on an answer it does not need, and a slow one would leave
+       somebody staring at nothing. It repaints the launcher when it arrives. */
+    setTimeout(function () { rcLoad(); pkLoad(); kqLoad(); krLoad(); }, 0);
     // See homeLand: a probe that never answers must not hold the app on a
     // decision it has not made.
     setTimeout(armLanding, 3500);
@@ -1473,6 +1497,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   var enterOnce = false;      // set by a real load; spent by the next render
   function render() {
+    // Held: a ?go= open is still on the boot screen and this list is not what
+    // it was opened for (see THE FIRST SCREEN IS THE ONLY SCREEN). What was
+    // swallowed is remembered, not lost — holdEnd repaints it if the landing
+    // comes back here after all.
+    if (_hold) { _heldPaint = 'list'; return; }
     paintCounts();
     var main = $('#main'), html = '';
     if (state.loadErr) html += bannerHtml();
@@ -1493,6 +1522,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function renderSkeleton() {
+    if (_hold) { _heldPaint = 'skel'; return; }
     var one = '<div class="skel"><span class="s1"></span><span class="s2"></span><span class="s3"></span></div>';
     $('#main').innerHTML = new Array(7).join(one);
   }
@@ -2597,9 +2627,18 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       })).then(function (full) {
         pk.list = full;
         probeAnswered();
+        /* EACH OF THESE REPAINTS THE SCREEN THAT IS ON, and this one used to
+           repaint the counting list whatever was on. It is the slowest probe by
+           a distance — it reads every run in FULL before it has a list — so it
+           lands last, and it landed on top: tap Receiving off the entry card
+           before it answers and the shelf came back over the delivery. With a
+           ?go= link honoured the moment its own screen is ready, last is always
+           after the landing, so the stomp went from rare to certain.
+           rcLoad's tail is safe by accident rather than by care — rcRender
+           returns on the wrong view — and this is the same rule, said out. */
         if (state.view === 'home') homeRender();
         else if (state.view === 'picking') pkRender();
-        else render();
+        else if (state.view === 'list') render();
       });
     }).catch(function (e) {
       if (e.message === 'norealm') { rc.on = false; pk.list = []; probeAnswered(); return; }
@@ -3055,6 +3094,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     queue: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/></svg>',
     kit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 6V3M12 6V3M15 6V3"/><path d="M8 9h8"/></svg>',
     ask:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h8v12H3z"/><path d="M21 6h-8v12h8z"/><path d="M11 12h2"/><path d="M15 9l-2 3 2 3"/></svg>',
+    ready: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M5 20a7 7 0 0 1 14 0"/><path d="M9 7l2 2 4-4"/></svg>',
   };
 
   /* The launcher is for someone with more than one job, and BEING REFUSED ONE
@@ -3141,7 +3181,22 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // kitchen's queue, not this shelf's, and a badge here would be a number
         // about somebody else's work sitting on a door marked with a job.
         homeTileHtml('kit', t('Ask the kitchen', '向厨房下单'),
-          t('Have something made', '请厨房制作'), '', 'data-akopen')) +
+          t('Have something made', '请厨房制作'), '', 'data-akopen') +
+        /* THE OTHER HALF OF THAT TILE, and until now there was no other half.
+           A kitchen request closes at 'prepared' — nothing travels, nothing is
+           counted in — so the person who asked for it heard once, in a push,
+           and then never again. This is the standing answer to "is it made
+           yet", and the count IS this operator's own: it is their request, and
+           the number is what is waiting for them to come and get it.
+
+           It does not hide when empty, by the same rule as every tile beside
+           it: "Nothing waiting" is what teaches somebody the screen is here
+           before the morning they need it. */
+        homeTileHtml('ready', t('Ready from the kitchen', '厨房已完成'),
+          krCount() ? t('Made and waiting for you', '已制作,等待领取')
+                    : t('Nothing waiting', '暂无待领取'),
+          krCount() ? t(krCount() + ' waiting', krCount() + ' 项待领取') : '',
+          'data-kropen')) +
         // The other end of the same request, for the people who make it, and on
         // its OWN probe: this is the one tile a kitchen operator gets, and the
         // one an ordinary picker does not. The count IS theirs here — unlike the
@@ -3187,6 +3242,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (r) r.onclick = rcEnter;
     var k = m.querySelector('[data-akopen]');
     if (k) k.onclick = akEnter;
+    var kr_ = m.querySelector('[data-kropen]');
+    if (kr_) kr_.onclick = krEnter;
     var kqb = m.querySelector('[data-kqopen-home]');
     if (kqb) kqb.onclick = kqEnter;
     var lbb = m.querySelector('[data-lbopen]');
@@ -3236,6 +3293,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   // Set when a ?go= link was honoured, so the launcher is never entered on the
   // way back out of a screen it was never entered from.
   var _deep = false;
+  // The boot screen, kept up while a named open decides where it lands, and
+  // what the counting list tried to paint behind it. See THE FIRST SCREEN IS
+  // THE ONLY SCREEN in mountShell.
+  var _hold = false, _heldPaint = '';
   var PROBE_COUNT = 3;                      // rcLoad, pkLoad, kqLoad
   function probeAnswered() { _probes++; homeLand(); }
   /* ?go= — the deep links, and they exist because every one of these jobs is
@@ -3260,29 +3321,83 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      and a deep link that lands on a refusal is worse than no link. */
   function homeWanted() {
     try {
-      var m = /(?:^|[?&])go=(queue|add|pick|receive)(?:&|$)/.exec(location.search || '');
+      var m = /(?:^|[?&])go=(queue|add|pick|receive|ready)(?:&|$)/.exec(location.search || '');
       return m ? m[1] : '';
     } catch (e) { return ''; }
   }
 
+  /* A ?go= that names a screen OTHER than the counting list — the opens that
+     must not paint a list on the way. ?go=add is not one of them: it names the
+     screen this app already opens on, so there is nothing to hold and nothing
+     to replace. */
+  function homeDeep() { var w = homeWanted(); return w === 'add' ? '' : w; }
+
+  /* WHAT A NAMED DOOR IS ACTUALLY WAITING FOR, and it is one answer, not three.
+     Landing waited for every probe before honouring any ?go=, because whether
+     the LAUNCHER exists is the OR of all three — but a door that names its
+     screen never asks that question. ?go=queue opens if the queue answered, and
+     the two transfer refusals beside it cannot change that. Held on a boot
+     screen until a 403 comes back, a kitchen operator was waiting on the answer
+     to a question nobody had asked.
+
+     DATA, NOT ONLY PERMISSION. rcEnter reads rc.list to decide whether a single
+     delivery opens straight into its count, and pkRender carries a Loading
+     state because pk.list arrives a fetch later than rc.on does — pkLoad reads
+     every run in full before it has a list. A door that opens on the wrong
+     screen and corrects itself is the blink again, one screen further in. A
+     refusal sets the same list to [] alongside on:false, so both are asked. */
+  function wantReady(want) {
+    if (want === 'queue') return kq.on === true && kq.list != null;
+    if (want === 'receive') return rc.on === true && rc.list != null;
+    if (want === 'pick') return rc.on === true && pk.list != null;
+    /* The ready list has a permission and a list from two different loaders:
+       rcLoad says whether this session is a transfer operator at all, and
+       krLoad brings what the kitchen has finished. Both, for the same reason
+       Receive asks for both — the screen reads kr.list on its first paint, and
+       landing on the permission alone is a list that appears a fetch later. */
+    if (want === 'ready') return rc.on === true && kr.list != null;
+    return false;
+  }
+
+  /* Letting the held boot screen go. The counting list is the one destination
+     that has to be painted from here — every other screen paints itself, and
+     the chrome each wants is its own business (kqRender, pkRender and rcRender
+     hide the head and the band; homeRender keeps the head and drops the band).
+     What comes back is whatever the hold swallowed: the skeleton while the
+     shelf is still on its way, the list itself once it is in. */
+  function holdEnd(toList) {
+    if (!_hold) return;
+    _hold = false;
+    if (!toList) return;
+    $('#pageHead').hidden = false;
+    $('#band').hidden = false;
+    measureHead();
+    if (_heldPaint === 'list') render(); else renderSkeleton();
+  }
+
   function homeLand() {
     if (_landed || state.view === 'off' || state.view === 'nostore') return;
-    if (_probes < PROBE_COUNT && !_armed) return;
-    _landed = true;
     var want = homeWanted();
+    if (!wantReady(want) && _probes < PROBE_COUNT && !_armed) return;
+    _landed = true;
     /* ?go=add is answered BEFORE the launcher is considered, and needs no probe
        at all: the counting list is what this app already opens on, so honouring
        it is a matter of not putting a menu in front of it. The tile for it stays
        on the launcher regardless — for the installed PWA, whose start_url is a
        bare /stock, that tile is the only way to the shelf. */
-    if (want === 'add') { _deep = true; return; }
-    if (!homeAvailable()) return;          // one job — stay on the list
-    if (want === 'queue' && kq.on === true) { _deep = true; kqEnter(); return; }
+    if (want === 'add') { _deep = true; holdEnd(true); return; }
+    if (!homeAvailable()) { holdEnd(true); return; }   // one job — stay on the list
+    if (want === 'queue' && kq.on === true) { _deep = true; holdEnd(false); kqEnter(); return; }
     // Both transfer screens sit behind the one probe — rcLoad and pkLoad set the
     // same rc.on — so a refusal on that realm drops both links, together.
-    if (want === 'pick' && rc.on === true) { _deep = true; pkEnter(); return; }
-    if (want === 'receive' && rc.on === true) { _deep = true; rcEnter(); return; }
+    if (want === 'pick' && rc.on === true) { _deep = true; holdEnd(false); pkEnter(); return; }
+    if (want === 'receive' && rc.on === true) { _deep = true; holdEnd(false); rcEnter(); return; }
+    // Behind the same probe as the two above: the ready list is the far end of
+    // "Ask the kitchen", and a session refused the transfer realm was never
+    // able to ask.
+    if (want === 'ready' && rc.on === true) { _deep = true; holdEnd(false); krEnter(); return; }
     state.view = 'home';
+    holdEnd(false);
     homeRender();
   }
   function armLanding() { _armed = true; homeLand(); }
@@ -3510,6 +3625,188 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     }
   }
 
+
+  /* ══ READY FROM THE KITCHEN ════════════════════════════════════════════════
+     The far end of "Ask the kitchen", and it did not exist.
+
+     WHAT WAS MISSING. A kitchen request closes at 'prepared' — nothing travels,
+     so there is no dispatch, no van and no delivery to count in. The request
+     simply stops moving, and the only thing that ever announced it was a push:
+     one moment, on one phone, that is regularly in a pocket, on silent, or
+     swiped off a lock screen by someone reaching for the torch. After that the
+     warehouse's only way to learn its hummus was made was to remember to go and
+     look, and there was nowhere to look — this app could raise the request and
+     could not show it back.
+
+     THE ACKNOWLEDGEMENT IS THE POINT, not the list. "Collected" archives the
+     request (PUT /api/restock/:id/archive), which is what archiving already
+     means on this route, and that is a SERVER-SIDE fact: it drops the row out
+     of /api/restock/kitchen-ready, so the dot in /m goes out on every phone
+     rather than on the one that tapped it. A per-device "seen" stamp would have
+     lit again on the next handset and told the next person work was waiting
+     that somebody had already carried upstairs.
+
+     IT DOES NOT MOVE STOCK, and says so. The kitchen's own "record what you
+     made" step is what puts it on a shelf (see THE KITCHEN QUEUE below); this
+     button says a person has the goods, and confusing the two would have this
+     screen quietly double-counting every tray. */
+
+  var kr = {
+    list: null,     // prepared, unarchived requests addressed to the kitchen
+    order: null,    // the open one, with lines
+    busy: false, err: '',
+  };
+
+  function krCount() { return (kr.list || []).length; }
+
+  /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
+     defined for this direction as "prepared" (routes/restock.js: for
+     warehouse→kitchen, prepared IS the closure), and the endpoint drops
+     archived rows from every tab by default — so what comes back is exactly
+     "made, and nobody has said they have it". The status filter is belt and
+     braces for a row that reached 'delivered' under an older client. */
+  /* homeLand() rather than probeAnswered(), and the difference is the whole
+     reason krLoad is not a probe. _probes decides whether the LAUNCHER may be
+     shown, and this loader answers nothing about that — counting it would let
+     the launcher land one answer early. What it does decide is ?go=ready, whose
+     wantReady() reads kr.list, so the landing is re-asked when the list arrives
+     and a held boot screen is released by data instead of by the arming timer. */
+  function krLoad() {
+    return rcFetch('/api/restock?to_role=kitchen&tab=history').then(function (j) {
+      kr.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) {
+        return o.status === 'prepared';
+      });
+      homeLand();
+      if (state.view === 'home') homeRender();
+      else if (state.view === 'kitchenready') krRender();
+    }).catch(function (e) {
+      // A refusal is not an error here: this loader runs at boot for every
+      // session, and the ones it does not answer for simply never see the tile.
+      // The list is still SET, so ?go=ready is decided rather than left waiting
+      // — homeLand drops the link on rc.on, which is the honest refusal.
+      if (e.message === 'norealm') { kr.list = []; homeLand(); return; }
+      kr.err = e.message; if (state.view === 'kitchenready') krRender();
+    });
+  }
+
+  function krEnter() {
+    state.view = 'kitchenready'; kr.order = null; kr.err = '';
+    krRender(); krLoad();
+  }
+  function krExit() { kr.order = null; kr.err = ''; homeBack(); }
+
+  function krOpen(id) {
+    kr.busy = true; kr.err = ''; kr.order = null;
+    state.view = 'kitchenready'; krRender();
+    rcFetch('/api/restock/' + id).then(function (j) {
+      kr.order = j.data; kr.busy = false; krRender();
+    }).catch(function (e) {
+      kr.busy = false; kr.err = e.message === 'norealm' ? '' : e.message; krRender();
+    });
+  }
+
+  /* "We have it." The row leaves this list for everyone, on every device, which
+     is the whole reason the acknowledgement is written down rather than
+     remembered locally. */
+  function krCollect() {
+    if (kr.busy || !kr.order) return;
+    kr.busy = true; kr.err = ''; krRender();
+    rcFetch('/api/restock/' + kr.order.id + '/archive', { method: 'PUT', body: { archived: true } })
+      .then(function () {
+        kr.busy = false; kr.order = null;
+        return krLoad();
+      })
+      .catch(function (e) {
+        kr.busy = false;
+        kr.err = e.message === 'norealm'
+          ? t('This account cannot close a kitchen request.', '此账号无法关闭厨房申请。')
+          : e.message;
+        krRender();
+      });
+  }
+
+  function krMade(o) {
+    var d = rcStamp(o.prepared_at);
+    return d ? clock(d) : '';
+  }
+
+  function krListHtml() {
+    var rows = kr.list || [];
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-krback>' + RC_CHEV + t('Back', '返回') + '</button>' +
+        '<div class="rc-h1">' + t('Ready from the kitchen', '厨房已完成') + '</div>' +
+        '<div class="rc-sub">' + (rows.length
+          ? t(rows.length + ' waiting for you', rows.length + ' 项待领取')
+          : t('What the kitchen has finished', '厨房已完成的申请')) + '</div>' +
+      '</div>' +
+      (kr.err ? '<div class="rc-err">' + esc(kr.err) + '</div>' : '') +
+      '<div class="rc-body">' + (
+        kr.list === null
+          ? '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' + t('Loading…', '加载中…') + '</div></div>'
+        : !rows.length
+          ? '<div class="rc-empty"><div style="font-size:20px;font-weight:600;letter-spacing:-.02em">' +
+            t('Nothing waiting', '暂无待领取') + '</div>' +
+            '<div style="font-size:15px;color:var(--text2);margin-top:6px">' +
+            t('Everything the kitchen has made has been collected.', '厨房已完成的申请都已领取。') + '</div></div>'
+        : rows.map(function (o) {
+            var p = kqPurpose(o), when = krMade(o);
+            return '<div class="rc-hr"></div>' +
+              '<button class="rc-row" data-kropen2="' + o.id + '">' +
+              '<span class="rc-qty num">' + (o.item_count || 0) + '</span>' +
+              '<span class="rc-mid"><span class="rc-nm">' + esc(o.rs_number || ('#' + o.id)) + '</span>' +
+              '<span class="rc-cap">' + t((o.item_count || 0) + ' items', (o.item_count || 0) + ' 项') +
+              (p ? ' · ' + esc(p) : '') + (when ? ' · ' + t('made ' + when, when + ' 完成') : '') +
+              '</span></span>' +
+              '<span class="sh-chev">' + RC_CHEV_R + '</span></button>';
+          }).join('') + '<div class="rc-hr"></div>'
+      ) + '</div></div>';
+  }
+
+  function krDetailHtml() {
+    var o = kr.order;
+    var items = (o.items || []).filter(function (it) { return rcNum(it.qty_requested) > 0; });
+    var p = kqPurpose(o), when = krMade(o);
+    return '<div class="rc-wrap">' +
+      '<div class="rc-head">' +
+        '<button class="rc-back" data-krlist>' + RC_CHEV + t('Ready', '已完成') + '</button>' +
+        '<div class="rc-h1">' + esc(o.rs_number || ('#' + o.id)) + '</div>' +
+        '<div class="rc-sub">' + t(items.length + ' items', items.length + ' 项') +
+          (p ? ' · ' + esc(p) : '') + (when ? ' · ' + t('made ' + when, when + ' 完成') : '') + '</div>' +
+      '</div>' +
+      (kr.err ? '<div class="rc-err">' + esc(kr.err) + '</div>' : '') +
+      '<div class="rc-body">' + items.map(function (it) {
+        return '<div class="rc-hr"></div><div class="rc-row">' +
+          '<span class="rc-qty num">' + rcNum(it.qty_requested) + '</span>' +
+          '<span class="rc-mid"><span class="rc-nm">' + esc(kqItemName(it)) + '</span>' +
+          '<span class="rc-cap">' + esc(it.sku || '') + '</span></span></div>';
+      }).join('') + '<div class="rc-hr"></div></div>' +
+      '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+        t('Collecting this clears it for everyone. It does not change stock — the kitchen records what it made, and that is the step that fills the shelf.',
+          '领取后所有人都不再看到该提醒。此操作不会变动库存 — 库存由厨房登记制作数量时变动。') + '</div></div>' +
+      '<div class="rc-foot" style="background:transparent;border:none">' +
+        '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
+        '<button class="rc-big"' + (kr.busy ? ' disabled' : ' data-krcollect') + '>' +
+          (kr.busy ? t('Saving…', '保存中…') : t('Collected', '已领取')) + '</button>' +
+        '</div></div></div>';
+  }
+
+  function krRender() {
+    if (state.view !== 'kitchenready') return;
+    $('#pageHead').hidden = true; $('#band').hidden = true;
+    measureHead();
+    $('#main').className = '';
+    $('#main').innerHTML = kr.order ? krDetailHtml() : krListHtml();
+    var m = $('#main'), each = function (sel, fn) {
+      Array.prototype.forEach.call(m.querySelectorAll(sel), fn);
+    };
+    each('[data-krback]', function (b) { b.onclick = krExit; });
+    each('[data-krlist]', function (b) { b.onclick = function () { kr.order = null; krRender(); }; });
+    each('[data-kropen2]', function (b) {
+      b.onclick = function () { krOpen(parseInt(b.getAttribute('data-kropen2'), 10)); };
+    });
+    each('[data-krcollect]', function (b) { b.onclick = krCollect; });
+  }
 
   /* ══ THE KITCHEN QUEUE ═════════════════════════════════════════════════════
      What was asked for, seen by the people who make it — in Tacet, on the same

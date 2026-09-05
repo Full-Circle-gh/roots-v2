@@ -147,7 +147,13 @@ const PUSH_AUDIENCE = {
     sent:      { caps: 'restock:fulfil',  at: null, go: 'queue' },
     // And 'prepared' IS the closure here — the food is made, and the person who
     // asked for it is the one waiting to hear so.
-    prepared:  { caps: ['restock:request', 'restock:pick'], at: null, go: '' },
+    //
+    // IT NOW HAS A DOOR. This carried no `go` because there was no screen at the
+    // asking end to open — the notification told somebody their hummus was made
+    // and then handed them a launcher to go hunting through. /stock?go=ready is
+    // the list of what the kitchen has finished and nobody has collected, which
+    // is the thing the alert is about.
+    prepared:  { caps: ['restock:request', 'restock:pick'], at: null, go: 'ready' },
   },
 };
 
@@ -970,6 +976,43 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   if (from_role) { q += " AND COALESCE(r.from_role,'store') = ?";     params.push(from_role); }
   q += ' ORDER BY r.created_at DESC, r.id DESC';
   res.json({ success: true, data: tdb().prepare(q).all(...params) });
+});
+
+/* ── What the kitchen has finished, and nobody has acknowledged ─────────────
+ *
+ * THE SIGNAL THAT DID NOT EXIST. A warehouse operator raises a kitchen request
+ * ("Ask the kitchen", on the /stock launcher) and then hears nothing. For
+ * warehouse→kitchen 'prepared' IS the closure — there is no delivery leg and no
+ * receipt to count in — so the request simply stops moving, and the only thing
+ * that ever announced it was a push: one moment, on one phone, that may be in a
+ * pocket, on silent, or swiped away on the lock screen. Nothing in either app
+ * carried the fact afterwards, so the person who asked found out by remembering
+ * to go and look.
+ *
+ * This is the number behind that dot, and it is deliberately a SERVER-SIDE fact
+ * rather than a per-device "last seen" stamp: addressed to the kitchen, at
+ * 'prepared', and NOT ARCHIVED. Archiving already means "we have it" on this
+ * route (PUT /:id/archive), so an acknowledgement made on one phone clears the
+ * dot on every other — the property the Orders dot gets from reading a status
+ * (routes/retail.js orders/unseen-count) and the Inbox dot has never had.
+ *
+ * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
+ * 404 for a row whose id is 'kitchen-ready'.
+ */
+router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, res) => {
+  /* THE MAKER IS NOT THE AUDIENCE. A fulfil-only operator is the person who
+     marked it made; a dot telling them their own work is waiting is telling
+     them about themselves. They get an honest zero rather than a 403 — this is
+     polled in the background, and a refusal there costs the client a bounce to
+     the login screen out of a pocket. */
+  if (_kitchenScopedSession(req)) return res.json({ success: true, data: { count: 0, latest: null } });
+  const row = tdb().prepare(`
+    SELECT COUNT(*) AS n, MAX(prepared_at) AS latest
+      FROM restock_orders
+     WHERE COALESCE(to_role, 'warehouse') = 'kitchen'
+       AND status = 'prepared'
+       AND archived_at IS NULL`).get();
+  res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
 
 // ── Single order with items ─────────────────────────────────────────────────

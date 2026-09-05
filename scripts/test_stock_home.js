@@ -80,6 +80,17 @@ const KITCHEN_REQ2 = {
   ],
 };
 
+/* MADE, AND NOBODY HAS COLLECTED IT — the far end of "Ask the kitchen".
+   warehouse→kitchen closes at 'prepared' (nothing travels, so there is no
+   delivery leg), and the list route puts exactly that row in `tab=history`
+   while dropping archived ones from every tab. So "history, unarchived" IS
+   "waiting for you", and archiving it is the acknowledgement. */
+const READY = {
+  id: 93, rs_number: 'RS-260904-004', status: 'prepared', from_role: 'warehouse', to_role: 'kitchen',
+  purpose: 'shelf', goods_state: 'none', item_count: 1, prepared_at: '2026-09-04 03:20:00',
+  items: [{ id: 931, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 8 }],
+};
+
 // TWO LOCATIONS, which is the whole subject of the "Ask for stock" cases below.
 // Roots really has these two, and the second one is what makes the screen mean
 // anything: with one store there is nobody to ask.
@@ -112,17 +123,23 @@ function stub(o) {
   // quickstock:add. The handoff after "Mark as made" exists only for them.
   if (o.mode) ctx.mode = o.mode;
   const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
+  const ready = o.ready ? [READY] : [];
   return '<script>\n' +
-    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];\n' +
+    'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];window.__archive=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(ctx) +
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
-    'var KITCHEN=' + JSON.stringify(queue) + ';\n' +
+    'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) + ';\n' +
     'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
-    'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ';\n' +
+    'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ',SLOW=' + JSON.stringify(!!o.slow) +
+      ',HANG=' + JSON.stringify(!!o.hang) + ';\n' +
     'window.fetch=function(url,opts){url=String(url);opts=opts||{};window.__calls.push(url.split("?")[0]);var body;\n' +
+    /* A DROPPED CONNECTION, WHICH IS NOT A REFUSAL. A 403 answers; this never
+       does. It is the case the landing's arming timer exists for, and the one
+       that decides whether holding the boot screen is safe. */
+    '  if(HANG&&url.indexOf("/api/restock")===0) return new Promise(function(){});\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
     '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
     // The one write Add stock has ever done. The production flow no longer uses
@@ -175,14 +192,32 @@ function stub(o) {
     '    if(DENY) return Promise.resolve({status:403,json:function(){return Promise.resolve({error:"forbidden"})}});\n' +
     '    var m=url.match(/restock\\/(\\d+)$/);\n' +
     '    if(/\\/status$/.test(url)){ window.__status=JSON.parse(opts.body||"{}"); body={success:true}; }\n' +
-    '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
-    '    else if(url.indexOf("to_role=kitchen")>-1) body={success:true,data:KITCHEN};\n' +
+    // "Collected", which is the whole point of the ready list: it archives the
+    // request, and archiving is what drops it out of the count on every phone.
+    '    else if(/\\/archive$/.test(url)){\n' +
+    '      window.__archive.push({url:url,body:JSON.parse(opts.body||"{}")});\n' +
+    '      READY=[]; body={success:true,archived:true};\n' +
+    '    }\n' +
+    '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).concat(READY).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
+    // The queue and the ready list read the same route from opposite sides —
+    // `tab=active` is what is still to make, `tab=history` is what is made.
+    '    else if(url.indexOf("to_role=kitchen")>-1)\n' +
+    '      body={success:true,data:url.indexOf("tab=history")>-1?READY:KITCHEN};\n' +
     '    else body={success:true,data:ORDERS};\n' +
     '  }\n' +
     '  else body={success:true,data:{}};\n' +
+    '  var res={status:200,json:function(){return Promise.resolve(body)}};\n' +
     '  if(KONLY&&url.indexOf("to_role=kitchen")>-1)\n' +
-    '    return new Promise(function(z){setTimeout(function(){z({status:200,json:function(){return Promise.resolve(body)}})},60)});\n' +
-    '  return Promise.resolve({status:200,json:function(){return Promise.resolve(body)}});};\n' +
+    '    return new Promise(function(z){setTimeout(function(){z(res)},60)});\n' +
+    /* A REAL NETWORK, FOR THE CASES THAT ARE ABOUT WAITING. Every stub answer
+       above resolves in the same tick, so the gap between boot and a landing —
+       the gap a deep link used to fill with the counting list — closes before a
+       sampler can see it, and a no-flash case would pass on a broken build. The
+       transfer probes are the slow ones in real life (pkLoad reads every run in
+       full), so `slow` gives them a delay to be caught in. */
+    '  if(SLOW&&url.indexOf("/api/restock")===0)\n' +
+    '    return new Promise(function(z){setTimeout(function(){z(res)},60)});\n' +
+    '  return Promise.resolve(res);};\n' +
     '</scr' + 'ipt>';
 }
 
@@ -195,6 +230,30 @@ const HELPERS =
   'window.__done=function(){setTimeout(function(){window.__ready=1},320)};';
 
 const seq = (items) => 'window.__seq([' + items + '],window.__done);';
+
+/* WATCHING FOR THE BLINK. Every assertion in this file reads the screen once,
+   at the end, and a screen that appears and is replaced leaves nothing behind
+   for that to catch — which is exactly how a deep link came to paint the
+   counting list on its way to somewhere else for as long as it did. Ash, on the
+   Kitchen queue row in /m: "it doesn't go smooth to the tool page, it blink and
+   then land on the page."
+
+   So this samples while the app boots and records what was EVER on screen: the
+   page head, the search band, the loading skeleton. On an open that names its
+   screen, none of the three belongs to it, so any of them appearing is the
+   blink — whatever the final frame says. Sampled from <head>, before the app's
+   own script runs, so the first paint cannot slip through underneath it. */
+const NOFLASH =
+  '(function(){var seen={};setInterval(function(){if(!document.body)return;' +
+  'var h=document.getElementById("pageHead"),b=document.getElementById("band"),' +
+  'm=document.getElementById("main");' +
+  'if(h&&!h.hidden)seen.head=1; if(b&&!b.hidden)seen.band=1;' +
+  'if(m&&m.querySelector(".skel"))seen.skeleton=1;' +
+  'document.body.setAttribute("data-flash",Object.keys(seen).join(","));},8)})();';
+const noFlash = (out) => {
+  const f = (out.match(/data-flash="([^"]*)"/) || [])[1] || '';
+  return f ? `the counting list flashed up on the way in (${f})` : null;
+};
 
 const CASES = {
   // Every transfer job, named, with the two that carry work counting it.
@@ -641,6 +700,35 @@ const CASES = {
     expect: ['Production', 'To make', 'RS-260904-002'],
     check: (out) => /data-view="home"/.test(out) ? 'the deep link stopped at the launcher' : null },
 
+  /* AND IT OPENS ON NOTHING ELSE FIRST. Landing on the right screen was never
+     the whole of it: boot revealed the counting list — head, band, skeleton,
+     rows — and the queue replaced it once the probes were in, so a row named
+     Kitchen queue answered with a shelf for a moment. The screen the operator
+     asked for is the only screen they should ever see. */
+  'go-queue-does-not-flash-the-counting-list': { kitchenOnly: true, search: '?go=queue',
+    pre: NOFLASH, js: 'window.__done();',
+    expect: ['Production', 'To make', 'RS-260904-002'],
+    check: noFlash },
+
+  // The same rule for the door a notification opens, and on the other realm's
+  // probe: this one lands through rcEnter, which reads rc.list to decide
+  // whether a single delivery opens straight into its count.
+  'go-receive-does-not-flash-the-counting-list': { stores: TWO, search: '?go=receive',
+    slow: true, pre: NOFLASH, js: 'window.__done();',
+    expect: ['Receiving'],
+    check: noFlash },
+
+  /* AND THE HOLD ALWAYS ENDS. Holding the first paint is only safe if something
+     always lets it go: a probe that never answers at all is a screen that never
+     arrives, and a boot logo forever is far worse than the blink this replaced.
+     armLanding is the net — the landing is armed on a timer whatever the
+     network did — and this is the case that proves it is still under there.
+     A link cannot grant access, so an unanswered queue lands where an operator
+     with one job always lands: on their shelf, with the head back. */
+  'a-deep-link-whose-probe-never-answers-still-lands': { hang: true, search: '?go=queue',
+    js: seq(['3800']),
+    expect: ['Quick stock', 'Hummus Asli'] },
+
   // A LINK CANNOT GRANT ACCESS. Someone who was refused the queue and follows
   // the same URL lands where they would have anyway — not on a refusal.
   'go-queue-is-ignored-when-the-queue-was-refused': { deny: true, search: '?go=queue',
@@ -701,6 +789,70 @@ const CASES = {
     js: seq(["'[data-asopen]'", '250']),
     expect: ['申请补货', '由哪个地点发货?', '越秀店'] },
 
+  /* ── READY FROM THE KITCHEN ───────────────────────────────────────────────
+     The far end of "Ask the kitchen", and until now there was none. A kitchen
+     request closes at 'prepared' — nothing travels — so the person who raised
+     it heard once, in a push, and this app could not show it back. */
+  'ready-tile-is-there-on-a-quiet-day': { js: 'window.__done();',
+    // The launcher's own rule: a tile that vanishes when empty is a tool nobody
+    // learns exists before the morning they need it.
+    expect: ['Ready from the kitchen', 'Nothing waiting'] },
+
+  'ready-tile-counts-what-is-waiting': { ready: true, js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'Made and waiting for you', '1 waiting'],
+    absent: ['Nothing waiting'] },
+
+  'ready-list-names-the-request': { ready: true,
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['Ready from the kitchen', '1 waiting for you', 'RS-260904-004', 'For the shelf'] },
+
+  'ready-empty-says-so-rather-than-painting-nothing': {
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['Nothing waiting', 'Everything the kitchen has made has been collected.'] },
+
+  /* COLLECTING IS AN ARCHIVE, and that is the point rather than an
+     implementation detail: /api/restock/kitchen-ready counts unarchived
+     'prepared' rows, so this puts the dot in /m out on EVERY phone instead of
+     only the one that tapped it. */
+  'collected-archives-it-for-everyone': { ready: true,
+    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250', "'[data-krcollect]'", '300']),
+    checkArchive: (a) => a.length === 1 && /\/api\/restock\/93\/archive$/.test(a[0].url)
+      && a[0].body.archived === true ? null : 'Collected did not archive the request: ' + JSON.stringify(a),
+    // And the list it came from is empty afterwards, on the same screen.
+    expect: ['Nothing waiting'] },
+
+  // It does not move stock, and does not let anyone infer that it does.
+  'collected-does-not-claim-to-fill-a-shelf': { ready: true,
+    js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '250']),
+    expect: ['RS-260904-004', 'Hummus Asli', 'Collected', 'It does not change stock'],
+    checkPatch: (p) => p.length ? 'collecting wrote a stock change: ' + JSON.stringify(p) : null },
+
+  /* THE PUSH'S OWN DOOR. routes/restock.js addresses the 'prepared' alert to
+     the side that asked with go=ready; a notification that opens a launcher has
+     told somebody about a job and then asked them to go and find it. */
+  'go-ready-opens-the-list-not-the-launcher': { ready: true, search: '?go=ready',
+    js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'RS-260904-004'],
+    check: (out) => /data-view="home"/.test(out) ? 'the deep link landed on the launcher' : null },
+
+  /* AND IT OPENS ON NOTHING ELSE FIRST — the same rule as the two doors above,
+     on the one that a notification opens. This screen waits on TWO loaders
+     (rcLoad for the permission, krLoad for the list), so it is the one where a
+     landing on the first answer would paint the shelf while the second lands. */
+  'go-ready-does-not-flash-the-counting-list': { ready: true, search: '?go=ready',
+    slow: true, pre: NOFLASH, js: 'window.__done();',
+    expect: ['Ready from the kitchen', 'RS-260904-004'],
+    check: noFlash },
+
+  'ready-cn': { ready: true, pre: "localStorage.setItem('roots-admin-lang','cn');",
+    js: seq(["'[data-kropen]'", '250']),
+    expect: ['厨房已完成', '项待领取', 'RS-260904-004'] },
+
+  // A session the transfer realm refuses never asked the kitchen for anything,
+  // so it is not offered the answer either.
+  'kitchen-only-has-no-ready-tile': { kitchenOnly: true, ready: true, js: 'window.__done();',
+    absent: ['Ready from the kitchen'] },
+
 };
 
 function main() {
@@ -741,6 +893,7 @@ function main() {
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'document.body.setAttribute("data-patch",JSON.stringify(window.__patch||[]));' +
       'document.body.setAttribute("data-prod",JSON.stringify(window.__prod||[]));' +
+      'document.body.setAttribute("data-archive",JSON.stringify(window.__archive||[]));' +
       'var sb=document.querySelector(".rc-foot .rc-cta");' +
       'document.body.setAttribute("data-send",sb?(sb.hasAttribute("disabled")?"disabled":"live"):"none");' +
       'document.title=(window.__e.length?"ERR "+window.__e.join(" | "):"OK "+n);}' +
@@ -782,6 +935,10 @@ function main() {
     if (c.checkProd) {
       const prod = JSON.parse(dec((out.match(/data-prod="([^"]*)"/) || [])[1] || '[]'));
       const p = c.checkProd(prod); if (p) failures.push([name, p]);
+    }
+    if (c.checkArchive) {
+      const arch = JSON.parse(dec((out.match(/data-archive="([^"]*)"/) || [])[1] || '[]'));
+      const p = c.checkArchive(arch); if (p) failures.push([name, p]);
     }
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
