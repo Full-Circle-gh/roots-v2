@@ -2360,6 +2360,10 @@
       <button class="btn btn-sm ord-clear-btn" id="ord-clear-btn" type="button" hidden
               onclick="ordClearFilters()"
               title="Show every order again · 显示全部订单">Clear filters · 清除筛选</button>
+      <!-- Saved views (audit E-08). Beside Clear, because both are about the
+           filter row rather than the orders: one puts a set of filters back,
+           the other takes them all away. Drawn by 25-views.js. -->
+      <span id="ord-views"></span>
       <!-- Download the orders currently listed — all of them, not just this
            page. Filtered on purpose: the file should match the screen it was
            taken from. -->
@@ -2526,6 +2530,41 @@
       /* Per-row / per-card channel label: icon + text on one baseline. */
       .ord-chan { display: inline-flex; align-items: center; gap: 4px; }
       .ord-chan svg { width: 13px; height: 13px; flex: none; }
+
+      /* ── Saved views (audit E-08) ── */
+      .vw-wrap { position: relative; display: inline-flex; }
+      .vw-pop {
+        position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 260px;
+        background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg);
+        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 6px;
+      }
+      .vw-row { display: flex; align-items: center; gap: 4px; }
+      .vw-apply {
+        flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; text-align: left;
+        padding: 8px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+        color: var(--text-1); cursor: pointer; background: none; border: 0;
+      }
+      .vw-apply:hover { background: var(--bg-elev-1); }
+      .vw-apply > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .vw-by { font-size: 11.5px; color: var(--text-3); flex: none; }
+      .vw-share, .vw-x {
+        flex: none; background: none; border: 0; cursor: pointer; border-radius: 6px;
+        color: var(--text-3); font-size: 12px; padding: 6px 8px; line-height: 1;
+      }
+      .vw-share.on { color: var(--text-1); }
+      .vw-share:hover, .vw-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
+      .vw-head {
+        font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+        color: var(--text-3); padding: 10px 10px 4px; border-top: 1px solid var(--line); margin-top: 4px;
+      }
+      .vw-empty { font-size: 12.5px; color: var(--text-3); padding: 10px; line-height: 1.5; }
+      .vw-foot { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+      .vw-save {
+        width: 100%; text-align: left; padding: 8px 10px; border-radius: 7px; border: 0;
+        background: none; color: var(--text-1); font-size: 13.5px; font-weight: 500; cursor: pointer;
+      }
+      .vw-save:hover:not(:disabled) { background: var(--bg-elev-1); }
+      .vw-save:disabled { color: var(--text-3); cursor: default; }
 
       /* ── View options (tweaks) popover ── */
       .ovp-wrap { position: relative; display: inline-flex; }
@@ -13157,6 +13196,7 @@
 <script src="/assets/retail-admin/22-finance.js"></script>
 <script src="/assets/retail-admin/23-sku.js"></script>
 <script src="/assets/retail-admin/24-import.js"></script>
+<script src="/assets/retail-admin/25-views.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside role="dialog" id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

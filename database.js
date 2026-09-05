@@ -1860,6 +1860,37 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_notification_log_entity ON notification_log(entity_type, entity_id);
   CREATE INDEX IF NOT EXISTS idx_notification_log_failed ON notification_log(tenant_id, ok, created_at);
 
+  -- A named set of filters, pinned to the screen it belongs to (audit E-08).
+  --
+  -- "Unpaid orders from the Web channel at the Tianhe shop" had to be rebuilt
+  -- from three controls every morning and could not be handed to a colleague.
+  -- Nothing anywhere remembered a view: filter state lived in page variables
+  -- and went with the reload.
+  --
+  -- query_json holds the screen's OWN control names — the same keys its filter
+  -- query already builds — so a screen adopts this without a translation layer
+  -- and a view saved today still applies after a control is renamed only if
+  -- somebody migrates it deliberately. Unknown keys are dropped on apply, so a
+  -- stale view narrows less than it did rather than erroring.
+  --
+  -- owner_name is DENORMALISED on purpose: tenant_users is a control-plane
+  -- table in another database, so there is no foreign key to hang here and no
+  -- join to make. It is a label ("shared by Mei"), and a rename leaves it
+  -- stale, which is a smaller cost than a cross-database lookup on every list.
+  CREATE TABLE IF NOT EXISTS saved_views (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    screen      TEXT NOT NULL,          -- 'orders' | … — the screen it belongs to
+    name        TEXT NOT NULL,
+    query_json  TEXT NOT NULL,          -- the filter set, in the screen's own control names
+    owner_id    INTEGER,                -- tenant_users.id of whoever saved it
+    owner_name  TEXT,                   -- for "shared by …"; see above
+    shared      INTEGER NOT NULL DEFAULT 0,   -- 1 = everyone on the account may use it
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_saved_views_screen ON saved_views(screen, shared, owner_id);
+
   -- Customer in-app notification center. One row per event (order status,
   -- refund transition, invoice issued, …). read_at NULL = unread. ref_type +
   -- ref_id deep-link the mini app to the relevant order/invoice.
