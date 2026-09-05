@@ -1007,8 +1007,15 @@ Page({
     const MAXM = 1000000;                       // 100% in micro
     const ship = Number(deliveryFee) || 0;
     const c = (v) => Math.round((Number(v) || 0) * 100);
-    const base = Math.max(0, c(subtotal) + (this.data.taxShippingTaxable ? c(ship) : 0)
-      + c(packingFee) + c(surcharge) - c(voucherDiscount));
+    /* THE SLOT SURCHARGE IS PART OF SHIPPING, and is taxed with it or not at
+       all. The server folds it into shippingFee before it taxes anything
+       (`shippingFee += sameDaySurcharge`), so counting it here unconditionally
+       would have made this page disagree with the server on every same-day
+       order at a shop that does not tax delivery — and a disagreement is a
+       refused checkout, not a wrong label. */
+    const shipBase = c(ship) + c(surcharge);
+    const base = Math.max(0, c(subtotal) + (this.data.taxShippingTaxable ? shipBase : 0)
+      + c(packingFee) - c(voucherDiscount));
     if (!base) return { added: 0, amount: 0 };
     const minor = this.data.taxMode === 'inclusive'
       ? Math.floor((base * micro) / (MAXM + micro) + 0.5)

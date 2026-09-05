@@ -442,6 +442,17 @@ async function place(taxCfg, body) {
     yes(/Math\.floor\(\(base \* micro\) \/ MAXM \+ 0\.5\)/.test(fn),
         'and an exclusive one is rounded half away from zero on one base, once');
     yes(/inclusive' \? 0 :/.test(fn), 'an inclusive tax adds nothing to the total');
+    /* The same-day slot surcharge is part of SHIPPING and is taxed with it or
+       not at all: the server folds it into shippingFee before taxing anything
+       (`shippingFee += sameDaySurcharge`). Counting it unconditionally here
+       would disagree with the server on every same-day order at a shop that
+       does not tax delivery — and a disagreement is a refused checkout. */
+    yes(/const shipBase = c\(ship\) \+ c\(surcharge\)/.test(fn),
+        'the slot surcharge is taxed with shipping, because that is where the server puts it');
+    yes(/taxShippingTaxable \? shipBase : 0/.test(fn),
+        'so a shop that does not tax delivery does not tax the surcharge either');
+    yes(/shippingFee \+= sameDaySurcharge/.test(RETAIL_SRC),
+        'and the server really does fold it in before it taxes anything');
 
     yes(/function taxDataFrom\(/.test(co), 'the settings are normalised in one place');
     yes(/rate_micro != null \? t\.rate_micro : t\.rateMicro/.test(co),
