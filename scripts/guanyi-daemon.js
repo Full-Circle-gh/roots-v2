@@ -37,7 +37,22 @@ try {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getBrowser, closeAll } = require('../lib/guanyi-browser');
-const { sendOpsAlert } = require('../lib/ops-alert');
+const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
+// ── Whose problem is it? (audit P-01) ─────────────────────────────────────
+// Every alert below now says who is meant to ACT on it: alertMerchant for this
+// account's trading day, alertPlatform for ours to fix, alertBoth for the rare
+// thing that is genuinely both. Before this they all went to the platform's
+// group, so a merchant was never told their own marketplace account had logged
+// out.
+//
+// ONE ACCOUNT, TODAY, AND SAID PLAINLY. This daemon opens require('../database')
+// — account 1's database — so account 1 is the only account it can be about. The
+// addressing is real, not a placeholder; there is simply one addressee. When the
+// channel sync becomes per-account (audit D-05, out of scope in this pass) this
+// constant becomes a parameter and every alert below follows it with no second
+// pass over these files.
+const { ROOTS_TENANT_ID: ACCOUNT } = require('../lib/tenant-db');
+
 const { claimWindow, clearWindow } = require('../lib/alert-latch');
 
 // Defensive: ensure the pickup-inference tables exist even if the deployed
@@ -725,7 +740,7 @@ function autoHeal(storeCode, listing) {
   const summary = parts.join('; ');
   log(storeCode, `auto-heal: ${summary}`);
   logSync(storeCode, 'autoheal', 'ok', { reenabled, revived, resynced });
-  sendOpsAlert(`🩹 管易 ${storeCode} 库存同步已自动修复：${total} 个商品重新推送\nGuanyi ${storeCode} auto-healed — ${summary}`);
+  alertMerchant(ACCOUNT, `🩹 管易 ${storeCode} 库存同步已自动修复：${total} 个商品重新推送\nGuanyi ${storeCode} auto-healed — ${summary}`);
 }
 
 // Probe the login on a timer, regardless of whether anything is queued: an
@@ -746,7 +761,7 @@ async function processSessionHealth() {
       if (!proxyDownFlagged[storeCode] && proxyFailStreak[storeCode] >= PROXY_DOWN_GRACE) {
         proxyDownFlagged[storeCode] = true;
         logSync(storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Guanyi — stock push paused (not logged out)');
-        sendOpsAlert(
+        alertPlatform(
           `🔴 管易 ${storeCode} 代理掉线，无法连接，库存推送已暂停（未掉登录）\n` +
           `Guanyi ${storeCode} proxy down (${maskProxy(activeProxy(storeCode))}) — stock push paused, session is NOT logged out, no need to re-run guanyi-login.js`
         );
@@ -756,7 +771,7 @@ async function processSessionHealth() {
     if (proxyDownFlagged[storeCode]) {
       proxyDownFlagged[storeCode] = false;
       logSync(storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — stock push resumed');
-      sendOpsAlert(`✅ 管易 ${storeCode} 代理已恢复，库存推送继续\nGuanyi ${storeCode} proxy recovered — stock push resumed`);
+      alertPlatform(`✅ 管易 ${storeCode} 代理已恢复，库存推送继续\nGuanyi ${storeCode} proxy recovered — stock push resumed`);
     }
     proxyFailStreak[storeCode] = 0;
 
@@ -776,7 +791,7 @@ async function processSessionHealth() {
       if (!downFlagged[storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
         downFlagged[storeCode] = true;
         logSync(storeCode, 'needs_login', 'error', null, 'Guanyi session expired — stock push STOPPED');
-        sendOpsAlert(
+        alertMerchant(ACCOUNT, 
           `🔴 管易 ${storeCode} 登录已失效，库存推送已停止！gzgrocery 仍按旧库存下单，请在盒子上运行 scripts/guanyi-login.js 重新登录\n` +
           `Guanyi ${storeCode} session expired — stock push STOPPED. gzgrocery is still ordering against stale numbers; re-run scripts/guanyi-login.js on the box.`
         );
@@ -789,7 +804,7 @@ async function processSessionHealth() {
     loginFailStreak[storeCode] = 0;
     if (wasDown) {
       logSync(storeCode, 'needs_login', 'ok', null, 'session recovered');
-      sendOpsAlert(`✅ 管易 ${storeCode} 已重新登录，库存推送恢复\nGuanyi ${storeCode} logged back in — stock push resumed`);
+      alertMerchant(ACCOUNT, `✅ 管易 ${storeCode} 已重新登录，库存推送恢复\nGuanyi ${storeCode} logged back in — stock push resumed`);
     }
     // Heal after any recovery, and once at start-up: a box restarted after a long
     // outage has no "down" transition to hang the heal off, but is exactly the
@@ -846,7 +861,7 @@ async function processSessionHealth() {
             // hours away. Inside SESSION_WARN_NOW_MS the push is about to stop
             // and the message has to say so — the old text paired "~0h" with
             // "at your convenience", which is both alarming and useless.
-            sendOpsAlert(leftMs <= SESSION_WARN_NOW_MS
+            alertMerchant(ACCOUNT, leftMs <= SESSION_WARN_NOW_MS
               ? `🟠 管易 ${storeCode} 登录将在${cn}后过期，请尽快重新登录（过期后库存推送会停止）\n` +
                 `Guanyi ${storeCode} login expires in ${en} — re-login NOW from the ops screen; stock push stops when it goes.`
               : `🟡 管易 ${storeCode} 登录将在${cn}后过期，请在方便时重新登录（现在同步仍正常）\n` +

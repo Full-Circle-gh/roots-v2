@@ -182,6 +182,18 @@ app.use((req, res, next) => {
 });
 
 // Static files
+//
+// JavaScript and CSS go through their own handler first (audit J-03): the admin
+// shell is about a megabyte of code, nginx in front does not gzip, and the
+// compression above wraps res.json only — so the API was compressed and the
+// code that calls it was not. It also gives a ?v=-stamped file a real cache
+// lifetime, which is safe precisely because the stamp changes on every deploy.
+// Everything else — images, fonts — falls straight through to express.static,
+// which is what should serve them: an already-compressed JPEG must never be
+// re-gzipped.
+app.use('/assets', require('./lib/static-assets').assetHandler({
+  root: path.join(__dirname, 'public'),
+}));
 app.use('/assets', express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     // iOS WeChat's wx.loadFontFace rejects responses with content-type
@@ -413,6 +425,8 @@ app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend doo
 app.use(require('./routes/retail-waste')); // Waste (损耗) — §32: a stock movement with a reason; product subjects only for now. NOT routes/waste.js, which is the kitchen screen's API and stays live until cutover
 app.use(require('./routes/retail-production')); // Production (生产) — what the kitchen MADE, in the realm the kitchen is actually in. production_batches has been empty since it shipped because its only two screens are kitchen-realm and the cooks are Tacet operators. NOT routes/production.js, which is those screens' API
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
+app.use(require('./routes/recycle'));     // Recently deleted (audit E-07) — what was removed, and putting it back
+app.use(require('./routes/saved-views')); // Saved views (audit E-08) — a named set of filters, pinned to the screen it belongs to
 app.use(require('./routes/finance-summary')); // Finance Summary (§36) — Tacet's own staircase, on tdb() from the first commit. NOT routes/finance.js, which is the kitchen Finance API and is blocked-and-left-to-die under §36
 app.use(require('./routes/finance-transactions')); // Finance Transactions (§36 v4.121) — the ledger of typed rows; reads income_entries + expense_entries, never the order record
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)

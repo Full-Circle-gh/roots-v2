@@ -2360,6 +2360,10 @@
       <button class="btn btn-sm ord-clear-btn" id="ord-clear-btn" type="button" hidden
               onclick="ordClearFilters()"
               title="Show every order again · 显示全部订单">Clear filters · 清除筛选</button>
+      <!-- Saved views (audit E-08). Beside Clear, because both are about the
+           filter row rather than the orders: one puts a set of filters back,
+           the other takes them all away. Drawn by 25-views.js. -->
+      <span id="ord-views"></span>
       <!-- Download the orders currently listed — all of them, not just this
            page. Filtered on purpose: the file should match the screen it was
            taken from. -->
@@ -2526,6 +2530,41 @@
       /* Per-row / per-card channel label: icon + text on one baseline. */
       .ord-chan { display: inline-flex; align-items: center; gap: 4px; }
       .ord-chan svg { width: 13px; height: 13px; flex: none; }
+
+      /* ── Saved views (audit E-08) ── */
+      .vw-wrap { position: relative; display: inline-flex; }
+      .vw-pop {
+        position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 260px;
+        background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg);
+        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 6px;
+      }
+      .vw-row { display: flex; align-items: center; gap: 4px; }
+      .vw-apply {
+        flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; text-align: left;
+        padding: 8px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+        color: var(--text-1); cursor: pointer; background: none; border: 0;
+      }
+      .vw-apply:hover { background: var(--bg-elev-1); }
+      .vw-apply > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .vw-by { font-size: 11.5px; color: var(--text-3); flex: none; }
+      .vw-share, .vw-x {
+        flex: none; background: none; border: 0; cursor: pointer; border-radius: 6px;
+        color: var(--text-3); font-size: 12px; padding: 6px 8px; line-height: 1;
+      }
+      .vw-share.on { color: var(--text-1); }
+      .vw-share:hover, .vw-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
+      .vw-head {
+        font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+        color: var(--text-3); padding: 10px 10px 4px; border-top: 1px solid var(--line); margin-top: 4px;
+      }
+      .vw-empty { font-size: 12.5px; color: var(--text-3); padding: 10px; line-height: 1.5; }
+      .vw-foot { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+      .vw-save {
+        width: 100%; text-align: left; padding: 8px 10px; border-radius: 7px; border: 0;
+        background: none; color: var(--text-1); font-size: 13.5px; font-weight: 500; cursor: pointer;
+      }
+      .vw-save:hover:not(:disabled) { background: var(--bg-elev-1); }
+      .vw-save:disabled { color: var(--text-3); cursor: default; }
 
       /* ── View options (tweaks) popover ── */
       .ovp-wrap { position: relative; display: inline-flex; }
@@ -4130,10 +4169,24 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
           <input type="text" id="cu-q" data-ph-en="Search name or phone" data-ph-cn="搜索姓名或电话" placeholder="Search name or phone" oninput="cuSearchDebounced()">
         </span>
+        <!-- Clear filters (audit Q-03). Customers offered this ONLY from the
+             empty state — so a filter that matched forty people had no way out
+             but undoing each control by hand, while a filter that matched none
+             did. Waste's rule is the right one and Orders already follows it:
+             the button is present whenever something is narrowing the list, and
+             absent otherwise, so it is a status line as well as a control. -->
+        <button class="btn btn-sm ord-clear-btn" id="cu-clear-btn" type="button" hidden
+                onclick="cuFilterClearAll()"
+                title="Show every customer again · 显示全部顾客">Clear filters · 清除筛选</button>
         <!-- Download the customers currently listed — all of them, not just this
              page, and filtered exactly as the roster is. -->
         <button class="btn btn-sm" id="cu-export-btn" type="button" onclick="cuExportCsv()"
                 title="Download these customers as a spreadsheet · 下载当前顾客表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
+        <!-- Audit E-05, and deliberately next to Export: the two halves of the
+             same idea, and a merchant who has found one has found the other.
+             The arrow points the other way. -->
+        <button class="btn btn-sm" id="cu-import-btn" type="button" data-cap="customers:edit" onclick="tdImportOpen('customers')"
+                title="Bring customers in from a spreadsheet · 从表格导入顾客"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>Import CSV · 导入</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -4375,6 +4428,10 @@
         <div class="pa-addsplit-menu" id="pa-add-menu" hidden>
           <button type="button" onclick="paAddMenuClose();pwOpen()"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg><span><b>Step by step · 分步添加</b><small>Walks you through each field · 逐项引导填写</small></span></button>
           <button type="button" onclick="paAddMenuClose();pdOpen(null)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg><span><b>Add manually · 手动新增</b><small>Blank form · 空白表单</small></span></button>
+          <!-- Audit E-05. The catalogue is the largest cost of moving to Tacet,
+               and until now it could only be typed in. Third in the menu, not
+               first: importing is the rarer act and the once-per-shop one. -->
+          <button type="button" data-cap="products:edit" onclick="paAddMenuClose();tdImportOpen('products')"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.5V2.5M5 7l3 3 3-3"/><path d="M2.5 11.5v1a1 1 0 001 1h9a1 1 0 001-1v-1"/></svg><span><b>Import a spreadsheet · 导入表格</b><small>Bring a catalogue in from another system · 从其他系统导入商品目录</small></span></button>
         </div>
       </div>
     </div>
@@ -4473,7 +4530,18 @@
            display / empty-photo style were per-operator tweaks to the card
            grid that had been display:none for most of their life; unhiding
            them put nine settings on screen for a choice nobody had missed. -->
+      <!-- Clear filters (audit Q-03 / B-06). Waste's rule, which Orders and
+           Customers now follow too: present only while something is actually
+           narrowing the list. Products offered it from the empty state alone —
+           the one case where the operator already knows. -->
+      <button class="btn btn-sm ord-clear-btn" id="pa-clear-btn" type="button" hidden
+              onclick="paClearFilters()"
+              title="Show every product again · 显示全部商品">Clear filters · 清除筛选</button>
       <button class="btn btn-sm" id="pa-export-btn" type="button" onclick="paExportCsv()" title="Download every product as a spreadsheet · 下载全部产品明细"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
+      <!-- Audit E-12. A stocktake happens away from a screen, so the sheet that
+           goes to the shelf is paper. Beside Export because both are "take this
+           list out of here" — one to a spreadsheet, one to a clipboard. -->
+      <button class="btn btn-sm" id="pa-count-btn" type="button" onclick="paPrintCountSheet()" title="A sheet to take to the shelves · 打印盘点表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg>Count sheet · 盘点表</button>
     </div>
 
     <!-- Sub-bar (one row): store switcher + shown-count. The low-stock threshold
@@ -5406,6 +5474,24 @@
       .vw-preset b { display: block; color: var(--text-1); font-weight: 500; font-size: 13px; }
       .vw-door.fresh { border-style: dashed; background: transparent; }
       .vw-door.fresh:hover { background: var(--bg-elev-1); }
+
+      /* The other ways in, offered BESIDE the first question rather than on a
+         screen before it (audit F-02). Deliberately quiet: they are for the
+         minority who already have the words written down, and the first
+         question is what everybody else came for. */
+      .pw-alts, .vw-alts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -2px 0 12px; }
+      .pw-alt, .vw-alt {
+        display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+        border-radius: 999px; padding: 5px 11px; background: var(--bg-input); cursor: pointer;
+        font: inherit; font-size: 12.5px; color: var(--text-2);
+        transition: border-color .2s var(--ease-out, ease), color .2s var(--ease-out, ease);
+      }
+      .pw-alt:hover, .vw-alt:hover { border-color: var(--text-3); color: var(--text-1); }
+      .pw-alt .vico, .vw-alt .vico { display: flex; }
+      /* The coupon wizard's chips are a CHOICE — one of them is always the one
+         the answers below came from — so the current one is marked. The product
+         wizard's two are alternative routes, not a selection, and have no "on". */
+      .vw-alt.on { border-color: var(--text-1); color: var(--text-1); background: var(--bg-elev-1); }
 
       /* screen 2 — the deal */
       .vw-kinds { display: flex; gap: 10px; margin-top: 10px; }
@@ -9665,6 +9751,19 @@
     <div class="settings-layout">
       <!-- ───────── sidebar nav ───────── -->
       <aside class="settings-nav" id="settings-nav">
+        <!-- Audit G-03. Settings holds more controls than any other screen and
+             had no search of its own. The command palette can already jump to a
+             single card — but only for somebody who knows the name of the thing
+             they are looking for, which on the screen a merchant is least
+             confident in is exactly what they do not have. This searches the
+             CARDS: their headings and their explanatory text, across all seven
+             panels, so "delivery fee" finds the card wherever it lives. -->
+        <div class="cfg-search">
+          <input type="text" id="cfg-search" autocomplete="off" oninput="cfgSearch()" data-kbd-search
+                 data-ph-en="Search settings…" data-ph-cn="搜索设置…" placeholder="Search settings…"
+                 aria-label="Search settings · 搜索设置">
+        </div>
+        <div id="cfg-search-results" hidden></div>
         <button data-sub="shop" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
           Shop tab · 商城页
@@ -9729,7 +9828,7 @@
           <h2>Shop tab · 商城页</h2>
 
           <!-- LAYOUT picker -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Layout · 布局</h3>
               <div class="muted">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top. · 顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</div>
@@ -9831,7 +9930,7 @@
           </div>
 
           <!-- DEFAULT SORT -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Default sort · 默认排序</h3>
               <div class="muted">The order products appear in when a customer opens the Shop. "Featured" follows the manual order you set on the Products page (drag-and-drop). · 顾客打开商城时的默认排序;"精选"沿用产品页手动排序(拖拽)。</div>
@@ -9869,7 +9968,7 @@
           </div>
 
           <!-- FILTER CHIPS -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Filter &amp; controls bar · 筛选与操作条</h3>
               <div class="muted">Toggle which filter widgets appear above the product list. Each adds a row to the top of the Shop. The preview below updates live to show what customers will see. · 控制产品列表上方显示哪些筛选控件;每项会在商城顶部加一行。下方预览实时更新顾客看到的样式。</div>
@@ -9951,7 +10050,7 @@
         <div class="sub-panel" id="sub-push">
           <h2>Push notifications · 推送通知</h2>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3>
               <div class="muted">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates. · 微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</div>
@@ -10038,7 +10137,7 @@
           </div>
 
           <!-- DISPLAY CURRENCY — sits with payment; tenant-wide price display. -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Currency · 货币</h3>
               <div class="muted">The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。</div>
@@ -10053,7 +10152,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款
                 <span id="alipay-manual-chip" style="margin-left:8px;vertical-align:middle"></span>
@@ -10122,7 +10221,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
                 <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
@@ -10200,7 +10299,7 @@
             </div>
           </div>
 
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>What customers receive · 顾客收到的内容</h3>
               <div class="muted">After opt-in, each status transition in Mini App Backend → Orders fires one push. Customers see it in the WeChat "Service notifications" feed. · 顾客订阅后,小程序后台 → 订单的每次状态变更都会触发一次推送,显示在微信"服务通知"中。</div>
@@ -10283,7 +10382,7 @@
           </div>
 
           <!-- Mode -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>How customers reach you · 顾客联系方式</h3>
               <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet. · 三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</div>
@@ -10319,7 +10418,7 @@
           </div>
 
           <!-- QR fallback -->
-          <div class="group-card" id="cs-qr-fields">
+          <div class="group-card" id="cs-qr-fields" data-sees="customer">
             <div class="group-card-head">
               <h3>QR code image · 二维码图片</h3>
               <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
@@ -10332,7 +10431,7 @@
           </div>
 
           <!-- Labels + hours -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Button label &amp; hours · 按钮文案与营业时间</h3>
               <div class="muted">Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide. · 两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。</div>
@@ -10365,7 +10464,7 @@
           </div>
 
           <!-- Placement -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Where to show · 显示位置</h3>
               <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
@@ -10388,7 +10487,7 @@
           </div>
 
           <!-- Floating-bubble appearance -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Floating bubble look · 悬浮按钮样式</h3>
               <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
@@ -10476,7 +10575,7 @@
 
           <!-- ── Support button · 客服按钮 — hide the floating platform-support
                launcher (bottom-right) for operators who don't want it. ── -->
-          <div class="group-card">
+          <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Support button · 客服按钮</h3>
               <div class="muted">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support. Turn it off to hide it. · 右下角悬浮的<b>客服</b>按钮用于联系平台客服。关闭即可隐藏。</div>
@@ -10526,10 +10625,44 @@
                 One message a day, naming the shortest few and counting the rest — not one alert per product, which is how a busy Saturday buries the notifications that matter. It goes to everyone on your team who can edit products or raise a restock request. · 每天一条消息,列出库存最少的几件并统计其余,而不是每件商品一条提醒。发送给团队中可编辑商品或发起补货的成员。
               </div>
             </div>
+            <!-- ══ Open / closed, per channel (audit B-03) ═════════════════
+                 Four endpoints implemented pausing and resuming the shop per
+                 sales channel — GET /store-status and three POSTs — and NOTHING
+                 called any of them. Closing for a day was done somewhere else,
+                 or not at all from here. This is that screen.
+
+                 It sits above the store list on purpose: "are we open?" is the
+                 question somebody arrives at this page holding, and the list of
+                 shops is what they read afterwards. -->
+            <div id="ops-openclose" style="margin:4px 0 18px">
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <strong style="color:var(--text-1);font-size:14px">Open for business · 营业状态</strong>
+                <span id="oc-master-pill" class="muted" style="font-size:12px"></span>
+              </div>
+              <div class="helper" style="margin:4px 0 10px;line-height:1.55">
+                Closing pauses new orders. Your marketplace shops are queued and follow within about a minute; the online store stops at once. · 关闭后将暂停接单。外卖平台会在约一分钟内跟随，线上商城立即生效。
+              </div>
+              <div id="oc-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
+            </div>
+
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
             <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
             <div id="ops-store-form"></div>
             <div id="ops-store-staff"></div>
+          </div>
+
+          <!-- Recently deleted (audit E-07). Products had version history and
+               nothing else in the admin had anything. It lives here rather than
+               on each screen it covers: somebody looking for something they
+               deleted usually cannot remember which screen they deleted it
+               from, and four half-lists in four places is four things to find
+               instead of one. -->
+          <div class="group-card">
+            <div class="group-card-head"><h3>Recently deleted · 最近删除</h3></div>
+            <div class="helper" style="margin:2px 0 10px;line-height:1.55">
+              Coupons, delivery zones and ledger rows removed in the last 60 days can be put back. Purchase orders are not kept — putting one back would mean re-deriving stock that has moved. · 最近 60 天内删除的优惠券、配送区域与账目行可以恢复。采购单不在其中：恢复采购单需重新推导已变动的库存。
+            </div>
+            <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
           </div>
 
           <!-- ── Quick Stock (mobile add-on) ── -->
@@ -12262,6 +12395,15 @@
       #tab-team .tm-edit { flex: none; cursor: pointer; background: transparent; border: 1px solid var(--td-border); border-radius: 8px; padding: 7px 14px; font-family: inherit; font-size: 12.5px; font-weight: 500; color: var(--td-text2); }
       #tab-team .tm-edit:hover { border-color: var(--td-text2); color: var(--td-text); }
       #tab-team .tm-empty { padding: 22px 8px; font-size: 13px; color: var(--text-3); text-align: center; }
+      /* Audit O-02 — a search box on the team list, shown only once there are
+         enough people to need one. Written against the page's own tokens so it
+         follows the tenant's theme like every other input here. */
+      #tab-team .tm-searchbar { padding: 4px 0 10px; }
+      #tab-team .tm-searchbar input { width: 100%; max-width: 320px; padding: 8px 11px;
+        border: 1px solid var(--line); border-radius: 9px; background: var(--bg-elev-1);
+        color: var(--text-1); font-size: 13px; }
+      #tab-team .tm-searchbar input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+      #tab-team .tm-searchcount { padding: 0 0 8px; font-size: 12px; color: var(--text-3); }
 
       /* Team devices — every operator's signed-in sessions (owner/admin only),
          moved here from the account pop-up's Devices tab. Per-row sign-out hits
@@ -13118,6 +13260,10 @@
 <script src="/assets/retail-admin/21-product-build.js"></script>
 <script src="/assets/retail-admin/22-finance.js"></script>
 <script src="/assets/retail-admin/23-sku.js"></script>
+<script src="/assets/retail-admin/24-import.js"></script>
+<script src="/assets/retail-admin/25-views.js"></script>
+<script src="/assets/retail-admin/26-print.js"></script>
+<script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside role="dialog" id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

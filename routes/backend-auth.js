@@ -1244,7 +1244,43 @@ router.post('/api/backend/push/unsubscribe', express.json(), (req, res) => {
 // "off" read back as "on" the moment another page re-enrolled the device.
 router.get('/api/backend/push/pref', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  res.json(_push.operatorPref(req.session.backendUserId));
+  res.json({ ..._push.operatorPref(req.session.backendUserId), events: _eventPane(req) });
+});
+
+// ── Which alerts, not just whether (audit E-10) ───────────────────────────
+// The pane needs three things per event: what it is, whether this person wants
+// it, and whether it could reach them at all. The third is why the capabilities
+// are resolved here — a warehouse clerk shown a "New orders" switch that does
+// nothing has been told something untrue about their own phone.
+function _eventPane(req) {
+  const pushEvents = require('../lib/push-events');
+  const uid = req.session.backendUserId;
+  let caps = [], owner = false;
+  try {
+    const u = db.prepare('SELECT id, tenant_id, role, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(uid);
+    if (u) {
+      owner = u.role === 'owner';
+      const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+      caps = (require('../lib/operator-caps').resolveOperator(db, u, tenant).caps) || [];
+    }
+  } catch (e) {
+    // A capability read that fails must not empty the pane — it would read as
+    // "none of these reach you", which is a stronger claim than "I could not
+    // tell". Everything reaches, and the switches still work.
+    owner = true;
+  }
+  return pushEvents.paneFor({ caps, owner, off: _push.mutedEvents('operator', uid) });
+}
+
+// One switch at a time: { event, on }. Deliberately not a whole-pane PUT — two
+// tabs open on the same account would otherwise have the older one write back
+// the switches it loaded before the newer one changed them.
+router.post('/api/backend/push/events', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const b = req.body || {};
+  const r = _push.setEventMuted('operator', req.session.backendUserId, String(b.event || ''), b.on !== false);
+  if (!r.ok) return res.status(400).json({ error: 'Unknown notification · 未知的通知类型' });
+  res.json({ success: true, events: _eventPane(req) });
 });
 router.post('/api/backend/push/pref', express.json(), (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });

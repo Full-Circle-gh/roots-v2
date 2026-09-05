@@ -256,8 +256,9 @@ function _fireRestockPush(orderId, kind, actorTenantUserId) {
     // /stock reads ?go= itself and refuses one the operator was not answered
     // for, so a link can never grant access to a screen a capability does not.
     const url = audience.go ? '/stock?go=' + audience.go : '/stock';
+    // `event` names the switch this alert answers to (audit E-10).
     Promise.resolve(_push.sendPushToOperatorsWithCaps(currentTenantId(), audience.caps, {
-      title, body, url, tag: 'rs-' + orderId + '-' + kind,
+      title, body, url, tag: 'rs-' + orderId + '-' + kind, event: 'restock',
     }, { storeId, excludeTenantUserId: actorTenantUserId || null }))
       .catch(e => console.warn('[fireRestockPush operators]', e.message));
   } catch (e) { console.warn('[fireRestockPush]', e.message); }
@@ -925,13 +926,15 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
     // span days (slow ferments, multi-step recipes), so a "stale" sent
     // request to the kitchen is still real work, not noise. The original
     // sweep was designed for the store→warehouse Fulfill tab only.
+    // The shop's own midnight, not Guangzhou's (audit A-05).
+    const SHIFT = require('../lib/business-date').sqlDayShiftForShop(tdb());
     tdb().prepare(`
       UPDATE restock_orders
          SET archived_at = CURRENT_TIMESTAMP
        WHERE archived_at IS NULL
          AND status NOT IN ('prepared','delivered','draft')
          AND COALESCE(to_role, 'warehouse') != 'kitchen'
-         AND date(created_at, '+8 hours') < date('now', '+8 hours')
+         AND date(created_at, '${SHIFT}') < date('now', '${SHIFT}')
     `).run();
   }
   let q = `

@@ -12,12 +12,222 @@
 // were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
 // ═══════════════════════════════════════════════════════════════════════
 function loadOpsPanel() {
+  loadOpenClose();
   loadOpsStores();
+  loadRecycle();
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
   loadAlipayManual();
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FINDING WHAT YOU CAME TO SETTINGS FOR (audit G-03)
+   ══════════════════════════════════════════════════════════════════════════
+   Settings holds more controls than any other screen — nine dropdowns, seven
+   panels — and had no search of its own. The command palette can already jump
+   to a single card, and that was the mitigation, but it only works for somebody
+   who knows the NAME of the thing they want. On the screen a merchant is least
+   confident in, the name is precisely what they do not have.
+
+   This searches the cards themselves: the heading, and the explanatory text
+   under it. So "delivery fee", "announcement", "who changed" all land somewhere
+   even though none of them is a card title.
+
+   EVERY WORD HAS TO MATCH, not the whole phrase as a substring — "printer
+   receipt" finds "Receipt printing — Feie cloud printer", which a substring
+   search would not. Same rule as the stores and team boxes (audit O-02); one
+   search behaviour across the admin is worth more than a cleverer one here.
+
+   IT LISTS RESULTS RATHER THAN FILTERING THE PANELS. Hiding cards inside seven
+   panels would leave the panel headings, the sidebar counts and the scroll
+   position all describing a screen that is no longer there; a list says where
+   each answer LIVES, which is the thing somebody is actually missing. */
+function _cfgCards() {
+  const out = [];
+  document.querySelectorAll('#tab-config .sub-panel').forEach((panel) => {
+    const sub = (panel.id || '').replace(/^sub-/, '');
+    const navBtn = document.querySelector('#settings-nav button[data-sub="' + sub + '"]');
+    if (!navBtn) return;
+    // A panel the operator's role cannot open is not a place to send them.
+    if (navBtn.hidden || navBtn.offsetParent === null) return;
+    const panelName = (navBtn.textContent || '').replace(/\s+/g, ' ').trim();
+    panel.querySelectorAll('.group-card, .card').forEach((card) => {
+      const h3 = card.querySelector('h3');
+      if (!h3) return;
+      const title = (h3.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!title) return;
+      out.push({
+        sub, panelName, title, card,
+        sees: card.getAttribute('data-sees') === 'customer',
+        hay: ((title + ' ' + panelName + ' ' + (card.textContent || '')).replace(/\s+/g, ' ')).toLowerCase(),
+      });
+    });
+  });
+  return out;
+}
+
+function cfgSearch() {
+  const box = document.getElementById('cfg-search');
+  const out = document.getElementById('cfg-search-results');
+  if (!box || !out) return;
+  const q = (box.value || '').trim().toLowerCase();
+  if (!q) { out.hidden = true; out.innerHTML = ''; return; }
+  const words = q.split(/\s+/).filter(Boolean);
+  const hits = _cfgCards().filter((c) => words.every((w) => c.hay.includes(w))).slice(0, 12);
+  out.hidden = false;
+  if (!hits.length) {
+    out.innerHTML = '<div class="cfg-hit-none">' + cuT('Nothing here matches.', '没有匹配的设置。') + '</div>';
+    return;
+  }
+  out.innerHTML = hits.map((h, i) =>
+    '<button type="button" class="cfg-hit" onclick="cfgSearchGo(' + i + ')">'
+    + '<span class="cfg-hit-title" data-no-i18n>' + escapeHtml(h.title) + '</span>'
+    + '<span class="cfg-hit-where" data-no-i18n>' + escapeHtml(h.panelName) + '</span>'
+    + (h.sees ? '<span class="cfg-sees">' + cuT('Customers see this', '顾客可见') + '</span>' : '')
+    + '</button>').join('');
+  _cfgHits = hits;
+}
+let _cfgHits = [];
+function cfgSearchGo(i) {
+  const h = _cfgHits[i];
+  if (!h) return;
+  const btn = document.querySelector('#settings-nav button[data-sub="' + h.sub + '"]');
+  if (btn) btn.click();
+  // Same landing as the command palette's: switch, scroll, then flash, so the
+  // card says "here" rather than leaving somebody to find it again by eye.
+  setTimeout(() => {
+    h.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    h.card.classList.remove('gsearch-flash');
+    void h.card.offsetWidth;
+    h.card.classList.add('gsearch-flash');
+    setTimeout(() => h.card.classList.remove('gsearch-flash'), 1600);
+  }, 90);
+}
+window.cfgSearch = cfgSearch;
+window.cfgSearchGo = cfgSearchGo;
+
+/* MARK THE ONES CUSTOMERS SEE (audit G-03, second half).
+
+   Some settings change what a customer sees the moment they are saved, and
+   nothing on screen distinguished those from the ones that only change how the
+   shop is run. That is the difference somebody wants to know before pressing
+   save on a screen they are not confident in.
+
+   The badge is added from JavaScript rather than written into the markup so its
+   words follow the language toggle like everything else. `data-sees="customer"`
+   on the card is the claim; this only renders it.
+
+   AN UNMARKED CARD IS NOT A CLAIM THAT NOTHING IS PUBLIC. The badge says "this
+   one is visible to customers"; its absence says nothing, because a rule that
+   had to be right about all twenty-seven cards to be useful would be wrong
+   about one of them within a month. */
+function cfgMarkAudience() {
+  document.querySelectorAll('#tab-config [data-sees="customer"]').forEach((card) => {
+    const head = card.querySelector('.group-card-head') || card;
+    const h3 = head.querySelector('h3');
+    if (!h3) return;
+    let tag = head.querySelector('.cfg-sees');
+    if (!tag) {
+      tag = document.createElement('span');
+      tag.className = 'cfg-sees';
+      h3.insertAdjacentElement('afterend', tag);
+    }
+    tag.textContent = cuT('Customers see this', '顾客可见');
+  });
+}
+window.cfgMarkAudience = cfgMarkAudience;
+// Painted once the shell is up, and again on a language change so the badge is
+// never left in the language somebody switched away from.
+if (typeof onLangChange === 'function') onLangChange(cfgMarkAudience);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cfgMarkAudience);
+else setTimeout(cfgMarkAudience, 0);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RECENTLY DELETED (audit E-07)
+   ══════════════════════════════════════════════════════════════════════════
+   Products had version history and nothing else in the admin had anything. The
+   contents of a deleted coupon, delivery zone or ledger row are now kept for
+   sixty days, and this is where somebody puts one back.
+
+   IT LIVES IN OPERATIONS, not on each screen it covers. A merchant looking for
+   something they deleted does not remember which screen they deleted it from —
+   that is usually the whole problem — and four half-lists in four places is
+   four things to find instead of one.
+
+   RESTORING IS NOT CONFIRMED. It puts something back that somebody wanted back;
+   the reversible direction does not need a dialog in front of it. What IS said
+   is the outcome, including the two ways it can fail for a reason the operator
+   can act on: the id has been taken by something created since, or the record
+   it archived is gone entirely. */
+let _recycleRows = [];
+
+async function loadRecycle() {
+  const box = document.getElementById('ops-recycle-body');
+  if (!box) return;
+  try {
+    const j = await api('/api/retail-admin/deleted');
+    _recycleRows = j.data || [];
+    paintRecycle(j.days || 60);
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Could not read what was deleted', '无法读取删除记录')}: `
+      + `<span data-no-i18n>${escapeHtml(e.message)}</span></span> `
+      + `<button class="btn btn-sm" onclick="loadRecycle()">${cuT('Try again', '重试')}</button>`;
+  }
+}
+window.loadRecycle = loadRecycle;
+
+function paintRecycle(days) {
+  const box = document.getElementById('ops-recycle-body');
+  if (!box) return;
+  if (!_recycleRows.length) {
+    box.innerHTML = `<div class="muted" style="font-size:12.5px">${
+      cuT('Nothing has been deleted in the last ' + days + ' days.', '最近 ' + days + ' 天内没有删除记录。')}</div>`;
+    return;
+  }
+  box.innerHTML = _recycleRows.map((r, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)"><span data-no-i18n>${escapeHtml(r.label || ('#' + r.record_id))}</span></div>
+        <div style="color:var(--text-3);font-size:12px">
+          ${escapeHtml(cuT(r.kindEn, r.kindCn))} ·
+          <span data-no-i18n>${escapeHtml(r.deleted_at || '')}${r.deleted_by ? ' · ' + escapeHtml(r.deleted_by) : ''}</span>
+        </div>
+      </div>
+      <button class="btn btn-sm" data-cap="settings:edit" onclick="recycleRestore(${i})">${cuT('Put it back', '恢复')}</button>
+    </div>`).join('');
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the gate is a nicety; the server still refuses */ }
+}
+
+async function recycleRestore(i) {
+  const r = _recycleRows[i];
+  if (!r) return;
+  try {
+    await api('/api/retail-admin/deleted/' + r.id + '/restore', { method: 'POST' });
+    toast(cuT('Put back', '已恢复'), 'ok');
+  } catch (e) {
+    // The two an operator can act on get their own sentence. "taken" is the one
+    // that would otherwise read as a bug: nothing failed, something else has
+    // been created under that id since.
+    const msg = e.message === 'taken'
+      ? cuT('Something else now uses that record’s place. It cannot be put back.',
+            '该记录的位置已被其他内容占用，无法恢复。')
+      : e.message === 'gone'
+        ? cuT('The record itself is no longer here, so there is nothing to switch back on.',
+              '该记录已不存在，无法恢复。')
+        : cuT('Could not put it back', '恢复失败') + ': ' + (e.message || '');
+    toast(msg, 'err');
+  }
+  await loadRecycle();
+  // The record belongs to ANOTHER screen, which is still showing the list it
+  // loaded before this. Refresh the one it went back to, rather than leaving
+  // somebody to wonder why a zone they just restored is not on the Delivery
+  // page — a screen that is silently stale after a success is how a restore
+  // gets tried twice.
+  if (r.kind === 'delivery_zone' && typeof loadDeliveryZones === 'function') loadDeliveryZones();
+  if (r.kind === 'voucher' && typeof loadVouchers === 'function') loadVouchers();
+}
+window.recycleRestore = recycleRestore;
 
 // ── Manual-Alipay (静态收款码) fallback card ──────────────────────────────
 // Stopgap while 当面付 API access is blocked: operator uploads a static收款码 +
@@ -187,6 +397,135 @@ async function _saveAlipayManual() {
 // Mirrors the kitchen app's store editor but lives here so the online store
 // is fully independent. Uses the dual-realm /api/retail-admin/stores routes;
 // saving an address auto-re-geocodes the store in the background.
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OPEN / CLOSED, PER CHANNEL — audit B-03
+   ══════════════════════════════════════════════════════════════════════════
+   Four endpoints implemented pausing and resuming the shop per sales channel
+   and no page, drawer or phone screen called any of them. The merchant this
+   was written for closes the shop somewhere else, or not at all from here.
+
+   WHAT THE THREE CONTROLS MEAN, because they are not the same act:
+     Master      everything at once — online store AND every marketplace shop.
+                 The one somebody reaches for when the fridge dies.
+     Online      just the storefront the merchant owns. Immediate.
+     Per shop    one marketplace location. Queued; the daemon applies it within
+                 about a minute, which is why a pending row says so instead of
+                 pretending it already happened.
+
+   CLOSING IS NOT CONFIRMED AND OPENING IS NOT EITHER. Both are reversible in
+   one tap and both are urgent — a dialog between a merchant and "stop taking
+   orders" is a dialog in the way. What IS shown is the consequence, before and
+   after, in words.
+   ══════════════════════════════════════════════════════════════════════════ */
+let _ocState = null;
+let _ocBusy = false;
+
+async function loadOpenClose() {
+  const box = document.getElementById('oc-body');
+  if (!box) return;
+  try {
+    const j = await api('/api/retail-admin/store-status');
+    _ocState = j;
+    paintOpenClose();
+  } catch (e) {
+    // A shop that cannot READ its own open/closed state must not render a
+    // control that looks live. Say so, and offer the retry.
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Could not read the shop status', '无法读取营业状态')}: `
+      + `<span data-no-i18n>${escapeHtml(e.message)}</span></span> `
+      + `<button class="btn btn-sm" onclick="loadOpenClose()">${cuT('Try again', '重试')}</button>`;
+  }
+}
+window.loadOpenClose = loadOpenClose;
+
+function paintOpenClose() {
+  const box = document.getElementById('oc-body');
+  const pill = document.getElementById('oc-master-pill');
+  if (!box || !_ocState) return;
+  const st = _ocState;
+  const master = st.master;                       // 'open' | 'closed' | 'mixed'
+  if (pill) {
+    const label = master === 'open' ? cuT('Everything is open', '全部营业中')
+      : master === 'closed' ? cuT('Everything is closed', '全部已关闭')
+      : cuT('Some channels are closed', '部分渠道已关闭');
+    // Amber for mixed, never red: a shop that has deliberately closed one
+    // marketplace is not in an error state.
+    const tone = master === 'open' ? 'var(--sage-ink,#4d5a33)'
+      : master === 'mixed' ? 'var(--amber-ink,#7a5a12)' : 'var(--text-2)';
+    pill.textContent = label;
+    pill.style.color = tone;
+  }
+  const btn = (on, label, onclick, cap) =>
+    `<button class="btn btn-sm${on ? '' : ' btn-primary'}" data-cap="${cap}" onclick="${onclick}"${_ocBusy ? ' disabled' : ''}>`
+    + escapeHtml(label) + '</button>';
+
+  const online = st.online || {};
+  const rows = (st.meituan || []).map((m) => {
+    // A shop is open when it is taking orders. That is `fulfillmentOpen`, which
+    // is immediate and true of every shop; the marketplace status is a SECOND
+    // fact, and only for a shop that has a marketplace at all — an unlinked shop
+    // reports isOpen:false because nobody has ever pushed it, which is not the
+    // same as closed and must not be shown as closed.
+    const shopOpen = m.fulfillmentOpen && (m.linked ? m.isOpen : true);
+    const bits = [m.fulfillmentOpen ? cuT('taking orders', '接单中') : cuT('paused', '已暂停')];
+    if (m.linked) {
+      bits.push(!m.readOk ? cuT('marketplace status unknown', '外卖平台状态未知')
+        : m.isOpen ? cuT('open on the marketplace', '外卖平台营业中')
+        : cuT('closed on the marketplace', '外卖平台已关闭'));
+    }
+    const pending = m.pending ? ` <span style="color:var(--amber-ink,#7a5a12)">${escapeHtml(cuT('· change queued', '· 变更排队中'))}</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)">${escapeHtml(m.name || m.storeCode)}</div>
+        <div style="color:var(--text-3);font-size:12px">${escapeHtml(bits.join(' · '))}${pending}</div>
+      </div>
+      ${btn(shopOpen, shopOpen ? cuT('Close', '关闭') : cuT('Open', '营业'),
+            `ocSetStore('${escapeHtml(m.storeCode)}', ${shopOpen ? 'false' : 'true'})`, 'settings:edit')}
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${btn(master !== 'closed', master === 'closed' ? cuT('Open everything', '全部营业') : cuT('Close everything', '全部关闭'),
+            `ocMaster(${master === 'closed' ? 'true' : 'false'})`, 'settings:edit')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)">${escapeHtml(cuT('Online store', '线上商城'))}</div>
+        <div style="color:var(--text-3);font-size:12px">${escapeHtml(online.online_open ? cuT('open', '营业中') : cuT('closed', '已关闭'))}</div>
+      </div>
+      ${btn(!!online.online_open, online.online_open ? cuT('Close', '关闭') : cuT('Open', '营业'),
+            `ocSetOnline(${online.online_open ? 'false' : 'true'})`, 'settings:edit')}
+    </div>
+    ${rows || `<div style="padding:8px 0;border-top:1px solid var(--line);color:var(--text-3);font-size:12px">${escapeHtml(cuT('No shops yet — only the online store can be opened or closed.', '暂无门店 — 目前只能开关线上商城。'))}</div>`}`;
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the gate is a nicety; the server still refuses */ }
+}
+
+// The three writes. Each disables the panel while it runs, because two taps on
+// "close everything" while the first is in flight is how a merchant ends up
+// reopening a shop they meant to shut.
+async function _ocWrite(path, body, okEn, okCn) {
+  if (_ocBusy) return;
+  _ocBusy = true; paintOpenClose();
+  try {
+    await api(path, { method: 'POST', body });
+    toast(cuT(okEn, okCn), 'ok');
+  } catch (e) {
+    toast(cuT('Could not change the shop status', '修改营业状态失败') + ': ' + (e.message || ''), 'err');
+  }
+  _ocBusy = false;
+  await loadOpenClose();
+}
+window.ocMaster = (open) => _ocWrite('/api/retail-admin/store-status/master', { open },
+  open ? 'Opening every channel' : 'Closing every channel — marketplaces follow within about a minute',
+  open ? '正在开启全部渠道' : '正在关闭全部渠道 — 外卖平台约一分钟内跟随');
+window.ocSetOnline = (open) => _ocWrite('/api/retail-admin/store-status/online', { open },
+  open ? 'Online store is open' : 'Online store is closed',
+  open ? '线上商城已开启' : '线上商城已关闭');
+window.ocSetStore = (code, open) => _ocWrite('/api/retail-admin/store-status/store/' + encodeURIComponent(code), { open },
+  open ? 'Queued — the shop reopens within about a minute' : 'Queued — the shop closes within about a minute',
+  open ? '已排队 — 门店约一分钟内恢复营业' : '已排队 — 门店约一分钟内关闭');
+
 let _opsStores = [];
 async function loadOpsStores() {
   const box = document.getElementById('ops-stores-list');
@@ -199,7 +538,46 @@ async function loadOpsStores() {
       box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">No stores yet. Add one below. · 暂无门店,请在下方添加。</div>';
       return;
     }
-    box.innerHTML = _opsStores.map(s => {
+    _opsPaintStores();
+  } catch (e) {
+    box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// AUDIT O-02. Neither this list nor the team list had a search box. Fine at two
+// locations; not fine at twenty, which is the size of merchant the platform is
+// being built for. The box appears only once there are enough rows to need it —
+// a search field above three stores is furniture.
+let _opsStoreQ = '';
+const OPS_SEARCH_FROM = 6;
+window._opsStoreSearch = function (v) { _opsStoreQ = String(v || ''); _opsPaintStores(); };
+function _opsStoreMatches(s, q) {
+  if (!q) return true;
+  const hay = [s.code, s.name_en, s.name_cn, s.city, s.district, s.address]
+    .filter(Boolean).join(' ').toLowerCase();
+  // Every word must appear somewhere — "tianhe park" finds a Tianhe store on
+  // Park Road, which one substring match over the whole string would not.
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
+function _opsPaintStores() {
+  const box = document.getElementById('ops-stores-list');
+  if (!box) return;
+  const q = _opsStoreQ.trim();
+  const shown = _opsStores.filter(s => _opsStoreMatches(s, q));
+  const searchBar = _opsStores.length >= OPS_SEARCH_FROM
+    ? `<div style="padding:8px 0 4px"><input id="ops-store-q" type="search" value="${escapeHtml(_opsStoreQ)}"
+         placeholder="Search stores · 搜索门店" aria-label="Search stores · 搜索门店"
+         oninput="_opsStoreSearch(this.value)"
+         style="width:100%;max-width:320px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elev-1);color:var(--text-1)"></div>`
+    : '';
+  if (!shown.length) {
+    box.innerHTML = searchBar + `<div style="padding:10px 0;color:var(--text-3)">No store matches “${escapeHtml(q)}”. · 没有匹配的门店。</div>`;
+    _opsRestoreFocus();
+    return;
+  }
+  box.innerHTML = searchBar
+    + (q ? `<div style="padding:2px 0 6px;color:var(--text-3);font-size:12px">${shown.length} of ${_opsStores.length} · 共 ${_opsStores.length} 家</div>` : '')
+    + shown.map(s => {
       const loc = [s.city, s.district].filter(Boolean).join(' · ');
       const gps = (s.lat != null && s.lng != null)
         ? '<span style="color:#16a34a">📍 GPS located · 已定位</span>'
@@ -217,9 +595,21 @@ async function loadOpsStores() {
         </div>
       </div>`;
     }).join('');
-  } catch (e) {
-    box.innerHTML = `<span style="color:var(--danger)">${cuT('Failed to load stores', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></span>`;
-  }
+  _opsRestoreFocus();
+}
+
+// Typing rebuilds the list, which throws away the input the operator is typing
+// into. Put the caret back where it was, or the box loses focus on every
+// keystroke and is unusable with more than one word.
+function _opsRestoreFocus() {
+  const el = document.getElementById('ops-store-q');
+  if (!el) return;
+  if (document.activeElement === el) return;
+  const prev = _opsStoreQ.length;
+  el.focus();
+  // Same as above: type=search refuses setSelectionRange in some engines, and
+  // the focus is the part that makes the box usable.
+  try { el.setSelectionRange(prev, prev); } catch (e) { /* not selectable on this engine — focus is what matters */ }
 }
 
 function _opsStoreEdit(id) {
@@ -316,6 +706,8 @@ async function _opsStoreSave(id) {
     toast('Saved · 已保存', 'success');
     document.getElementById('ops-store-form').innerHTML = '';
     loadOpsStores();
+    // A new or renamed shop is a new row in the open/closed panel above it.
+    loadOpenClose();
     loadIntegrationsStatus();
     // Address saves re-geocode in the background; refresh again shortly so the
     // 📍 GPS badge updates without a manual reload.
@@ -1776,6 +2168,13 @@ let ENTITLEMENTS = {};
 // tab (favicon + title) always stays Tacet, regardless of tenant branding.
 function applyBrand(tenant) {
   if (!tenant) return;
+  // The MERCHANT'S name, for anything that leaves this screen on paper (audit
+  // E-12). Set even when there is no logo and the admin chrome stays Tacet:
+  // a statement handed to a customer, or a count sheet on a clipboard, is the
+  // shop's document and has to carry the shop's name — the older purchase-order
+  // sheet had "Roots" written into the file, which is the wrong name for every
+  // merchant but one.
+  window.TD_SHOP_NAME = tenant.brand || tenant.name || '';
   const logoUrl = tenant.brandLogoUrl || null;
   const markUrl = tenant.brandMarkUrl || logoUrl;
   // The admin's default identity is ALWAYS "tacet". A tenant only takes over the
@@ -2119,12 +2518,39 @@ function tmPaintStats() {
   $('#tmStatNever').textContent = never;
   $('#tmStatLimited').textContent = limited;
 }
+// AUDIT O-02, the team half. Same rule as the stores list: the box appears only
+// once there are enough people to need it, and it matches on name, username,
+// role and store — the four things somebody actually remembers about a
+// colleague when they are looking for them.
+let _tmQ = '';
+window.tmSearch = function (v) { _tmQ = String(v || ''); tmRender(); };
+function tmMatches(u, q) {
+  if (!q) return true;
+  const hay = [u.displayName, u.username, tmRoleLabel(u.role),
+    (tmNeedsStore(u.role) && u.retailStoreId) ? tmStoreName(u.retailStoreId) : '']
+    .filter(Boolean).join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
+}
 function tmRender() {
   tmPaintStats();
   const membersEl = $('#tmMembers');
   if (!membersEl) return;
   if (!TM_TEAM.length) { membersEl.innerHTML = `<div class="tm-empty">${cuT('No team members yet.', '暂无团队成员。')}</div>`; return; }
-  membersEl.innerHTML = TM_TEAM.map(u => {
+  const q = _tmQ.trim();
+  const shown = TM_TEAM.filter(u => tmMatches(u, q));
+  const bar = TM_TEAM.length >= 6
+    ? `<div class="tm-searchbar"><input id="tmQ" type="search" value="${escapeHtml(_tmQ)}"
+         placeholder="${cuT('Search name, username, role or store', '搜索姓名、用户名、角色或门店')}"
+         aria-label="${cuT('Search team', '搜索团队')}" oninput="tmSearch(this.value)"></div>`
+    : '';
+  if (!shown.length) {
+    membersEl.innerHTML = bar + `<div class="tm-empty">${cuT('Nobody matches', '没有匹配的成员')} “${escapeHtml(q)}”.</div>`;
+    tmRestoreFocus();
+    return;
+  }
+  membersEl.innerHTML = bar
+    + (q ? `<div class="tm-searchcount">${shown.length} / ${TM_TEAM.length}</div>` : '')
+    + shown.map(u => {
     const bits = [];
     bits.push(`<span class="tm-u">@${escapeHtml(u.username)}</span>`);
     if (tmNeedsStore(u.role) && u.retailStoreId) bits.push(`<span class="tm-dot"></span>${escapeHtml(tmStoreName(u.retailStoreId))}`);
@@ -2147,6 +2573,18 @@ function tmRender() {
   membersEl.querySelectorAll('.tm-edit').forEach(b => {
     b.addEventListener('click', () => tmOpenEdit(Number(b.getAttribute('data-id'))));
   });
+  tmRestoreFocus();
+}
+
+// The list is rebuilt on every keystroke, which destroys the input being typed
+// into. Put the caret back, or the box drops focus after one character.
+function tmRestoreFocus() {
+  const el = document.getElementById('tmQ');
+  if (!el || document.activeElement === el) return;
+  el.focus();
+  // An input of type=search refuses setSelectionRange in some engines. The
+  // focus above is the part that matters; the caret position is a nicety.
+  try { el.setSelectionRange(_tmQ.length, _tmQ.length); } catch (e) { /* not selectable on this engine — focus is what matters */ }
 }
 async function tmLoad() {
   try {

@@ -146,7 +146,7 @@ function recorder() {
     logs, alertsSent, lines,
     log: (sc, msg) => lines.push({ sc, msg }),
     logSync: (sc, type, status, detail, msg) => logs.push({ sc, type, status, detail, msg }),
-    sendOpsAlert: (msg) => alertsSent.push(msg),
+    notifyMerchant: (msg) => alertsSent.push(msg),
   };
 }
 
@@ -166,7 +166,7 @@ function latchStub() {
 function run(db, rec, { descriptor = ELEME, alerts = latchStub(), storeCodes = [STORE] } = {}) {
   return sweepStockDrift(db, descriptor, {
     storeCodes, log: rec.log, logSync: rec.logSync,
-    sendOpsAlert: rec.sendOpsAlert, alerts,
+    notifyMerchant: rec.notifyMerchant, alerts,
   });
 }
 

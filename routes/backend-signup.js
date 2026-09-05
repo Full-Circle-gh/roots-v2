@@ -61,17 +61,45 @@ function canProvision(req) {
 }
 
 router.get('/api/backend/signup/status', (req, res) => {
-  res.json({ open: SIGNUP_OPEN(), canProvision: canProvision(req) });
+  // The country list, and what each one IMPLIES. Sent together so the sign-up
+  // page can show the merchant their currency, time zone and shop language as
+  // they pick — the three questions it is not asking. A consequence shown is a
+  // consequence they can disagree with; the previous behaviour was to decide
+  // all three in silence (audit D-08).
+  const locales = require('../lib/locale-defaults');
+  const options = locales.countries().map((cc) => {
+    const L = locales.resolveLocale({ country: cc });
+    return { code: cc, currency: L.currency.code, symbol: L.currency.symbol,
+             timezone: L.timezone, language: L.language };
+  });
+  res.json({ open: SIGNUP_OPEN(), canProvision: canProvision(req), countries: options });
 });
 
 router.post('/api/backend/signup', signupLimiter, express.json(), (req, res) => {
   if (!canProvision(req)) {
     return res.status(403).json({ success: false, error: 'Signup is invite-only right now · 暂为邀请制,敬请期待' });
   }
-  const { company, brand, username, password, owner_name } = req.body || {};
+  // Audit D-08 / H-01. `country` is the one new question on the form; currency,
+  // time zone and language follow from it and are all editable afterwards. The
+  // three are accepted here as well so a caller that knows better — an import,
+  // a platform staffer setting an account up — can say so directly.
+  const { company, brand, username, password, owner_name,
+          country, currency, timezone, language } = req.body || {};
   try {
-    const r = provisionTenant({ company, brand, ownerUsername: username, ownerPassword: password, ownerName: owner_name });
-    res.json({ success: true, tenantId: r.tenantId, username: r.ownerUsername });
+    const r = provisionTenant({
+      company, brand, ownerUsername: username, ownerPassword: password, ownerName: owner_name,
+      country, currency, timezone, language,
+    });
+    res.json({
+      success: true, tenantId: r.tenantId, username: r.ownerUsername,
+      // What they were actually given, so the page can show it back rather than
+      // leaving the merchant to discover their currency on the pricing screen.
+      locale: r.locale,
+      // Audit H-03: null when no address could be issued. The page must say so
+      // rather than implying a shop somebody can visit.
+      storefront: r.storefrontHost || null,
+      storefrontWhy: r.storefrontHost ? null : (r.storefrontWhy || null),
+    });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }

@@ -64,6 +64,7 @@ function cuSearchDebounced() {
 // old page and could land the operator on an empty one.)
 function cuFilterChanged() {
   CU_PAGE = 1;
+  cuSyncClearBtn();
   cuLoad();
 }
 
@@ -239,6 +240,16 @@ function cuFilterClearAll() {
   if (segs) segs.querySelectorAll('.cul-seg').forEach(b => b.classList.toggle('on', (b.dataset.seg || '') === ''));
   cuPaintTierFilterUI();
   cuFilterChanged();
+}
+// Show or hide the Clear button to match (audit Q-03). Called on every load, so
+// it tracks the controls however they were changed — a segment, a tier chip, a
+// tag, the channel menu, or typing. The button was previously offered ONLY from
+// the empty state, which is the one case where it is least needed: a filter that
+// matched nothing announces itself, and a filter that matched forty people out
+// of four hundred does not.
+function cuSyncClearBtn() {
+  const b = document.getElementById('cu-clear-btn');
+  if (b) b.hidden = !cuAnyFilter();
 }
 // True when anything is narrowing the roster — drives which empty state shows.
 function cuAnyFilter() {
@@ -767,6 +778,9 @@ async function _cuLoad(opts) {
   const fp = _cuFp(rows);
   if (silent && fp === _CU_LAST_FP && tbody.querySelector('tr.cul-row .cul-mono, .cul-state')) return;
   const prevSeen = _CU_SEEN_IDS;
+  // Tracks the controls however they were changed, including the paths that do
+  // not go through cuFilterChanged (a tag picked from a drawer, a restored view).
+  cuSyncClearBtn();
   _CU_LAST_FP = fp;
   _CU_SEEN_IDS = new Set(rows.map(r => r.id));
 
@@ -1393,6 +1407,10 @@ function cuRenderDetail() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div id="cux-more-menu" class="cux-menu" hidden>
+        <button class="cux-mi" onclick="cuMoreClose(); cuPrintStatement()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg>
+          Print statement · 打印对账单</button>
+        <div class="cux-sep"></div>
         <button class="cux-mi" onclick="cuMoreClose(); cuForceLogout(event)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
           Sign out all devices · 退出所有设备

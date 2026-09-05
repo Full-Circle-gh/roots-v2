@@ -312,6 +312,46 @@ const MEDIA_INLINE_MIME = new Set([
 // customer, and the mini app reads the amount straight from here.
 const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
 
+const businessDate = require('../lib/business-date');
+// Money, exact to the cent (audit I-02). `lifetime_spend = lifetime_spend + ?`
+// is addition performed by SQLite over a floating-point column: 0.01 added a
+// thousand times is 9.999999999999831, not 10. The running totals below are
+// computed here instead, in whole cents.
+const money = require('../lib/money');
+// What was deleted, kept so it can be put back (audit E-07).
+const recycle = require('../lib/recycle');
+// ── The shop's own day boundary, for SQL (audit A-05) ─────────────────────
+// Thirty-five day-boundary calculations in this file were the literal string
+// '+8 hours', so today's takings, the dashboard, the finance window and "new
+// this week" ended at midnight in Guangzhou for every merchant on the platform.
+// lib/business-date.js already existed and said why that was wrong; one file
+// used it.
+//
+// THE SAME ZONE THE SCREEN USES. This resolves the first active location's
+// timezone — character for character the query GET /api/retail-admin/config
+// answers with, which is what the client hands to td-datetime.js as TD_TZ. They
+// must agree: a screen that RENDERS a row at 00:30 Monday while the server
+// BUCKETS it into Sunday is a screen arguing with itself, and the operator has
+// no way to tell which half is lying.
+//
+// Memoised for a minute, per account. It is read many times per request and the
+// answer changes when somebody edits a location's zone, which is not a thing
+// that happens twice in a minute.
+const _tzMemo = new Map();          // tenantId -> { at, shift }
+function shopSqlShift() {
+  const tid = (() => { try { return currentTenantId() || ROOTS_TENANT_ID; } catch (e) { return ROOTS_TENANT_ID; } })();
+  const hit = _tzMemo.get(tid);
+  const now = Date.now();
+  if (hit && now - hit.at < 60_000) return hit.shift;
+  // The library owns the resolution so every reader agrees — including
+  // finance-summary.js and restock.js, which ask the same question. A column
+  // absent on an old account database falls back to UTC+8 there, which is
+  // exactly what this code did before, so an un-migrated account behaves
+  // identically rather than shifting every date it shows.
+  const shift = businessDate.sqlDayShiftForShop(tdb());
+  _tzMemo.set(tid, { at: now, shift });
+  return shift;
+}
 function loadConfig() {
   const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();
   const out = { version: 0 };
@@ -2469,7 +2509,7 @@ function socialProofForProduct(id) {
   try {
     const row = tdb().prepare(`
       SELECT
-        COUNT(DISTINCT CASE WHEN date(o.placed_at, '+8 hours') = date('now', '+8 hours')
+        COUNT(DISTINCT CASE WHEN date(o.placed_at, '${shopSqlShift()}') = date('now', '${shopSqlShift()}')
                             THEN o.customer_id END) AS c_today,
         COUNT(DISTINCT CASE WHEN o.placed_at >= datetime('now', '-7 days')
                             THEN o.customer_id END) AS c_week,
@@ -4842,6 +4882,7 @@ function markOrderPaid(orderId) {
           body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
           url: '/?tab=orders',
           tag: 'retail-order-' + orderId,
+          event: 'new_order',      // the switch this answers to (audit E-10)
         });
       }
     } catch (e) { console.warn('[markOrderPaid operator push]', e.message); }
@@ -13297,7 +13338,7 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 function guanyiPickupSales(db, from, to, opts) {
   const out = { revenue: 0, lines: 0, orders: 0, byBucket: {} };
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const hourly = !!(opts && opts.hourly);
     const bkL = hourly ? `strftime('%H', l.created_at, '${TZ}')`  : `date(l.created_at, '${TZ}')`;
     const bkP = hourly ? `strftime('%H', pl.created_at, '${TZ}')` : `date(pl.created_at, '${TZ}')`;
@@ -13371,7 +13412,7 @@ function guanyiPickupSales(db, from, to, opts) {
 function topupCashReceived(db, from, to, opts) {
   const out = { received: 0, byBucket: {} };
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const hourly = !!(opts && opts.hourly);
     const bk = hourly ? `strftime('%H', paid_at, '${TZ}')` : `date(paid_at, '${TZ}')`;
     const rows = db.prepare(`
@@ -13400,7 +13441,7 @@ function topupCashReceived(db, from, to, opts) {
 // with the day the order settled. Returns a rounded ¥ total.
 function storeCreditRedeemed(db, from, to) {
   try {
-    const TZ = '+8 hours';
+    const TZ = shopSqlShift();
     const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
     const row = db.prepare(`
       SELECT COALESCE(SUM(balance_used), 0) AS redeemed
@@ -13418,7 +13459,7 @@ function storeCreditRedeemed(db, from, to) {
 // "Today" is GZ-local (UTC+8), same convention as the dashboard.
 router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => {
   try {
-    const TZ    = '+8 hours';
+    const TZ    = shopSqlShift();
     const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
     const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
@@ -13571,7 +13612,7 @@ function dashMemoBust(tenantId) {
 }
 
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
-  const TZ    = '+8 hours';
+  const TZ    = shopSqlShift();
   // gzgrocery is a wholesale pickup channel whose revenue is folded in via the
   // Guanyi/order-read ledger (guanyiPickupSales, below). Its display-only mirror
   // rows in retail_orders (channel='gzgrocery') must therefore be excluded from
@@ -14254,7 +14295,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 const _catHiCache = new Map();   // tenant → { at, body }
 const CAT_HI_TTL = 60 * 1000;
 router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, res) => {
-  const TZ = '+8 hours';
+  const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
   const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
@@ -14485,8 +14526,8 @@ function buildActivityQuery(q) {
   // tab counts are computed over `whereNoSource` so the switcher always shows
   // every channel's count regardless of which tab is selected; the table + CSV
   // use `where` (base + the picked channel).
-  const base = [`date(datetime(l.created_at,'+8 hours')) >= @from`,
-                `date(datetime(l.created_at,'+8 hours')) <= @to`];
+  const base = [`date(datetime(l.created_at,'${shopSqlShift()}')) >= @from`,
+                `date(datetime(l.created_at,'${shopSqlShift()}')) <= @to`];
   const params = { from, to };
   if (q.store_id && /^\d+$/.test(String(q.store_id))) { base.push('l.store_id = @store_id'); params.store_id = Number(q.store_id); }
   const term = String(q.q || '').trim();
@@ -14501,7 +14542,7 @@ function buildActivityQuery(q) {
 function activityRows({ where, params }, limit, offset) {
   return tdb().prepare(`
     SELECT l.id,
-           datetime(l.created_at,'+8 hours') AS ts_local,
+           datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
            ${ACT_SOURCE_SQL} AS source,
            l.reason, l.store_id,
            COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store,
@@ -14568,8 +14609,8 @@ function buildChangeLogFilter(req) {
   // Day bounds, read as Guangzhou days because that is what the screen shows.
   const from = String(req.query.from || '').trim();
   const to   = String(req.query.to   || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(a.created_at,'+8 hours') >= ?"); params.push(from); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(a.created_at,'+8 hours') <= ?"); params.push(to); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push(`date(a.created_at,'${shopSqlShift()}') >= ?`); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push(`date(a.created_at,'${shopSqlShift()}') <= ?`); params.push(to); }
 
   return { whereSql: 'WHERE ' + where.join(' AND '), params };
 }
@@ -14581,7 +14622,7 @@ function buildChangeLogFilter(req) {
 const CHANGE_LOG_SELECT = `
   SELECT a.id, a.username, a.action, a.entity_type, a.entity_id, a.details, a.ip_address,
          a.created_at,
-         datetime(a.created_at,'+8 hours') AS at_local
+         datetime(a.created_at,'${shopSqlShift()}') AS at_local
     FROM activity_log a`;
 
 // GET /api/retail-admin/activity-log — the change history, newest first.
@@ -14677,8 +14718,8 @@ function buildNotifyLogFilter(req) {
 
   const from = String(req.query.from || '').trim();
   const to   = String(req.query.to   || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push("date(n.created_at,'+8 hours') >= ?"); params.push(from); }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push("date(n.created_at,'+8 hours') <= ?"); params.push(to); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push(`date(n.created_at,'${shopSqlShift()}') >= ?`); params.push(from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(to))   { where.push(`date(n.created_at,'${shopSqlShift()}') <= ?`); params.push(to); }
 
   return { whereSql: 'WHERE ' + where.join(' AND '), params };
 }
@@ -14771,7 +14812,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
          WHERE ${built.where}
          GROUP BY l.product_id, l.store_id
       )
-      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+      SELECT datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
              COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
              p.sku,
              COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store
@@ -14797,7 +14838,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         JOIN retail_stock_ledger l ON l.id = last.last_id
        WHERE l.balance_after = 0 AND l.delta < 0`).get(built.params).n;
     const big = tdb().prepare(`
-      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+      SELECT datetime(l.created_at,'${shopSqlShift()}') AS ts_local,
              ${ACT_SOURCE_SQL} AS source,
              COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
              p.sku, l.delta, l.actor_label,
@@ -16354,7 +16395,12 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
 });
 
 router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) => {
-  tdb().prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(parseInt(req.params.id, 10));
+  const id = parseInt(req.params.id, 10);
+  // Kept before it goes (audit E-07). A coupon is archived rather than removed,
+  // so the copy is what puts it on the "recently deleted" list at all — without
+  // it, switching one back on means knowing it existed and finding it.
+  recycle.capture(tdb(), 'voucher', id, (req.user && req.user.username) || null);
+  tdb().prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
@@ -16694,7 +16740,7 @@ function buildCustomerFilter(query) {
   // as "today" on the tile and as a day old on the roster. Today plus the
   // previous 6 GZ days, so today is always inside this week.
   if      (segment === 'blocked')  where.push('is_blocked = 1');
-  else if (segment === 'new_week') where.push("date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days')");
+  else if (segment === 'new_week') where.push(`date(created_at, '${shopSqlShift()}') >= date('now', '${shopSqlShift()}', '-6 days')`);
   else if (segment === 'sleeping') {
     where.push(`EXISTS (${SEG_PAID_EXISTS})`);
     params.push(...BC_PAID_STATUSES);
@@ -16731,9 +16777,9 @@ router.get('/api/retail-admin/customers/export.csv', requireRetailAdmin, (req, r
               lifetime_spend, points_balance, balance, is_blocked,
               ${CHANNEL_SQL} AS channel,
               (SELECT COUNT(*) FROM retail_orders o WHERE o.customer_id = retail_customers.id) AS orders_count,
-              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '+8 hours') AS last_order_at,
-              datetime(created_at,     '+8 hours') AS joined_local,
-              datetime(last_login_at,  '+8 hours') AS last_seen_local
+              datetime((SELECT MAX(o.placed_at) FROM retail_orders o WHERE o.customer_id = retail_customers.id), '${shopSqlShift()}') AS last_order_at,
+              datetime(created_at,     '${shopSqlShift()}') AS joined_local,
+              datetime(last_login_at,  '${shopSqlShift()}') AS last_seen_local
          FROM retail_customers
          ${whereSql}
         ORDER BY id ASC`
@@ -16869,7 +16915,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     const seg = tdb().prepare(
       `SELECT
          COALESCE(SUM(CASE WHEN is_blocked = 0 THEN 1 ELSE 0 END), 0) AS all_count,
-         COALESCE(SUM(CASE WHEN is_blocked = 0 AND date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days') THEN 1 ELSE 0 END), 0) AS new_week,
+         COALESCE(SUM(CASE WHEN is_blocked = 0 AND date(created_at, '${shopSqlShift()}') >= date('now', '${shopSqlShift()}', '-6 days') THEN 1 ELSE 0 END), 0) AS new_week,
          COALESCE(SUM(CASE WHEN is_blocked = 0
                             AND EXISTS (${SEG_PAID_EXISTS})
                             AND NOT EXISTS (${SEG_PAID_EXISTS} AND o.placed_at >= datetime('now', '-60 days'))
@@ -21967,8 +22013,8 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
               free_of, nutrition, product_facts, tags, notes,
               ship_modes, ship_from_supplier, supplier_paused, is_batch_made, oos_policy,
               is_market, is_restock_only, sort_order, image_url,
-              datetime(created_at,'+8 hours') AS created_local,
-              datetime(updated_at,'+8 hours') AS updated_local
+              datetime(created_at,'${shopSqlShift()}') AS created_local,
+              datetime(updated_at,'${shopSqlShift()}') AS updated_local
          FROM store_products
         WHERE COALESCE(is_active, 1) = 1
         ORDER BY is_published DESC, sort_order ASC, name_en ASC`
@@ -22282,7 +22328,7 @@ router.get('/api/retail-admin/products/:id/variant-store-stocks', requireRetailA
 router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
-  const TZ = '+8 hours';
+  const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
   const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
@@ -22966,7 +23012,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
        WHERE i.product_id IN (${ph})
          AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
          AND COALESCE(o.channel,'') != 'gzgrocery'
-         AND date(COALESCE(o.paid_at, o.placed_at), '+8 hours') BETWEEN ? AND ?
+         AND date(COALESCE(o.paid_at, o.placed_at), '${shopSqlShift()}') BETWEEN ? AND ?
        GROUP BY i.product_id
     `).all(...ids, from, to);
     const bySales = new Map(salesRows.map(r => [r.product_id, r.units]));
@@ -24115,10 +24161,10 @@ router.get('/api/retail-admin/orders/export.csv', requireRetailAdmin, (req, res)
               o.tracking_carrier, o.tracking_number, o.tracking_status,
               o.needs_invoice, o.invoice_status, o.invoice_number, o.invoice_title,
               o.staff_note,
-              datetime(o.placed_at,     '+8 hours') AS placed_local,
-              datetime(o.paid_at,       '+8 hours') AS paid_local,
-              datetime(o.dispatched_at, '+8 hours') AS dispatched_local,
-              datetime(o.delivered_at,  '+8 hours') AS delivered_local
+              datetime(o.placed_at,     '${shopSqlShift()}') AS placed_local,
+              datetime(o.paid_at,       '${shopSqlShift()}') AS paid_local,
+              datetime(o.dispatched_at, '${shopSqlShift()}') AS dispatched_local,
+              datetime(o.delivered_at,  '${shopSqlShift()}') AS delivered_local
          FROM retail_orders o
     LEFT JOIN retail_customers c ON c.id = o.customer_id
     LEFT JOIN retail_stores    s ON s.id = o.store_id
@@ -24465,18 +24511,67 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   res.json({ success: true, data: out });
 });
 
-// Guangzhou districts where the operator may CHOOSE the dispatch method at
-// dispatch time — send by a same-city rider (arrival time) OR by JD logistics
-// (waybill) — rather than the method being locked by the routing at checkout.
-// These are the outer five opt-in same-day districts (花都/番禺/南沙/从化/增城)
-// plus 白云, where both a rider and a courier are realistic. Central districts
-// (越秀/天河/海珠/荔湾/黄埔…) stay rider-only. District names are matched with
-// the trailing 区 stripped so "白云区"/"白云" both hit.
+// Districts where the operator may CHOOSE the dispatch method at dispatch time
+// — send by a same-city rider (arrival time) OR by a courier (waybill) — rather
+// than the method being locked by the routing at checkout.
+//
+// ── AUDIT D-10 ────────────────────────────────────────────────────────────
+// This was a hard-coded set of six Guangzhou district names behind a hard-coded
+// "is this Guangzhou?" gate, so a merchant anywhere else could never offer the
+// choice at all: the function returned false on the city test before it ever
+// looked at a district. Delivery areas are the merchant's to describe, and the
+// pattern for that already existed one file over — lib/inventory.js reads
+// `routing.gz_express_excluded_districts` from storefront_config and falls back
+// to a default. This does the same thing.
+//
+// THE FALLBACK IS THE OLD BEHAVIOUR, EXACTLY. An account that has not set the
+// key gets the Guangzhou rule it has always had, city gate included, so nothing
+// moves for the merchant this was written for. An account that HAS set one is
+// taken at its word and the city gate does not apply — the whole point is that
+// somewhere else is somewhere else.
+//
+// The six defaults are the outer five opt-in same-day districts
+// (花都/番禺/南沙/从化/增城) plus 白云, where both a rider and a courier are
+// realistic; the central districts stay rider-only. Names are matched with a
+// trailing 区 stripped, and case-folded, so "白云区"/"白云"/"Baiyun" all hit —
+// a merchant typing their own list should not have to guess the house spelling.
+const METHOD_CHOICE_CFG = 'delivery.methodChoiceDistricts';
 const GZ_METHOD_TOGGLE_DISTRICTS = new Set(['白云', '花都', '番禺', '南沙', '从化', '增城']);
+
+// TRIM FIRST. Stripping the suffix before trimming leaves "  白云区 " as
+// "白云区" — the $ anchor cannot see the 区 through a trailing space — so a
+// merchant whose spreadsheet carried a stray space would silently not match
+// their own district. Trim, strip, trim again, fold.
+const normDistrict = (s) => String(s == null ? '' : s).trim().replace(/[区縣县市]$/, '').trim().toLowerCase();
+
+/**
+ * The merchant's own list, or null when they have not set one.
+ * A present-but-empty list is a DECISION — "nowhere may choose" — and is
+ * returned as an empty Set rather than collapsing to the default, because
+ * turning a rule off must not silently turn the old one back on.
+ */
+function methodChoiceDistricts() {
+  try {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(METHOD_CHOICE_CFG);
+    if (!row) return null;
+    const arr = JSON.parse(row.value_json);
+    if (!Array.isArray(arr)) return null;
+    return new Set(arr.filter(Boolean).map(normDistrict));
+  } catch (e) {
+    // A malformed config row must not decide dispatch. Fall back to the rule
+    // this account had before it was configurable.
+    return null;
+  }
+}
+
 function gzMethodToggleAllowed(address) {
-  if (!address || !isGuangzhou(address.city || '')) return false;
-  const d = String(address.district || '').replace(/区$/, '').trim();
-  return GZ_METHOD_TOGGLE_DISTRICTS.has(d);
+  if (!address) return false;
+  const own = methodChoiceDistricts();
+  const d = normDistrict(address.district);
+  if (own) return d ? own.has(d) : false;
+  // Unconfigured: the Guangzhou rule, unchanged.
+  if (!isGuangzhou(address.city || '')) return false;
+  return GZ_METHOD_TOGGLE_DISTRICTS.has(String(address.district || '').replace(/区$/, '').trim());
 }
 
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
@@ -29047,6 +29142,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
             body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
             url: '/?tab=orders',
             tag: 'retail-order-' + id,
+            event: 'new_order',    // the switch this answers to (audit E-10)
           });
         }
       } catch (e) { console.warn('[admin mark-paid operator push]', e.message); }
@@ -32596,9 +32692,13 @@ function awardOrderPoints(orderId) {
   // — otherwise sub-rate orders (subtotal below points.earnRate) would be
   // double-counted on retries.
   const tx = tdb().transaction(() => {
+    // The NEW TOTAL, added exactly, rather than `lifetime_spend + ?` in SQL
+    // (audit I-02). Inside the transaction, so the read it adds to cannot move
+    // between the read and the write.
+    const before = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(o.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
-    ).run(spend, pts, o.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance + ? WHERE id = ?'
+    ).run(money.addMajor(before ? before.s : 0, spend), pts, o.customer_id);
     const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(o.customer_id);
     // Auto-promote tier_key off the new lifetime_spend in the same transaction
     // so leaderboards / admin lists / next reads all agree without waiting on
@@ -32643,9 +32743,12 @@ function reverseOrderPoints(orderId) {
   const o = tdb().prepare('SELECT subtotal FROM retail_orders WHERE id = ?').get(orderId);
   const spend = Math.max(0, Number(o?.subtotal) || 0);
   const tx = tdb().transaction(() => {
+    // Subtracted exactly, and still floored at zero — a refund must not be able
+    // to drive a lifetime total negative (audit I-02).
+    const before = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(earn.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = MAX(0, COALESCE(lifetime_spend, 0) - ?), points_balance = points_balance - ? WHERE id = ?'
-    ).run(spend, reverseDelta, earn.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance - ? WHERE id = ?'
+    ).run(Math.max(0, money.addMajor(before ? before.s : 0, -spend)), reverseDelta, earn.customer_id);
     const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(earn.customer_id);
     // Refunds reduce lifetime_spend, so the tier may need to demote in the
     // same transaction. Sticky-upward semantics would skip this — current
@@ -33526,9 +33629,11 @@ function finalizeOrderAddon(addonId) {
     // a distinct source so awardOrderPoints' idempotency marker is untouched.
     // (Known v1 gap: a later refund of the whole order reverses only the
     // original order_earn row, not this add-on row — small amounts, rare.)
+    // Same exact addition as the order-earn path above (audit I-02).
+    const beforeAddon = tdb().prepare('SELECT COALESCE(lifetime_spend, 0) AS s FROM retail_customers WHERE id = ?').get(a.customer_id);
     tdb().prepare(
-      'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
-    ).run(Math.max(0, Number(a.amount) || 0), pts, a.customer_id);
+      'UPDATE retail_customers SET lifetime_spend = ?, points_balance = points_balance + ? WHERE id = ?'
+    ).run(money.addMajor(beforeAddon ? beforeAddon.s : 0, Math.max(0, Number(a.amount) || 0)), pts, a.customer_id);
     const fresh = tdb().prepare(
       'SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?'
     ).get(a.customer_id);
@@ -34275,6 +34380,10 @@ router.patch('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, express
 
 router.delete('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // Copied first (audit E-07) — a zone carries its fees, its caps and its free
+  // threshold, and retyping those from memory is how a delivery charge ends up
+  // quietly different from what it was.
+  recycle.capture(tdb(), 'delivery_zone', id, (req.user && req.user.username) || null);
   const r = tdb().prepare('DELETE FROM retail_delivery_zones WHERE id = ?').run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'delivery_zone', id, null, req.ip);
