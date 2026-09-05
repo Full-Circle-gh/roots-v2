@@ -29,6 +29,7 @@
     "test:settings-findable": "node scripts/test_settings_findable.js",
     "test:recycle": "node scripts/test_recycle.js",
     "test:asset-delivery": "node scripts/test_asset_delivery.js",
+    "test:clear-filters": "node scripts/test_clear_filters.js",
     "verify:alert-audience": "node scripts/check-alert-audience.js",
     "verify:swallowed-errors": "node scripts/check-swallowed-errors.js",
     "test:awaiting-restock": "node scripts/test_awaiting_restock_client.js",

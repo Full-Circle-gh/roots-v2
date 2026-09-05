@@ -4169,6 +4169,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
           <input type="text" id="cu-q" data-ph-en="Search name or phone" data-ph-cn="搜索姓名或电话" placeholder="Search name or phone" oninput="cuSearchDebounced()">
         </span>
+        <!-- Clear filters (audit Q-03). Customers offered this ONLY from the
+             empty state — so a filter that matched forty people had no way out
+             but undoing each control by hand, while a filter that matched none
+             did. Waste's rule is the right one and Orders already follows it:
+             the button is present whenever something is narrowing the list, and
+             absent otherwise, so it is a status line as well as a control. -->
+        <button class="btn btn-sm ord-clear-btn" id="cu-clear-btn" type="button" hidden
+                onclick="cuFilterClearAll()"
+                title="Show every customer again · 显示全部顾客">Clear filters · 清除筛选</button>
         <!-- Download the customers currently listed — all of them, not just this
              page, and filtered exactly as the roster is. -->
         <button class="btn btn-sm" id="cu-export-btn" type="button" onclick="cuExportCsv()"
@@ -4521,6 +4530,13 @@
            display / empty-photo style were per-operator tweaks to the card
            grid that had been display:none for most of their life; unhiding
            them put nine settings on screen for a choice nobody had missed. -->
+      <!-- Clear filters (audit Q-03 / B-06). Waste's rule, which Orders and
+           Customers now follow too: present only while something is actually
+           narrowing the list. Products offered it from the empty state alone —
+           the one case where the operator already knows. -->
+      <button class="btn btn-sm ord-clear-btn" id="pa-clear-btn" type="button" hidden
+              onclick="paClearFilters()"
+              title="Show every product again · 显示全部商品">Clear filters · 清除筛选</button>
       <button class="btn btn-sm" id="pa-export-btn" type="button" onclick="paExportCsv()" title="Download every product as a spreadsheet · 下载全部产品明细"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
       <!-- Audit E-12. A stocktake happens away from a screen, so the sheet that
            goes to the shelf is paper. Beside Export because both are "take this

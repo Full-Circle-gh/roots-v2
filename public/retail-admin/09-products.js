@@ -193,6 +193,19 @@ function paClearFilters() {
   paFillSubFilter();   // category back to All → the subcategory picker hides itself
   paRender();
 }
+// Is anything narrowing the catalogue right now? (audit Q-03 / B-06.) Same rule
+// as Waste and Orders: a control that is always there but does nothing four
+// times out of five is noise, and one that appears when there is something to
+// clear is a status line as well as a button.
+function paAnyFilter() {
+  const v = (id) => (document.getElementById(id) || {}).value || '';
+  return !!((v('pa-search') || '').trim() || (v('pa-filter') && v('pa-filter') !== 'all')
+    || (v('pa-subfilter') && v('pa-subfilter') !== 'all') || (PA_STATUS && PA_STATUS !== 'all'));
+}
+function paSyncClearBtn() {
+  const b = document.getElementById('pa-clear-btn');
+  if (b) b.hidden = !paAnyFilter();
+}
 function paSyncStatusFilter() {
   const sel = document.getElementById('pa-statusfilter');
   if (!sel) return;
@@ -2322,6 +2335,9 @@ function paRender() {
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   PA_FILTERED_IDS = rows.map(p => p.id);
+  // On every render, so the button tracks the controls however they were
+  // changed — a KPI tile, a dashboard deep-link, or typing (audit Q-03).
+  paSyncClearBtn();
   // TWO DIFFERENT NOTHINGS. One message — "No products match this filter" —
   // used to answer both a filter that matched nothing AND a catalogue with
   // nothing in it, so a shop that had just signed up opened the screen that

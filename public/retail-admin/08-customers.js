@@ -64,6 +64,7 @@ function cuSearchDebounced() {
 // old page and could land the operator on an empty one.)
 function cuFilterChanged() {
   CU_PAGE = 1;
+  cuSyncClearBtn();
   cuLoad();
 }
 
@@ -239,6 +240,16 @@ function cuFilterClearAll() {
   if (segs) segs.querySelectorAll('.cul-seg').forEach(b => b.classList.toggle('on', (b.dataset.seg || '') === ''));
   cuPaintTierFilterUI();
   cuFilterChanged();
+}
+// Show or hide the Clear button to match (audit Q-03). Called on every load, so
+// it tracks the controls however they were changed — a segment, a tier chip, a
+// tag, the channel menu, or typing. The button was previously offered ONLY from
+// the empty state, which is the one case where it is least needed: a filter that
+// matched nothing announces itself, and a filter that matched forty people out
+// of four hundred does not.
+function cuSyncClearBtn() {
+  const b = document.getElementById('cu-clear-btn');
+  if (b) b.hidden = !cuAnyFilter();
 }
 // True when anything is narrowing the roster — drives which empty state shows.
 function cuAnyFilter() {
@@ -767,6 +778,9 @@ async function _cuLoad(opts) {
   const fp = _cuFp(rows);
   if (silent && fp === _CU_LAST_FP && tbody.querySelector('tr.cul-row .cul-mono, .cul-state')) return;
   const prevSeen = _CU_SEEN_IDS;
+  // Tracks the controls however they were changed, including the paths that do
+  // not go through cuFilterChanged (a tag picked from a drawer, a restored view).
+  cuSyncClearBtn();
   _CU_LAST_FP = fp;
   _CU_SEEN_IDS = new Set(rows.map(r => r.id));
 
