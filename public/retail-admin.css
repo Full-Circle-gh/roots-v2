@@ -14448,3 +14448,24 @@ main:focus { outline: none; }
    emergency, and the calm rule holds here as everywhere else. */
 #sub-sent .nl-ok  { color: var(--accent); font-weight: 500; }
 #sub-sent .nl-bad { color: var(--warn); font-weight: 500; }
+
+/* "Was the customer told" on the order drawer (audit P-02). Reads as a short
+   receipt, not a table: one line per kind of message, the outcome first.
+   Amber for "did not arrive", never red — the order is fine, the message is
+   not, and the calm rule holds. */
+.ord-told { display: flex; flex-direction: column; gap: 4px; }
+.ord-told-row {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font: 400 12.5px/1.6 var(--f-sans); color: var(--text-2);
+}
+.ord-told-mark {
+  flex: none; width: 16px; text-align: center; font-weight: 700;
+  color: var(--accent);
+}
+.ord-told-row.is-bad .ord-told-mark { color: var(--warn); }
+.ord-told-what { color: var(--text-1); font-weight: 500; }
+.ord-told-when { margin-left: auto; font-size: 11.5px; white-space: nowrap; }
+/* The reason drops to its own line so a long one never squeezes the timestamp
+   off the row — it is the part the merchant acts on. */
+.ord-told-why { flex-basis: 100%; padding-left: 24px; color: var(--warn); }
+.ord-told-foot { margin-top: 8px; }

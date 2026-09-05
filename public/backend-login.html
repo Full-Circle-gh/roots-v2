@@ -386,7 +386,10 @@
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
           if (j && j.twofa && j.choose) { showChoose(j.hints); reset(); return; }
-          if (j && j.twofa) { showTwofa(j.hint); reset(); return; }
+          // sendFailed: the password was right, but the code did not go out.
+          // The code step still opens — an earlier code may be live — with the
+          // reason on it, instead of "we sent you a code" over silence.
+          if (j && j.twofa) { showTwofa(j.hint, j.sendFailed ? pickErr(j.error) : ''); reset(); return; }
           showErr(pickErr(j && j.error) || L('That username and password don’t match. Check them and try again.', '用户名与密码不匹配,请检查后重试。'));
           reset();
         })
@@ -419,9 +422,11 @@
     var twofaPanel = document.getElementById('twofaPanel');
     var twofaBtn = document.getElementById('twofaBtn');
     var twofaErr = document.getElementById('twofaErr');
-    function showTwofa(hint) {
+    function showTwofa(hint, warn) {
       document.getElementById('twofaHint').textContent = hint || '';
       loginPanel.hidden = true; twofaChoosePanel.hidden = true; twofaPanel.hidden = false;
+      if (warn) { twofaErr.querySelector('span').textContent = warn; twofaErr.classList.add('show'); }
+      else { twofaErr.classList.remove('show'); twofaErr.querySelector('span').textContent = ''; }
       var c = document.getElementById('twofaCode'); if (c) c.focus();
     }
     document.getElementById('twofaBack').addEventListener('click', function () { window.location.reload(); });

@@ -453,6 +453,60 @@ function dedupeSessions(tenantUserId, currentSid) {
   } catch (e) { /* index-only; never blocks auth */ }
 }
 
+// ── A sign-in code that never left the building (audit P-02) ─────────────
+// Both senders return { ok:false, error } rather than throwing, and every call
+// to them below was `try { await send… } catch (e) {}` with the result dropped
+// on the floor. An expired SMS access key, a mail provider refusing the
+// account, a network blip — each of them produced exactly the same screen as a
+// code that arrived: "enter the 6-digit code we sent you". The operator then
+// waits for a message that is never coming, shut out of their own admin, with
+// nothing anywhere saying why.
+//
+// It is safe to say so at this point: the password has already been checked,
+// so whoever reads the answer is the account holder. (The forgotten-password
+// path is not — its reply stays deliberately identical for every username, so
+// there the failure is recorded rather than shown. See password-reset/start.)
+//
+// THIS IS NOT A FAIL-OPEN. A channel that is switched on but momentarily
+// failing does not sign the operator in without a code. The fail-open a few
+// lines below is for a channel that is not SET UP at all, which is a different
+// condition; turning a provider outage into a two-step bypass is the account
+// holder's decision to make, not a side effect of a bug fix.
+async function sendLoginCode(channel, u, code, ctx) {
+  let r;
+  try {
+    r = channel === 'sms'
+      ? await aliyunSms.sendOtpSms(u.phone, code, ctx.smsCreds)
+      : await emailSender.sendOtpEmail(u.recovery_email, code, null,
+          { ...emailBrandOpts(ctx.req, u.tenant_id), kind: ctx.kind || 'signin_code' });
+  } catch (e) {
+    // A sender that throws instead of returning is a bug in the sender, but it
+    // must still come back here as an ordinary failure — the operator's screen
+    // is the same either way.
+    r = { ok: false, error: 'send_threw:' + e.message };
+  }
+  if (r && r.ok) return { ok: true };
+  const why = (r && r.error) || 'unknown';
+  console.warn(`[backend-auth] sign-in code not sent · user=${u.id} channel=${channel} · ${why}`);
+  return { ok: false, error: why };
+}
+
+// What the operator is told when it fails. Names the channel, and points at the
+// other one when they have both, because "try again" on a channel that is down
+// is not advice. The provider's own error is deliberately not shown: it means
+// nothing to the person reading it, and it is already in the send record and
+// the log for whoever goes looking.
+function codeSendFailedMessage(channel, hasOther) {
+  if (channel === 'sms') {
+    return hasOther
+      ? 'We couldn’t send the text message — try email instead · 短信发送失败,请改用邮箱接收'
+      : 'We couldn’t send the text message — please try again in a moment · 短信发送失败,请稍后再试';
+  }
+  return hasOther
+    ? 'We couldn’t send the email — try SMS instead · 邮件发送失败,请改用短信接收'
+    : 'We couldn’t send the email — please try again in a moment · 邮件发送失败,请稍后再试';
+}
+
 // ── Brute-force guard, same posture as the kitchen login ─────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -494,14 +548,17 @@ router.post('/api/backend/login', loginLimiter, express.json(), async (req, res)
       const channel = smsOk ? 'sms' : 'email';
       const code = genCode();
       req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now(), channel };
-      if (channel === 'sms') {
-        insertCode(u.id, 'login_2fa', u.phone, code, 10);
-        try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
-        return res.json({ success: false, twofa: true, channel: 'sms', hint: maskPhone(u.phone) });
-      }
-      insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
-      try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
-      return res.json({ success: false, twofa: true, channel: 'email', hint: maskEmail(u.recovery_email) });
+      const to = channel === 'sms' ? maskPhone(u.phone) : maskEmail(u.recovery_email);
+      insertCode(u.id, 'login_2fa', channel === 'sms' ? u.phone : u.recovery_email, code, 10);
+      const sent = await sendLoginCode(channel, u, code, { req, smsCreds });
+      // The code step is still shown on a failure, and the pending login is
+      // still held: a code from a minute ago may well be live and typeable, and
+      // dropping them back to the password screen would only send them round
+      // the same loop. What changes is that the screen says what happened.
+      return res.json({
+        success: false, twofa: true, channel, hint: to,
+        ...(sent.ok ? {} : { sendFailed: true, error: codeSendFailedMessage(channel, false) }),
+      });
     }
     // No deliverable channel — fall through to a normal password-only sign-in.
   }
@@ -544,14 +601,18 @@ router.post('/api/backend/login/2fa/channel', loginLimiter, express.json(), asyn
   pending.channel = channel;
   pending.at = Date.now();
   req.session.pending2fa = pending;
-  if (channel === 'sms') {
-    insertCode(u.id, 'login_2fa', u.phone, code, 10);
-    try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
-    return res.json({ success: true, channel: 'sms', hint: maskPhone(u.phone) });
+  insertCode(u.id, 'login_2fa', channel === 'sms' ? u.phone : u.recovery_email, code, 10);
+  const sent = await sendLoginCode(channel, u, code, { req, smsCreds });
+  if (!sent.ok) {
+    // Hand the choice back. `pending.channel` is what this endpoint refuses a
+    // second call on, so leaving it set would answer the operator's next pick
+    // with "your sign-in expired" — the one channel that still works, closed
+    // off by the one that didn't.
+    pending.channel = null;
+    req.session.pending2fa = pending;
+    return res.json({ success: false, error: codeSendFailedMessage(channel, channel === 'sms' ? emailOk : smsOk) });
   }
-  insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
-  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
-  res.json({ success: true, channel: 'email', hint: maskEmail(u.recovery_email) });
+  res.json({ success: true, channel, hint: channel === 'sms' ? maskPhone(u.phone) : maskEmail(u.recovery_email) });
 });
 
 // Two-step verification — second step. Consumes the pending login held on this
@@ -1304,7 +1365,11 @@ router.post('/api/backend/password-reset/start', codeLimiter, express.json(), as
   if (!u || !u.recovery_email || !u.recovery_email_verified || !emailSender.isConfigured()) return res.json(generic);
   const code = genCode();
   insertCode(u.id, 'password_reset', u.recovery_email, code, 15);
-  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
+  // The reply stays generic whether or not the mail went out — "that address
+  // bounced" is still an answer to "does this username exist". The failure goes
+  // to the send record and the log instead, which is where somebody looking
+  // into "I asked for a reset and nothing came" can actually find it.
+  await sendLoginCode('email', u, code, { req, kind: 'password_reset_code' });
   res.json(generic);
 });
 

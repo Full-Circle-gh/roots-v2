@@ -2627,6 +2627,117 @@ function awaitingRestockStore(o) {
 // needs it on; the Save button appears only once the text differs from what is
 // stored, so an operator reading an order never sees an action they have no
 // reason to take.
+/* ══════════════════════════════════════════════════════════════════════════
+   WAS THE CUSTOMER TOLD? (audit P-02)
+
+   Every message this service tries to send is recorded (P-03). But a record
+   nobody thinks to open does not answer the question a merchant actually asks,
+   and they ask it WHILE LOOKING AT AN ORDER: "did the customer get told?"
+
+   So the answer sits on the order. The latest attempt per kind, with its
+   outcome, and — when one did not arrive — a button that tries again.
+
+   THE PRINTER IS THE PATTERN. A failed print has been written onto the order
+   as print_status/print_error, with a reprint button right there, for a long
+   time; it is the one failure path in this service that was never silent. This
+   is that shape for everything else.
+
+   DRAWN ONLY WHEN THERE IS SOMETHING TO SAY. An order nobody has tried to send
+   anything about — most manual orders, every counter sale — gets no block at
+   all rather than an empty "no notifications" panel. Absence of a block means
+   nothing was attempted; that is different from "attempted and failed", and
+   the two must not look alike.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// What each message was about, in a shopkeeper's words. The same fallback rule
+// the change history and the send record use — an unknown kind reads as words,
+// so one added tomorrow is legible on the day it ships.
+const ORD_NOTIFY_KINDS = {
+  order_paid:       ['Payment received', '已收到付款'],
+  order_preparing:  ['Preparing', '备货中'],
+  order_dispatched: ['Dispatched', '已发货'],
+  order_delivered:  ['Delivered', '已送达'],
+  order_cancelled:  ['Cancelled', '已取消'],
+  order_refunded:   ['Refunded', '已退款'],
+  delivery_update:  ['Delivery update', '配送更新'],
+};
+function ordNotifyKindText(k) {
+  const e = ORD_NOTIFY_KINDS[k];
+  if (e) return cuT(e[0], e[1]);
+  const w = String(k || '').replace(/_/g, ' ').trim();
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+}
+const ORD_NOTIFY_CHANNELS = {
+  wechat: ['WeChat', '微信'], sms: ['Text', '短信'], email: ['Email', '邮件'],
+};
+function ordNotifyChannelText(c) {
+  const e = ORD_NOTIFY_CHANNELS[c];
+  return e ? cuT(e[0], e[1]) : String(c || '');
+}
+
+// Why it did not arrive, in words the merchant can act on. These are the
+// reasons that actually occur, and each one implies a different next move —
+// which is the whole reason a bare "failed" was not good enough.
+const ORD_NOTIFY_WHY = {
+  no_consent:              ['they have not agreed to be messaged in the mini app', '顾客未在小程序中同意接收通知'],
+  no_openid:               ['this customer has no linked mini-app account', '该顾客未绑定小程序账号'],
+  no_template_id:          ['no message template is set up yet — Settings → Push notifications', '尚未配置消息模板 — 设置 → 推送通知'],
+  no_access_token:         ['the WeChat connection is not working', '微信连接异常'],
+  dev_mode_nothing_sent:   ['this shop is in test mode, so nothing was actually sent', '本店处于测试模式,消息未真正发送'],
+  aliyun_sms_not_configured: ['text messaging is not set up yet', '短信服务尚未配置'],
+  bad_phone:               ['their phone number is not one we can text', '该号码无法发送短信'],
+};
+function ordNotifyWhy(err) {
+  const e = ORD_NOTIFY_WHY[err];
+  if (e) return cuT(e[0], e[1]);
+  return (typeof tdErrorText === 'function') ? tdErrorText(err, null) : String(err || '');
+}
+
+function wasCustomerToldBlock(o) {
+  const rows = Array.isArray(o.notifications) ? o.notifications : [];
+  if (!rows.length) return '';
+  const anyFailed = rows.some(r => !r.ok);
+  const line = (r) => `<div class="ord-told-row${r.ok ? '' : ' is-bad'}">`
+    + `<span class="ord-told-mark">${r.ok ? '✓' : '!'}</span>`
+    + `<span class="ord-told-what" data-no-i18n>${escapeHtml(ordNotifyKindText(r.kind))}`
+    + `<span class="muted"> · ${escapeHtml(ordNotifyChannelText(r.channel))}</span></span>`
+    + `<span class="ord-told-when muted" data-no-i18n>${escapeHtml(
+        (typeof tdWhen === 'function' ? tdWhen(r.created_at, 'dateTime') : r.created_at) || '')}</span>`
+    + (r.ok ? '' : `<span class="ord-told-why" data-no-i18n title="${escapeAttr(r.error || '')}">${escapeHtml(ordNotifyWhy(r.error))}</span>`)
+    + `</div>`;
+  return `<div class="full ord-told">`
+    + `<div class="kicker">${escapeHtml(cuT('Was the customer told · 顾客是否已收到通知', '顾客是否已收到通知'))}</div>`
+    + rows.map(line).join('')
+    + (anyFailed
+      ? `<div class="ord-told-foot"><button type="button" class="btn btn-sm" data-cap="orders:edit" onclick="ordRenotify(${o.id}, this)">`
+        + escapeHtml(cuT('Try telling them again', '重新通知顾客')) + `</button></div>`
+      : '')
+    + `</div>`;
+}
+
+// Re-run the notification for the order's CURRENT status. A failure shown with
+// no way to act on it is a nicer way of doing nothing.
+//
+// The sends are detached and record their own outcome, so this waits a moment
+// and then re-reads the order rather than claiming a result the endpoint could
+// not have observed. Reporting "sent ✓" the instant the request returned would
+// be exactly the lie this whole finding is about.
+async function ordRenotify(id, btn) {
+  let ok;
+  try {
+    ok = await adminWrite({
+      btn,
+      url: `/api/retail-admin/orders/${id}/renotify`,
+      method: 'POST',
+      errLabelEn: 'Could not try again', errLabelCn: '重新通知失败',
+      busyLabel: cuT('Sending…', '发送中…'),
+    });
+  } catch (e) { return; }
+  if (!ok) return;
+  toast(cuT('Trying again — the result appears below in a moment.', '正在重试,稍后在下方显示结果。'));
+  setTimeout(() => { try { openOrder(id, { instant: true }); } catch (e) {} }, 2500);
+}
+
 function staffNoteBlock(o) {
   const note = o.staff_note || '';
   return `<div class="full ord-note" data-order-id="${o.id}">
@@ -6235,6 +6346,7 @@ function renderOpenOrder(o) {
           ${renderAlipayProof(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${staffNoteBlock(o)}
+          ${wasCustomerToldBlock(o)}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
         </div>

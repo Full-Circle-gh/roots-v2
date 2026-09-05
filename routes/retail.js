@@ -6139,15 +6139,36 @@ router.post('/api/wx/callback/:tid', wxPushBody, (req, res) => {
 // Push a subscribeMessage to a customer if they have an unused consent for
 // the given template. Idempotent — marks consent used after send so it
 // can't fire twice. In DEV mode (no WECHAT_APP_ID set), logs only.
-async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/me/me') {
-  if (!templateId) return { sent: false, reason: 'no_template_id' };
+// `about` — { type, id, kind, subject } — ties the delivery record to the thing
+// the message was ABOUT, so a customer who was never told shows up ON their
+// order rather than only in a log somebody has to think to open (audit P-02).
+//
+// EVERY EXIT IS RECORDED, including the ones that are not failures at all:
+// "no consent" and "dev mode" are the commonest reasons a customer hears
+// nothing, and a merchant asking "did they get told?" is owed that answer as
+// much as they are owed a network error. `ok` separates them.
+async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/me/me', about) {
+  const _log = (ok, reason) => {
+    try {
+      require('../lib/notify-log').logNotification({
+        channel: 'wechat',
+        kind: (about && about.kind) || 'subscribe_message',
+        subject: (about && about.subject) || null,
+        recipient: customerId == null ? null : `customer #${customerId}`,
+        entityType: about && about.type,
+        entityId: about && about.id,
+        ok, error: ok ? null : reason,
+      });
+    } catch (e) { /* the log must never be able to fail a send */ }
+  };
+  if (!templateId) { _log(false, 'no_template_id'); return { sent: false, reason: 'no_template_id' }; }
   const sub = tdb().prepare(
     'SELECT id FROM retail_subscriptions WHERE customer_id = ? AND template_id = ? AND used = 0 ORDER BY id DESC LIMIT 1'
   ).get(customerId, templateId);
-  if (!sub) return { sent: false, reason: 'no_consent' };
+  if (!sub) { _log(false, 'no_consent'); return { sent: false, reason: 'no_consent' }; }
 
   const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(customerId);
-  if (!cust?.openid) return { sent: false, reason: 'no_openid' };
+  if (!cust?.openid) { _log(false, 'no_openid'); return { sent: false, reason: 'no_openid' }; }
 
   // WeChat one-shot consent is precious: it is only spent on WeChat's side by a
   // SUCCESSFUL send. So consume it (used=1) ONLY after a confirmed success (or a
@@ -6159,12 +6180,13 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   if (getTenantCreds(currentTenantId()).wechat.devMode || cust.openid.startsWith('dev:')) {
     markUsed();   // dev: nothing is sent; treat as a consumed no-op (matches prior behavior)
     console.log(`[subscribe-message] DEV — would send template=${templateId} to=${cust.openid}, data=${JSON.stringify(data)}`);
+    _log(false, 'dev_mode_nothing_sent');
     return { sent: false, dev: true };
   }
 
   try {
     const token = await getWeChatAccessToken();
-    if (!token) return { sent: false, reason: 'no_access_token' };   // transient → consent intact for retry
+    if (!token) { _log(false, 'no_access_token'); return { sent: false, reason: 'no_access_token' }; }   // transient → consent intact for retry
     const body = {
       touser: cust.openid,
       template_id: templateId,
@@ -6174,15 +6196,17 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
       lang: 'zh_CN',
     };
     const j = (await wxApiPost('/cgi-bin/message/subscribe/send', body)).json || {};
-    if (j.errcode === 0) { markUsed(); return { sent: true, response: j }; }
+    if (j.errcode === 0) { markUsed(); _log(true); return { sent: true, response: j }; }
     console.warn('[subscribe-message] send failed:', j);
     // 43101 = user has no / revoked subscription for this template — genuinely
     // non-retryable, so consume to stop pointless re-attempts. Any other errcode
     // is treated as transient and leaves the consent unused for a later retry.
     if (j.errcode === 43101) markUsed();
+    _log(false, `wechat ${j.errcode || '?'} ${j.errmsg || ''}`.trim());
     return { sent: false, response: j };
   } catch (e) {
     console.error('[subscribe-message]', e);
+    _log(false, 'exception: ' + (e && e.message ? e.message : e));
     return { sent: false, reason: 'exception' };   // transient → consent intact for retry
   }
 }
@@ -6241,7 +6265,7 @@ function maybeSendDeliveredSms(orderId) {
     if (claimed.changes !== 1) return;               // lost the race
 
     const tid = currentTenantId();
-    _aliyunSms.sendDeliveredSms(phone, { orderNo: o.order_no }, creds)
+    _aliyunSms.sendDeliveredSms(phone, { orderNo: o.order_no, orderId }, creds)
       .then((r) => {
         if (r.ok) { console.log('[sms-delivered] sent', o.order_no, r.bizId || ''); return; }
         console.warn('[sms-delivered]', orderId, r.error || r.code);
@@ -6379,7 +6403,9 @@ function notifyOrderStatusChange(orderId, newStatus) {
     // delayed tip short, Chinese-first, punctuation-free.
     const tip = airDelayed ? '送达延误 请勿食用生鲜' : ORDER_STATUS_TIP[newStatus];
     const data = buildOrderStatusData(orderId, o.order_no, tip);
-    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
+    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`,
+      { type: 'retail_order', id: orderId, kind: 'order_' + newStatus,
+        subject: `${o.order_no} → ${newStatus}` })
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
 }
@@ -6638,7 +6664,9 @@ function notifyTrackingScenario(orderId, scenario) {
     if (scenario.pickup_code) phrase = `${scenario.label_cn}取件码${scenario.pickup_code}`;
     else if (scenario.signer) phrase = `${scenario.label_cn}签收人${scenario.signer}`;
     const data = buildOrderStatusData(orderId, o.order_no, phrase);
-    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
+    sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`,
+      { type: 'retail_order', id: orderId, kind: 'delivery_update',
+        subject: `${o.order_no} — ${scenario.label_cn || ''}`.trim() })
       .catch(e => console.warn('[notify-scenario]', e));
   } catch (e) { console.error('[notify-scenario]', e); }
 }
@@ -24684,7 +24712,74 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // will never fire. A pending accept still lands in meituan_order_actions either way.
   o.meituan_writeback = process.env.MEITUAN_WRITEBACK === '1';
 
+  /* ── WAS THE CUSTOMER TOLD? (audit P-02) ─────────────────────────────────
+     Every message this service tries to send is recorded (P-03), but a record
+     nobody thinks to open does not answer the question a merchant actually
+     asks, which is asked WHILE LOOKING AT AN ORDER: "did they get told?"
+
+     The LATEST attempt per kind, not every attempt and not only the failures.
+     Only-failures would answer half the question and leave "we tried three
+     times and the third worked" reading as a failure; every attempt would make
+     a busy order's drawer a log file. One row per kind, most recent, with its
+     outcome, is the answer.
+
+     The printer is the pattern being copied: a failed print has been written
+     onto the order as print_status/print_error with a reprint button in the
+     drawer for a long time, and it is the one failure path in this service
+     that was never silent. This is the same shape for everything else.
+
+     Best-effort: an install that has not restarted since notification_log
+     shipped has no table, and an order drawer must open regardless. */
+  try {
+    o.notifications = tdb().prepare(
+      `SELECT n.id, n.channel, n.kind, n.subject, n.recipient, n.ok, n.error, n.created_at
+         FROM notification_log n
+        WHERE n.entity_type = 'retail_order' AND n.entity_id = ?
+          AND n.id = (SELECT MAX(m.id) FROM notification_log m
+                       WHERE m.entity_type = n.entity_type AND m.entity_id = n.entity_id
+                         AND m.kind = n.kind)
+        ORDER BY n.id DESC`
+    ).all(id).map(r => ({ ...r, ok: !!r.ok }));
+  } catch (e) { o.notifications = []; }
+
   res.json({ success: true, data: o });
+});
+
+/* Try again to tell the customer (audit P-02).
+   A failure shown with no way to act on it is a nicer way of doing nothing, so
+   the drawer's "did not arrive" row carries this. Re-runs the SAME notify path
+   the status change runs, which is what keeps one code path deciding what a
+   customer is told and in what words.
+
+   NOT a general "send anything" door: it re-sends the notification for the
+   order's CURRENT status, and nothing else. Gated as orders:edit by
+   lib/cap-routes.js like every other write under /orders. */
+router.post('/api/retail-admin/orders/:id/renotify', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const o = tdb().prepare('SELECT id, status, order_no FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  try {
+    // The delivered-SMS claim stamp is cleared first, or the atomic claim inside
+    // the hook sees it already set and returns without sending — which would
+    // report success while doing nothing, the exact failure this endpoint is
+    // here to fix.
+    tdb().prepare('UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?').run(id);
+  } catch (e) { /* column not present on an older row — the hook handles it */ }
+  try {
+    // Synchronous: it FIRES the sends and returns. Each send is detached and
+    // records its own outcome, which is why this endpoint reports only that it
+    // tried — see below.
+    notifyOrderStatusChange(id, o.status);
+  } catch (e) {
+    console.error('[renotify]', e);
+    return res.status(500).json({ success: false, error: 'renotify_failed', message: e.message });
+  }
+  logActivity(req.user.id, req.user.username, 'order_renotify', 'retail_order', id, { status: o.status }, req.ip);
+  // The attempt is already recorded by the senders, so the client re-reads the
+  // order rather than being told an outcome this endpoint cannot see: the sends
+  // are detached, and answering "sent" here would be a guess.
+  res.json({ success: true });
 });
 
 // Queue a Meituan write-back action for the daemon to click (currently only 接单).
