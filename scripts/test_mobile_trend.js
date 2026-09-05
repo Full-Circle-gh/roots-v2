@@ -25,16 +25,53 @@
 
 const { run } = require('./lib/m-probe');
 
-// Seven days, rising, with an obvious peak on the sixth so "Busiest day" has a
-// single unambiguous answer.
-const WEEK = `state.trendKey='7'; state.trend=[
-  {bucket:'2026-08-17',orders:10,revenue:1000,visits:200},
-  {bucket:'2026-08-18',orders:12,revenue:1200,visits:240},
-  {bucket:'2026-08-19',orders:14,revenue:1400,visits:280},
-  {bucket:'2026-08-20',orders:11,revenue:1100,visits:220},
-  {bucket:'2026-08-21',orders:13,revenue:1300,visits:260},
-  {bucket:'2026-08-22',orders:20,revenue:2000,visits:400},
-  {bucket:'2026-08-23',orders:10,revenue:1000,visits:200}];`;
+/* THE WEEK ENDS TODAY, AND IT IS BUILT THAT WAY RATHER THAN TYPED.
+ *
+ * Two of this screen's labels are read against the clock: fmtDateOnly prints
+ * "Today" and "Yesterday" by comparing a bucket with `new Date()`. The buckets
+ * here were literals from August 2026, so on 1 September the last one stopped
+ * being today, the sixth stopped being yesterday, and two assertions began
+ * failing on a screen nobody had touched. Same expiry as the purchasing probe
+ * (558eed3), same answer.
+ *
+ * LOCAL DATES, NOT UTC AND NOT UTC+8. This one differs from the purchasing
+ * fixture on purpose. _date() appends 'T00:00:00' with no Z to a bare
+ * YYYY-MM-DD, so a bucket is parsed as LOCAL midnight, and fmtDateOnly compares
+ * it against a LOCAL now. Building these from a UTC or Guangzhou date would
+ * disagree with the page by a day for part of every day, in whichever direction
+ * the runner's zone happens to lean. The fixture uses the same clock the
+ * comparison does.
+ *
+ * The shape is unchanged: seven days, rising, with the peak on the sixth so
+ * "Busiest day" has a single unambiguous answer — and that sixth day is now
+ * yesterday, which is what makes the label assertion mean anything.
+ */
+const CLOCK = `
+  var _n=new Date();
+  var _pad=function(x){ return String(x).padStart(2,'0') };
+  var _day=function(off){
+    var d=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()+off);
+    return d.getFullYear()+'-'+_pad(d.getMonth()+1)+'-'+_pad(d.getDate());
+  };
+  // What the LEFT end of the line should read, derived here rather than by
+  // calling the screen's own fmtDay — a check that asks the code what it printed
+  // and then agrees with it has asserted nothing. Carries the year only when the
+  // window crosses one, which is fmtDay's rule and matters in the first week of
+  // January.
+  var _l=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()-6);
+  var LEFT_END = _l.getFullYear()===_n.getFullYear()
+    ? _l.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    : _l.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+`;
+
+const WEEK = CLOCK + `state.trendKey='7'; state.trend=[
+  {bucket:_day(-6),orders:10,revenue:1000,visits:200},
+  {bucket:_day(-5),orders:12,revenue:1200,visits:240},
+  {bucket:_day(-4),orders:14,revenue:1400,visits:280},
+  {bucket:_day(-3),orders:11,revenue:1100,visits:220},
+  {bucket:_day(-2),orders:13,revenue:1300,visits:260},
+  {bucket:_day(-1),orders:20,revenue:2000,visits:400},
+  {bucket:_day(0), orders:10,revenue:1000,visits:200}];`;
 
 const STUB = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
@@ -50,7 +87,7 @@ const CASES = [
     ['and dated',                  `txt('content').includes('Yesterday')`],
     ['a typical day is the mean',  `txt('content').includes('¥1,286')`],
     ['the span is stated',         `txt('content').includes('Days counted') && txt('content').includes('7')`],
-    ['both ends of the line are dated', `txt('content').includes('Aug 17') && txt('content').includes('Today')`],
+    ['both ends of the line are dated', `txt('content').includes(LEFT_END) && txt('content').includes('Today')`],
     ['the head carries total and window', `txt('content').includes('¥9,000 revenue · last 7 days')`],
     // A sparkline is not a chart. Saying where the chart lives is the same
     // promise every other phone screen makes about its desktop half.

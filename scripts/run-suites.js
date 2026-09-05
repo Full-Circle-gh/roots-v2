@@ -94,9 +94,14 @@ const QUARANTINE = {
      THE GENERAL LESSON FOR READING THIS RUNNER'S OUTPUT: a green CI shard and a
      red local one on "the same commit" are not a contradiction when the base
      has moved. Fetch and merge the base before believing either. */
-  'test_mobile_trend.js':
-    'mobile-trend: 2 of 10 cases — both ends of the line are not dated, and ' +
-    'switching range does not re-ask the server for thirty days.',
+  /* test_mobile_trend.js has gone too, and with it the browser shard's whole
+     quarantine. It was TWO cases when this list was written; by the time it was
+     picked up it was one, because another branch had fixed the range assertion
+     and nothing told anybody — which is the small daily argument for this
+     runner existing. The remaining one was the same expiry as the purchasing
+     probe: an August fixture asserting the labels read "Today" and "Yesterday",
+     which fmtDateOnly computes from now. Anchored to the local clock the
+     comparison itself uses. */
 };
 
 /* The render passes. Chromium, tens of seconds to minutes each — kept in their
