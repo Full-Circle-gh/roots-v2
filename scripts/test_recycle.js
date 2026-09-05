@@ -213,5 +213,50 @@ section('6 · every delete this covers takes the copy, and there is a screen');
   yes(/recycle\.sweep\(db\)/.test(db), 'and it is swept on its own window, not the log’s');
 }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+// ── §7 · the endpoints answer ─────────────────────────────────────────────
+// Mounted for real, because a router that fails to bind its middleware throws
+// at MOUNT time — "Route.get() requires a callback function" — and a source
+// check would not see it. This is the whole of routes/recycle.js exercised.
+section('7 · the two endpoints, mounted');
+{
+  const db = freshDb();
+  const copy = R.capture(db, 'delivery_zone', 4, 'mei');
+  db.prepare('DELETE FROM retail_delivery_zones WHERE id = 4').run();
+
+  function stub(rel, value) {
+    const f = require.resolve(rel);
+    require.cache[f] = { id: f, filename: f, loaded: true, exports: value };
+  }
+  stub('../lib/tenant-db', { tdb: () => db, getTenantDb: () => db, rawTenantDb: () => db });
+  stub('../database', db);
+  stub('../routes/retail', { requireRetailAdmin: (q, s, n) => n() });
+  stub('../middleware/auth', { logActivity: () => {}, requireAuth: (q, s, n) => n() });
+
+  const express = require('express');
+  const app = express();
+  app.use((q, s, n) => { q.user = { id: 1, username: 'mei' }; n(); });
+  app.use(require(path.join(ROOT, 'routes', 'recycle.js')));
+  const srv = app.listen(0);
+  const base = () => 'http://127.0.0.1:' + srv.address().port;
+
+  (async () => {
+    const listed = await (await fetch(base() + '/api/retail-admin/deleted')).json();
+    is(listed.success, true, 'the list answers');
+    is(listed.data.length, 1, 'with what was deleted');
+    is(listed.days, 60, 'and says how long it is kept');
+
+    const put = await fetch(base() + '/api/retail-admin/deleted/' + copy + '/restore', { method: 'POST' });
+    is(put.status, 200, 'and one can be put back over the wire');
+    is(db.prepare('SELECT name_cn FROM retail_delivery_zones WHERE id = 4').get().name_cn, '天河区',
+      'which really puts it back');
+
+    const again = await fetch(base() + '/api/retail-admin/deleted/' + copy + '/restore', { method: 'POST' });
+    is(again.status, 409, 'a second attempt is a conflict, not a 500 — nothing failed, it is already done');
+    const missing = await fetch(base() + '/api/retail-admin/deleted/9999/restore', { method: 'POST' });
+    is(missing.status, 404, 'and a copy that does not exist is a plain not-found');
+
+    srv.close();
+    console.log(`\n${pass} passed, ${fail} failed\n`);
+    process.exit(fail ? 1 : 0);
+  })();
+}
