@@ -257,6 +257,12 @@ function ordChannelLabel(o) {
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'wechat')    return 'WeChat';
+  // A sale that originated at a physical shop — rung up on the till or placed
+  // by the customer through that shop's QR menu (§14, §44). The two are NOT
+  // separate channels on purpose: splitting them would divide one shop's
+  // revenue across two lines. Which door it came through is
+  // retail_orders.shop_entry_method, not this.
+  if (c === 'shop')      return cuT('Shop', '门店');
   // Staff-keyed origins — where the customer reached us, asked on the New order
   // form. 'manual' is the LEGACY value: rows written before the form asked the
   // question, plus every till sale (whose origin is the counter, recorded in

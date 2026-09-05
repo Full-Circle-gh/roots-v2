@@ -2317,6 +2317,31 @@ addColumn('retail_orders', 'refund_printed_at',       'DATETIME');
 // the durable audit marker (channel can be re-derived, source never changes).
 addColumn('retail_orders', 'source',                  'TEXT');
 addColumn('retail_orders', 'created_by',              'INTEGER');
+// HOW A SHOP ORDER WAS ENTERED — 'till' | 'qr'. NULL for every order that is
+// not a shop order, which today is all of them: nothing writes this column yet.
+// §44 calls this "order source", and it is deliberately NOT `source` above.
+//
+// ASH'S RULING, 2026-09-05: this is its own column and `source` is not touched.
+// `source` already answers a DIFFERENT question — staff-keyed versus customer
+// checkout — and the comment above says so in the same breath as calling it
+// "the durable audit marker". Adding 'till' and 'qr' to it would make one column
+// answer two questions, and a reader asking "was this keyed by staff?" would get
+// 'qr' back. This codebase has been damaged twice by a column acquiring a second
+// meaning: `store_id` on the two product tables (two id spaces, one integer,
+// units landing on the wrong shelf) and channel `wechat` standing for a tender
+// on counter rows (§44 names it a defect). A second column is cheap; a second
+// meaning is not.
+//
+// WHY NOT ON THE CHANNEL EITHER: §44 rules that till and QR sales are the same
+// shop selling the same listings and share the single channel value `shop`, so
+// that scan uptake can be measured without dividing a shop's revenue across two
+// channel lines. Channel says WHERE the sale originated; this says which of the
+// shop's two doors it came through.
+//
+// No CHECK constraint, matching every other enumerated TEXT column on this table
+// (`fulfillment_type`, `routing_reason`, `channel`). Nothing reads this column
+// after the change that adds it.
+addColumn('retail_orders', 'shop_entry_method',       'TEXT');
 // Guest-pay token — an unguessable handle that lets a customer WITHOUT an app
 // account open a public pay page (/pay/:token) for a single manual order and
 // pay by QR. Minted for manual orders at creation; NULL for app orders (those
