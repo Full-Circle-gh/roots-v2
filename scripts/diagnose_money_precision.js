@@ -192,12 +192,28 @@ const check = (label, sql) => {
 check('payments refunded for more than was paid',
   `SELECT COUNT(*) n FROM retail_payments
     WHERE COALESCE(refunded_amount,0) > COALESCE(amount,0) + 0.005`);
-check('orders refunded for more than the order total',
+// AGAINST GROSS, NOT AGAINST `total`. This was wrong when first written, and it
+// reported two perfectly correct orders as over-refunded. `retail_orders.total`
+// is only the CASH portion — what the customer paid with money once points and
+// wallet balance were applied. routes/retail.js:32439 orderTenders() gives the
+// real ceiling as points_amount + balance_used + total, because a refund sends
+// each part back to the tender it came from. So on any order paid partly with
+// points or store credit, refunding MORE than `total` is correct.
+//
+// The check that actually matters is the third one: cash returned must never
+// exceed the cash taken, whatever the gross ceiling allows. That is the only one
+// of the three where the business is out of pocket.
+const GROSS = `(COALESCE(points_amount,0) + COALESCE(balance_used,0) + COALESCE(total,0))`;
+check('orders refunded for more than the customer actually tendered',
   `SELECT COUNT(*) n FROM retail_orders
-    WHERE COALESCE(refund_amount_paid,0) > COALESCE(total,0) + 0.005`);
-check('orders approved to refund more than the order total',
+    WHERE COALESCE(refund_amount_paid,0) > ${GROSS} + 0.005`);
+check('orders approved to refund more than the customer actually tendered',
   `SELECT COUNT(*) n FROM retail_orders
-    WHERE COALESCE(refund_amount_approved,0) > COALESCE(total,0) + 0.005`);
+    WHERE COALESCE(refund_amount_approved,0) > ${GROSS} + 0.005`);
+check('CASH returned above the cash actually taken',
+  `SELECT COUNT(*) n FROM retail_orders
+    WHERE refund_cash_amount IS NOT NULL
+      AND refund_cash_amount > COALESCE(total,0) + 0.005`);
 check('negative order totals',
   `SELECT COUNT(*) n FROM retail_orders WHERE total < 0`);
 // qty is REAL, not INTEGER — weighed goods are sold as 0.35 kg. So this is the

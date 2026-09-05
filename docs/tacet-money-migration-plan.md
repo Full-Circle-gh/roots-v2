@@ -140,17 +140,54 @@ not a rounding error, it is a 5% error in every recipe cost.
 | result | n | check |
 |---|---:|---|
 | ok | 0 | payments refunded for more than was paid |
-| **FAIL** | **2** | orders refunded for more than the order total |
-| **FAIL** | **2** | orders approved to refund more than the order total |
+| ok | 0 | orders refunded for more than the customer tendered |
+| ok | 0 | orders approved to refund more than the customer tendered |
+| ok | 0 | **cash returned above the cash actually taken** |
 | ok | 0 | negative order totals |
 | ok | 0 | line totals that are not `unit_price × qty` to the cent |
 | — | 0 | lines priced on a fractional quantity |
 
-**Two orders are refunded for more than they cost.** That is a real defect
-sitting in production right now, and it is *not* caused by floating point —
-¥0.005 of drift cannot push a refund past a total. Something else did that. It is
-recorded here so it cannot later be blamed on this migration, and it is worth
-looking at on its own account.
+**The baseline is clean. Nothing in the refund data is wrong.**
+
+> **Correction, made the same day.** The first version of this section reported
+> *"two orders are refunded for more than they cost — a real defect sitting in
+> production right now"*. **That was wrong, and it was my check that was wrong,
+> not the data.**
+>
+> The check compared the refund against `retail_orders.total`. But `total` is only
+> the **cash** portion — what the customer paid with money once points and wallet
+> balance were applied. `routes/retail.js:32439` gives the real ceiling:
+>
+> ```js
+> function orderTenders(o) {
+>   const P = points_amount, B = balance_used, C = total;
+>   return { P, B, C, G: P + B + C };
+> }
+> ```
+>
+> A refund is capped at **G**, and `splitRefundAcrossTenders` returns each part to
+> the tender it came from. So on an order paid partly with points or store credit,
+> refunding more than `total` is exactly right.
+>
+> Both flagged orders are textbook correct (`scripts/diagnose_refund_ceiling.js`,
+> Actions run 90):
+>
+> | order | cash | points | balance | gross | refunded | cash out |
+> |---|---:|---:|---:|---:|---:|---:|
+> | `R260625999440` | 25.00 | — | 38.80 | 63.80 | 63.00 | 24.69 |
+> | `TC000306` | 24.40 | 322.00 | — | 346.40 | 346.40 | 24.40 |
+>
+> `TC000306` refunded ¥346.40 of value while only ¥24.40 of cash left the
+> business; the other ¥322 went back as points. Against the correct ceiling:
+> **0 approved over gross, 0 paid over gross, 0 cash returned above cash taken.**
+> Ten orders sit exactly at the ceiling, which is what a full refund looks like.
+>
+> This is the failure the precision script's own header warns about — *"a guessed
+> invariant reporting a scary number is worse than no invariant"* — committed two
+> sections after writing the warning. The check in
+> `diagnose_money_precision.js` is corrected to measure gross, and a third check
+> added for the one that would actually cost money: cash returned above cash
+> taken.
 
 Zero fractional quantities is a useful negative: the sub-cent `unit_price` values
 are **not** from selling by weight, so they need explaining before that column is
@@ -381,9 +418,8 @@ What remains is not a question I can answer by measuring:
 1. **Go or no-go**, given that §1a moved the shape of the work. The rate-vs-amount
    split means the inventory pass is no longer clerical — it is a judgement about
    what each of 93 columns *means*, and it has to be right.
-2. **The two over-refunded orders** in §1a are a live defect this migration does
-   not cause and will not fix. Worth pulling on separately; say the word and I
-   will look.
+2. ~~The two over-refunded orders.~~ Investigated and closed — see the correction
+   in §1a. There is no defect; the check was wrong. No action needed.
 
 ---
 
