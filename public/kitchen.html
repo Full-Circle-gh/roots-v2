@@ -1787,7 +1787,12 @@ function renderProductionTab() {
               <div class="b-name">${esc(b.recipe_name || '—')}</div>
               <div class="b-meta">${(b.created_at||'').slice(11,16)}${b.notes ? ' · ' + esc((b.notes||'').slice(0, 50)) : ''}</div>
             </div>
-            <div class="b-amt">${b.batches_made}× <span style="font-weight:500;color:var(--muted);font-size:11px">${b.servings_made ? '· '+b.servings_made+' svg' : ''}</span></div>
+            <!-- A row written by Tacet's Production screen counts JARS, not
+                 recipe batches, so batches_made is deliberately null there —
+                 twenty jars might be one batch or four and the row does not
+                 know. Without this guard it printed "null×". Falls back to the
+                 servings figure, which for a product row IS the count made. -->
+            <div class="b-amt">${b.batches_made == null ? (b.servings_made || '—') : b.batches_made + '×'} <span style="font-weight:500;color:var(--muted);font-size:11px">${b.servings_made ? '· '+b.servings_made+' svg' : ''}</span></div>
           </div>`).join('')}
     </div>`;
   // Footer: log button

@@ -31,12 +31,14 @@
  * failure, and a runner with no Chromium fails loudly instead of going green
  * having checked nothing.
  *
- * QUARANTINE IS A LIST WITH NAMES ON IT, not a silence. The six red suites do
- * not block a merge, because holding every PR hostage to defects it did not
- * cause is how a gate gets switched off in week two. They are RUN, reported
- * under their own heading with the failure text, and counted. The list is meant
- * to shrink; adding to it should feel like a decision, which is why it lives
- * here in the open rather than in a workflow's `continue-on-error`.
+ * QUARANTINE IS A LIST WITH NAMES ON IT, not a silence — and it is now EMPTY.
+ * It opened with eight suites red on main and closed one week later with every
+ * one of them green; none was deleted or skipped to get there. A quarantined
+ * suite still RAN, was reported under its own heading with its failure text, and
+ * was counted, which is what made the list shrinkable rather than a drawer.
+ * Adding to it should feel like a decision, which is why it lives here in the
+ * open rather than in a workflow's `continue-on-error`. See the block above the
+ * (empty) list for what the eight turned out to be — six rot, two live defects.
  */
 'use strict';
 
@@ -48,55 +50,38 @@ const ROOT = path.join(__dirname, '..');
 const SCRIPTS = path.join(ROOT, 'scripts');
 
 /* ── Quarantine ────────────────────────────────────────────────────────────
-   Red on main as of 2026-09-04, each with what is actually broken. These run
-   and report; they do not block. Delete a line the moment its suite is green —
-   that is the only way this list is allowed to move. */
-const QUARANTINE = {
-  'test_address_pin.js':
-    'address: 1 of 126 — a pin case. Red before the suites were wired up.',
-  'test_manual_order_fees.js':
-    'manual-order-fees: 2 of 14 — delivery-fee wiring.',
-  'test_needs_point_client.js':
-    'needs-point: 2 of 20 — an async client assertion returning null.',
-  'test_meituan_queue_window.js':
-    'queue-window: 5 of 15 — "no such table: store_products". Reads like a ' +
-    'fixture that never creates the table rather than a defect in the queue.',
-  'test_handle_threading_batch1.js':
-    'handle-threading: 1 of 13 — "expected 2 generateRetailSku call sites, ' +
-    'found 0". A source-grep assertion that outlived the shape it greps for; ' +
-    'same class as the store_stock literal-list assertion fixed alongside this. ' +
-    '`npm run test:handle-threading` chains batch1 and batch2, so the npm ' +
-    'script name does not say which half is red — batch2 is green.',
-  'test_tx_conversion_manual_order.js':
-    'tx-conversion-manual-order: 8 of 14. Had NO npm alias, so it could not be ' +
-    'run by name by anybody — found only by walking scripts/ on disk.',
+   EMPTY, AND THAT IS THE POINT OF IT.
 
-  /* THESE TWO ARE WHY THE UNIT IS THE FILE. Both are inside `npm run
-     test:mobile`, which chains 24 files and reports one exit code — so for as
-     long as anybody has looked, the answer was "test:mobile fails" and WHICH of
-     the 24 was red took a 9-minute run and a scroll to find out. Running the
-     files separately named them in the first pass. */
-  /* test_mobile_purchasing.js LEFT THIS LIST on 2026-09-05, and the entry is
-     kept here as a paragraph rather than deleted outright, because the shape of
-     its defect is the one most likely to happen again.
+   It opened on 2026-09-04 with eight suites red on main, some for months, and
+   is now closed. Nothing was silenced to get here — every entry left by going
+   green, which is the only exit this list ever had.
 
-     It asserted "¥6,080 this month" against five purchase orders whose dates
-     were typed in as August 2026 literals, while the screen sums the CURRENT
-     month — so on 1 September every seeded order aged out and the case began
-     failing on a screen nobody had touched. Its quarantine entry said not to
-     delete it on one green run, because it was green on CI and red locally on
-     the same calendar day and that divergence was unexplained.
+   What the eight actually were, because the shape repeats and the next person
+   should recognise it: SIX were rot in the test, not defects in the product.
+   Assertions pinned to a literal list, a tuple or an English string that a
+   correct change moved (store_stock's caps, the requeue statement's states, a
+   fail card that gained i18n); fixtures that grew thinner than the code they
+   drive (a missing store_products, a request predating two validations); and
+   scaffolding that had quietly stopped covering what it claimed — a hand-rolled
+   JS lexer that swallowed two thirds of routes/retail.js and reported "0 call
+   sites" about code that was entirely correct, while the assertion beside it
+   passed by luck.
 
-     It is explained now: commit 558eed3 anchored the fixture to the app's own
-     Asia/Shanghai today, which is exactly what that entry said the fix had to
-     be — date the fixture relative to today, not re-record the figure. The
-     suite is green in two independent environments AND the named cause is gone
-     from the file. Both halves were required; either alone would have been a
-     guess. */
-  'test_mobile_trend.js':
-    'mobile-trend: 2 of 10 cases — both ends of the line are not dated, and ' +
-    'switching range does not re-ask the server for thirty days.',
-};
+   TWO WERE REAL, and both had been shipping. The trend window over-fetched by a
+   day at UTC+8 — every figure on that screen computed over the wrong range, in
+   the only timezone the shop runs in. And a product row filed itself as one
+   recipe batch, so three products reported as three batches.
+
+   That ratio is the argument for the list rather than against it: six pieces of
+   rot were the price of finding two live defects, and neither would have been
+   found by reading the code, because the code looked right. They were found by
+   running the suites somewhere that did not already agree with them.
+
+   ADD TO IT ONLY AS A DECISION. An entry needs a name and a sentence saying
+   what is broken; a suite whose failure you cannot describe is a suite you have
+   not read. And delete a line the moment it goes green — the runner calls out
+   any entry that passes, by name, for exactly that purpose. */
+const QUARANTINE = {};
 
 /* The render passes. Chromium, tens of seconds to minutes each — kept in their
    own shard so a typo in a route file does not cost twenty minutes to find.

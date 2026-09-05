@@ -122,7 +122,8 @@
     "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js",
     "test:channel-hub-binding": "node scripts/test_channel_hub_binding.js",
     "test:affiliate-new-customer": "node scripts/test_affiliate_new_customer.js",
-    "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js"
+    "test:po-cost-unit-guard": "node scripts/test_po_cost_unit_guard.js",
+    "test:production-log": "node scripts/test_production_log.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -142,6 +143,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "acorn": "^8.16.0",
     "eslint": "^10.4.0",
     "globals": "^17.6.0"
   }

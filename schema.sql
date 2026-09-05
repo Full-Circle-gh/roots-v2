@@ -400,10 +400,48 @@ CREATE TABLE IF NOT EXISTS production_batches (
   -- and cloned per tenant, so that FK is kept.
   -- Dropped from existing databases by drop_created_by_user_fk_v1.
   created_by    INTEGER,
+  -- ── The Tacet half ────────────────────────────────────────────────────────
+  -- Everything above describes a batch in RECIPE terms — "1.5 batches of the
+  -- hummus", logged on a desktop by somebody holding the kitchen permission.
+  -- That is the only shape this table had, and it is the reason it is empty:
+  -- the people who actually make the food are Tacet `tenant_users` with
+  -- capabilities, a different realm with no login for that screen at all. They
+  -- can reach exactly one catalogue — store_products — and they count JARS.
+  --
+  -- So a row may now be written in PRODUCT terms instead, and the two shapes
+  -- live in one table on purpose: a parallel table would be the same defect
+  -- this is fixing, one event recorded twice in two places that never agree.
+  -- recipe_id is still filled in where store_products.recipe_id resolves one,
+  -- so the desktop log and its yield stats keep working without the operator
+  -- ever seeing the word "recipe".
+  store_id      INTEGER,                 -- which kitchen/shelf; NULL on legacy recipe rows
+  product_id    INTEGER,                 -- store_products.id — NOT products.id (see _checkTransferIds)
+  -- WHAT WAS MADE AND WHAT REACHED THE SHELF ARE TWO NUMBERS, and that is the
+  -- whole point of recording production separately from stock. Make 20, break
+  -- 2, shelve 18: qty_made 20, qty_shelved 18, and the gap is a real loss that
+  -- is otherwise invisible — the stock ledger only ever saw 18 arrive and had
+  -- no way to know 20 existed.
+  qty_made      REAL,
+  qty_shelved   REAL,
+  -- Why they differ, in the waste module's own vocabulary (routes/retail-waste
+  -- REASONS: damaged, preparation_error, spoiled, …) plus 'made_fewer', which
+  -- is NOT a loss and must never be totalled as one — it means the batch was
+  -- smaller than asked for, so nothing was destroyed.
+  gap_reason    TEXT,
+  -- The request this batch answers, when there was one. Kitchen staff also make
+  -- things nobody asked for, and those rows carry NULL rather than a fiction.
+  request_id    INTEGER,
   FOREIGN KEY (recipe_id) REFERENCES recipes(id)
 );
 CREATE INDEX IF NOT EXISTS idx_production_date ON production_batches(date);
 CREATE INDEX IF NOT EXISTS idx_production_recipe ON production_batches(recipe_id);
+-- NO INDEX ON THE COLUMNS ABOVE THIS LINE'S NEW NEIGHBOURS — idx_production_store
+-- is created in database.js instead, immediately after the addColumn() calls that
+-- put store_id there. This file runs FIRST on an existing database, where
+-- CREATE TABLE IF NOT EXISTS is a no-op and the column does not exist yet, so an
+-- index named here refuses with "no such column: store_id" and takes the whole
+-- boot with it. A column and its index are added in the same place, and that
+-- place is the migration.
 
 -- ── Kitchen Orders ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS kitchen_orders (

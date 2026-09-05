@@ -104,37 +104,53 @@ function stripComments(src) {
 
 const CODE = stripComments(RETAIL_SRC);
 
-/**
- * Replace every string/template literal body with a harmless placeholder.
+/* CALL SITES ARE FOUND BY PARSING, NOT BY SCANNING.
  *
- * Only used for COUNTING arguments. A template literal carrying `${…}` is one
- * argument however many commas hide inside it, so blanking the whole literal is
- * the correct reading — and it makes paren/comma balancing trivial and safe.
+ * This used to blank every string literal with a hand-rolled scanner and then
+ * balance parentheses over the result. It broke, silently, and in the way a
+ * hand-rolled JS lexer always eventually breaks: it has no idea what a REGEX
+ * literal is, so an apostrophe inside one — /don't/ or a character class with a
+ * quote in it — opened a string that ran until the next stray quote thousands of
+ * lines away. On the routes/retail.js of the day it was written that happened to
+ * hit nothing important. By now it collapsed 1.2 MB of stripped source to 272 KB
+ * and swallowed two of the three `generateRetailSku` occurrences, so the suite
+ * reported "expected 2 call sites, found 0" about code that was entirely correct.
+ *
+ * WORSE, THE NEIGHBOURING ASSERTION WAS PASSING BY LUCK. writeLayout's nine call
+ * sites survived only because they sat outside the swallowed region; one more
+ * regex anywhere above them and that check would have started lying too, in the
+ * direction that reports success.
+ *
+ * acorn is the parser eslint already brings, now declared directly so the
+ * dependency is stated rather than borrowed. It is devDependencies-only and the
+ * production installer runs --omit=dev, so nothing about the deployed box
+ * changes. A parser cannot be confused by a regex, a template literal or a
+ * comment, which is the entire reason to use one.
  */
-function blankStrings(src) {
-  let out = '', i = 0;
-  const n = src.length;
-  while (i < n) {
-    const c = src[i];
-    if (c === '"' || c === "'") {
-      const q = c; out += '0'; i++;
-      while (i < n && src[i] !== q) { i += src[i] === '\\' ? 2 : 1; }
-      i++; continue;
+const acorn = require('acorn');
+
+let AST = null;
+function ast() {
+  if (!AST) AST = acorn.parse(RETAIL_SRC, { ecmaVersion: 'latest', sourceType: 'script' });
+  return AST;
+}
+
+/** Argument counts at every CALL of `name` — the definition itself excluded,
+ *  because a FunctionDeclaration is not a CallExpression and never matches. */
+function callArgCounts(name) {
+  const out = [];
+  (function walk(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (node.type === 'CallExpression'
+        && node.callee && node.callee.type === 'Identifier' && node.callee.name === name) {
+      out.push(node.arguments.length);
     }
-    if (c === '`') {
-      out += '0'; i++;
-      let depth = 0;
-      while (i < n) {
-        if (src[i] === '\\') { i += 2; continue; }
-        if (src[i] === '$' && src[i + 1] === '{') { depth++; i += 2; continue; }
-        if (depth > 0 && src[i] === '}') { depth--; i++; continue; }
-        if (depth === 0 && src[i] === '`') { i++; break; }
-        i++;
-      }
-      continue;
+    for (const k in node) {
+      if (k === 'type' || k === 'start' || k === 'end') continue;
+      walk(node[k]);
     }
-    out += c; i++;
-  }
+  })(ast());
   return out;
 }
 
@@ -160,33 +176,6 @@ function instantiate(name, tdbFn) {
   return new Function('tdb', `${src}\nreturn ${name};`)(tdbFn);
 }
 
-/** Argument counts at every CALL of `name` — the definition itself excluded. */
-function callArgCounts(name) {
-  const flat = blankStrings(CODE);
-  const out = [];
-  const re = new RegExp(`(^|[^\\w.])${name}\\s*\\(`, 'g');
-  let m;
-  while ((m = re.exec(flat)) !== null) {
-    const before = flat.slice(Math.max(0, m.index - 30), m.index + m[0].length);
-    if (/function\s+$/.test(flat.slice(0, m.index + m[0].length - name.length - 1))) continue;
-    if (/\bfunction\s+\w*\s*$/.test(before.slice(0, before.length - name.length - 1))) continue;
-    let i = m.index + m[0].length - 1, depth = 0, start = i + 1;
-    for (; i < flat.length; i++) {
-      if (flat[i] === '(') depth++;
-      else if (flat[i] === ')') { depth--; if (depth === 0) break; }
-    }
-    const inner = flat.slice(start, i);
-    if (!inner.trim()) { out.push(0); continue; }
-    let d = 0, count = 1;
-    for (const ch of inner) {
-      if ('([{'.includes(ch)) d++;
-      else if (')]}'.includes(ch)) d--;
-      else if (ch === ',' && d === 0) count++;
-    }
-    out.push(count);
-  }
-  return out;
-}
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 function newDb() {

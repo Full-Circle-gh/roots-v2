@@ -73,8 +73,24 @@ check('it still logs what it made', () => {
   assert.ok(kitchenCaps.indexOf('quickstock:add') >= 0, 'lost quickstock:add');
 });
 
-check('and gains nothing else — this is a queue, not the backend', () => {
-  assert.deepStrictEqual([...kitchenCaps].sort(), ['quickstock:add', 'restock:fulfil'].sort());
+/* THE THIRD TIME THIS SHAPE HAS GONE RED FOR A CORRECT CHANGE, and the second
+   in this file. It asserted the literal pair, so `production:log` — a capability
+   this role must hold, or the Production screen is invisible to the only people
+   with anything to put in it — turned it red the moment it was granted. That is
+   a change-detector, not a test: exactly what the store_stock case above was
+   before it was rewritten, and the reason it sat red for weeks.
+
+   THE PROPERTY IS THE CEILING, NOT THE LIST. What matters is that a kitchen
+   operator stays confined to the kitchen's own jobs — make things, record what
+   was made, put them on the shelf — and never acquires the backend: no orders,
+   no money, no products, no settings, and above all no `restock:pick`, which is
+   what would let them dispatch a van. Growing the kitchen's own tools is
+   allowed and expected; growing sideways is not. */
+check('and gains nothing outside the kitchen’s own work', () => {
+  const KITCHEN_WORK = ['quickstock:add', 'restock:fulfil', 'production:log'];
+  const extra = kitchenCaps.filter(k => KITCHEN_WORK.indexOf(k) < 0);
+  assert.deepStrictEqual(extra, [],
+    `kitchen gained ${JSON.stringify(extra)} — beyond making, recording and shelving`);
 });
 
 /* THE KITCHEN'S GRANT DID NOT LEAK INTO THE OTHER RESTRICTED STOCKER, which is

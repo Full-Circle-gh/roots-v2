@@ -240,6 +240,13 @@ async function runOpenOrder(order, opts, { qpNodeExists = true, scrollThrows = f
     mountCourierMap: () => {},
     qpInitMap: () => { seen.qpInit++; },
     escapeHtml: (s) => String(s),
+    // A CROSS-FILE GLOBAL FROM 01-core.js, which this sandbox does not load.
+    // openOrder's failure card moved onto cuT for i18n, so without this the
+    // function threw ReferenceError before reaching anything under test — and
+    // the suite reported it as "a load failure is still handled, not thrown",
+    // which is a true sentence about the wrong thing. Mirrors 01-core's own
+    // fallback for when the helper is absent: return the English.
+    cuT: (en) => en,
   };
   vm.createContext(ctx);
   new vm.Script(`${FOCUS_FN}\n${OPEN_ORDER}`).runInContext(ctx);
@@ -306,7 +313,12 @@ it('the focus call is positioned after the catch block, not inside the try', () 
   // even if no test happens to throw from the scroll.
   const fn = slice(ORDERS_JS, 'async function openOrder(id, opts = {})');
   const catchAt = fn.indexOf('} catch (e) {');
-  const failCard = fn.indexOf('order-card err">Failed');
+  // ANCHORED ON THE CLASS, NOT ON THE WORD. This looked for `err">Failed` and
+  // went red when the card moved onto cuT for i18n — `err">${cuT('Failed', …)}`.
+  // The card is still there and still in the catch; only the English literal
+  // stopped being adjacent. The class is the part that identifies it and the
+  // part that does not change when somebody translates the screen.
+  const failCard = fn.indexOf('order-card err"');
   const call = fn.indexOf("if (opts.focus === 'point'");
   assert.ok(catchAt > -1 && failCard > catchAt, 'could not locate openOrder\'s catch');
   assert.ok(call > -1, 'the focus call is gone');
