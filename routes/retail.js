@@ -10920,10 +10920,27 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   const carriesPoints = paymentMethod === 'points' || Number(body.points_to_use) > 0;
   if (declaresTotal && carriesPoints) {
     const declaredTotal = Number(body.client_total);
-    // Same money class as `total` — ¥ at 2dp, no conversion. Half-cent
-    // tolerance absorbs float dust on either side; a real disagreement is
-    // never smaller than a fen.
-    if (!Number.isFinite(declaredTotal) || Math.abs(declaredTotal - total) > 0.005) {
+    /* ── A CLIENT THAT HAS NOT LEARNED ABOUT TAX YET IS NOT A DISAGREEMENT ──
+       (audit I-03.) The mini app is a PUBLISHED WeChat build: turning tax on in
+       the admin takes effect here immediately, while the handset in a
+       customer's pocket is whatever build WeChat last approved. Without this,
+       the day a shop switched tax on, every customer still on the old build
+       would have declared a total short by exactly the tax and been refused —
+       a checkout outage lasting until a new build cleared review, caused by a
+       setting change.
+
+       So the pre-tax figure is accepted too, and it is not a hole: `taxAdded`
+       is not a free variable a client can move, it is what THIS server just
+       computed for THIS cart. Both accepted values are the server's own
+       arithmetic; the thing the check exists to catch — a stale
+       points-affordability flag, where the client shows ¥0.00 and the real
+       residual is ¥24.40 — is neither of them, and is still refused.
+
+       Zero on an inclusive shop and on every shop that charges no tax, where
+       the two accepted values are the same number and this changes nothing. */
+    const taxAdded = money.fromMinor(taxLine.addedMinor);
+    const agrees = (v) => Number.isFinite(declaredTotal) && Math.abs(declaredTotal - v) <= 0.005;
+    if (!(agrees(total) || (taxAdded > 0 && agrees(Math.max(0, total - taxAdded))))) {
       return res.status(400).json({
         success: false,
         error: 'points_cannot_cover_shipping',

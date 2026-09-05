@@ -502,6 +502,31 @@ async function place(taxCfg, body) {
     is(incl.addedMinor, 0, 'and on an inclusive shop the figure passed is zero — the price already contained it');
   }
 
+  // ── §7f · the published app in a customer's pocket ──────────────────────
+  section('7f · a client that has not learned about tax yet');
+  {
+    /* The mini app is a PUBLISHED WeChat build. Turning tax on in the admin
+       takes effect on the server immediately; the handset is whatever build
+       WeChat last approved, which is days behind. The create route refuses an
+       order whose declared total disagrees with its own — so without a
+       tolerance, switching tax on would have taken every customer on the old
+       build out of the checkout until a new build cleared review.
+
+       The pre-tax figure is accepted too. Not a hole: both accepted values are
+       the server's own arithmetic for this cart, and the stale
+       points-affordability flag the check exists to catch is neither. */
+    const co = RETAIL_SRC.slice(RETAIL_SRC.indexOf('const declaredTotal = Number(body.client_total)'));
+    const block = co.slice(0, 2600);
+    yes(/const agrees = \(v\) =>/.test(block), 'the check accepts either of two figures');
+    yes(/agrees\(total\) \|\| \(taxAdded > 0 && agrees\(Math\.max\(0, total - taxAdded\)\)\)/.test(block),
+        'the total, and the total before the tax this server just added');
+    yes(/taxAdded > 0/.test(block),
+        'and only when there IS added tax — an inclusive shop and an untaxed one accept exactly one figure, as before');
+    yes(/points_cannot_cover_shipping/.test(block),
+        'everything else is still refused, with the same answer it always gave');
+    yes(/0\.005/.test(block), 'and the half-cent tolerance for float dust is unchanged');
+  }
+
   // ── §8 · the report, over the wire ──────────────────────────────────────
   // Mounted for real rather than read: the refunded half is arithmetic (a
   // proportion of each order's own gross) and arithmetic asserted by grep is
