@@ -13,7 +13,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 |---|---|---|
 | **Part one** | the first 36 findings | merged and live (commit `24f3991`) |
 | **Part two** | §1b's nineteen | merged and live (commit `5070ca1`) |
-| **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | on the branch, deploys with the next merge |
+| **Part three** | N-02, I-03, E-07's purchase orders, K-01, and rung 1 of the money ladder | merged and live (commit `dae3a5f`) |
+| **Part four** | C-02's last part — the phone's date family | on the branch, deploys with the next merge |
 
 ---
 
@@ -38,7 +39,7 @@ three are done and pushed. They are the last three rows of the table.
 | **B-05** | Medium | Escape threw away a half-finished product without asking. |
 | **B-06** | Medium | Orders had no way to clear its own filters. |
 | **C-01** | High | The Team screen asked the owner to type a number into a browser pop-up. Five native dialogs replaced; `askChoice` added to the shared dialog module. |
-| **C-02** | Medium | Four date formats. The three bespoke formatters now call the shared one. |
+| **C-02** | Medium | Four date formats. The three bespoke formatters now call the shared one, and the phone admin — which had a fourth, drawn on the DEVICE's clock rather than the store's — now loads and renders through the same module. |
 | **C-04** | Low | "The daemon will push it" — three strings, rewritten. |
 | **D-03 / I-01** | High | 188 hardcoded ¥ conversions across twelve files. Every amount now renders in the merchant's currency, including the coupon presets offered on day one. |
 | **D-04** | Medium | Shared feature copy named the first merchant's loyalty programme, in three places. |
@@ -107,8 +108,8 @@ with `--update`; list them with `--list`. The two worst offenders are
 Everything below was built after the first 36 shipped, working down what was
 left. It is grouped by what each one changes rather than by severity: at this
 point the severities left are mostly Medium and Low, and the useful question is
-what a merchant notices. Four rows are marked **part three** — those are on the
-branch and deploy with the next merge; everything else here is live.
+what a merchant notices. One row is marked **part four** — it is on the branch
+and deploys with the next merge; everything else here is live.
 
 | Finding | Severity | What changed |
 |---|---|---|
@@ -117,13 +118,13 @@ branch and deploy with the next merge; everything else here is live.
 | **D-08 / H-01 / H-03** | High ×3 | *Q6.* A new merchant is asked where they trade, once, and currency, time zone and shop language follow from it. The yuan fee defaults are seeded only in yuan. An unknown country falls back to USD/UTC, deliberately not to China. A shop with no web address says so instead of finishing the checklist with a shop nobody can reach. |
 | **D-10** | High | *Q7.* Guangzhou's districts were written into delivery, orders and stock routing. The districts that may choose a dispatch method are the merchant's own now. |
 | **P-01** | High | *Q4.* Every alert says whose problem it is: `alertPlatform`, `alertMerchant`, `alertBoth`. A gate refuses an alert that declares no audience. |
-| **N-02** | High · part three | *Q9.* An order can be taken on the phone. One screen, six sections, the same create endpoint the desktop and the till use — including the same fee quote, so the phone cannot charge a different delivery fee for the same basket. Counter sales stay at the till and drafts stay on the desktop, both for stated reasons. Nothing in the form re-renders the app while somebody is typing: on a phone that drops the keyboard. |
-| **I-03** | High · part three | *Q8.* Sales tax and VAT. One rate per shop, both shapes — added at checkout, or already in the price — off until a shop sets a rate, so nothing moves for Roots. The order keeps a snapshot of the money, the rate and the shape, so a rate that changes in April cannot restate March. It shows on the checkout and its quote, the mini-app order page, the web storefront, the till, the admin drawer, the phone, the thermal receipt and the finance summary. |
+| **N-02** | High | *Q9.* An order can be taken on the phone. One screen, six sections, the same create endpoint the desktop and the till use — including the same fee quote, so the phone cannot charge a different delivery fee for the same basket. Counter sales stay at the till and drafts stay on the desktop, both for stated reasons. Nothing in the form re-renders the app while somebody is typing: on a phone that drops the keyboard. |
+| **I-03** | High | *Q8.* Sales tax and VAT. One rate per shop, both shapes — added at checkout, or already in the price — off until a shop sets a rate, so nothing moves for Roots. The order keeps a snapshot of the money, the rate and the shape, so a rate that changes in April cannot restate March. It shows on the checkout and its quote, the mini-app order page, the web storefront, the till, the admin drawer, the phone, the thermal receipt and the finance summary. |
 | **E-05** | Larger | Products and customers can come in from a spreadsheet. The importer refuses an ambiguous comma decimal rather than guessing — `18,00` as 1800 is a hundredfold mis-price, and my own test caught it. |
 | **B-03** | Medium | Four endpoints for opening and closing the shop, and no screen. There is one now, above the store list. Wiring it up exposed a wrong answer: `master` counted a shop with no marketplace as closed, so a merchant with no integration would have been told their whole business was shut while it traded. |
 | **E-10** | Medium | Notifications can be tuned. Four events, each a switch, all on until somebody turns one off, filtered at the one place every send funnels through. No quiet hours, deliberately — an operational alert dropped by a clock is indistinguishable from one that failed. |
 | **E-08** | Medium | A filter set can be named, kept and shared with a colleague. Private until shared; a shared view stays its author's. Orders adopts it; the module is general. |
-| **E-07** | Medium · part three | What was deleted can be put back — coupons, delivery zones, hand-typed ledger rows and draft purchase orders, for sixty days, from Settings → Operations. A purchase order comes back with its lines and with its own date, so it still belongs to the month it was placed in. Only a draft can get there: the delete route refuses anything else, and a delivered order has to be stood down first, which reverses its stock and unposts its books under its own all-or-nothing rule. |
+| **E-07** | Medium | What was deleted can be put back — coupons, delivery zones, hand-typed ledger rows and draft purchase orders, for sixty days, from Settings → Operations. A purchase order comes back with its lines and with its own date, so it still belongs to the month it was placed in. Only a draft can get there: the delete route refuses anything else, and a delivered order has to be stood down first, which reverses its stock and unposts its books under its own all-or-nothing rule. |
 | **I-02** | Medium | Money arithmetic in SQL no longer sets the rounding. A purchase order's expense rows, a customer's lifetime spend and the finance summary's `fen()` all round the product's way — which fixes two real cases: 1.005 became 1.00, and a negative net rounded the opposite way from the positive it should mirror. |
 | **G-03** | Medium | Settings has a search of its own, over the cards' own words, and fourteen of its twenty-seven cards are marked as things customers see. |
 | **J-03** | Medium | The shell is compressed on the way out and a stamped file is cached properly: 3,355 KB → 1,073 KB on the wire, and nothing at all between deploys. Loading a section on demand — the audit's direction — is still open, and why is written into `lib/static-assets.js`. |
@@ -134,7 +135,8 @@ branch and deploy with the next merge; everything else here is live.
 | **E-12** | Low | A stock count sheet for the shelves and a customer statement. Both carry the merchant's own name; the older purchase-order sheet had "Roots" written into the file, and no longer does. |
 | **Q-03** | Low | Three behaviours for "clear the filters". Customers and Products now follow Waste's, which Orders already did: the button is present while something is narrowing the list and absent otherwise. Empty-state-only was serving the wrong case — a filter that matched nothing announces itself; one that matched forty out of four hundred does not. |
 | **C-05** | Low | The one destructive call in the admin that did not ask, now asks. |
-| **K-01** | Medium · part three | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
+| **K-01** | Medium | *Answered: tag the controls only.* Seven of the consequential controls carry the capability the SERVER already requires of the endpoint they call — the four refund buttons, the product delete, the delivery-zone delete and the coupon revoke — and the three screens that build them after page load now re-run the gate, without which a tag is decoration. The audit's own example is closed: the Refund / Cancel menu is built from what the operator may do, so a cashier keeps Cancel and no longer sees Refund. Nothing about what an account may DO has changed, and `scripts/test_role_tagged_controls.js` asserts that pairing against `requiredCapFor()` rather than trusting it. |
+| **C-02** | Medium · part four | The phone admin had its own date family — its own parser, its own English and Chinese branches, and its own idea of what "today" is. Its SHAPES matched the desktop's; its ZONE did not. Every stamp on the phone was drawn on the handset's clock while every stamp on the desktop is drawn on the store's, so an owner abroad read two different times for the same order on two screens — the same defect A-05 fixed on the server, pointing the other way. Three "today" computations were hardcoded to UTC+8 on top of that, which is right for exactly one account. The phone now loads `/assets/td-datetime.js` and renders through it, so there is one formatter and one clock. Nothing changes for Roots: Guangzhou is UTC+8 and the module's fallback is the same zone. `scripts/test_phone_dates.js` runs the shipped helpers under two store zones, which is the only way to see this at all.|
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -399,10 +401,6 @@ that could be done without one has been.
   the brief.
 
 **Deliberately left, with the reason:**
-- **C-02, the last part** — the phone admin still has its own date family. Its
-  convention matches the shared formatter's, so converging changes nothing
-  visible; it is tidiness on an untested surface, which is the worst ratio on
-  this list.
 - **I-04** — the platform's money is integer cents and the merchant's is a
   float. That IS A-06; it stops being true when stage 2 lands, and doing
   anything about it separately would be a second migration to undo.
@@ -455,7 +453,7 @@ earlier note here said it could not; that was wrong for two sessions, and it
 mattered — half the suites and every eslint run were being skipped on an
 assumption. With `npm ci` the whole thing runs locally.
 
-**The fast shard: 141 suites, 0 failures, 0 quarantined.** The quarantine list
+**The fast shard: 143 suites, 0 failures, 0 quarantined.** The quarantine list
 is empty — five of the six were fixed on `main` while this branch was in
 flight, and the sixth (`test_mobile_purchasing.js`) left on the evidence
 described below. `npx eslint` reports **0 errors** on every changed file, which
@@ -484,7 +482,7 @@ Suites added by this pass, each named for the finding it holds down:
 `test_print_documents.js`, `test_settings_findable.js`, `test_recycle.js`,
 `test_asset_delivery.js`, `test_clear_filters.js`, `test_money_invariants.js`,
 `test_money_migration.js`, `test_phone_order.js`, `test_tax.js`,
-`test_role_tagged_controls.js`.
+`test_role_tagged_controls.js`, `test_phone_dates.js`.
 
 Also run, on every commit:
 

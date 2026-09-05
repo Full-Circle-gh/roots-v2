@@ -22,6 +22,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { fakeServer } = require('./lib/m-fakeserver');
+const { inlineTdDatetime } = require('./lib/m-probe');
 
 const APP = path.join(__dirname, '..', 'public', 'm.html');
 const OUT = process.argv[2] || path.join(os.tmpdir(), 'm-shots');
@@ -88,10 +89,12 @@ function main() {
   // bug that was not there. Every keyframe's `to` is the element's own static
   // CSS, so removing the animation IS the settled frame.
   const STILL = '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>';
-  let src = src0
+  // The page's one local dependency, inlined — see inlineTdDatetime(). Without
+  // it every screen in the shot renders empty, which is a slow way to find out.
+  let src = inlineTdDatetime(src0
     .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, ICON_STUB)
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '')
-    .replace('</head>', STILL + '</head>');
+    .replace('</head>', STILL + '</head>'));
 
   const SERVER = process.env.NO_FAKE_SERVER ? '' : fakeServer();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-shoot-'));

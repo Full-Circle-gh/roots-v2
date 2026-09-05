@@ -117,6 +117,9 @@ html.includes('apple-mobile-web-app-capable')
 const sw = fs.readFileSync(path.join(PUB, 'sw.js'), 'utf8');
 /const SHELL = \[[^\]]*'\/m'/.test(sw)
   ? ok("sw.js pre-caches the /m shell") : bad("sw.js SHELL does not include '/m' — the app has no offline shell");
+/const SHELL = \[[^\]]*'\/assets\/td-datetime\.js'/.test(sw)
+  ? ok('sw.js pre-caches the date module the app renders through')
+  : bad("sw.js SHELL does not include '/assets/td-datetime.js' — offline, the phone opens to a blank app rather than a plain one");
 
 // ── Browser pass ───────────────────────────────────────────────────────────
 const CHROME = findChrome();
@@ -146,7 +149,12 @@ function serve() {
       // miss that one and install() rejects, the worker never activates, and
       // the whole browser pass hangs waiting for a worker that will never come.
       const named = { '/': 'm.html', '/m': 'm.html', '/login': 'login.html' };
-      const file = named[p] || p.replace(/^\//, '');
+      // server.js mounts public/ at /assets as well as at the root, and m.html
+      // loads /assets/td-datetime.js from there. Without this the app's date
+      // module 404s, the first render throws, .tabbar never appears and the
+      // whole browser pass times out on a page that looks blank — and the
+      // service worker, which pre-caches that same URL, never installs either.
+      const file = named[p] || p.replace(/^\/assets\//, '').replace(/^\//, '');
       const abs = path.join(PUB, file);
       // Never let a request climb out of public/.
       if (!abs.startsWith(PUB) || !fs.existsSync(abs) || fs.statSync(abs).isDirectory()) {

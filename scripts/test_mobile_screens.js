@@ -20,6 +20,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { inlineTdDatetime } = require('./lib/m-probe');
 
 const APP = path.join(__dirname, '..', 'public', 'm.html');
 
@@ -272,6 +273,13 @@ function main() {
   // each hold the page open until they time out.
   src = src.replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
            .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
+  // The app's one LOCAL dependency, inlined — see inlineTdDatetime(). Every
+  // screen below formats at least one date, so without it tdWhen is undefined
+  // and the whole run paints empty: 372 identical failures saying nothing.
+  // The static passes further down keep reading this same string, which is why
+  // the inlined block carries an attribute — their /<script>…<\/script>/ lifts
+  // want the app's own source and must not match a dependency.
+  src = inlineTdDatetime(src);
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-screens-'));
   const cases = buildCases(src);

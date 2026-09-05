@@ -32,7 +32,12 @@ const CACHE = 'roots-v2-shell-unstamped';
 // meant to be INSTALLED rather than visited. An installed app that opens to a
 // browser error the first time the signal drops is not an app, so its shell is
 // pre-cached with the others.
-const SHELL = ['/', '/login', '/m'];
+// '/assets/td-datetime.js' is here for '/m' and for no other reason. Every
+// other shell degrades without it; the phone does not — it renders every list
+// through tdWhen, so a missing module is a blank app rather than an app with
+// plain dates. Stale-while-revalidate would fetch it on the first ONLINE load,
+// which is one load too late for an installed app opened on a dead signal.
+const SHELL = ['/', '/login', '/m', '/assets/td-datetime.js'];
 
 // Heuristic — request that wants HTML?
 function isHTMLRequest(req) {
