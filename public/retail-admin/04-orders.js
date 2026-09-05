@@ -8915,6 +8915,9 @@ function ordNewRender() {
     // Which of the two fee fields the operator has typed in. A touched field is
     // never refilled from the zone quote again — see ordNewFeeTyped.
     feeTouched: { ship: false, pack: false },
+    // True while the fulfilment select holds a value the ORIGIN picker put there
+    // (Pick up → Pickup), not one the operator chose — see ordNewChannelChange.
+    fulFromOrigin: false,
   };
   // The busy latch and the two action buttons only ever get set BUSY/disabled
   // (ordNewSetBusy) — a successful create leaves them that way on purpose
@@ -9287,7 +9290,20 @@ function ordNewRenderLines() {
 // "Other" is the only origin that needs a follow-up question, so the note field
 // exists only while it is selected — and is cleared on the way out so a switch
 // away from Other can't leave a stale note attached to a real origin.
-function ordNewChannelChange() {
+//
+// "PICK UP" AS AN ORIGIN MEANS THE CUSTOMER COLLECTS. The form opens on
+// fulfilment = Delivery, and an operator who answered "Pick up" and went
+// straight to the products was still being quoted the delivery zone's shipping
+// (¥15 on a walk-in collection). The origin answer already says how this order
+// is fulfilled, so picking it moves the fulfilment select to Pickup — which is
+// what zeroes shipping and hides the address block (ordNewFulChange). Only the
+// operator's own pick does this (`userPick`): the open/reset and draft-restore
+// paths call this to re-reveal the note field and must not re-route an order
+// whose fulfilment the draft already holds. The hop is remembered
+// (ONW.fulFromOrigin) so a mis-click on "Pick up" that is then corrected to
+// another origin falls back to Delivery instead of leaving a silent Pickup
+// behind it; a fulfilment the operator chose by hand is never overridden.
+function ordNewChannelChange(userPick) {
   const sel  = document.getElementById('onw-channel');
   const wrap = document.getElementById('onw-channel-note-wrap');
   const note = document.getElementById('onw-channel-note');
@@ -9295,11 +9311,26 @@ function ordNewChannelChange() {
   const isOther = sel.value === 'other';
   wrap.hidden = !isOther;
   if (!isOther && note) note.value = '';
+  if (!userPick || !ONW) return;
+  const ful = document.getElementById('onw-ful');
+  if (!ful) return;
+  if (sel.value === 'pickup' && ful.value === 'delivery') {
+    ful.value = 'pickup';
+    ordNewFulChange();
+    ONW.fulFromOrigin = true;
+  } else if (sel.value !== 'pickup' && ONW.fulFromOrigin && ful.value === 'pickup') {
+    ful.value = 'delivery';
+    ordNewFulChange();
+  }
 }
 
 function ordNewFulChange() {
   const sel = document.getElementById('onw-ful');
   if (!sel || !ONW) return;
+  // Any change to the select — the operator's or a restore's — is a value the
+  // origin picker no longer owns (ordNewChannelChange re-sets the flag after
+  // its own call).
+  ONW.fulFromOrigin = false;
   const ft = sel.value;
   const addr = document.getElementById('onw-addr-blk');
   if (addr) addr.hidden = ft !== 'delivery';
