@@ -4134,6 +4134,11 @@
              page, and filtered exactly as the roster is. -->
         <button class="btn btn-sm" id="cu-export-btn" type="button" onclick="cuExportCsv()"
                 title="Download these customers as a spreadsheet · 下载当前顾客表格"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>Export CSV · 导出</button>
+        <!-- Audit E-05, and deliberately next to Export: the two halves of the
+             same idea, and a merchant who has found one has found the other.
+             The arrow points the other way. -->
+        <button class="btn btn-sm" id="cu-import-btn" type="button" data-cap="customers:edit" onclick="tdImportOpen('customers')"
+                title="Bring customers in from a spreadsheet · 从表格导入顾客"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:5px"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>Import CSV · 导入</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -4375,6 +4380,10 @@
         <div class="pa-addsplit-menu" id="pa-add-menu" hidden>
           <button type="button" onclick="paAddMenuClose();pwOpen()"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg><span><b>Step by step · 分步添加</b><small>Walks you through each field · 逐项引导填写</small></span></button>
           <button type="button" onclick="paAddMenuClose();pdOpen(null)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg><span><b>Add manually · 手动新增</b><small>Blank form · 空白表单</small></span></button>
+          <!-- Audit E-05. The catalogue is the largest cost of moving to Tacet,
+               and until now it could only be typed in. Third in the menu, not
+               first: importing is the rarer act and the once-per-shop one. -->
+          <button type="button" data-cap="products:edit" onclick="paAddMenuClose();tdImportOpen('products')"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.5V2.5M5 7l3 3 3-3"/><path d="M2.5 11.5v1a1 1 0 001 1h9a1 1 0 001-1v-1"/></svg><span><b>Import a spreadsheet · 导入表格</b><small>Bring a catalogue in from another system · 从其他系统导入商品目录</small></span></button>
         </div>
       </div>
     </div>
@@ -13118,6 +13127,7 @@
 <script src="/assets/retail-admin/21-product-build.js"></script>
 <script src="/assets/retail-admin/22-finance.js"></script>
 <script src="/assets/retail-admin/23-sku.js"></script>
+<script src="/assets/retail-admin/24-import.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside role="dialog" id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
