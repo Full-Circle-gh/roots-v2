@@ -542,9 +542,8 @@ img{display:block;max-width:100%}
    this is the one control on the screen and it wears the house's off-white
    like every other border on the page. */
 .big-x{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;
-  width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-  border:2px solid var(--oat);background:rgba(0,0,0,.55);color:var(--oat);
-  font-family:var(--f-bear);font-size:24px;line-height:1;padding:0;cursor:pointer;
+  width:44px;height:44px;border:2px solid var(--oat);background:rgba(0,0,0,.55);
+  color:var(--oat);padding:0;cursor:pointer;
   -webkit-tap-highlight-color:transparent}
 
 /* ── the basket ── */
@@ -636,12 +635,44 @@ img{display:block;max-width:100%}
   .sheet.closing .sheet-p,.sheet.closing .sheet-bg,
   .big:not([hidden]){animation:none}
 }
+/* THE PRODUCT FLIES TO THE BASKET. A number changing at the bottom edge of a
+   phone is easy to miss with a thumb over it; the flight is what says WHICH
+   product went in and WHERE it went, before the customer has to look for the
+   count. It is the mini app's own feedback, so somebody who knows the app is
+   not learning a second language here.
+   A CLONE OF THE CARD'S PHOTO, never the photo itself — moving the real one
+   would leave a hole in the menu behind it, and put the card's own layout at
+   the mercy of an animation. Fixed rather than absolute, so it does not care
+   what the page is scrolled to, and pointer-events:none so a customer tapping
+   a second product mid-flight is not blocked by the first one. */
+.fly{position:fixed;z-index:70;pointer-events:none;opacity:1;
+  background:var(--oat) center center no-repeat;background-size:cover;
+  transition:transform .5s cubic-bezier(.35,.05,.3,1),opacity .5s ease-in}
+/* Reduced motion gets the count and nothing thrown across the screen. */
+@media (prefers-reduced-motion:reduce){.fly{display:none}}
+
 .sheet-h{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;
   border-bottom:2px solid var(--ink)}
 .sheet-t{flex:1;font-family:var(--f-bear);font-size:16px;letter-spacing:.04em}
-.sheet-x{flex:none;width:32px;height:32px;border:2px solid var(--ink);
-  background:transparent;color:var(--ink);font-size:20px;line-height:1;
+.sheet-x{flex:none;position:relative;width:32px;height:32px;
+  border:2px solid var(--ink);background:transparent;color:var(--ink);
   cursor:pointer;padding:0}
+
+/* THE X IS DRAWN, NOT TYPED, and that is the difference between centring a
+   glyph and centring a mark. A character is placed by its font's metrics, not
+   by its ink: the house display face hangs its multiplication sign high in the
+   em box, so centring the line box in a 44px square still left the cross
+   sitting above the middle of it, which is what a customer sees. Two bars
+   crossed at 45 degrees have their centre where the maths puts it. Same reason
+   the card's + is two bars rather than a plus sign.
+   Real spans rather than ::before and ::after, so the suite can measure where
+   the mark actually landed — a pseudo-element has no box to ask about, and an
+   assertion that cannot see the ink is how this shipped off-centre. */
+.xb{position:absolute;left:50%;top:50%;height:2px;background:currentColor}
+.xb1{transform:rotate(45deg)}
+.xb2{transform:rotate(-45deg)}
+.sheet-x .xb{width:14px;margin-left:-7px;margin-top:-1px}
+.big-x .xb{width:20px;margin-left:-10px;margin-top:-1px}
 .sheet-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 14px}
 .sheet-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
   border-top:2px solid var(--ink)}
@@ -984,8 +1015,39 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // means the customer meets the ceiling as a button that stops moving rather
   // than as an error after they have filled in their name.
   `if(cart[id].qty<20)cart[id].qty++;paintBar();if(!sheet.hidden)paintSheet()};` +
+  // THE FLIGHT RUNS AFTER add(), NOT INSIDE IT, and the order is the whole
+  // trick: add() calls paintBar(), which is what un-hides the bar on the very
+  // first tap. Measuring the target before that would measure a hidden element
+  // and send the first product of every order to the top-left corner.
+  `var fly=function(b){` +
+  `if(shRM())return;` +
+  `var card=b.closest?b.closest('.it'):null;if(!card)return;` +
+  `var img=card.querySelector('.ph img');if(!img||!img.src)return;` +
+  `var from=img.getBoundingClientRect();` +
+  // A card scrolled off the screen has nothing to throw. Nothing is better
+  // than a photo sailing in from somewhere the customer was not looking.
+  `if(from.bottom<0||from.top>window.innerHeight||from.width===0)return;` +
+  `var t=nEl.getBoundingClientRect();if(t.width===0)return;` +
+  `var f=document.createElement('div');f.className='fly';` +
+  `f.style.backgroundImage='url("'+img.src+'")';` +
+  `f.style.left=from.left+'px';f.style.top=from.top+'px';` +
+  `f.style.width=from.width+'px';f.style.height=from.height+'px';` +
+  `document.body.appendChild(f);` +
+  `var dx=(t.left+t.width/2)-(from.left+from.width/2);` +
+  `var dy=(t.top+t.height/2)-(from.top+from.height/2);` +
+  // Read a layout value before changing the transform, or the browser is
+  // entitled to collapse both styles into one frame and play no transition at
+  // all. This line looks pointless and is the reason the flight happens.
+  `f.getBoundingClientRect();` +
+  `f.style.transform='translate('+dx+'px,'+dy+'px) scale(.14)';` +
+  `f.style.opacity='.2';` +
+  // Removed on a timer as well as on the event: a transition that never fires
+  // (a background tab, a browser that skipped it) must not leave a photo
+  // pinned over the menu for the rest of the visit.
+  `var gone=function(){if(f.parentNode)f.parentNode.removeChild(f)};` +
+  `f.addEventListener('transitionend',gone,false);setTimeout(gone,700)};` +
   `document.addEventListener('click',function(e){` +
-  `var b=e.target.closest?e.target.closest('.add'):null;if(b){add(b);return}` +
+  `var b=e.target.closest?e.target.closest('.add'):null;if(b){add(b);fly(b);return}` +
   `var d=e.target.getAttribute&&e.target.getAttribute('data-d');` +
   `if(d){if(cart[d]){cart[d].qty--;if(cart[d].qty<1)delete cart[d]}` +
   `paintBar();paintSheet();closeIfEmpty();return}` +
@@ -1283,7 +1345,8 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="sheet-p" role="dialog" aria-modal="true">` +
         `<div class="sheet-h">` +
           `<div class="sheet-t" id="dsheetT"></div>` +
-          `<button type="button" class="sheet-x" id="dsheetX" aria-label="${esc('Cancel 取消')}">×</button>` +
+          `<button type="button" class="sheet-x" id="dsheetX" aria-label="${esc('Cancel 取消')}">` +
+          `<span class="xb xb1"></span><span class="xb xb2"></span></button>` +
         `</div>` +
         `<div class="sheet-b" id="dsheetB"></div>` +
         `<div class="sheet-f">` +
@@ -1301,7 +1364,8 @@ router.get('/s/:shopCode', (req, res) => {
     // a phone. A delegated tap on a non-interactive full-screen div is not
     // something to rely on in a WeChat web view; a button is.
     `<div class="big" id="big" hidden>` +
-      `<button type="button" class="big-x" id="bigX" aria-label="${esc('Close 关闭')}">×</button>` +
+      `<button type="button" class="big-x" id="bigX" aria-label="${esc('Close 关闭')}">` +
+      `<span class="xb xb1"></span><span class="xb xb2"></span></button>` +
       `<img id="bigImg" src="" alt="">` +
     `</div>` +
     `<div class="sheet" id="sheet" hidden>` +
@@ -1315,7 +1379,8 @@ router.get('/s/:shopCode', (req, res) => {
           // "Cancel" box beside the ×, reported from a phone. Both languages go
           // in as one plain escaped string: an accessibility label is read out,
           // never laid out, so it has no CSS switch to obey.
-          `<button type="button" class="sheet-x" id="sheetX" aria-label="${esc('Cancel 取消')}">×</button>` +
+          `<button type="button" class="sheet-x" id="sheetX" aria-label="${esc('Cancel 取消')}">` +
+          `<span class="xb xb1"></span><span class="xb xb2"></span></button>` +
         `</div>` +
         `<div class="sheet-b" id="sheetB"></div>` +
         `<div class="sheet-f" id="sheetF">` +

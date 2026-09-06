@@ -979,10 +979,17 @@ const soldOut = (row) => /class="sold"/.test(row);
 
     await checkAsync('the sheet\'s close control says what it is, once', async () => {
       const { body } = await get(`/s/${LIVE}`);
-      // The button's own text is the glyph; the label is for a screen reader.
-      const m = /<button[^>]*id="sheetX"[^>]*>([^<]*)<\/button>/.exec(body);
+      // THE MARK IS DRAWN, NOT TYPED. A multiplication sign is placed by the
+      // font's metrics rather than by its ink, and the house display face hangs
+      // it high in the em box — centred by flex, it still sat above the middle
+      // of the square. Two bars carry no metrics of their own. So the button's
+      // own text is empty and the label is the only words it has.
+      const m = /<button[^>]*id="sheetX"[^>]*>([\s\S]*?)<\/button>/.exec(body);
       assert.ok(m, 'the sheet lost its close button');
-      assert.strictEqual(m[1].trim(), '×', `the close button renders text: ${JSON.stringify(m[1])}`);
+      const bars = (m[1].match(/class="xb /g) || []).length;
+      assert.strictEqual(bars, 2, `the close mark is not two bars: ${JSON.stringify(m[1])}`);
+      assert.strictEqual(m[1].replace(/<[^>]*>/g, '').trim(), '',
+        `the close button renders text beside its drawn mark: ${JSON.stringify(m[1])}`);
       assert.ok(/id="sheetX"[^>]*aria-label="[^"<>]+"/.test(body) ||
                 /aria-label="[^"<>]+"[^>]*id="sheetX"/.test(body),
         'the close button has no plain-text label');
