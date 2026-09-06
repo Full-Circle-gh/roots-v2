@@ -707,8 +707,15 @@ img{display:block;max-width:100%}
   color:var(--ink);overflow-wrap:anywhere}
 /* tabular-nums is this page's own and is kept: it stops the figures jittering
    as prices change down a column, which the mini app wants too — its
-   .row-price-stack comment asks for exactly that, by a different means. */
-.pr{font-family:var(--f-bear);font-size:16px;line-height:1;letter-spacing:.04em;
+   .row-price-stack comment asks for exactly that, by a different means.
+   SIZE IS THE ONE DEPARTURE FROM "the website is the right source" ABOVE,
+   on Ash's direction: 16px (the website's own .sl-pr) still read as too big
+   here next to the chunky Lilita-One digit substitute. 13.5px is the mini
+   app's post-fix .card .price — 26rpx converted at this file's own 390/750
+   phone-width ratio (the same ratio .add's 26x5rpx bars were converted at,
+   above) — so the counter menu now matches the mini app's price size rather
+   than the website's. */
+.pr{font-family:var(--f-bear);font-size:13.5px;line-height:1;letter-spacing:.04em;
   color:var(--ink);font-variant-numeric:tabular-nums}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
