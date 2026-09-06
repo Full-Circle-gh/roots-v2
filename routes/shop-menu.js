@@ -487,10 +487,23 @@ img{display:block;max-width:100%}
 .tot{display:flex;justify-content:space-between;align-items:baseline;
   font-family:var(--f-bear);font-size:17px;margin-bottom:10px}
 .tot span:last-child{font-variant-numeric:tabular-nums}
-.nm-l{display:block;font-size:12px;letter-spacing:.04em;color:var(--olive);
-  text-transform:uppercase;margin-bottom:4px}
+.nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
+  color:var(--olive);text-transform:uppercase;margin-bottom:6px}
 .nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
-  padding:11px 12px;font:inherit;font-size:16px;color:var(--ink)}
+  padding:11px 12px;font:inherit;font-size:16px;color:var(--ink);
+  border-radius:0;-webkit-appearance:none;appearance:none;
+  -webkit-tap-highlight-color:transparent}
+/* THE FOCUS RING IS OURS, NOT THE BROWSER'S. Left alone, the WeChat/Android
+   web view paints its own amber ring on a focused field — reported from a phone
+   as an orange frame that belongs to no design system here. It is drawn in the
+   tenant's own ink instead, so the field reads as part of the shop in every
+   browser, and outline-offset:-2px puts it over the border rather than outside
+   it, so nothing shifts when the customer taps in.
+   THE COMMENT ITSELF MUST NAME NO BRAND: this text is served inside the style
+   element to every tenant, and §0's test greps the response for the seed
+   tenant's name.
+   Naming it here failed that check, which is the rule working on a comment. */
+.nm-i:focus{outline:2px solid var(--ink);outline-offset:-2px}
 /* 16px is not a style choice: iOS Safari zooms the whole page in on focus for
    anything smaller, and the customer lands zoomed into a menu they then have to
    pinch back out of. */
@@ -906,7 +919,13 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="sheet-p" role="dialog" aria-modal="true">` +
         `<div class="sheet-h">` +
           `<div class="sheet-t">${bi('YOUR BASKET', '购物车')}</div>` +
-          `<button type="button" class="sheet-x" id="sheetX" aria-label="${bi('Cancel', '取消')}">×</button>` +
+          // AN ATTRIBUTE TAKES TEXT, NOT MARKUP. bi() returns two <span>s, and
+          // putting that in aria-label closed the attribute at its first quote
+          // and spilled the rest into the header as visible text — a stray
+          // "Cancel" box beside the ×, reported from a phone. Both languages go
+          // in as one plain escaped string: an accessibility label is read out,
+          // never laid out, so it has no CSS switch to obey.
+          `<button type="button" class="sheet-x" id="sheetX" aria-label="${esc('Cancel 取消')}">×</button>` +
         `</div>` +
         `<div class="sheet-b" id="sheetB"></div>` +
         `<div class="sheet-f" id="sheetF">` +
