@@ -334,6 +334,53 @@ function boxOf(text) {
         `the add button is not on the price row, right of the price: ${JSON.stringify(m)}`);
     });
 
+    await check('the add button is the mini app\'s SIZE, read from its own stylesheet', async () => {
+      // Reported from a phone, 2026-09-06: "the + is too big". It was 36px,
+      // which was guessed. The real number lives in .card-plus in
+      // miniapp/pages/shop/shop.wxss, and this reads it there rather than
+      // restating it — so if that shop ever resizes its chip, this goes red and
+      // names the gap instead of the two drifting apart unnoticed.
+      const wxss = require('fs').readFileSync(
+        path.join(ROOT, 'miniapp/pages/shop/shop.wxss'), 'utf8');
+      const block = wxss.slice(wxss.indexOf('.card-plus {'));
+      const rpx = /width:\s*(\d+)rpx;\s*height:\s*(\d+)rpx/.exec(block);
+      assert.ok(rpx, '.card-plus no longer states its size in rpx — this check cannot see it');
+      // The same 390px-phone conversion the rest of routes/shop-menu.js used.
+      const want = Number(rpx[1]) * (390 / 750);
+      const got = await page.evaluate(() => {
+        const r = document.querySelector('.it:not(.out) .add').getBoundingClientRect();
+        return { w: r.width, h: r.height };
+      });
+      assert.ok(Math.abs(got.w - want) <= 1.5,
+        `the add chip is ${got.w}px against the mini app's ${want.toFixed(1)}px`);
+      assert.ok(Math.abs(got.h - got.w) <= 1, `the add chip is not square: ${JSON.stringify(got)}`);
+    });
+
+    await check('the + is two bars and both are actually drawn', async () => {
+      // The wxss records why: the brand serif's "+" sits off-centre in the
+      // square and flex-centring cannot fix it, because it centres the text
+      // line box rather than the ink. Borrowed with its reason — so the bars
+      // have to be real, and a pseudo-element that collapsed to nothing would
+      // leave a blank chip that still passes every colour and size check.
+      const bars = await page.evaluate(() => {
+        const b = document.querySelector('.it:not(.out) .add');
+        const rd = (which) => {
+          const cs = getComputedStyle(b, which);
+          return { w: parseFloat(cs.width), h: parseFloat(cs.height), c: cs.content };
+        };
+        return { before: rd('::before'), after: rd('::after'),
+                 fontSize: parseFloat(getComputedStyle(b).fontSize) };
+      });
+      assert.ok(bars.before.w > 4 && bars.before.h > 0.5,
+        `the horizontal bar is not drawn: ${JSON.stringify(bars.before)}`);
+      assert.ok(bars.after.h > 4 && bars.after.w > 0.5,
+        `the vertical bar is not drawn: ${JSON.stringify(bars.after)}`);
+      assert.ok(bars.before.w > bars.before.h, 'the horizontal bar is not horizontal');
+      assert.ok(bars.after.h > bars.after.w, 'the vertical bar is not vertical');
+      assert.strictEqual(bars.fontSize, 0,
+        'a text glyph is still being rendered alongside the bars — it will sit off-centre');
+    });
+
     await check('the add button is the mini app\'s colours, not the page background', async () => {
       // An ink square with a lime glyph. Read off the computed style so a token
       // that stopped resolving shows up here rather than as an invisible button
