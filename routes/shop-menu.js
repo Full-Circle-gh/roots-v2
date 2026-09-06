@@ -137,6 +137,18 @@ function bi(en, cn) {
   return `<span class="l-en">${esc(e)}</span><span class="l-cn">${esc(c)}</span>`;
 }
 
+// Reported on the rail: a Chinese category name carrying "&" ("鲜食 & 熟食")
+// wrapped at the rail's own narrow width with "&" stranded alone at the end
+// of the first line ("鲜食 &" / "熟食") — CJK text breaks between any two
+// characters, so the greedy line-breaker fills the first line right up to
+// that trailing "&" before wrapping. A non-breaking space AFTER "&" glues it
+// to the word that follows instead, so a label that must wrap breaks BEFORE
+// "&" ("鲜食" / "& 熟食") rather than orphaning it. The space before "&"
+// stays a normal one, so that is still where the break lands.
+function noOrphanAmp(s) {
+  return String(s == null ? '' : s).replace(/&\s+/g, '& ');
+}
+
 // Money in the tenant's own display currency. normalizeCurrency is retail.js's,
 // so a tenant that sells in something other than yuan sees one figure format
 // across the storefront, the till and this menu.
@@ -644,9 +656,16 @@ img{display:block;max-width:100%}
 .qty span{min-width:26px;text-align:center;font-variant-numeric:tabular-nums;
   font-size:14px}
 
-.tot{display:flex;justify-content:space-between;align-items:baseline;
+.tot{display:flex;justify-content:space-between;align-items:center;gap:12px;
   font-family:var(--f-bear);font-size:17px;margin-bottom:10px}
 .tot span:last-child{font-variant-numeric:tabular-nums}
+/* THE PRODUCT SHEET'S OWN .tot: a price span beside .dadd, not two spans of
+   text. .place's own width:100% put the button's flex-basis at the full row
+   width, so it fought .dPr for space and the two ran together with no visible
+   gap — reported from a phone as the price and the button touching. .dadd
+   drops that width and shrinks to fit the row beside the price instead of
+   filling it, so the tot's own gap actually shows between them. */
+.tot .dadd{width:auto;margin-top:0;padding:11px 20px}
 .nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
   color:var(--olive);text-transform:uppercase;margin-bottom:6px}
 .nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
@@ -1181,7 +1200,7 @@ router.get('/s/:shopCode', (req, res) => {
       // the width it would occupy is still held, or the centring is a lie.
       `<span class="lb">${bi('ALL', '全部')}</span><span class="cv"></span></a>` +
       groups.map(c => `<a href="#${c.id}" data-cat="${c.id}">` +
-        `<span class="lb">${bi(c.en, c.cn)}</span><span class="cv">\u203a</span></a>`).join('') +
+        `<span class="lb">${bi(c.en, noOrphanAmp(c.cn))}</span><span class="cv">\u203a</span></a>`).join('') +
       `</nav>`
     : '';
 
