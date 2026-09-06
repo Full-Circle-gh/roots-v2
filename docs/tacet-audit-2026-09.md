@@ -3051,19 +3051,33 @@ is a floating-point decimal (A-06).
 **Where:** the full list is in Part 1; the ones that will bite first are below
 
 > **AMENDED 2026-09-06 — re-verified in `docs/tacet-j01-row-limits-survey.md`.**
-> **Five of the seven below are now paged** (`LIMIT ? OFFSET ?`): `/materials`,
-> `/suppliers`, `/recipes`, `/inventory/grid`, `/purchasing/invoices`. Half of
-> **J-02** closed with them.
+> **CLOSED as written. Six of the seven below have a row ceiling; the seventh
+> should not have one.**
 >
-> **One is genuinely open:** `/finance/transactions` — and it is bounded by a
-> 30-day default window over a ledger of ~209 rows, so it is not unbounded in
-> the way this finding reads. The survey recommends capping the window span
-> rather than paging, because the screen shows a net total under the list and a
-> total computed from one page is worse than a slow one.
+> **Five are paged in SQL** (`LIMIT ? OFFSET ?`): `/materials`, `/suppliers`,
+> `/recipes`, `/inventory/grid`, `/purchasing/invoices`. Half of **J-02** closed
+> with them.
+>
+> **`/finance/transactions` is capped too**, since `188a50bf` — in JavaScript,
+> on the merged list, because its three reads are interleaved by date and a
+> per-query `LIMIT` would leave holes in the middle of the ledger. Totals and
+> counts are computed **before** the cut so the figure under the list still
+> describes the whole window, and `truncated` is reported.
+>
+> ⚠️ *The first version of this amendment, merged earlier the same day, called
+> this endpoint "genuinely open" and recommended a span cap instead of paging.
+> Both were wrong: the survey had read as far as the unlimited `.all()` calls
+> and stopped short of the cap 120 lines below them. Corrected here and in the
+> survey, which records how the mistake was made.*
 >
 > **One should NOT be paged:** `/products/export.csv`. An export that silently
 > returns part of your catalogue is worse than one that is slow; if it needs
 > fixing the fix is streaming, which is a different job.
+>
+> **What genuinely remains** is narrower than this finding and should not be
+> filed under it: `readTransactions()` bounds its *response* but still reads the
+> whole window into *memory*. Against ~209 ledger rows that is not worth a
+> behaviour change. The survey records the shape of a fix for the day it is.
 >
 > **Every line number in the table below has drifted** — the survey lists the
 > current ones. The "63" could not be reproduced (240 such handlers, 141 without

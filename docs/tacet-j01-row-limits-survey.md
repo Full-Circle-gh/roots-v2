@@ -5,6 +5,40 @@ the last High-severity finding in `docs/tacet-audit-2026-09.md` that nobody had
 re-checked, and adding a row limit changes what an API returns — which is a
 decision rather than a cleanup.
 
+> ## ⚠️ CORRECTION, 2026-09-06 (same day, after the first version was merged)
+>
+> **This survey was wrong about `/finance/transactions`, which was its entire
+> "one genuinely open item".** That endpoint has had a row ceiling since
+> `188a50bf` (2026-09-04) — *two days before this survey was written* — under a
+> comment that names this very finding: *"The row ceiling, applied to the MERGED
+> list (audit J-01)"*.
+>
+> **How the error was made, because it is a repeatable one:** I read the
+> handler, followed it into `readTransactions()`, saw three `.all(from, to)`
+> calls with no `LIMIT`, and stopped there. The cap is applied ~120 lines
+> further down, to the merged and re-sorted list, and the comment explains why
+> it cannot be in the SQL: the three reads are interleaved by date afterwards,
+> so capping each query separately *"would drop rows from the middle of the
+> window and the screen would show a ledger with holes in it"*. Reading the
+> query and not the function is how a present fix looks absent.
+>
+> **The recommendation below is also superseded.** It argued for capping the
+> window span rather than paging, because *"the screen shows a net total under
+> the list and a paged list whose total is computed from one page is worse than
+> a slow one"*. That objection is real and had already been answered better:
+> `totals` and `counts` are computed **before** the cut, on the whole window,
+> and only `rows` is sliced — with `truncated` reported. The CSV export passes
+> `{ cap: false }` for the same reason this survey gives for not paging
+> `/products/export.csv`.
+>
+> **So J-01 is effectively closed:** six of the seven have ceilings, and the
+> seventh should not have one. What genuinely remains is smaller and different
+> from anything below — see *What is actually left* at the foot of this file.
+>
+> Everything from here to that section is the original text, left intact
+> because a survey that quietly rewrites itself teaches the next reader
+> nothing.
+
 **The headline: five of the seven endpoints the audit named as "will bite
 first" have been paged since it was written.** One of the two that remain
 should probably not be paged at all. So the item is much smaller than its
@@ -155,3 +189,41 @@ test, not by working down a list of 141.
 real class of fault, but the specific endpoints that carried the risk were
 fixed, and the one left is bounded by a 30-day default over a two-hundred-row
 ledger.
+
+---
+
+# What is actually left (2026-09-06 correction)
+
+With `/finance/transactions` established as already capped, **no endpoint in
+J-01 returns an unbounded number of rows to a client.** The finding is closed as
+written.
+
+One narrower thing is true and is worth recording so it is not rediscovered as
+though it were J-01:
+
+### `readTransactions()` reads the whole window into memory before it slices
+
+The cap is applied in JavaScript, to the merged list. The three SQL reads still
+fetch every income row, every hand-entered expense and every posted-PO group in
+the window. So the **response** is bounded and **memory** is not.
+
+**This is a deliberate trade with a stated reason** — the three are interleaved
+by date, and a per-query `LIMIT` would punch holes in the middle of the ledger.
+That reasoning is sound and a fix must not undo it.
+
+**It is also nearly harmless today.** From the production census: 183 expense
+values and 26 income values, ever — about two hundred rows in the entire
+ledger, against a 30-day default window.
+
+**If it is ever worth closing**, the shape is a cap on the window *span*, not on
+the rows: `resolveWindow()` already computes `span_days`, and refusing a window
+over a year is one comparison. That bounds the memory without touching the
+interleave, and it fails by telling the operator rather than by quietly
+returning part of an answer. `routes/finance-summary.js:91` and
+`routes/finance-transactions.js:410` already refuse an inverted window in
+exactly that shape, with a bilingual message — so the pattern to copy exists
+and no new string would have to be composed.
+
+**Recommendation: do nothing.** Two hundred rows does not justify a behaviour
+change to an API, and the span cap is worth building the day a ledger is large
+enough to notice — not before.
