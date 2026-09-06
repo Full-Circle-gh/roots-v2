@@ -3609,6 +3609,45 @@ arriving on the desktop.
 
 ## R. Accessibility — basic pass
 
+> **RE-VERIFIED 2026-09-06 — mechanically, every finding in this section.
+> One is CLOSED, two are materially better, two still stand and one of those is
+> WIDER than written.**
+>
+> | | audit | today | |
+> |---|---|---|---|
+> | R-01 pinch-zoom | off on the phone | off on `m.html` **and `stock.html`** | ⚠️ wider |
+> | R-02 unnamed fields | "about two hundred" | **61** in the admin, 90 across three surfaces | improved |
+> | R-03 dark contrast | 3.61, fails 4.5 | **5.30, passes** | ✅ closed |
+> | R-04 touch targets | ~26px | **36px** (min-height added) | improved |
+> | R-05 keyboard | no skip link, no focus trap | **skip link exists**; no focus trap | part closed |
+>
+> **R-03 is closed.** `--text-3` on the dark theme is now `#9a978f`, not the
+> `#7d7a72` recorded here — `#9a978f` on `--bg-elev-1: #1F252B` is **5.30**,
+> clear of the 4.5 standard. The light theme's `#6a675c` on `#F1EEE7` is 4.89
+> and also passes. The old value recomputes to 3.61 exactly as this finding
+> says, so the two measurements agree and the change is real.
+>
+> **R-01 is wider than written.** `public/stock.html` disables pinch-zoom too
+> (`user-scalable=no, maximum-scale=1`), and this finding names only the phone.
+> Per the house rule, a `file:line` is where a thing was found and not its
+> extent.
+>
+> **R-02's "about two hundred" is now 61** — and beware the count. A naive
+> sweep for `aria-label`/`<label for>` gives 153, but **92 fields are named by
+> an enclosing `<label>`**, which is a valid accessible name: 69 of the 71
+> unnamed checkboxes are labelled that way. The real figure is 61 in
+> `retail-admin.html`, plus 25 in `m.html` and 4 in `stock.html`. Mostly free
+> text inputs (35) and textareas (13).
+>
+> **R-04:** now `min-height: 36px; padding: 6px 12px; font-size: 12px` (at
+> `:4775`, not `:4749`). Still under the 44px guideline, but this finding
+> already called it a comfort problem on a mouse-driven surface, and 26 → 36 is
+> most of the distance.
+>
+> **R-05:** `<a href="#main" class="skip-link">Skip to content · 跳到内容</a>`
+> exists at `retail-admin.html:895`. Focus rules are 114 (were 108). The focus
+> trap is still absent, and the `onclick` count has **grown**, 385 → 405.
+
 ### R-01 · Pinch-zoom is switched off on the phone
 **Severity:** Medium · N-01 above. This is the single most consequential accessibility
 defect found, because it removes the standard remedy for every other size problem.
