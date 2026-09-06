@@ -111,23 +111,29 @@ function seed() {
               VALUES (?, '__test_menu_render', 'Render fixture shop', '测试渲染门店', 1, 96)`).run(LOC);
   const prod = db.prepare(`INSERT INTO store_products
     (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
-     product_facts, nutrition, free_of, image_data)
-    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?, ?)`);
+     description_blocks, nutrition, image_data)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?)`);
   // A REAL IMAGE, because the detail sheet's photo — and the tap that enlarges
   // it — exist only for a product that has one. Without this the sheet renders
   // its empty frame and the enlarge cannot be driven at all.
   const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  // REAL SHAPES, not stand-ins. product_facts holds four keys the sheet must
-  // IGNORE alongside the one it reads; nutrition carries a parent, a child and
-  // an unrecognised label, so the classifier is exercised on all three; free_of
-  // names two of the four allergens, so both the free chip and the contains
-  // chip appear on one product.
-  const FACTS = JSON.stringify({
-    origin_en: 'Peru', origin_cn: '秘鲁',
-    ingredients_en: 'Roasted almonds (100%)', ingredients_cn: '烘焙杏仁（100%）',
-    storage_en: 'Cool, dry place', storage_cn: '阴凉干燥处',
-    shelf_life_en: '12 months', serving_en: 'Add to oats',
-  });
+  // THE OFFICE'S REAL BLOCK ARRAY, not a stand-in. It carries three types the
+  // sheet must IGNORE alongside the two it reads, a lead ingredient, a stated
+  // percentage, and an allergen card whose CONTAINS and MAY CONTAIN differ —
+  // which is the distinction the whole card exists for.
+  const BLOCKS = JSON.stringify([
+    { type: 'hero_intro', body_en: 'A marketing paragraph nobody at a counter wants.' },
+    { type: 'why', claims: [{ claim_en: 'Neutral enough to go sweet or savory.' }] },
+    { type: 'ingredients_chips', items: [
+      { name_en: 'Coconut milk', name_cn: '椰奶', pct: 92, lead: true },
+      { name_en: 'Natural starch', name_cn: '天然淀粉' },
+      { name_en: 'Probiotics', name_cn: '益生菌' },
+    ] },
+    { type: 'allergen_card',
+      contains_en: 'Coconut', contains_cn: '椰子',
+      may_contain_en: 'Soy, Nuts, Gluten', may_contain_cn: '大豆、坚果、麸质' },
+    { type: 'how_to_use', tiles: [{ label_en: 'Spoon it over oats' }] },
+  ]);
   const NUTR = JSON.stringify({
     basis_en: 'per 100 g', basis_cn: '每100克',
     rows: [
@@ -136,8 +142,8 @@ function seed() {
       { label_en: 'Fibre', label_cn: '膳食纤维', value: '11 g' },
     ],
   });
-  prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33, FACTS, NUTR, 'gluten, soy', PIXEL);
-  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18, FACTS, NUTR, 'gluten, soy', PIXEL);
+  prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33, BLOCKS, NUTR, PIXEL);
+  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18, BLOCKS, NUTR, PIXEL);
   // A SECOND CATEGORY AND ENOUGH ROWS THAT THE PAGE ACTUALLY SCROLLS. With the
   // two products above, a phone viewport holds the whole menu and window.scrollY
   // never leaves 0 — on which a rail that scrolls away and a rail that holds
@@ -321,60 +327,78 @@ function boxOf(text) {
     // database by routes/shop-menu.js, not by a stub. A cart tested by reading
     // its markup would prove the buttons EXIST and nothing about what they do.
     // ─── The product sheet, driven ────────────────────────────────────────
-    await check('tapping a card opens what is in it, its nutrition and its allergens', async () => {
+    await check('tapping a card opens its ingredients, allergens and nutrition', async () => {
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.click(`.it:not(.out)[data-open]`);
       const m = await page.evaluate(() => {
         const b = document.getElementById('dsheetB');
-        const rows = Array.from(b.querySelectorAll('.nr')).map(r => ({
-          label: r.querySelector('.nr-l').innerText.trim(),
-          value: r.querySelector('.nr-r').textContent.trim(),
-          kind: r.className.replace('nr', '').trim(),
-        }));
         return {
           open: !document.getElementById('dsheet').hidden,
           text: b.innerText,
-          rows,
-          chips: Array.from(b.querySelectorAll('.fchip')).map(c => ({
-            t: c.innerText.trim(), has: c.className.includes('has'),
+          chips: Array.from(b.querySelectorAll('.ichip')).map(c => ({
+            t: c.innerText.trim(), lead: c.className.includes('lead'),
           })),
+          rows: Array.from(b.querySelectorAll('.nr')).map(r => r.className.replace('nr', '').trim()),
           price: document.getElementById('dPr').textContent.trim(),
         };
       });
       assert.strictEqual(m.open, true, 'the sheet did not open');
-      assert.ok(/Roasted almonds/.test(m.text), `ingredients missing: ${JSON.stringify(m.text)}`);
-      // The facts bag holds origin, storage, shelf life and a serving note too.
-      // §44's sheet is for deciding whether to eat something — none of those
-      // may leak in, or the sheet becomes the mini app's page again.
-      for (const leak of ['Peru', 'Cool, dry place', '12 months', 'Add to oats']) {
-        assert.ok(!m.text.includes(leak), `the sheet leaked a fact it should not show: ${leak}`);
+      // THE LEAD INGREDIENT IS THE FILLED ONE. That flag is the only thing the
+      // office's chip block carries beyond the names, and it is why a customer
+      // reads what the product is mostly made of first.
+      assert.strictEqual(m.chips.length, 3, `ingredient chips: ${JSON.stringify(m.chips)}`);
+      assert.ok(/Coconut milk/.test(m.chips[0].t), 'the lead ingredient is not first');
+      assert.strictEqual(m.chips[0].lead, true, 'the lead ingredient is not marked');
+      assert.strictEqual(m.chips[1].lead, false, 'every chip is marked as the lead');
+      assert.ok(/92/.test(m.chips[0].t), 'a stated percentage was dropped');
+      // The blocks also hold a marketing paragraph, a claim and a usage tile.
+      // §44's sheet is for deciding whether you can eat something.
+      for (const leak of ['marketing paragraph', 'Neutral enough', 'Spoon it over oats']) {
+        assert.ok(!m.text.includes(leak), `the sheet leaked a block it should not draw: ${leak}`);
       }
+      assert.deepStrictEqual(m.rows, ['p', 'c', ''], `nutrition rows classified wrong: ${m.rows}`);
       assert.ok(/\d/.test(m.price), `no price on the sheet: ${JSON.stringify(m.price)}`);
-      // Parent, child and an unrecognised label, classified by lib/nutrition-rows.
-      assert.deepStrictEqual(m.rows.map(r => r.kind), ['p', 'c', ''],
-        `nutrition rows classified wrong: ${JSON.stringify(m.rows)}`);
-      assert.strictEqual(m.rows[0].value, '612 kcal');
     });
 
-    await check('THE NEGATIVE IS STATED — a contains chip, and it does not look like a free one', async () => {
-      // Decided 2026-09-06 and a departure from public/shop.html, which shows
-      // only what a product is free OF. On a menu an absent chip would read as
-      // "nobody checked" to somebody scanning for an allergen.
-      const chips = await page.evaluate(() => Array.from(
-        document.querySelectorAll('#dsheetB .fchip')).map(c => {
-          const cs = getComputedStyle(c);
-          return { t: c.innerText.trim(), has: c.className.includes('has'),
-                   style: cs.borderTopStyle, opacity: parseFloat(cs.opacity) };
+    await check('CONTAINS AND MAY-CONTAIN ARE TWO STATEMENTS, and they do not look alike', async () => {
+      // The distinction a person with an allergy actually needs: what is IN the
+      // food, against what the line it was made on also handles. An earlier
+      // draft derived allergens from free_of — the filter tags — and would have
+      // asserted an allergen nobody declared.
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('#dsheetB .acard');
+        if (!card) return null;
+        // SCOPED TO ONE LANGUAGE ON PURPOSE. Both are in the DOM and CSS hides
+        // one — but innerText falls back to textContent for a hidden element,
+        // so an unscoped read returns the English chips AND the Chinese ones
+        // and the assertion fails on a page that is entirely correct.
+        const rows = Array.from(card.querySelectorAll('.arow')).map(r => ({
+          label: r.querySelector('.alab').innerText.trim(),
+          chips: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.textContent.trim()),
+          cn: Array.from(r.querySelectorAll('.l-cn .achip')).map(c => c.textContent.trim()),
+          kinds: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.className.includes('has') ? 'has' : 'may'),
         }));
-      const free = chips.filter(c => !c.has), has = chips.filter(c => c.has);
-      assert.strictEqual(chips.length, 4, `all four allergens should be answered: ${JSON.stringify(chips)}`);
-      assert.strictEqual(free.length, 2, 'the fixture is free of gluten and soy');
-      assert.strictEqual(has.length, 2, 'the other two must be stated, not left silent');
-      assert.ok(/Contains/i.test(has[0].t), `a contains chip does not say so: ${JSON.stringify(has[0])}`);
-      // The two must not read alike — that is the whole point of stating it.
-      assert.strictEqual(free[0].style, 'solid');
-      assert.strictEqual(has[0].style, 'dashed');
-      assert.ok(has[0].opacity < free[0].opacity, 'the contains chip is not muted against the free one');
+        const has = card.querySelector('.l-en .achip.has'), may = card.querySelector('.l-en .achip.may');
+        return { title: card.querySelector('.atitle').innerText.trim(), rows,
+                 hasBg: has && getComputedStyle(has).backgroundColor,
+                 mayBg: may && getComputedStyle(may).backgroundColor,
+                 mayBorder: may && getComputedStyle(may).borderTopStyle };
+      });
+      assert.ok(m, 'the allergen card is missing');
+      assert.ok(/Allergen/i.test(m.title), `the card is not titled: ${m.title}`);
+      assert.strictEqual(m.rows.length, 2, `contains and may-contain are two rows: ${JSON.stringify(m.rows)}`);
+      assert.deepStrictEqual(m.rows[0].chips, ['Coconut']);
+      assert.deepStrictEqual(m.rows[1].chips, ['Soy', 'Nuts', 'Gluten']);
+      assert.deepStrictEqual(m.rows[0].kinds, ['has'], 'the contains row is not marked as contains');
+      assert.deepStrictEqual(m.rows[1].kinds, ['may', 'may', 'may'], 'a may-contain chip reads as contains');
+      // And the Chinese half is really there, split on its own separators —
+      // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones.
+      assert.deepStrictEqual(m.rows[0].cn, ['椰子']);
+      assert.deepStrictEqual(m.rows[1].cn, ['大豆', '坚果', '麸质'],
+        'the Chinese list was not split on its own separators');
+      // They must not merge visually — that is the whole reason the card exists.
+      assert.notStrictEqual(m.hasBg, m.mayBg, 'the two allergen kinds look identical');
+      assert.strictEqual(m.mayBorder, 'dashed');
     });
 
     await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
@@ -411,9 +435,9 @@ function boxOf(text) {
     });
 
     await check('a product with nothing to say is NOT tappable', async () => {
-      // The filler rows carry no facts, no nutrition and no allergens. A sheet
-      // for them would be an empty panel, which is worse than a card that does
-      // not respond — so the whole apparatus is absent rather than empty.
+      // The filler rows carry no blocks, no nutrition and no allergen card. A
+      // sheet for them would be an empty panel, which is worse than a card that
+      // does not respond — so the whole apparatus is absent rather than empty.
       const m = await page.evaluate(() => {
         const cards = Array.from(document.querySelectorAll('.it'));
         const withDt = cards.filter(c => c.hasAttribute('data-open')).length;
@@ -423,7 +447,7 @@ function boxOf(text) {
       assert.ok(m.total > m.withDt,
         'every card is tappable, so the factless case is not being excluded');
       assert.strictEqual(m.withDt, m.withTpl, 'a card is tappable but carries no sheet body');
-      assert.strictEqual(m.withDt, 2, `only the two real products have facts: ${JSON.stringify(m)}`);
+      assert.strictEqual(m.withDt, 2, `only the two real products carry blocks: ${JSON.stringify(m)}`);
     });
 
     await check('the sheet carries both languages, so the toggle works inside it', async () => {

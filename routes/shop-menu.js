@@ -84,6 +84,7 @@ const {
 } = require('./retail');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const { nutritionRows } = require('../lib/nutrition-rows');
+const blockRead = require('../lib/product-blocks-read');
 const moneyLib = require('../lib/money');   // the money MATHS; money() below is this page's formatter
 const tax = require('../lib/tax');
 const rateLimit = require('express-rate-limit');
@@ -265,13 +266,20 @@ function buildMenu(shop) {
   const listings = tdb().prepare(`
     SELECT sl.id, sl.store_product_id, sl.price, sl.fulfilment_mode, sl.is_available,
            sl.sort_position, p.name_en, p.name_cn, p.top_category, p.subcategory, p.updated_at,
-           -- WHAT THE DETAIL SHEET READS, and nothing more. Three columns that
-           -- already exist on every product and that no customer surface has
-           -- ever drawn: the facts bag (this page wants ONE of its keys), the
-           -- nutrition table, and the allergen flags. Deliberately NOT the
-           -- marketing description or the tagline — a person standing at a
+           -- WHAT THE DETAIL SHEET READS, and nothing more. The office's own
+           -- product blocks — the mini app draws eleven types from them and
+           -- this page reads TWO, ingredients and the allergen card — plus the
+           -- nutrition table. Deliberately NOT the marketing paragraph, the
+           -- claims, the usage tiles or the tagline: a person standing at a
            -- counter is deciding whether they can eat it.
-           p.product_facts, p.nutrition, p.free_of,
+           --
+           -- NOT product_facts.ingredients_* AND NOT free_of. The first is a
+           -- second, sparser home for the same idea; the second is the filter
+           -- tag set behind the storefront's GLUTEN FREE chips, where an absent
+           -- tag means "not tagged" and never "contains". An earlier draft of
+           -- this sheet read both and would have asserted an allergen nobody
+           -- declared.
+           p.description_blocks, p.nutrition,
            -- Does a photo EXIST for this product? Mirrors resolveProductImage,
            -- including its variant-sibling fallback, so the two never disagree.
            -- Asked here because the alternative is an <img> pointing at a route
@@ -383,6 +391,11 @@ function styles(vars, faces) {
   //
   // Every colour and family is still a token from the tenant's theme. The only
   // literals are neutral veils and the black sold-out scrim.
+  // NO BACKTICK EITHER, comments included: this whole stylesheet is one JS
+  // template literal, so a backtick around a word in a CSS comment ends the
+  // string and the file stops parsing. Quoting a field name that way cost one
+  // round here.
+  //
   // NO ANGLE BRACKET MAY APPEAR ANYWHERE IN THIS STYLESHEET, comments included.
   // cssSafe() strips them from injected config, and scripts/test_shop_menu.js
   // asserts the whole sheet is free of them — a coarse rule on purpose, because
@@ -427,21 +440,47 @@ img{display:block;max-width:100%}
 .dt-ph.empty{cursor:default}
 .dt-hd{flex:1;min-width:0}
 .dt-nm{font-family:var(--f-bear);font-size:19px;line-height:1.15;overflow-wrap:anywhere}
-.fchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-/* A FREE chip is solid; a CONTAINS chip is dashed and muted. The two must not
-   read alike — the whole reason the negative is stated is that a customer
-   scanning for an allergen should not have to work out which is which.
-   THE LABEL FACE IS --f-bear, NOT the mini app's Toni Grotesk: this tenant's
-   theme exposes only --f-bear and --f-aleo, and this page's own section
-   kickers already set small uppercase labels in --f-bear. Reaching for a token
-   the theme does not define would have fallen through to the CJK stack in
-   silence. */
-.fchip{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.09em;
-  text-transform:uppercase;border:1.5px solid var(--ink);padding:3px 7px;line-height:1.3}
-.fchip.has{border-style:dashed;color:var(--olive);opacity:.62}
 .dt-k{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
-  text-transform:uppercase;color:var(--olive);margin:18px 0 5px}
-.dt-ing{font-size:13.5px;line-height:1.5}
+  text-transform:uppercase;color:var(--olive);margin:18px 0 7px}
+
+/* THE INGREDIENT CLOUD — the mini app's ingredients_chips, in this page's ink.
+   The hero ingredient is FILLED and the rest outlined, which is the one thing
+   the block's lead flag carries and the reason it exists: a customer reads
+   what the product is mostly made of before reading the list. */
+.ichips{display:flex;flex-wrap:wrap;gap:6px}
+.ichip{border:1.5px solid var(--ink);border-radius:999px;padding:5px 11px;
+  font-size:12.5px;line-height:1.35}
+.ichip.lead{background:var(--ink);color:var(--oat);border-color:var(--ink)}
+.ichip .pct{font-variant-numeric:tabular-nums;opacity:.7;font-size:11px}
+
+/* THE ALLERGEN CARD — contains and may-contain as separate rows, never merged.
+   One says what is in the food; the other says what the line it was made on
+   also handles, and somebody avoiding an allergen needs to know which is
+   which. The two chip styles differ for the same reason. */
+.acard{border:1px solid var(--ink);padding:12px;margin-top:18px}
+.atitle{font-family:var(--f-bear);font-size:16px;line-height:1;
+  padding-bottom:9px;border-bottom:2px solid var(--ink);margin-bottom:10px}
+.arow{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+.arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
+.alab{flex:none;width:96px;font-family:var(--f-bear);font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
+  line-height:1.35;padding-top:3px}
+.achips{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px}
+/* Class selectors rather than a child combinator: no angle bracket may appear
+   in this stylesheet, and the combinator's own character is one — the rule is
+   stated at the head of the file and this is where its cost is paid. Naming it
+   here in the obvious way tripped the same check a second time, which is the
+   rule being blunt on purpose rather than misfiring. display:contents
+   makes the two language wrappers vanish from layout so the chips are the
+   flex items, rather than two blocks each holding a row. */
+.achips .l-en,.achips .l-cn{display:contents}
+.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:1.3;
+  font-family:var(--f-bear);letter-spacing:.03em}
+/* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
+   lime is this menu's "yes, add it" colour and an allergen is not that. */
+.achip.has{background:var(--ink);color:var(--oat)}
+.achip.may{background:transparent;color:var(--olive);border:1.5px dashed var(--olive)}
+.anone{font-size:12px;color:var(--olive);font-style:italic}
 
 /* .nut-card from miniapp/pages/product/product.wxss, converted at the same
    390px phone (rpx x .52) the rest of this file uses. */
@@ -892,65 +931,54 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
 
 // ─── What a product's detail sheet knows ────────────────────────────────
 //
-// EVERY LABEL BELOW IS A LIVE PAIR, copied, not composed:
-//   What's in it · 配料      the product editor's own field label (PW_FACTS)
-//   Nutrition · 营养成分      the mini app's nutrition card heading
-//   Gluten free · 无麸质 …    the product wizard's allergen list (PW_FREE_OF)
-// The one thing this page states that no other surface does is the NEGATIVE —
-// "Contains nuts" — and that is a deliberate departure recorded below.
-
-// free_of is stored as a comma-separated bag of keys. The four the wizard
-// offers are the four that mean anything; an unknown key is ignored rather
-// than shown raw, because a chip reading "5 spice " helps nobody.
-const FREE_OF = [
-  { key: 'gluten',  en: 'Gluten free',  cn: '无麸质', hasEn: 'Contains gluten', hasCn: '含麸质' },
-  { key: 'nuts',    en: 'Nut free',     cn: '无坚果', hasEn: 'Contains nuts',   hasCn: '含坚果' },
-  { key: 'soy',     en: 'Soy free',     cn: '无大豆', hasEn: 'Contains soy',    hasCn: '含大豆' },
-  { key: '5 spice', en: '5-spice free', cn: '无五香', hasEn: 'Contains 5 spice', hasCn: '含五香' },
-];
-
-function freeOfSet(raw) {
-  return new Set(String(raw == null ? '' : raw)
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
-}
-
-// The ingredients line, and ONLY that, out of the facts bag. The bag also holds
-// origin, storage, shelf life and a serving suggestion; §44's sheet is for a
-// customer deciding whether to eat something, not reading about the farm.
-function ingredientsOf(raw) {
-  let f = raw;
-  if (typeof f === 'string') { try { f = JSON.parse(f); } catch { return null; } }
-  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
-  const en = String(f.ingredients_en || '').trim();
-  const cn = String(f.ingredients_cn || '').trim();
-  return (en || cn) ? { en, cn } : null;
-}
+// EVERY LABEL IS THE MINI APP'S OWN, copied from its product-blocks component:
+//   Ingredients · 配料表      Allergens · 过敏原
+//   Contains · 含有           May contain traces of · 可能含有微量
+// Nothing here is composed. The customer who reads a product in the app and the
+// one standing at the counter are the same person, and two wordings for
+// "may contain traces of" would be the defect §30 exists to prevent.
 
 // The sheet's body for one product. Returns '' when the product has nothing to
-// say beyond its photo and price — the caller then renders no detail at all
-// rather than an empty sheet, and the card stays untappable.
+// say — the caller then renders no sheet at all and the card stays untappable,
+// because an empty panel is worse than a card that does not respond.
 function detailBody(it, code) {
-  const ing = ingredientsOf(it.product_facts);
+  const ing = blockRead.ingredientsOf(it.description_blocks);
+  const alg = blockRead.allergensOf(it.description_blocks);
   const nut = nutritionRows(it.nutrition);
-  const flags = freeOfSet(it.free_of);
+  const L = blockRead.LABELS;
 
-  // THE NEGATIVE IS STATED, NOT INFERRED FROM AN ABSENCE — decided 2026-09-06,
-  // and a departure from public/shop.html, which shows only what a product is
-  // free OF. On a filterable catalogue an absent chip means "does not match
-  // this filter". On a menu it would mean "nobody checked", and a customer
-  // scanning for an allergen cannot tell that from "contains it". So every one
-  // of the four is answered, and the two answers look different: a free chip is
-  // solid, a contains chip is dashed and muted.
-  //
-  // It is answered ONLY where the product has been filled in at all. A product
-  // with an empty free_of gets no chips rather than four "contains" claims
-  // nobody made — asserting an allergen from missing data is the one failure
-  // here that could actually hurt somebody.
-  const chips = flags.size ? FREE_OF.map(f => flags.has(f.key)
-    ? `<span class="fchip">${bi(f.en, f.cn)}</span>`
-    : `<span class="fchip has">${bi(f.hasEn, f.hasCn)}</span>`).join('') : '';
+  if (!ing && !alg && !nut) return '';
 
-  if (!ing && !nut && !chips) return '';
+  // THE HERO INGREDIENT IS FILLED, THE REST OUTLINED — the mini app's own chip
+  // cloud, where `lead` marks the one the product is mostly made of. A pct the
+  // office stated rides on the chip; most have none and that is normal.
+  const chips = ing ? ing.items.map(x => {
+    const pct = x.pct == null ? '' : ` <span class="pct">${esc(String(x.pct))}%</span>`;
+    return `<span class="ichip${x.lead ? ' lead' : ''}">` +
+      bi(x.name_en || x.name_cn, x.name_cn || x.name_en) + pct + `</span>`;
+  }).join('') : '';
+
+  // CONTAINS AND MAY-CONTAIN ARE TWO DIFFERENT STATEMENTS and are never merged.
+  // The first is what is in the food; the second is what the line it was made
+  // on also handles. A person avoiding an allergen needs both and needs to know
+  // which is which — this is the whole reason the sheet reads the office's card
+  // rather than deriving anything.
+  const algRow = (label, en, cn, cls) => {
+    if (!en.length && !cn.length) return '';
+    const one = (list) => list.map(t => `<span class="achip ${cls}">${esc(t)}</span>`).join('');
+    return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
+      `<div class="achips"><span class="l-en">${one(en)}</span><span class="l-cn">${one(cn.length ? cn : en)}</span></div></div>`;
+  };
+  const algCard = alg
+    ? `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
+      (algRow(L.contains, alg.contains_en, alg.contains_cn, 'has') ||
+        // "None declared" is the mini app's own empty state for this row, and it
+        // is a statement rather than a blank: the office looked and found none.
+        `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
+        `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
+      algRow(L.mayContain, alg.may_en, alg.may_cn, 'may') +
+      `</div>`
+    : '';
 
   const rows = nut ? nut.rows.map(r => {
     const k = r.kind === 'parent' ? ' p' : (r.kind === 'child' ? ' c' : '');
@@ -966,13 +994,11 @@ function detailBody(it, code) {
           `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}" alt="" loading="lazy" decoding="async">` +
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
-      `<div class="dt-hd">` +
-        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>` +
-        (chips ? `<div class="fchips">${chips}</div>` : '') +
-      `</div>` +
+      `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
-    (ing ? `<div class="dt-k">${bi("What\u2019s in it", '配料')}</div>` +
-           `<div class="dt-ing">${bi(ing.en || ing.cn, ing.cn || ing.en)}</div>` : '') +
+    (chips ? `<div class="dt-k">${bi(L.ingredients.en, L.ingredients.cn)}</div>` +
+             `<div class="ichips">${chips}</div>` : '') +
+    algCard +
     (nut ? `<div class="nut">` +
              `<div class="nut-top"><div class="nut-ttl">${bi('Nutrition', '营养成分')}</div>` +
              ((nut.basis_en || nut.basis_cn)
