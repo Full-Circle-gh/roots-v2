@@ -631,6 +631,32 @@ function boxOf(text) {
         `the × is ${inset.right}px from the edge but the photo is ${inset.pad}px`);
       assert.strictEqual(inset.top, inset.pad,
         `the × is ${inset.top}px from the top but the photo is ${inset.pad}px`);
+      // AND THE MARK IS CENTRED IN THE SQUARE. Reported from a phone: the ×
+      // sat above the middle of the button. It was a glyph, placed by the
+      // font's metrics rather than by its ink; it is now two bars, whose centre
+      // is where the arithmetic puts it. Measured on BOTH close buttons,
+      // because they share the mark and would drift apart otherwise.
+      const marks = await page.evaluate(() => {
+        return ['bigX', 'dsheetX'].map(id => {
+          const b = document.getElementById(id);
+          const box = b.getBoundingClientRect();
+          const bars = Array.from(b.querySelectorAll('.xb')).map(el => el.getBoundingClientRect());
+          if (bars.length !== 2) return { id, bars: bars.length };
+          const cx = (Math.min(...bars.map(r => r.left)) + Math.max(...bars.map(r => r.right))) / 2;
+          const cy = (Math.min(...bars.map(r => r.top)) + Math.max(...bars.map(r => r.bottom))) / 2;
+          return { id, bars: 2,
+                   dx: cx - (box.left + box.right) / 2,
+                   dy: cy - (box.top + box.bottom) / 2,
+                   // And it really is a cross, not two bars lying on each other.
+                   spread: Math.max(...bars.map(r => r.height)) };
+        });
+      });
+      for (const k of marks) {
+        assert.strictEqual(k.bars, 2, `${k.id} does not draw its mark as two bars`);
+        assert.ok(Math.abs(k.dx) <= 1, `${k.id}'s mark is ${k.dx}px off centre across`);
+        assert.ok(Math.abs(k.dy) <= 1, `${k.id}'s mark is ${k.dy}px off centre down`);
+        assert.ok(k.spread > 4, `${k.id}'s bars are not crossed: ${k.spread}px tall`);
+      }
       await page.click('#bigX');
       const shut = await page.evaluate(() => ({
         big: document.getElementById('big').hidden,
@@ -711,6 +737,61 @@ function boxOf(text) {
       assert.strictEqual(offShut, true,
         'reduced motion still holds the panel open for an animation it is not playing');
       await reduced.close();
+    });
+
+    await check('adding throws the product at the basket, and clears up after itself', async () => {
+      // Asked for: the mini app's feedback. A count changing at the bottom edge
+      // of a phone is easy to miss with a thumb over it, so the product itself
+      // travels there. Measured rather than eyeballed, because a clone left
+      // pinned over the menu is the failure mode nobody would report as an
+      // animation bug — they would report the menu as broken.
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const m = await page.evaluate(async () => {
+        // A card WITH a photo: there is nothing to throw for a product nobody
+        // has photographed, and fly() correctly declines rather than throwing
+        // an empty box across the screen.
+        const card = Array.from(document.querySelectorAll('.it:not(.out)'))
+          .find(c => c.querySelector('.ph img') && c.querySelector('.add'));
+        if (!card) return { flew: false, why: 'no photographed product in the fixture' };
+        // On screen first: fly() declines for a card that is scrolled out of
+        // view, and that is the right behaviour — a photo sailing in from
+        // somewhere the customer was not looking explains nothing.
+        card.scrollIntoView({ block: 'center' });
+        await new Promise(r => setTimeout(r, 60));
+        const btn = card.querySelector('.add');
+        const photo = card.querySelector('.ph img').getBoundingClientRect();
+        btn.click();
+        const f = document.querySelector('.fly');
+        if (!f) return { flew: false };
+        const start = f.getBoundingClientRect();
+        const target = document.getElementById('cbarN').getBoundingClientRect();
+        await new Promise(r => setTimeout(r, 60));
+        const moving = getComputedStyle(f).transform;
+        return { flew: true,
+                 // It starts on the card's own photo, at its size.
+                 dx: Math.abs(start.left - photo.left), dy: Math.abs(start.top - photo.top),
+                 dw: Math.abs(start.width - photo.width),
+                 // It is aimed at the basket count, which is BELOW and to the RIGHT.
+                 down: target.top > photo.top, moving,
+                 img: /url\(/.test(getComputedStyle(f).backgroundImage) };
+      });
+      assert.strictEqual(m.flew, true,
+        `adding drew nothing — the product does not travel${m.why ? ' (' + m.why + ')' : ''}`);
+      assert.ok(m.dx <= 1 && m.dy <= 1, `the flight starts off the photo: ${m.dx},${m.dy}`);
+      assert.ok(m.dw <= 1, `the flight starts at the wrong size: ${m.dw}px out`);
+      assert.strictEqual(m.img, true, 'the thing thrown is not the product photo');
+      assert.strictEqual(m.down, true, 'the basket count is not below the card being added');
+      assert.notStrictEqual(m.moving, 'none', 'the clone was created but never moved');
+      // AND IT IS GONE AFTERWARDS. A photo left pinned over the menu reads as
+      // the page having broken, not as an animation that overstayed.
+      const left = await page.evaluate(async () => {
+        await new Promise(r => setTimeout(r, 900));
+        return document.querySelectorAll('.fly').length;
+      });
+      assert.strictEqual(left, 0, `${left} flown photo(s) still pinned over the menu`);
+      // This check put a product in the basket to watch it fly. Hand the page
+      // back empty, or every basket check after it counts one line too many.
+      await page.reload({ waitUntil: 'domcontentloaded' });
     });
 
     await check('adding shows the bar, and the bar counts and totals', async () => {
