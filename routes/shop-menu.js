@@ -375,6 +375,13 @@ function styles(vars, faces) {
   //
   // Every colour and family is still a token from the tenant's theme. The only
   // literals are neutral veils and the black sold-out scrim.
+  // NO ANGLE BRACKET MAY APPEAR ANYWHERE IN THIS STYLESHEET, comments included.
+  // cssSafe() strips them from injected config, and scripts/test_shop_menu.js
+  // asserts the whole sheet is free of them — a coarse rule on purpose, because
+  // the thing it protects is that no markup can be built out of a tenant's own
+  // palette or font name. It costs the child combinator (a > b), which nothing
+  // here needs, and it costs "->" in a comment, which is how it was tripped: an
+  // arrow in a note about rpx conversion went red as a security failure.
   return `${cssSafe(faces)}
 :root{${cssSafe(vars)};--barh:58px;--cbarh:0px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -558,10 +565,21 @@ img{display:block;max-width:100%}
 .sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
   font-family:var(--f-bear);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   text-align:center;padding:5px 0}
-.t{flex:1;font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
+/* NAME AND PRICE ARE THE MINI APP'S OWN TYPE, converted from its .card rules in
+   miniapp/pages/shop/shop.wxss at the same 390px phone the rest of this file
+   used (390/750 = 0.52). name 28rpx becomes 14.6px at line-height 1.2, margin-top
+   18rpx becomes 9.4px; price 32rpx becomes 16.6px with its 0.04em letter-spacing; the
+   foot's 8rpx becomes 4.2px. The price was 19px and read as shouting beside a 15px
+   name — both numbers were guessed, and both are measured now. The wxss scales
+   these by a --font-scale the customer sets in that app; this page has no such
+   control, so the scale is 1. */
+.t{flex:1;font-family:var(--f-bear);font-size:14.6px;line-height:1.2;margin-top:9.4px;
   overflow-wrap:anywhere}
-.pf{margin-top:7px}
-.pr{font-family:var(--f-bear);font-size:19px;line-height:1;
+.pf{padding-top:4.2px}
+/* tabular-nums is this page's own and is kept: it stops the figures jittering
+   as prices change down a column, which the wxss wants too — its
+   .row-price-stack comment asks for exactly that, by a different means. */
+.pr{font-family:var(--f-bear);font-size:16.6px;line-height:1;letter-spacing:.04em;
   font-variant-numeric:tabular-nums}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
