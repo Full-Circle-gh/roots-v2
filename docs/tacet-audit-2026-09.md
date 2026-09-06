@@ -3047,8 +3047,28 @@ is a floating-point decimal (A-06).
 ## J. Speed and scale
 
 ### J-01 · 63 list endpoints have no row limit
-**Severity:** High
+**Severity:** High → **mostly closed, see the amendment**
 **Where:** the full list is in Part 1; the ones that will bite first are below
+
+> **AMENDED 2026-09-06 — re-verified in `docs/tacet-j01-row-limits-survey.md`.**
+> **Five of the seven below are now paged** (`LIMIT ? OFFSET ?`): `/materials`,
+> `/suppliers`, `/recipes`, `/inventory/grid`, `/purchasing/invoices`. Half of
+> **J-02** closed with them.
+>
+> **One is genuinely open:** `/finance/transactions` — and it is bounded by a
+> 30-day default window over a ledger of ~209 rows, so it is not unbounded in
+> the way this finding reads. The survey recommends capping the window span
+> rather than paging, because the screen shows a net total under the list and a
+> total computed from one page is worse than a slow one.
+>
+> **One should NOT be paged:** `/products/export.csv`. An export that silently
+> returns part of your catalogue is worse than one that is slow; if it needs
+> fixing the fix is streaming, which is a different job.
+>
+> **Every line number in the table below has drifted** — the survey lists the
+> current ones. The "63" could not be reproduced (240 such handlers, 141 without
+> a `LIMIT`, by a method that over-counts). The count was never the useful
+> thing: sort by whether a table grows with USE or with SETUP.
 
 Most of the 63 are small lookup lists where it does not matter. These grow without bound:
 
@@ -3112,8 +3132,37 @@ support tickets and will not grow.
 **Suggested direction:** batch both — one query per page of invoices, and `getAvailableMap` per store.
 
 ### J-03 · The admin shell is 970 KB of JavaScript before anything is fetched
-**Severity:** Medium
+**Severity:** Medium → **half closed; the other half is blocked, see the amendment**
 **Where:** `public/retail-admin/` — 23 files, 57,241 lines
+
+> **AMENDED 2026-09-06 — re-measured in `docs/tacet-j03-admin-bundle-survey.md`.**
+>
+> **Compression and caching are done.** `lib/static-assets.js` (mounted at
+> `server.js:194`) was written for this finding: 3.33 MB → 1,092 KB on the wire,
+> and a `?v=`-stamped file is cached `immutable`, so between deploys there is no
+> request at all. *"Loaded on every visit"* is now *"loaded on the first visit
+> after each deploy"*.
+>
+> **The bundle has GROWN:** 23 files → **28**, 57,218 lines → **61,976**,
+> 995 KB → **1,092 KB** gzipped. `04-orders.js` is 600 KB raw.
+>
+> **The suggested direction below cannot be done as written.** `01-core.js` is
+> not a base layer: all 27 other files depend on it *and* it depends on seven of
+> them at 26 sites. Following those edges, **fourteen files are one strongly
+> connected component worth 771 KB — 71% of the bundle** — and nothing in a
+> cycle can be loaded on demand. Cutting core's outbound edges alone does not
+> break it. The coupling is not only function calls: `18-materials.js` reads
+> `_cats` from `05-marketing.js`, `26-print.js` reads `PA_STORE` and
+> `CU_CURRENT`. Shared state across a lazy boundary fails *silently*.
+>
+> **What is available instead:** leave the cycle eager, lazy-load the other
+> fourteen files — **1,092 KB → 771 KB on first load, a 29% cut, with no
+> refactor**, since their dependencies are already present (proved in both
+> directions for all 14 × 14 pairs).
+>
+> **Units:** the 970 KB above is within 3% of the gzipped total at this
+> document's own commit, while *"Orders alone is 558 KB"* below is a **raw**
+> size. The headline and its evidence are in different units.
 
 Every screen's code is loaded on every visit, in one global scope, in a fixed order.
 Orders alone is 558 KB. Nothing is loaded on demand.
