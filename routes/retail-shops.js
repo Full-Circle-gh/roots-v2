@@ -356,11 +356,19 @@ router.get('/api/retail-admin/shops/:id/qr.png', requireRetailAdmin, (req, res) 
   if (!shop) return res.status(404).end();
   const url = menuUrlFor(currentTenantId(), shop.public_code);
   if (!url) return bad(res, 409, 'no_public_domain');
-  // Scale is the module width in pixels. 8 gives a ~300px image for the
-  // versions these URLs need — big enough to print at table-tent size without
-  // resampling, small enough to sit in the admin beside the code.
+  // Scale is the module width in pixels. 8 is the on-screen size; the download
+  // asks for more, because a QR that is printed and stuck to a table is
+  // resampled by whatever prints it and a small source shows it. Clamped rather
+  // than trusted: an unbounded scale is an easy way to ask this endpoint for a
+  // hundred-megabyte PNG.
+  const scale = Math.max(4, Math.min(24, parseInt(req.query.scale, 10) || 8));
+  // A filename the operator can find again in a downloads folder six weeks
+  // later. The code is the only stable, human-checkable thing about a QR.
+  if (req.query.download === '1') {
+    res.set('Content-Disposition', `attachment; filename="shop-${shop.public_code}.png"`);
+  }
   let png;
-  try { png = qrpng.qrPng(url, { scale: 8, quiet: 4 }); }
+  try { png = qrpng.qrPng(url, { scale, quiet: 4 }); }
   catch (e) {
     // lib/qrpng carries versions 1-6, about 103 bytes. A customer domain long
     // enough to overflow that is possible and must say so rather than 500.
