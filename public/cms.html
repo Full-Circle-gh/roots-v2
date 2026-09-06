@@ -5768,7 +5768,54 @@ const state = {
   lang: 'en',
   // Current page being edited — home / promotions / about / …
   page: 'home',
+  /* THE MERCHANT'S DISPLAY CURRENCY — audit D-03. Every price this editor drew
+     was a hardcoded '¥', so a shop selling in dollars or baht designed its
+     storefront in yuan and only found out what customers would see after
+     publishing. Loaded at boot beside the catalogue; null until then, and
+     cmsCurrency() falls back to the server's own defaults so an early paint
+     renders exactly as it always did. */
+  currency: null,
 };
+
+/* Mirrors acCurrency() in public/retail-admin/01-core.js, field for field and
+   fallback for fallback. NOT imported from it: retail-admin loads plain
+   <script> part files with no module system and this page loads none of them,
+   so a shared copy would mean loading 01-core.js here for four functions.
+   The defaults are the SERVER'S — routes/retail.js normalizeCurrency() — so a
+   tenant that never touched the setting formats exactly as before.
+
+   /api/retail-admin/config returns the currency RAW, unlike the storefront's
+   /api/retail/config which normalises it first (routes/retail.js:794). That is
+   why both this and acCurrency() defend field by field rather than trusting the
+   shape: a stored value can be a bare string, a partial object, or absent. */
+const CMS_CURRENCY_FALLBACK = Object.freeze({ code: 'CNY', symbol: '¥', decimals: 2, position: 'before' });
+function cmsCurrency() {
+  const raw = state.currency;
+  const c = (raw && typeof raw === 'object') ? raw : {};
+  return {
+    code:     typeof c.code === 'string' && c.code.trim() ? c.code.trim().toUpperCase().slice(0, 3) : CMS_CURRENCY_FALLBACK.code,
+    symbol:   typeof c.symbol === 'string' && c.symbol.trim() ? c.symbol.trim().slice(0, 4) : CMS_CURRENCY_FALLBACK.symbol,
+    decimals: Number.isInteger(c.decimals) && c.decimals >= 0 && c.decimals <= 3 ? c.decimals : CMS_CURRENCY_FALLBACK.decimals,
+    position: c.position === 'after' ? 'after' : 'before',
+  };
+}
+// Just the symbol, for the places that format their own digits.
+function cmsSym() { return cmsCurrency().symbol; }
+/* Put the symbol on an ALREADY-FORMATTED number, on the correct side. Takes a
+   STRING because that is the point: the caller has decided how the digits look
+   — a rounded figure, a thousands separator, a range — and this must not
+   second-guess it. Same split acWrap()/acMoney() draws in the admin. */
+function cmsWrap(formatted) {
+  const c = cmsCurrency();
+  return c.position === 'after' ? String(formatted) + c.symbol : c.symbol + String(formatted);
+}
+// Format an amount at the currency's own decimal places. `dp` overrides, for
+// the few places that deliberately show a whole number.
+function cmsMoney(n, dp) {
+  const c = cmsCurrency();
+  const d = Number.isInteger(dp) ? dp : c.decimals;
+  return cmsWrap((Number(n) || 0).toFixed(d));
+}
 
 const PAGES = [
   { id: 'home',       name: 'Home',         cn: '首页',   desc: 'Customer landing — opens when the mini app launches',              desc_cn: '顾客落地页 — 小程序打开时显示' },
@@ -5853,7 +5900,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     // Categories + products are page-agnostic; load once. flashSales is
     // refreshed every 60s by a background timer (see below) so the
     // flash_sale_strip preview reflects what customers actually see.
-    const [catsResp, prodsResp, flashResp, pollsResp, vouchersResp, affiliateResp] = await Promise.all([
+    const [catsResp, prodsResp, flashResp, pollsResp, vouchersResp, affiliateResp, cfgResp] = await Promise.all([
       // Categories are the TOP nodes of the 2-level category tree (the legacy
       // categories table is gone — the tree is the only category system). Each
       // top → { id, name (EN, matches products.category), name_cn }.
@@ -5868,6 +5915,10 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
       // The affiliate_block preview mirrors the live-configured deal (give /
       // get amounts + repeat-order %) instead of hardcoded placeholder numbers.
       api('/api/retail-admin/affiliate/settings').catch(() => ({ data: {} })),
+      // The merchant's display currency (audit D-03). Failure falls back to the
+      // server's own defaults rather than blocking the editor: a page that will
+      // not open is worse than one drawing ¥ for a moment.
+      api('/api/retail-admin/config').catch(() => ({ data: {} })),
     ]);
     state.categories = (catsResp?.data || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' }));
     state.products = prodsResp.data || [];
@@ -5875,6 +5926,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     state.polls = pollsResp?.data || [];
     state.vouchers = (vouchersResp?.data || []).filter(v => v.is_active);
     state.affiliateSettings = affiliateResp?.data || {};
+    state.currency = cfgResp?.data?.currency || null;
     setInterval(async () => {
       try {
         const r = await fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json());
@@ -9459,8 +9511,8 @@ function renderBlockBody(b) {
       let priceLine = '';
       if (priceMode !== 'hide_price') {
         const wasPrice = (priceMode === 'both' && p.is_on_flash && Number(p.sell_price ?? p.price) > price.value)
-          ? `<span class="was">¥${Number(p.sell_price ?? p.price).toFixed(2)}</span>` : '';
-        priceLine = `<div class="price">${wasPrice}<span class="now">${price.value > 0 ? '¥'+price.value.toFixed(2) : '—'}</span></div>`;
+          ? `<span class="was">${cmsMoney(Number(p.sell_price ?? p.price))}</span>` : '';
+        priceLine = `<div class="price">${wasPrice}<span class="now">${price.value > 0 ? cmsMoney(price.value) : '—'}</span></div>`;
       }
       const copy = `
         <div class="copy">
@@ -9542,7 +9594,7 @@ function renderBlockBody(b) {
         return `<div class="card${rankCardCls}">
           <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}${rankBadge(idx)}</div>
           <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
-          <div class="price">${price.value > 0 ? `¥${price.value.toFixed(2)}` : '—'}</div>
+          <div class="price">${price.value > 0 ? cmsMoney(price.value) : '—'}</div>
           ${soldCaption(p)}
         </div>`;
       }).join('');
@@ -9556,7 +9608,7 @@ function renderBlockBody(b) {
           <div class="meta">
             <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
             ${tagline ? `<div class="tagline">${escapeHtml(tagline.slice(0, 80))}${tagline.length > 80 ? '…' : ''}</div>` : ''}
-            <div class="price">${price.value > 0 ? `¥${price.value.toFixed(2)}` : '—'}</div>
+            <div class="price">${price.value > 0 ? cmsMoney(price.value) : '—'}</div>
             ${soldCaption(p)}
           </div>
         </div>`;
@@ -9657,8 +9709,8 @@ function renderBlockBody(b) {
           <div class="meta">
             <div class="name">${escapeHtml(name)}</div>
             <div class="prices">
-              <span class="now"${flashAccent ? ` style="color:${flashAccent}"` : ''}>¥${fp.toFixed(2)}</span>
-              ${rp > fp ? `<span class="was">¥${rp.toFixed(2)}</span>` : ''}
+              <span class="now"${flashAccent ? ` style="color:${flashAccent}"` : ''}>${cmsMoney(fp)}</span>
+              ${rp > fp ? `<span class="was">${cmsMoney(rp)}</span>` : ''}
             </div>
             ${pct != null ? `
               <div class="meter"><span style="width:${pct}%${flashAccent ? `;background:${flashAccent}` : ''}"></span></div>
@@ -9720,8 +9772,8 @@ function renderBlockBody(b) {
               <div class="fsd-name">${escapeHtml(nm)}</div>
               ${sub ? `<div class="fsd-cn">${escapeHtml(sub)}</div>` : ''}
               <div class="fsd-prices">
-                <span class="fsd-now">¥${fp.toFixed(2)}</span>
-                ${rp > fp ? `<span class="fsd-was">¥${rp.toFixed(2)}</span>` : ''}
+                <span class="fsd-now">${cmsMoney(fp)}</span>
+                ${rp > fp ? `<span class="fsd-was">${cmsMoney(rp)}</span>` : ''}
               </div>
               ${pct != null ? `<div class="fsd-meter"><span style="width:${pct}%"></span></div>` : ''}
               <div class="fsd-sold">${escapeHtml(soldLbl)}</div>
@@ -9892,12 +9944,12 @@ function renderBlockBody(b) {
           <span class="tu-sub">Pick a pack in the wallet</span>
           <span class="tu-cta">Top up now →</span>
         </div>`;
-      const meta = s => `${s.pct}% BONUS · ≈¥${s.value} VALUE`;
+      const meta = s => `${s.pct}% BONUS · ≈${cmsWrap(s.value)} VALUE`;
       if (layout === 'b') {
         const bands = sample.map(s => `
           <div class="tu-band tu-card--${s.kind}">
             <span class="tu-notch tu-notch--l"></span><span class="tu-notch tu-notch--r"></span>
-            <div class="tu-band-l"><div class="tu-num">${s.no}</div><div class="tu-amt">¥${s.amount}</div></div>
+            <div class="tu-band-l"><div class="tu-num">${s.no}</div><div class="tu-amt">${cmsWrap(s.amount)}</div></div>
             <div class="tu-band-r">${s.best ? `<div class="tu-best tu-best--band">BEST VALUE</div>` : ''}<div class="tu-pts">+${s.bonus} PTS</div><div class="tu-meta">${meta(s)}</div></div>
           </div>`).join('');
         d.innerHTML = head + `<div class="tu-receipt">${bands}</div>` + linkout;
@@ -9907,15 +9959,15 @@ function renderBlockBody(b) {
         const strip = rest.map(s => `
           <div class="tu-chipcard tu-card--${s.kind}">
             <div class="tu-num">${s.no}</div>
-            <div class="tu-amt tu-amt--sm">¥${s.amount}</div>
+            <div class="tu-amt tu-amt--sm">${cmsWrap(s.amount)}</div>
             <div class="tu-pts tu-pts--sm">+${s.bonus} PTS</div>
-            <div class="tu-meta tu-meta--sm">≈¥${s.value} VALUE</div>
+            <div class="tu-meta tu-meta--sm">≈${cmsWrap(s.value)} VALUE</div>
           </div>`).join('');
         d.innerHTML = head + `
           <div class="tu-hero">
             <div class="tu-best tu-best--hero">BEST VALUE</div>
             <div class="tu-hero-top">
-              <div class="tu-hero-l"><div class="tu-num">${hero.no}</div><div class="tu-amt tu-amt--hero">¥${hero.amount}</div></div>
+              <div class="tu-hero-l"><div class="tu-num">${hero.no}</div><div class="tu-amt tu-amt--hero">${cmsWrap(hero.amount)}</div></div>
               <div class="tu-hero-r"><div class="tu-pts">+${hero.bonus} PTS</div><div class="tu-meta">${meta(hero)}</div></div>
             </div>
             <div class="tu-hero-cta">Top up now →</div>
@@ -9926,7 +9978,7 @@ function renderBlockBody(b) {
           <div class="tu-card tu-card--${s.kind}">
             ${s.best ? `<div class="tu-best">BEST VALUE</div>` : ''}
             <div class="tu-num">${s.no}</div>
-            <div class="tu-amt">¥${s.amount}</div>
+            <div class="tu-amt">${cmsWrap(s.amount)}</div>
             <div class="tu-pts">+${s.bonus} PTS</div>
             <div class="tu-meta">${meta(s)}</div>
           </div>`).join('');
@@ -10339,8 +10391,8 @@ function renderBlockBody(b) {
       const afxLifeRate   = Number(afx.lifetimeRatePercent) || 0;
       const afxLifeMonths = Number(afx.lifetimeMonths) || 0;
       const afxDefaultTitle = afxRewardThem > 0
-        ? (state.lang === 'cn' ? `你得 ¥${afxRewardYou}，好友得 ¥${afxRewardThem}。` : `Get ¥${afxRewardYou}. Give ¥${afxRewardThem}.`)
-        : (state.lang === 'cn' ? `好友首单 ¥${afxRewardYou}。` : `Get ¥${afxRewardYou} on their first order.`);
+        ? (state.lang === 'cn' ? `你得 ${cmsWrap(afxRewardYou)}，好友得 ${cmsWrap(afxRewardThem)}。` : `Get ${cmsWrap(afxRewardYou)}. Give ${cmsWrap(afxRewardThem)}.`)
+        : (state.lang === 'cn' ? `好友首单 ${cmsWrap(afxRewardYou)}。` : `Get ${cmsWrap(afxRewardYou)} on their first order.`);
       // Respects an admin-authored title/subtitle override; otherwise mirrors
       // the current deal so the preview updates the moment settings change.
       const titleHtml = biLabel(t.en, t.cn) || escapeHtml(afxDefaultTitle);
@@ -10500,7 +10552,7 @@ function renderBlockBody(b) {
           <span class="gr-pts-num">228</span>
           <span class="gr-pts-unit">${state.lang === 'cn' ? '积分' : 'pts'}</span>
           <span class="gr-pts-sep">·</span>
-          <span class="gr-pts-cny">${state.lang === 'cn' ? '抵 ¥2.28' : '¥2.28'}</span>
+          <span class="gr-pts-cny">${state.lang === 'cn' ? '抵 ' + cmsWrap('2.28') : cmsWrap('2.28')}</span>
         </div>` : '';
       const ctaHtml = cta ? `<div class="gr-cta">${escapeHtml(cta)} →</div>` : '';
       const greetHtml = `<div class="gr-headline">${escapeHtml(greet)}, ${escapeHtml(sampleName)}.</div>`;
@@ -10552,7 +10604,7 @@ function renderBlockBody(b) {
         const cnGreet = overrideCn || defaults.cn[tone];
         const nm = escapeHtml(sampleName);
         const gTxt = escapeHtml(greet);
-        const ptsN = '228', ptsCny = state.lang === 'cn' ? '抵 ¥2.28' : '¥2.28', walletV = '420.50';
+        const ptsN = '228', ptsCny = state.lang === 'cn' ? '抵 ' + cmsWrap('2.28') : cmsWrap('2.28'), walletV = '420.50';
         const ptsUnit = state.lang === 'cn' ? '积分' : 'pts';
         const kHtml = (k.en && k.cn)
           ? `${escapeHtml(k.en)} <span class="cn">· ${escapeHtml(k.cn)}</span>`
@@ -10586,7 +10638,7 @@ function renderBlockBody(b) {
               <div class="grd-bar">
                 <div class="grd-seg">
                   <div class="grd-seg-lbl">${state.lang === 'cn' ? '钱包' : 'WALLET'} <span class="cn">· ${state.lang === 'cn' ? 'WALLET' : '钱包'}</span></div>
-                  <div class="grd-seg-val">¥${walletV}</div>
+                  <div class="grd-seg-val">${cmsWrap(walletV)}</div>
                 </div>
                 <div class="grd-bar-div"></div>
                 <div class="grd-seg">
@@ -10636,7 +10688,7 @@ function renderBlockBody(b) {
             ${showPts ? `
               <div class="gr-split-wallet" style="background:${accent}1f;border-color:${accent}55;color:${accent}">
                 <div class="gr-wallet-num">228</div>
-                <div class="gr-wallet-lbl">${state.lang === 'cn' ? '积分 · 抵 ¥2.28' : 'pts · ¥2.28'}</div>
+                <div class="gr-wallet-lbl">${state.lang === 'cn' ? '积分 · 抵 ' + cmsWrap('2.28') : 'pts · ' + cmsWrap('2.28')}</div>
               </div>` : ''}
           </div>
           ${hintHtml}`;
@@ -10718,7 +10770,7 @@ function renderBlockBody(b) {
           <div class="rcp-card-img">${thumbUrl(linked) ? `<img src="${escapeAttr(thumbUrl(linked))}" alt="">` : ''}</div>
           <div class="rcp-card-meta">
             <div class="rcp-card-name">${escapeHtml(pickLang(linked.name_en, linked.name_cn) || '')}</div>
-            <div class="rcp-card-price">¥${Number(linked.effective_price ?? linked.sell_price ?? linked.price ?? 0).toFixed(2)} →</div>
+            <div class="rcp-card-price">${cmsMoney(Number(linked.effective_price ?? linked.sell_price ?? linked.price ?? 0))} →</div>
           </div>
         </div>` : '';
       // Aspect-ratio crop — `auto` lets the image take its natural ratio
@@ -10805,10 +10857,10 @@ function renderBlockBody(b) {
           || (state.lang === 'cn' ? `加入购物车 (${itemData.length} 件)` : `ADD BUNDLE · ${itemData.length} ITEMS`);
       }
       const showSav = bundlePrice > 0 && bundlePrice < sum;
-      const priceLbl = bundlePrice > 0 ? '¥' + bundlePrice.toFixed(2) : (sum > 0 ? '¥' + sum.toFixed(2) : '');
-      const sumLbl = sum > 0 ? '¥' + sum.toFixed(2) : '';
+      const priceLbl = bundlePrice > 0 ? cmsMoney(bundlePrice) : (sum > 0 ? cmsMoney(sum) : '');
+      const sumLbl = sum > 0 ? cmsMoney(sum) : '';
       const savAmt = sum - bundlePrice;
-      const sav = showSav ? (state.lang === 'cn' ? `省 ¥${savAmt.toFixed(2)}` : `SAVE ¥${savAmt.toFixed(2)}`) : '';
+      const sav = showSav ? (state.lang === 'cn' ? `省 ${cmsMoney(savAmt)}` : `SAVE ${cmsMoney(savAmt)}`) : '';
 
       // Surface character for free-floating elements (tubs, stamp, sticker).
       const elBorder = BT.riso ? '1.5px solid #1a1a17' : '1.5px solid rgba(26,26,23,.10)';
@@ -10842,7 +10894,7 @@ function renderBlockBody(b) {
           <div class="bun-rrow" style="border-top:${i === 0 ? '1.5px solid #1a1a17' : '1px dashed rgba(0,0,0,.22)'}">
             <div class="bun-rimg">${it.img ? `<img src="${escapeAttr(it.img)}" alt="">` : ''}</div>
             <div class="bun-rmid"><div class="bun-rname">${it.name}</div>${it.cn ? `<div class="bun-rcn">${it.cn}</div>` : ''}</div>
-            <div class="bun-rprice">¥${it.price.toFixed(2)}</div>
+            <div class="bun-rprice">${cmsMoney(it.price)}</div>
           </div>`).join('');
         const itemsLbl = state.lang === 'cn' ? '单买' : 'Items total';
         const bundLbl = state.lang === 'cn' ? '套装价' : 'Bundle price';
@@ -10859,7 +10911,7 @@ function renderBlockBody(b) {
       } else if (BT.style === 'sticker') {
         const show = itemData.slice(0, 3);
         const tubs = show.map((it, i) => `<div class="bun-tub" style="left:${i * 72}px;top:${i % 2 === 0 ? 0 : 10}px;border:${elBorder};box-shadow:${elShadow};transform:${rot(i % 2 === 0 ? -3 : 3)}">${it.img ? `<img src="${escapeAttr(it.img)}" alt="">` : ''}</div>`).join('');
-        const stamp = showSav ? `<div class="bun-stamp" style="background:${BT.save};color:${BT.saveText};border:${elBorder};box-shadow:${elShadow};transform:${rot(8)}"><span class="bun-stamp-k">SAVE</span><span class="bun-stamp-n">¥${savAmt.toFixed(0)}</span></div>` : '';
+        const stamp = showSav ? `<div class="bun-stamp" style="background:${BT.save};color:${BT.saveText};border:${elBorder};box-shadow:${elShadow};transform:${rot(8)}"><span class="bun-stamp-k">SAVE</span><span class="bun-stamp-n">${cmsMoney(savAmt, 0)}</span></div>` : '';
         const more = itemData.length > 3 ? `<div class="bun-more" style="color:${BT.cta}">+ ${itemData.length - 3} ${state.lang === 'cn' ? '件' : 'MORE'}</div>` : '';
         const tapTxt = state.lang === 'cn' ? '一键<br>入购物车' : 'Tap once —<br>straight to cart';
         bodyHtml = `
@@ -10883,7 +10935,7 @@ function renderBlockBody(b) {
           return `<div class="bun-card">
             <div class="bun-card-img">${img}</div>
             <div class="bun-card-name">${it.name}</div>
-            <div class="bun-card-price">¥${it.price.toFixed(2)}</div>
+            <div class="bun-card-price">${cmsMoney(it.price)}</div>
           </div>${plus}`;
         }).join('');
         bodyHtml = `
@@ -11100,7 +11152,7 @@ function renderBlockBody(b) {
         return `<div class="card">
           <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
           <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
-          <div class="price">${price.value > 0 ? `¥${price.value.toFixed(2)}` : '—'}</div>
+          <div class="price">${price.value > 0 ? cmsMoney(price.value) : '—'}</div>
         </div>`;
       }).join('');
       const note = `<div class="fav-note">${state.lang === 'cn'
@@ -11164,7 +11216,7 @@ function renderBlockBody(b) {
         metric === 'orders_count'   ? row.orders :
         row.spend;
       const fmtValue = (v) => {
-        if (metric === 'lifetime_spend') return '¥' + Math.round(v).toLocaleString();
+        if (metric === 'lifetime_spend') return cmsWrap(Math.round(v).toLocaleString());
         if (metric === 'points_balance') return v + (state.lang === 'cn' ? ' 分' : ' pts');
         return v + (state.lang === 'cn' ? ' 单' : ' orders');
       };
@@ -12918,14 +12970,14 @@ function buildFlashStripForm(m, b) {
 // can never advertise a number or code that isn't backed by a live coupon.
 function couponDisplayFromVoucher(v) {
   let discEn = '', discCn = '';
-  if (v.type === 'fixed_amount') { discEn = discCn = '¥' + (Number(v.value) || 0); }
+  if (v.type === 'fixed_amount') { discEn = discCn = cmsWrap(Number(v.value) || 0); }
   else if (v.type === 'percent') { discEn = discCn = (Number(v.value) || 0) + '%'; }
   else if (v.type === 'free_shipping') { discEn = 'FREE'; discCn = '包邮'; }
   // Subtitle: prefer the coupon's own description, else compose min-spend / expiry.
   let subEn = (v.description || '').trim(), subCn = (v.description || '').trim();
   if (!subEn) {
     const parts = [];
-    if (Number(v.min_subtotal) > 0) parts.push({ en: 'Min spend ¥' + Number(v.min_subtotal), cn: '满 ' + Number(v.min_subtotal) + ' 元可用' });
+    if (Number(v.min_subtotal) > 0) parts.push({ en: 'Min spend ' + cmsWrap(Number(v.min_subtotal)), cn: '满 ' + Number(v.min_subtotal) + ' 元可用' });
     if (v.expires_at) { const d = String(v.expires_at).slice(0, 10); parts.push({ en: 'Expires ' + d, cn: d + ' 截止' }); }
     subEn = parts.map(p => p.en).join(' · ');
     subCn = parts.map(p => p.cn).join(' · ');
@@ -15247,7 +15299,7 @@ function stripRichText(s) {
 // canonical price used everywhere — POS, Meituan, mini app, GZGrocery.
 function displayPrice(p) {
   const v = Number(p?.sell_price) || 0;
-  if (v > 0) return { value: v, html: `¥${v.toFixed(2)}` };
+  if (v > 0) return { value: v, html: cmsMoney(v) };
   return { value: 0, html: '<span class="price-missing">No price</span>' };
 }
 function thumbUrl(p) { return p.image_url || p.image_data || ''; }
