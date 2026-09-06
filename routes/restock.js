@@ -28,6 +28,13 @@ try { _push = require('./push'); } catch (e) { console.warn('[restock] push modu
 // notifications to any open dashboard / restock PWA tab.
 let _events = null;
 try { _events = require('./events'); } catch (e) { console.warn('[restock] events module not available:', e.message); }
+// The kitchen's PAPER copy of the same event. A push reaches a phone; a kitchen
+// is a room with wet hands and no phone on the bench, so the request also comes
+// out of a thermal printer that beeps. Rides the store printers' existing
+// Feieyun rail — see lib/kitchen-print.js for why it routes on its own SN
+// rather than on `printer.by_store`. Best-effort and fire-and-forget: a request
+// must never fail to reach the queue because a printer is offline.
+const _kprint = require('../lib/kitchen-print');
 function _broadcastRestock(orderId, kind, actorUserId) {
   if (!_events || !_events.broadcast) return;
   try {
@@ -1164,6 +1171,9 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
     if (initialStatus === 'sent') {
       _fireRestockPush(id, 'sent', _actorOperatorId(req));
       _broadcastRestock(id, 'sent', req.user.id);
+      // Paper, for the kitchen queue. No-ops for every other direction — a
+      // store transfer has its own paper trail and never reaches this roll.
+      _kprint.autoPrintKitchenRequest(id, 'sent');
     }
     res.json({ success: true, id, rs_number });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1261,6 +1271,14 @@ router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, 
     _fireRestockPush(order.id, status, _actorOperatorId(req));
     _broadcastRestock(order.id, status, req.user.id);
   }
+  // The kitchen's slip, for the two events that mean anything on paper. Which
+  // of them actually prints is the tenant's setting (printer.kitchen_print_on)
+  // — Roots prints on arrival only, because the people who would read a
+  // completion slip are the people who just cooked it. 'delivered' never
+  // prints: a warehouse→kitchen request closes at 'prepared'.
+  if (status === 'sent' || status === 'prepared') {
+    _kprint.autoPrintKitchenRequest(order.id, status);
+  }
   // The status change itself succeeded. When the stock movement did not, say so
   // in the response so the screen can put it in front of the person who just
   // pressed the button — it used to be a console warning only, which meant a
@@ -1268,6 +1286,57 @@ router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, 
   if (transfer && transfer.ok === false) {
     return res.json({ success: true, stock_transfer: { ok: false, error: transfer.error } });
   }
+  res.json({ success: true });
+});
+
+// ── Reprint the kitchen's slip ─────────────────────────────────────────────
+//
+// PAPER RUNS OUT, AND THAT IS NOT A REASON TO LOSE A JOB. The slip prints once,
+// automatically, when the request lands in the queue — and the one thing that
+// is certain about a thermal printer in a kitchen is that some morning it will
+// be out of paper, off, or offline. The auto-print records exactly that on the
+// order (print_status = 'failed'), so the queue can show it and offer this.
+//
+// WHOEVER WORKS THE QUEUE CAN PRESS IT. Same guard as every other action on a
+// kitchen request, and kitchenScopedOrder refuses a store transfer here for the
+// same reason it refuses one everywhere else: a transfer between shelves has
+// its own paper trail and must never surface on the kitchen's roll.
+//
+// FORCED, DELIBERATELY. A reprint is somebody standing at the printer asking
+// for this slip now. It ignores printer.kitchen_print_on — which governs what
+// prints BY ITSELF — because a tenant switching off automatic completion slips
+// has not said the kitchen may never reprint one. It cannot bypass a missing
+// SN or absent credentials: those are "there is no printer", not a preference.
+router.post('/api/restock/:id/reprint', requireRestockAccess, kitchenScopedOrder, async (req, res) => {
+  const conn = tdb();
+  const order = conn.prepare('SELECT id, status, to_role FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+  // THE OBJECT TYPE, CHECKED HERE, BECAUSE THE MIDDLEWARE ABOVE CHECKS
+  // SOMETHING ELSE. kitchenScopedOrder is a SCOPE limiter: it confines an
+  // account that can fulfil but not pick — the `kitchen` role, and on the
+  // shipped presets only that one — to kitchen requests. Every other role that
+  // reaches these endpoints (owner, admin, manager, warehouse, store_manager)
+  // works transfers legitimately and passes through, which is correct for the
+  // endpoints that serve both.
+  //
+  // This endpoint does not serve both. It only ever prints a kitchen request,
+  // for anybody, so it needs the object type refused rather than the caller
+  // scoped. Leaning on the middleware let a warehouse picker's reprint reach a
+  // store transfer, and the failed print then stamped print_status on a row
+  // that was never owed a slip.
+  if ((order.to_role || 'warehouse') !== 'kitchen') {
+    return res.status(403).json({
+      error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',
+    });
+  }
+  // The slip says what state the job is in, so reprint the one that matches
+  // where the request actually IS — not the event that happened to print first.
+  const kind = order.status === 'prepared' || order.status === 'delivered' ? 'prepared' : 'sent';
+  const r = await _kprint.printKitchenRequest(order.id, kind, { conn, force: true })
+    .catch(e => ({ ok: false, msg: e.message }));
+  _kprint.recordPrintResult(conn, order.id, r);
+  logActivity(req.user.id, req.user.username, 'reprint', 'restock', order.id, { ok: !!r.ok, kind }, req.ip);
+  if (!r.ok) return res.status(502).json({ success: false, error: r.msg || 'print_failed' });
   res.json({ success: true });
 });
 

@@ -69,6 +69,7 @@ const { channelSyncStale } = require('../lib/channel-sync-stale');
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
+const _kprint = require('../lib/kitchen-print');  // the kitchen queue's own slip — same rail, its own SN
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
 const _emailSender = require('../lib/email-sender'); // credential-gated email for web sign-in codes
@@ -12683,7 +12684,15 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
     delivery_status: job.delivery_status,
     carrier: job.carrier_name || null,
     waybill_id: job.waybill_id || null,
-    rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+    // A rider with a number but no name still has to be reachable. The mini-app
+    // "Call rider" button, the web storefront's call link and the admin drawer's
+    // tel: link all hang off this object, so gating it on the NAME meant a job
+    // Qingyun returned nameless showed a live map and no way to phone the person
+    // on it. The name is the optional half; either field alone builds the object.
+    // The order-row twin below (o.courier) shapes this identically — keep them so.
+    rider: (job.rider_name || job.rider_phone)
+      ? { name: job.rider_name || null, phone: job.rider_phone || null }
+      : null,
     // Prefer the live column; fall back to the last-known rider point in raw_track.
     // Track-less reconcile polls can null the column while raw_track keeps the last
     // real fix, so without this the map loses the rider between pings.
@@ -25015,7 +25024,11 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
       o.courier = {
         stage,                                            // scheduled | awaiting_dispatch | in_transit | delivered
         carrier: job.carrier_name || null,
-        rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+        // Same shape, same reason as buildDeliveryTrackData's rider above: a
+        // nameless rider still carries a number the customer can call.
+        rider: (job.rider_name || job.rider_phone)
+          ? { name: job.rider_name || null, phone: job.rider_phone || null }
+          : null,
         // No ETA/distance before a rider is on it — suppress for the pre-dispatch
         // preview so we never show a bogus "~N min".
         eta_seconds:     stage === 'scheduled' ? null : (job.eta_seconds ?? null),
@@ -27441,6 +27454,15 @@ function loadPrinterPrefs() {
     // Independent toggle: print a "refund request" alert slip the moment a
     // customer files a refund. Default on.
     auto_print_refund: get('printer.auto_print_refund', true),
+    // The KITCHEN's printer — one SN of its own, not a row in by_store. A
+    // kitchen request carries no store id at either end (routes/restock.js
+    // nulls both for anything with a kitchen on it), so there is nothing to
+    // key the store map on. `kitchen_print_on` says which events print by
+    // themselves: 'sent' (Roots' answer — paper when work arrives), 'prepared',
+    // 'both', or 'off'. lib/kitchen-print.js is what reads these.
+    kitchen_sn: String(get('printer.kitchen_sn', '') || '').trim(),
+    kitchen_print_on: get('printer.kitchen_print_on', _kprint.DEFAULT_PRINT_ON),
+    kitchen_copies: get('printer.kitchen_copies', 1),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
     // Orders shipping OUTSIDE Guangzhou always print at this store's printer
@@ -27803,6 +27825,9 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     auto_print: prefs.auto_print,
     auto_print_addon: prefs.auto_print_addon,
     auto_print_refund: prefs.auto_print_refund,
+    kitchen_sn: prefs.kitchen_sn,
+    kitchen_print_on: prefs.kitchen_print_on,
+    kitchen_copies: prefs.kitchen_copies,
     shop_name:  prefs.shop_name,
     enabled:    _feie.feieEnabled(integ().feie),
     templates:  _feie.TEMPLATE_IDS,
@@ -27826,6 +27851,21 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
     if (b.auto_print_refund !== undefined) upsert.run('printer.auto_print_refund', JSON.stringify(!!b.auto_print_refund), req.user.id);
     if (b.shop_name !== undefined) {
       upsert.run('printer.shop_name', JSON.stringify(String(b.shop_name || '').slice(0, 40)), req.user.id);
+    }
+    // Kitchen printer. A blank SN is a real answer — "the kitchen has no
+    // printer" — so unlike a by_store row it is saved rather than skipped,
+    // which is how a printer that has been removed actually stops printing.
+    if (b.kitchen_sn !== undefined) {
+      upsert.run('printer.kitchen_sn', JSON.stringify(String(b.kitchen_sn || '').trim().slice(0, 40)), req.user.id);
+    }
+    if (b.kitchen_print_on !== undefined) {
+      const v = String(b.kitchen_print_on || '');
+      upsert.run('printer.kitchen_print_on',
+        JSON.stringify(_kprint.PRINT_ON.includes(v) ? v : _kprint.DEFAULT_PRINT_ON), req.user.id);
+    }
+    if (b.kitchen_copies !== undefined) {
+      upsert.run('printer.kitchen_copies',
+        JSON.stringify(Math.max(1, Math.min(5, parseInt(b.kitchen_copies, 10) || 1))), req.user.id);
     }
     if (b.by_store !== undefined && b.by_store && typeof b.by_store === 'object') {
       const clean = {};

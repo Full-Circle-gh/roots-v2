@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.135
+# Tacet shared-core consolidation — decisions record, v4.136
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-06 · v4.136 — **§51 ADDED: A KITCHEN REQUEST PRINTS ON PAPER WHEN IT REACHES THE QUEUE; ONE KITCHEN PRINTER, AND THE TENANT SAYS WHEN IT PRINTS — DECIDED by Ash.** A warehouse→kitchen request has announced itself by push since #261, which reaches a phone; Ash raised the gap as what it is — *"except of notification, i want to have a printer that printer the order for them in the kitchen"* — and the slip is an ADDITION, the push going out unchanged. **Nothing new is wired for it, which is most of why it was a day's work**: the store printers already run on Feieyun's cloud (`lib/feie.js`), the kitchen's printer is one more device on the SAME account, and the paid-order auto-print is copied wholesale — best-effort, fire-and-forget, recording BOTH outcomes. **Ruling: ONE kitchen printer, not a map keyed by location** — the per-location alternative was offered and declined, and **the cost is recorded rather than glossed**: a second kitchen means a config shape change, a migration and the routing touched again. The single SN is also what the data model already forces, so the two answers do not conflict today — a kitchen request carries NO locations at all, `routes/restock.js` nulling both ends for anything with a kitchen on it, so there is nothing for `printer.by_store` to key on. **Ruling: WHEN it prints is per-tenant and Roots prints on arrival only** — in Ash's words *"It depends on the tenant. For roots only when job arrive"* — because **the people who would read a completion slip are the people who just cooked it**, and whoever is waiting to hear is at the other end of a push. `delivered` never prints in any setting: the kitchen direction closes at `prepared` and `PUSH_AUDIENCE` already gives it no `delivered` entry. **The slip carries no money anywhere** — a production ticket is not priced, and a cost column would invite the kitchen to think a transfer owes it something. **A failed print is recorded, not swallowed** (`print_status`/`printed_at`/`print_error` on `restock_orders`, the three `retail_orders` already carries), and a result that never reached a printer is explicitly NOT a failure — no SN, event off, or not a kitchen request would otherwise put a red mark and a reprint button on a request that was never owed a slip. **TWO DEFECTS THE NEW SUITE FOUND ARE FIXED IN THE SAME COMMIT and both would have shipped green**: the reprint leaned on `kitchenScopedOrder` to refuse a store transfer, which that middleware does not do for the roles that hold `restock:pick` — it is a SCOPE limiter confining a kitchen-only account, not an object-type guard — so the refusal was not refusing; and the reprint stamped its outcome unconditionally, so refusing a transfer stamped a failed print on the transfer. **The middleware is correctly left alone**, and the concern first filed against it — that it is "a no-op for a Tacet session" — was AUDITED THE SAME DAY AND WITHDRAWN in §51's NOT DECIDED, where the working is kept: across every shipped preset exactly one role is scoped by it, `kitchen`, and every other role reaching these endpoints works transfers legitimately. **A wrong finding is left corrected rather than deleted**, because the next reader is otherwise free to file it again. Vocabulary goes to v1.24 in the same commit per Rule 4's standing delegation — twenty-one entries, fifteen already live, six composed and all six in the settings block, with one live pair (`重打小票`) REJECTED and the rejection recorded, because `小票` is a receipt and this slip is not one. Appended as §51 under the append-only convention; Related documents stays at §38.
 
 2026-09-06 · v4.135 — **§50 ADDED: IN-PAGE WECHAT PAYMENT FOR THE QR MENU IS PURSUED; ALIPAY STAYS A COUNTER PAYMENT — DECIDED by Ash.** §45's deferred in-page WeChat payment is picked up rather than left open: Ash ruled to build it, with Alipay customers continuing to pay at the counter on the existing cashier-pay path — no new architecture for that half. **The block §45 named is confirmed, and it is four things, not one**: no verified 服务号 (only the Mini Program's appid exists anywhere in the schema), no OAuth code capable of producing an openid outside the mini program, no JS-SDK code to trigger payment in-browser, and the merchant domain verification §44 already anticipated needing. **The first and the fourth are administrative steps with WeChat that only the merchant-account holder can complete and are not removed by this ruling** — recorded so a later session does not read "decided" as "credentials exist." The OAuth/JS-SDK build can proceed against WeChat's published contract without live credentials, mirroring how `lib/tenant-creds.js` already holds WeChat Pay's other secrets per tenant; there is no sandbox for a verified official account, so the first real end-to-end test is against production credentials. **Rejected: shipping WeChat Pay Native (a second scannable QR) as an interim** — buildable today with no new registration, but not what was asked for, and Ash chose the real in-page path over a stopgap. **§50 also carries two rulings taken the same day, and the first NARROWS §44.** **The kitchen ticket's trigger now follows the payment path**: an in-page WeChat order prints on payment success, not on submit, because a customer can submit and close WeChat and the food is already made — while Alipay, cash and anyone routed to the counter keep §44's print-on-submit unchanged; the consequence for §49's clock is recorded, an unpaid order dying at twenty minutes now leaving no printed ticket behind it. **There is no in-page payment fallback outside the WeChat browser**: a customer who opens the menu with a phone camera lands in Safari or Chrome where WeChat's in-page payment cannot run, and pays at the counter, **where staff scan the customer's payment code on the existing terminal** — no new code, and a Native QR rendered on the page is rejected as a worse counter than the counter. **§50 also records an apparent contradiction with §47 and dissolves it rather than leaving it to be found:** the PAYMENT page reads the user agent, because WeChat's in-page sheet cannot run outside WeChat and the customer who is outside it must reach the till rather than WeChat's error page; §47's byte-identical rule governs the MENU, still holds, and its three-user-agent test now runs with the rail switched on. Appended as §50 under the append-only convention; Related documents stays at §38.
 
@@ -5578,3 +5580,122 @@ Ruling (Ash, 2026-09-06): **there is no second app.** `/stock` — the Quick Sto
 - Whether the order model needs a new payment-pending sub-state to distinguish "waiting on a WeChat callback" from today's `pending_payment`, or whether the existing counter-order status machine (§45, §49) already covers it — deferred to that same session.
 
 Docs only; no code yet.
+
+## 51. A kitchen request prints on paper when it reaches the queue; one kitchen printer, and the tenant says when it prints
+
+A warehouse→kitchen request has announced itself since #261: it fans out by
+capability to every operator holding `restock:fulfil` and opens on
+`/stock?go=queue`. That reaches a phone. **A kitchen is a room with wet hands,
+noise and no phone on the bench**, and Ash raised it as exactly that: *"when
+there is a request from the kitchen and it arrive to the kitchen queue — except
+of notification, i want to have a printer that printer the order for them in the
+kitchen."*
+
+**Ruling (Ash, 2026-09-06): build it.** A request landing in the production
+queue also comes out of a thermal printer in the kitchen. The notification is
+not replaced — paper is an addition, and the push still goes out unchanged.
+
+**NOTHING NEW IS WIRED FOR IT, and that is most of why this was a day's work
+rather than a project.** The store printers already run on Feieyun's cloud
+(`lib/feie.js`): the server POSTs the slip text to the Open API and the cloud
+pushes it to the device, which prints and announces by voice within a second or
+two. No LAN, no agent, no port forwarding — which is why a remote server
+printing to an on-site printer works at all. **The kitchen's printer is one more
+device on the SAME Feieyun account**, so this is a second caller of an existing
+rail rather than a second rail. The pattern it copies wholesale is the paid-order
+auto-print: best-effort, fire-and-forget, and recording BOTH outcomes.
+
+**Ruling (Ash, 2026-09-06): one kitchen printer, not a map keyed by location.**
+The alternative was offered and declined: the store printers resolve through
+`printer.by_store`, keyed on store id, and a per-location kitchen map would have
+made a second kitchen a config row rather than a code change. Ash chose the
+single printer. **The reasoning is recorded because the cost is real and lands
+later**: a second kitchen means changing the config shape, migrating the saved
+value, and touching the routing again. It is a new decision when it happens,
+not a row nobody would have filled in.
+
+**The single SN is also what the data model already forces**, which is worth
+recording beside the ruling because it means the two answers do not conflict
+today. A kitchen request carries **no locations at all** — `routes/restock.js`
+nulls both `from_store_id` and `to_store_id` for any order with a kitchen at
+either end, because a kitchen request is production and not a transfer between
+shelves (§43's distinction, applied). So there is nothing for a store map to key
+on, and `printer.kitchen_sn` is a standalone setting rather than a `by_store`
+row.
+
+**Ruling (Ash, 2026-09-06): WHEN it prints is a per-tenant setting, and Roots
+prints on arrival only.** In his words: *"It depends on the tenant. For roots
+only when job arrive."* So `printer.kitchen_print_on` takes `sent` (the
+default, and Roots' answer), `prepared`, `both`, or `off`. **The reason arrival
+alone is right for Roots is worth stating**: the people who would read a
+completion slip are the people who just cooked it, and the person actually
+waiting to hear that the food is made is at the other end of a push, not in the
+kitchen. A tenant that wants a spike of finished tickets can have one; Roots
+does not.
+
+**`delivered` never prints, in any setting.** A warehouse→kitchen request closes
+at `prepared` — §39's shape, already encoded in `PUSH_AUDIENCE`, which gives the
+kitchen direction no `delivered` entry at all.
+
+**A transfer between shelves NEVER reaches the kitchen's roll**, and this is
+held by a test rather than by the absence of a call site. A kitchen printing
+every store's restock is a kitchen that stops reading the printer.
+
+**THE SLIP CARRIES NO MONEY.** Not the unit cost, not a line total, not a
+total — a production ticket is not priced, and a cost column on one would only
+invite the kitchen to think a transfer owes it something. It carries the request
+number, why it was asked for (§39's `purpose`, `order` or `shelf`), who asked
+and when, every line with its quantity and unit, and the requester's note.
+
+**A FAILED PRINT IS RECORDED, NOT SWALLOWED, and that is not optional here.**
+`restock_orders` gains `print_status` / `printed_at` / `print_error` — the same
+three `retail_orders` already carries — because the one certainty about a
+thermal printer in a kitchen is that some morning it is out of paper. The queue
+screen shows the failure and offers a reprint. **A result that never reached a
+printer is NOT a failure**: no SN configured, the event switched off, or an
+order that was never a kitchen request are all "no slip was owed", and recording
+one as failed would put a red mark and a reprint button on a request that was
+never printing.
+
+**Two defects were found by the suite written for this and are fixed in the same
+commit.** They are recorded because both are the kind that would have shipped
+green. (1) `kitchenScopedOrder` — the middleware that refuses a store transfer
+on every kitchen endpoint — **only guards a KITCHEN-realm session and returns
+early for a Tacet operator**, who since #261 is exactly who works this queue.
+The reprint's refusal was leaning on it and therefore was not refusing. The
+guard now sits on the endpoint. **The middleware itself is NOT changed here**:
+whether its realm check is right for the endpoints that have relied on it since
+#261 is a larger question than this build, and is left open below rather than
+answered in passing. (2) The reprint stamped its outcome unconditionally, so
+refusing a transfer stamped `print_status = 'failed'` on the transfer.
+
+**NOT DECIDED:**
+
+- ~~Whether `kitchenScopedOrder`'s realm-scoped guard is right for the other
+  endpoints that use it.~~ **AUDITED THE SAME DAY AND WITHDRAWN — the concern
+  as filed was wrong, and it is corrected here rather than left for someone to
+  spend a day on.** The claim was that the guard is "a no-op for a Tacet
+  session", which is false. `_kitchenScopedSession` is true for a kitchen-realm
+  session OR for an operator holding `restock:fulfil` and NOT `restock:pick`,
+  and computing that across every shipped preset gives exactly one match: the
+  `kitchen` role. Every other role that can reach these endpoints — `owner`,
+  `admin`, `manager`, `warehouse`, `store_manager` — holds `restock:pick` or no
+  restock capability at all, and each of them works transfers legitimately, so
+  passing through is the correct behaviour rather than an opening. **The guard
+  is a SCOPE limiter keyed on a role shape ("a kitchen account may only touch
+  kitchen requests"), and it does that job.** What the reprint endpoint needed
+  was a different thing — an OBJECT-TYPE guard, "this endpoint only ever
+  operates on a kitchen request, for anybody" — which is why the fix was to put
+  the check on the endpoint and is why the middleware is correctly left alone.
+  **Two observations recorded from the audit, neither a defect:** the endpoints
+  are capability-gated by `lib/cap-routes.js` (`/api/restock` is covered) only
+  once a tenant switches on `tenants.rbac_enforce`, which is the documented
+  Phase 2 position and not a finding; and `resolveOperator` fails OPEN by
+  design, so a capability-resolution error leaves a kitchen operator unscoped
+  rather than locked out — consistent with that module's stated contract.
+- **A second kitchen.** Ruled above as a single printer; when a second kitchen
+  exists, the config shape is a new decision.
+- **Whether the kitchen realm's own screen (`public/kitchen.html`) gains the
+  reprint control.** It is still a client of these endpoints and its request
+  detail view is the obvious second home for the button. Left out of this build
+  to keep one PR to one change; the endpoint serves both realms already.
