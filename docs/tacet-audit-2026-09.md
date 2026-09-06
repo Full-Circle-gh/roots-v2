@@ -3169,10 +3169,24 @@ support tickets and will not grow.
 > `_cats` from `05-marketing.js`, `26-print.js` reads `PA_STORE` and
 > `CU_CURRENT`. Shared state across a lazy boundary fails *silently*.
 >
-> **What is available instead:** leave the cycle eager, lazy-load the other
-> fourteen files — **1,092 KB → 771 KB on first load, a 29% cut, with no
-> refactor**, since their dependencies are already present (proved in both
-> directions for all 14 × 14 pairs).
+> ⚠️ **CORRECTED 2026-09-06, later the same day: the cycle is 23 files and 94%
+> of the bundle, and the lazy-load cut is 6%, not 29%.** The first version of
+> this amendment said fourteen files and a 29% cut. Its coupling analysis did
+> not count `window.f = function f()` as a declaration, and there are **408** of
+> them — the deliberately-exported names, so the likeliest to cross files. The
+> error was found by starting to build the change: the rail dispatches through
+> inline `onclick="finInit()"`, and `finInit` is declared on `window` in a file
+> the survey had called a clean candidate.
+>
+> **What is available instead: not much, and the recommendation is now DON'T.**
+> Five files sit outside the cycle — `18-materials`, `22-finance`, `20-waste`,
+> `24-import`, `27-keyboard`, 67 KB together. They are genuinely loadable on
+> demand and it is not worth a loader, a registry and a permanent class of
+> "screen opens on a ReferenceError" bug to save 6% of one load per deploy —
+> against the 98 KB brotli bought for one constant and no new failure mode.
+>
+> The finding's own direction survives and is stronger than it reads: the admin
+> cannot be split as it stands, and the knot is 94% rather than 71%.
 >
 > **Units:** the 970 KB above is within 3% of the gzipped total at this
 > document's own commit, while *"Orders alone is 558 KB"* below is a **raw**
