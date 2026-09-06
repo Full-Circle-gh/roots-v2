@@ -334,6 +334,45 @@ function boxOf(text) {
         `the add button is not on the price row, right of the price: ${JSON.stringify(m)}`);
     });
 
+    await check('the card\'s TYPE is the mini app\'s, read from its own stylesheet', async () => {
+      // Reported from a phone, 2026-09-06: "the price of each product, its too
+      // big... do it the same as the mini app exactly". It was 19px against a
+      // 15px name; both were guessed. The real values are .card .name and
+      // .card .price in miniapp/pages/shop/shop.wxss, and this reads them there
+      // rather than restating them — the same reason the chip's size does.
+      const wxss = require('fs').readFileSync(
+        path.join(ROOT, 'miniapp/pages/shop/shop.wxss'), 'utf8');
+      // The 2-column card's rules. Deliberately NOT .grid-3's, which are the
+      // three-across variant and smaller; this page lays out two across.
+      const rpxOf = (sel) => {
+        const line = wxss.split('\n').find(l => l.trim().startsWith(sel));
+        const m = line && /font-size:\s*calc\((\d+)rpx/.exec(line);
+        return m ? Number(m[1]) : null;
+      };
+      const nameRpx = rpxOf('.card .name');
+      const priceRpx = rpxOf('.card .price ');
+      assert.ok(nameRpx && priceRpx,
+        `could not read the card's type out of the wxss: name=${nameRpx} price=${priceRpx}`);
+      const px = (r) => r * (390 / 750);
+      const got = await page.evaluate(() => {
+        const card = document.querySelector('.it:not(.out)');
+        const t = getComputedStyle(card.querySelector('.t'));
+        const p = getComputedStyle(card.querySelector('.pr'));
+        return { name: parseFloat(t.fontSize), price: parseFloat(p.fontSize),
+                 tracking: p.letterSpacing };
+      });
+      assert.ok(Math.abs(got.name - px(nameRpx)) <= 0.6,
+        `the name is ${got.name}px against the mini app's ${px(nameRpx).toFixed(1)}px`);
+      assert.ok(Math.abs(got.price - px(priceRpx)) <= 0.6,
+        `the price is ${got.price}px against the mini app's ${px(priceRpx).toFixed(1)}px`);
+      // The price must not be the louder of the two by more than the mini app
+      // makes it — that ratio is the whole of what "too big" described.
+      assert.ok(got.price / got.name <= (priceRpx / nameRpx) + 0.05,
+        `the price shouts over the name: ${got.price}/${got.name} against ${(priceRpx / nameRpx).toFixed(2)}`);
+      assert.ok(/px$/.test(got.tracking) && parseFloat(got.tracking) > 0,
+        `the price lost the mini app's letter-spacing: ${got.tracking}`);
+    });
+
     await check('the add button is the mini app\'s SIZE, read from its own stylesheet', async () => {
       // Reported from a phone, 2026-09-06: "the + is too big". It was 36px,
       // which was guessed. The real number lives in .card-plus in
