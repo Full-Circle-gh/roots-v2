@@ -642,6 +642,16 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* RAISING A REQUEST (§48). Two screens — Ask the kitchen and Ask for stock —
+     and one basket, because they are never open at once and a basket that
+     survived the switch would send one screen's list from the other. Entering
+     either clears it. The CATALOGUE is shared and cached: both screens list the
+     same products and re-reading it on every entry is a wait for nothing. */
+  rq:{products:null,tried:false,fromShelf:false,q:'',
+      purpose:null,          // kitchen only: 'order' | 'shelf', no default (§39)
+      from:null,             // ask-for-stock: the location being asked to supply
+      to:null,               // ...and the one asking, where there is a choice
+      qty:{},busy:false,err:'',sent:null},
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
       add:{},inflight:{},rowErr:{},timers:{},
@@ -725,7 +735,12 @@ function copyText(t){
   else fallback();
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
-function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return; state.stack.push({route,title:s.title}); render(); }
+function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
+  /* A REQUEST SCREEN OPENS EMPTY. The two directions share one basket — they
+     are never open at once — so entering either clears what the other left,
+     and a screen reopened after a send does not reappear on its receipt. */
+  if(route==='askkitchen'||route==='askstock') rqReset();
+  state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -767,6 +782,22 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
+reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
+  const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
+  // Same caret rescue the stock search does: a re-render moves focus, and a
+  // search box that loses the caret mid-word is one nobody can type in.
+  const el2=document.getElementById('mRqQ');
+  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
+reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
+reg('rqTo', id=>{ state.rq.to=Number(id);
+  // The supplier list is everywhere except the asker, so a destination change
+  // can leave a supplier that is now the destination itself.
+  if(state.rq.from===state.rq.to) state.rq.from=null;
+  render(); });
+reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
+reg('rqSendKitchen', ()=>rqSendKitchen());
+reg('rqSendStock', ()=>rqSendStock());
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -2745,7 +2776,12 @@ const MORE_GROUPS=[
      tiles stay put on a quiet day, so "Nothing to pick" is what tells somebody
      the tool is there before the morning they need it. Four rows here would say
      the same thing louder and worse. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add']]},
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add'],
+    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
+       own and lived on /stock's launcher, which the Transfers row above still
+       reaches for what has not moved yet. As each of those flows lands here
+       that launcher empties, and the row goes with the last of them. */
+    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6221,6 +6257,116 @@ SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenS
        count at the door is the one failure nobody forgives, and a toast that
        fades has told the operator nothing they can act on.
    ────────────────────────────────────────────────────────────────────────── */
+/* ══ ASKING FOR SOMETHING ══════════════════════════════════════════════════
+   Two directions, one shape. Ask the kitchen asks for something to be MADE and
+   moves no stock — §39: stock changes when the kitchen makes it, not when
+   somebody asks — so it carries a purpose and no locations. Ask for stock asks
+   another location to SEND what it already has, so it carries the two ends and
+   no purpose.
+
+   NO product_id IS SENT BY EITHER, and that is deliberate rather than a
+   shortcut. `restock_items.product_id` is read as a KITCHEN products.id, and
+   the two catalogues are separate AUTOINCREMENT counters over one integer
+   space — so a store id written into that field points at a different thing on
+   the other side and nothing would ever say so. The name is what a picker or a
+   cook reads off the row, so the name is what is sent. */
+function rqReset(){
+  const r=state.rq;
+  r.purpose=null; r.from=null; r.qty={}; r.q=''; r.err=''; r.sent=null; r.busy=false;
+  // One store is not a choice; more than one is a question this app has to ask
+  // and the old screen never did, because it ran pinned to a single shelf.
+  const st=state.stores||[];
+  r.to = st.length===1 ? st[0].id : null;
+}
+/* THE CATALOGUE TACET OWNS. /api/retail-admin/products is the sellable list and
+   is reachable by exactly the operator who can raise one of these. The shelf
+   already in memory stands in if it cannot be read — a request screen with no
+   products is no screen at all — and says so rather than pretending. */
+function loadRqProducts(){
+  const r=state.rq;
+  if(r.products||r.tried) return;
+  r.tried=true;
+  api('/products').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.products)||[]);
+    r.products=rows.map(p=>({id:p.id,name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+    r.fromShelf=false; render();
+  }).catch(()=>{
+    r.products=(state.qs.items||[]).map(p=>({id:p.product_id!=null?p.product_id:p.id,
+      name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+    r.fromShelf=true; render();
+  });
+}
+function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
+function rqLines(){
+  const all=state.rq.products||[];
+  const q=state.rq.q.trim().toLowerCase();
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+function rqChosen(){ return (state.rq.products||[]).filter(p=>(state.rq.qty[p.id]||0)>0); }
+function rqUnits(){ return rqChosen().reduce((a,p)=>a+(state.rq.qty[p.id]||0),0); }
+function rqBump(id,d){
+  const n=(state.rq.qty[id]||0)+d;
+  state.rq.qty[id]=n>0?n:0;
+  render();
+}
+// Everywhere except the location doing the asking.
+function rqSuppliers(){ return (state.stores||[]).filter(s=>s.id!==state.rq.to); }
+function rqStoreName(id){
+  const s=(state.stores||[]).find(x=>x.id===id);
+  return s ? (LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')) : '';
+}
+// One line per chosen product, in the shape the restock API takes.
+function rqItems(){
+  return rqChosen().map(p=>({
+    product_id:null,
+    product_name:p.name_en||p.name_cn||('#'+p.id),
+    product_cn:p.name_cn||null,
+    sku:p.sku||null,
+    qty_requested:state.rq.qty[p.id],
+    unit:'pcs',
+  }));
+}
+/* THE NUMBERS STAY ON SCREEN WHEN A SEND FAILS. Losing a list somebody just
+   built is the one failure that makes people stop using a screen. */
+function rqSend(body,cannot){
+  const r=state.rq;
+  if(r.busy) return;
+  r.busy=true; r.err=''; render();
+  const lines=rqChosen().length, units=rqUnits(), to=r.from;
+  apiWrite('/api/restock', body).then(j=>{
+    r.busy=false;
+    r.sent={rs:(j&&j.rs_number)||('#'+((j&&j.id)||'')), lines:lines, units:units,
+            who:to?rqStoreName(to):''};
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    r.busy=false;
+    r.err = e.code==='norealm' ? cannot
+          : (e.message||T('That did not send. Nothing has changed — try again.','未发送,数据未变 — 请重试。'));
+    render();
+  });
+}
+function rqSendKitchen(){
+  const r=state.rq;
+  // The purpose is mandatory and the server refuses a request without it by
+  // name, so the screen asks first and the button stays shut until it is
+  // answered — §39's no-prefill rule means it cannot be chosen for them.
+  if(!r.purpose||!rqChosen().length) return;
+  rqSend({to_role:'kitchen', purpose:r.purpose, status:'sent', items:rqItems()},
+         T('This account cannot raise kitchen requests.','此账号无法向厨房下单。'));
+}
+function rqSendStock(){
+  const r=state.rq;
+  if(!r.from||!r.to||!rqChosen().length) return;
+  // BOTH ENDS NAMED OUTRIGHT. The server still derives the roles for its
+  // notification routing, but the locations are the order's own — which is what
+  // makes a request TO a shop as ordinary as one to the warehouse.
+  rqSend({from_store_id:r.from, to_store_id:r.to, status:'sent', items:rqItems()},
+         T('This account cannot ask for stock.','此账号无法发起补货申请。'));
+}
+
 function qsStore(){ const c=state.qs.ctx; if(!c) return null;
   return (c.stores||[]).find(s=>s.id===state.qs.storeId) || (c.stores||[])[0] || null; }
 function qsStoreName(){ const s=qsStore(); return s ? (LANG==='en'?(s.name_en||s.name_cn||''):(s.name_cn||s.name_en||'')) : ''; }
@@ -6628,6 +6774,126 @@ function screenStockAdd(){
    would render as one. titleOf is the hook that exists for a title that is not
    a fixed word; Receive is the other screen using it. `title` stays the
    array so the stack entry is still valid on its own. */
+/* ── The two request screens ──────────────────────────────────────────────
+   One product picker, drawn once, with the question that belongs to each
+   direction above it: what the kitchen request is FOR, or which two locations
+   the stock is moving between. */
+function rqPicker(){
+  const r=state.rq;
+  if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=rqLines();
+  const search=`<div style="padding:4px 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)"></div>`;
+  // Said plainly rather than silently: a shorter list is a different list, and
+  // an operator who cannot find a product needs to know why before they conclude
+  // the shop does not sell it.
+  const note=r.fromShelf?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+    T('Showing what this shelf holds — the full catalogue could not be read.','显示本店货架商品 — 无法读取完整商品目录。')}</div>`:'';
+  if(!rows.length) return search+note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    T('No products match','没有匹配的商品')}</div>`;
+  const row=p=>{
+    const n=r.qty[p.id]||0;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
+        ${p.sku?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''}
+      </span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
+        aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
+      <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
+        aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+    </div>`;
+  };
+  return search+note+`<div>${rows.map(row).join('')}</div>`;
+}
+/* The bar that sends. It carries the tally because the list above it scrolls —
+   an operator who has picked eleven things cannot see all eleven, and "11 items
+   · 40 units" is the only place the total exists. */
+function rqFoot(cmd,ready){
+  const r=state.rq;
+  const chosen=rqChosen().length;
+  return `${r.err?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(r.err)}</div>`:''}
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${chosen}</b> ${T('items','项')}
+        · <span class="num">${rqUnits()}</span> ${T('units','件')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${(ready&&!r.busy)?'':' disabled'}
+        onclick="APP.cmd('${cmd}')">${r.busy?T('Sending…','发送中…'):T('Send','发送')}</button>
+    </div>`;
+}
+// What a sent request leaves behind. It names the number so it can be quoted,
+// and says what happens next rather than only that something happened.
+function rqSentHtml(title,line){
+  const r=state.rq;
+  return `<div style="padding:24px 16px">
+    <div style="font-size:18px;font-weight:500">${title}</div>
+    <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:6px">${escAttr(r.sent.rs)}</div>
+    <div style="font-size:15px;margin-top:12px">${r.sent.lines} ${T('items','项')} · <span class="num">${r.sent.units}</span> ${T('units','件')}</div>
+    <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${line}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${T('Done','完成')}</button>
+  </div>`;
+}
+function screenAskKitchen(){
+  loadRqProducts();
+  const r=state.rq;
+  if(r.sent) return rqSentHtml(T('Sent to the kitchen','已发送至厨房'),
+    T('The kitchen sees it now. Nothing moves until they make it.','厨房已收到。制作完成后库存才会变动。'));
+  /* THE PURPOSE IS MANDATORY and the server enforces it by name, so it is asked
+     FIRST — before the list, because it is a property of the whole request —
+     and nothing is chosen for them: §39's no-prefill rule is that a purpose
+     picked on somebody's behalf is a reason they did not give. */
+  const opt=(k,en,zh,subEn,subZh)=>`<button class="row" style="flex:1;min-height:64px;padding:10px 12px;text-align:left;
+    border:1px solid ${r.purpose===k?'var(--text-primary)':'var(--border-default)'};border-radius:12px;
+    background:${r.purpose===k?'var(--text-primary)':'var(--surface-card)'};
+    color:${r.purpose===k?'var(--surface-card)':'var(--text-secondary)'};display:block"
+    onclick="APP.cmd('rqPurpose','${k}')">
+    <b style="display:block;font-size:15px;font-weight:500;line-height:1.3;color:inherit">${T(en,zh)}</b>
+    <i style="display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75">${T(subEn,subZh)}</i></button>`;
+  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      T('They make it — nothing moves until it is made.','由厨房制作 — 制作完成前库存不变。')}</div>
+    <div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What is it for?','用途')}</div>
+    <div style="display:flex;gap:8px;padding:0 16px 14px">
+      ${opt('order','For an order','用于发货','A customer is waiting on it','有客户订单等待')}
+      ${opt('shelf','For the shelf','货架补货','Restocking what we hold','补充本店库存')}
+    </div>
+    ${rqPicker()}
+    ${rqFoot('rqSendKitchen', !!r.purpose && rqChosen().length>0)}`;
+}
+function screenAskStock(){
+  loadRqProducts();
+  const r=state.rq;
+  if(r.sent) return rqSentHtml(T('Sent','已发送'),
+    T('They pick it and send it. Count it in when it arrives.','对方拣货发出后，到货时清点入库。'));
+  const stores=state.stores||[];
+  /* A DOOR INTO A WALL IS WORSE THAN NO DOOR. With one location there is
+     nowhere to ask, and the screen says so instead of drawing a picker with a
+     single disabled option. */
+  if(stores.length<2) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--text-secondary);line-height:1.6">${
+    T('There is nowhere else to ask — this is the only location.','没有其他地点可申请 — 当前仅此一个门店。')}</div>`;
+  const chip=(id,on,cmd)=>`<button class="row" style="min-height:44px;padding:8px 14px;border-radius:999px;
+    border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};
+    background:${on?'var(--text-primary)':'var(--surface-card)'};color:${on?'var(--surface-card)':'var(--text-primary)'};
+    font-size:14px;width:auto;display:inline-flex" onclick="APP.cmd('${cmd}',${id})">${escAttr(rqStoreName(id))}</button>`;
+  // Which store is ASKING is a question the old screen never had to put: it ran
+  // pinned to one shelf. Here an operator can hold several, and a request that
+  // guessed the destination would send stock to the wrong shop.
+  const askedBy = stores.length>1 ? `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('For which store?','送到哪家门店？')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${stores.map(st=>chip(st.id,r.to===st.id,'rqTo')).join('')}</div>` : '';
+  const suppliers=rqSuppliers();
+  const from = r.to==null ? '' : `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Ask which location?','向哪个地点申请？')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${suppliers.map(st=>chip(st.id,r.from===st.id,'rqFrom')).join('')}</div>`;
+  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      T('Have another location send it','请其他地点发货')}</div>
+    ${askedBy}${from}
+    ${r.to!=null?rqPicker():''}
+    ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
+}
+SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
+SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
@@ -9461,6 +9727,12 @@ const ROUTE_CAP={
      refused the recount would be the row opening onto a refusal. */
   stockadd:['quickstock:add','quickstock:recount'],
   stockapp:['quickstock:add','quickstock:recount'],
+  /* RAISING A REQUEST, either direction (§48). Both are screens whose entire
+     purpose is the Send at the bottom, and that send is gated on
+     restock:request server-side — so gating them on anything weaker would be
+     two screens that 403 after the list has been built. Asking the kitchen
+     rides with the same key: it is a request, it just goes to a pot. */
+  askkitchen:'restock:request', askstock:'restock:request',
   /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
      queue shipped as a tile on the Stock home, and a kitchen operator whose
      role puts them in THIS app never sees that home — they see this list, and
