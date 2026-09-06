@@ -251,7 +251,22 @@
   const fdate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,10); };
   const ftime = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,16).replace('T',' '); };
   // Order/customer money is stored as REAL yuan (not cents like billing).
-  const yuan = v => '¥' + (Number(v||0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  /* THE SHOP'S SYMBOL, not this platform's. Every figure on these screens is
+     some MERCHANT's money — their customers' lifetime spend and wallet, their
+     GMV, the commission billed on it — and it was all printed in ¥ regardless,
+     so a merchant trading in dollars had their GMV read as yuan on the one
+     screen they get billed from (audit D-03). The server now sends each
+     tenant's own currency beside their figures; null means the account has not
+     set one, which falls back to the platform default rather than a guess. */
+  const sym = cur => {
+    if (!cur) return '¥';                                   // not set → the platform default
+    if (typeof cur === 'string') return cur === 'CNY' ? '¥' : (cur + ' ');   // a bare code, as plans carry
+    return cur.symbol || (cur.code === 'CNY' || !cur.code ? '¥' : cur.code + ' ');
+  };
+  const yuan = (v, cur) => {
+    const n = Number(v||0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (cur && cur.position === 'after') ? (n + sym(cur)) : (sym(cur) + n);
+  };
   function statusPill(s){
     if (s==='paid' || s==='delivered') return 'active';
     if (s==='cancelled' || s==='refunded') return 'suspended';
@@ -607,7 +622,9 @@
       const subPill = internal ? '<span class="pill internal">internal</span>'
         : (s ? '<span class="pill '+esc(s.status)+'">'+esc(s.status)+'</span>' : '<span class="zh">no subscription · 无订阅</span>');
       const statusPill = (t.status!=='active' && !internal) ? '<span class="pill suspended">'+esc(t.status)+'</span>' : '';
-      const planLine = internal ? 'Internal · ¥0 · perpetual'
+      /* No symbol on the internal line: it is a zero, and which currency a
+         zero is in tells nobody anything. */
+      const planLine = internal ? 'Internal · no charge · perpetual'
         : (plan ? esc(plan.name)+' · '+money(plan.price_cents,plan.currency)+'/'+esc(plan.billing_interval) : 'No plan · 无套餐');
       const metaBits = [planLine];
       if (owner) metaBits.push(esc(owner.display_name||owner.username)+' <span class="mono">@'+esc(owner.username)+'</span>');
@@ -1040,7 +1057,7 @@
         '<div><label>Category · 类目</label><select id="ob-cat">' +
           Object.keys(CATS).map(c => '<option value="'+c+'"'+(j.category===c?' selected':'')+'>'+esc(CATS[c])+'</option>').join('') +
         '</select></div>' +
-        '<div style="flex:0 0 96px;min-width:96px"><label>Setup fee ¥ · 费用</label><input type="text" id="ob-fee" value="'+esc(feeYuan)+'"></div>' +
+        '<div style="flex:0 0 120px;min-width:120px"><label>Setup fee '+esc(sym(j.currency))+' · 费用</label><input type="text" id="ob-fee" value="'+esc(feeYuan)+'"></div>' +
         '<button class="btn btn-sm" id="ob-cfg-save">Save · 保存</button>' +
       '</div></div>' +
       '<div class="ob-prog"><div class="ob-prog-bar"><span style="width:'+pct+'%"></span></div>' +
@@ -1166,7 +1183,7 @@
     $('#mBody').innerHTML =
       '<div class="field"><label>Name · 名称</label><input type="text" id="p-name" value="'+esc(p.name)+'"></div>' +
       '<div class="field"><label>Name CN · 中文名</label><input type="text" id="p-namecn" value="'+esc(p.nameCn||'')+'"></div>' +
-      '<div class="field"><label>Price ¥ / '+esc(p.interval)+' · 价格</label><input type="number" id="p-price" value="'+(Number(p.priceCents||0)/100)+'" min="0" step="1"></div>' +
+      '<div class="field"><label>Price '+esc(sym(p.currency))+' / '+esc(p.interval)+' · 价格</label><input type="number" id="p-price" value="'+(Number(p.priceCents||0)/100)+'" min="0" step="1"></div>' +
       '<label class="check-row" style="margin-bottom:10px"><input type="checkbox" id="p-public"'+(p.isPublic?' checked':'')+'> Public in catalogue · 在套餐表公开</label>' +
       '<label class="check-row" style="margin-bottom:16px"><input type="checkbox" id="p-active"'+(p.isActive?' checked':'')+'> Active · 启用</label>' +
       '<button class="btn btn-brass" id="p-save" style="width:100%;padding:11px">Save · 保存</button>';
@@ -1272,10 +1289,10 @@
     api('/api/store-admin/lookup?q='+encodeURIComponent(q)).then(j => {
       if (!j || !j.success){ $('#lk-results').innerHTML = '<div class="empty">No results</div>'; return; }
       const cust = (j.customers||[]).map(c =>
-        '<tr class="lk-cust" data-tenant="'+c.tenantId+'" data-id="'+c.id+'" style="cursor:pointer"><td class="co">'+esc(c.tenant)+'</td><td>'+esc(c.nickname||'—')+(c.isBlocked?' <span class="pill suspended">blocked</span>':'')+'</td><td class="mono">'+esc(c.phone||'—')+'</td><td class="mono">'+yuan(c.lifetimeSpend)+'</td><td class="mono">'+(c.pointsBalance||0)+'</td></tr>'
+        '<tr class="lk-cust" data-tenant="'+c.tenantId+'" data-id="'+c.id+'" style="cursor:pointer"><td class="co">'+esc(c.tenant)+'</td><td>'+esc(c.nickname||'—')+(c.isBlocked?' <span class="pill suspended">blocked</span>':'')+'</td><td class="mono">'+esc(c.phone||'—')+'</td><td class="mono">'+yuan(c.lifetimeSpend, c.currency)+'</td><td class="mono">'+(c.pointsBalance||0)+'</td></tr>'
       ).join('') || '<tr><td colspan="5" class="empty">No customers · 无顾客</td></tr>';
       const ord = (j.orders||[]).map(o =>
-        '<tr><td class="co">'+esc(o.tenant)+'</td><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td>'+esc(o.recipientName||'—')+' <span class="zh mono">'+esc(o.recipientPhone||'')+'</span></td><td class="mono">'+yuan(o.total)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>'
+        '<tr><td class="co">'+esc(o.tenant)+'</td><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td>'+esc(o.recipientName||'—')+' <span class="zh mono">'+esc(o.recipientPhone||'')+'</span></td><td class="mono">'+yuan(o.total, o.currency)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>'
       ).join('') || '<tr><td colspan="6" class="empty">No orders · 无订单</td></tr>';
       $('#lk-results').innerHTML =
         '<div class="bar"><h1>Customers · 顾客 <span class="zh mono">'+(j.customers||[]).length+'</span></h1></div>' +
@@ -1293,12 +1310,12 @@
       const c = j.customer;
       $('#mTitle').textContent = (c.nickname||('Customer #'+c.id)) + ' · ' + j.store;
       const row = (k,v) => '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)"><span class="zh">'+k+'</span><span class="mono">'+v+'</span></div>';
-      const orders = (j.orders||[]).map(o => '<tr><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td class="mono">'+yuan(o.total)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>').join('') || '<tr><td colspan="4" class="empty">No orders · 无订单</td></tr>';
+      const orders = (j.orders||[]).map(o => '<tr><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td class="mono">'+yuan(o.total, o.currency)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>').join('') || '<tr><td colspan="4" class="empty">No orders · 无订单</td></tr>';
       $('#mBody').innerHTML =
         (c.isBlocked?'<div class="msg show err">This customer is blocked in this store · 该顾客在此店铺被拉黑</div>':'') +
         row('Store · 店铺', esc(j.store)) + row('Phone · 手机', esc(c.phone||'—')) + row('Email · 邮箱', esc(c.email||'—')) +
-        row('Tier · 等级', esc(c.tier||'—')) + row('Lifetime spend · 累计消费', yuan(c.lifetimeSpend)) +
-        row('Points · 积分', c.pointsBalance||0) + row('Wallet · 余额', yuan(c.balance)) + row('Joined · 加入', fdate(c.createdAt)) +
+        row('Tier · 等级', esc(c.tier||'—')) + row('Lifetime spend · 累计消费', yuan(c.lifetimeSpend, j.currency)) +
+        row('Points · 积分', c.pointsBalance||0) + row('Wallet · 余额', yuan(c.balance, j.currency)) + row('Joined · 加入', fdate(c.createdAt)) +
         '<div class="det-sec"><h4>Recent orders · 近期订单</h4><div class="card"><table><tbody>'+orders+'</tbody></table></div></div>';
     }).catch(()=>{});
   }
@@ -1380,8 +1397,8 @@
         const ratePct = (p.rateBps/100).toFixed(2) + '%';
         const acts = billW ? '<div class="acts"><button class="btn btn-sm" data-po-rate="'+p.tenantId+'">Rate</button>'+(p.rateBps>0?'<button class="btn btn-sm" data-po-bill="'+p.tenantId+'">Bill</button>':'')+'</div>' : '';
         return '<tr><td class="co">'+esc(p.tenant)+'</td>' +
-          '<td class="mono">'+yuan(p.gmvThisMonth)+' <span class="zh">('+p.ordersThisMonth+')</span></td>' +
-          '<td class="mono zh">'+yuan(p.gmvLastMonth)+'</td>' +
+          '<td class="mono">'+yuan(p.gmvThisMonth, p.currency)+' <span class="zh">('+p.ordersThisMonth+')</span></td>' +
+          '<td class="mono zh">'+yuan(p.gmvLastMonth, p.currency)+'</td>' +
           '<td class="mono">'+(p.rateBps>0?ratePct:'<span class="zh">—</span>')+'</td>' +
           '<td class="mono">'+(p.rateBps>0?money(p.commissionThisMonthCents):'<span class="zh">—</span>')+'</td>' +
           '<td class="mono">'+(p.unpaidCommissionCents>0?'<span class="pill open" style="display:inline-block">'+money(p.unpaidCommissionCents)+'</span>':'<span class="zh">—</span>')+'</td>' +
@@ -1411,7 +1428,7 @@
     $('#mBody').innerHTML =
       '<div class="zh" style="margin-bottom:10px;line-height:1.5">Suggested from GMV × rate. Edit freely. The invoice appears in Billing as an open commission charge. · 按 GMV×费率 估算,可自行修改;发票将在账单中显示为待结佣金。</div>' +
       '<div class="row2" style="gap:8px;margin-bottom:10px"><button class="btn btn-sm" id="po-use-this">This mo '+money(p.commissionThisMonthCents)+'</button><button class="btn btn-sm" id="po-use-last">Last mo '+money(p.commissionLastMonthCents)+'</button></div>' +
-      '<div class="field"><label>Amount ¥ · 金额</label><input type="number" id="po-amt" value="'+thisY+'" min="0" step="0.01"></div>' +
+      '<div class="field"><label>Amount '+esc(sym(p.currency))+' · 金额</label><input type="number" id="po-amt" value="'+thisY+'" min="0" step="0.01"></div>' +
       '<button class="btn btn-brass" id="po-bill-save" style="width:100%;padding:11px">Create invoice · 开具发票</button>';
     $('#po-use-this').addEventListener('click', () => { $('#po-amt').value = thisY; });
     $('#po-use-last').addEventListener('click', () => { $('#po-amt').value = lastY; });
