@@ -131,13 +131,78 @@ function openSqlite(file) {
 // CASH tender only; the real ceiling is points_amount + balance_used + total
 // (routes/retail.js orderTenders). Getting this wrong reported two correct
 // orders as over-refunded once already, which is recorded in the plan.
+/* WHAT AN ORDER'S TOTAL IS, WRITTEN ONCE.
+ *
+ * Invariant A's count and detail queries both need it, and a formula this
+ * fiddly restated twice is a formula that will disagree with itself. It is
+ * interpolated into both below.
+ *
+ * TWO SHAPES, BECAUSE THERE ARE TWO KINDS OF ORDER, and conflating them is
+ * what made this check wrong for a year of Meituan and Eleme trading.
+ *
+ * A CHANNEL ORDER is not created here — the Meituan and Eleme ingests mirror
+ * it in, and the platform has already done the arithmetic. Its identity is
+ * `subtotal + packing + delivery − merchant discount = total`, stated in
+ * lib/channel-settlement.js and enforced one order at a time by the admin's
+ * Settlement panel since PR #206. Asking such a row for `− voucher − points −
+ * balance` asks it for terms the platform never sends, so every discounted
+ * channel order failed this check by exactly its own promotion. Seventeen of
+ * the twenty-three failures in the 2026-09-06 production rehearsal were this.
+ *
+ * AN OWN ORDER is created by routes/retail.js, and its total is FLOORED TWICE:
+ *
+ *     grossTotal = MAX(0, subtotal + shipping + packing − voucher) + taxAdded
+ *     total      = MAX(0, grossTotal − points − balance)
+ *
+ * (retail.js:10832 and :10925.) The floors are why TC000207 and R260630163496
+ * failed: points and a voucher covered more than the order was worth, the
+ * arithmetic goes to −0.78 and −0.60, and the stored total is correctly 0.
+ * A check without the floors reports the shop's own clamp as a defect.
+ *
+ * THE TAX TERM IS THE ADDED HALF, NOT THE WHOLE. `tax_amount` records how much
+ * of the order IS tax; what the total goes UP by is that figure on an
+ * exclusive shop and ZERO on an inclusive one, where it was already inside the
+ * prices (lib/tax.js: `addedMinor = taxMinor` exclusive, `0` inclusive). Adding
+ * tax_amount unconditionally would break every inclusive shop the day it
+ * switched tax on. No production order carries tax today, so this term is
+ * currently proven only by the fixture — which is the point of having one.
+ *
+ * The surcharge stays out: shipping_fee already contains it. See the note on
+ * the check itself. */
+const EXPECTED_TOTAL = `
+  CASE WHEN COALESCE(NULLIF(TRIM(channel), ''), 'wechat') IN ('meituan', 'eleme')
+       THEN COALESCE(subtotal,0) + COALESCE(packing_fee,0) + COALESCE(shipping_fee,0)
+            - COALESCE(channel_discount,0)
+       ELSE MAX(0,
+              MAX(0, COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
+                     - COALESCE(voucher_amount,0))
+              + CASE WHEN tax_mode = 'exclusive' THEN COALESCE(tax_amount,0) ELSE 0 END
+              - COALESCE(points_amount,0) - COALESCE(balance_used,0))
+  END`;
+
 const CHECKS = [
   {
     id: 'A', kind: 'invariant',
     title: 'an order total is its parts',
-    blurb: 'subtotal + shipping + packing − voucher − points − balance = total, to the cent.',
+    blurb: 'an own order: MAX(0, MAX(0, subtotal + shipping + packing − voucher) + tax added − points − balance) = total. '
+      + 'A Meituan or Eleme order: subtotal + packing + delivery − channel discount = total.',
     notes: [
       'Skips orders with a NULL subtotal — a draft that was never priced is not a broken order.',
+      'TWO SHAPES, ONE CHECK. A channel order is mirrored in by the Meituan/Eleme ingest and '
+      + 'obeys the identity lib/channel-settlement.js states — the platform has already done the '
+      + 'arithmetic, and it sends no voucher, points or balance. Asking it for those terms failed '
+      + 'every discounted channel order by exactly its own promotion: 17 of the 23 failures in the '
+      + 'first production rehearsal, 2026-09-06. Run scripts/diagnose_channel_settlement.js to see '
+      + 'a remaining channel failure classified by cause — that script and this check read the '
+      + 'same identity from the same module.',
+      'THE TOTAL IS FLOORED AT ZERO, TWICE (routes/retail.js:10832 and :10925), and this check '
+      + 'now floors it too. An order whose points and voucher exceed its value computes to a small '
+      + 'negative and is correctly stored as 0; without the floors the shop\'s own clamp is '
+      + 'reported as a broken order. TC000207 (−0.78) and R260630163496 (−0.60) were exactly this.',
+      'The tax term is the ADDED half. tax_amount is how much of the order is tax; the total goes '
+      + 'up by it on an EXCLUSIVE shop and by nothing on an inclusive one, where it was already '
+      + 'inside the prices (lib/tax.js). No production order carries tax yet, so the fixture is '
+      + 'what holds this arm.',
       'The same-day surcharge is NOT added: it is already inside shipping_fee. routes/retail.js '
       + 'does `shippingFee += sameDaySurcharge` at order creation ("added to the shipping line so '
       + 'totals reconcile without a new fee column"), and same_day_surcharge_fee is the BREAKDOWN '
@@ -148,18 +213,19 @@ const CHECKS = [
     ],
     count: `SELECT COUNT(*) AS n FROM retail_orders
              WHERE subtotal IS NOT NULL AND total IS NOT NULL
-               AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
-                        - COALESCE(voucher_amount,0)
-                        - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
-                 <> ROUND(COALESCE(total,0) * 100)`,
-    detail: `SELECT id, order_no, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
-                    voucher_amount, points_amount, balance_used, total
+               AND ROUND((${EXPECTED_TOTAL}) * 100) <> ROUND(COALESCE(total,0) * 100)`,
+    /* The detail carries `channel` and the expected figure, because the first
+       question about any row here is which of the two identities was applied
+       to it, and the second is what the check thought the total should be.
+       Both used to require re-deriving the arithmetic by hand from the
+       components — which is how the surcharge double-count survived. */
+    detail: `SELECT id, order_no, channel, subtotal, shipping_fee, packing_fee,
+                    same_day_surcharge_fee, voucher_amount, points_amount, balance_used,
+                    channel_discount, tax_amount, tax_mode, total,
+                    ROUND((${EXPECTED_TOTAL}) * 100) / 100.0 AS expected
                FROM retail_orders
               WHERE subtotal IS NOT NULL AND total IS NOT NULL
-                AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
-                         - COALESCE(voucher_amount,0)
-                         - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
-                  <> ROUND(COALESCE(total,0) * 100)
+                AND ROUND((${EXPECTED_TOTAL}) * 100) <> ROUND(COALESCE(total,0) * 100)
               ORDER BY id DESC LIMIT ?`,
   },
   {
