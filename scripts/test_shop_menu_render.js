@@ -281,6 +281,33 @@ function boxOf(text) {
         `the rail moved with the page: top ${before.top} → ${after.top}`);
     });
 
+    await check('EVERY RAIL TAB IS CENTRED, ALL INCLUDED', async () => {
+      // Reported from a phone: ALL sat against the left edge while every
+      // category below it was centred. It was the one tab whose label was a
+      // bare text node rather than the flex:1 child between the two spacers,
+      // so it had nothing to centre. Measured as the gap on each side of the
+      // ink, because that is what the eye is comparing.
+      const m = await page.evaluate(() => {
+        const read = (a) => {
+          const box = a.getBoundingClientRect();
+          // The visible label, not the <a> — the <a> fills the rail either way.
+          const lb = a.querySelector('.lb') || a;
+          const vis = Array.from(lb.querySelectorAll('span'))
+            .filter(el => getComputedStyle(el).display !== 'none');
+          const t = (vis.length ? vis[0] : lb).getBoundingClientRect();
+          return { left: t.left - box.left, right: box.right - t.right,
+                   text: (vis.length ? vis[0] : lb).textContent.trim() };
+        };
+        const tabs = Array.from(document.querySelectorAll('.rail a'));
+        return tabs.slice(0, 3).map(read);
+      });
+      assert.ok(m.length >= 2, 'the rail has too few tabs to compare');
+      for (const t of m) {
+        assert.ok(Math.abs(t.left - t.right) <= 2,
+          `"${t.text}" is not centred in the rail: ${t.left} left, ${t.right} right`);
+      }
+    });
+
     await check('and it sits BELOW the header, not behind it', async () => {
       // The half that was actually broken. Sticky at the wrong offset is still
       // sticky, so the check above would have passed on the bug.
@@ -404,6 +431,35 @@ function boxOf(text) {
       assert.strictEqual(m.mayBorder, 'dashed');
     });
 
+    await check('the allergen chips are centred in their column, not left against it', async () => {
+      // Reported from a phone: a single "Gluten (oats)" chip floated in the gap
+      // between a short label and the middle of the card, aligned to nothing.
+      const m = await page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#dsheetB .arow'));
+        return rows.map(r => {
+          const col = r.querySelector('.achips').getBoundingClientRect();
+          const chips = Array.from(r.querySelectorAll('.achips span'))
+            .filter(el => el.getBoundingClientRect().width > 0);
+          if (!chips.length) return null;
+          const boxes = chips.map(c => c.getBoundingClientRect());
+          const left = Math.min(...boxes.map(b => b.left));
+          const right = Math.max(...boxes.map(b => b.right));
+          const lab = r.querySelector('.alab').getBoundingClientRect();
+          return { pad: (left - col.left) - (col.right - right),
+                   n: chips.length,
+                   // And the label sits level with them rather than riding high.
+                   dy: ((lab.top + lab.bottom) / 2) - ((col.top + col.bottom) / 2) };
+        }).filter(Boolean);
+      });
+      assert.ok(m.length >= 2, `the allergen card has too few rows to measure: ${m.length}`);
+      for (const r of m) {
+        assert.ok(Math.abs(r.pad) <= 2,
+          `a row of ${r.n} chip(s) is off centre by ${r.pad}px`);
+        assert.ok(Math.abs(r.dy) <= 2,
+          `the label rides ${r.dy}px off the chips it belongs to`);
+      }
+    });
+
     await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
       const src = await page.evaluate(async () => {
         document.querySelector('#dsheetB .dt-ph[data-big]').click();
@@ -522,6 +578,19 @@ function boxOf(text) {
       assert.ok(hasBtn, 'the enlarge has no close button at all');
       // A 44px target is the smallest a thumb finds reliably.
       assert.ok(hasBtn.w >= 40 && hasBtn.h >= 40, `the close button is too small: ${JSON.stringify(hasBtn)}`);
+      // AND IT SITS ON THE PHOTO'S OWN MARGIN, not jammed into the corner. The
+      // overlay pads its photo by 16px; the button's outer edge lines up with
+      // that rather than choosing an inset of its own. Reported as "not
+      // positioned nice" at 10px, where it hugged the screen edge.
+      const inset = await page.evaluate(() => {
+        const r = document.getElementById('bigX').getBoundingClientRect();
+        const pad = parseFloat(getComputedStyle(document.getElementById('big')).paddingRight);
+        return { right: window.innerWidth - r.right, top: r.top, pad };
+      });
+      assert.strictEqual(inset.right, inset.pad,
+        `the × is ${inset.right}px from the edge but the photo is ${inset.pad}px`);
+      assert.strictEqual(inset.top, inset.pad,
+        `the × is ${inset.top}px from the top but the photo is ${inset.pad}px`);
       await page.click('#bigX');
       const shut = await page.evaluate(() => ({
         big: document.getElementById('big').hidden,
@@ -556,6 +625,26 @@ function boxOf(text) {
       assert.strictEqual(out.hidden, false, 'the sheet was hidden mid-travel, so nothing was seen');
       assert.ok(/closing/.test(out.cls), `the closing class is never added: ${out.cls}`);
       assert.strictEqual(out.anim, 'shOut', `the sheet snaps shut instead of sliding: ${out.anim}`);
+      // THE STYLESHEET'S DURATION AND THE SCRIPT'S TIMER ARE ONE NUMBER. The
+      // panel is only [hidden] once the travel has played, so a timer shorter
+      // than the keyframes would cut the slide off half way and nobody would
+      // see the second half. Measured against the duration the browser reports,
+      // so slowing the animation cannot silently outrun the timer.
+      await page.evaluate(async () => { await new Promise(r => setTimeout(r, 300)); });
+      await page.click('.it:not(.out)[data-open]');
+      const paced = await page.evaluate(async () => {
+        const sh = document.getElementById('dsheet');
+        const t0 = Date.now();
+        document.getElementById('dsheetX').click();
+        // Read AFTER the click: while the sheet is open the panel is wearing
+        // the opening keyframes, and it is the closing pair being paced here.
+        const dur = parseFloat(getComputedStyle(sh.querySelector('.sheet-p')).animationDuration) * 1000;
+        while (!sh.hidden && Date.now() - t0 < 3000) await new Promise(r => setTimeout(r, 8));
+        return { dur, took: Date.now() - t0, hidden: sh.hidden };
+      });
+      assert.strictEqual(paced.hidden, true, 'the sheet never finished its close');
+      assert.ok(paced.took + 40 >= paced.dur,
+        `the panel was hidden after ${paced.took}ms of a ${paced.dur}ms slide, so it was cut off`);
       const gone = await page.evaluate(async () => {
         await new Promise(r => setTimeout(r, 260));
         const sh = document.getElementById('dsheet');

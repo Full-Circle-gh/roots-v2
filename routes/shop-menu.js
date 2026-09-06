@@ -460,12 +460,17 @@ img{display:block;max-width:100%}
 .acard{border:1px solid var(--ink);padding:12px;margin-top:18px}
 .atitle{font-family:var(--f-bear);font-size:16px;line-height:1;
   padding-bottom:9px;border-bottom:2px solid var(--ink);margin-bottom:10px}
-.arow{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+/* CENTRED BOTH WAYS. The chips sat at the left edge of a 96px-wide column with
+   a short label beside them, so a single chip floated in the gap and read as
+   misplaced rather than aligned to anything. Centring gives each row its own
+   balance, which is what a one-chip row and a three-chip row need to look like
+   the same card. */
+.arow{display:flex;gap:10px;align-items:center;padding:7px 0}
 .arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
 .alab{flex:none;width:96px;font-family:var(--f-bear);font-size:9.5px;
   letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
   line-height:1.35;padding-top:3px}
-.achips{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px}
+.achips{flex:1;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
    stated at the head of the file and this is where its cost is paid. Naming it
@@ -518,12 +523,15 @@ img{display:block;max-width:100%}
   display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
 .big[hidden]{display:none}
 .big img{max-width:100%;max-height:100%;object-fit:contain}
-/* Top-right, clear of the phone's own status bar and of the notch inset. It is
-   the only control on this screen, so it is large and unmissable rather than
-   discreet. */
-.big-x{position:absolute;top:calc(10px + env(safe-area-inset-top));right:10px;
+/* Top-right, clear of the phone's own status bar and of the notch inset. The
+   16px is THE OVERLAY'S OWN PADDING, above, so the button's outer edge lines up
+   with the photo's rather than sitting at an inset of its own choosing — at
+   10px it hugged the corner and read as stuck to it. Oat rather than white:
+   this is the one control on the screen and it wears the house's off-white
+   like every other border on the page. */
+.big-x{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;
   width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-  border:2px solid #fff;background:rgba(0,0,0,.5);color:#fff;
+  border:2px solid var(--oat);background:rgba(0,0,0,.55);color:var(--oat);
   font-family:var(--f-bear);font-size:24px;line-height:1;padding:0;cursor:pointer;
   -webkit-tap-highlight-color:transparent}
 
@@ -595,17 +603,20 @@ img{display:block;max-width:100%}
    display:none has no previous value to transition FROM, and a transition
    would simply not play. Closing plays the same pair backwards, driven by a
    class the script adds and then removes.
-   Deliberately short: 180ms out, 140ms back. This sits between a customer and
-   their order, and an animation they wait for twice is a slower menu. */
+   Deliberately short: 210ms out, 160ms back. This sits between a customer and
+   their order, and an animation they wait for twice is a slower menu. The
+   first pair, 180/140, read as a snap on a real phone and was slowed by 15%.
+   THE 160 IS ALSO IN shClose's timer — the panel is only [hidden] once the
+   travel has played, so the two numbers are one number and must move together. */
 @keyframes shIn{from{transform:translateY(100%)}to{transform:none}}
 @keyframes shOut{from{transform:none}to{transform:translateY(100%)}}
 @keyframes bgIn{from{opacity:0}to{opacity:1}}
 @keyframes bgOut{from{opacity:1}to{opacity:0}}
-.sheet:not([hidden]) .sheet-p{animation:shIn .18s cubic-bezier(.22,.7,.3,1) both}
-.sheet:not([hidden]) .sheet-bg{animation:bgIn .18s ease both}
-.sheet.closing .sheet-p{animation:shOut .14s cubic-bezier(.5,0,.8,.4) both}
-.sheet.closing .sheet-bg{animation:bgOut .14s ease both}
-.big:not([hidden]){animation:bgIn .14s ease both}
+.sheet:not([hidden]) .sheet-p{animation:shIn .21s cubic-bezier(.22,.7,.3,1) both}
+.sheet:not([hidden]) .sheet-bg{animation:bgIn .21s ease both}
+.sheet.closing .sheet-p{animation:shOut .16s cubic-bezier(.5,0,.8,.4) both}
+.sheet.closing .sheet-bg{animation:bgOut .16s ease both}
+.big:not([hidden]){animation:bgIn .16s ease both}
 /* Somebody who has asked their phone to stop animating gets the panel with no
    travel at all — not a slower one. */
 @media (prefers-reduced-motion:reduce){
@@ -828,7 +839,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(el.shT){clearTimeout(el.shT);el.shT=null}` +
   `if(shRM()){el.hidden=true;el.className='sheet';return}` +
   `el.className='sheet closing';` +
-  `el.shT=setTimeout(function(){el.shT=null;el.hidden=true;el.className='sheet'},140)};` +
+  `el.shT=setTimeout(function(){el.shT=null;el.hidden=true;el.className='sheet'},160)};` +
 
   // ── THE PRODUCT SHEET ───────────────────────────────────────────────────
   //
@@ -1161,7 +1172,14 @@ router.get('/s/:shopCode', (req, res) => {
   // tabs — a menu is short enough to scroll, and an anchor needs no state and
   // no script to work. ALL / 全部 and OTHER / 其他 are the shop's own labels.
   const rail = groups.length
-    ? `<nav class="rail"><a href="#top" data-cat="top" class="on">${bi('ALL', '全部')}</a>` +
+    ? `<nav class="rail"><a href="#top" data-cat="top" class="on">` +
+      // ALL WEARS THE SAME THREE PARTS AS EVERY OTHER TAB, and the empty .cv is
+      // the reason: the label only centres because it is the flex:1 child
+      // between two 9px spacers. ALL had neither, so its text sat hard against
+      // the left spacer while every category below it was centred. There is no
+      // chevron in it — ALL is the top of the list, not a jump into one — but
+      // the width it would occupy is still held, or the centring is a lie.
+      `<span class="lb">${bi('ALL', '全部')}</span><span class="cv"></span></a>` +
       groups.map(c => `<a href="#${c.id}" data-cat="${c.id}">` +
         `<span class="lb">${bi(c.en, c.cn)}</span><span class="cv">\u203a</span></a>`).join('') +
       `</nav>`
