@@ -68,7 +68,57 @@ function main() {
   const existing = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(KEY);
   if (existing && String(existing.value_json || '').trim() && existing.value_json !== 'null') {
     console.log('Account #1 already has ' + KEY + ' — leaving it alone.');
-    console.log('Nothing to do. (That row is their real About page; this script never overwrites one.)');
+
+    /* THE ONE THING A WRITTEN PAGE CAN STILL BE MISSING. The hero photograph
+       was never content: it was a hardcoded /assets/brand path in
+       public/shop.html, one shop's picture at the top of every shop's story,
+       and D-04 removed it. Nothing had ever written the key it became, and no
+       editor could set it — so an account that HAD written an About page kept
+       every word of it and silently lost the picture above it.
+
+       That is a one-key gap, so it gets a one-key repair. Everything already
+       stored is preserved byte for byte; only the missing field is added. */
+    let blob = null;
+    try { blob = JSON.parse(existing.value_json); } catch { blob = null; }
+    if (!blob || typeof blob !== 'object') {
+      console.log('Nothing to do. (That row is their real About page; this script never overwrites one.)');
+      return 0;
+    }
+    if (String(blob.hero_image_url || '').trim()) {
+      console.log('Nothing to do. (That row is their real About page; this script never overwrites one.)');
+      return 0;
+    }
+
+    console.log('');
+    console.log('One field is missing from it: hero_image_url, the photograph at the top.');
+    console.log('It was never content — it was a hardcoded path, removed by D-04 — so their');
+    console.log('written page kept its words and lost its picture.');
+    console.log('Would set ONLY that field, to ' + ROOTS_ABOUT.hero_image_url + ',');
+    console.log('leaving the other ' + Object.keys(blob).length + ' field(s) exactly as they are.');
+
+    if (!APPLY) {
+      console.log('');
+      console.log('DRY RUN — nothing written. Re-run with --apply to set it.');
+      return 0;
+    }
+
+    const patched = JSON.stringify({ ...blob, hero_image_url: ROOTS_ABOUT.hero_image_url });
+    db.prepare('UPDATE storefront_config SET value_json = ? WHERE key = ?').run(patched, KEY);
+    const back = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(KEY);
+    if (!back || back.value_json !== patched) {
+      console.error('FAIL: wrote the row but read back something else. Nothing else was changed.');
+      return 1;
+    }
+    /* Prove the repair added and changed nothing else. */
+    const after = JSON.parse(back.value_json);
+    for (const k of Object.keys(blob)) {
+      if (JSON.stringify(after[k]) !== JSON.stringify(blob[k])) {
+        console.error('FAIL: the field ' + k + ' changed. It should not have.');
+        return 1;
+      }
+    }
+    console.log('');
+    console.log('Set. Every other field read back unchanged; the picture is back at the top.');
     return 0;
   }
 

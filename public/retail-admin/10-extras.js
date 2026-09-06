@@ -2739,70 +2739,77 @@ document.querySelector('[data-tab="voting"]').addEventListener('click', () => {
 let ABOUT_LOADED = false;
 let ABOUT_STATE = null;
 
-const ABOUT_DEFAULTS = {
-  kicker_en: 'WHO WE ARE',
-  kicker_cn: '我们是谁',
-  manifesto_en: 'We exist to make **plant-based food** so mind blowing good it transforms how people eat, how they see plants, and how we create a better, more sustainable future — without ever giving up flavor, health, or joy!',
-  manifesto_cn: '我们存在的意义,是把**植物食物**做到令人惊艳的好——好到改变人们的饮食方式、对植物的认知,也改变我们共同走向更可持续未来的方式——而风味、健康与快乐,一样也不放下。',
-  stats: [
-    { value_en: '2017', value_cn: '2017', label_en: 'EST.',     label_cn: '成立' },
-    { value_en: '广州', value_cn: '广州', label_en: 'MADE IN',  label_cn: '产地' },
-    { value_en: '50+',  value_cn: '50+',  label_en: 'PRODUCTS', label_cn: '产品' },
-    { value_en: '100%', value_cn: '100%', label_en: 'PLANT',    label_cn: '植物' },
-  ],
-  founder_kicker_en: 'MEET THE FOUNDER',
-  founder_kicker_cn: '创始人',
-  founder_name_en: 'Founder Name',
-  founder_name_cn: '创始人姓名',
-  founder_title_en: 'FOUNDER & CEO',
-  founder_title_cn: '创始人兼首席执行官',
-  founder_quote_en: 'I started Roots because I wanted to prove that plants don\'t have to be the boring option.',
-  founder_quote_cn: '我创立 Roots,是想证明植物从来不该是无聊的选择。',
+/* AN EMPTY SHAPE, NOT A DEFAULT PAGE — audit D-04.
+   What stood here was the FIRST TENANT's About page: the manifesto about
+   plant-based food, EST. 2017, MADE IN 广州, the founder's quote, the in/out
+   list about fermentation and preservatives. loadAbout() merged it OVER
+   whatever the merchant had written, and collectAbout() reads the form — so
+   any merchant who opened this tab, changed one field and pressed Save wrote
+   another company's story into their OWN storefront_config and published it to
+   their own customers.
+
+   That is worse than the same defect on the storefront was. There the borrowed
+   copy was only DISPLAYED, and the fix (public/shop.html renderAbout) simply
+   stopped displaying it. Here it was PERSISTED — and once persisted it is
+   indistinguishable from copy the merchant actually wrote, so it sails
+   straight through the storefront's new guard.
+
+   The skeleton below names the fields and holds nothing. Every input in
+   retail-admin.html already carries a placeholder saying what the field is
+   for, which is how an empty form stays legible without filling it in with
+   somebody's real sentences. */
+const ABOUT_EMPTY = {
+  kicker_en: '', kicker_cn: '',
+  manifesto_en: '', manifesto_cn: '',
+  stats: [],
+  founder_kicker_en: '', founder_kicker_cn: '',
+  founder_name_en: '', founder_name_cn: '',
+  founder_title_en: '', founder_title_cn: '',
+  founder_quote_en: '', founder_quote_cn: '',
   founder_photo_url: '',
-  promise_kicker_en: 'OUR PROMISE',
-  promise_kicker_cn: '我们的承诺',
-  in_items: [
-    { en: '100% plant-based',     cn: '100% 植物' },
-    { en: 'Made from scratch',    cn: '原料自制' },
-    { en: 'Real fermentation',    cn: '真发酵' },
-    { en: 'Whole ingredients',    cn: '完整食材' },
-    { en: 'Small batch',          cn: '小批量' },
-    { en: 'Seasonal',             cn: '应季' },
-    { en: 'Local-first · 广州',   cn: '本地优先' },
-    { en: 'Recyclable packaging', cn: '可回收包装' },
-  ],
-  out_items: [
-    { en: 'Preservatives',     cn: '防腐剂' },
-    { en: 'Refined sugar',     cn: '精制糖' },
-    { en: 'Artificial color',  cn: '人造色素' },
-    { en: 'Artificial flavor', cn: '人造香精' },
-    { en: 'Additives',         cn: '添加剂' },
-    { en: 'GMO',               cn: '转基因' },
-    { en: 'Animal products',   cn: '动物产品' },
-    { en: 'Cutting corners',   cn: '走捷径' },
-  ],
-  outro_en: 'From soil to soul.',
-  outro_cn: '从土壤到灵魂',
-  cta_en: 'SHOP NOW',
-  cta_cn: '立即购买',
+  promise_kicker_en: '', promise_kicker_cn: '',
+  in_items: [],
+  out_items: [],
+  outro_en: '', outro_cn: '',
+  cta_en: '', cta_cn: '',
+  hero_image_url: '',
 };
+
+/* The stat strip renders four cells at most (public/shop.html slices to 4),
+   so the editor stops at four rather than letting somebody type a fifth that
+   never appears. */
+const ABOUT_MAX_STATS = 4;
+
+/* Whether the load that filled this form actually succeeded. Save is refused
+   unless it did: a form that failed to load is EMPTY, and an empty form saved
+   over a real About page erases it. The old code painted defaults on a network
+   error, which made the failure invisible and the Save destructive twice
+   over — borrowed copy on top of erased copy. */
+let ABOUT_READY = false;
 
 async function loadAbout() {
   try {
     const { data } = await api('/api/retail/config');
     const stored = data?.about?.content;
     ABOUT_STATE = stored && typeof stored === 'object'
-      ? { ...ABOUT_DEFAULTS, ...stored }
-      : { ...ABOUT_DEFAULTS };
-    // Make sure arrays exist
-    if (!Array.isArray(ABOUT_STATE.stats))     ABOUT_STATE.stats     = ABOUT_DEFAULTS.stats.slice();
-    if (!Array.isArray(ABOUT_STATE.in_items))  ABOUT_STATE.in_items  = ABOUT_DEFAULTS.in_items.slice();
-    if (!Array.isArray(ABOUT_STATE.out_items)) ABOUT_STATE.out_items = ABOUT_DEFAULTS.out_items.slice();
+      ? { ...ABOUT_EMPTY, ...stored }
+      : { ...ABOUT_EMPTY };
+    // Arrays must exist to be painted; a shop that has written none gets none.
+    if (!Array.isArray(ABOUT_STATE.stats))     ABOUT_STATE.stats     = [];
+    if (!Array.isArray(ABOUT_STATE.in_items))  ABOUT_STATE.in_items  = [];
+    if (!Array.isArray(ABOUT_STATE.out_items)) ABOUT_STATE.out_items = [];
+    ABOUT_READY = true;
     paintAbout();
   } catch (e) {
     console.warn('about load failed', e);
-    ABOUT_STATE = { ...ABOUT_DEFAULTS };
+    ABOUT_STATE = { ...ABOUT_EMPTY };
+    ABOUT_READY = false;
     paintAbout();
+    const status = document.getElementById('about-save-status');
+    /* 加载失败 — 请刷新页面 is lifted whole from public/app.html's own
+       "Cost formula failed to load · 成本公式加载失败 — reload the page ·
+       请刷新页面", fragments and separator unchanged (§30). */
+    if (status) status.textContent = 'Could not load — reload the page · 加载失败 — 请刷新页面';
   }
 }
 
@@ -2827,9 +2834,25 @@ function paintAbout() {
   set('about-outro-cn', a.outro_cn);
   set('about-cta-en', a.cta_en);
   set('about-cta-cn', a.cta_cn);
+  paintAboutHero();
   paintAboutPhoto();
   paintAboutStats();
   paintAboutBullets();
+}
+
+/* THE HERO IMAGE HAD NO CONTROL AT ALL. public/shop.html and the mini app both
+   render `hero_image_url` from this blob, and nothing anywhere wrote it: it
+   used to be a hardcoded /assets/brand path — one shop's photograph at the top
+   of every shop's story — and when that was removed as part of D-04 the field
+   became content no merchant could reach. A field two surfaces read and no
+   surface writes is a field that is always empty. */
+function paintAboutHero() {
+  const wrap = document.getElementById('about-hero-preview');
+  if (!wrap) return;
+  const url = ABOUT_STATE.hero_image_url || '';
+  wrap.innerHTML = url
+    ? `<img src="${escapeAttr(url)}" alt="">`
+    : '<div class="ab-photo-empty">No image — the page starts at the text. · 暂无图片</div>';
 }
 
 function paintAboutPhoto() {
@@ -2851,8 +2874,23 @@ function paintAboutStats() {
       <td><input type="text" value="${escapeAttr(s.value_cn || '')}" oninput="ABOUT_STATE.stats[${i}].value_cn=this.value"></td>
       <td><input type="text" value="${escapeAttr(s.label_en || '')}" oninput="ABOUT_STATE.stats[${i}].label_en=this.value"></td>
       <td><input type="text" value="${escapeAttr(s.label_cn || '')}" oninput="ABOUT_STATE.stats[${i}].label_cn=this.value"></td>
+      <td style="width:32px;"><button class="btn btn-sm" onclick="aboutRemoveStat(${i})">×</button></td>
     </tr>
   `).join('');
+  /* The strip used to arrive with four rows already in it, so it never needed
+     an add button. Emptied, it needs one or the section is unreachable. */
+  const add = document.getElementById('about-stats-add');
+  if (add) add.style.display = ABOUT_STATE.stats.length >= ABOUT_MAX_STATS ? 'none' : '';
+}
+
+function aboutAddStat() {
+  if (ABOUT_STATE.stats.length >= ABOUT_MAX_STATS) return;
+  ABOUT_STATE.stats.push({ value_en: '', value_cn: '', label_en: '', label_cn: '' });
+  paintAboutStats();
+}
+function aboutRemoveStat(i) {
+  ABOUT_STATE.stats.splice(i, 1);
+  paintAboutStats();
 }
 
 function paintAboutBullets() {
@@ -2881,7 +2919,14 @@ function aboutRemoveBullet(which, i) {
 
 function collectAbout() {
   const get = id => document.getElementById(id)?.value || '';
+  /* SPREAD THE LOADED STATE FIRST so a key this form has no control for
+     survives the round trip. It did not, and `hero_image_url` is exactly what
+     that cost: a shop that had one would have had it silently deleted by the
+     next Save of any other field. The form's own fields overwrite it below —
+     this only preserves what the form never asked about. */
   return {
+    ...ABOUT_STATE,
+    hero_image_url: ABOUT_STATE.hero_image_url || '',
     kicker_en: get('about-kicker-en'),
     kicker_cn: get('about-kicker-cn'),
     manifesto_en: get('about-manifesto-en'),
@@ -2912,6 +2957,13 @@ function collectAbout() {
 
 async function saveAbout() {
   const status = document.getElementById('about-save-status');
+  /* A form that never loaded is an EMPTY form, and saving it would erase a
+     real About page. Refused rather than attempted. */
+  if (!ABOUT_READY) {
+    status.textContent = 'Could not load — reload the page · 加载失败 — 请刷新页面';
+    toast('Could not load — reload the page · 加载失败 — 请刷新页面', 'err');
+    return;
+  }
   status.textContent = 'Saving…';
   try {
     const next = collectAbout();
@@ -2928,32 +2980,43 @@ async function saveAbout() {
   }
 }
 
-// Photo upload — uses the CMS media endpoint (multipart, field 'file').
-document.getElementById('about-founder-photo-file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  if (file.size > 4 * 1024 * 1024) { toast('Image too large (max 4MB) · 图片过大(上限 4MB)', 'err'); return; }
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch('/api/retail-admin/cms/media', {
-      method: 'POST', body: fd, credentials: 'same-origin',
-    });
-    const j = await res.json();
-    if (!j.success) throw new Error(j.error || 'upload_failed');
-    ABOUT_STATE.founder_photo_url = j.data.url || ('/api/retail/media/' + j.data.id);
-    paintAboutPhoto();
-    toast('Photo uploaded — remember to Save · 图片已上传 — 记得点保存');
-  } catch (err) {
-    toast('Upload failed · 上传失败: ' + err.message, 'err');
-  }
-  e.target.value = '';
-});
+/* Image upload — the CMS media endpoint (multipart, field 'file'). Both the
+   founder photo and the hero go through it, so they are wired from one table
+   rather than written twice: the second copy is where the two drift. */
+const ABOUT_IMAGE_FIELDS = [
+  { key: 'founder_photo_url', file: 'about-founder-photo-file', clear: 'about-founder-photo-clear', paint: () => paintAboutPhoto() },
+  { key: 'hero_image_url',    file: 'about-hero-file',          clear: 'about-hero-clear',          paint: () => paintAboutHero() },
+];
 
-document.getElementById('about-founder-photo-clear').addEventListener('click', () => {
-  ABOUT_STATE.founder_photo_url = '';
-  paintAboutPhoto();
-});
+for (const f of ABOUT_IMAGE_FIELDS) {
+  const input = document.getElementById(f.file);
+  if (input) {
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 4 * 1024 * 1024) { toast('Image too large (max 4MB) · 图片过大(上限 4MB)', 'err'); return; }
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/retail-admin/cms/media', {
+          method: 'POST', body: fd, credentials: 'same-origin',
+        });
+        const j = await res.json();
+        if (!j.success) throw new Error(j.error || 'upload_failed');
+        ABOUT_STATE[f.key] = j.data.url || ('/api/retail/media/' + j.data.id);
+        f.paint();
+        toast('Photo uploaded — remember to Save · 图片已上传 — 记得点保存');
+      } catch (err) {
+        toast('Upload failed · 上传失败: ' + err.message, 'err');
+      }
+      e.target.value = '';
+    });
+  }
+  const clear = document.getElementById(f.clear);
+  if (clear) {
+    clear.addEventListener('click', () => { ABOUT_STATE[f.key] = ''; f.paint(); });
+  }
+}
 
 document.querySelector('[data-tab="about"]').addEventListener('click', () => {
   if (!ABOUT_LOADED) { ABOUT_LOADED = true; loadAbout(); }

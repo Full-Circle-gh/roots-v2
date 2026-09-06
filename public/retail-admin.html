@@ -9529,12 +9529,32 @@
   <section id="tab-about">
     <h2>About page · 关于我们</h2>
     <p class="hint" style="margin-bottom: 16px;">
-      Edit the content of the customer-facing About / Story page (Me → About Roots).
+      Edit the content of the customer-facing About / Story page (Me → About).
       Bilingual fields: fill both EN and CN — the customer sees their preferred language.
-      · 编辑面向顾客的“关于 / 故事”页内容(我的 → 关于 Roots)。双语字段:中英文都要填写 —— 顾客会看到自己偏好的语言。
+      Every section is hidden from customers until you write it — nothing is filled in for you.
+      · 编辑面向顾客的“关于 / 故事”页内容(我的 → 关于)。双语字段:中英文都要填写 —— 顾客会看到自己偏好的语言。
     </p>
 
     <div class="about-editor">
+      <!-- Hero image -->
+      <details open class="about-block">
+        <summary>⓪ Image · 图片</summary>
+        <div class="about-block-body">
+          <label class="ab-field">
+            <span class="ab-label">Top of the page · 图片</span>
+            <div id="about-hero-preview" class="ab-photo-preview ab-hero-preview">
+              <div class="ab-photo-empty">No image — the page starts at the text. · 暂无图片</div>
+            </div>
+            <div class="ab-photo-actions">
+              <input type="file" id="about-hero-file" accept="image/*" style="display:none">
+              <button type="button" class="btn btn-sm" onclick="document.getElementById('about-hero-file').click()">Choose image… · 选择图片…</button>
+              <button type="button" class="btn btn-sm" id="about-hero-clear">Remove · 移除</button>
+            </div>
+            <span class="ab-help">A wide photograph across the top of the About page, on the web shop and in the mini app. Leave it empty and the page opens on the text instead.</span>
+          </label>
+        </div>
+      </details>
+
       <!-- Manifesto -->
       <details open class="about-block">
         <summary>① Manifesto · 宣言</summary>
@@ -9549,12 +9569,12 @@
           </label>
           <label class="ab-field">
             <span class="ab-label">Body — English · 正文(英文)</span>
-            <textarea id="about-manifesto-en" rows="5" placeholder="We exist to make…"></textarea>
+            <textarea id="about-manifesto-en" rows="5" placeholder="What your shop is for, in a few sentences…"></textarea>
             <span class="ab-help">Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**). · 用 **双星号** 包住词语即可加粗(例如 **plant-based food**)。</span>
           </label>
           <label class="ab-field">
             <span class="ab-label">Body — 中文</span>
-            <textarea id="about-manifesto-cn" rows="5" placeholder="我们存在的意义…"></textarea>
+            <textarea id="about-manifesto-cn" rows="5"></textarea>
             <span class="ab-help">Leave blank to hide the Chinese paragraph. · 留空则隐藏中文段落。</span>
           </label>
         </div>
@@ -9562,7 +9582,7 @@
 
       <!-- Stats -->
       <details open class="about-block">
-        <summary>② Stat strip · 数据条 (4 cells)</summary>
+        <summary>② Stat strip · 数据条 (up to 4 cells)</summary>
         <div class="about-block-body">
           <table class="about-stats-table">
             <thead>
@@ -9572,10 +9592,17 @@
                 <th>Value CN · 中文值</th>
                 <th>Label EN · 英文标签</th>
                 <th>Label CN · 中文标签</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="about-stats-tbody"></tbody>
           </table>
+          <!-- §30: 添加…项 and 留空则隐藏… are both lifted from this editor's own
+               live strings ("添加「是」项" below, "留空则隐藏中文段落。" above),
+               with 数据条 taken from this block's own summary. Nothing composed
+               from scratch; flagged here for Ash all the same. -->
+          <button type="button" class="btn btn-sm" id="about-stats-add" onclick="aboutAddStat()">+ Add stat · 添加数据条项</button>
+          <span class="ab-help">The strip is hidden from customers while it is empty. Four cells is the most the page shows. · 留空则隐藏数据条。</span>
         </div>
       </details>
 
@@ -9674,11 +9701,11 @@
           <div class="ab-row">
             <label class="ab-field" style="flex:1">
               <span class="ab-label">Headline (EN) · 标题(英文)</span>
-              <input type="text" id="about-outro-en" placeholder="From soil to soul.">
+              <input type="text" id="about-outro-en">
             </label>
             <label class="ab-field" style="flex:1">
               <span class="ab-label">Headline (CN) · 标题(中文)</span>
-              <input type="text" id="about-outro-cn" placeholder="从土壤到灵魂">
+              <input type="text" id="about-outro-cn">
             </label>
           </div>
           <div class="ab-row">
@@ -9733,6 +9760,10 @@
       .about-stats-table input, .about-bullets-table input { width: 100%; font-size: 13px; }
       .ab-photo-preview { width: 160px; height: 200px; border: 1.5px solid var(--ink, #1a1a17); background: #CCD900; overflow: hidden; position: relative; }
       .ab-photo-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      /* The hero runs across the top of the page, so it is previewed wide. In
+         the founder photo's 160×200 frame a landscape picture is cropped to a
+         portrait and the operator is shown something the customer never sees. */
+      .ab-hero-preview { width: 320px; height: 160px; }
       .ab-photo-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; letter-spacing: .15em; color: rgba(0,0,0,.55); text-transform: uppercase; }
       .ab-photo-actions { display: flex; gap: 8px; margin-top: 8px; }
       .about-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
