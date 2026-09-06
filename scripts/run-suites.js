@@ -239,23 +239,56 @@ function run(entry) {
  *
  * The cap on lifted lines exists because a suite with 300 failing assertions
  * would otherwise bury every other suite in the run. When it bites, the count
- * says so rather than trimming silently. */
+ * says so rather than trimming silently.
+ *
+ * A FAILING LINE IS LIFTED WITH ITS DETAIL, not on its own. The common helper
+ * in these suites prints the label and the assertion message on two lines:
+ *
+ *     ✗ A CHIP'S TEXT SITS IN THE MIDDLE OF ITS PILL
+ *         "小食（小）" sits 1.375px off the middle of its pill, down
+ *
+ * and the second line carries the only number worth having. Lifting the `✗`
+ * alone loses it, which is what happened on 2026-09-06 to
+ * test_shop_menu_render.js: the label came through and the measurement did not,
+ * so CI said which check failed but not by how much. The continuation is
+ * whatever follows the failing line indented FURTHER than it, which is exactly
+ * how those helpers lay a message under its label, and it stops at the next
+ * result line so a passing case is never dragged in. */
 const FAIL_MARK = /^\s*(✗|✘|×|FAIL\b|not ok\b|AssertionError\b)/;
+const PASS_MARK = /^\s*(✓|✔|ok\b|PASS\b)/;
 const MAX_LIFTED = 12;
+const MAX_DETAIL = 4;
+
+const indentOf = (l) => (/^\s*/.exec(l)[0] || '').length;
 
 function tail(out, n = 14) {
   const lines = String(out).trimEnd().split('\n');
   const indent = (l) => '      ' + l;
-  const last = lines.slice(-n);
-  const lastSet = new Set(last);
+  const cut = Math.max(0, lines.length - n);   // where the tail begins
+  const last = lines.slice(cut);
 
-  // Failing lines the tail would not already show, in the order they happened.
-  const lifted = lines.filter((l) => FAIL_MARK.test(l) && !lastSet.has(l));
-  const shown = lifted.slice(0, MAX_LIFTED);
+  /* By INDEX, not by value: two identical failing lines are two failures, and
+     comparing strings hid the second one behind the first. */
+  const groups = [];
+  for (let i = 0; i < cut; i++) {
+    if (!FAIL_MARK.test(lines[i])) continue;
+    const g = [lines[i]];
+    const base = indentOf(lines[i]);
+    for (let j = i + 1; j < cut && g.length <= MAX_DETAIL; j++) {
+      const l = lines[j];
+      if (!l.trim()) break;
+      if (FAIL_MARK.test(l) || PASS_MARK.test(l)) break;
+      if (indentOf(l) <= base) break;
+      g.push(l);
+    }
+    groups.push(g);
+  }
+
+  const shown = groups.slice(0, MAX_LIFTED);
   const head = shown.length
-    ? shown.map(indent).concat(
-      lifted.length > shown.length
-        ? [indent(`… and ${lifted.length - shown.length} more failing line(s) above the tail`)]
+    ? shown.flat().map(indent).concat(
+      groups.length > shown.length
+        ? [indent(`… and ${groups.length - shown.length} more failing line(s) above the tail`)]
         : [],
     ).concat([indent('      ⋮')])
     : [];

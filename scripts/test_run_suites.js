@@ -129,5 +129,63 @@ is(tail('').trim(), '', 'empty output produces nothing rather than throwing');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+section('6 · the measurement under the label comes with it');
+
+/* THE SECOND HALF OF THE SAME LESSON, and it cost a second diagnosis before it
+   was noticed. The check() helper these browser suites share prints
+
+       ✗ LABEL
+           message
+
+   on TWO lines. Lifting only the line that carries the ✗ hands CI the name of
+   the failing check and throws away the number.
+
+   Real shape, from test_shop_menu_render.js on 2026-09-06: the label arrived,
+   `sits 1.375px off` did not, and how far out of tolerance it was — the only
+   thing that distinguishes a broken layout from a threshold set too tight —
+   could not be read from CI at all. */
+function chipShaped() {
+  const out = [];
+  for (let i = 1; i <= 20; i++) out.push(`  ✓ earlier check ${i}`);
+  out.push("  ✗ A CHIP'S TEXT SITS IN THE MIDDLE OF ITS PILL — both languages");
+  out.push('      "小食（小）" sits 1.375px off the middle of its pill, down');
+  for (let i = 1; i <= 20; i++) out.push(`  ✓ later check ${i}`);
+  out.push('', '1 check(s) failed');
+  return out.join('\n');
+}
+
+{
+  const t = tail(chipShaped());
+  yes(t.includes("A CHIP'S TEXT SITS IN THE MIDDLE"), 'the label is lifted');
+  yes(t.includes('sits 1.375px off the middle of its pill'),
+    '…AND the message under it, which is where the number lives');
+  is(/later check \d+/.test(t.split('⋮')[0]), false,
+    'the detail stops before the next passing case rather than dragging it up');
+}
+
+/* A message must not be able to run away with the report either. */
+{
+  const out = ['  ✗ it threw'];
+  for (let i = 1; i <= 30; i++) out.push(`      at frame ${i} (/somewhere/deep.js:${i})`);
+  for (let i = 1; i <= 20; i++) out.push(`  ✓ later ${i}`);
+  out.push('', '1 failed');
+  const frames = (tail(out.join('\n')).match(/at frame \d+/g) || []).length;
+  yes(frames > 0 && frames <= 4, `a 30-frame stack is cut to ${frames} lines, not printed whole`);
+}
+
+/* Indexing rather than string-matching: two identical failures are two
+   failures. The previous version compared line VALUES against the tail, so a
+   repeated line was silently suppressed by its own later twin. */
+{
+  const out = [];
+  out.push('  ✗ the same assertion');
+  for (let i = 1; i <= 20; i++) out.push(`  ✓ filler ${i}`);
+  out.push('  ✗ the same assertion');
+  out.push('', '2 failed');
+  const hits = (tail(out.join('\n')).match(/the same assertion/g) || []).length;
+  is(hits, 2, 'the early twin of a failure already in the tail is still reported');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
