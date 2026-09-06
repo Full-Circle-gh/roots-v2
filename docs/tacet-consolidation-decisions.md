@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.137
+# Tacet shared-core consolidation — decisions record, v4.138
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-06 · v4.138 — **§53 ADDED: THE QUICK STOCK AND ADD STOCK FEATURE SWITCHES ARE DELETED AHEAD OF §48's LAST STEP — DECIDED by Ash**, whose framing was that Quick Stock became part of Tacet and is no longer connected to the kitchen app, so the two switches no longer describe anything an operator recognises. **The finding that prompted it is that both were already half-dead**: `features.quickStock` and `features.kitchenAdd` are not members of `lib/features.js` `FEATURES`, so they never had an entitlement layer and the `feature:` tags on `quickstock:add` / `quickstock:recount` in `lib/capabilities.js` could never fire; the only server reader folded them into one `enabled` field on `/api/retail-admin/quick-stock/context`, and the only consumer of that field was the standalone `/stock` PWA's "off" screen. **Tacet Mobile's own Add stock / Quick stock screens read `can_recount` and `stores` from the same response and ignore `enabled` entirely**, entry being gated on capability alone — so the switch an operator held in Tacet's Settings changed nothing in Tacet, and **`kitchenAdd`'s own copy, "Off: kitchen staff cannot add what they just made," was false when this was ruled.** **The cost is recorded rather than glossed**: `/stock` is still live under §48, still the only home for six flows, and `kitchen` and `store_stock` still carry `stock_app_only`, so this takes away that app's only off switch while two roles remain locked inside it — accepted, because the switch was one nobody could reach a correct conclusion from. **§48's migrate-before-delete ordering is otherwise untouched**; no role is unlocked and no flow moves. **A tenant holding either preference at `false` has that app switched back on**, and a migration deletes both `storefront_config` rows so a stored `false` cannot sit in the database meaning nothing. **The context endpoint keeps sending `enabled: true` as a constant** because `/stock` is an installed PWA and a cached shell that still tested the field would read an omitted `enabled` as falsy and show every staffer the off screen; it goes when the app does. **Rejected, both offered and declined:** narrowing the labels to name the separate `/stock` app and deleting them with it at §48 step 4, and wiring the flags into Tacet Mobile so the switches became true rather than removed. Code, docs, schema and one migration; no capability grant changes. **Written as §52 and RENUMBERED TO §53 ON REBASE** — PR #335 merged its own §52 while this was being written, so it keeps the number and this takes the next, per the append-only rule. **The third collision of this kind recorded here** (two branches each defining a §39, then §46/§47), and it arose the same way: two branches open at once, each taking what was the next free number when it was written. **Nothing was renumbered to make room and no live section moved.** Related documents stays at §38.
 
 2026-09-06 · v4.137 — **§52 ADDED: A MIRRORED ORDER HAS NO PARCELS — DECIDED by Ash.** Raised from a phone, on a gzgrocery order: *"no way I'll for gzgrocery. this is mobile. no land it air option."* **The "Land · No waybill on this parcel yet — add it on the desktop" card the phone was showing is NOT a display bug — the parcel is real, and we create it on every read.** The chain is four steps and each one is correct in isolation: `scripts/gzgrocery-order-daemon.js` mirrors the order in as `fulfillment_type='delivery'` with no address; the order-detail GET runs `shipsNothing(o) ? [] : ensureShipments(id)`, and `shipsNothing` knows only pickup and counter — **it has never heard of a channel**; `planShipments` reads an empty city, finds neither Guangzhou nor Guangdong, and falls through to the air/land split, where the default `ship_modes` of `'air,land'` yields one **Land** parcel; and the legacy back-fill then stamps that phantom parcel dispatched and delivered because the order's status is `delivered`, which is what makes it render. **The instruction on the card could not be followed**: the desktop routes read-only channels to `renderReadonlyOrder`, which shows no parcels, no tracking and no waybill field at all — so the phone was sending an operator to a screen that does not offer the thing. **The desktop was never right, only silent**: it hid the rows it was still causing to be written on every drawer open. **Ruling: BOTH ENDS — the server stops planning them and the phone stops showing them.** Either alone is a half-fix, and the reason is asymmetric rather than belt-and-braces: stopping the planner leaves every gzgrocery order already opened once carrying its Land row, and guarding only the phone leaves the rows accumulating for every other reader. **Ruling: the rule is the CHANNEL SET, not gzgrocery** — Meituan (`routes/meituan-internal.js`) and Eleme (`routes/eleme-internal.js`) mirror in the same shape, `fulfillment_type='delivery'`, and grow the same phantom parcels; the set is the one the desktop's `ordIsReadonlyChannel` has always used. **The guard goes INSIDE `ensureShipments`, and that deviates from this repo's own convention deliberately** — fulfilment type is guarded at each of the eleven callers, and §24's split/undo entry records what that convention already cost: one branch that did not guard, creating Air/Land parcels for a counter sale, with no self-heal because the detail read returns `[]` for those orders rather than reconciling them. A channel that ships nothing of ours is a property of the ORDER, not of one read path, so it is enforced where it cannot be forgotten. **`shipsNothing` is deliberately NOT widened to cover channels**, and the reason is a live dependency rather than caution: `maybeEnqueueQingyunPush` gates on it, and a Meituan order IS fulfilled by a Qingyun rider — widening it would stop the rider push on the channel that most needs it, and the desktop's read-only drawer shows that rider card on purpose. **Mobile gains the channel set the desktop already had**: `viewOnly` was computed from a display key that has no Eleme entry, so an Eleme order was not read-only on the phone at all. **Not fixed here and recorded rather than left to be found:** the ship-by tile still says "Ship when ready · courier" on a mirrored order — same class of fiction, different tile, and a separate change; the waybill POST answers `no_shipments` with a **500** where a mirrored order deserves a 4xx; and mobile's `CH_ICON`/`CH_BACK` still have no Eleme entry, so an Eleme order wears the mini-app icon. No new user-facing strings, so `docs/tacet-delivery-vocabulary.md` is untouched. Appended as §52 under the append-only convention; Related documents stays at §38.
 
@@ -5827,3 +5829,73 @@ corrects the list row's delivery cell.
   `viewOnly` flag instead of a pill, and this is left as its own change rather
   than added in passing.
 - **The phantom rows already written are not swept.** See above.
+
+## 53. The Quick Stock and Add Stock feature switches are deleted ahead of §48's last step
+
+**WRITTEN AS §52 AND RENUMBERED TO §53 ON REBASE, 2026-09-06.** PR #335 merged
+its own §52 — a mirrored order has no parcels — while this was being written on
+an open branch, so that one keeps the number and this takes the next. **Nothing
+was renumbered to make room and no live section moved**, which is the whole of
+the append-only rule at the head of this file. This is the third collision of
+its kind recorded here, after two branches each defining a §39 and the §46/§47
+pair, and it arose the same way each time: two branches open at once, each
+taking what was the next free number when it was written. **Version becomes
+v4.138**; v4.137 is #335's and is not touched.
+
+**DECIDED 2026-09-06 by Ash.** The two Features switches — `quickStock` ("Quick
+Stock (mobile)" · 手机库存) and `kitchenAdd` ("Add Stock (kitchen)" · 加库存) —
+are removed from both Settings screens now, rather than retiring with `/stock`
+in §48 step 4. Ash's framing: Quick Stock became part of Tacet and is no longer
+connected to the kitchen app, so the switches no longer describe anything an
+operator recognises.
+
+**THE SWITCHES WERE ALREADY HALF-DEAD, AND THAT IS THE FINDING THAT PROMPTED
+THIS.** Both are operator preferences in `storefront_config`
+(`features.quickStock`, `features.kitchenAdd`). They are NOT members of
+`lib/features.js` `FEATURES`, so they never had an entitlement layer, and the
+`feature:` tags carried by `quickstock:add` and `quickstock:recount` in
+`lib/capabilities.js` were therefore inert: `entitlements()` only ever emits
+keys drawn from `FEATURES`, so `backend-team.js`'s
+`ent[c.feature] === false` filter could not fire for either. The only server
+reader was a pair of private helpers in `routes/retail-inventory.js`, folded
+into one `enabled` field on `/api/retail-admin/quick-stock/context`, and the
+only consumer of that field was the standalone `/stock` PWA's "off" screen.
+
+**Tacet Mobile's own Add stock / Quick stock screens never read it.** They call
+the same endpoint and take `can_recount` and `stores` from the response while
+ignoring `enabled`; entry to those screens is gated on capability alone. So the
+switch an operator was holding in Tacet's own Settings changed nothing in
+Tacet. **`kitchenAdd`'s own copy — "Off: kitchen staff cannot add what they
+just made" — was false at the time of this ruling**, because they could, from
+More → Add stock. `quickStock`'s copy named `/stock` explicitly and was
+literally true, but sat in a list where every other row governs the app the
+reader is holding.
+
+**THE COST IS RECORDED RATHER THAN GLOSSED.** `/stock` is still live under
+§48 — still served, still the only home for six flows, and `kitchen` and
+`store_stock` still carry `stock_app_only` — so deleting the switches takes
+away that app's only off switch while two roles remain locked inside it. That
+is accepted, not overlooked: the switch was a kill switch nobody could reach a
+correct conclusion from, and §48 deletes the app it guarded regardless. **§48's
+ordering rule is otherwise untouched** — migrate before delete still governs
+the app itself, and nothing here unlocks a role or removes a flow.
+
+**A tenant currently holding either preference at `false` has that app switched
+back on by this change.** A migration deletes both `storefront_config` rows so
+the stored `false` cannot sit in the database meaning nothing; leaving it would
+be indistinguishable to a later reader from a preference still honoured.
+
+**The context endpoint keeps sending `enabled: true` as a constant.** `/stock`
+is an installed PWA. Its shell is network-first and not precached, so a stale
+copy is bounded — but a cached `stock.html` that still tested the field would
+read an omitted `enabled` as falsy and show every staffer the "off" screen. The
+constant costs one line and removes that failure mode entirely; it goes when
+the app does.
+
+**Rejected, both offered and declined:** narrowing the two labels to say they
+govern the separate `/stock` app and deleting them with the app in §48 step 4;
+and wiring the flags into Tacet Mobile so the switches became true rather than
+removed — investment in a control §48 already retires.
+
+Code, docs, schema and one migration. No change to any capability grant, and no
+role gains or loses access to either screen.

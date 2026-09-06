@@ -6,14 +6,18 @@
  *
  *   node scripts/test_mobile_settings.js
  *
- * Settings offered five feature switches. The desktop has eight. The three
- * missing ones were socialProof, quickStock and kitchenAdd — switches that
- * decide whether shoppers see bought-counts, whether shop staff can open the
- * phone stock app, and whether kitchen staff can log what they just made. None
- * of them could be reached from a phone at all. The phone also had no notion
- * of the platform ENTITLEMENT ceiling, so it would have drawn a switch for a
- * feature the tenant is not entitled to and written a preference nobody would
- * ever honour.
+ * Settings offered five feature switches where the desktop had eight, and the
+ * three missing ones were socialProof, quickStock and kitchenAdd. The phone
+ * also had no notion of the platform ENTITLEMENT ceiling, so it would have
+ * drawn a switch for a feature the tenant is not entitled to and written a
+ * preference nobody would ever honour.
+ *
+ * TWO OF THOSE THREE ARE NOW DELETED RATHER THAN ADDED (§53). quickStock and
+ * kitchenAdd were switches inside Tacet that changed nothing in Tacet: this
+ * app's own Add stock screen reads the quick-stock context and never read the
+ * `enabled` those flags fed, so "Off: kitchen staff cannot add what they just
+ * made" was simply false. Both lists are now six, and the cases below assert
+ * the pair is absent — an accidental re-add would otherwise look like a fix.
  *
  * The Setup guide had three controls that did nothing — every step row was a
  * button with a chevron wired to noop, and so was "Continue setup" — and it
@@ -45,17 +49,22 @@ const CASES = [
     ['feedback',     `txt('content').includes('Customer feedback')`],
     ['SOCIAL PROOF — was missing', `txt('content').includes('Social proof')`],
     ['help / FAQ',   `txt('content').includes('Help / FAQ')`],
-    ['QUICK STOCK — was missing',  `txt('content').includes('Quick Stock')`],
-    ['ADD STOCK — was missing',    `txt('content').includes('Add Stock')`],
+    /* AND THE TWO THAT ARE GONE (§53). Quick Stock and Add Stock were switches
+       inside Tacet that changed nothing in Tacet — this app's Add stock screen
+       never read the flag they fed — so they are deleted rather than corrected.
+       Asserted as absent, because "was missing" is what this suite was written
+       to catch and an accidental re-add would otherwise read as a fix. */
+    ['QUICK STOCK — deleted', `!txt('content').includes('Quick Stock')`],
+    ['ADD STOCK — deleted',   `!txt('content').includes('Add Stock')`],
   ]],
-  ['the entitlement ceiling is honoured', `state.ent={socialProof:false,kitchenAdd:false}; APP.cmd('push','settings');`, [
+  ['the entitlement ceiling is honoured', `state.ent={socialProof:false,faq:false}; APP.cmd('push','settings');`, [
     ['a feature the tenant cannot have carries no switch', `!txt('content').includes('Social proof')`],
-    ['nor does the other one',                             `!txt('content').includes('Add Stock')`],
-    ['the entitled ones are still there',                  `txt('content').includes('Quick Stock') && txt('content').includes('Product reviews')`],
+    ['nor does the other one',                             `!txt('content').includes('Help / FAQ')`],
+    ['the entitled ones are still there',                  `txt('content').includes('Membership & points') && txt('content').includes('Product reviews')`],
   ]],
   ['a switched-off feature says what it costs',
-   `state.cfg=Object.assign({},state.cfg,{features:{quickStock:false}}); APP.cmd('push','settings');`, [
-    ['the consequence is spelled out', `txt('content').includes('staff open /stock and get a closed screen')`],
+   `state.cfg=Object.assign({},state.cfg,{features:{faq:false}}); APP.cmd('push','settings');`, [
+    ['the consequence is spelled out', `txt('content').includes('the help screen is hidden in the mini app')`],
     ['and only for the off one',       `!txt('content').includes('no tiers and no points')`],
   ]],
   ['no dead chevrons in Settings', `APP.cmd('push','settings');`, [

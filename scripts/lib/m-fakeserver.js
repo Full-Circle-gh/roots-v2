@@ -17,7 +17,8 @@ const D = {
   '/config': {
     currency: { symbol: '¥' },
     brand: { me_footer: { wordmark_text: 'Roots' } },
-    features: { membership: 1, affiliate: 1, reviews: 1, feedback: 1, socialProof: 1, faq: 1, quickStock: 1, kitchenAdd: 1 },
+    // The six that survive §53 — quickStock and kitchenAdd are deleted.
+    features: { membership: 1, affiliate: 1, reviews: 1, feedback: 1, socialProof: 1, faq: 1 },
     roots_club: { tiers: [
       { key: 'seed', name_en: 'Seed', name_cn: '种子', threshold: 0, points_mult: 1, perks_en: ['5% off your first order', 'Member newsletter'], perks_cn: ['首单 5% 折扣', '会员通讯'] },
       { key: 'sprout', name_en: 'Sprout', name_cn: '幼苗', threshold: 500, points_mult: 1.2, perks_en: ['10% off all orders', 'Free shipping ¥299+'], perks_cn: ['全场 10% 折扣', '满 ¥299 包邮'] },

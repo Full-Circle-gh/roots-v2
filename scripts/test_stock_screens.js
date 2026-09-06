@@ -261,7 +261,14 @@ const CASES = {
     js: "document.querySelector('.chip[data-filter=\"out\"]').click();" },
   'load-error': { rows: ROWS, fail: { stock: true }, expect: ['The shelf didn’t load.', 'Try again'] },
   'context-error': { rows: ROWS, fail: { context: true }, expect: ['That didn’t load'] },
-  'off': { rows: ROWS, ctxPatch: { enabled: false }, expect: ['Quick stock is off'] },
+  /* THERE IS NO 'off' SCREEN TO SHOOT ANY MORE (§53). It was reachable only
+     from the two deleted Features switches, and it told a staffer to ask an
+     admin to switch something on in a Settings list that no longer holds it.
+     Its place is kept by the assertion below rather than by a skip: a context
+     still carrying `enabled: false` must now draw the ordinary list, which is
+     what a stale server or a cached shell would send. */
+  'off-flag-ignored': { rows: ROWS, ctxPatch: { enabled: false },
+    expect: ['Hummus Asli'], absent: ['Quick stock is off', 'Add stock is off'] },
   'nostore': { rows: ROWS, ctxPatch: { stores: [] }, expect: ['No store assigned'] },
   'keypad': { rows: ROWS, expect: ['Set count', 'Save', 'Hummus Asli'], opens: 'kpSheet',
     js: "document.querySelector('.row .qty').click();" },
