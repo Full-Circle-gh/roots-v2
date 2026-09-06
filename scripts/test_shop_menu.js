@@ -291,6 +291,18 @@ const soldOut = (row) => /class="tag"/.test(row);
       }
     });
 
+    await checkAsync('a product with no photo gets the empty frame, never a broken <img>', async () => {
+      // Found by looking at the rendered page: an <img> pointing at a route
+      // that 404s is drawn by the phone as a broken-image glyph, which reads
+      // as a fault in the shop rather than a product nobody photographed.
+      const { body } = await get(`/s/${LIVE}`);
+      const withPhoto = rowFor(body, 'Fixture cold brew');
+      const without = rowFor(body, 'Fixture kombucha');
+      assert.ok(/<img /.test(withPhoto), 'a product WITH a photo lost its image');
+      assert.ok(!/<img /.test(without), 'a product with no photo still emits an <img> that will 404');
+      assert.ok(/<div class="ph"><\/div>/.test(without), 'the empty photo frame is missing');
+    });
+
     console.log('\nThe page is not an oracle — every unresolvable code answers the same');
     await checkAsync('malformed, unknown, shop-off and location-off are byte-identical 404s', async () => {
       const bad = await get('/s/nope');                       // malformed

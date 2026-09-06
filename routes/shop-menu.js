@@ -216,7 +216,20 @@ function shopName(shop) {
 function buildMenu(shop) {
   const listings = tdb().prepare(`
     SELECT sl.id, sl.store_product_id, sl.price, sl.fulfilment_mode, sl.is_available,
-           sl.sort_position, p.name_en, p.name_cn, p.top_category, p.updated_at
+           sl.sort_position, p.name_en, p.name_cn, p.top_category, p.updated_at,
+           -- Does a photo EXIST for this product? Mirrors resolveProductImage,
+           -- including its variant-sibling fallback, so the two never disagree.
+           -- Asked here because the alternative is an <img> pointing at a route
+           -- that 404s, which a phone draws as a broken-image glyph on the menu.
+           (CASE WHEN (p.image_data IS NOT NULL AND p.image_data != '')
+                   OR (p.image_url  IS NOT NULL AND p.image_url  != '')
+                   OR (p.variant_group_id IS NOT NULL AND EXISTS (
+                        SELECT 1 FROM store_products sib
+                         WHERE sib.variant_group_id = p.variant_group_id
+                           AND COALESCE(sib.is_active, 1) = 1
+                           AND ((sib.image_data IS NOT NULL AND sib.image_data != '')
+                             OR (sib.image_url  IS NOT NULL AND sib.image_url  != ''))))
+                 THEN 1 ELSE 0 END) AS has_photo
       FROM shop_listings sl
       JOIN store_products p ON p.id = sl.store_product_id
      WHERE sl.shop_id = ? AND COALESCE(p.is_active, 1) = 1
@@ -430,8 +443,14 @@ router.get('/s/:shopCode', (req, res) => {
         g.items.map(it => {
           const src = `/s/${esc(code)}/i/${it.store_product_id}` +
             `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
+          // No photo → the empty frame, never an <img> that cannot resolve. A
+          // product nobody has photographed is ordinary; a broken-image glyph
+          // beside its name reads as a fault in the shop.
+          const photo = it.has_photo
+            ? `<img src="${src}" alt="" loading="lazy" decoding="async">`
+            : '';
           return `<div class="it${it.sold_out ? ' out' : ''}">` +
-            `<div class="ph"><img src="${src}" alt="" loading="lazy" decoding="async"></div>` +
+            `<div class="ph">${photo}</div>` +
             `<div class="tx"><div class="t">${bi(it.name_en, it.name_cn)}</div>` +
             `<div class="pr">${esc(money(it.price, cur))}</div>` +
             (it.sold_out ? `<span class="tag">${bi('Sold out', '售罄')}</span>` : '') +
