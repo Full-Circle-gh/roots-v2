@@ -67,13 +67,16 @@ function fixture() {
      wrong. */
   db.exec(`ALTER TABLE retail_orders ADD COLUMN channel TEXT;
            ALTER TABLE retail_orders ADD COLUMN tax_amount REAL;
-           ALTER TABLE retail_orders ADD COLUMN tax_mode TEXT;`);
-  // One customer, seven clean orders. Every relationship holds exactly.
+           ALTER TABLE retail_orders ADD COLUMN tax_mode TEXT;
+           ALTER TABLE retail_orders ADD COLUMN source TEXT;
+           ALTER TABLE retail_orders ADD COLUMN created_by INTEGER;
+           ALTER TABLE retail_orders ADD COLUMN placed_at TEXT;`);
+  // One customer, eight clean orders. Every relationship holds exactly.
   // lifetime_spend is the sum of every order subtotal
-  // (100 + 60 + 50 + 228.50 + 266 + 100 + 100), so the reconciliation starts
+  // (100 + 60 + 50 + 228.50 + 266 + 100 + 100 + 994), so the reconciliation starts
   // clean — a baseline that is already non-zero cannot show a MOVE, which is
   // the only thing the migration gate reads.
-  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 904.50, 20);
+  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 1898.50, 20);
   const ord = db.prepare(`INSERT INTO retail_orders
     (id, order_no, customer_id, status, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
      voucher_amount, points_amount, balance_used, total, refund_amount_paid, refund_cash_amount)
@@ -131,6 +134,27 @@ function fixture() {
   db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'exclusive' WHERE id = 6").run();
   db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'inclusive' WHERE id = 7").run();
 
+  /* A-8 · A MANUAL ORDER WHOSE TOTAL DOES ADD UP. Clean here on purpose: §2
+     seeds the override onto this row, and that pairing is what proves BOTH
+     halves of the manual-order rule at once. Overridden, it must appear in the
+     reconciliation line I and NOT in invariant A — and since §2 also requires
+     that no OTHER check moves, a missing `source <> 'manual'` clause in A would
+     fail that assertion rather than pass unnoticed.
+
+     TC000269 is the production row behind it: eleven items summing to 994.00 —
+     the line items agree with subtotal exactly — sold for 1014.80.
+     routes/retail.js:23421 says staff "may override any line price AND the
+     grand total (negotiated / wholesale)", so the total is an operator's figure
+     and A cannot ask it the identity.
+
+     These rows are COUNTED rather than exempted because nothing distinguishes a
+     negotiated price from a typo — the override IS the feature — so dropping
+     them would hide a mistyped total for ever. Twenty manual orders exist in
+     production and exactly one carries an override, so visible-not-exempt costs
+     almost nothing and keeps the one row readable. */
+  ord.run(8, 'A-8', 1, 'completed', 994, 0, 0, 0, 0, 0, 0, 994.00, 0, 0);
+  db.prepare("UPDATE retail_orders SET source = 'manual', created_by = 6, placed_at = '2026-08-14 11:11:09' WHERE id = 8").run();
+
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
     .run(1, 1, 'S-1', 4, 25, 100, 0.042);
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
@@ -182,6 +206,14 @@ const BREAKS = [
     (db) => db.prepare('UPDATE retail_customers SET balance = -1 WHERE id = 1').run()],
   ['G', 'a lifetime total that no longer matches the orders',
     (db) => db.prepare('UPDATE retail_customers SET lifetime_spend = 500 WHERE id = 1').run()],
+  /* I's "break" is legitimate data, exactly as G's is: an operator negotiating a
+     price is not a defect, and the check exists to make that visible rather than
+     to forbid it. What this case actually proves is the EXEMPTION — because §2
+     requires every other check to stay green, invariant A must NOT move when
+     this manual total is overridden. Drop the `source <> 'manual'` clause from A
+     and this assertion fails, which is the only reason it is safe to have one. */
+  ['I', 'a manual order whose grand total was overridden',
+    (db) => db.prepare('UPDATE retail_orders SET total = 1014.80 WHERE id = 8').run()],
   // Moving `total` alone by half a cent breaks the order's arithmetic as well,
   // and that is correct: A and H are looking at the same row from two sides.
   ['H', 'an amount that is not a whole number of cents',
