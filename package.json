@@ -52,6 +52,7 @@
     "test:shop-menu": "node scripts/test_shop_menu.js",
     "test:shop-menu-render": "node scripts/test_shop_menu_render.js",
     "test:shop-qr": "node scripts/test_shop_qr.js",
+    "test:counter-sweep": "node scripts/test_counter_sweep_exempt.js",
     "check:shop-listing-names": "node scripts/check_shop_listing_names.js",
     "test:restock-direction": "node scripts/test_restock_direction_default.js",
     "test:shop-channel": "node scripts/test_shop_channel.js",
