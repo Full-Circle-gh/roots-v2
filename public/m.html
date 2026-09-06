@@ -642,6 +642,11 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* RECEIVING A TRANSFER (§48) — the STORE end of a stock movement, which is a
+     different job from the `rcv*` supplier receiving above: that one counts a
+     purchase order in from a supplier, this one counts in what another location
+     sent. Named xfr rather than rcv so the two can never be mistaken for one. */
+  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:''},
   /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
      dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
      thing on /stock's launcher that this app could only point at. */
@@ -748,6 +753,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
+  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
   state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
@@ -808,6 +814,20 @@ reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
 reg('krOpen', id=>krOpen(id));
 reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
+reg('xfrOpen', id=>xfrOpen(id));
+reg('xfrList', ()=>{ const x=state.xfr; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; render(); });
+reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
+reg('xfrConfirm', ()=>xfrConfirm());
+reg('xfrAsk', id=>{
+  const it=xfrItems().find(y=>y.id===Number(id));
+  if(!it) return;
+  const cur=xfrCount(it);
+  state.ask={ title:T('Count what actually arrived.','清点实际到货数量。'), body:xfrName(it),
+    fields:[{id:'n',label:T('sent','发出')+' '+xfrSent(it),numeric:true,value:cur==null?'':String(cur)}],
+    validate:v=>/^\d+$/.test(String(v.n||'').trim())?null
+      :T('Enter what arrived — a whole number, 0 or more.','请输入到货数量 — 0 或以上的整数。'),
+    run:v=>xfrSaveCount(Number(id), parseInt(String(v.n).trim(),10)) };
+  render(); });
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -2792,7 +2812,8 @@ const MORE_GROUPS=[
        reaches for what has not moved yet. As each of those flows lands here
        that launcher empties, and the row goes with the last of them. */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
-    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成']]},
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
+    ['receivexfer','truck','Receive delivery','收货']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6378,6 +6399,121 @@ function rqSendStock(){
          T('This account cannot ask for stock.','此账号无法发起补货申请。'));
 }
 
+/* ══ RECEIVING A TRANSFER ══════════════════════════════════════════════════
+   Counting in what another location sent. NOT the Receiving row already in this
+   app — that one counts a purchase order in from a supplier, and folding the
+   two together would put a supplier's invoice and a sister shop's van behind
+   one word.
+
+   WHAT IS COMING TO A SHELF THIS OPERATOR HOLDS. The old screen ran pinned to a
+   single store, so "is this mine" was one id comparison. Here an operator can
+   hold several, so the list spans them and every row names where it is going —
+   a delivery counted in against the wrong shop is stock that never arrives and
+   stock that arrives twice. */
+function xfrStoreIds(){ return (state.stores||[]).map(s=>s.id); }
+function xfrMine(o){
+  // Since #259 an order records to_store_id, so this is an id comparison rather
+  // than a guess. Rows written before that column existed carry only the name.
+  if(o.to_store_id) return xfrStoreIds().indexOf(o.to_store_id)>=0;
+  return true;
+}
+function loadXfr(force){
+  const x=state.xfr;
+  if(x.tried&&!force) return;
+  x.tried=true;
+  api('/api/restock?tab=active').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    // A kitchen request is not a delivery: it moves no stock and closes when
+    // the kitchen makes it, so it has nothing to count in.
+    x.list=rows.filter(o=>(o.to_role||'warehouse')!=='kitchen'
+                       && o.goods_state==='in_transit' && xfrMine(o));
+    x.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.list=[]; x.err=''; render();
+  });
+}
+function xfrArrived(o){ return !!(o&&o.delivered_at); }
+function xfrItems(){
+  const xs=state.xfr.order&&state.xfr.order.items;
+  // Only lines that were actually sent. A line asked for and not picked has
+  // nothing on the van to count.
+  return (Array.isArray(xs)?xs:[]).filter(it=>xfrSent(it)>0);
+}
+function xfrNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+function xfrSent(it){ return xfrNum(it.qty_sent!=null?it.qty_sent:it.qty_requested); }
+function xfrGot(it){ return it.qty_received==null?null:xfrNum(it.qty_received); }
+function xfrHeldFor(it){ const h=state.xfr.held; return h&&h.item_id===it.id?h.qty:null; }
+function xfrCount(it){ const h=xfrHeldFor(it); return h!=null?h:xfrGot(it); }
+function xfrName(it){
+  return (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—';
+}
+function xfrOpen(id){
+  const x=state.xfr;
+  x.busy=true; x.err=''; x.order=null; x.held=null; x.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    x.order=(j&&j.data)||j; x.busy=false;
+    // Counting in something that has not arrived is the one thing this screen
+    // must not invite, so an order still on the road says so instead.
+    x.step=xfrArrived(x.order)?'count':'transit';
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false; x.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+/* THE LAST LINE IS HELD, and that is the whole reason this is not one write per
+   tap. Sending every count as it is typed would settle the delivery the moment
+   the final line landed — before anybody had looked at the totals — so the last
+   outstanding line is kept on the screen and goes to the server with the
+   confirm. A held line that stops being the last one goes with the next save,
+   so nothing is held except while the set is genuinely complete. */
+function xfrSaveCount(itemId,qty){
+  const x=state.xfr;
+  const outstanding=xfrItems().filter(it=>it.id!==itemId&&xfrCount(it)==null).length;
+  if(outstanding===0){ x.held={item_id:itemId,qty:qty}; x.step='confirm'; render(); return; }
+  const counts=[{item_id:itemId,qty_received:qty}];
+  if(x.held&&x.held.item_id!==itemId) counts.push({item_id:x.held.item_id,qty_received:x.held.qty});
+  x.busy=true; x.err=''; render();
+  apiWrite('/api/restock/'+x.order.id+'/receive',{counts:counts},'PUT').then(()=>{
+    counts.forEach(c=>{ const it=(x.order.items||[]).find(y=>y.id===c.item_id); if(it) it.qty_received=c.qty_received; });
+    x.held=null; x.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false;
+    // The number they typed is never thrown away by a failed write. Losing a
+    // delivery's counts at the door is the one failure nobody forgives.
+    x.held={item_id:itemId,qty:qty};
+    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+                             : T('That count did not save. It is still on screen — try again.','数量未保存,仍显示在屏幕上 — 请重试。');
+    render();
+  });
+}
+function xfrConfirm(){
+  const x=state.xfr;
+  if(x.busy) return;
+  const counts=xfrItems().map(it=>({item_id:it.id,qty_received:xfrCount(it)}))
+                         .filter(c=>c.qty_received!=null);
+  x.busy=true; x.err=''; render();
+  apiWrite('/api/restock/'+x.order.id+'/receive',{counts:counts},'PUT').then(j=>{
+    x.busy=false;
+    // The server is the one that decides the delivery is settled; a client that
+    // assumed it would close a delivery with a line still uncounted.
+    if(j&&j.settled===false){ x.err=T('Some lines are still uncounted.','仍有未点数的项目。'); x.step='count'; render(); return; }
+    counts.forEach(c=>{ const it=(x.order.items||[]).find(y=>y.id===c.item_id); if(it) it.qty_received=c.qty_received; });
+    x.held=null; x.step='done'; render();
+    // The shelf this app counts has just changed underneath it.
+    state.qs.itemsTried=false; loadQsItems(true);
+    loadXfr(true);
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false;
+    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+                             : (e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
+
 /* ══ READY FROM THE KITCHEN ════════════════════════════════════════════════
    A kitchen request that is `prepared` has already been made AND put on the
    shelf by the kitchen itself, so nothing is physically waiting for anybody.
@@ -7022,6 +7158,82 @@ function screenKitchenReady(){
       </button>`;
     }).join('')}</div>`;
 }
+function screenReceiveTransfer(){
+  loadXfr();
+  const x=state.xfr;
+  const err=x.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(x.err)}</div>`:'';
+  const backRow=lbl=>`<div style="padding:4px 16px 12px">
+    <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrList')">${lbl}</button></div>`;
+
+  if(x.step==='done'){
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${T('Counted in','已入库')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T('The shelf has been updated.','库存已更新。')}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('xfrList')">${T('Done','完成')}</button>
+    </div>`;
+  }
+  if(x.orderId!=null){
+    if(x.busy&&!x.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    const o=x.order||{};
+    if(x.step==='transit'){
+      return backRow(T('Receiving','收货'))+err+`<div style="padding:0 16px">
+        <div style="font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+        <div style="font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
+          T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
+    }
+    const items=xfrItems();
+    if(x.step==='confirm'){
+      const counted=items.reduce((a,it)=>a+(xfrCount(it)||0),0);
+      const sent=items.reduce((a,it)=>a+xfrSent(it),0);
+      // Against the VAN — all this screen can compare before they confirm.
+      const diff=items.filter(it=>xfrCount(it)!==xfrSent(it));
+      return `<div style="padding:4px 16px 12px">
+          <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrCount')">${T('Receiving','收货')}</button></div>
+        ${err}
+        <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${T('Confirm receipt','确认收货')}</div>
+        <div style="padding:0 16px 14px;font-size:14px;color:var(--text-secondary)">
+          <span class="num">${counted}</span> ${T('counted','已点')} · <span class="num">${sent}</span> ${T('sent','发出')}</div>
+        ${diff.length?`<div style="padding:0 16px 12px">${diff.map(it=>`<div style="display:flex;gap:12px;padding:8px 0;font-size:14px">
+            <span style="flex:1;min-width:0">${escAttr(xfrName(it))}</span>
+            <span class="num" style="color:var(--amber-ink)">${xfrCount(it)} / ${xfrSent(it)}</span></div>`).join('')}</div>`:''}
+        <div style="padding:0 16px 20px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+          T('Confirming puts these counts on the shelf.','确认后将按此数量入库。')}</div>
+        <div style="padding:0 16px calc(env(safe-area-inset-bottom,0px) + 16px)">
+          <button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
+            onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button></div>`;
+    }
+    // The count itself: one row per line, each opening a number entry.
+    return backRow(T('Receiving','收货'))+err+`
+      <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">${
+        T('Count what actually arrived.','清点实际到货数量。')}</div>
+      <div>${items.map(it=>{
+        const got=xfrCount(it);
+        return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+          onclick="APP.cmd('xfrAsk',${it.id})">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
+            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+          </span>
+          <span class="num" style="font-size:20px;font-weight:500;color:${got==null?'var(--text-secondary)':'var(--text-primary)'}">${got==null?'—':got}</span>
+        </button>`;
+      }).join('')}</div>`;
+  }
+  if(!x.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!x.list.length) return nothingYet(T('Nothing on its way','暂无在途'),
+    T('Deliveries from another location show up here.','其他地点发来的货会显示在这里。'));
+  return err+`<div>${x.list.map(o=>`<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+      onclick="APP.cmd('xfrOpen',${o.id})">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${
+          o.to_store_id?' · '+escAttr(rqStoreName(o.to_store_id)):''}</span>
+      </span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+    </button>`).join('')}</div>`;
+}
+SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
@@ -9869,6 +10081,11 @@ const ROUTE_CAP={
      fulfil-only kitchen operator is the one who made it, and telling them
      their own work is waiting is telling them about themselves. */
   kitchenready:['restock:request','restock:pick'],
+  /* Counting a transfer in, gated on the capability its save is gated on
+     server-side — the same call the supplier Receiving row makes above, for the
+     same reason: a screen whose whole purpose is the save must not be offered
+     to somebody whose save will 403. */
+  receivexfer:'restock:receive',
   /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
      queue shipped as a tile on the Stock home, and a kitchen operator whose
      role puts them in THIS app never sees that home — they see this list, and
