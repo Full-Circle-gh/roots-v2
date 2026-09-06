@@ -9644,7 +9644,8 @@ function sheetAsk(){
          <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
          ${f.multiline
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
-           : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}">`}
+           : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('askRun','')}">`}
        </label>`).join('')}
        ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}
      </div>`:''}
