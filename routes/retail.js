@@ -3825,6 +3825,30 @@ function payContext() {
   return { appId: c.wechat.appId, ...c.pay };  // {appId,mchId,apiV3Key,privateKey,serialNo,devMode}
 }
 
+// The Official Account's pay context — THE SAME MERCHANT, A DIFFERENT APPID.
+//
+// §50. An openid is issued by one WeChat app and can only pay a charge created
+// under that same app, so the QR menu's in-page payment signs with the 服务号's
+// appid while settling to the merchant every other rail already settles to.
+// That is the whole of the difference, and it is why this is a sibling of
+// payContext() rather than a flag on it: the merchant half must not be able to
+// drift between the two, and the appid half must never be shared.
+//
+// `oaDevMode` is separate from `devMode` on purpose. Pay can be fully
+// configured while the Official Account is not — that is exactly the state
+// this repo is in until the 服务号 credentials are set — and a caller must be
+// able to tell "we cannot charge at all" from "we cannot charge IN PAGE".
+// The Official Account's own secret rides along rather than being read from
+// env by the caller: for Roots the bundle resolves it from .env and for every
+// other tenant from its encrypted row, and a caller reaching for
+// process.env.WECHAT_OA_APP_SECRET would silently hand a tenant an empty
+// string — its exchange would fail and the customer would be bounced to the
+// till with nothing in the log saying why.
+function oaPayContext() {
+  const c = getTenantCreds(currentTenantId());
+  return { appId: c.oa.appId, oaAppSecret: c.oa.appSecret, ...c.pay, oaDevMode: c.oa.devMode };
+}
+
 // The active tenant's third-party integration creds (Platform readiness ⑤).
 // Roots/unscoped → env-backed bundle (unchanged); other tenants → their own
 // encrypted creds with NO env fallback. Shape:
@@ -35704,3 +35728,13 @@ module.exports.costAtSale            = costAtSale;
 // copy of it — a second renderer would drift, and the drawer's Reprint reads
 // the columns this one writes.
 module.exports.autoPrintOrder        = autoPrintOrder;
+// The in-page WeChat payment rail for the QR menu (§50). routes/shop-menu.js
+// composes these rather than owning copies: the prepare, the signing and the
+// out_trade_no namespace are the same ones every other WeChat charge in this
+// system uses, and a second implementation of any of them would settle to a
+// ledger the callback cannot find.
+module.exports.oaPayContext          = oaPayContext;
+module.exports.wechatJsapiPrepare    = wechatJsapiPrepare;
+module.exports.buildWxPayParams      = buildWxRequestPaymentParams;
+module.exports.wxOutTradeNo          = wxOutTradeNo;
+module.exports.payDescription        = payDescription;

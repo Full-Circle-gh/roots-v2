@@ -81,7 +81,14 @@ const {
   // paid path uses, so the printer resolution, the template and the print_status
   // the drawer's Reprint reads cannot drift from the till's.
   autoPrintOrder,
+  // §50, the in-page WeChat rail. Composed, never copied: the prepare, the
+  // signing and the out_trade_no namespace are the same ones the mini app and
+  // the storefront charge through, so a payment placed here settles through
+  // the same callback into the same ledger.
+  oaPayContext, wechatJsapiPrepare, buildWxPayParams, wxOutTradeNo, payDescription,
 } = require('./retail');
+const crypto = require('crypto');
+const wechatOa = require('../lib/wechat-oa');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const { nutritionRows } = require('../lib/nutrition-rows');
 const blockRead = require('../lib/product-blocks-read');
@@ -741,6 +748,17 @@ img{display:block;max-width:100%}
   background:rgba(255,255,255,.72);font-size:14px}
 .err[hidden]{display:none}
 
+/* How they intend to pay, asked BEFORE the order is placed rather than after —
+   §50 puts the kitchen ticket on payment for the in-page path and on submit for
+   the counter, so the answer has to exist by the time the order does. The whole
+   row is absent unless the Official Account is configured. */
+.pw{display:flex;gap:8px;margin-top:10px}
+.pw[hidden]{display:none}
+.pw button{flex:1;border:2px solid var(--ink);background:rgba(255,255,255,.72);
+  color:var(--ink);padding:11px 8px;font:inherit;font-family:var(--f-bear);font-size:14px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pw button.on{background:var(--lime)}
+
 /* The placed order. The number is the biggest thing on the phone, because the
    whole of what happens next is somebody calling it across a room. */
 .done{padding:26px 14px 30px;text-align:center}
@@ -1077,6 +1095,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `document.getElementById('sheetBg').addEventListener('click',close,false);` +
   `document.addEventListener('keydown',function(e){if(e.key==='Escape')close()},false);` +
   `var fail=function(t){errEl.innerHTML=t;errEl.hidden=false};` +
+  // HOW THEY MEAN TO PAY. Read off the bar's own data attribute, like the
+  // currency — the shop either can take an in-page WeChat payment or cannot,
+  // and this script is built once for every shop. When it cannot, `pm` stays
+  // 'counter' for the whole visit and the row is not in the DOM to be tapped.
+  //
+  // NOTHING HERE LOOKS AT THE BROWSER. A customer who opened the menu from a
+  // camera app rather than WeChat's own scanner may pick WeChat Pay and will be
+  // told at the till instead (§50); the alternative — reading the user agent to
+  // hide the button — is the branch §47 keeps off this page, and it would be
+  // wrong on every browser WeChat ships next.
+  `var pw=document.getElementById('cPw');` +
+  `var pm=(bar.getAttribute('data-wxpay')==='1')?'wechat':'counter';` +
+  `if(pw){pw.addEventListener('click',function(e){` +
+  `var b=e.target.closest?e.target.closest('button[data-pm]'):null;if(!b)return;` +
+  `pm=b.getAttribute('data-pm');` +
+  `var all=pw.querySelectorAll('button[data-pm]');` +
+  `for(var i=0;i<all.length;i++)all[i].className=(all[i]===b?'on':'');` +
+  `},false)}` +
   // Submitting. The button locks for the round trip: a customer who taps twice
   // on a slow connection must not put two orders through the counter.
   `place.addEventListener('click',function(){if(sending)return;` +
@@ -1086,10 +1122,15 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var items=[];for(var i=0;i<k.length;i++)items.push({store_product_id:parseInt(k[i],10),qty:cart[k[i]].qty});` +
   `sending=true;place.disabled=true;errEl.hidden=true;` +
   `fetch(location.pathname.replace(/\\/$/,'')+'/order',{method:'POST',` +
-  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items})})` +
+  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items,pay_method:pm})})` +
   `.then(function(r){return r.json().then(function(j){return {s:r.status,j:j}})})` +
   `.then(function(o){sending=false;place.disabled=false;` +
-  `if(o.s===201&&o.j&&o.j.data){done(o.j.data);return}` +
+  // A WeChat order leaves for the payment page and never draws the done screen
+  // here: its number is shown there, after the money has actually arrived.
+  // Counter orders are unchanged and land on done() as they always have.
+  `if(o.s===201&&o.j&&o.j.data){` +
+  `if(o.j.data.pay_url){location.href=o.j.data.pay_url;return}` +
+  `done(o.j.data);return}` +
   // A refusal names the items rather than saying "something went wrong": the
   // customer is standing in the shop and can choose again in ten seconds if
   // they are told what went.
@@ -1245,6 +1286,66 @@ function notFoundPage(req, res) {
   }));
 }
 
+// ─── in-page WeChat payment (§50) ───────────────────────────────────────
+//
+// OFF UNLESS THE OFFICIAL ACCOUNT IS CONFIGURED, and that is the deploy story
+// rather than a nicety: with WECHAT_OA_APP_ID / WECHAT_OA_APP_SECRET unset —
+// which is every environment until somebody sets them — every branch below is
+// dead and this page behaves exactly as §44 shipped it. Nothing to roll back
+// and nothing to gate; the credentials ARE the switch.
+//
+// Pay's own devMode is checked too. An Official Account with no merchant behind
+// it can obtain an openid and then fail at the charge, which would strand a
+// customer mid-payment on a screen offering them nothing else.
+function oaReady() {
+  try {
+    const p = oaPayContext();
+    return !p.oaDevMode && !p.devMode;
+  } catch (e) { return false; }
+}
+
+// The OAuth `state`, bound to the order it was issued for.
+//
+// There is no session and no cookie on this page (§44), so state cannot be
+// stored and compared — it is DERIVED instead, as an HMAC of the pay token
+// under a key only this server holds. A code returned against a state that
+// does not recompute was not obtained through our redirect for this order, and
+// is refused. The Official Account secret is the key because it is already
+// server-only and already required for the exchange that follows.
+function payState(token) {
+  const p = oaPayContext();
+  const key = p.appId + '|' + String(p.oaAppSecret || '');
+  return crypto.createHmac('sha256', key).update(String(token)).digest('hex').slice(0, 32);
+}
+
+// Is this WeChat's own browser?
+//
+// THIS IS NOT THE BRANCH §47 KEEPS OFF THE MENU, and the distinction is worth
+// stating because the two look identical from a distance. §47's rule — held by
+// a test that fetches the menu under three user agents and compares the bytes —
+// is that WHAT A SHOP SELLS never depends on what someone is reading it with.
+// This is a different page and a different question: WeChat's in-page payment
+// physically cannot run outside WeChat, and §50's second ruling says the
+// customer who is outside it pays at the counter. Answering that needs knowing,
+// and the alternative is worse than knowing — sending them to an authorize URL
+// that cannot complete strands them on WeChat's own error page, which is the
+// one outcome §50 says this page must never produce.
+//
+// It is used ONLY to choose between offering the payment sheet and showing the
+// counter screen. Nothing about the order, the prices or the menu moves on it.
+function inWeChat(req) {
+  return /MicroMessenger/i.test(String(req.get('user-agent') || ''));
+}
+
+// The absolute URL WeChat redirects back to. It must match the domain
+// registered against the Official Account, so it is built from the request's
+// own host rather than from config — the page is already being served from
+// that domain or the customer would not be reading it.
+function payReturnUrl(req, code, token) {
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}/s/${code}/pay/${token}`;
+}
+
 // ─── routes ─────────────────────────────────────────────────────────────
 
 router.get('/s/:shopCode', (req, res) => {
@@ -1261,6 +1362,7 @@ router.get('/s/:shopCode', (req, res) => {
   const cur = normalizeCurrency(cfg('currency', null));
   const name = shopName(shop);
   const groups = buildMenu(shop);
+  const wxPay = oaReady();
   const brand = brandText();
 
   const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>`;
@@ -1342,8 +1444,16 @@ router.get('/s/:shopCode', (req, res) => {
   const cartUi = groups.length ? (
     // The bar. Hidden until something is in the basket — an empty bar is a
     // permanent strip of chrome over the menu it exists to serve.
+    // data-wxpay carries the ONE per-request fact the basket script needs about
+    // payment, on the same reasoning as the currency attributes beside it: the
+    // script is built once at module load and this is resolved per request.
+    // Note what it is NOT — it says whether this SHOP can take an in-page
+    // WeChat payment, never anything about the browser reading it. §47's rule
+    // that nothing on this page branches on the user agent is untouched, and
+    // its test still compares these bytes across three of them.
     `<div class="cbar" id="cbar" hidden data-sym="${esc(cur.symbol)}"` +
-      ` data-dec="${esc(String(cur.decimals))}" data-pos="${esc(cur.position)}">` +
+      ` data-dec="${esc(String(cur.decimals))}" data-pos="${esc(cur.position)}"` +
+      `${wxPay ? ' data-wxpay="1"' : ''}>` +
       `<button type="button" class="cbar-b" id="cbarOpen">` +
         `<span class="cbar-n" id="cbarN">0</span>` +
         `<span class="cbar-l">${bi('YOUR BASKET', '购物车')}</span>` +
@@ -1405,6 +1515,16 @@ router.get('/s/:shopCode', (req, res) => {
           `<input class="nm-i" id="cName" type="text" maxlength="40" autocomplete="name"` +
             ` enterkeyhint="done" inputmode="text">` +
           `<div class="err" id="cErr" hidden></div>` +
+          // Asked before the order exists, because §50's print rule turns on the
+          // answer. WeChat leads: it is the path that saves the queue, and the
+          // customer who is going to walk to the till is the one already
+          // expecting to do something.
+          (wxPay
+            ? `<div class="pw" id="cPw">` +
+                `<button type="button" data-pm="wechat" class="on">${bi('WeChat Pay', '微信支付')}</button>` +
+                `<button type="button" data-pm="counter">${bi('Pay at the counter', '收银台付款')}</button>` +
+              `</div>`
+            : '') +
           `<button type="button" class="place" id="cPlace">${bi('Place order →', '提交订单 →')}</button>` +
         `</div>` +
       `</div>` +
@@ -1540,6 +1660,16 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   const name = String(b.name == null ? '' : b.name).replace(/[<>]/g, '').trim().slice(0, 40);
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
 
+  // HOW THEY MEAN TO PAY — and it is asked here, before the order exists,
+  // because §50 hangs the kitchen ticket on the answer: an in-page WeChat order
+  // prints when the money arrives, every other one prints now.
+  //
+  // 'wechat' is honoured ONLY when the shop can actually take it. A body
+  // claiming 'wechat' at a shop with no Official Account configured falls back
+  // to the counter rather than being refused — the customer gets the flow that
+  // works instead of an error, and the ticket still prints on submit.
+  const wantsWechat = String(b.pay_method || '') === 'wechat' && oaReady();
+
   const rawLines = Array.isArray(b.items) ? b.items : [];
   if (!rawLines.length) return res.status(400).json({ success: false, error: 'no_items' });
   if (rawLines.length > MAX_LINES) return res.status(400).json({ success: false, error: 'too_many_lines' });
@@ -1621,6 +1751,13 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     created = h.transaction(() => {
       const orderNo = nextOrderNo(h);
       const { code: shopCode, date: shopDate } = allocateShopOrderCode(h, shop.location_id);
+      // The unguessable handle the payment page is reached by — the same
+      // mechanism, the same width and the same column the guest pay page has
+      // used since manual orders got one. It is minted for every QR order, not
+      // only the WeChat ones: it costs nothing on an order nobody pays online,
+      // and an order that acquires a payment page later would otherwise need a
+      // second way to be addressed.
+      const payToken = crypto.randomBytes(18).toString('hex');
       // THE TENDER IS 'offline', NOT 'counter', AND THAT IS DELIBERATE.
       // Nobody has paid yet: the customer walks to the till after submitting,
       // and the real tender — cash, bank transfer, off-app WeChat or Alipay —
@@ -1638,8 +1775,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
           recipient_name, subtotal, shipping_fee, packing_fee, total,
           channel, source, fulfillment_type, store_id,
           shop_entry_method, shop_order_code, shop_order_date,
-          tax_amount, tax_rate_micro, tax_mode, placed_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+          tax_amount, tax_rate_micro, tax_mode, pay_token, placed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       `).run(
         orderNo, null, 'pending_payment', PLACEHOLDER_TENDER,
         name, subtotal, 0, 0, total,
@@ -1649,7 +1786,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         'qr', shopCode, shopDate,
         taxCfg.enabled ? moneyLib.fromMinor(taxLine.taxMinor) : null,
         taxCfg.enabled ? taxCfg.rateMicro : null,
-        taxCfg.enabled ? taxCfg.mode : null
+        taxCfg.enabled ? taxCfg.mode : null,
+        payToken
       );
       const orderId = info.lastInsertRowid;
 
@@ -1682,7 +1820,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
           { storeId: shop.location_id, orderId, items: resItems, channel: SHOP_CHANNEL }, h
         );
       }
-      return { orderId, orderNo, shopCode, shopDate };
+      return { orderId, orderNo, shopCode, shopDate, payToken };
     })();
   } catch (e) {
     console.error('[shop-menu/order]', code, e.message);
@@ -1704,13 +1842,33 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // told to tap anything. That is the pending_accept mistake again — a state
   // the code knows and no screen does. If phantom orders become real, the
   // accept step arrives with a surface a person can see, not as a flag.
-  try { autoPrintOrder(created.orderId); }
-  catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
+  // §50 NARROWS §44 HERE, AND ONLY HERE. A counter order prints now, exactly as
+  // it always has — the customer is walking to the till and the kitchen should
+  // already be making it. AN IN-PAGE WECHAT ORDER DOES NOT: the customer can
+  // submit, close WeChat and never pay, and a ticket printed on submit is food
+  // already made for nobody. Its ticket comes from markOrderPaid() when the
+  // money actually lands.
+  //
+  // NOTHING IS NEEDED IN autoPrintOrder FOR THAT SECOND HALF TO WORK, and the
+  // reason is worth stating because it looks like an omission. Its skip guard
+  // is `source='qr' AND print_status='printed'` — deliberately narrow, per its
+  // own comment. A WeChat order reaches the paid transition having never
+  // printed, so print_status is null, the guard does not fire, and the paid
+  // path prints it once. A WeChat order that is instead settled at the till
+  // behaves the same way for the same reason.
+  if (!wantsWechat) {
+    try { autoPrintOrder(created.orderId); }
+    catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
+  }
 
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(201).json({
     success: true,
     data: {
+      // Present only on the WeChat path. The browser reads its presence as
+      // "go here next" rather than being told separately which path it is on,
+      // so the two cannot disagree.
+      ...(wantsWechat ? { pay_url: `/s/${code}/pay/${created.payToken}` } : {}),
       // The short code is what staff call and what the customer watches for.
       order_code: created.shopCode,
       order_no: created.orderNo,
@@ -1724,6 +1882,200 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       })),
     },
   });
+});
+
+// ─── THE PAYMENT PAGE (§50) ─────────────────────────────────────────────
+//
+// One route, reached only from a placed order, and it renders one of three
+// things: pay now, paid, or pay at the counter.
+//
+// THE COUNTER SCREEN IS THE FALLBACK FOR EVERY FAILURE, and that is the whole
+// safety design of this page. A missing Official Account, a refused code, a
+// WeChat API that is down, a customer who opened the menu from a camera app
+// rather than WeChat's scanner (§50's second ruling), a cancelled payment — all
+// of them land on the same screen telling them to walk to the till, which is
+// the flow that worked before this page existed and still works. There is no
+// state this page can reach where the customer is told nothing.
+//
+// IT SETTLES NOTHING ITSELF. The money is confirmed by WeChat's async notify to
+// routes/retail.js, which settles retail_payments → markOrderPaid → stock,
+// books and the kitchen ticket. What the browser reports back here is used only
+// to choose which screen to show; a customer who claims success they did not
+// have gets a screen, not a paid order.
+function payScreen(req, res, { status, order, main }) {
+  const { vars, fonts } = themeBits();
+  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(status).type('html').send(shell({
+    lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
+    title: brandText(), vars, faces: fontFaces(fonts),
+    body: `<div class="bar">${toggle(lang)}</div>` +
+      `<div class="done">` +
+        `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
+        `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+        main +
+        `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+      `</div>`,
+  }));
+}
+
+// Both of these are LIVE PAIRS, copied rather than composed: `支付成功！` is the
+// web storefront's own payment-received line and `请到收银台付款。` is already
+// on this file's done screen. The customer paying at a counter and the one
+// paying in the web store are the same person (§30).
+const PAID_MAIN =
+  `<div class="done-h">${bi('Payment received!', '支付成功！')}</div>`;
+const COUNTER_MAIN =
+  `<div class="done-h">${bi('Order placed!', '下单成功！')}</div>` +
+  `<div class="done-s">${bi('Pay at the counter.', '请到收银台付款。')}</div>`;
+
+router.get('/s/:shopCode/pay/:token', async (req, res) => {
+  const code = String(req.params.shopCode || '');
+  if (!isShopCode(code)) return notFoundPage(req, res);
+  const shop = resolveShop(code);
+  if (!shop) return notFoundPage(req, res);
+
+  // Same shape the guest pay page validates, so a malformed token never
+  // reaches the database.
+  const token = String(req.params.token || '');
+  if (!/^[a-f0-9]{16,64}$/i.test(token)) return notFoundPage(req, res);
+
+  const order = tdb().prepare(
+    `SELECT id, order_no, status, total, recipient_name, shop_order_code, store_id, source
+       FROM retail_orders WHERE pay_token = ?`
+  ).get(token);
+  // AN ORDER FROM ANOTHER SHOP IS A 404, not an error — the same answer a wrong
+  // shop code gets, for the same reason the menu gives it (this page must not
+  // confirm which guesses hit something real).
+  if (!order || order.store_id !== shop.location_id || order.source !== 'qr') {
+    return notFoundPage(req, res);
+  }
+
+  if (order.status === 'paid') return payScreen(req, res, { status: 200, order, main: PAID_MAIN });
+
+  const counter = () => payScreen(req, res, { status: 200, order, main: COUNTER_MAIN });
+
+  // Anything other than an order still waiting for money — cancelled, refunded,
+  // already in the kitchen — is not payable here. The till can always take it.
+  if (order.status !== 'pending_payment' || !oaReady()) return counter();
+
+  // §50's second ruling, and it is checked BEFORE the redirect rather than
+  // after: a customer who scanned with a phone camera is in Safari or Chrome,
+  // where the authorize URL leads to WeChat's own error page and no further.
+  // They are told to pay at the till, which is where they were always going.
+  if (!inWeChat(req)) return counter();
+
+  // ── leg 1: no code yet, so go and get one ──────────────────────────────
+  // snsapi_base is silent: the customer sees a redirect and comes straight
+  // back, with no consent sheet and nothing to tap.
+  if (!req.query.code) {
+    try {
+      return res.redirect(wechatOa.authorizeUrl({
+        appId: oaPayContext().appId,
+        redirectUri: payReturnUrl(req, code, token),
+        state: payState(token),
+      }));
+    } catch (e) {
+      console.warn('[shop-menu/pay authorize]', order.order_no, e.message);
+      return counter();
+    }
+  }
+
+  // ── leg 2: back from WeChat with a code ────────────────────────────────
+  // The state must recompute from this order's own token. A code arriving
+  // against a state that does not is not one we asked for, and is dropped to
+  // the counter rather than exchanged.
+  if (String(req.query.state || '') !== payState(token)) {
+    console.warn('[shop-menu/pay state]', order.order_no, 'state mismatch');
+    return counter();
+  }
+
+  let params, appId;
+  try {
+    const p = oaPayContext();
+    appId = p.appId;
+    const { openid } = await wechatOa.exchangeCodeForOpenid(req.query.code, {
+      appId: p.appId, appSecret: p.oaAppSecret,
+    });
+    // THE AMOUNT IS READ FROM THE ORDER, never from the page. Same rule the
+    // submit handler states about prices, one step further along: a customer
+    // cannot choose what they are charged.
+    const prepayId = await wechatJsapiPrepare({
+      outTradeNo:  wxOutTradeNo(order.order_no),
+      description: payDescription(order.order_no),
+      amountCents: Math.round(Number(order.total) * 100),
+    }, openid, p);
+    // The callback finds the order by out_trade_no, exactly as every other
+    // WeChat rail stamps it before returning.
+    //
+    // THE TENDER MOVES OFF 'offline' HERE TOO. The submit handler writes
+    // 'offline' as a placeholder because nobody has paid at that point and
+    // staff's Mark-paid would name the real one; a charge signed against the
+    // merchant IS the real one, and leaving the placeholder would file a WeChat
+    // payment under the tender the books use for cash. If this charge is never
+    // completed and the customer pays at the till instead, staff's Mark-paid
+    // overwrites it exactly as it does today.
+    tdb().prepare(
+      "UPDATE retail_payments SET method = 'wechat', out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
+    ).run(wxOutTradeNo(order.order_no), order.id);
+    tdb().prepare(
+      "UPDATE retail_orders SET payment_method = 'wechat' WHERE id = ? AND status = 'pending_payment'"
+    ).run(order.id);
+    params = { appId, ...buildWxPayParams(prepayId, p) };
+  } catch (e) {
+    console.error('[shop-menu/pay prepare]', order.order_no, e.message);
+    return counter();
+  }
+
+  // ── leg 3: hand the signed charge to WeChat's own payment sheet ────────
+  // getBrandWCPayRequest rather than the JS-SDK's chooseWXPay: it needs no
+  // jsapi_ticket, no wx.config and no signature over the page URL, so there is
+  // no ticket cache to keep and nothing that breaks when the URL changes.
+  //
+  // Both screens are rendered now and CSS decides, exactly as the language
+  // halves do. Showing "paid" the instant WeChat says ok — rather than
+  // reloading — is deliberate: the async notify may be a second or two behind,
+  // and a reload could show the customer an unpaid order they have just paid.
+  const paid = `<div class="done" id="payOk" hidden>` +
+    `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
+    `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+    PAID_MAIN +
+    `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    `</div>`;
+
+  const script =
+    // `<` is escaped out of the JSON even though every value in it is
+    // server-made (an appid, a timestamp, a nonce, a base64 signature) and none
+    // could carry one. A </script> inside a script literal ends the element
+    // wherever it appears, and the cost of being wrong about "could never
+    // contain" is the whole page.
+    `(function(){var p=${JSON.stringify(params).replace(/</g, '\\u003c')};` +
+    `var wait=document.getElementById('payWait'),ok=document.getElementById('payOk');` +
+    `var go=function(){WeixinJSBridge.invoke('getBrandWCPayRequest',p,function(r){` +
+    // Anything that is not ok — cancelled, failed, closed — leaves the counter
+    // screen exactly where it already is. The customer is in the shop and the
+    // till works.
+    `if(r&&r.err_msg==='get_brand_wcpay_request:ok'){if(wait)wait.hidden=true;if(ok)ok.hidden=false}})};` +
+    // The bridge is not always there on first paint; WeChat fires this event
+    // when it is. Both orders are handled because either can happen.
+    `if(typeof WeixinJSBridge==='undefined'){` +
+    `document.addEventListener('WeixinJSBridgeReady',go,false)}else{go()}})();`;
+
+  const { vars, fonts } = themeBits();
+  const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(200).type('html').send(shell({
+    lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
+    title: brandText(), vars, faces: fontFaces(fonts),
+    body: `<div class="bar">${toggle(lang)}</div>` +
+      `<div class="done" id="payWait">` +
+        `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
+        `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+        COUNTER_MAIN +
+        `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+      `</div>` + paid +
+      `<script>${script}</script>`,
+  }));
 });
 
 module.exports = router;

@@ -1026,6 +1026,231 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual(r.headers.get('set-cookie'), null, 'the menu set a cookie');
     });
 
+    // ── §50 — in-page WeChat payment ────────────────────────────────────────
+    //
+    // THE FIRST CHECK IS THE ONE THAT MATTERS MOST, and it is the one asserting
+    // that nothing happens: with no Official Account configured — which is
+    // every environment until somebody sets two env vars — this whole feature
+    // is absent from the page and the order path behaves exactly as §44
+    // shipped it. That is what makes it safe to deploy ahead of the
+    // credentials rather than behind a flag somebody has to remember to clear.
+    //
+    // The rest hold §50's two rulings: the ticket follows the payment path, and
+    // every failure lands the customer at the counter rather than nowhere.
+    console.log('\nIn-page WeChat payment (§50)');
+
+    const OA_SAVED = {
+      id: process.env.WECHAT_OA_APP_ID, sec: process.env.WECHAT_OA_APP_SECRET,
+      mp: process.env.WECHAT_APP_ID, mps: process.env.WECHAT_APP_SECRET,
+      mch: process.env.WECHAT_PAY_MCH_ID, key: process.env.WECHAT_PAY_PRIVATE_KEY,
+      serial: process.env.WECHAT_PAY_SERIAL_NO,
+    };
+    // A real key, because buildWxPayParams really signs with it — a stub string
+    // would throw inside crypto and the suite would be proving the catch works
+    // rather than the payment path.
+    const { privateKey: testKey } = require('crypto').generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    const oaOff = () => { delete process.env.WECHAT_OA_APP_ID; delete process.env.WECHAT_OA_APP_SECRET; };
+    const oaOn = () => {
+      process.env.WECHAT_OA_APP_ID = 'wxoa_official_test';
+      process.env.WECHAT_OA_APP_SECRET = 'oa_secret_test';
+      process.env.WECHAT_APP_ID = 'wxmp_miniprogram_test';
+      process.env.WECHAT_APP_SECRET = 'mp_secret_test';
+      process.env.WECHAT_PAY_MCH_ID = '1900000000';
+      process.env.WECHAT_PAY_SERIAL_NO = 'SERIAL';
+      process.env.WECHAT_PAY_PRIVATE_KEY = testKey;
+    };
+    const restoreOa = () => {
+      const put = (k, v) => { if (v == null) delete process.env[k]; else process.env[k] = v; };
+      put('WECHAT_OA_APP_ID', OA_SAVED.id); put('WECHAT_OA_APP_SECRET', OA_SAVED.sec);
+      put('WECHAT_APP_ID', OA_SAVED.mp);    put('WECHAT_APP_SECRET', OA_SAVED.mps);
+      put('WECHAT_PAY_MCH_ID', OA_SAVED.mch); put('WECHAT_PAY_PRIVATE_KEY', OA_SAVED.key);
+      put('WECHAT_PAY_SERIAL_NO', OA_SAVED.serial);
+    };
+
+    // The printer stub again — this section asserts on which submits print, and
+    // the block above restored the real functions.
+    const paySlips = [];
+    feieMod.feieEnabled = () => true;
+    feieMod.printContent = (content, opts) => {
+      paySlips.push({ content: String(content || ''), sn: opts && opts.sn });
+      return Promise.resolve({ ok: true });
+    };
+
+    try {
+      oaOff();
+
+      await checkAsync('WITH NO OFFICIAL ACCOUNT, the page is exactly as §44 shipped it', async () => {
+        const r = await get(`/s/${LIVE}`);
+        assert.strictEqual(r.status, 200);
+        // The BAR's own tag, not the whole page: the basket script always
+        // carries the getAttribute('data-wxpay') that reads it, and matching
+        // the document would find that and prove nothing.
+        const bar = /<div class="cbar"[^>]*>/.exec(r.body);
+        assert.ok(bar, 'the basket bar is not on the page at all');
+        assert.ok(!/data-wxpay/.test(bar[0]), 'the basket advertised a payment rail that is not configured');
+        assert.ok(!/微信支付/.test(r.body), 'a WeChat Pay control reached a shop that cannot take one');
+        assert.ok(!/class="pw"/.test(r.body), 'the payment row rendered with nothing behind it');
+      });
+
+      await checkAsync('...and a submit CLAIMING wechat still prints and gets no pay url', async () => {
+        await resetOrderLimit();
+        paySlips.length = 0;
+        const r = await post(`/s/${LIVE}/order`, {
+          name: 'Mei', pay_method: 'wechat', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+        assert.strictEqual(r.json.data.pay_url, undefined, 'handed out a payment page with no Official Account');
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'the kitchen lost its ticket to a rail that does not exist');
+      });
+
+      oaOn();
+
+      await checkAsync('with one configured, the basket offers both ways to pay', async () => {
+        const r = await get(`/s/${LIVE}`);
+        assert.ok(/data-wxpay="1"/.test(r.body), 'the basket was not told the shop can take WeChat');
+        assert.ok(/微信支付/.test(r.body) && /WeChat Pay/.test(r.body), 'the WeChat control is missing a language');
+        assert.ok(/收银台付款/.test(r.body), 'the counter control is missing');
+      });
+
+      await checkAsync('the user agent still moves nothing — §47 holds with the rail on', async () => {
+        const wechat = await get(`/s/${LIVE}`, { 'user-agent': 'Mozilla/5.0 (iPhone) MicroMessenger/8.0.42 NetType/WIFI Language/zh_CN' });
+        const safari = await get(`/s/${LIVE}`, { 'user-agent': 'Mozilla/5.0 (iPhone) Version/16.6 Mobile/15E148 Safari/604.1' });
+        assert.strictEqual(wechat.body, safari.body, 'the page branched on the browser');
+      });
+
+      let wxOrder = null;
+      await checkAsync('A WECHAT ORDER DOES NOT PRINT ON SUBMIT, and comes back with its payment page', async () => {
+        await resetOrderLimit();
+        paySlips.length = 0;
+        const r = await post(`/s/${LIVE}/order`, {
+          name: 'Wei', pay_method: 'wechat', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+        assert.ok(/^\/s\/[A-Za-z0-9_-]+\/pay\/[a-f0-9]{36}$/.test(r.json.data.pay_url || ''),
+          `pay_url is not a payment page: ${r.json.data.pay_url}`);
+        await settle();
+        // §50: the food is not made until the money is there.
+        assert.strictEqual(paySlips.length, 0, 'a ticket printed for an order nobody has paid for');
+        wxOrder = db.prepare('SELECT id, order_no, pay_token, print_status FROM retail_orders WHERE order_no = ?')
+          .get(r.json.data.order_no);
+        assert.ok(wxOrder.pay_token, 'the order has no handle its payment page could be reached by');
+        assert.strictEqual(wxOrder.print_status, null, 'print_status was stamped without a print');
+      });
+
+      await checkAsync('THE PAID PATH THEN PRINTS IT — once, and without a guard change', async () => {
+        paySlips.length = 0;
+        // The real function the async notify reaches through markOrderPaid. Its
+        // skip guard is source='qr' AND print_status='printed'; this order never
+        // printed, so the guard must not fire.
+        retail.autoPrintOrder(wxOrder.id);
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'a paid WeChat order never reached the kitchen');
+        assert.ok(paySlips[0].content.includes('Wei'), 'the name to call is not on the slip');
+      });
+
+      await checkAsync('a counter order is untouched — prints on submit, no payment page', async () => {
+        await resetOrderLimit();
+        paySlips.length = 0;
+        const r = await post(`/s/${LIVE}/order`, {
+          name: 'Lin', pay_method: 'counter', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+        assert.strictEqual(r.json.data.pay_url, undefined, 'a counter order was sent to a payment page');
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'the counter path stopped printing on submit');
+      });
+
+      await checkAsync('...and so is an order that names no payment method at all', async () => {
+        await resetOrderLimit();
+        paySlips.length = 0;
+        const r = await post(`/s/${LIVE}/order`, { name: 'Yu', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+        assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+        assert.strictEqual(r.json.data.pay_url, undefined);
+        await settle();
+        assert.strictEqual(paySlips.length, 1, 'the default stopped being the counter');
+      });
+
+      const payUrl = `/s/${LIVE}/pay/${wxOrder.pay_token}`;
+
+      // Inside WeChat's browser — the only place the in-page sheet can run.
+      const WX_UA = { 'user-agent': 'Mozilla/5.0 (iPhone) MicroMessenger/8.0.42 NetType/WIFI Language/zh_CN' };
+      const PLAIN_UA = { 'user-agent': 'Mozilla/5.0 (iPhone) Version/16.6 Mobile/15E148 Safari/604.1' };
+
+      await checkAsync('OUTSIDE WECHAT, the customer is sent to the till and not to a broken redirect', async () => {
+        // §50's second ruling. The authorize URL would lead to WeChat's own
+        // error page for this browser, which is the one outcome the payment
+        // page must never produce.
+        const r = await fetch(`http://127.0.0.1:${PORT}${payUrl}`, { redirect: 'manual', headers: PLAIN_UA });
+        assert.strictEqual(r.status, 200, 'a camera-app scan was redirected into WeChat anyway');
+        const body = await r.text();
+        assert.ok(/请到收银台付款。/.test(body), 'a camera-app scan was left with nothing to do');
+      });
+
+      await checkAsync('the payment page sends them to WeChat for an openid, and nowhere else', async () => {
+        const r = await fetch(`http://127.0.0.1:${PORT}${payUrl}`, { redirect: 'manual', headers: WX_UA });
+        assert.strictEqual(r.status, 302, 'the payment page did not hand off to WeChat');
+        const loc = new URL(r.headers.get('location').split('#')[0]);
+        assert.strictEqual(loc.origin + loc.pathname, 'https://open.weixin.qq.com/connect/oauth2/authorize');
+        assert.strictEqual(loc.searchParams.get('appid'), 'wxoa_official_test',
+          'the charge would be signed by one app and paid by another');
+        assert.strictEqual(loc.searchParams.get('scope'), 'snsapi_base', 'a consent sheet for a coffee');
+        assert.ok(loc.searchParams.get('redirect_uri').endsWith(payUrl), 'WeChat would return to the wrong page');
+        assert.ok(r.headers.get('location').endsWith('#wechat_redirect'), 'WeChat renders a blank page without this');
+      });
+
+      await checkAsync('A FORGED STATE IS NEVER EXCHANGED — it lands at the counter', async () => {
+        // If this reached the exchange it would call WeChat; fetch is left alone
+        // and the assertion is that no call is needed to answer.
+        const r = await get(`${payUrl}?code=somecode&state=notthestate`, WX_UA);
+        assert.strictEqual(r.status, 200);
+        assert.ok(/请到收银台付款。/.test(r.body), 'a forged state did not fall back to the till');
+        assert.ok(!/getBrandWCPayRequest/.test(r.body), 'a forged state reached the payment sheet');
+      });
+
+      await checkAsync('another shop cannot open this order\'s payment page', async () => {
+        const r = await get(`/s/${CODES[LOC_EMPTY]}/pay/${wxOrder.pay_token}`);
+        assert.strictEqual(r.status, 404, 'one shop opened another shop\'s order');
+      });
+
+      await checkAsync('a malformed token is the same 404 as a wrong code', async () => {
+        assert.strictEqual((await get(`/s/${LIVE}/pay/not-a-token`)).status, 404);
+        assert.strictEqual((await get(`/s/${LIVE}/pay/${'a'.repeat(80)}`)).status, 404);
+      });
+
+      await checkAsync('once it is paid, the page says so and stops asking for money', async () => {
+        db.prepare("UPDATE retail_orders SET status = 'paid' WHERE id = ?").run(wxOrder.id);
+        const r = await get(payUrl);
+        assert.strictEqual(r.status, 200);
+        assert.ok(/支付成功！/.test(r.body) && /Payment received!/.test(r.body), 'a paid order was not told it is paid');
+        assert.ok(!/getBrandWCPayRequest/.test(r.body), 'a paid order was offered the payment sheet again');
+        db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(wxOrder.id);
+      });
+
+      await checkAsync('an order that is no longer payable falls back rather than erroring', async () => {
+        db.prepare("UPDATE retail_orders SET status = 'cancelled' WHERE id = ?").run(wxOrder.id);
+        const r = await get(payUrl);
+        assert.strictEqual(r.status, 200, 'a cancelled order threw instead of answering');
+        assert.ok(/请到收银台付款。/.test(r.body), 'a cancelled order left the customer with nothing');
+      });
+
+      await checkAsync('and with the Official Account withdrawn, the page still answers', async () => {
+        db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(wxOrder.id);
+        oaOff();
+        const r = await get(payUrl);
+        assert.strictEqual(r.status, 200);
+        assert.ok(/请到收银台付款。/.test(r.body), 'pulling the credentials stranded a live payment page');
+      });
+    } finally {
+      restoreOa();
+      feieMod.printContent = realPrint;
+      feieMod.feieEnabled = realEnabled;
+    }
+
   } finally {
     server.close();
     restoreConfig();
