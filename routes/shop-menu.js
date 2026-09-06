@@ -402,15 +402,19 @@ img{display:block;max-width:100%}
    because the photo is the biggest tap target on the card and the thumb is
    already there. Square, ink-bordered, lime — the same three moves the rest of
    this page makes, so it reads as part of the shop rather than as a widget. */
-/* Anchored on .ph, which is already position:relative for the sold-out bar —
-   the button sits inside that frame, so it needs no positioning context of its
-   own. A sold-out card has the bar and no button, so the two never collide. */
-.it .add{position:absolute;right:6px;bottom:6px;width:34px;height:34px;
+/* The price row: price on the left, add on the right, baselines apart because
+   the button is a box and the price is type. A sold-out card has no button, so
+   the row is the price alone and needs no separate rule. */
+.pf{display:flex;align-items:center;justify-content:space-between;gap:8px}
+/* INK GROUND, LIME GLYPH — the mini app's own add control, not a new one. The
+   page already borrows that shop's colours through the theme, so this borrows
+   its shape too and a customer meets one button in two places. */
+.add{flex:none;width:36px;height:36px;
   display:flex;align-items:center;justify-content:center;
-  border:2px solid var(--ink);background:var(--lime);color:var(--ink);
-  font-family:var(--f-bear);font-size:20px;line-height:1;cursor:pointer;
+  border:0;background:var(--ink);color:var(--lime);
+  font-family:var(--f-bear);font-size:22px;line-height:1;cursor:pointer;
   padding:0;-webkit-tap-highlight-color:transparent}
-.it .add:active{transform:translateY(1px)}
+.add:active{transform:translateY(1px)}
 
 /* The bar clears the phone's home indicator; without the inset the tap target
    sits under it on every iPhone since the X. */
@@ -532,7 +536,8 @@ img{display:block;max-width:100%}
   text-align:center;padding:5px 0}
 .t{font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
   overflow-wrap:anywhere}
-.pr{font-family:var(--f-bear);font-size:19px;line-height:1;margin-top:7px;
+.pf{margin-top:7px}
+.pr{font-family:var(--f-bear);font-size:19px;line-height:1;
   font-variant-numeric:tabular-nums}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
@@ -796,6 +801,11 @@ router.get('/s/:shopCode', (req, res) => {
     // a tap that has to be refused — the availability is re-checked at submit
     // anyway (§47), so this is the honest half of the same answer, not the
     // whole of it.
+    // THE ADD BUTTON SITS BESIDE THE PRICE, NOT ON THE PHOTO. It was on the
+    // photo's corner first, and that was wrong twice over: it covered the
+    // product it was offering to add, and it is not where this shop's own
+    // customers already look for it — the mini app puts it on the price row,
+    // and a customer who knows the app should not have to learn a second place.
     const add = it.sold_out ? '' :
       `<button type="button" class="add" data-add="${it.store_product_id}"` +
       ` data-p="${esc(String(Number(it.price) || 0))}"` +
@@ -804,10 +814,9 @@ router.get('/s/:shopCode', (req, res) => {
     return `<div class="it${it.sold_out ? ' out' : ''}">` +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
-      add +
       `</div>` +
       `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
-      `<div class="pr">${esc(money(it.price, cur))}</div>` +
+      `<div class="pf"><div class="pr">${esc(money(it.price, cur))}</div>${add}</div>` +
       `</div>`;
   };
 
