@@ -1118,3 +1118,61 @@ The cart on `/s/:shopCode` (§44, step 5b part 4). **Almost all of it is COPIED,
 **Ash should correct either if it reads wrong to a Chinese operator; nothing depends on the exact phrasing.**
 
 **WHAT CARRIES NO STRING AT ALL, and it is the larger half of this section.** The add control is `+`, the quantity controls are `−` and `+`, the close control is `×`, and the placed order shows a numeral and a name with no label over either. Every one of those was a candidate for a label and every one reads better without: a numeral in double-width beside a customer's own name needs no word, and on a phone in a queue a word is a thing to read rather than a thing to act on. Rule 4 is not the only reason to mint fewer strings.
+
+## The About page editor (2026-09-06)
+
+The desktop editor at retail-admin → About page, opened by audit D-04. Register:
+OPERATOR (Rule 1) — every string here is read by a merchant editing their own
+shop, never by a customer.
+
+**THE SECTION EXISTS BECAUSE THE EDITOR STOPPED SUPPLYING ITS OWN CHINESE.**
+Until this commit the form arrived pre-filled with the first tenant's About
+page — the manifesto, the founder's quote, the in/out list, all of it bilingual
+— and a merchant who pressed Save wrote that copy into their own shop. Removing
+it emptied the form, and an empty form needs two controls it never needed while
+it came full: a way to add a stat row, and a note saying what an empty strip
+does. Those two are the whole of what is minted here. Everything else the
+screen says was already live and is listed below as copied, because the useful
+fact about a nine-string change is that seven of the strings are not new.
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| `chooseImage` | Choose image… | 选择图片… | LIVE — this editor's founder-photo control |
+| `remove` | Remove | 移除 | LIVE — this editor's founder-photo control |
+| `noImage` | No image | 暂无图片 | LIVE — `05-marketing.js`, `09-products.js` |
+| `image` | Image | 图片 | LIVE — this editor's own upload messages |
+| `loadFailed` | Could not load — reload the page | 加载失败 — 请刷新页面 | LIFTED whole from `public/app.html`'s "成本公式加载失败 — reload the page · 请刷新页面", fragments and separator unchanged |
+| `addStat` | + Add stat | 添加数据项 | **COMPOSED** under Rule 4's standing delegation |
+| `statStripEmpty` | (help) The strip is hidden while empty | 留空则隐藏数据条。 | **COMPOSED** under Rule 4's standing delegation |
+
+**`addStat` — the live candidate was rejected on shape, and it is worth
+recording which.** Its two siblings in this same block are `+ Add IN item ·
+添加「是」项` and `+ Add OUT item · 添加「否」项`, and the obvious move was to
+follow them literally into `添加数据条项`. That reads badly: `数据条` is the
+strip, so the literal form says *add a stat-STRIP item* and stacks three nouns
+to do it. The bracket in the live pair carries a one-character value — 是, 否 —
+and there is no such value for a stat. `添加数据项` keeps the live verb and the
+live `项`, drops the borrowed bracket, and says *add a data item*, which is what
+the button does. An earlier draft of this branch shipped `添加数据条项`; it is
+recorded here rather than quietly replaced, because the rejected form is the
+more useful half of the note.
+
+**`statStripEmpty` is the live pattern with one noun swapped.** This block
+already carries `Leave blank to hide the Chinese paragraph. · 留空则隐藏中文
+段落。`, so `留空则隐藏数据条。` is that sentence about this control, full stop
+included. It is marked composed rather than copied because the noun moved, and
+a swapped noun is a new string however small the edit.
+
+**Ash should correct either if it reads wrong; nothing depends on the exact
+phrasing and both sit on controls whose meaning is clear without them.**
+
+**WHAT DELIBERATELY CARRIES NO NEW STRING.** The hero image's help text is
+English only, matching the founder photo's help text six lines below it, which
+has always been English only — one bilingual help line beside one English one
+would read as an oversight in whichever language it was missing. The four
+placeholders removed by this change (`We exist to make…`, `我们存在的意义…`,
+`From soil to soul.`, `从土壤到灵魂`) are NOT replaced by composed neutral
+equivalents: each field already carries a label naming it, and a placeholder
+that has to be invented for a field the label already names is a string minted
+to fill a gap that was not there. Rule 4's delegation is permission to compose
+where a string is needed, not a reason to need one.

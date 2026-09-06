@@ -9597,11 +9597,12 @@
             </thead>
             <tbody id="about-stats-tbody"></tbody>
           </table>
-          <!-- §30: 添加…项 and 留空则隐藏… are both lifted from this editor's own
-               live strings ("添加「是」项" below, "留空则隐藏中文段落。" above),
-               with 数据条 taken from this block's own summary. Nothing composed
-               from scratch; flagged here for Ash all the same. -->
-          <button type="button" class="btn btn-sm" id="about-stats-add" onclick="aboutAddStat()">+ Add stat · 添加数据条项</button>
+          <!-- Both CN halves here are COMPOSED, under Rule 4's standing
+               delegation (docs/tacet-delivery-vocabulary.md v1.19), and both are
+               declared in that document's own section in this commit — see
+               "The About page editor". Composing is delegated; composing
+               silently is not. -->
+          <button type="button" class="btn btn-sm" id="about-stats-add" onclick="aboutAddStat()">+ Add stat · 添加数据项</button>
           <span class="ab-help">The strip is hidden from customers while it is empty. Four cells is the most the page shows. · 留空则隐藏数据条。</span>
         </div>
       </details>
