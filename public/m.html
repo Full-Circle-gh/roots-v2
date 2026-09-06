@@ -11831,10 +11831,12 @@ async function loadLive(){
       // NO LOCAL FALLBACK. rev/ord is precisely the wrong answer, so a server
       // that sends no `aov` gets a dash rather than a confident lie.
       //
-      // The server sends no baseline for average order value, so this tile has
-      // nothing to compare against and says nothing — rather than printing a
-      // comparison label with no comparison under it.
-      [['Avg. order','客单价'], k.aov!=null ? money(CUR, Number(k.aov)) : (CUR||'¥')+'—', null],
+      // `baseline.aov` is total storefront revenue over total storefront
+      // orders across the same trailing weekdays — the same population as
+      // kpi.aov — never baseline.revenue (blended) / baseline.orders
+      // (storefront-only), which would reintroduce the exact fault above one
+      // level down.
+      [['Avg. order','客单价'], k.aov!=null ? money(CUR, Number(k.aov)) : (CUR||'¥')+'—', deltaText(k.aov, b.aov, bl)],
       [['New customers','新客'], String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // The desktop's Today strip carries a fifth figure and its Customers card

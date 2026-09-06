@@ -13868,7 +13868,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       .reduce((s, h) => s + Number((byBucket[h] || {}).revenue || 0), 0);
 
     const days = cand.length;
-    let sumRev = 0, sumOrd = 0, sumNew = 0;
+    let sumRev = 0, sumOrd = 0, sumNew = 0, sumStorefrontRev = 0;
     // Each same-weekday's own takings, not just their total. The loop already
     // pays for these queries to build the average, so keeping the individual
     // numbers costs nothing — and it is the only way to answer "is today the
@@ -13879,6 +13879,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const k = clip ? tdb().prepare(kpiSqlClip).get(d, d, nowHms)
                      : tdb().prepare(kpiSql).get(d, d);
       sumOrd += Number(k.orders || 0);
+      // Storefront-only revenue, same population as sumOrd (and as kpi.aov's
+      // own numerator via NOTGZ above) — kept separate from the blended `rev`
+      // below so a baseline AOV can divide like-for-like, never top-up/gzgrocery
+      // money by a storefront order count.
+      sumStorefrontRev += Number(k.revenue || 0);
       sumNew += clip ? tdb().prepare(newCustSqlClip).get(d, d, nowHms).n
                      : tdb().prepare(newCustSql).get(d, d).n;
       // Blend gzgrocery pickup takings and top-up cash into each baseline day,
@@ -13898,6 +13903,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const avg = days > 0 ? sum / days : 0;
       return { avg, delta: days > 0 ? pctOf(cur, avg) : null };
     };
+    // AOV's own average isn't a per-day mean divided by `days` like the other
+    // three — it's total storefront revenue over total storefront orders across
+    // the baseline window (weighted by each day's order volume), which is the
+    // same shape as kpi.aov itself. Never sumRev (blended) / sumOrd: that
+    // divides top-up and gzgrocery money by an order count that never counted
+    // them, and reproduces the exact inflation this field exists to avoid.
+    const aovAvg = sumOrd > 0 ? sumStorefrontRev / sumOrd : 0;
     baseline = {
       days,
       // 0–6, Sunday first. Sent as an index, never a word: the client owns the
@@ -13912,6 +13924,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       revenue:       mk(kpi.revenue, sumRev),
       orders:        mk(kpi.orders,  sumOrd),
       new_customers: mk(newCust,     sumNew),
+      aov:           { avg: aovAvg, delta: (days > 0 && aovAvg > 0) ? pctOf(kpi.aov, aovAvg) : null },
       // Is today outright ahead of EVERY same weekday behind it? Strictly
       // greater, so a tie is not a record, and null rather than false when
       // there are too few days to make the claim mean anything — one prior
