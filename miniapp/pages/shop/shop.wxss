@@ -311,7 +311,7 @@
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em; font-weight: 700;
 }
 .card .name { font-size: calc(28rpx * var(--font-scale)); margin-top: 18rpx; line-height: 1.2; }
-.card .price { font-size: calc(32rpx * var(--font-scale)); margin-top: 4rpx; color: var(--ink); letter-spacing: 0.04em; }
+.card .price { font-size: calc(26rpx * var(--font-scale)); margin-top: 4rpx; color: var(--ink); letter-spacing: 0.04em; }
 .card .price.is-flash { color: #E96174; font-weight: 700; }
 .card .price-stack { display: flex; align-items: baseline; gap: 8rpx; margin-top: 4rpx; }
 .card .price-stack .price { margin-top: 0; }
