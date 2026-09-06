@@ -32,8 +32,9 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const CMS = fs.readFileSync(path.join(ROOT, 'public', 'cms.html'), 'utf8');
-const CORE = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const CMS = read('public/cms.html');
+const CORE = read('public/retail-admin/01-core.js');
 
 let pass = 0; let fail = 0;
 const ok = (m) => { pass++; console.log('  ✓ ' + m); };
@@ -159,6 +160,58 @@ section('5 · what still says ¥, and why that is allowed');
     'the block seed copy is still there, unchanged and pinned as a known D-04 item');
   yes(/Spend \(¥\)/.test(CMS) || /total ¥ across paid orders/.test(CMS),
     'and so is the editor prose that talks about money rather than showing it');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section('6 · the public storefront preview, which is the same defect on a public page');
+
+/* public/storefront.html renders the LIVE layout in a phone frame for any
+   visitor, with no auth. /api/retail is wrapped in publicTenantScope
+   (server.js:414), which resolves the tenant from tenant_domains — so served on
+   a merchant's own domain it shows THEIR storefront, and printed their prices
+   in yuan whatever they sell in. Their own stakeholders were the audience.
+
+   It needs no defensive normalisation: /api/retail/config normalises the
+   currency before responding, unlike the admin endpoint. So this page is a
+   plain consumer, and its helper is shop.html's money() verbatim — that page
+   renders what this page previews, and a second spelling of the same
+   formatting would be a way for the two to disagree. */
+{
+  const SF = read('public/storefront.html');
+  const offenders = SF.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => l.includes('¥') && /¥\s*\$\{|\$\{[^}]*\}\s*¥|toFixed[^\n]*¥|¥[^\n]*toFixed/.test(l));
+  is(offenders.length, 0, 'no price is drawn beside a hardcoded ¥');
+  for (const [n, l] of offenders.slice(0, 6)) console.log(`      storefront.html:${n}  ${l.trim().slice(0, 90)}`);
+
+  yes(/function money\(n\) \{/.test(SF), 'it has the same money() helper shop.html has');
+  yes(/state\.config && state\.config\.currency/.test(SF),
+    '…reading the currency the storefront endpoint already normalised');
+
+  /* THE TWO MUST NOT DRIFT. This page previews what shop.html renders, so a
+     difference in decimals or symbol position would show the operator one
+     thing and the customer another. */
+  const grab = (src) => {
+    const a = src.indexOf('function money(n)');
+    return src.slice(a, src.indexOf('\n}', a) + 2).replace(/\s+/g, ' ').trim();
+  };
+  /* Not sliced out: shop.html's money() opens with `||{}`, so a naive
+     brace-match truncates at the first `}` and tests nothing. The property is
+     what matters, so it is asserted against the file. */
+  const shop = read('public/shop.html');
+  yes(/c\.position\s*===\s*'after'/.test(shop), 'shop.html still honours symbol position');
+  yes(grab(SF).includes("c.position === 'after'"), '…and so does the preview');
+  yes(/c\.decimals != null \? c\.decimals : 2/.test(SF), 'the preview defaults to 2dp exactly as shop.html does');
+}
+
+/* D-04 on the same page: its own chrome named the first tenant, above a
+   merchant's storefront, on a public host-scoped URL. */
+{
+  const SF = read('public/storefront.html');
+  is(/Roots/.test(SF), false, 'the preview no longer hardcodes the first tenant anywhere');
+  yes(/wordmark_text/.test(SF), '…it reads the shop\'s own wordmark instead');
+  yes(/id="brandName"/.test(SF) && /id="brandMark"/.test(SF),
+    'with the mark and the name both filled from it');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
