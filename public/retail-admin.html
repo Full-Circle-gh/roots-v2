@@ -10849,6 +10849,28 @@
               <div class="muted" style="font-size:13px">Loading stores…</div>
             </div>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
+            <div class="field-label">Kitchen printer · 厨房打印机</div>
+            <div class="muted" style="font-size:12px;margin-bottom:10px">The kitchen prints its own request slip when a job lands in the production queue — the paper copy of the notification, for a room where nobody is watching a phone. Leave the SN blank if the kitchen has no printer. · 制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。</div>
+            <div style="display:grid;grid-template-columns:2fr 1.6fr 0.8fr;gap:10px;align-items:end;margin-bottom:14px">
+              <div>
+                <label for="feie-kitchen-sn" class="field-label" style="font-size:10px">Printer SN · 编号</label>
+                <input type="text" id="feie-kitchen-sn" style="font-family:monospace" data-ph-en="e.g. 550540977" data-ph-cn="例如 550540977" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label for="feie-kitchen-when" class="field-label" style="font-size:10px">When it prints · 何时打印</label>
+                <select id="feie-kitchen-when">
+                  <option value="sent">When a request arrives · 请求到达时</option>
+                  <option value="prepared">When the kitchen marks it made · 标记完成时</option>
+                  <option value="both">Both · 两者都打印</option>
+                  <option value="off">Never — notification only · 不打印,仅通知</option>
+                </select>
+              </div>
+              <div>
+                <label for="feie-kitchen-copies" class="field-label" style="font-size:10px">Copies · 份数</label>
+                <input type="number" id="feie-kitchen-copies" min="1" max="5" value="1">
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
             <div class="muted" style="font-size:12px;margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</div>
             <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:14px">

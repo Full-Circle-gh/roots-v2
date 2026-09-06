@@ -4021,6 +4021,24 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           ? '<button class="rc-big"' + (kq.busy ? ' disabled' : ' data-kqnext="' + next + '"') + '>' +
               (kq.busy ? t('Saving…', '保存中…') : label) + '</button>'
           : '<button class="rc-big" data-kqlist>' + t('Done', '完成') + '</button>') +
+        // PAPER RUNS OUT, AND THAT IS NOT A REASON TO LOSE A JOB. The slip
+        // prints by itself when the request arrives; the one certainty about a
+        // thermal printer in a kitchen is that some morning it is out of paper
+        // or switched off. Shown only when a slip was actually owed and failed
+        // — a request whose print_status is NULL was never printing (no printer
+        // configured, or the tenant prints nothing), and offering a reprint
+        // there would promise a device that does not exist.
+        (o.print_status
+          ? '<div style="padding:0 16px 8px">' +
+              '<button class="rc-flat" style="width:100%;border:none;font:inherit;cursor:pointer"' +
+              (kq.printing ? ' disabled' : ' data-kqprint="' + o.id + '"') + '>' +
+              (kq.printing ? t('Printing…', '打印中…')
+                : o.print_status === 'failed'
+                  ? t('The slip did not print — print it again', '制作单未打印成功 — 重新打印')
+                  : t('Print the slip again', '重新打印制作单')) + '</button>' +
+              (kq.printErr ? '<div class="rc-err">' + esc(kq.printErr) + '</div>' : '') +
+            '</div>'
+          : '') +
         '</div></div></div>';
   }
 
@@ -4044,6 +4062,35 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     each('[data-kqnext]', function (b) {
       b.onclick = function () { kqAdvance(b.getAttribute('data-kqnext')); };
     });
+    each('[data-kqprint]', function (b) {
+      b.onclick = function () { kqReprint(parseInt(b.getAttribute('data-kqprint'), 10)); };
+    });
+  }
+
+  /* Ask the kitchen printer for this slip again. Says what happened either way:
+     a reprint that silently does nothing is indistinguishable from a printer
+     that is still off, which is the state the operator pressed the button to
+     get out of. The route forces the print past printer.kitchen_print_on — a
+     tenant that prints nothing automatically has not said the kitchen may
+     never reprint — but it cannot conjure a printer that is not configured,
+     and says so. */
+  function kqReprint(id) {
+    if (!id || kq.printing) return;
+    kq.printing = true; kq.printErr = ''; kqRender();
+    rcFetch('/api/restock/' + id + '/reprint', { method: 'POST' })
+      .then(function () {
+        kq.printing = false;
+        if (kq.order) kq.order.print_status = 'printed';
+        kqRender();
+      })
+      .catch(function () {
+        // Every failure reads the same to the person standing at the printer,
+        // and the two things worth checking are the two things they can check.
+        kq.printing = false;
+        kq.printErr = t('The printer did not take it. Check it is on and has paper.',
+                        '打印机未接收。请检查电源与纸张。');
+        kqRender();
+      });
   }
 
   /* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
