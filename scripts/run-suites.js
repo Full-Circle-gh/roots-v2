@@ -221,9 +221,46 @@ function run(entry) {
   };
 }
 
-// The last few lines of a failure, which is where these suites put their tally.
+/* WHAT A FAILING SUITE GETS TO SAY HERE.
+ *
+ * This was the last 14 lines and nothing else, on the reasoning that "these
+ * suites put their tally there". That holds for a suite that prints a summary
+ * block at the end. It does not hold for one that prints `✗` INLINE as it goes
+ * and then a bare count — and on 2026-09-06 that cost a real diagnosis:
+ * test_mobile_home.js failed its 10th case of 26, the runner kept twelve later
+ * `✓` lines and `1 of 26 home cases failed.`, and the one line naming the
+ * failing case was discarded. The job log was the only copy and it had already
+ * thrown it away, so the failure could not be read from CI at all.
+ *
+ * So the failing lines are lifted out of the WHOLE output first, wherever they
+ * fall, and the tail follows for the tally and context. A suite that fails
+ * late prints much as it did before, because the lifted lines are already in
+ * the tail and are not repeated; one that fails early now says which case.
+ *
+ * The cap on lifted lines exists because a suite with 300 failing assertions
+ * would otherwise bury every other suite in the run. When it bites, the count
+ * says so rather than trimming silently. */
+const FAIL_MARK = /^\s*(✗|✘|×|FAIL\b|not ok\b|AssertionError\b)/;
+const MAX_LIFTED = 12;
+
 function tail(out, n = 14) {
-  return String(out).trimEnd().split('\n').slice(-n).map((l) => '      ' + l).join('\n');
+  const lines = String(out).trimEnd().split('\n');
+  const indent = (l) => '      ' + l;
+  const last = lines.slice(-n);
+  const lastSet = new Set(last);
+
+  // Failing lines the tail would not already show, in the order they happened.
+  const lifted = lines.filter((l) => FAIL_MARK.test(l) && !lastSet.has(l));
+  const shown = lifted.slice(0, MAX_LIFTED);
+  const head = shown.length
+    ? shown.map(indent).concat(
+      lifted.length > shown.length
+        ? [indent(`… and ${lifted.length - shown.length} more failing line(s) above the tail`)]
+        : [],
+    ).concat([indent('      ⋮')])
+    : [];
+
+  return head.concat(last.map(indent)).join('\n');
 }
 
 function main() {
@@ -288,4 +325,11 @@ function main() {
   if (broke.length) process.exit(1);
 }
 
-main();
+/* Run when invoked, importable when required. scripts/test_run_suites.js
+   exercises tail() against the real function rather than a copy of it — a test
+   that validates its own copy proves nothing about the code that ships, and the
+   two drift the first time either is edited. Without this guard, requiring this
+   file would run the entire suite as a side effect. */
+if (require.main === module) main();
+
+module.exports = { tail, FAIL_MARK, SLOW, QUARANTINE };
