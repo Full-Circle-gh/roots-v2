@@ -1099,9 +1099,12 @@ function ordRenderKpis() {
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
   dashCountUp($('#ord-kpi-rev'), revenue, n => acMoneyCompact(n));
-  // No orders means no average — which is ¥0, not an unreadable dash. A money
-  // tile carries a number.
-  $('#ord-kpi-aov').textContent = acMoneyCompact(orders ? revenue / orders : 0);
+  // The server's own `aov` — AVG over storefront order totals — never
+  // revenue/orders. Revenue is blended with wallet top-up cash and gzgrocery
+  // takings that never become an order, so dividing it by the order count
+  // charges every yuan of that money to a handful of orders (the fault
+  // m.html's Avg. order tile was fixed for; see its comment there).
+  $('#ord-kpi-aov').textContent = acMoneyCompact(Number(k.aov || 0));
   ordRepaintKpiLabels();   // deltas (language-aware)
 }
 // The Orders strip's own delta badge. Same states, same arithmetic and the same
@@ -1170,13 +1173,20 @@ function ordRepaintKpiLabels() {
   ordSetDelta('#ord-kpi-rev-d',    revenue, revAvg, days,
     () => (b && b.revenue && b.revenue.delta != null ? b.revenue.delta : pct(revenue, revAvg)), '%',
     money, perDay);
-  // A typical day's order value. Not on the wire, but exact from what is: both
-  // averages divide by the same `days`, so revenue.avg / orders.avg is the real
-  // 7-day AOV, not an approximation of it.
-  const aov    = orders  ? revenue / orders  : 0;
-  const aovAvg = ordAvg  ? revAvg  / ordAvg  : 0;
-  ordSetDelta('#ord-kpi-aov-d',    aov,     aovAvg, days, pct, '%',
-    money, cuT('order', '单'));
+  // No local rev/ord fallback and no baseline comparison for AOV — the same
+  // ruling already applied to m.html's Avg. order tile. baseline.revenue is
+  // blended with top-up cash and gzgrocery takings while baseline.orders
+  // counts storefront orders only, so revenue.avg / orders.avg is not a
+  // like-for-like AOV baseline — it carries the exact top-up inflation this
+  // tile exists to avoid. The server sends no baseline for AOV, so the badge
+  // says nothing rather than a confident lie.
+  const aovEl = $('#ord-kpi-aov-d');
+  if (aovEl) {
+    aovEl.classList.remove('is-up', 'is-down', 'is-flat');
+    aovEl.classList.add('is-flat');
+    aovEl.textContent = '—';
+    ttSet(aovEl, cuT('no comparable baseline', '暂无可比基准'));
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
