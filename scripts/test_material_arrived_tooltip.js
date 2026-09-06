@@ -161,8 +161,19 @@ ok('BEHAVIOURAL', 'both cells carry the identical string',
 console.log('\nSOURCE — 16-purchasing.js and tacet-delivery-vocabulary.md');
 
 const SOURCE_CHECKS = [
+  // WAS 'the doc is at v1.18', anchored on '**v1.18 · 2026-09-04'. Changed
+  // 2026-09-06, and named here rather than silently re-pinned: that check read
+  // the leading '**' of the banner, which by this document's own convention
+  // marks the HEAD version only — so the next amendment to that file was always
+  // going to break it, and v1.19 is the one that did. Nothing about the twelfth
+  // amendment moved; its banner entry is intact, one bump down.
+  //
+  // What this suite actually needs is that ITS OWN entry survived, so that is
+  // what it now asserts. The '·' and the date stay in the anchor: they are what
+  // make it this entry rather than any mention of the version.
   { file: 'docs/tacet-delivery-vocabulary.md', src: () => DOC_SRC,
-    name: 'the doc is at v1.18', anchor: '**v1.18 · 2026-09-04', present: true },
+    name: "the twelfth amendment's own banner entry is still on record",
+    anchor: 'v1.18 · 2026-09-04 · adds a TWELFTH amendment section', present: true },
   { file: 'docs/tacet-delivery-vocabulary.md', src: () => DOC_SRC,
     name: 'the twelfth amendment section exists and is LOCKED',
     anchor: "## What a material line's Arrived box does — receiving (LOCKED 2026-09-04)", present: true },

@@ -233,6 +233,33 @@ function ordIsReadonlyChannel(o) {
 // collapse anything over 6 digits to prefix + last 6 (MT256422). A hyphen
 // separator (GZ-138616) is dropped so the column doesn't line-break at the
 // dash. Full number still shows in the drawer and on hover.
+// THE NUMBER A SHOP CALLS ACROSS ITS COUNTER — §49. A QR order carries a plain
+// daily number (1, 2, 3 … back to 1 tomorrow); every other order carries none,
+// so this renders nothing at all for them and no existing row changes.
+//
+// IT IS NOT UNIQUE and §49 forbids showing it alone: two shops both call 14 on
+// the same afternoon. Both callers below sit beside the shop and the date — the
+// list row has a Store column and a Placed column, the drawer has both in its
+// head — which is what makes the number readable rather than ambiguous.
+//
+// THE LABEL IS `Pick-up number · 取餐号`, composed under Rule 4's standing
+// delegation (docs/tacet-delivery-vocabulary.md v1.19, Ash 2026-09-06) and
+// declared there rather than only here. Two live candidates were considered and
+// rejected: 序号 is a SKU counter, and 取餐 is a rider's pickup verb in
+// lib/tracking.js's courier stages.
+//
+// IT IS A TOOLTIP IN THE LIST AND A VISIBLE WORD IN THE DRAWER, which is one
+// string in two registers rather than two strings. The list is a dense table
+// where an operator scanning for "seven" wants the numeral and nothing else;
+// the drawer has room, and is where somebody meeting the chip for the first
+// time goes to find out what it is.
+function ordShopCode(o, withLabel) {
+  const n = o && o.shop_order_code;
+  if (n == null || n === '') return '';
+  const label = cuT('Pick-up number', '取餐号');
+  return `<span class="ord-shopno" title="${escapeHtml(label)}">${escapeHtml(String(n))}</span>` +
+    (withLabel ? `<span class="ord-shopno-lbl">${escapeHtml(label)}</span>` : '');
+}
 function ordShortNo(no) {
   const s = String(no || '');
   const m = s.match(/^([A-Za-z]+)[-·\s]?(\d+)$/);
@@ -1635,7 +1662,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-sel">${ro ? '' : `<input type="checkbox" class="ord-sel" data-id="${o.id}"${ORD_SELECTED.has(o.id) ? ' checked' : ''}
              onclick="ordToggleSelect(${o.id}, event)"
              aria-label="Select order ${escapeHtml(ordShortNo(o.order_no))}">`}</td>
-        <td class="oc-ord"><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
+        <td class="oc-ord">${ordShopCode(o)}<span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -6398,7 +6425,7 @@ function renderOpenOrder(o) {
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div class="title-row">
-            <b>${escapeHtml(o.order_no)}</b>
+            ${ordShopCode(o, true)}<b>${escapeHtml(o.order_no)}</b>
             ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
           </div>
           ${headActions ? `<div class="transitions od-head-tx">${headActions}</div>` : ''}
