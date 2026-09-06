@@ -523,6 +523,50 @@ function boxOf(text) {
       assert.strictEqual(m.sheet, true, 'an empty basket sheet stayed open over the menu');
     });
 
+    await check('the basket header shows the × and nothing else', async () => {
+      // Reported from a phone: a stray "Cancel" box beside the ×. bi() had been
+      // dropped into an aria-label, which closed the attribute and spilled its
+      // markup into the header. Measured on screen, because the page still
+      // parsed and the server-side check alone would not show what a customer
+      // actually saw.
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      const head = await page.evaluate(() => {
+        const h = document.querySelector('.sheet-h');
+        const strays = Array.from(h.childNodes)
+          .filter(n => n.nodeType === 3 && n.textContent.trim())
+          .map(n => n.textContent.trim());
+        return { text: h.innerText.replace(/\s+/g, ' ').trim(), strays };
+      });
+      assert.deepStrictEqual(head.strays, [], `loose text in the sheet header: ${JSON.stringify(head.strays)}`);
+      assert.ok(!/Cancel|取消/.test(head.text),
+        `the close button's label is being drawn, not just read: ${JSON.stringify(head.text)}`);
+    });
+
+    await check('the name field wears the shop\'s focus ring, not the browser\'s', async () => {
+      // Reported from a phone as an orange frame. Left alone the WeChat/Android
+      // web view paints its own; this asserts the page draws one, so the
+      // default can never be what the customer sees.
+      const ring = await page.evaluate(() => {
+        const el = document.getElementById('cName');
+        el.focus();
+        const cs = getComputedStyle(el);
+        return { style: cs.outlineStyle, width: cs.outlineWidth, colour: cs.outlineColor,
+                 border: cs.borderTopColor, focused: document.activeElement === el };
+      });
+      assert.ok(ring.focused, 'the field did not take focus');
+      assert.notStrictEqual(ring.style, 'none', 'the page draws no focus ring, so the browser draws its own');
+      assert.ok(parseFloat(ring.width) > 0, `the focus ring has no width: ${ring.width}`);
+      // Ours is the tenant's ink — the same token the border uses.
+      assert.strictEqual(ring.colour, ring.border,
+        `the focus ring is not the field's own ink: ${ring.colour} vs ${ring.border}`);
+      // Hand the next check a clean page. These two opened the sheet and left a
+      // line in the basket; the basket lives in memory, so a reload empties it.
+      // Without this the next check's first tap lands on the open sheet's
+      // backdrop and it fails for a reason that has nothing to do with it.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    });
+
     await check('a nameless order is refused BEFORE it reaches the counter', async () => {
       await page.click('.it:not(.out) .add');
       await page.click('#cbarOpen');
