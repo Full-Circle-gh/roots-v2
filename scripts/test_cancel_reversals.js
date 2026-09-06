@@ -297,7 +297,7 @@ CREATE TABLE retail_stock_reservations (id INTEGER PRIMARY KEY, order_id INTEGER
 -- exemption must not swallow it, and the reversal this suite is actually
 -- about must still happen.
 CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, customer_id INTEGER, status TEXT,
-  fulfillment_type TEXT, cancelled_at TEXT, cancelled_reason TEXT, updated_at TEXT);
+  fulfillment_type TEXT, placed_at TEXT, cancelled_at TEXT, cancelled_reason TEXT, updated_at TEXT);
 CREATE TABLE retail_payments (id INTEGER PRIMARY KEY, order_id INTEGER, status TEXT);
 INSERT INTO retail_orders (id, customer_id, status) VALUES (900, 42, 'pending_payment');
 INSERT INTO retail_payments (id, order_id, status) VALUES (1, 900, 'pending');

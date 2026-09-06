@@ -88,11 +88,14 @@ try {
   const delivery = makeOrder('delivery');
   inventory.sweepExpiredReservations();
 
-  check('a COUNTER order survives, and keeps its reservation', () => {
-    assert.strictEqual(statusOf(counter), 'pending_payment',
-      'the customer walking to the till had their order cancelled underneath them — §45');
-    assert.strictEqual(resOf(counter), 'active',
-      'its reservation was expired, which frees stock the shop is still holding for them');
+  check('a COUNTER order is not swept on the fifteen-minute reservation clock', () => {
+    // It IS cancelled here — but by the twenty-minute counter clock below, not
+    // by the reservation sweep, because this fixture is thirty days old. What
+    // this asserts is the REASON: had the reservation clock claimed it, the
+    // reason would be reservation_expired and a fresh order would die too.
+    const reason = h.prepare('SELECT cancelled_reason FROM retail_orders WHERE id = ?').get(counter).cancelled_reason;
+    assert.notStrictEqual(reason, 'reservation_expired',
+      'the fifteen-minute reservation clock claimed a counter order — §45 exempts it');
   });
   check('...and the opposite still holds: a DELIVERY order IS swept', () => {
     assert.strictEqual(statusOf(delivery), 'cancelled',
@@ -118,6 +121,45 @@ try {
   check('...and the opposite still holds: it DOES select a delivery order', () => {
     assert.ok(picked.includes(delivery2),
       'the reaper selected nothing at all, so this suite proves nothing');
+  });
+
+  console.log('\nThe counter clock — twenty minutes, or staff, whichever comes first');
+  check('a counter order older than twenty minutes IS cancelled, and its stock released', () => {
+    const id = makeOrder('counter');
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'cancelled',
+      'a counter order thirty days old was left holding stock for ever');
+    assert.strictEqual(h.prepare('SELECT cancelled_reason FROM retail_orders WHERE id = ?').get(id).cancelled_reason,
+      'counter_unpaid_timeout');
+    assert.strictEqual(resOf(id), 'released',
+      'the order is over but its reservation still holds the stock');
+  });
+  check('...and a FRESH counter order is left alone — the walk to the till', () => {
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'counter', ?, 'shop', 10, CURRENT_TIMESTAMP)`)
+      .run(id, '__SWEEP-' + id, STORE);
+    h.prepare(`INSERT INTO retail_stock_reservations (store_id, product_id, order_id, qty, channel, status, expires_at)
+               VALUES (?, ?, ?, 1, 'shop', 'active', datetime('now','-1 day'))`).run(STORE, PROD, id);
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'pending_payment',
+      'an order placed seconds ago was cancelled — this is the §45 failure the clock must not reintroduce');
+    assert.strictEqual(resOf(id), 'active',
+      'its reservation expired on the fifteen-minute clock, which §45 exempts it from');
+  });
+  check('a MADE-HERE counter order with NO reservation is still cancelled', () => {
+    // The case that makes this a second pass rather than a filter: §43 defers
+    // material stock, so a made-here order reserves nothing and has no
+    // reservation to expire. Keyed on reservations it would live for ever.
+    const id = ++seq; ORDERS.push(id);
+    h.prepare(`INSERT INTO retail_orders (id, order_no, customer_id, status, fulfillment_type,
+               store_id, channel, total, placed_at)
+               VALUES (?, ?, NULL, 'pending_payment', 'counter', ?, 'shop', 10, datetime('now','-30 days'))`)
+      .run(id, '__SWEEP-' + id, STORE);
+    inventory.sweepExpiredReservations();
+    assert.strictEqual(statusOf(id), 'cancelled',
+      'an order of nothing but made-here items sat unpaid for ever, printed and forgotten');
   });
 
   console.log('\nThe guard is about fulfilment, not about the shop channel');
