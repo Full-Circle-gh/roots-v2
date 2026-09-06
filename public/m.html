@@ -642,6 +642,10 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
+     dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
+     thing on /stock's launcher that this app could only point at. */
+  kr:{list:null,tried:false,order:null,orderId:null,seen:false,busy:false,err:''},
   /* RAISING A REQUEST (§48). Two screens — Ask the kitchen and Ask for stock —
      and one basket, because they are never open at once and a basket that
      survived the switch would send one screen's list from the other. Entering
@@ -740,6 +744,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      are never open at once — so entering either clears what the other left,
      and a screen reopened after a send does not reappear on its receipt. */
   if(route==='askkitchen'||route==='askstock') rqReset();
+  /* The list is re-read on every entry and the seen-stamp re-armed: it is a
+     record of what the kitchen finished, and one taken at boot would be stale
+     by the time somebody opened it. */
+  if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
@@ -798,6 +806,8 @@ reg('rqTo', id=>{ state.rq.to=Number(id);
 reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
 reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
+reg('krOpen', id=>krOpen(id));
+reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -2781,7 +2791,8 @@ const MORE_GROUPS=[
        own and lived on /stock's launcher, which the Transfers row above still
        reaches for what has not moved yet. As each of those flows lands here
        that launcher empties, and the row goes with the last of them. */
-    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货']]},
+    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6367,6 +6378,84 @@ function rqSendStock(){
          T('This account cannot ask for stock.','此账号无法发起补货申请。'));
 }
 
+/* ══ READY FROM THE KITCHEN ════════════════════════════════════════════════
+   A kitchen request that is `prepared` has already been made AND put on the
+   shelf by the kitchen itself, so nothing is physically waiting for anybody.
+   The screen exists so the people who raised it know it was handled — Ash:
+   "the only thing needed is that the warehouse knows the kitchen handled his
+   request." It moves no stock and says so, as a statement of where the stock
+   already went rather than a warning about a button.
+
+   THE LIST IS NOT THE DOT. It shows what the kitchen has finished, seen or
+   not, because it is a record — "what did they make today" has to still answer
+   the day after somebody glanced at it. Only the COUNT is unseen-only, and
+   that count is the one the dot already polls. */
+function loadKr(force){
+  const k=state.kr;
+  if(k.tried&&!force) return;
+  k.tried=true;
+  /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
+     defined for this direction as "prepared" — for warehouse→kitchen, prepared
+     IS the closure — and the endpoint drops archived rows from every tab. The
+     status filter is belt and braces for a row that reached 'delivered' under
+     an older client. */
+  api('/api/restock?to_role=kitchen&tab=history').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    k.list=rows.filter(o=>o.status==='prepared');
+    k.err=''; render(); krMarkSeen();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    // A refusal is not an error worth shouting: the row is gated on the same
+    // pair the count is, and an operator who cannot read it never sees it.
+    k.list=[]; k.err=''; render();
+  });
+}
+function krUnseen(){ return (state.kr.list||[]).filter(o=>!o.seen_at); }
+/* READING IT IS THE ACKNOWLEDGEMENT, and this is the whole of it. No button and
+   no confirmation.
+
+   THE IDS IT ACTUALLY DREW, never "everything unseen": the kitchen can mark
+   something made between this list rendering and the post landing, and
+   clearing a request nobody has laid eyes on is the one failure that would
+   make the dot worth ignoring.
+
+   THE STAMP IS SERVER-SIDE, so one person looking clears it for the whole
+   team rather than each handset holding its own opinion and chasing the next
+   person about a request everybody already knows about.
+
+   A FAILURE IS SILENT AND HARMLESS: nothing the operator did has gone wrong,
+   and the worst case is a dot still lit next time, which is the safe direction
+   to fail in. */
+function krMarkSeen(){
+  const k=state.kr;
+  if(k.seen) return;
+  const ids=krUnseen().map(o=>o.id);
+  if(!ids.length) return;
+  k.seen=true;
+  apiWrite('/api/restock/kitchen-ready/seen',{ids:ids}).then(()=>{
+    const now=new Date().toISOString();
+    (k.list||[]).forEach(o=>{ if(ids.indexOf(o.id)>=0) o.seen_at=now; });
+    // The dot behind this screen goes out on the way back rather than on the
+    // next poll a minute later.
+    state.kitchenReady=Math.max(0,Number(state.kitchenReady||0)-ids.length);
+    render();
+  }).catch(()=>{ k.seen=false; });
+}
+function krOpen(id){
+  const k=state.kr;
+  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    k.order=(j&&j.data)||j; k.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+function krPurpose(o){
+  return o.purpose==='order' ? T('For an order','用于发货')
+       : o.purpose==='shelf' ? T('For the shelf','货架补货') : '';
+}
+
 function qsStore(){ const c=state.qs.ctx; if(!c) return null;
   return (c.stores||[]).find(s=>s.id===state.qs.storeId) || (c.stores||[])[0] || null; }
 function qsStoreName(){ const s=qsStore(); return s ? (LANG==='en'?(s.name_en||s.name_cn||''):(s.name_cn||s.name_en||'')) : ''; }
@@ -6892,6 +6981,48 @@ function screenAskStock(){
     ${r.to!=null?rqPicker():''}
     ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
 }
+function screenKitchenReady(){
+  loadKr();
+  const k=state.kr;
+  if(k.orderId!=null){
+    if(k.busy) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(k.err) return `<div style="padding:24px 16px"><div style="font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:16px" onclick="APP.cmd('krList')">${T('Back','返回')}</button></div>`;
+    const o=k.order||{};
+    const items=(o.items||[]).filter(it=>Number(it.qty_requested||0)>0);
+    const p=krPurpose(o);
+    return `<div style="padding:4px 16px 12px">
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('krList')">${T('Ready','已完成')}</button>
+      </div>
+      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span class="num" style="min-width:44px;font-size:18px;font-weight:500">${Number(it.qty_requested||0)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(
+          (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—')}</span>
+      </div>`).join('')}</div>
+      <div style="padding:16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+        T('The kitchen has already put this on the shelf. Nothing to collect.','厨房已将其上架，无需领取。')}</div>`;
+  }
+  if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!k.list.length) return nothingYet(T('Nothing finished yet','暂无已完成'),
+    T('What the kitchen makes for you shows up here.','厨房为你制作完成的申请会显示在这里。'));
+  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
+      T(k.list.length+' made · already on the shelf',k.list.length+' 项已完成 · 已上架')}</div>
+    <div>${k.list.map(o=>{
+      const p=krPurpose(o);
+      return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+        onclick="APP.cmd('krOpen',${o.id})">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+        </span>
+        ${!o.seen_at?`<span style="width:8px;height:8px;border-radius:99px;background:var(--sage-ink);flex:none"></span>`:''}
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+      </button>`;
+    }).join('')}</div>`;
+}
+SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
@@ -9733,6 +9864,11 @@ const ROUTE_CAP={
      two screens that 403 after the list has been built. Asking the kitchen
      rides with the same key: it is a request, it just goes to a pot. */
   askkitchen:'restock:request', askstock:'restock:request',
+  /* The same pair the count is gated on, and the same pair routes/restock.js
+     addresses the 'prepared' push to — the people who RAISE these requests. A
+     fulfil-only kitchen operator is the one who made it, and telling them
+     their own work is waiting is telling them about themselves. */
+  kitchenready:['restock:request','restock:pick'],
   /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
      queue shipped as a tile on the Stock home, and a kitchen operator whose
      role puts them in THIS app never sees that home — they see this list, and
@@ -10078,14 +10214,17 @@ function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 /* Made and not collected. Gated on the row it points at for the same reason
    the inbox count is: a dot must never promise work behind a door this operator
    cannot open. */
-function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('transfers')
+/* Gated on the row it points at, for the reason the inbox count is: a dot must
+   never promise work behind a door this operator cannot open. That row is this
+   app's own screen now (§48) rather than the Transfers departure. */
+function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('kitchenready')
   ? Number(state.kitchenReady||0) : 0; }
 /* Which More ROWS carry a dot of their own. The folder's dot says something
    inside wants you; without this the operator opens More and has to guess
    which of thirty rows it meant — and on a role with no tab bar at all
    (flatNav) this list IS the home screen, so the row dot is the only one
    there is. */
-function moreRowDot(key){ return key==='transfers' ? readyFromKitchen()>0 : false; }
+function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0 : false; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
