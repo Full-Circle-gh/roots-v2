@@ -5549,6 +5549,12 @@
      weight is what says "this is the number", and it sits directly before the
      order number rather than in a column of its own — a column would be empty
      on every row of a tenant with no shop. */
+  /* The label beside the number, drawer only — see ordShopCode. The list keeps
+     it as a tooltip: on a dense table the numeral is what an operator scans. */
+  .ord-shopno-lbl {
+    display: inline-block; vertical-align: middle; margin-right: 8px;
+    color: var(--text-2); font-size: 11px; letter-spacing: .02em;
+  }
   .ord-shopno {
     display: inline-block; vertical-align: middle; margin-right: 8px;
     min-width: 22px; padding: 1px 6px; border-radius: 3px;

@@ -71,6 +71,9 @@ const db = tdb();
 
 const LOC = 9871;
 const P_OK = 9971, P_OUT = 9972;
+// Filler rows, in a second category, so the rendered page is taller than a
+// phone. See seed() for why a page that does not scroll cannot test a rail.
+const FILLER = [9973, 9974, 9975, 9976, 9977, 9978, 9979, 9980];
 const CODE = 'RENDERAB';
 const EN_OK = 'Render fixture latte', CN_OK = '测试渲染拿铁';
 const EN_OUT = 'Render fixture bun',  CN_OUT = '测试渲染面包';
@@ -86,6 +89,7 @@ function cleanup() {
   db.prepare('DELETE FROM shops WHERE location_id = ?').run(LOC);
   db.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(LOC);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_OK, P_OUT);
+  db.prepare(`DELETE FROM store_products WHERE id IN (${FILLER.map(() => '?').join(',')})`).run(...FILLER);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
 }
 
@@ -98,6 +102,16 @@ function seed() {
     VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks')`);
   prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33);
   prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18);
+  // A SECOND CATEGORY AND ENOUGH ROWS THAT THE PAGE ACTUALLY SCROLLS. With the
+  // two products above, a phone viewport holds the whole menu and window.scrollY
+  // never leaves 0 — on which a rail that scrolls away and a rail that holds
+  // still are indistinguishable, and the sticky checks below would pass on the
+  // bug they exist to catch. They are in their own category so the rail has more
+  // than one destination to jump to.
+  const filler = db.prepare(`INSERT INTO store_products
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Ready to Eat')`);
+  FILLER.forEach((id, i) => filler.run(id, `Render filler ${i + 1}`, `测试填充${i + 1}`, `__R-8${i}`, 20 + i));
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
   const add = db.prepare(`INSERT INTO shop_listings
@@ -105,6 +119,7 @@ function seed() {
     VALUES (?, ?, ?, 'made_here', ?, ?)`);
   add.run(shopId, P_OK, 33, 1, 0);
   add.run(shopId, P_OUT, 18, 0, 1);   // switched off → the sold-out badge
+  FILLER.forEach((id, i) => add.run(shopId, id, 20 + i, 1, 2 + i));
 }
 
 // Box of the first element whose text is exactly `text`, or null when the
@@ -156,12 +171,23 @@ function boxOf(text) {
         const b = await page.evaluate(boxOf, t);
         assert.ok(onScreen(b), `"${t}" is not on screen: ${JSON.stringify(b)}`);
       }
-      const price = await page.evaluate(() => {
-        const el = document.querySelector('.pr');
+      // THE PRICE OF A NAMED PRODUCT, not whichever price happens to be first.
+      // The fixture gained filler rows in a second category to make the page
+      // scroll, and category order comes from the tenant's tree rather than from
+      // this file — so `.pr` first-match silently became a filler's ¥20 and this
+      // check failed on a page that was entirely correct.
+      const price = await page.evaluate((name) => {
+        const el = Array.from(document.querySelectorAll('*'))
+          .find(e => e.children.length === 0 && e.textContent.trim() === name);
         if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { w: r.width, h: r.height, text: el.textContent.trim() };
-      });
+        // .it is the product card. The name sits in a .l-en span inside .t, so a
+        // generic closest() stops at .t and never sees the price beside it.
+        const card = el.closest('.it');
+        const pr = card && card.querySelector('.pr');
+        if (!pr) return null;
+        const r = pr.getBoundingClientRect();
+        return { w: r.width, h: r.height, text: pr.textContent.trim() };
+      }, EN_OK);
       assert.ok(price && price.w > 0 && price.h > 0, `no price box: ${JSON.stringify(price)}`);
       assert.ok(/33/.test(price.text), `the price does not read as money: ${JSON.stringify(price)}`);
     });
@@ -170,6 +196,73 @@ function boxOf(text) {
         doc: document.documentElement.scrollWidth, win: window.innerWidth,
       }));
       assert.ok(over.doc <= over.win + 1, `the page scrolls sideways on a phone: ${JSON.stringify(over)}`);
+    });
+
+    // ─── The rail holds still ─────────────────────────────────────────────
+    // Reported from a phone, 2026-09-06: "when i start scrolling product the
+    // menu on the left is being scrolled". It was sticky and it WAS sticking —
+    // at top:0, which is where the header already sits, so it pinned its first
+    // category behind the bar and pushed its last one off the bottom. Nothing
+    // short of measuring it while the page moves catches that: the CSS reads
+    // correct, and both elements are honestly "stuck".
+    await check('the rail stays put while the products scroll', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const before = await page.evaluate(() => {
+        const r = document.querySelector('.rail').getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, y: window.scrollY };
+      });
+      await page.evaluate(() => window.scrollTo(0, 600));
+      // One frame for the scroll to settle before the box is read.
+      await page.evaluate(() => new Promise(r => window.requestAnimationFrame(
+        () => window.requestAnimationFrame(r))));
+      const after = await page.evaluate(() => {
+        const r = document.querySelector('.rail').getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, y: window.scrollY };
+      });
+      assert.ok(after.y > before.y + 300,
+        `the page barely scrolled, so this proves nothing about a sticky rail: ${JSON.stringify(after)}`);
+      assert.ok(Math.abs(after.top - before.top) <= 1,
+        `the rail moved with the page: top ${before.top} → ${after.top}`);
+    });
+
+    await check('and it sits BELOW the header, not behind it', async () => {
+      // The half that was actually broken. Sticky at the wrong offset is still
+      // sticky, so the check above would have passed on the bug.
+      const m = await page.evaluate(() => {
+        const bar = document.querySelector('.bar').getBoundingClientRect();
+        const rail = document.querySelector('.rail').getBoundingClientRect();
+        const first = document.querySelector('.rail a').getBoundingClientRect();
+        return { barBottom: bar.bottom, railTop: rail.top, railBottom: rail.bottom,
+                 firstTop: first.top, vh: window.innerHeight };
+      });
+      assert.ok(m.railTop >= m.barBottom - 1,
+        `the rail starts above the bar's bottom edge, so its top is hidden: ${JSON.stringify(m)}`);
+      assert.ok(m.firstTop >= m.barBottom - 1,
+        `the FIRST category is behind the header — the reported symptom: ${JSON.stringify(m)}`);
+      assert.ok(m.railBottom <= m.vh + 1,
+        `the rail runs off the bottom of the screen, so its last category cannot be reached: ${JSON.stringify(m)}`);
+    });
+
+    await check('tapping a category lands its heading below the header, not under it', async () => {
+      const heading = await page.evaluate(async () => {
+        // NOT the first anchor: that is ALL, whose href is #top — a bare anchor
+        // at the very top of the document, which correctly lands at 0 and would
+        // fail this check while nothing is wrong. A real category is the subject.
+        const a = document.querySelector('.rail a[data-cat]:not([href="#top"])');
+        if (!a) return null;
+        a.click();
+        await new Promise(r => setTimeout(r, 400));
+        const sec = document.getElementById(a.getAttribute('href').slice(1));
+        if (!sec) return null;
+        return {
+          secTop: sec.getBoundingClientRect().top,
+          barBottom: document.querySelector('.bar').getBoundingClientRect().bottom,
+        };
+      });
+      assert.ok(heading, 'no rail category to tap');
+      assert.ok(heading.secTop >= heading.barBottom - 1,
+        `the section the customer asked for landed behind the header: ${JSON.stringify(heading)}`);
+      await page.evaluate(() => window.scrollTo(0, 0));
     });
 
     await check('tapping 中 swaps the visible language, both ways, with real boxes', async () => {

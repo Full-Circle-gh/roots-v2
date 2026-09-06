@@ -51,7 +51,6 @@ function fnSource(src, name) {
   const start = src.indexOf(`function ${name}(`);
   if (start < 0) return null;
   let depth = 0, i = src.indexOf('{', start);
-  const from = i;
   for (; i < src.length; i++) {
     if (src[i] === '{') depth++;
     else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(start, i + 1); }
@@ -68,7 +67,14 @@ const sandbox = {
   escapeHtml: (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
+  // The admin's bilingual picker, as app.html defines it. Driven in BOTH
+  // languages below, because a pair that renders one half is the failure this
+  // whole vocabulary lock exists for.
+  _lang: 'en',
+  cuT: function (en, cn) { return sandboxLang() === 'cn' ? cn : en; },
 };
+let LANG = 'en';
+function sandboxLang() { return LANG; }
 vm.createContext(sandbox);
 vm.runInContext(`${src}; this.ordShopCode = ordShopCode;`, sandbox);
 const render = sandbox.ordShopCode;
@@ -92,13 +98,13 @@ yes(render({ shop_order_code: '<b>7</b>' }).includes('&lt;b&gt;'),
   'the value is escaped, so a bad column can never inject markup');
 
 section('It is actually called, on both screens');
-const callSites = (ORDERS_JS.match(/\$\{ordShopCode\(o\)\}/g) || []).length;
+const callSites = (ORDERS_JS.match(/\$\{ordShopCode\(o(?:,\s*true)?\)\}/g) || []).length;
 yes(callSites >= 2, `ordShopCode is called from the list row AND the drawer (found ${callSites})`,
   'a renderer nobody calls reviews fine and shows nothing');
 yes(/<td class="oc-ord">\$\{ordShopCode\(o\)\}/.test(ORDERS_JS),
   'the list row calls it, in the order-number cell');
-yes(/\$\{ordShopCode\(o\)\}<b>\$\{escapeHtml\(o\.order_no\)\}<\/b>/.test(ORDERS_JS),
-  'the order drawer calls it, before the order number');
+yes(/\$\{ordShopCode\(o,\s*true\)\}<b>\$\{escapeHtml\(o\.order_no\)\}<\/b>/.test(ORDERS_JS),
+  'the order drawer calls it WITH the visible label, before the order number');
 
 section('The API sends the columns the list needs');
 // The list endpoint names every column it returns. Narrowed to the query that
@@ -126,14 +132,42 @@ yes(/tabular-nums/.test(CSS.slice(CSS.indexOf('.ord-shopno'), CSS.indexOf('.ord-
 yes(/class="oc-store"/.test(ORDERS_JS) && /class="muted oc-placed"/.test(ORDERS_JS),
   'the list row still carries the shop and the date the number needs to be read with');
 
-section('No label was invented (§30)');
-// §49's number ships unlabelled because no live Chinese string in this tree
-// means "the number called out". If a label appears it must be a supplied pair,
-// not a composed one — this catches the composition, not the pair.
-const helper = src || '';
-yes(!/[一-鿿]/.test(helper),
-  'the helper composes no Chinese of its own',
-  'a label arrived here; §30 says it comes from Ash or from a live string, never from this file');
+section('The label, and it is declared where the lock lives');
+// Rule 4's standing delegation (docs/tacet-delivery-vocabulary.md v1.19, Ash
+// 2026-09-06) lets this be composed. What it does NOT allow is composing it
+// silently, so the pair must exist in that document as well as in the code —
+// that is the whole substance of the amendment and the only part a test can
+// hold. A label in the code that is not in the lock is the failure.
+const VOCAB = fs.readFileSync(path.join(ROOT, 'docs/tacet-delivery-vocabulary.md'), 'utf8');
+const inCode = (src || '').match(/cuT\('([^']+)',\s*'([^']+)'\)/);
+yes(!!inCode, 'the helper labels the chip with a bilingual pair');
+if (inCode) {
+  const [, en, cn] = inCode;
+  yes(VOCAB.includes(cn), `the CN half (${cn}) is declared in the vocabulary lock`,
+    'composed and undeclared — indistinguishable from a locked string to everyone after');
+  yes(VOCAB.includes(en), `the EN half (${en}) is declared beside it`);
+  // The TABLE ROW, not the version banner — the row is what a later reader
+  // copying a string will land on, and it is the row that has to say composed.
+  const row = VOCAB.split('\n').find(l => l.includes(cn) && l.includes(en) && l.trim().startsWith('|'));
+  yes(!!row && /COMPOSED/.test(row),
+    'the vocabulary table row marks the pair COMPOSED rather than locked-by-Ash',
+    row ? `row reads: ${row.trim()}` : 'no table row carries both halves');
+}
+
+section('Both halves actually render');
+LANG = 'en';
+yes(render({ shop_order_code: 7 }, true).includes('Pick-up number'),
+  'the English half renders in the drawer');
+LANG = 'cn';
+const cnOut = render({ shop_order_code: 7 }, true);
+yes(/取餐号/.test(cnOut), 'the Chinese half renders in the drawer');
+yes(!/Pick-up number/.test(cnOut), 'the two halves do not both render at once');
+// The list is the tooltip register: numeral visible, label in the title.
+const listOut = render({ shop_order_code: 7 });
+yes(/title="[^"]*取餐号/.test(listOut), 'the list row carries the label as a tooltip');
+yes(!/ord-shopno-lbl/.test(listOut), 'the list row does NOT print the label beside the number');
+LANG = 'en';
+yes(/\.ord-shopno-lbl\s*\{/.test(CSS), 'retail-admin.css styles the drawer label');
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);

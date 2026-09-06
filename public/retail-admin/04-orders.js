@@ -242,15 +242,23 @@ function ordIsReadonlyChannel(o) {
 // list row has a Store column and a Placed column, the drawer has both in its
 // head — which is what makes the number readable rather than ambiguous.
 //
-// NO LABEL, and that is the §30 answer rather than an oversight. No live
-// Chinese string in this tree means "the number called out" — 序号 is a SKU
-// counter, 取餐 belongs to courier statuses — and a label here would be the one
-// composed string on the screen. The numeral carries itself; if Ash supplies a
-// pair, it goes in front of this without anything else moving.
-function ordShopCode(o) {
+// THE LABEL IS `Pick-up number · 取餐号`, composed under Rule 4's standing
+// delegation (docs/tacet-delivery-vocabulary.md v1.19, Ash 2026-09-06) and
+// declared there rather than only here. Two live candidates were considered and
+// rejected: 序号 is a SKU counter, and 取餐 is a rider's pickup verb in
+// lib/tracking.js's courier stages.
+//
+// IT IS A TOOLTIP IN THE LIST AND A VISIBLE WORD IN THE DRAWER, which is one
+// string in two registers rather than two strings. The list is a dense table
+// where an operator scanning for "seven" wants the numeral and nothing else;
+// the drawer has room, and is where somebody meeting the chip for the first
+// time goes to find out what it is.
+function ordShopCode(o, withLabel) {
   const n = o && o.shop_order_code;
   if (n == null || n === '') return '';
-  return `<span class="ord-shopno">${escapeHtml(String(n))}</span>`;
+  const label = cuT('Pick-up number', '取餐号');
+  return `<span class="ord-shopno" title="${escapeHtml(label)}">${escapeHtml(String(n))}</span>` +
+    (withLabel ? `<span class="ord-shopno-lbl">${escapeHtml(label)}</span>` : '');
 }
 function ordShortNo(no) {
   const s = String(no || '');
@@ -6407,7 +6415,7 @@ function renderOpenOrder(o) {
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div class="title-row">
-            ${ordShopCode(o)}<b>${escapeHtml(o.order_no)}</b>
+            ${ordShopCode(o, true)}<b>${escapeHtml(o.order_no)}</b>
             ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
           </div>
           ${headActions ? `<div class="transitions od-head-tx">${headActions}</div>` : ''}

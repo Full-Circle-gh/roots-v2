@@ -376,7 +376,7 @@ function styles(vars, faces) {
   // Every colour and family is still a token from the tenant's theme. The only
   // literals are neutral veils and the black sold-out scrim.
   return `${cssSafe(faces)}
-:root{${cssSafe(vars)}}
+:root{${cssSafe(vars)};--barh:58px}
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
@@ -397,8 +397,26 @@ img{display:block;max-width:100%}
 
 .wrap{display:flex;align-items:stretch;min-height:100vh}
 
+/* Tapping a rail category jumps to its section, and the bar is sticky over the
+   top of wherever that lands — so without this the heading the customer just
+   asked for arrives hidden behind the header. Same measured height, same
+   reason as the rail below. */
+.cat{scroll-margin-top:calc(var(--barh) + 8px)}
+
 /* ── the rail ── */
-.rail{position:sticky;top:0;flex:none;width:92px;height:100vh;overflow-y:auto;
+/* IT STICKS BELOW THE BAR, NOT UNDER IT. The bar is sticky at top:0 and paints
+   a solid ground at z-index 20, so a rail that also sticks at top:0 pins its
+   own first category behind the header and pushes its last one past the bottom
+   of the screen — which reads, correctly, as "the menu scrolled". --barh is the
+   bar's measured height; the 58px is the fallback for the first paint and for a
+   browser that runs no script, and it is deliberately close rather than exact:
+   being a few pixels out is invisible, being a whole header out is the bug.
+   The bar's height is not a constant — it grows with the safe-area inset and
+   again when a long shop name wraps to two lines, and the language toggle can
+   change which name is showing — so it is measured rather than written down. */
+.rail{position:sticky;top:var(--barh);flex:none;width:92px;
+  height:calc(100vh - var(--barh));height:calc(100dvh - var(--barh));
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
   align-self:flex-start;background:var(--oat);border-right:2px solid var(--ink)}
 .rail a{display:flex;align-items:center;gap:2px;padding:16px 5px;
   font-family:var(--f-bear);font-size:13px;line-height:1.15;color:var(--ink);
@@ -462,6 +480,16 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `for(var i=0;i<n.length;i++){var on=n[i].getAttribute('data-lang')===l;` +
   `if(on)n[i].className='on';else n[i].className=''}` +
   `},false)})();` +
+  // The bar's real height, published as --barh so the rail can stick BELOW it
+  // rather than behind it. Re-measured on resize, on rotation, and whenever the
+  // bar itself changes box — the language toggle can swap a one-line shop name
+  // for a two-line one, and the rail must move with it rather than a header
+  // later.
+  `(function(){var b=document.querySelector('.bar');if(!b)return;` +
+  `var set=function(){document.documentElement.style.setProperty('--barh',b.offsetHeight+'px')};set();` +
+  `if(window.ResizeObserver){new ResizeObserver(set).observe(b)}` +
+  `window.addEventListener('resize',set,false);` +
+  `window.addEventListener('orientationchange',set,false);})();` +
   // The rail follows the scroll. Progressive enhancement only: without it the
   // rail is still a working list of anchors, which is the whole of its job.
   `(function(){var r=document.querySelectorAll('.rail a[data-cat]');if(!r.length||!window.IntersectionObserver)return;` +
