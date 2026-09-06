@@ -794,6 +794,7 @@
 <link rel="preload" href="/assets/td-datetime.js" as="script">
 <link rel="preload" href="/assets/retail-admin/01-core.js" as="script">
 <link rel="preload" href="/assets/retail-admin/02-settings-ops.js" as="script">
+<link rel="preload" href="/assets/retail-admin/chart-primitives.js" as="script">
 <link rel="preload" href="/assets/retail-admin/03-dashboard.js" as="script">
 <link rel="preload" href="/assets/retail-admin/04-orders.js" as="script">
 <link rel="preload" href="/assets/retail-admin/05-marketing.js" as="script">
@@ -13374,6 +13375,10 @@
 <script src="/assets/td-datetime.js"></script>
 <script src="/assets/retail-admin/01-core.js"></script>
 <script src="/assets/retail-admin/02-settings-ops.js"></script>
+<!-- The hand-rolled chart primitives (SVG + CSS bars), shared by every
+     tab that draws one. Must come BEFORE 03-dashboard.js, which is the
+     first caller — same reasoning as /lib/ingredient-cost.js below. -->
+<script src="/assets/retail-admin/chart-primitives.js"></script>
 <script src="/assets/retail-admin/03-dashboard.js"></script>
 <script src="/assets/retail-admin/04-orders.js"></script>
 <script src="/assets/retail-admin/05-marketing.js"></script>

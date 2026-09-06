@@ -1417,7 +1417,7 @@
   .fc-spark { display: block; width: 100%; height: 100%; }
   .fc-spark-dot { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--accent); pointer-events: none; }
   /* Tacet flat spark — thin graphite line + ink end-dot, no filled wash (the
-     shared dashSparkline emits .db-spark-* here; match .td-spark on the
+     shared chartSparkline emits .db-spark-* here; match .td-spark on the
      dashboard instead of the old tea-green filled look). */
   .fc-spark-wrap .db-spark-area { display: none; }
   .fc-spark-wrap .db-spark-line { opacity: .7; }
@@ -1780,7 +1780,7 @@
 
   /* ── Magnitude bars, period captions, tile icons (data-viz pass) ───────── */
   /* A left-anchored tint behind each list row, scaled to the tile's own max
-     (--mag 0–1, set inline by dashBarRows) so rows rank at a glance — a chart
+     (--mag 0–1, set inline by chartBarRows) so rows rank at a glance — a chart
      without the chart. */
   .db-tile-list-row.has-bar { position: relative; }
   .db-tile-list-row.has-bar::before {
