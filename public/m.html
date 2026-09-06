@@ -642,6 +642,11 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
+     walking, which the old screen never had to ask because it ran pinned to
+     one. Named pik so it cannot be confused with the local `pk` in the
+     packaging screen. */
+  pik:{list:null,tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null},
   /* RECEIVING A TRANSFER (§48) — the STORE end of a stock movement, which is a
      different job from the `rcv*` supplier receiving above: that one counts a
      purchase order in from a supplier, this one counts in what another location
@@ -754,6 +759,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      by the time somebody opened it. */
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
+  if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
+    // The freezer is re-asked on every entry where there is a choice: which one
+    // they are standing in is a fact about now, not about last time.
+    if(pikStores().length>1) k.at=null; }
   state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
@@ -818,6 +827,12 @@ reg('xfrOpen', id=>xfrOpen(id));
 reg('xfrList', ()=>{ const x=state.xfr; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; render(); });
 reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
 reg('xfrConfirm', ()=>xfrConfirm());
+reg('pikAt', id=>{ const k=state.pik; k.at=Number(id); k.tried=false; k.list=null; k.dest='all'; render(); });
+reg('pikDest', d=>{ state.pik.dest=String(d); render(); });
+reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pikWriteLine(L,null); });
+reg('pikShort', key=>pikAskShort(String(key)));
+reg('pikDispatch', ()=>pikDispatch());
+reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
 reg('xfrAsk', id=>{
   const it=xfrItems().find(y=>y.id===Number(id));
   if(!it) return;
@@ -2813,7 +2828,7 @@ const MORE_GROUPS=[
        that launcher empties, and the row goes with the last of them. */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    ['receivexfer','truck','Receive delivery','收货']]},
+    ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6399,6 +6414,160 @@ function rqSendStock(){
          T('This account cannot ask for stock.','此账号无法发起补货申请。'));
 }
 
+/* ══ PICKING A RUN ═════════════════════════════════════════════════════════
+   Pulling what other locations have asked this one to send.
+
+   WHAT THIS LOCATION HAS BEEN ASKED TO SUPPLY. `from_store_id` is the supplier,
+   so a Tianhe→Yuexiu request appears in YUEXIU's pick list — they are the ones
+   who have to walk to a freezer. Filtering on the roles instead would put it in
+   Tianhe's, asking the requester to pick their own order.
+
+   THE LIST IS COMBINED, ONE ROW PER PRODUCT. Several stores' requests are
+   merged into a single walk of the freezer; the merge is a VIEW, never a row of
+   its own, which is why picking a line writes one PUT per contributing request.
+
+   NOTHING HERE CHECKS STOCK BEFORE DISPATCHING and nothing refuses on it — the
+   server owns that (§39 Ruling 1), and this screen must not reintroduce a gate
+   that ruling deleted. */
+function pikStores(){ return state.stores||[]; }
+function loadPik(force){
+  const k=state.pik;
+  if(k.at==null) return;                       // nothing to pick until a freezer is named
+  if(k.tried&&!force) return;
+  k.tried=true;
+  api('/api/restock?tab=active').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    // A run is what has been asked for and not yet dispatched: goods_state
+    // 'none' is the pre-dispatch state, anything else has already left.
+    const want=rows.filter(o=>{
+      const mine=o.from_store_id ? o.from_store_id===k.at
+        : ((o.from_role||'store')==='store' && (o.to_role||'warehouse')==='warehouse');
+      return mine && ['sent','received'].indexOf(o.status)>=0
+                  && (!o.goods_state||o.goods_state==='none');
+    });
+    // Each in FULL, because the merged row needs every contributing line.
+    return Promise.all(want.map(o=>api('/api/restock/'+o.id).then(d=>(d&&d.data)||d)))
+      .then(full=>{ k.list=full; k.err=''; render(); });
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.list=[]; k.err=''; render();
+  });
+}
+function pikOrders(){ return Array.isArray(state.pik.list)?state.pik.list:[]; }
+function pikDestOf(o){
+  return o.to_store_id ? rqStoreName(o.to_store_id)
+       : (LANG==='en'?(o.store_name||o.store_cn):(o.store_cn||o.store_name))||T('Warehouse','仓库');
+}
+function pikLines(){
+  const by={},order=[];
+  pikOrders().forEach(o=>{
+    (o.items||[]).forEach(it=>{
+      const asked=xfrNum(it.qty_requested);
+      if(!(asked>0)) return;
+      // Merged on the product where there is one, and on the NAME where there
+      // is not — a kitchen-direction line carries no product_id by design.
+      const key=it.product_id!=null?('p'+it.product_id):('n'+(it.product_name||it.id));
+      if(!by[key]){ by[key]={key:key,name:xfrName(it),sku:it.sku,parts:[]}; order.push(key); }
+      by[key].parts.push({orderId:o.id,itemId:it.id,dest:pikDestOf(o),asked:asked,
+                          sent:it.qty_sent==null?null:xfrNum(it.qty_sent),
+                          checked:!!it.is_checked});
+    });
+  });
+  return order.map(k=>{
+    const L=by[k];
+    L.asked=L.parts.reduce((a,p)=>a+p.asked,0);
+    L.done=L.parts.every(p=>p.checked);
+    L.sent=L.done?L.parts.reduce((a,p)=>a+(p.sent==null?p.asked:p.sent),0):null;
+    return L;
+  });
+}
+function pikDests(){
+  const seen=[];
+  pikOrders().forEach(o=>{ const n=pikDestOf(o); if(seen.indexOf(n)<0) seen.push(n); });
+  return seen;
+}
+function pikVisible(){
+  const all=pikLines();
+  if(state.pik.dest==='all') return all;
+  return all.filter(L=>L.parts.some(p=>p.dest===state.pik.dest));
+}
+/* Writing a picked line: one PUT per contributing request, because a combined
+   row is several stores' lines standing next to each other. qty_sent is what
+   actually leaves; is_checked is what marks the walk done. */
+function pikWriteLine(L,per){
+  const k=state.pik;
+  k.busy=true; k.err=''; render();
+  return Promise.all(L.parts.map(p=>{
+    const q=per?per[p.itemId]:p.asked;
+    return apiWrite('/api/restock/'+p.orderId+'/item/'+p.itemId,{qty_sent:q,is_checked:1},'PUT')
+      .then(()=>{
+        const o=pikOrders().find(x=>x.id===p.orderId);
+        const it=o&&(o.items||[]).find(x=>x.id===p.itemId);
+        if(it){ it.qty_sent=q; it.is_checked=1; }
+      });
+  })).then(()=>{ k.busy=false; render(); })
+    .catch(e=>{
+      if(String(e.message)==='auth') return;
+      k.busy=false;
+      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+                              :T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。');
+      render();
+    });
+}
+/* THE SHORT PICK. The old screen asked how many were FOUND and then how those
+   go across the stores; here the allocation IS the answer and the found total
+   is its sum, because a number the operator types twice is a number they can
+   disagree with themselves about. The remainder still gates the save: nothing
+   may be allocated that was not asked for. */
+function pikAskShort(key){
+  const L=pikVisible().find(x=>x.key===key);
+  if(!L) return;
+  state.ask={
+    title:T('How many did you find?','找到多少？'),
+    body:L.name+(L.sku?' · '+L.sku:'')+' · '+T('asked for '+L.asked,'申请 '+L.asked),
+    fields:L.parts.map(p=>({id:String(p.itemId),
+      label:p.dest+' · '+T('asked '+p.asked,'申请 '+p.asked), numeric:true, value:''})),
+    validate:v=>{
+      let sum=0;
+      for(const p of L.parts){
+        const raw=String(v[String(p.itemId)]||'').trim();
+        if(!/^\d+$/.test(raw)) return T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。');
+        const n=parseInt(raw,10);
+        if(n>p.asked) return T('More than was asked for.','超过申请数量。');
+        sum+=n;
+      }
+      if(sum<=0) return T('Nothing to send.','没有可发出的数量。');
+      return null;
+    },
+    run:v=>{
+      const per={};
+      L.parts.forEach(p=>{ per[p.itemId]=parseInt(String(v[String(p.itemId)]).trim(),10); });
+      pikWriteLine(L,per);
+    } };
+  render();
+}
+/* THE DISPATCH. One PUT per order, which is what fires _applyDispatch. A
+   failure is SHOWN and nothing more — retrying it is its own work, and offering
+   a retry here would be building that feature by the back door. */
+function pikDispatch(){
+  const k=state.pik;
+  if(k.busy) return;
+  k.busy=true; k.err=''; k.result=null; render();
+  const orders=pikOrders(); const failed=[];
+  Promise.all(orders.map(o=>
+    apiWrite('/api/restock/'+o.id+'/status',{status:'prepared'},'PUT').then(j=>{
+      if(j&&j.stock_transfer&&j.stock_transfer.ok===false){
+        failed.push({rs:o.rs_number||('#'+o.id),error:j.stock_transfer.error});
+      }
+    }).catch(e=>{ failed.push({rs:o.rs_number||('#'+o.id),error:e.message}); })
+  )).then(()=>{
+    k.busy=false; k.result={failed:failed}; k.step='sent'; render();
+    // The shelf this app counts has just changed underneath it.
+    state.qs.itemsTried=false; loadQsItems(true);
+    loadPik(true);
+  });
+}
+
 /* ══ RECEIVING A TRANSFER ══════════════════════════════════════════════════
    Counting in what another location sent. NOT the Receiving row already in this
    app — that one counts a purchase order in from a supplier, and folding the
@@ -7233,6 +7402,77 @@ function screenReceiveTransfer(){
       <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
     </button>`).join('')}</div>`;
 }
+function screenPick(){
+  const k=state.pik;
+  const stores=pikStores();
+  const chip=(label,on,cmd,arg)=>`<button class="row" style="min-height:40px;padding:7px 14px;border-radius:999px;width:auto;display:inline-flex;
+    border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};background:${on?'var(--text-primary)':'var(--surface-card)'};
+    color:${on?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('${cmd}',${arg})">${escAttr(label)}</button>`;
+
+  /* WHICH FREEZER IS BEING WALKED. The old screen never asked — it ran pinned
+     to one location. Merging two locations' runs into one list would be a walk
+     of two freezers drawn as one, so it is asked wherever there is a choice. */
+  if(k.at==null){
+    if(stores.length===1){ k.at=stores[0].id; }
+    else return `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Picking at which location?','在哪个地点拣货？')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 16px">${
+        stores.map(st=>chip(rqStoreName(st.id),false,'pikAt',st.id)).join('')}</div>`;
+  }
+  loadPik();
+  const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+
+  if(k.step==='sent'){
+    const failed=(k.result&&k.result.failed)||[];
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${failed.length?T('Sent, with problems','已发出，但有问题'):T('Sent','已发送')}</div>
+      ${failed.length?`<div style="margin-top:12px">${failed.map(f=>`<div style="font-size:14px;color:var(--brick-ink);padding:4px 0">
+          ${escAttr(f.rs)} — ${escAttr(f.error||'')}</div>`).join('')}</div>`
+        :`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+          T('The stores can count it in when it arrives.','门店到货后即可清点入库。')}</div>`}
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('pikList')">${T('Done','完成')}</button>
+    </div>`;
+  }
+  if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const lines=pikLines();
+  if(!lines.length) return nothingYet(T('Nothing to pick','暂无拣货'),
+    T('Requests for this location to supply show up here.','需要本地点发货的申请会显示在这里。'));
+
+  const dests=pikDests();
+  const filter=dests.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px">
+    ${chip(T('All stores','全部门店'),k.dest==='all','pikDest',"'all'")}
+    ${dests.map(d=>chip(d,k.dest===d,'pikDest',"'"+String(d).replace(/'/g,"\\'")+"'")).join('')}</div>`:'';
+
+  const visible=pikVisible();
+  const picked=lines.filter(L=>L.done).length;
+  const rows=visible.map(L=>{
+    const split=L.parts.map(p=>escAttr(p.dest)+' '+(L.done?(p.sent==null?p.asked:p.sent):p.asked)).join(' · ');
+    return `<div style="padding:12px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px">
+      <span class="num" style="min-width:44px;font-size:20px;font-weight:500;color:${L.done?'var(--text-secondary)':'var(--text-primary)'}">${L.done?L.sent:L.asked}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500${L.done?';color:var(--text-secondary)':''}">${escAttr(L.name)}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${split}</span>
+      </span>
+      ${L.done
+        ? `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`
+        : `<span style="display:flex;gap:8px">
+             <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('pikShort','${L.key}')">${T('Short','缺货')}</button>
+             <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('pikAll','${L.key}')">${T('Picked','已拣')}</button>
+           </span>`}
+    </div>`;
+  }).join('');
+
+  const allDone=lines.length>0&&lines.every(L=>L.done);
+  return `<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+      escAttr(rqStoreName(k.at))} · <span class="num">${picked}</span>/${lines.length} ${T('picked','已拣')}</div>
+    ${filter}${err}<div>${rows}</div>
+    <div style="padding:16px;position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default)">
+      <button class="btn2" style="width:auto;padding:11px 26px"${(allDone&&!k.busy)?'':' disabled'}
+        onclick="APP.cmd('pikDispatch')">${k.busy?T('Sending…','发送中…'):T('Dispatch','发货')}</button>
+    </div>`;
+}
+SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
@@ -10086,6 +10326,8 @@ const ROUTE_CAP={
      same reason: a screen whose whole purpose is the save must not be offered
      to somebody whose save will 403. */
   receivexfer:'restock:receive',
+  // Pulling a run, gated on the capability its own writes are gated on.
+  pick:'restock:pick',
   /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
      queue shipped as a tile on the Stock home, and a kitchen operator whose
      role puts them in THIS app never sees that home — they see this list, and
