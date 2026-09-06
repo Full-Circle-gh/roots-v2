@@ -435,6 +435,14 @@ const WAVE = (w,color)=>`<svg width="${w}" height="${(w*0.324).toFixed(0)}" view
 /* ---- single live language (EN default), toggled from the overflow menu ---- */
 let LANG = 'en';
 function T(en, zh){ return LANG==='en' ? en : (zh||en); }
+/* A STRING WITH NO CHINESE YET. Decisions §30 forbids composing one and forbids
+   inventing one, and it does not forbid shipping the control — so these read
+   English in both languages until Ash supplies the Chinese, which is visibly
+   missing rather than quietly wrong. Deliberately NOT T(en, en): that is what
+   the bilingual-pair check in test_mobile_screens exists to catch, and a
+   blocked string must not be able to hide behind the shape of a translated
+   one. Every string that HAS a locked source goes through T() as normal. */
+function TB(en){ return en; }
 /* A message that outlives the moment it is written. T() resolves the language
    NOW, which is right for anything a renderer builds and wrong for anything a
    LOADER stores: an error caught in a .catch() sits in state until the screen
@@ -636,7 +644,12 @@ const state = {
   recvOpenLine:null,
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
-      add:{},inflight:{},rowErr:{},timers:{}},
+      add:{},inflight:{},rowErr:{},timers:{},
+      /* §46. `canRecount` is the server's answer, never inferred from whether a
+         quantity happened to arrive — a stripped list and a genuinely empty
+         shelf look identical from here. `addedToday` is what has already gone
+         on this store's shelf today, which is the half that needs no grant. */
+      canRecount:false, addedToday:{}, addedTried:false, fixing:{}},
   /* WASTE — the ledger and its one write. Namespaced like `qs` rather than
      spread across a dozen flat keys, for the reason the note above this
      literal gives: `pick`, `note`, `range` and `busy` are exactly the short
@@ -753,6 +766,7 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
   state.qs.q=String(v||''); state.focus={id:'mQsQ',pos:el?el.selectionStart:null}; render(); });
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
+reg('qsFix', id=>qsAskCount(Number(id)));
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -6216,10 +6230,13 @@ function loadQsCtx(){
   if(state.qs.ctxTried) return; state.qs.ctxTried=true;
   api('/quick-stock/context').then(d=>{
     state.qs.ctx=d||{}; state.qs.ctxErr=null;
+    // §46: whether this operator may also SEE the count and correct it. The
+    // server decides, from the `quickstock:recount` grant on their role.
+    state.qs.canRecount=(d&&d.can_recount)===true;
     const st=(d&&d.stores)||[];
     state.qs.storeId=st.length?st[0].id:null;
     render();
-    if(state.qs.storeId!=null) loadQsItems();
+    if(state.qs.storeId!=null){ loadQsItems(); loadQsAdded(); }
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.ctxErr=E('Could not open Add stock.','无法打开“加库存”。'); render(); });
 }
@@ -6233,6 +6250,58 @@ function loadQsItems(force){
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
 }
+/* WHAT HAS ALREADY GONE ON THE SHELF TODAY.
+   An add leaves nothing behind on this screen: the row returns to +0 and the
+   toast fades, and a few minutes later nobody can tell whether a batch went in.
+   The honest guess is to add it again, and that is the one that costs.
+
+   THE STORE'S ADDS, NOT THIS OPERATOR'S — the duplicate worth preventing is as
+   often a colleague on the other phone as the same person coming back.
+
+   IT NEVER BLOCKS THE SCREEN. A failure here leaves the line off the cards and
+   nothing else: this screen's job is to add stock, and it can do that whether
+   or not it can say what was added earlier. */
+function loadQsAdded(){
+  if(state.qs.storeId==null) return;
+  const forStore=state.qs.storeId;
+  api('/stores/'+forStore+'/stock/added-today').then(d=>{
+    if(state.qs.storeId!==forStore) return;   // they switched store mid-flight
+    state.qs.addedToday=d||{}; state.qs.addedTried=true; render();
+  }).catch(()=>{ state.qs.addedTried=true; });
+}
+function qsAdded(id){ return (state.qs.addedToday||{})[id]|0; }
+function qsShelf(p){ return p&&p.physical_qty!=null ? (p.physical_qty|0) : null; }
+
+/* THE CARD'S SECOND LINE (§46). Two facts, either of which may be absent.
+
+   The shelf figure appears only where the grant allows it. Where it does not,
+   this line carries what was added today alone — the half that needs no grant,
+   because it is this operator's own work read back.
+
+   ZERO IS NOT SHOWN for the added figure: "Added today +0" on two hundred cards
+   is noise that trains the eye to skip the line on the one card where it says
+   something. */
+function qsMeta(p,id){
+  const bits=[];
+  const shelf=qsShelf(p);
+  if(state.qs.canRecount&&shelf!=null)
+    bits.push(`<span>${TB('On the shelf')} <b class="num">${shelf}</b></span>`);
+  const a=qsAdded(id);
+  if(a>0) bits.push(`<span style="color:var(--text-primary)">${TB('Added today')} <b class="num">+${a}</b></span>`);
+  if(!bits.length) return '';
+  return `<div class="num" style="font-size:13px;color:var(--text-secondary)">${
+    bits.join('<span style="opacity:.5;padding:0 6px">·</span>')}</div>`;
+}
+/* THE CORRECTION DOOR, and only where the grant opens it. Deliberately plain
+   and deliberately NOT beside the stepper: the two writes must never be one fat
+   finger apart — the stepper says what was MADE, this says what is THERE. */
+function qsFix(id){
+  if(!state.qs.canRecount) return '';
+  return `<button data-qsfix="${id}" style="align-self:flex-start;background:none;border:0;padding:0;font:inherit;
+    font-size:13px;color:var(--text-secondary);text-decoration:underline;text-underline-offset:3px"
+    onclick="APP.cmd('qsFix',${id})">${TB('Correct the count')}</button>`;
+}
+
 function qsRows(){
   const all=state.qs.items||[];
   const q=state.qs.q.trim().toLowerCase();
@@ -6262,11 +6331,104 @@ function qsFlush(id){
     .then(()=>qsWriteLanded(id,n,p))
     .catch(e=>{ if(String(e.message)==='auth') return; qsWriteFailed(id,n,e.message); });
 }
+/* ── CORRECTING THE COUNT (§46) ──────────────────────────────────────────
+   A SEPARATE WRITE FROM THE BATCH, and the whole ruling turns on the two never
+   becoming one. Logging a batch sends a positive delta and is recorded as
+   production; correcting sends an absolute count and is recorded as a recount.
+   Merged, every yield figure downstream becomes a guess — which is exactly what
+   `made_fewer` exists to prevent on the production gap.
+
+   The server enforces this whatever the client sends: it writes the ledger
+   reason itself in add mode, and refuses a lowered count that does not carry
+   the fork's answer. What is here is the question, asked once, in the right
+   place. */
+function qsAskCount(id){
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  if(!p||!state.qs.canRecount) return;
+  const was=qsShelf(p);
+  state.ask={ title:TB('How many are on the shelf?'), body:qsName(p),
+    fields:[{id:'n', label:TB('Count on the shelf'), numeric:true, value:was==null?'':String(was)}],
+    validate:v=>{
+      const n=String(v.n||'').trim();
+      if(!/^\d+$/.test(n)) return TB('Enter the number of units on the shelf — a whole number, 0 or more.');
+      return null;
+    },
+    run:v=>qsCountEntered(id, parseInt(String(v.n).trim(),10)) };
+  render();
+}
+/* THE FORK A LOWERED COUNT OPENS. Two answers, one of which does not save.
+
+   NOT A REASON PICKER, and the waste vocabulary is deliberately absent: the
+   kitchen records no waste on this screen. Offering "spoiled" here and writing
+   a waste record from it would put loss-recording in their hands through a side
+   door; offering it without writing one is worse — a loss named by the operator
+   and filed nowhere. So a real loss STOPS here and goes to somebody who holds
+   the waste permission, and the shelf figure does not move until they record
+   it. A count that drops without a loss record leaves the shelf agreeing with
+   the room and the business with no idea anything went missing.
+
+   A RISE ASKS NOTHING (§46), ruled that way against the symmetry argument:
+   raising a count is overwhelmingly a miscount being fixed, and a question
+   asked on every one of them is a question that stops being read. */
+function qsCountEntered(id,n){
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  if(!p) return;
+  const was=qsShelf(p);
+  if(was!=null&&n===was) return;              // agreed with the shelf; nothing to write
+  if(was!=null&&n<was){
+    state.ask={ title:TB('The count has gone down'),
+      body:TB('Shelf says '+was+', you counted '+n+'.'),
+      options:[{key:'miscount', label:TB('I counted wrong — save '+n)},
+               {key:'gone',     label:TB('Something is missing or spoiled')}],
+      run:key=>{
+        if(key==='miscount') return qsCorrect(id,n,'miscount');
+        // The answer that writes NOTHING. It says what happens next rather than
+        // just refusing — a dead end that leaves the operator holding a number
+        // they cannot enter anywhere is how a count stays wrong.
+        showToast(TB('The count stays as it is. Tell whoever records waste.'));
+      } };
+    render();
+    return;
+  }
+  qsCorrect(id,n,null);
+}
+/* `recount_reason` rides only on a DROP. An upward correction was never asked,
+   so claiming a miscount on one would put an assertion in the operator's mouth
+   they were never given the chance to make. */
+function qsCorrect(id,n,reason){
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  const was=qsShelf(p);
+  const body={physical_qty:n, note:'kitchen-correct'};
+  if(reason) body.recount_reason=reason;
+  delete state.qs.rowErr[id];
+  /* Its OWN in-flight flag, not the batch's: `inflight` prints "Adding N…",
+     which is the wrong sentence for a write that is not adding anything. */
+  state.qs.fixing[id]=n;
+  if(p&&p.physical_qty!=null) p.physical_qty=n;   // optimistic, reverted on failure
+  render();
+  apiWrite('/stores/'+state.qs.storeId+'/stock/'+id, body, 'PATCH')
+    .then(()=>{ delete state.qs.fixing[id]; render();
+      showToast(TB('Count set to '+n)+(p?' · '+qsName(p):'')); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      // The shelf goes back to what it showed, because that is what the
+      // operator has to know before they try again.
+      if(p&&was!=null) p.physical_qty=was;
+      delete state.qs.fixing[id];
+      state.qs.rowErr[id]=e.message||E('Didn\u2019t save','未保存');
+      render(); });
+}
+
 /* The two ways a write ends, named. They are the whole point of the screen —
    what the operator is left holding — so they are functions rather than two
    anonymous tails of a promise chain, and can be exercised on their own. */
 function qsWriteLanded(id,n,p){
   delete state.qs.inflight[id];
+  // Both figures that move under the operator follow the write rather than
+  // waiting for a reload: today's running total, and the shelf where §46 shows
+  // it. The card is what they check before deciding whether this batch has
+  // already gone on, and a line that lags is worse than no line at all.
+  state.qs.addedToday[id]=(state.qs.addedToday[id]|0)+n;
+  if(p&&p.physical_qty!=null) p.physical_qty=(p.physical_qty|0)+n;
   render();
   showToast(T('Added '+n,'已加 '+n+' 件')+(p?' · '+qsName(p):''));
 }
@@ -6314,6 +6476,7 @@ function screenStockAdd(){
     return `<div style="background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px">
       <div style="font-size:18px;font-weight:500;line-height:1.3;letter-spacing:-.01em;min-width:0">${escAttr(qsName(p))}</div>
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.sku||'')}</div>
+      ${qsMeta(p,id)}
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${pend<=0?' disabled':''}
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
@@ -6322,6 +6485,8 @@ function screenStockAdd(){
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>
       </div>
       ${flying?`<div style="font-size:13px;color:var(--text-secondary)">${T('Adding '+flying+'…','正在加 '+flying+' 件…')}</div>`:''}
+      ${state.qs.fixing[id]!=null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
+      ${qsFix(id)}
       ${err?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:13px;color:var(--brick-ink)">${escAttr(err)}</span>
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('qsFlush',${id})">${T('Retry','重试')}</button></div>`:''}
