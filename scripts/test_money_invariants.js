@@ -59,11 +59,21 @@ function fixture() {
     CREATE TABLE retail_customers (
       id INTEGER PRIMARY KEY, nickname TEXT, lifetime_spend REAL, balance REAL);
   `);
-  // One customer, three clean orders. Every relationship holds exactly.
-  // lifetime_spend is the sum of the three order subtotals (100 + 60 + 50), so the
-  // reconciliation starts clean — a baseline that is already non-zero cannot
-  // show a MOVE, which is the only thing the migration gate reads.
-  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 210, 20);
+  /* channel, tax_amount and tax_mode are columns the real retail_orders has had
+     since their migrations, and invariant A now reads all three. The stand-in
+     gains them for the same reason it gained same_day_surcharge_fee: a fixture
+     missing a column the check reads makes the check ERROR rather than fail,
+     and an errored invariant reports nothing while looking like nothing is
+     wrong. */
+  db.exec(`ALTER TABLE retail_orders ADD COLUMN channel TEXT;
+           ALTER TABLE retail_orders ADD COLUMN tax_amount REAL;
+           ALTER TABLE retail_orders ADD COLUMN tax_mode TEXT;`);
+  // One customer, seven clean orders. Every relationship holds exactly.
+  // lifetime_spend is the sum of every order subtotal
+  // (100 + 60 + 50 + 228.50 + 266 + 100 + 100), so the reconciliation starts
+  // clean — a baseline that is already non-zero cannot show a MOVE, which is
+  // the only thing the migration gate reads.
+  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 904.50, 20);
   const ord = db.prepare(`INSERT INTO retail_orders
     (id, order_no, customer_id, status, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
      voucher_amount, points_amount, balance_used, total, refund_amount_paid, refund_cash_amount)
@@ -87,6 +97,40 @@ function fixture() {
      the first rehearsal flagged it, and two others like it, as broken data. It
      was not; the check was. */
   ord.run(3, 'A-3', 1, 'completed', 50, 30, 0, 15, 0, 0, 0, 80, 0, 0);
+
+  /* THREE MORE ORDERS, ONE PER CORRECTION, and each is red against the formula
+     that stood before it. Every one is taken from the 2026-09-06 production
+     rehearsal rather than invented, because the argument for each correction is
+     that real trading already looked broken under the old arithmetic.
+
+     A-4 · A CHANNEL ORDER WITH A RECORDED DISCOUNT. MT20260831376090:
+     228.50 + 15 + 1.50 − 12 = 233.00, which is what the platform settled. The
+     old formula had no channel_discount term at all, so it expected 245.00 and
+     called a correctly-mirrored order broken by exactly its own promotion.
+     Seventeen production orders were this one shape.
+
+     A-5 · POINTS AND A VOUCHER COVERING MORE THAN THE ORDER. TC000207:
+     266 + 1.50 − 21.28 − 247 = −0.78, and the stored total is 0 because
+     routes/retail.js floors it (:10925). The old formula expected −0.78 and
+     reported the shop's own clamp as a defect. R260630163496 is the same shape
+     at −0.60.
+
+     A-6 · AN EXCLUSIVE-TAX ORDER. No production order carries tax yet — the
+     census counts zero — so this row is the ONLY thing holding that arm of the
+     formula, and it is here precisely because nothing in production would
+     notice if it were wrong. 100 + 10 = 110, tax 8.80 added on top, total
+     118.80. An inclusive shop with the same figures would total 110.00 with the
+     8.80 already inside; A-7 is that order, and the two together are what stop
+     the tax term being added unconditionally. */
+  //     id  no      cust status        sub  ship pack sur vouch  pts  bal   total  refund cash
+  ord.run(4, 'A-4', 1, 'completed', 228.50, 15, 1.50, 0, 0, 0, 0, 233.00, 0, 0);
+  ord.run(5, 'A-5', 1, 'completed',    266,  0, 1.50, 0, 21.28, 247, 0,   0, 0, 0);
+  ord.run(6, 'A-6', 1, 'completed',    100, 10,    0, 0, 0, 0, 0, 118.80, 0, 0);
+  ord.run(7, 'A-7', 1, 'completed',    100, 10,    0, 0, 0, 0, 0, 110.00, 0, 0);
+  db.prepare("UPDATE retail_orders SET channel = 'meituan', channel_discount = 12 WHERE id = 4").run();
+  db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'exclusive' WHERE id = 6").run();
+  db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'inclusive' WHERE id = 7").run();
+
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
     .run(1, 1, 'S-1', 4, 25, 100, 0.042);
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
