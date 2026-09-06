@@ -95,13 +95,18 @@ const SLOW = new Set([
   'test_mobile_screens.js', 'test_mobile_geometry.js', 'test_mobile_receiving.js',
   'test_mobile_waste.js', 'test_mobile_scroll.js', 'test_mobile_rider.js',
   'test_mobile_pwa.js', 'test_mobile_i18n_names.js', 'test_mobile_nav.js',
-  'test_mobile_addstock.js', 'test_mobile_home.js', 'test_mobile_orders.js',
+  'test_mobile_addstock.js', 'test_mobile_production.js',
+  'test_mobile_home.js', 'test_mobile_orders.js',
   'test_mobile_products.js', 'test_mobile_purchasing.js', 'test_mobile_inbox.js',
   'test_mobile_activity.js', 'test_mobile_categories.js', 'test_mobile_club.js',
   'test_mobile_voting.js', 'test_mobile_settings.js', 'test_mobile_sales.js',
   'test_mobile_team.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
   'test_mobile_customer_record.js', 'test_stock_home.js', 'test_stock_screens.js',
   'test_stock_receiving.js', 'test_stock_picking.js', 'test_finance_presentation.js',
+  // Drives Chromium for its render pass, so it belongs in the shard where
+  // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report
+  // a tick, which is the failure this list exists to stop.
+  'test_kitchen_stock_visibility.js',
   'test_till_back.js', 'test_restock_direction_default.js',
 ]);
 

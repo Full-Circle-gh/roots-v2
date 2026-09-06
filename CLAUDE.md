@@ -68,14 +68,25 @@ Four rules, in the order they fire:
 
 ## Chinese strings
 
-The rule is `docs/tacet-consolidation-decisions.md` §30, which carries the
-lock, the source it points at, and the amendment for the case where no
-locked source exists. Do not restate it; read it.
+The lock lives in `docs/tacet-delivery-vocabulary.md` Rule 4, which
+`docs/tacet-consolidation-decisions.md` §30 rule 3 points at. Read the rule
+there; do not restate it.
 
-The one practical note that keeps being needed: prefer restructuring a label
-so that an existing live string fits it over composing a new string. Where
-nothing live fits, leave the string blocked for Ash and ship the control
-without it. Never invent.
+**AMENDED 2026-09-06 by Ash: you decide the Chinese.** The old default — leave
+it blocked and ship the control without it — is gone, and so is "never
+invent". Work the preferences in order: copy a live pair, lift from the
+source, then compose.
+
+**What is NOT delegated is composing silently.** Every string you compose goes
+into `docs/tacet-delivery-vocabulary.md` in the same commit as the code that
+uses it, marked composed and by whom, with the live candidates you rejected.
+An undeclared string is indistinguishable from a locked one to everyone who
+comes after, which is how a wrong character survives; a declared one can be
+read and corrected. That document's v1.19 carries the full amendment.
+
+Still true, and now a reason to be careful rather than to stop: prefer
+restructuring a label so an existing live string fits it over minting a new
+one, and a numeral or a name often needs no label at all.
 
 ## Tests
 

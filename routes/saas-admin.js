@@ -29,6 +29,23 @@ try { db.exec('ALTER TABLE tenants ADD COLUMN wx_appid TEXT'); } catch (e) { /* 
 try { db.exec('ALTER TABLE tenants ADD COLUMN onboarding_model TEXT'); } catch (e) { /* already added */ }
 try { db.exec('ALTER TABLE tenants ADD COLUMN business_category TEXT'); } catch (e) { /* already added */ }
 try { db.exec('ALTER TABLE tenants ADD COLUMN setup_fee_cents INTEGER'); } catch (e) { /* already added */ }
+
+/* A tenant's own currency, read from their storefront_config and normalised by
+   the one function that defines that shape (routes/retail.js). The platform
+   screens print merchants' money and had no way to ask what it was denominated
+   in. null when the account has not set one — the client falls back to the
+   platform default rather than guessing on their behalf. */
+function tenantCurrency(tenantId) {
+  try {
+    const { getTenantDb } = require('../lib/tenant-db');
+    const { normalizeCurrency } = require('./retail');
+    const row = getTenantDb(tenantId)
+      .prepare("SELECT value_json FROM storefront_config WHERE key = 'currency'").get();
+    return (row && row.value_json) ? normalizeCurrency(JSON.parse(row.value_json)) : null;
+  } catch (e) {
+    return null;   // no such table on an old account DB, or unparseable JSON
+  }
+}
 // Per-tenant onboarding checklist progress (step template: lib/onboarding-steps).
 db.exec(`CREATE TABLE IF NOT EXISTS tenant_onboarding (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -316,6 +333,10 @@ router.get('/api/saas-admin/tenants/:id/onboarding', requireSaasAdmin, (req, res
     success: true,
     tenant: { id: t.id, name: t.name, brand: t.brand_name },
     model, category: t.business_category || '', setupFeeCents: t.setup_fee_cents || 0,
+    /* The tenant's own currency, so the setup-fee field is labelled in the money
+       the fee is actually denominated in rather than in this platform's default
+       (audit D-03). null when the account has not set one. */
+    currency: tenantCurrency(t.id),
     progress: onboarding.progress(phases), phases,
   });
 });

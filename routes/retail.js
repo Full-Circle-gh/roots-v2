@@ -3826,6 +3826,30 @@ function payContext() {
   return { appId: c.wechat.appId, ...c.pay };  // {appId,mchId,apiV3Key,privateKey,serialNo,devMode}
 }
 
+// The Official Account's pay context — THE SAME MERCHANT, A DIFFERENT APPID.
+//
+// §50. An openid is issued by one WeChat app and can only pay a charge created
+// under that same app, so the QR menu's in-page payment signs with the 服务号's
+// appid while settling to the merchant every other rail already settles to.
+// That is the whole of the difference, and it is why this is a sibling of
+// payContext() rather than a flag on it: the merchant half must not be able to
+// drift between the two, and the appid half must never be shared.
+//
+// `oaDevMode` is separate from `devMode` on purpose. Pay can be fully
+// configured while the Official Account is not — that is exactly the state
+// this repo is in until the 服务号 credentials are set — and a caller must be
+// able to tell "we cannot charge at all" from "we cannot charge IN PAGE".
+// The Official Account's own secret rides along rather than being read from
+// env by the caller: for Roots the bundle resolves it from .env and for every
+// other tenant from its encrypted row, and a caller reaching for
+// process.env.WECHAT_OA_APP_SECRET would silently hand a tenant an empty
+// string — its exchange would fail and the customer would be bounced to the
+// till with nothing in the log saying why.
+function oaPayContext() {
+  const c = getTenantCreds(currentTenantId());
+  return { appId: c.oa.appId, oaAppSecret: c.oa.appSecret, ...c.pay, oaDevMode: c.oa.devMode };
+}
+
 // The active tenant's third-party integration creds (Platform readiness ⑤).
 // Roots/unscoped → env-backed bundle (unchanged); other tenants → their own
 // encrypted creds with NO env fallback. Shape:
@@ -5015,6 +5039,13 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 
     // Default — JSAPI (mini-app, or shop opened INSIDE WeChat). Needs the
     // customer's openid.
+    //
+    // A WEB PAGE OPENED INSIDE WECHAT CANNOT REACH THIS SUCCESSFULLY TODAY, and
+    // that is expected rather than broken: it has no openid to offer, so it
+    // falls to the 409 below. §44/§45 put payment at the counter for launch and
+    // record that in-page WeChat payment is blocked on a verified 服务号 — no
+    // OAuth and no JS-SDK exist in this repo to obtain one. Do not read this
+    // branch as a working in-WeChat web payment path.
     try {
       // Pull the customer's openid for the JSAPI call
       const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
@@ -7726,7 +7757,16 @@ function cancelStalePendingOrdersForTenant() {
           WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)
             -- never reap an Alipay order the customer has uploaded a screenshot
             -- for: it's (claimed) paid and awaiting staff/auto-verify.
-            AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)`
+            AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)
+            -- §45: A COUNTER-FULFILMENT ORDER IS NEVER REAPED ON THIS
+            -- TIMING. The customer is in the shop, at a table or in the queue,
+            -- and this sweep would cancel their order underneath them. §45
+            -- exempts them from "their existing timings", not from ever
+            -- expiring, so an abandoned counter order waits for staff to
+            -- cancel it — which releases its reservation on the existing path.
+            -- A counter-specific timing is nobody's ruling yet.
+            AND COALESCE(fulfillment_type, '') <> 'counter'
+            `
       ).all(`-${hours} hours`)) byId.set(o.id, o.status);
     }
     // Manual-Alipay orders past their pay window — but ONLY when the customer
@@ -7738,7 +7778,16 @@ function cancelStalePendingOrdersForTenant() {
         `SELECT id, status FROM retail_orders
           WHERE status = 'pending_payment' AND payment_method = 'alipay'
             AND alipay_proof_image IS NULL
-            AND placed_at <= datetime('now', ?)`
+            AND placed_at <= datetime('now', ?)
+            -- §45: A COUNTER-FULFILMENT ORDER IS NEVER REAPED ON THIS
+            -- TIMING. The customer is in the shop, at a table or in the queue,
+            -- and this sweep would cancel their order underneath them. §45
+            -- exempts them from "their existing timings", not from ever
+            -- expiring, so an abandoned counter order waits for staff to
+            -- cancel it — which releases its reservation on the existing path.
+            -- A counter-specific timing is nobody's ruling yet.
+            AND COALESCE(fulfillment_type, '') <> 'counter'
+            `
       ).all(`-${alipayWin} minutes`)) byId.set(o.id, o.status);
     }
   } catch (e) {
@@ -13844,7 +13893,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       .reduce((s, h) => s + Number((byBucket[h] || {}).revenue || 0), 0);
 
     const days = cand.length;
-    let sumRev = 0, sumOrd = 0, sumNew = 0;
+    let sumRev = 0, sumOrd = 0, sumNew = 0, sumStorefrontRev = 0;
     // Each same-weekday's own takings, not just their total. The loop already
     // pays for these queries to build the average, so keeping the individual
     // numbers costs nothing — and it is the only way to answer "is today the
@@ -13855,6 +13904,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const k = clip ? tdb().prepare(kpiSqlClip).get(d, d, nowHms)
                      : tdb().prepare(kpiSql).get(d, d);
       sumOrd += Number(k.orders || 0);
+      // Storefront-only revenue, same population as sumOrd (and as kpi.aov's
+      // own numerator via NOTGZ above) — kept separate from the blended `rev`
+      // below so a baseline AOV can divide like-for-like, never top-up/gzgrocery
+      // money by a storefront order count.
+      sumStorefrontRev += Number(k.revenue || 0);
       sumNew += clip ? tdb().prepare(newCustSqlClip).get(d, d, nowHms).n
                      : tdb().prepare(newCustSql).get(d, d).n;
       // Blend gzgrocery pickup takings and top-up cash into each baseline day,
@@ -13874,6 +13928,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const avg = days > 0 ? sum / days : 0;
       return { avg, delta: days > 0 ? pctOf(cur, avg) : null };
     };
+    // AOV's own average isn't a per-day mean divided by `days` like the other
+    // three — it's total storefront revenue over total storefront orders across
+    // the baseline window (weighted by each day's order volume), which is the
+    // same shape as kpi.aov itself. Never sumRev (blended) / sumOrd: that
+    // divides top-up and gzgrocery money by an order count that never counted
+    // them, and reproduces the exact inflation this field exists to avoid.
+    const aovAvg = sumOrd > 0 ? sumStorefrontRev / sumOrd : 0;
     baseline = {
       days,
       // 0–6, Sunday first. Sent as an index, never a word: the client owns the
@@ -13888,6 +13949,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       revenue:       mk(kpi.revenue, sumRev),
       orders:        mk(kpi.orders,  sumOrd),
       new_customers: mk(newCust,     sumNew),
+      aov:           { avg: aovAvg, delta: (days > 0 && aovAvg > 0) ? pctOf(kpi.aov, aovAvg) : null },
       // Is today outright ahead of EVERY same weekday behind it? Strictly
       // greater, so a tie is not a record, and null rather than false when
       // there are too few days to make the claim mean anything — one prior
@@ -24430,6 +24492,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.invoice_number, o.invoice_file_url, o.invoice_issued_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
+                    -- §49: the short number a shop calls across its counter, and
+                    -- the trading day it was drawn on. NOT unique — two shops
+                    -- both call 14 on the same afternoon — so the ruling requires
+                    -- it be shown with its shop and its date or not at all. This
+                    -- row already carries both: the Store column and Placed.
+                    -- Null for every order that did not arrive by QR.
+                    o.shop_order_code, o.shop_order_date,
                     o.channel_status, o.channel_status_at, o.channel_eta,
                     -- 预订单 marker: the list's delivery cell shows a booked window
                     -- differently from a live ETA (same clock time, different job).
@@ -27500,6 +27569,27 @@ function autoPrintOrder(orderId) {
   try {
     const pp = loadPrinterPrefs();
     if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    // ONE TICKET PER ORDER, AND A QR ORDER'S ALREADY PRINTED.
+    //
+    // §44 puts the QR ticket at SUBMIT, not at paid: the kitchen starts making
+    // the drink while the customer is still walking to the till. Every other
+    // order in this system prints here, on the paid transition, and that has
+    // not changed. Without this line a QR order would print twice — once from
+    // routes/shop-menu.js on submit, and again from here when the cashier
+    // settles it — and the second slip is indistinguishable from a second
+    // order to whoever picks it up.
+    //
+    // DELIBERATELY NARROW. It keys on source='qr' AND a print that actually
+    // SUCCEEDED, so: nothing that exists today changes behaviour (no other path
+    // can set print_status='printed' before paid), a QR order whose submit
+    // print FAILED still gets its chance here rather than losing the ticket
+    // altogether, and an operator's manual reprint of an unpaid non-QR order
+    // does not silently suppress that order's real slip.
+    const prior = db.prepare('SELECT source, print_status FROM retail_orders WHERE id = ?').get(orderId);
+    if (prior && prior.source === 'qr' && prior.print_status === 'printed') {
+      console.log('[feie print]', orderId, 'skipped — QR ticket already printed on submit');
+      return;
+    }
     printOrderById(orderId, pp)
       .then(r => {
         if (r.ok) console.log('[feie print]', orderId, 'ok');
@@ -35635,3 +35725,44 @@ module.exports.nextFreshBatchDate    = nextFreshBatchDate;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;
+
+// Exported for routes/shop-menu.js (the public /s/:shopCode QR menu, §44) so
+// the menu's photo fallback cannot drift from the storefront's:
+// resolveProductImage carries the variant-sibling fallback and a second copy
+// of it would be a second thing to keep right.
+module.exports.resolveProductImage   = resolveProductImage;
+
+// The one currency shape, exported so the PLATFORM screens read a tenant's
+// money the same way the tenant's own surfaces do. routes/store-admin.js
+// prints other people's money across many tenant databases and had no way to
+// ask what any of them was denominated in; a second normaliser there would be
+// a second answer to a question that already has one. The QR menu reads it for
+// the same reason — one answer, three callers.
+module.exports.normalizeCurrency     = normalizeCurrency;
+
+// Exported for routes/shop-menu.js — the public QR order path (§44). A QR sale
+// and a till sale at the same counter must be numbered, taxed and costed by the
+// SAME code: a second answer to any of these three is a bug that shows up as a
+// margin report nobody can reconcile, or a tax figure the shop cannot defend.
+//   nextOrderNo   — the public order number, and its uniqueness contract
+//   taxSettings   — the tenant's tax mode and rate, one source
+//   costAtSale    — the unit-cost snapshot every order item carries
+module.exports.nextOrderNo           = nextOrderNo;
+module.exports.taxSettings           = taxSettings;
+module.exports.costAtSale            = costAtSale;
+// §44: a QR order's kitchen ticket prints on SUBMIT rather than on paid, so the
+// menu route needs the same printer resolution, the same template and the same
+// outcome recording the paid path uses. It is the whole function rather than a
+// copy of it — a second renderer would drift, and the drawer's Reprint reads
+// the columns this one writes.
+module.exports.autoPrintOrder        = autoPrintOrder;
+// The in-page WeChat payment rail for the QR menu (§50). routes/shop-menu.js
+// composes these rather than owning copies: the prepare, the signing and the
+// out_trade_no namespace are the same ones every other WeChat charge in this
+// system uses, and a second implementation of any of them would settle to a
+// ledger the callback cannot find.
+module.exports.oaPayContext          = oaPayContext;
+module.exports.wechatJsapiPrepare    = wechatJsapiPrepare;
+module.exports.buildWxPayParams      = buildWxRequestPaymentParams;
+module.exports.wxOutTradeNo          = wxOutTradeNo;
+module.exports.payDescription        = payDescription;

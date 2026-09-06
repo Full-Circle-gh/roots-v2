@@ -59,11 +59,24 @@ function fixture() {
     CREATE TABLE retail_customers (
       id INTEGER PRIMARY KEY, nickname TEXT, lifetime_spend REAL, balance REAL);
   `);
-  // One customer, two clean orders. Every relationship holds exactly.
-  // lifetime_spend is the sum of the two order subtotals (100 + 60), so the
-  // reconciliation starts clean — a baseline that is already non-zero cannot
-  // show a MOVE, which is the only thing the migration gate reads.
-  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 160, 20);
+  /* channel, tax_amount and tax_mode are columns the real retail_orders has had
+     since their migrations, and invariant A now reads all three. The stand-in
+     gains them for the same reason it gained same_day_surcharge_fee: a fixture
+     missing a column the check reads makes the check ERROR rather than fail,
+     and an errored invariant reports nothing while looking like nothing is
+     wrong. */
+  db.exec(`ALTER TABLE retail_orders ADD COLUMN channel TEXT;
+           ALTER TABLE retail_orders ADD COLUMN tax_amount REAL;
+           ALTER TABLE retail_orders ADD COLUMN tax_mode TEXT;
+           ALTER TABLE retail_orders ADD COLUMN source TEXT;
+           ALTER TABLE retail_orders ADD COLUMN created_by INTEGER;
+           ALTER TABLE retail_orders ADD COLUMN placed_at TEXT;`);
+  // One customer, eight clean orders. Every relationship holds exactly.
+  // lifetime_spend is the sum of every order subtotal
+  // (100 + 60 + 50 + 228.50 + 266 + 100 + 100 + 994), so the reconciliation starts
+  // clean — a baseline that is already non-zero cannot show a MOVE, which is
+  // the only thing the migration gate reads.
+  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 1898.50, 20);
   const ord = db.prepare(`INSERT INTO retail_orders
     (id, order_no, customer_id, status, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
      voucher_amount, points_amount, balance_used, total, refund_amount_paid, refund_cash_amount)
@@ -72,6 +85,76 @@ function fixture() {
   ord.run(1, 'A-1', 1, 'completed', 100, 12, 0, 0, 0, 0, 0, 112, 0, 0);
   //  paid partly in points and credit: gross 30+10+20 = 60, cash 20
   ord.run(2, 'A-2', 1, 'completed', 60, 0, 0, 0, 0, 30, 10, 20, 0, 0);
+  /* A SAME-DAY ORDER, and the reason this row exists. Both orders above carry a
+     ZERO surcharge, so for as long as they were the whole fixture, invariant A
+     could not tell "the surcharge is added to the parts" from "it is not" —
+     nothing in the suite distinguished the two readings, and A shipped adding
+     it twice.
+
+     shipping_fee ALREADY CONTAINS the surcharge: routes/retail.js does
+     `shippingFee += sameDaySurcharge` at creation, and same_day_surcharge_fee
+     records how much of that line it was. So this order is CLEAN — 50 + 30 + 0
+     = 80 — and it goes red against the old formula, which made it 95.
+
+     Taken from production: TC000351 was 49 + 30 (15 of it surcharge) = 79, and
+     the first rehearsal flagged it, and two others like it, as broken data. It
+     was not; the check was. */
+  ord.run(3, 'A-3', 1, 'completed', 50, 30, 0, 15, 0, 0, 0, 80, 0, 0);
+
+  /* THREE MORE ORDERS, ONE PER CORRECTION, and each is red against the formula
+     that stood before it. Every one is taken from the 2026-09-06 production
+     rehearsal rather than invented, because the argument for each correction is
+     that real trading already looked broken under the old arithmetic.
+
+     A-4 · A CHANNEL ORDER WITH A RECORDED DISCOUNT. MT20260831376090:
+     228.50 + 15 + 1.50 − 12 = 233.00, which is what the platform settled. The
+     old formula had no channel_discount term at all, so it expected 245.00 and
+     called a correctly-mirrored order broken by exactly its own promotion.
+     Seventeen production orders were this one shape.
+
+     A-5 · POINTS AND A VOUCHER COVERING MORE THAN THE ORDER. TC000207:
+     266 + 1.50 − 21.28 − 247 = −0.78, and the stored total is 0 because
+     routes/retail.js floors it (:10925). The old formula expected −0.78 and
+     reported the shop's own clamp as a defect. R260630163496 is the same shape
+     at −0.60.
+
+     A-6 · AN EXCLUSIVE-TAX ORDER. No production order carries tax yet — the
+     census counts zero — so this row is the ONLY thing holding that arm of the
+     formula, and it is here precisely because nothing in production would
+     notice if it were wrong. 100 + 10 = 110, tax 8.80 added on top, total
+     118.80. An inclusive shop with the same figures would total 110.00 with the
+     8.80 already inside; A-7 is that order, and the two together are what stop
+     the tax term being added unconditionally. */
+  //     id  no      cust status        sub  ship pack sur vouch  pts  bal   total  refund cash
+  ord.run(4, 'A-4', 1, 'completed', 228.50, 15, 1.50, 0, 0, 0, 0, 233.00, 0, 0);
+  ord.run(5, 'A-5', 1, 'completed',    266,  0, 1.50, 0, 21.28, 247, 0,   0, 0, 0);
+  ord.run(6, 'A-6', 1, 'completed',    100, 10,    0, 0, 0, 0, 0, 118.80, 0, 0);
+  ord.run(7, 'A-7', 1, 'completed',    100, 10,    0, 0, 0, 0, 0, 110.00, 0, 0);
+  db.prepare("UPDATE retail_orders SET channel = 'meituan', channel_discount = 12 WHERE id = 4").run();
+  db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'exclusive' WHERE id = 6").run();
+  db.prepare("UPDATE retail_orders SET tax_amount = 8.80, tax_mode = 'inclusive' WHERE id = 7").run();
+
+  /* A-8 · A MANUAL ORDER WHOSE TOTAL DOES ADD UP. Clean here on purpose: §2
+     seeds the override onto this row, and that pairing is what proves BOTH
+     halves of the manual-order rule at once. Overridden, it must appear in the
+     reconciliation line I and NOT in invariant A — and since §2 also requires
+     that no OTHER check moves, a missing `source <> 'manual'` clause in A would
+     fail that assertion rather than pass unnoticed.
+
+     TC000269 is the production row behind it: eleven items summing to 994.00 —
+     the line items agree with subtotal exactly — sold for 1014.80.
+     routes/retail.js:23421 says staff "may override any line price AND the
+     grand total (negotiated / wholesale)", so the total is an operator's figure
+     and A cannot ask it the identity.
+
+     These rows are COUNTED rather than exempted because nothing distinguishes a
+     negotiated price from a typo — the override IS the feature — so dropping
+     them would hide a mistyped total for ever. Twenty manual orders exist in
+     production and exactly one carries an override, so visible-not-exempt costs
+     almost nothing and keeps the one row readable. */
+  ord.run(8, 'A-8', 1, 'completed', 994, 0, 0, 0, 0, 0, 0, 994.00, 0, 0);
+  db.prepare("UPDATE retail_orders SET source = 'manual', created_by = 6, placed_at = '2026-08-14 11:11:09' WHERE id = 8").run();
+
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
     .run(1, 1, 'S-1', 4, 25, 100, 0.042);
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
@@ -123,6 +206,14 @@ const BREAKS = [
     (db) => db.prepare('UPDATE retail_customers SET balance = -1 WHERE id = 1').run()],
   ['G', 'a lifetime total that no longer matches the orders',
     (db) => db.prepare('UPDATE retail_customers SET lifetime_spend = 500 WHERE id = 1').run()],
+  /* I's "break" is legitimate data, exactly as G's is: an operator negotiating a
+     price is not a defect, and the check exists to make that visible rather than
+     to forbid it. What this case actually proves is the EXEMPTION — because §2
+     requires every other check to stay green, invariant A must NOT move when
+     this manual total is overridden. Drop the `source <> 'manual'` clause from A
+     and this assertion fails, which is the only reason it is safe to have one. */
+  ['I', 'a manual order whose grand total was overridden',
+    (db) => db.prepare('UPDATE retail_orders SET total = 1014.80 WHERE id = 8').run()],
   // Moving `total` alone by half a cent breaks the order's arithmetic as well,
   // and that is correct: A and H are looking at the same row from two sides.
   ['H', 'an amount that is not a whole number of cents',

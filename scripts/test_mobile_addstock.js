@@ -44,6 +44,32 @@ const SHELF = KITCHEN + `
 
 const body = "txt('content').replace(/\\s+/g,' ')";
 
+/* THE SAME SHELF, WITH THE GRANT (decisions §46). Derived from SHELF rather
+   than written out again, so the two fixtures cannot drift on anything but the
+   one fact that separates them: whether this tenant has ticked
+   `quickstock:recount` onto the kitchen role. The server sends the answer as
+   `can_recount`; the screen never infers it from whether a quantity happened to
+   arrive, because a stripped list and a genuinely empty shelf look the same. */
+const GRANTED = SHELF.replace('render();', 'state.qs.canRecount=true; render();');
+
+// A write recorder, for the cases that are about what goes on the wire.
+/* THE OTHER JOB THIS SCREEN NOW DOES (§48): the store clerk's absolute recount,
+   which used to live in /stock. Same list, same store, same endpoint — the
+   number on the card IS the shelf and the write is an absolute count. */
+const CLERK = "state.caps=['quickstock:recount'];";
+const COUNTING = CLERK + `
+  state.qs.ctx={enabled:true,mode:'recount',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
+  state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true;
+  state.qs.items=[
+    {product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11},
+    {product_id:8,name_en:'Turkish Tomato Salad',name_cn:'土耳其番茄沙拉',sku:'1-15',physical_qty:0}
+  ];
+  state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`;
+
+const CATCH = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
+
 run('add stock', [
   ['it is a screen in this app, reached from the home',
     KITCHEN + "state.tab='more';state.stack=[];render();", [
@@ -51,12 +77,19 @@ run('add stock', [
       ['as a push, not a departure', "moreRowsFlat().some(function(r){return r.key==='stockapp'&&!r.href})"],
       ['and it lands on the in-app route', "moreRowsFlat().find(function(r){return r.key==='stockapp'}).cmd.indexOf('stockadd')>-1"],
     ]],
-  ['an operator who recounts still leaves for the app that does that',
+  /* AN OPERATOR WHO RECOUNTS NO LONGER LEAVES, and this case is where that
+     reversal is recorded. It used to assert the opposite — a departure carrying
+     `/stock?go=add` — which was right while the recount lived in the other app.
+     §48 retires that app, so the recount is a mode of THIS screen and there is
+     nothing to leave for. The row is still named for the job they hold. */
+  ['an operator who recounts stays in this app, named for the counting',
     "state.caps=['quickstock:recount'];state.tab='more';state.stack=[];render();", [
       ['named for the recount', `${body}.indexOf('Quick stock')>-1`],
-      // A departure, and a deep link: the row lands on the counting list rather
-    // than on the launcher that would offer it back (see #267).
-    ['and it is a departure', "moreRowsFlat().find(function(r){return r.key==='stockapp'}).href==='/stock?go=add'"],
+      ['and it is a push, not a departure',
+       "!moreRowsFlat().find(function(r){return r.key==='stockapp'}).href"],
+      ['landing on the screen this app carries',
+       "moreRowsFlat().find(function(r){return r.key==='stockapp'}).cmd.indexOf('stockadd')>-1"],
+      ['and the route admits them', "canRoute('stockadd')===true"],
     ]],
 
   ['the shelf total never reaches the screen', SHELF, [
@@ -136,6 +169,164 @@ run('add stock', [
       ['only the match', `${body}.indexOf('Turkish Tomato Salad')>-1 && ${body}.indexOf('Hummus')===-1`],
       ['the field keeps focus', "document.activeElement && document.activeElement.id==='mQsQ'"],
     ]],
+  /* ── §46: the count, and the one correction it allows ────────────────────
+     WITHOUT THE GRANT NOTHING CHANGED — asserted by the case above this block,
+     which is every kitchen until an owner ticks the capability on. */
+  ['without the grant there is no correction door', SHELF, [
+    ['no shelf line', `${body}.indexOf('On the shelf')===-1`],
+    ['and nothing to open', `${body}.indexOf('Correct the count')===-1`],
+  ]],
+  ['the grant shows the count and opens the door', GRANTED, [
+    ['the shelf figure is named', `${body}.indexOf('On the shelf')>-1`],
+    ['and it is the shelf figure', `${body}.indexOf('11')>-1`],
+    ['with a way to correct it', `${body}.indexOf('Correct the count')>-1`],
+  ]],
+  /* WHAT HAS ALREADY GONE ON TODAY. The half that needs NO grant — it is the
+     operator's own work read back, and it is what stops the same batch going
+     on twice. Zero is not drawn: "Added today +0" on two hundred cards trains
+     the eye to skip the line on the one card where it says something. */
+  ['todays adds are read back on the card',
+    SHELF + "state.qs.addedToday={7:{qty:6,who:['Ah Ming']}}; render();", [
+      ['the line is there', `${body}.indexOf('Added today')>-1`],
+      ['carrying what went on', `${body}.indexOf('+6')>-1`],
+      /* AND WHO PUT IT THERE. "somebody already added 30" is a weaker answer
+         than the name: the name is what tells the reader whether the 30 was
+         their own work or the colleague they can go and ask. */
+      ['and who put it there', `${body}.indexOf('Ah Ming')>-1`],
+    ]],
+  ['two people on the same product are both named',
+    SHELF + "state.qs.addedToday={7:{qty:14,who:['Ah Ming','Lily']}}; render();", [
+      ['the total is the two of them', `${body}.indexOf('+14')>-1`],
+      ['the first is named', `${body}.indexOf('Ah Ming')>-1`],
+      ['and so is the second', `${body}.indexOf('Lily')>-1`],
+    ]],
+  /* AN ADD NOBODY CAN BE NAMED FOR IS STILL AN ADD. The units are what keep the
+     figure agreeing with the shelf, so a row with no label contributes them and
+     no name rather than being dropped. */
+  ['an add with no name still counts',
+    SHELF + "state.qs.addedToday={7:{qty:9,who:[]}}; render();", [
+      ['the units are there', `${body}.indexOf('+9')>-1`],
+      ['and no stray separator', `${body}.indexOf('+9 ·')===-1`],
+    ]],
+  ['a landed write names this operator on the line',
+    SHELF + "state.me={name:'Ah Ming'}; state.qs.inflight[7]=2; qsWriteLanded(7,2,state.qs.items[0]);", [
+      ['today\u2019s figure moved', "qsAdded(7)===2"],
+      ['and it says who', "qsAddedWho(7).indexOf('Ah Ming')>-1"],
+    ]],
+  ['and it is absent when nothing went on', SHELF, [
+    ['no line', `${body}.indexOf('Added today')===-1`],
+  ]],
+
+  /* A DROP IS NEVER SAVED UNASKED. 11 on the shelf, 8 counted: the fork opens
+     and the wire stays silent until it is answered. */
+  ['a drop asks before it writes', GRANTED + CATCH + "qsCountEntered(7,8);", [
+    ['the fork is open', "!!state.ask"],
+    ['offering the miscount', "state.ask.options.some(function(o){return o.key==='miscount'})"],
+    ['and the loss', "state.ask.options.some(function(o){return o.key==='gone'})"],
+    ['carrying no waste vocabulary at all',
+      "state.ask.options.every(function(o){return ['miscount','gone'].indexOf(o.key)>-1})"],
+    ['and nothing has been written', "window.__sent.length===0"],
+  ]],
+  /* THE ANSWER THAT WRITES NOTHING. The kitchen records no waste, so a loss
+     stops here and goes to whoever can record one — and the screen says so
+     rather than merely refusing. */
+  ['something gone writes nothing and says where it goes',
+    GRANTED + CATCH + "qsCountEntered(7,8); APP.cmd('askRun','gone');", [
+      ['nothing on the wire', "window.__sent.length===0"],
+      ['the shelf is untouched', "state.qs.items[0].physical_qty===11"],
+      ['and it says what happens instead', "String(state.toast).indexOf('records waste')>-1"],
+    ]],
+  ['counted wrong writes an absolute count carrying the answer',
+    GRANTED + CATCH + "qsCountEntered(7,8); APP.cmd('askRun','miscount');", [
+      ['one request', "window.__sent.length===1"],
+      ['an absolute count, never a delta', "JSON.parse(window.__sent[0].b).physical_qty===8"],
+      ['the two writes stay two', "!('delta' in JSON.parse(window.__sent[0].b))"],
+      ['and it carries the fork answer', "JSON.parse(window.__sent[0].b).recount_reason==='miscount'"],
+    ]],
+  /* A RISE ASKS NOTHING (§46), ruled that way against the symmetry argument on
+     the friction case — so a fork appearing here is a decision reversed in
+     silence. And no answer rides along: an upward correction was never asked. */
+  ['raising the count asks nothing and claims nothing',
+    GRANTED + CATCH + "qsCountEntered(7,19);", [
+      ['no fork', "!state.ask"],
+      ['one request', "window.__sent.length===1"],
+      ['carrying the new count', "JSON.parse(window.__sent[0].b).physical_qty===19"],
+      ['and no answer nobody was asked for', "!('recount_reason' in JSON.parse(window.__sent[0].b))"],
+    ]],
+  ['a count that agrees with the shelf writes nothing at all',
+    GRANTED + CATCH + "qsCountEntered(7,11);", [
+      ['no fork', "!state.ask"],
+      ['and no write', "window.__sent.length===0"],
+    ]],
+
+  /* ── §48: the recount, in this app ───────────────────────────────────────
+     THE NUMBER IS THE SHELF, not an amount to add. The two modes write
+     different things — an absolute count and a delta — so the number is drawn
+     differently on purpose: `11` against `+0`. */
+  ['counting shows the shelf itself, not an amount to add', COUNTING, [
+    ['the product is there', `${body}.indexOf('Hummus Asli')>-1`],
+    ['and the shelf figure is the number', `${body}.indexOf('11')>-1`],
+    ['nothing is offered to add', `${body}.indexOf('+0')===-1`],
+    ['no correction door — counting IS the correction', `${body}.indexOf('Correct the count')===-1`],
+    ['and no add-mode second line', `${body}.indexOf('On the shelf')===-1`],
+  ]],
+  ['the screen is named for the counting', COUNTING, [
+    ['its head says so', "T.apply(null, stockAppLabel())==='Quick stock'"],
+  ]],
+  /* ONE WRITE PER PAUSE, the same rule the add path keeps: a write per tap puts
+     six rows in the ledger where one belongs. */
+  ['taps move the shelf and one absolute count is written',
+    COUNTING + CATCH + "APP.cmd('qsBump',7,1); APP.cmd('qsBump',7,1); qsSetCommit(7);", [
+      ['the card followed the taps', "state.qs.items[0].physical_qty===13"],
+      ['one request', "window.__sent.length===1"],
+      ['carrying the count', "JSON.parse(window.__sent[0].b).physical_qty===13"],
+      ['as a recount, never a delta', "!('delta' in JSON.parse(window.__sent[0].b))"],
+      ['recorded as an adjustment', "JSON.parse(window.__sent[0].b).reason==='adjust'"],
+    ]],
+  ['a count typed straight in is saved as it stands',
+    COUNTING + CATCH + "qsCountEntered(7,40);", [
+      ['one request', "window.__sent.length===1"],
+      ['carrying what was typed', "JSON.parse(window.__sent[0].b).physical_qty===40"],
+    ]],
+  /* A CLERK COUNTING DOWN IS NOT ASKED WHY. §46's fork is a kitchen rule — a
+     recount going down is exactly what a recount is for, and the server
+     enforces the fork only in add mode. */
+  ['counting down asks nothing, because counting down is the job',
+    COUNTING + CATCH + "qsCountEntered(7,3);", [
+      ['no fork', "!state.ask"],
+      ['it just saves', "window.__sent.length===1 && JSON.parse(window.__sent[0].b).physical_qty===3"],
+      ['and claims no reason', "!('recount_reason' in JSON.parse(window.__sent[0].b))"],
+    ]],
+  ['a shelf already at zero cannot be taken lower',
+    COUNTING + CATCH + "APP.cmd('qsBump',8,-1); qsSetCommit(8);", [
+      ['it stays at zero', "state.qs.items[1].physical_qty===0"],
+      ['and a count that did not move writes nothing', "window.__sent.length===0"],
+    ]],
+  /* THE TWO ENDS OF A RECOUNT, asserted on their own. The probe runs its checks
+     in the same tick as its setup, so a settled promise is not observable here
+     — which is why qsSetCommit hands its outcomes to two named functions. */
+  ['a failed recount hands the shelf back to what it showed',
+    COUNTING + "state.qs.setBase[7]=11; state.qs.items[0].physical_qty=40; state.qs.fixing[7]=40;"
+             + "qsSetFailed(7,11,'Server said no');", [
+      ['the shelf is what it was', "state.qs.items[0].physical_qty===11"],
+      ['the row carries the failure', "state.qs.rowErr[7]==='Server said no'"],
+      ['nothing left in flight', "state.qs.fixing[7]===undefined"],
+      ['no baseline left over', "state.qs.setBase[7]===undefined"],
+      ['and it is on the screen', `${body}.indexOf('Server said no')>-1`],
+    ]],
+  ['a recount that lands leaves nothing behind',
+    COUNTING + "state.qs.setBase[7]=11; state.qs.fixing[7]=13; qsSetLanded(7);", [
+      ['nothing in flight', "state.qs.fixing[7]===undefined"],
+      ['no baseline', "state.qs.setBase[7]===undefined"],
+      ['and no error', "!state.qs.rowErr[7]"],
+    ]],
+  ['the counting screen says which tool is off, not the other one',
+    CLERK + `state.qs.ctx={enabled:false,mode:'recount',stores:[]}; state.qs.ctxTried=true;
+      state.stack=[{route:'stockadd',title:SUBS.stockadd.title}]; render();`, [
+      ['named for the counting', `${body}.indexOf('Quick stock is off')>-1`],
+      ['and not for the other job', `${body}.indexOf('Add stock is off')===-1`],
+    ]],
+
   ['a role without the permission cannot reach it at all',
     "state.caps=['purchasing:receive'];push('stockadd');render();", [
       ['push refuses it', "state.stack.length===0"],

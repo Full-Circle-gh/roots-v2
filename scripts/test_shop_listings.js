@@ -289,11 +289,28 @@ function call(method, url, body) {
       assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM shops WHERE location_id = ?').get(LOC_B).n, 0);
       for (const t of Object.keys(BEFORE)) assert.strictEqual(colsOf(t), BEFORE[t], `${t} columns changed`);
     });
-    check('shop_listings is referenced only by its own route, its migration and this test', () => {
+    check('shop_listings is referenced only by its own route, the public menu, and this test', () => {
       const dirs = ['routes', 'lib', 'middleware', 'public'];
+      // WIDENED 2026-09-06 for step 5a, deliberately and once. This guard was
+      // written when nothing read these tables at all; the public QR menu is
+      // the first reader §44 always said would come, so it is admitted BY NAME
+      // rather than the guard being softened. Everything the line was for is
+      // intact: the till, the storefront and every order path are still held
+      // to reading nothing here, and the next unannounced reader still turns
+      // this red and has to say so.
       const allowed = new Set([
         path.join('routes', 'retail-shops.js'),
+        path.join('routes', 'shop-menu.js'),
         path.join('public', 'retail-admin', '28-shops.js'),
+        /* THE MONEY REGISTRY, which NAMES the column rather than reading it.
+           lib/money-columns.js is one line per money column in the schema, and
+           `shop_listings.price` is decimal yuan, so it has to appear there or
+           the migration scanner reports it as a column nobody has decided
+           about — which is exactly what the first production rehearsal did
+           report, on 2026-09-06. An entry there is a classification, not a
+           reader: nothing in that file queries this table, and the containment
+           this check exists to hold is unaffected. */
+        path.join('lib', 'money-columns.js'),
       ]);
       const hits = [];
       const walk = d => {

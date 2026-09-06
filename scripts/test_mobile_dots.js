@@ -95,7 +95,11 @@ const CASES = [
     // Thirty rows behind one folder dot is a guessing game. On a warehouse role
     // with no tab bar at all this list IS the home screen, so the row's dot is
     // the only one there is.
-    ['Transfers carries the dot', rowDot('Transfers')],
+    /* IT IS THE READY LIST'S ROW, NOT TRANSFERS. The dot sat on Transfers while
+       that row was the only door to the ready list — /stock's launcher held it,
+       and Transfers was the way in. §48 gave the list a row of its own and then
+       removed the launcher, so the dot moved to the row it was always about. */
+    ['Ready from the kitchen carries the dot', rowDot('Ready from the kitchen')],
     // Counted rather than spot-checked: "Purchasing has no dot" would also be
     // true of a More list that failed to render a single row.
     ['and it is the only row that does',
@@ -107,9 +111,9 @@ const CASES = [
   ['nothing waiting is no dot',
    `state.kitchenReady=0; APP.cmd('tab','more'); render();`, [
     ['not on the folder', `!(${dotOn('More')})`],
-    ['nor on the row',    `!(${rowDot('Transfers')})`],
+    ['nor on the row',    `!(${rowDot('Ready from the kitchen')})`],
   ]],
-  ['an operator who cannot open Transfers is never told about it',
+  ['an operator who cannot open the ready list is never told about it',
    // A dot promising work over a door this role cannot open — the same rule the
    // inbox dot keeps.
    `state.caps=['dashboard:view']; state.kitchenReady=2; APP.cmd('tab','home'); render();`, [

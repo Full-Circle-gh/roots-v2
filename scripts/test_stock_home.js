@@ -919,6 +919,12 @@ function main() {
       '  return b.getBoundingClientRect().top >= a.getBoundingClientRect().bottom - 1 ? "stacked" : "inline";}' +
       'document.body.setAttribute("data-tiletext",_stack(".sh-name",".sh-desc"));' +
       'document.body.setAttribute("data-rowtext",_stack(".rc-nm",".rc-cap"));' +
+      /* THE URL ALLOWLIST BELOW READ AN ATTRIBUTE NOTHING SET. `data-calls` was
+         checked at the bottom of this file and stamped nowhere, so the list of
+         endpoints this app is allowed to touch has never been able to fail —
+         every stray call any case made passed unseen. Stamped here, from the
+         recorder the stub has always kept. */
+      'document.body.setAttribute("data-calls",JSON.stringify(window.__calls||[]));' +
       'document.body.setAttribute("data-post",JSON.stringify(window.__post||null));' +
       'document.body.setAttribute("data-status",JSON.stringify(window.__status||null));' +
       'document.body.setAttribute("data-patch",JSON.stringify(window.__patch||[]));' +
@@ -973,7 +979,17 @@ function main() {
 
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
       /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/restock\/\d+\/status$/,
-      /^\/api\/retail-admin\/products$/, /^\/api\/retail-admin\/stores\/\d+\/stock\/\d+$/];
+      /^\/api\/retail-admin\/products$/, /^\/api\/retail-admin\/stores\/\d+\/stock\/\d+$/,
+      // What has already gone on the shelf today (§46) — read on every add-mode
+      // load, so the card can say it before the same batch goes on twice.
+      /^\/api\/retail-admin\/stores\/\d+\/stock\/added-today$/,
+      /^\/api\/retail-admin\/production$/, /^\/api\/retail-admin\/production\/reasons$/,
+      // The account sheet's notification toggle, which probes BOTH realms
+      // because the app does not know which session it is on until one answers.
+      /^\/api\/push\/pref$/, /^\/api\/backend\/push\/pref$/,
+      // Reading the ready list IS the acknowledgement — the stub above records
+      // it and a case below asserts on what was stamped.
+      /^\/api\/restock\/kitchen-ready\/seen$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
 
