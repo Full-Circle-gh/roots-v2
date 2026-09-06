@@ -51,6 +51,15 @@ const CASES = [
     ['and a map to put it on',   `!!document.getElementById('riderMapHost')`],
   ]],
 
+  // Qingyun can return a number with no name against it. The row used to be
+  // gated on the NAME, so those jobs showed a live map and no way to phone the
+  // person on it — the one control on the card that anybody actually needs.
+  ['a nameless rider is still callable',
+   openDetail(courier({ rider: { name: null, phone: '13800000000' } })), [
+    ['a number to call them on', `!!document.querySelector('.sheet a[href="tel:13800000000"]')`],
+    ['and no empty name printed in its place', `!sheetText().includes('null')`],
+  ]],
+
   ['the collect leg is not the delivery leg',
    openDetail(courier({ stage: 'heading_to_pickup', eta_seconds: 300 })), [
     ['it says the rider is coming', `sheetText().includes('Rider coming')`],
