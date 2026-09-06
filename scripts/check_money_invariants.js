@@ -213,6 +213,7 @@ const CHECKS = [
     ],
     count: `SELECT COUNT(*) AS n FROM retail_orders
              WHERE subtotal IS NOT NULL AND total IS NOT NULL
+               AND COALESCE(source,'') <> 'manual'
                AND ROUND((${EXPECTED_TOTAL}) * 100) <> ROUND(COALESCE(total,0) * 100)`,
     /* The detail carries `channel` and the expected figure, because the first
        question about any row here is which of the two identities was applied
@@ -225,6 +226,7 @@ const CHECKS = [
                     ROUND((${EXPECTED_TOTAL}) * 100) / 100.0 AS expected
                FROM retail_orders
               WHERE subtotal IS NOT NULL AND total IS NOT NULL
+                AND COALESCE(source,'') <> 'manual'
                 AND ROUND((${EXPECTED_TOTAL}) * 100) <> ROUND(COALESCE(total,0) * 100)
               ORDER BY id DESC LIMIT ?`,
   },
@@ -328,6 +330,41 @@ const CHECKS = [
                 FROM retail_customers c)
              WHERE ROUND(stored * 100) <> ROUND(live * 100)
              ORDER BY ABS(stored - live) DESC LIMIT ?`,
+  },
+  {
+    id: 'I', kind: 'reconciliation',
+    title: 'a manual order whose grand total was overridden',
+    blurb: 'A staff-keyed order whose total is not subtotal + shipping + packing − voucher − points − balance.',
+    notes: [
+      'RECONCILIATION, not an invariant, and it exists so these rows are VISIBLE rather',
+      'than exempt. A manual order is keyed in by staff, and routes/retail.js:23421 says',
+      'what it allows: "staff may override any line price AND the grand total (negotiated',
+      '/ wholesale)". So the total is an operator\'s figure, not one derived from the',
+      'parts, and invariant A cannot ask it the identity — TC000269 sold 994.00 of goods',
+      'for 1014.80 and was reported as broken data by a check that had not been told.',
+      'NOTHING HERE DISTINGUISHES A NEGOTIATED PRICE FROM A TYPO, and nothing can: the',
+      'override IS the feature, so a mistyped total looks exactly like a wholesale one.',
+      'That is the cost of the exemption and it is why these are counted here rather',
+      'than dropped. As with G, non-zero is expected; what matters for the migration is',
+      'that the number does not MOVE.',
+    ],
+    count: `SELECT COUNT(*) AS n FROM retail_orders
+             WHERE subtotal IS NOT NULL AND total IS NOT NULL
+               AND COALESCE(source,'') = 'manual'
+               AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
+                        - COALESCE(voucher_amount,0)
+                        - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
+                 <> ROUND(COALESCE(total,0) * 100)`,
+    detail: `SELECT id, order_no, subtotal, shipping_fee, packing_fee, voucher_amount,
+                    points_amount, balance_used, total, created_by, placed_at
+               FROM retail_orders
+              WHERE subtotal IS NOT NULL AND total IS NOT NULL
+                AND COALESCE(source,'') = 'manual'
+                AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
+                         - COALESCE(voucher_amount,0)
+                         - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
+                  <> ROUND(COALESCE(total,0) * 100)
+              ORDER BY id DESC LIMIT ?`,
   },
   {
     id: 'H', kind: 'forensic',
