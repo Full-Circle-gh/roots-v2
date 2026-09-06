@@ -408,18 +408,29 @@ img{display:block;max-width:100%}
 /* min-height MATCHES THE BUTTON, so a card that has no button — a sold-out one —
    still reserves the same row and its price sits at the same level as its
    neighbour's. Without it the row collapses to the height of the price alone
-   and that price rides 8.5px high, which is half the difference and reads as a
-   wobble rather than as anything deliberate. */
-.pf{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  min-height:36px}
-/* INK GROUND, LIME GLYPH — the mini app's own add control, not a new one. The
-   page already borrows that shop's colours through the theme, so this borrows
-   its shape too and a customer meets one button in two places. */
-.add{flex:none;width:36px;height:36px;
-  display:flex;align-items:center;justify-content:center;
+   and that price rides high by half the difference, which reads as a wobble
+   rather than as anything deliberate. */
+.pf{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  min-height:27px}
+/* THE MINI APP'S OWN ADD CHIP, AT ITS OWN SIZE. Taken from .card-plus in
+   miniapp/pages/shop/shop.wxss — 52rpx square with a 26x5rpx bar — converted at
+   the same 390px phone the rest of this file's values were converted at
+   (390/750), which is 27px and 13.5x2.6px. It was 36px first and read as
+   overbearing beside the price; the number was guessed then and is measured
+   now.
+   THE + IS TWO BARS, NOT A GLYPH, and that is borrowed with its reason rather
+   than reinvented: the wxss records that the brand serif's "+" sat off-centre
+   in the square and that no flex-centring could fix it, because centring aligns
+   the text line box and not the ink inside it. This page uses the same serif,
+   so it had the same bug — the first version of this button centred a glyph. */
+.add{flex:none;position:relative;width:27px;height:27px;
   border:0;background:var(--ink);color:var(--lime);
-  font-family:var(--f-bear);font-size:22px;line-height:1;cursor:pointer;
+  font-size:0;line-height:1;cursor:pointer;
   padding:0;-webkit-tap-highlight-color:transparent}
+.add::before,.add::after{content:'';position:absolute;top:50%;left:50%;
+  background:currentColor;transform:translate(-50%,-50%)}
+.add::before{width:13.5px;height:2.6px}
+.add::after{width:2.6px;height:13.5px}
 .add:active{transform:translateY(1px)}
 
 /* The bar clears the phone's home indicator; without the inset the tap target
