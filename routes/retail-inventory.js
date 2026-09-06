@@ -28,6 +28,9 @@ const { requireAuth, logActivity } = require('../middleware/auth');
 // still the same working day to the people in it, and `businessDate` is the
 // one place this system decides where that line falls.
 const { businessDate } = require('../lib/business-date');
+// The fold of those rows into "what went on today, and who put it there",
+// in lib/ so its rules can be exercised without a database.
+const { summariseKitchenAdds } = require('../lib/kitchen-adds');
 
 // Background geocode for a store row. Called after create + update when
 // an address-y field changed and the admin didn't supply explicit lat/lng.
@@ -404,29 +407,38 @@ router.get('/api/retail-admin/stores/:id/stock/added-today', requireInventoryRea
   }
 
   const tz = tdb().prepare('SELECT timezone FROM retail_stores WHERE id = ?').get(id)?.timezone || null;
-  const today = businessDate(tz);
   /* A TWO-DAY WINDOW NARROWED IN JS, rather than a date comparison in SQL.
      `created_at` is stored UTC and the business date is the STORE's, so no
      SQL predicate can select "today" without reimplementing the timezone rule
      that lib/business-date owns. The window is what keeps that cheap: any row
      belonging to the store's today is inside the last two days, whatever the
      offset, and a kitchen's adds at one store over two days are a handful. */
+  /* WHO, AND WHY IT IS `actor_label` RATHER THAN THE ID BESIDE IT.
+     `actor_user_id` cannot name anybody on its own: it holds a kitchen
+     `users.id` OR a backend `tenant_users.id`, two id spaces that collide,
+     which is why the column carries no foreign key and why adjustStock records
+     the display name alongside it. That label is the only honest answer to
+     "who put this on the shelf", and it is a snapshot — the name as it stood
+     when the write happened, which is what a person reading a day's work back
+     wants rather than whatever the account is called now.
+
+     A TWO-DAY WINDOW NARROWED IN JS, rather than a date comparison in SQL.
+     `created_at` is stored UTC and the business date is the STORE's, so no SQL
+     predicate can select "today" without reimplementing the timezone rule that
+     lib/business-date owns. The window is what keeps that cheap: any row
+     belonging to the store's today is inside the last two days, whatever the
+     offset, and a kitchen's adds at one store over two days are a handful.
+
+     The fold itself is lib/kitchen-adds, so its rules can be tested without a
+     database. */
   const rows = tdb().prepare(`
-    SELECT product_id, delta, created_at
+    SELECT product_id, delta, actor_label, created_at
       FROM retail_stock_ledger
      WHERE store_id = ? AND reason = 'kitchen_add'
        AND created_at >= datetime('now', '-2 days')
   `).all(id);
 
-  const added = {};
-  for (const r of rows) {
-    const at = new Date(String(r.created_at).replace(' ', 'T') + 'Z');
-    if (isNaN(at.getTime()) || businessDate(tz, at) !== today) continue;
-    const n = r.delta | 0;
-    if (n <= 0) continue;
-    added[r.product_id] = (added[r.product_id] || 0) + n;
-  }
-  res.json({ success: true, data: added });
+  res.json({ success: true, data: summariseKitchenAdds(rows, tz) });
 });
 
 // PATCH /api/retail-admin/stores/:storeId/stock/:productId

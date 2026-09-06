@@ -6275,7 +6275,16 @@ function loadQsAdded(){
    because a product is searched for the same way whichever job you are doing,
    and two lists is two places for that search to drift. */
 function qsMode(){ return (state.qs.ctx&&state.qs.ctx.mode)==='recount' ? 'recount' : 'add'; }
-function qsAdded(id){ return (state.qs.addedToday||{})[id]|0; }
+/* The endpoint answers {qty, who:[names]} per product. Read through accessors
+   so the two shapes it has had — a bare number, then this — cannot both be
+   assumed live somewhere in the file. */
+function qsAddedEntry(id){
+  const e=(state.qs.addedToday||{})[id];
+  if(e==null) return null;
+  return typeof e==='object' ? e : {qty:e|0, who:[]};   // tolerate the old shape
+}
+function qsAdded(id){ const e=qsAddedEntry(id); return e?(e.qty|0):0; }
+function qsAddedWho(id){ const e=qsAddedEntry(id); return (e&&e.who)||[]; }
 function qsShelf(p){ return p&&p.physical_qty!=null ? (p.physical_qty|0) : null; }
 
 /* THE CARD'S SECOND LINE (§46). Two facts, either of which may be absent.
@@ -6293,7 +6302,16 @@ function qsMeta(p,id){
   if(state.qs.canRecount&&shelf!=null)
     bits.push(`<span>${TB('On the shelf')} <b class="num">${shelf}</b></span>`);
   const a=qsAdded(id);
-  if(a>0) bits.push(`<span style="color:var(--text-primary)">${TB('Added today')} <b class="num">+${a}</b></span>`);
+  if(a>0){
+    /* WHO PUT IT THERE. The line exists so the same batch does not go on
+       twice, and "somebody already added 30" is a weaker answer than the name
+       — it is what tells the person reading it whether the 30 was their own
+       work or the colleague they can go and ask. Names are names: nothing to
+       translate, so this adds no blocked string. */
+    const who=qsAddedWho(id);
+    bits.push(`<span style="color:var(--text-primary)">${TB('Added today')} <b class="num">+${a}</b></span>`
+      + (who.length?`<span> · ${escAttr(who.join(', '))}</span>`:''));
+  }
   if(!bits.length) return '';
   return `<div class="num" style="font-size:13px;color:var(--text-secondary)">${
     bits.join('<span style="opacity:.5;padding:0 6px">·</span>')}</div>`;
@@ -6509,7 +6527,11 @@ function qsWriteLanded(id,n,p){
   // waiting for a reload: today's running total, and the shelf where §46 shows
   // it. The card is what they check before deciding whether this batch has
   // already gone on, and a line that lags is worse than no line at all.
-  state.qs.addedToday[id]=(state.qs.addedToday[id]|0)+n;
+  const me=(state.me&&(state.me.name||state.me.display_name))||'';
+  const e=qsAddedEntry(id)||{qty:0,who:[]};
+  e.qty=(e.qty|0)+n;
+  if(me&&e.who.indexOf(me)===-1) e.who.push(me);
+  state.qs.addedToday[id]=e;
   if(p&&p.physical_qty!=null) p.physical_qty=(p.physical_qty|0)+n;
   render();
   showToast(T('Added '+n,'已加 '+n+' 件')+(p?' · '+qsName(p):''));
