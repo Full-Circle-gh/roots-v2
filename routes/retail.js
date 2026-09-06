@@ -5014,6 +5014,13 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 
     // Default — JSAPI (mini-app, or shop opened INSIDE WeChat). Needs the
     // customer's openid.
+    //
+    // A WEB PAGE OPENED INSIDE WECHAT CANNOT REACH THIS SUCCESSFULLY TODAY, and
+    // that is expected rather than broken: it has no openid to offer, so it
+    // falls to the 409 below. §44/§45 put payment at the counter for launch and
+    // record that in-page WeChat payment is blocked on a verified 服务号 — no
+    // OAuth and no JS-SDK exist in this repo to obtain one. Do not read this
+    // branch as a working in-WeChat web payment path.
     try {
       // Pull the customer's openid for the JSAPI call
       const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
@@ -35607,3 +35614,12 @@ module.exports.nextFreshBatchDate    = nextFreshBatchDate;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;
+
+// Exported for routes/shop-menu.js (the public /s/:shopCode QR menu, §44) so
+// the menu's photo fallback and its money format cannot drift from the
+// storefront's. resolveProductImage carries the variant-sibling fallback;
+// normalizeCurrency is the one place a tenant's display currency is decided.
+// Neither is re-implemented there — a second copy of either would be a second
+// thing to keep right.
+module.exports.resolveProductImage   = resolveProductImage;
+module.exports.normalizeCurrency     = normalizeCurrency;

@@ -423,7 +423,17 @@ app.use(require('./routes/retail-purchasing')); // online store buying dept: sup
 app.use(require('./routes/retail-materials')); // Materials (物料) — the shared ingredients masterlist, backend door
 app.use(require('./routes/retail-recipes')); // Recipes (食谱) — backend door onto the same recipes tables the kitchen app writes; not wired into any UI yet
 app.use(require('./routes/retail-waste')); // Waste (损耗) — §32: a stock movement with a reason; product subjects only for now. NOT routes/waste.js, which is the kitchen screen's API and stays live until cutover
-app.use(require('./routes/retail-shops')); // Shops + shop listings (门店商品) — §41/§42/§44 step 2: admin-only, read by nothing else yet; the public /s/:shopCode menu is a later, separate build
+app.use(require('./routes/retail-shops')); // Shops + shop listings (门店商品) — §41/§42/§44 step 2: admin-only; the ONE other reader is the public menu mounted just below
+// Public QR menu (§44 step 5a) — /s/:shopCode, unauthenticated, outside the
+// admin route tree, menu only: no cart and no ordering (that is step 5b).
+//
+// TENANT-SCOPED BY HOST, exactly as the storefront's own /api/retail is above.
+// Without this the page would read the global (Roots) catalogue whatever domain
+// it was served from — which is what the public /track page does today, and is
+// the mistake this mount exists not to repeat. Mounted AFTER routes/retail, on
+// which shop-menu depends for two helpers.
+app.use('/s', require('./middleware/public-tenant').publicTenantScope);
+app.use(require('./routes/shop-menu'));
 app.use(require('./routes/retail-production')); // Production (生产) — what the kitchen MADE, in the realm the kitchen is actually in. production_batches has been empty since it shipped because its only two screens are kitchen-realm and the cooks are Tacet operators. NOT routes/production.js, which is those screens' API
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
 app.use(require('./routes/recycle'));     // Recently deleted (audit E-07) — what was removed, and putting it back
