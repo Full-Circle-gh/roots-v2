@@ -9079,7 +9079,7 @@ function sheetOrderDetail(){
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${riderCard(o)}
        ${hoistedTracking(o)}
-       ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
+       ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
            ${o.trk.live?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--sage-ink)"></span>${T('Live sync','实时同步')}</span>`:''}</div>
@@ -9235,6 +9235,16 @@ function localEtaCard(o,sp,label){
 }
 /* One card per parcel that has actually left, at the top of the drawer. */
 function hoistedTracking(o){
+  /* A MIRRORED ORDER HAS NO PARCELS (§52), so it has no tracking of ours to
+     hoist. The server no longer plans them, but every mirrored order opened
+     before that guard went in still carries the row it created, and this is
+     what those rows used to draw: a "Land" card reading "No waybill on this
+     parcel yet — add it on the desktop" on a gzgrocery order — for a parcel
+     no desktop screen offers a waybill field for, because the desktop routes
+     these orders to a stripped read-only panel with no parcels in it at all.
+     The rider card is NOT gated on this and must not be: a Meituan order is
+     genuinely delivered by a Qingyun rider, and the desktop shows that too. */
+  if(o.viewOnly) return '';
   const all=o.shipments||[];
   const multi=all.length>1;
   const cards=all.map((sp,i)=>{
@@ -9592,7 +9602,12 @@ function countLabel(lines,units){
     : T(lines+(lines===1?' product':' products'), lines+' 款');
 }
 function orderItemsBlock(o){
-  const ships=o.shipments||[];
+  /* Same rule as hoistedTracking: a mirrored order has no parcels of ours
+     (§52), so its lines are one flat manifest — which is what the desktop's
+     renderReadonlyItemRow gives these orders. A phantom parcel row left over
+     from before the server guard would otherwise head this list "1 parcel"
+     and print a Land card with a dispatch state on it. */
+  const ships=o.viewOnly?[]:(o.shipments||[]);
   const loose=ships.length?(o.loose||[]):(o.items||[]);
   const all=o.items||[];
   const n=all.length;
@@ -12197,6 +12212,17 @@ const ORDER_STATUS={
 // own test (the desktop already fixed the same fault — see ordChannelLabel's
 // `return c` and the removal of chanIcon's `|| CHAN_ICON.wechat`).
 const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
+/* Mirrored channels — the desktop's ordIsReadonlyChannel, on a phone. An order
+   from one of these is someone else's system's order: they accept it, prepare
+   it, ship it and hold the waybill; we mirror the row in to deduct stock and
+   show progress, and NOTHING here fulfils it (§52).
+
+   READ OFF THE RAW CHANNEL, never off CH_BACK. This was computed from the
+   display key, which has no 'eleme' entry at all — so an Eleme order fell to
+   the mini-app default and was not read-only on this device in any respect,
+   while the desktop had treated it as read-only since the day it landed. */
+const MIRROR_CH=['meituan','eleme','gzgrocery'];
+const isMirrorCh=c=>MIRROR_CH.includes(String(c||'').toLowerCase());
 let CUR='¥';
 
 /* The desktop's paymentCheckLine, on a phone. Only while unpaid — once a person
@@ -12332,7 +12358,7 @@ function deliveryState(r){
 }
 /* One line, the way the desktop picks one cell: the live fact for THIS row. */
 function deliveryLine(r){
-  const readonly=['meituan','gzgrocery'].includes(String(r.channel||'').toLowerCase());
+  const readonly=isMirrorCh(r.channel);
   if(r.fulfillment_type==='counter') return null;
   if(readonly){
     if(['cancelled','refunded'].includes(r.status)) return null;
@@ -12409,6 +12435,10 @@ function orderNotes(r){
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
    nothing to roll up and the row says nothing. */
 function parcelRollup(r){
+  // A mirrored order has no parcels of ours (§52). It can still carry phantom
+  // rows planned before that ruling, and a row reading "2 parcels · 1 to ship"
+  // on an order we never ship is the same lie the drawer's Land card was.
+  if(isMirrorCh(r.channel)) return null;
   const total=Number(r.shipment_count)||0;
   if(total<2) return null;
   const delivered=Math.min(Number(r.shipment_delivered)||0,total);
@@ -12492,7 +12522,7 @@ function mapOrderRow(r){
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     deliv,
-    viewOnly: ch==='meituan'||ch==='gzgrocery',
+    viewOnly: isMirrorCh(r.channel),
     // A proof is not a status — the order never moved, it is still
     // pending_payment. It rides its own row as a mark, exactly as the desktop
     // does, so the Pending list can be scanned for the one that needs a person.
