@@ -1,5 +1,5 @@
 // The public QR menu — docs/tacet-consolidation-decisions.md §41, §42, §44,
-// §46. Step 5a of the location commerce module.
+// §47. Step 5a of the location commerce module.
 //
 // WHAT THIS IS. One page, served at /s/:shopCode, that shows a shop's menu to
 // a customer who has just scanned a QR code. No login, no session, no cookie,
@@ -229,12 +229,12 @@ function shopName(shop) {
 
 // A shop's live menu, grouped for display.
 //
-// AVAILABILITY IS TWO DIFFERENT QUESTIONS (§42, §46):
+// AVAILABILITY IS TWO DIFFERENT QUESTIONS (§42, §47):
 //   made_here — the staff switch, and nothing else. There is no material stock
 //               to consult and §43 defers ever having any.
 //   stocked   — the staff switch AND counted units at THIS location. A product
 //               with no shelf record here at all is SOLD OUT, not "untracked":
-//               §46. The online store's own sellableStockSql takes the
+//               §47. The online store's own sellableStockSql takes the
 //               opposite view for its own reasons and the two are meant to
 //               differ; neither is to be changed to match the other.
 function buildMenu(shop) {
@@ -270,7 +270,7 @@ function buildMenu(shop) {
     if (!r.is_available) { r.sold_out = true; continue; }
     if (r.fulfilment_mode !== 'stocked') { r.sold_out = false; continue; }
     const a = avail.get(r.store_product_id);
-    r.sold_out = !a || a.available <= 0;      // absent shelf record IS sold out — §46
+    r.sold_out = !a || a.available <= 0;      // absent shelf record IS sold out — §47
   }
 
   // TWO LEVELS, because that is what the shop already is. The tenant's own

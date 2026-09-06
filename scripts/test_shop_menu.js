@@ -4,7 +4,7 @@
  *
  *   node scripts/test_shop_menu.js
  *
- * docs/tacet-consolidation-decisions.md §41, §42, §44, §46, built in
+ * docs/tacet-consolidation-decisions.md §41, §42, §44, §47, built in
  * routes/shop-menu.js. Menu only: no cart, no ordering, no order creation.
  *
  * Everything runs against a REAL sqlite database and the REAL express router,
@@ -15,7 +15,7 @@
  *
  * WHAT IS HELD HERE THAT READING THE CODE CANNOT PROVE
  *
- *  1. §46. A stocked listing with NO shelf record at its location reads SOLD
+ *  1. §47. A stocked listing with NO shelf record at its location reads SOLD
  *     OUT, not available. That is the whole of the ruling and it is the one
  *     assertion that would silently invert if somebody "fixed" the menu to
  *     match the online store's opposite fallback.
@@ -62,7 +62,7 @@ const LOCS = [LOC_LIVE, LOC_EMPTY, LOC_OFF, LOC_DEAD];
 
 const P_STOCK_OK   = 9951;  // stocked, shelf 5            → available
 const P_STOCK_ZERO = 9952;  // stocked, shelf 0            → sold out
-const P_STOCK_NONE = 9953;  // stocked, NO shelf row       → sold out (§46)
+const P_STOCK_NONE = 9953;  // stocked, NO shelf row       → sold out (§47)
 const P_STOCK_OFF  = 9954;  // stocked, shelf 9, switch off → sold out
 const P_MADE_ON    = 9955;  // made_here, no shelf row      → available
 const P_MADE_ZERO  = 9956;  // made_here, shelf 0           → available anyway
@@ -205,7 +205,7 @@ function seed() {
   add.run(liveShop, P_MADE_ZERO,  30,   'made_here', 1, 6);
   add.run(liveShop, P_MADE_OFF,   31,   'made_here', 0, 7);
   add.run(liveShop, P_LOOSE,      12,   'stocked',   1, 8);
-  // P_LOOSE is stocked and must have a shelf row, or §46 would make it sold
+  // P_LOOSE is stocked and must have a shelf row, or §47 would make it sold
   // out and the grouping assertion would be reading a greyed row.
   const shelf = db.prepare(`INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
                             VALUES (?, ?, ?, 0)`);
@@ -215,7 +215,7 @@ function seed() {
   shelf.run(LOC_LIVE, P_UNPUB, 3);
   shelf.run(LOC_LIVE, P_MADE_ZERO, 0);      // made-here ignores this entirely
   shelf.run(LOC_LIVE, P_LOOSE, 4);
-  // P_STOCK_NONE gets NO ROW ANYWHERE. That absence is §46's subject.
+  // P_STOCK_NONE gets NO ROW ANYWHERE. That absence is §47's subject.
 }
 
 // ── Harness ────────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ const soldOut = (row) => /class="sold"/.test(row);
   try {
     const LIVE = CODES[LOC_LIVE];
 
-    console.log('\n§46 — availability, and the absent shelf record');
+    console.log('\n§47 — availability, and the absent shelf record');
     await checkAsync('stocked with units on the shelf is available', async () => {
       const { status, body } = await get(`/s/${LIVE}`);
       assert.strictEqual(status, 200);
@@ -262,10 +262,10 @@ const soldOut = (row) => /class="sold"/.test(row);
       const { body } = await get(`/s/${LIVE}`);
       assert.ok(soldOut(rowFor(body, 'Fixture kombucha')), 'shelf of 0 read as available');
     });
-    await checkAsync('§46 — stocked with NO shelf record at this location is SOLD OUT', async () => {
+    await checkAsync('§47 — stocked with NO shelf record at this location is SOLD OUT', async () => {
       const { body } = await get(`/s/${LIVE}`);
       assert.ok(soldOut(rowFor(body, 'Fixture uncounted')),
-        'a product this location has never counted rendered as available — §46 says sold out, ' +
+        'a product this location has never counted rendered as available — §47 says sold out, ' +
         'and the online store\'s opposite fallback is not to be copied here');
     });
     await checkAsync('the staff switch alone sells a stocked item out', async () => {
