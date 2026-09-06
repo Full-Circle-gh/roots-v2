@@ -642,6 +642,17 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* THE KITCHEN'S QUEUE, and the two screens that close it (§48).
+     kq  — what has been asked of this kitchen.
+     hd  — "What you made": how much of it actually reached the shelf.
+     bat — logging a batch nobody asked for, which feeds the same hd screen.
+         Named bat, not lb: `lb` two hundred lines above is the leaderboard,
+         and a duplicate key in this literal is the later one silently winning.
+     They are one piece of work: closing a request moves NO stock, so the lines
+     have to be carried to the screen that adds them or the shelf stays short. */
+  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:''},
+  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1},
+  bat:{qty:{},q:''},
   /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
      walking, which the old screen never had to ask because it ran pinned to
      one. Named pik so it cannot be confused with the local `pk` in the
@@ -763,6 +774,12 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     // The freezer is re-asked on every entry where there is a choice: which one
     // they are standing in is a fact about now, not about last time.
     if(pikStores().length>1) k.at=null; }
+  /* The queue is re-read on entry for the same reason the kitchen-ready list
+     is: what is waiting to be made is a fact about this minute. */
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; }
+  /* Log a batch opens with nothing counted. A basket left over from a batch
+     that was already recorded would add it a second time. */
+  if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
   state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
@@ -833,6 +850,23 @@ reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pi
 reg('pikShort', key=>pikAskShort(String(key)));
 reg('pikDispatch', ()=>pikDispatch());
 reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
+reg('kqOpen', id=>kqOpen(id));
+reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; render(); });
+reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
+reg('kqAdvance', to=>kqAdvance(to));
+reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
+/* The chip sets the reason and closes the row's picker in one tap — there is
+   no second confirm, because the answer IS the confirmation. */
+reg('hdReason', (i,code)=>{ const l=(state.hd.lines||[])[i]; if(!l||state.hd.busy) return;
+  l.reason=String(code); state.hd.openReason=-1; render(); });
+reg('hdWhy', i=>{ state.hd.openReason=state.hd.openReason===Number(i)?-1:Number(i); render(); });
+reg('hdCommit', ()=>hdCommit());
+reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
+  const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
+  const el2=document.getElementById('mBatQ');
+  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+reg('batBump', (id,d)=>batBump(Number(id),Number(d)));
+reg('batNext', ()=>batContinue());
 reg('xfrAsk', id=>{
   const it=xfrItems().find(y=>y.id===Number(id));
   if(!it) return;
@@ -2808,27 +2842,28 @@ const MORE_GROUPS=[
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction.
 
-     THE NAMED /stock ROWS CARRY ?go=, and that is what keeps them doors rather
-     than signposts. /stock used to open on a launcher whose tiles were "Add
-     stock" and "Kitchen queue" — the two rows right here — so landing on it
-     answered a tap on either row with a menu offering both again. Each names
-     the screen it is for and goes straight there now.
-
-     TRANSFERS IS THE ONE THAT STILL WANTS THE LAUNCHER, and it is the reason
-     the launcher still exists. Pick, Receive, Ask the kitchen and Ask for stock
-     have no rows of their own here and no home anywhere else; the launcher is
-     the screen that holds them, and it is the screen that TEACHES them — its
-     tiles stay put on a quiet day, so "Nothing to pick" is what tells somebody
-     the tool is there before the morning they need it. Four rows here would say
-     the same thing louder and worse. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add'],
+     NOTHING IN THIS LIST LEAVES FOR /stock ANY MORE (§48). Two rows used to:
+     Kitchen queue, which carried ?go=queue, and Transfers, which opened that
+     app's launcher because Pick, Receive, Ask the kitchen and Ask for stock had
+     no rows of their own. They have rows of their own now, so the launcher held
+     nothing that is not named here — and a menu that offers what the list above
+     it already offers is a second way to reach one screen, which is the drift
+     this file keeps out. The rows stay put on a quiet day for the reason the
+     launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
+     there before the morning they need it. */
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存','/stock?go=add'],
     /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
        own and lived on /stock's launcher, which the Transfers row above still
        reaches for what has not moved yet. As each of those flows lands here
        that launcher empties, and the row goes with the last of them. */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货']]},
+    ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
+    /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
+       is never opened from here — it is where the queue and this row both
+       arrive, carrying lines with them, and a row that opened it cold would
+       open it empty. */
+    ['logbatch','clipboard-list','Log a batch','登记批次']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6414,6 +6449,236 @@ function rqSendStock(){
          T('This account cannot ask for stock.','此账号无法发起补货申请。'));
 }
 
+/* ══ THE KITCHEN QUEUE ═════════════════════════════════════════════════════
+   What has been asked of this kitchen. `received` = we have seen it;
+   `prepared` = it is made, and that closes it.
+
+   CLOSING IT IS NOT PUTTING IT ON THE SHELF, and `prepared` is where those two
+   part company: the server moves no stock for a kitchen request by design, so
+   the shelf is still short at the moment the request stops existing. That is
+   why the lines are carried straight to the screen that adds them. */
+function loadKq(force){
+  const k=state.kq;
+  if(k.tried&&!force) return;
+  k.tried=true;
+  api('/api/restock?to_role=kitchen&tab='+k.tab).then(j=>{
+    k.list=Array.isArray(j)?j:((j&&j.data)||[]);
+    k.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.list=[]; k.err=''; render();
+  });
+}
+function kqOpen(id){
+  const k=state.kq;
+  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    k.order=(j&&j.data)||j; k.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+function kqAdvance(to){
+  const k=state.kq;
+  if(k.busy||!k.order) return;
+  k.busy=true; k.err=''; render();
+  apiWrite('/api/restock/'+k.order.id+'/status',{status:String(to)},'PUT').then(()=>{
+    k.busy=false; k.order.status=String(to);
+    if(String(to)==='prepared'){
+      // Read BEFORE the reload clears it — this is the only copy of what was
+      // asked for, and loadKq drops it.
+      const made=k.order;
+      k.order=null; k.orderId=null; loadKq(true);
+      if(hdStart(made)) return;   // falls through to the queue when there is nothing to hand over
+    }
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false;
+    k.err=e.code==='norealm'?T('This account cannot work the kitchen queue.','此账号无法处理厨房队列。')
+                            :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
+
+/* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
+   The step between closing a request and the shelf being right.
+
+   ONE NUMBER PER ROW, AND THE SECOND IS INFERRED. The operator adjusts what
+   goes on the SHELF — the thing in front of them, that they can count. What was
+   MADE is then max(asked, shelved), which is right in all three shapes without
+   asking a second question:
+     asked 20, shelved 18 → made 20, 2 short, and it wants a reason
+     asked 20, shelved 20 → made 20, nothing short, no question
+     asked 20, shelved 22 → made 22, nothing short (an extra tray, not a loss)
+   A screen with two steppers per line would be more expressive and would be
+   wrong more often, on a phone, with cold hands. */
+function hdMade(l){ return Math.max(l.asked,l.want); }
+function hdShort(l){ return hdMade(l)-l.want; }
+function hdKey(v){ return String(v==null?'':v).trim().toLowerCase(); }
+function hdName(l){ return (LANG==='en'?(l.name_en||l.name_cn):(l.name_cn||l.name_en))||l.sku||'—'; }
+/* NO ID TO TRUST, SO IT MATCHES ON SKU. A kitchen request carries no
+   product_id — it is sent null on purpose, because restock_items.product_id is
+   read as a KITCHEN products.id and this app only knows store ids. Both sides
+   draw from the same catalogue, so the SKU is the honest join: it is the
+   operator's own code for the thing, printed on both lists. The name is a
+   fallback and only on an exact match — a fuzzy match that puts units on the
+   wrong product is the failure the transfer side has its own guard against.
+   A line that cannot be matched is SHOWN, greyed, saying so — never silently
+   dropped, because a dropped line is a product that quietly never reaches the
+   shelf. */
+function hdResolve(order){
+  const bySku={},byName={};
+  (state.qs.items||[]).forEach(it=>{
+    const id=it.product_id!=null?it.product_id:it.id;
+    const k=hdKey(it.sku);
+    if(k&&bySku[k]===undefined) bySku[k]={id:id,it:it};
+    [it.name_en,it.name_cn].forEach(n=>{ const kn=hdKey(n); if(kn&&byName[kn]===undefined) byName[kn]={id:id,it:it}; });
+  });
+  const out=[];
+  (order.items||[]).forEach(li=>{
+    const qty=xfrNum(li.qty_requested);
+    if(qty<=0) return;
+    const m=bySku[hdKey(li.sku)]||byName[hdKey(li.product_name)]||byName[hdKey(li.product_cn)]||null;
+    out.push({ id:m?m.id:null,
+      name_en:li.product_name||null, name_cn:li.product_cn||null, sku:li.sku||null,
+      asked:qty, want:qty, reason:'', st:'', msg:'' });
+  });
+  return out;
+}
+function hdStart(order){
+  if(qsMode()!=='add'||state.qs.storeId==null) return false;
+  const lines=hdResolve(order);
+  if(!lines.length||!lines.some(l=>l.id!=null)) return false;
+  return hdOpen(lines, order.rs_number||('#'+order.id), order.id);
+}
+/* THE PREFILL IS A PROPOSAL, NOT A DEFAULT. §39's no-prefill rule is about not
+   putting words in somebody's mouth — a purpose picked for them is a reason
+   they did not give. A quantity here is not that: it is what was ASKED for,
+   quoted back, and the operator says whether it is also what was made. */
+function hdOpen(lines,rs,rsId){
+  const h=state.hd;
+  h.lines=lines; h.rs=rs||null; h.rsId=rsId||null;
+  h.busy=false; h.err=''; h.done=null; h.openReason=-1;
+  loadHdReasons();
+  push('whatmade');
+  return true;
+}
+// Read from the server rather than kept as a second copy that drifts out of
+// step with the waste module's own list.
+function loadHdReasons(){
+  if(state.hd.reasons) return;
+  api('/production/reasons').then(rows=>{
+    state.hd.reasons=Array.isArray(rows)?rows:((rows&&rows.data)||[]);
+    render();
+  }).catch(()=>{});
+}
+function hdReasonLabel(code){
+  const r=(state.hd.reasons||[]).find(x=>x.code===code);
+  if(!r) return code;
+  return LANG==='cn'?(r.cn||r.en):(r.en||r.cn);
+}
+function hdBump(i,d){
+  const l=(state.hd.lines||[])[i];
+  if(!l||state.hd.busy||l.st==='ok'||l.id==null) return;
+  l.want=Math.max(0,l.want+Number(d));
+  if(l.st==='err'){ l.st=''; l.msg=''; }
+  // Back to full means there is nothing to explain, so the answer goes with the
+  // question — a stale "damaged" on a line that is no longer short would file a
+  // loss that did not happen.
+  if(hdShort(l)===0){ l.reason=''; if(state.hd.openReason===i) state.hd.openReason=-1; }
+  else if(!l.reason) state.hd.openReason=i;   // it just went short: ask, do not wait to be found
+  render();
+}
+// Every short line must say why before anything is written. The server refuses
+// a bare gap too (gap_reason_required); saying so here means the operator is
+// told by the screen rather than by a failed write.
+function hdUnexplained(){
+  return (state.hd.lines||[]).filter(l=>l.id!=null&&l.st!=='ok'&&hdShort(l)>0&&!l.reason);
+}
+/* A line is still to do when it was matched and has not landed. `want` is NOT
+   required to be > 0: a tray that was made and entirely lost is made 6,
+   shelved 0, which moves no stock and is exactly the morning most worth
+   recording. */
+function hdPending(){
+  return (state.hd.lines||[]).filter(l=>l.id!=null&&l.st!=='ok'&&(l.want>0||hdShort(l)>0));
+}
+/* ONE CALL PER LINE, and it is the PRODUCTION endpoint rather than the stock
+   one: that endpoint writes the batch and moves the shelf inside a single
+   transaction, so a line cannot end up half-recorded — which two calls from
+   here could not promise however carefully they were ordered. It is also what
+   keeps `made` alive; the stock route only ever knew the number that arrived.
+
+   A line that succeeded is marked ok and is never pending again, so pressing
+   Record after a partial failure retries ONLY what failed — the guard that
+   keeps a shaky connection from adding a batch twice. */
+function hdCommit(){
+  const h=state.hd;
+  if(h.busy) return;
+  const todo=hdPending();
+  if(!todo.length) return;
+  h.busy=true; h.err='';
+  todo.forEach(l=>{ l.st='saving'; l.msg=''; });
+  render();
+  let left=todo.length, failed=0, added=0, units=0, short=0;
+  todo.forEach(l=>{
+    apiWrite('/production',{
+      store_id:state.qs.storeId, product_id:l.id,
+      qty_made:hdMade(l), qty_shelved:l.want,
+      gap_reason:hdShort(l)>0?l.reason:null,
+      // Names the request, so a batch can be traced back to what asked for it
+      // rather than matched by eye on a timestamp.
+      request_id:h.rsId||null,
+    }).then(()=>{
+      l.st='ok'; added++; units+=l.want; short+=hdShort(l);
+      const it=(state.qs.items||[]).find(x=>(x.product_id===l.id||x.id===l.id));
+      if(it&&it.physical_qty!=null) it.physical_qty=(it.physical_qty|0)+l.want;
+    }).catch(e=>{
+      if(String(e.message)==='auth'){ l.st=''; return; }
+      l.st='err'; failed++; l.msg=e.message||'';
+    }).then(()=>{
+      if(--left>0){ render(); return; }
+      h.busy=false;
+      if(failed){
+        h.err=T('Some lines were not recorded. Nothing was counted twice — press Record again for the ones still marked.',
+                '部分商品未登记。已登记的不会重复计入 — 请对仍标记错误的商品再按一次「登记」。');
+      }else{
+        h.done={added:added,units:units,short:short};
+        loadKq(true);
+      }
+      render();
+    });
+  });
+}
+
+/* ══ LOG A BATCH ═══════════════════════════════════════════════════════════
+   What was made with nobody asking. It hands the chosen quantities to the same
+   record screen as what was MADE, with `asked` set to the same figure so the
+   short-batch arithmetic reads identically: drop the shelf number and it asks
+   why. */
+function batLines(){
+  const q=state.bat.q.trim().toLowerCase();
+  const all=state.qs.items||[];
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+function batId(p){ return p.product_id!=null?p.product_id:p.id; }
+function batChosen(){ return (state.qs.items||[]).filter(p=>(state.bat.qty[batId(p)]||0)>0); }
+function batUnits(){ return batChosen().reduce((a,p)=>a+(state.bat.qty[batId(p)]||0),0); }
+function batBump(id,d){
+  const n=(state.bat.qty[id]||0)+Number(d);
+  state.bat.qty[id]=n>0?n:0;
+  render();
+}
+function batContinue(){
+  const chosen=batChosen();
+  if(!chosen.length) return;
+  hdOpen(chosen.map(p=>({ id:batId(p), name_en:p.name_en, name_cn:p.name_cn, sku:p.sku,
+    asked:state.bat.qty[batId(p)], want:state.bat.qty[batId(p)], reason:'', st:'', msg:'' })), null, null);
+}
+
 /* ══ PICKING A RUN ═════════════════════════════════════════════════════════
    Pulling what other locations have asked this one to send.
 
@@ -7472,6 +7737,183 @@ function screenPick(){
         onclick="APP.cmd('pikDispatch')">${k.busy?T('Sending…','发送中…'):T('Dispatch','发货')}</button>
     </div>`;
 }
+function screenKitchenQueue(){
+  loadQsCtx(); loadKq();
+  const k=state.kq;
+  const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+  if(k.orderId!=null){
+    if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    const o=k.order||{};
+    const items=(o.items||[]).filter(it=>xfrNum(it.qty_requested)>0);
+    const p=krPurpose(o);
+    const next=o.status==='sent'?'received':o.status==='received'?'prepared':null;
+    return `<div style="padding:4px 16px 12px">
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
+      ${err}
+      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span></div>`).join('')}</div>
+      ${next?`<div style="padding:16px">
+        <button class="btn2" style="width:auto;padding:11px 26px"${k.busy?' disabled':''}
+          onclick="APP.cmd('kqAdvance','${next}')">${k.busy?T('Saving…','保存中…')
+            :(next==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>
+        ${next==='prepared'?`<div style="font-size:13px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
+          T('The next screen asks how many reached the shelf.','下一步会询问实际入库数量。')}</div>`:''}
+      </div>`:''}`;
+  }
+  const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;
+    border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
+    color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
+  const tabs=`<div style="display:flex;gap:8px;padding:0 16px 12px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
+  if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!k.list.length) return tabs+nothingYet(T('Nothing to make','暂无待制作'),
+    T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
+  return tabs+err+`<div>${k.list.map(o=>{
+    const p=krPurpose(o);
+    return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+      onclick="APP.cmd('kqOpen',${o.id})">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+      </span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
+function screenWhatMade(){
+  const h=state.hd;
+  if(h.done){
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${T('Recorded','已登记')}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:6px">${h.rs?escAttr(h.rs):T('Made without a request','无申请的制作')}</div>
+      <div style="font-size:17px;font-weight:500;margin-top:14px">${T(h.done.units+' units on the shelf','已入库 '+h.done.units+' 件')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:6px;line-height:1.55">${
+        h.rs?T('Across '+h.done.added+' products. The request is closed.','共 '+h.done.added+' 种商品。该申请已关闭。')
+            :T('Across '+h.done.added+' products.','共 '+h.done.added+' 种商品。')}</div>
+      ${h.done.short?`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T(h.done.short+' made but did not reach the shelf — recorded against this batch.',
+          '另有 '+h.done.short+' 件已制作但未入库 — 已记录在本批次。')}</div>`:''}
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${
+        h.rs?T('Back to the queue','返回制作队列'):T('Done','完成')}</button>
+    </div>`;
+  }
+  const lines=h.lines||[];
+  const pending=hdPending();
+  const units=pending.reduce((a,l)=>a+l.want,0);
+  const shortTotal=pending.reduce((a,l)=>a+hdShort(l),0);
+  const unexplained=hdUnexplained().length;
+  const ready=pending.length>0&&!unexplained&&!h.busy;
+  const lost=lines.filter(l=>l.id==null).length;
+  const row=(l,i)=>{
+    const dead=l.id==null, shortBy=dead?0:hdShort(l);
+    const badge=l.st==='ok'?T('Recorded','已登记')
+      :l.st==='saving'?T('Recording…','登记中…')
+      :l.st==='err'?T('Not recorded','未登记')
+      :dead?T('Not on this store\u2019s list','本店商品目录中没有')
+      :(shortBy>0?T('Made '+hdMade(l)+' · '+shortBy+' short','制作 '+hdMade(l)+' 件 · 少 '+shortBy+' 件')
+        :(l.want>l.asked?T(l.asked+' asked for','申请 '+l.asked+' 件'):''));
+    /* THE ONE QUESTION THIS SCREEN ASKS, and it only ever appears on a line
+       that is actually short. On a normal morning nobody sees it at all.
+       Answered inline rather than in a sheet: a modal over a three-line list,
+       on a phone, to answer one word, is a screen between the operator and the
+       thing they are already looking at. */
+    let ask='';
+    if(!dead&&l.st!=='ok'&&shortBy>0){
+      if(l.reason&&h.openReason!==i){
+        ask=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 12px">
+          <button class="row" style="min-height:34px;padding:6px 12px;border-radius:999px;width:auto;display:inline-flex;
+            border:1px solid var(--text-primary);background:var(--text-primary);color:var(--surface-card);font-size:13px"
+            onclick="APP.cmd('hdWhy',${i})">${escAttr(hdReasonLabel(l.reason))}</button>
+          <span style="font-size:13px;color:var(--text-secondary)">${T('tap to change','点击可修改')}</span></div>`;
+      }else{
+        const opts=(h.reasons||[]).map(r=>`<button class="row" style="min-height:34px;padding:6px 12px;border-radius:999px;width:auto;display:inline-flex;
+          border:1px solid ${l.reason===r.code?'var(--text-primary)':'var(--border-default)'};
+          background:${l.reason===r.code?'var(--text-primary)':'var(--surface-card)'};
+          color:${l.reason===r.code?'var(--surface-card)':'var(--text-primary)'};font-size:13px"
+          onclick="APP.cmd('hdReason',${i},'${escAttr(r.code)}')">${escAttr(LANG==='cn'?(r.cn||r.en):(r.en||r.cn))}</button>`).join('');
+        ask=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 12px">
+          <span style="font-size:13px;color:var(--text-secondary)">${T(shortBy+' short — why?','少 '+shortBy+' 件 — 原因?')}</span>
+          ${opts||`<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`}</div>`;
+      }
+    }
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)${dead?';opacity:.55':''}">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(hdName(l))}</span>
+          <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(l.sku||'')}${badge?(l.sku?' · ':'')+escAttr(badge):''}</span>
+        </span>
+        ${(dead||l.st==='ok')
+          ? `<span class="num" style="font-size:20px;color:var(--text-secondary)">${l.st==='ok'?('+'+l.want):'—'}</span>`
+          : `<span style="display:flex;align-items:center;gap:8px">
+              <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('hdBump',${i},-1)"${(l.want<=0||h.busy)?' disabled':''}>${ic('minus',18)}</button>
+              <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">+${l.want}</span>
+              <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('hdBump',${i},1)"${h.busy?' disabled':''}>${ic('plus',18)}</button>
+            </span>`}
+      </div>${ask}`;
+  };
+  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      h.rs?escAttr(h.rs)+' · '+T('Marked made — the shelf has not changed yet','已标记完成 — 库存尚未变动')
+          :T('Set what actually went on the shelf.','请填写实际入库数量。')}</div>
+    ${h.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(h.err)}</div>`:''}
+    <div>${lines.map(row).join('')}</div>
+    ${lost?`<div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T(lost+' line(s) are not on this store\u2019s product list, so they cannot be added here. Tell whoever looks after the catalogue.',
+        lost+' 项不在本店商品目录中,无法在此入库。请联系管理商品目录的同事。')}</div>`:''}
+    <div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T('If it is less than was made, say why — that is how the difference gets recorded instead of disappearing.',
+        '少于制作数量时请选择原因 — 差额才会被记录,而不是凭空消失。')}</div>
+    ${unexplained?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+      T(unexplained+' line(s) are short and have no reason yet.','有 '+unexplained+' 项数量不足且尚未选择原因。')}</div>`:''}
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${units}</b> ${T('units','件')}${
+          shortTotal?' · '+T(shortTotal+' short','少 '+shortTotal+' 件'):''}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${ready?'':' disabled'}
+        onclick="APP.cmd('hdCommit')">${h.busy?T('Recording…','登记中…'):T('Record','登记')}</button>
+    </div>`;
+}
+function screenLogBatch(){
+  loadQsCtx();
+  const rows=batLines();
+  const search=`<div style="padding:4px 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
+  if(!state.qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return search+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    T('Nothing on this store\u2019s list matches.','本店商品目录中没有匹配项。')}</div>`;
+  const chosen=batChosen();
+  return `<div style="padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
+      T('What you made, with nobody asking','主动制作,无对应申请')}</div>
+    ${search}
+    <div>${rows.map(p=>{
+      const id=batId(p), n=state.bat.qty[id]||0;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(qsName(p))}</span>
+          <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku||('#'+id))}</span>
+        </span>
+        <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('batBump',${id},-1)"${n<=0?' disabled':''}>${ic('minus',18)}</button>
+        <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+        <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('batBump',${id},1)">${ic('plus',18)}</button>
+      </div>`;
+    }).join('')}</div>
+    <div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T('Set how many you MADE. The next screen asks how many reached the shelf.',
+        '请填写制作数量。下一步会询问实际入库数量。')}</div>
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${batUnits()}</b> ${T('units','件')} · ${chosen.length} ${T('products','种商品')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${chosen.length?'':' disabled'}
+        onclick="APP.cmd('batNext')">${T('Next','下一步')}</button>
+    </div>`;
+}
+SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
+SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
+SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
@@ -10328,19 +10770,16 @@ const ROUTE_CAP={
   receivexfer:'restock:receive',
   // Pulling a run, gated on the capability its own writes are gated on.
   pick:'restock:pick',
-  /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
-     queue shipped as a tile on the Stock home, and a kitchen operator whose
-     role puts them in THIS app never sees that home — they see this list, and
-     "Add stock" is not a name anybody reads as "the orders waiting for you".
-     Gated on fulfil, the capability the queue's own writes are gated on, so the
-     row cannot appear for somebody whose first tap 403s. */
-  kitchenq:'restock:fulfil',
-  /* THE TRANSFER LAUNCHER, gated on the three transfer capabilities and NOT on
-     fulfil. A kitchen account holds fulfil alone: /stock would refuse it every
-     tile behind this row and hand it a launcher carrying nothing but the queue
-     — which is the row directly above. Any-of the three, because the launcher
-     itself shows a tile per job and each of those is refused on its own. */
-  transfers:['restock:pick','restock:receive','restock:request'],
+  /* THE KITCHEN'S QUEUE. Gated on fulfil, the capability its own writes are
+     gated on (PUT /api/restock/:id/status), so the row cannot appear for
+     somebody whose first tap 403s. */
+  kitchenqueue:'restock:fulfil',
+  /* THE TWO PRODUCTION SCREENS, on the capability POST /production is gated on
+     server-side. `whatmade` is gated even though no row opens it: the queue
+     pushes to it, and a kitchen that could close a request but not record the
+     batch would be sent to a screen whose Record 403s — better it never
+     advances than that it advances into a dead end. */
+  logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
   sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
