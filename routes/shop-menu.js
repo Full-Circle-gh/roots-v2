@@ -83,6 +83,7 @@ const {
   autoPrintOrder,
 } = require('./retail');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
+const { nutritionRows } = require('../lib/nutrition-rows');
 const moneyLib = require('../lib/money');   // the money MATHS; money() below is this page's formatter
 const tax = require('../lib/tax');
 const rateLimit = require('express-rate-limit');
@@ -264,6 +265,13 @@ function buildMenu(shop) {
   const listings = tdb().prepare(`
     SELECT sl.id, sl.store_product_id, sl.price, sl.fulfilment_mode, sl.is_available,
            sl.sort_position, p.name_en, p.name_cn, p.top_category, p.subcategory, p.updated_at,
+           -- WHAT THE DETAIL SHEET READS, and nothing more. Three columns that
+           -- already exist on every product and that no customer surface has
+           -- ever drawn: the facts bag (this page wants ONE of its keys), the
+           -- nutrition table, and the allergen flags. Deliberately NOT the
+           -- marketing description or the tagline — a person standing at a
+           -- counter is deciding whether they can eat it.
+           p.product_facts, p.nutrition, p.free_of,
            -- Does a photo EXIST for this product? Mirrors resolveProductImage,
            -- including its variant-sibling fallback, so the two never disagree.
            -- Asked here because the alternative is an <img> pointing at a route
@@ -403,6 +411,66 @@ img{display:block;max-width:100%}
 .lang button.on{background:var(--lime);color:var(--ink)}
 
 .wrap{display:flex;align-items:stretch;min-height:100vh}
+
+/* ── the product sheet ──
+   Layout B, chosen 2026-09-06: a small square photo with the name and the
+   allergen chips beside it, so the answer to "can I eat this" is on screen
+   without scrolling, then what is in it, then the nutrition table. The photo
+   is small BECAUSE it is tappable — B's own weakness is that a shrunk photo
+   stops selling, and the enlarge is what buys it back. */
+.it.has-dt{cursor:pointer}
+.dt-top{display:flex;gap:11px;align-items:flex-start}
+.dt-ph{flex:none;width:88px;height:88px;padding:0;border:2px solid var(--ink);
+  background:var(--oat);overflow:hidden;cursor:zoom-in;
+  -webkit-tap-highlight-color:transparent}
+.dt-ph img{width:100%;height:100%;object-fit:cover}
+.dt-ph.empty{cursor:default}
+.dt-hd{flex:1;min-width:0}
+.dt-nm{font-family:var(--f-bear);font-size:19px;line-height:1.15;overflow-wrap:anywhere}
+.fchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+/* A FREE chip is solid; a CONTAINS chip is dashed and muted. The two must not
+   read alike — the whole reason the negative is stated is that a customer
+   scanning for an allergen should not have to work out which is which.
+   THE LABEL FACE IS --f-bear, NOT the mini app's Toni Grotesk: this tenant's
+   theme exposes only --f-bear and --f-aleo, and this page's own section
+   kickers already set small uppercase labels in --f-bear. Reaching for a token
+   the theme does not define would have fallen through to the CJK stack in
+   silence. */
+.fchip{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;border:1.5px solid var(--ink);padding:3px 7px;line-height:1.3}
+.fchip.has{border-style:dashed;color:var(--olive);opacity:.62}
+.dt-k{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--olive);margin:18px 0 5px}
+.dt-ing{font-size:13.5px;line-height:1.5}
+
+/* .nut-card from miniapp/pages/product/product.wxss, converted at the same
+   390px phone (rpx x .52) the rest of this file uses. */
+.nut{border:1px solid var(--ink);padding:14.5px 14.5px 9px;margin-top:14px}
+.nut-top{display:flex;justify-content:space-between;align-items:flex-end;
+  padding-bottom:9px;margin-bottom:4px;border-bottom:2px solid var(--ink)}
+.nut-ttl{font-family:var(--f-bear);font-size:21px;line-height:1}
+.nut-bs{font-style:italic;font-size:11.4px;color:rgba(0,0,0,.6);
+  text-align:right;line-height:1.3}
+.nr{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding:8.3px 0;border-bottom:1px solid rgba(0,0,0,.12)}
+.nr:last-child{border-bottom:0}
+.nr-l{font-family:var(--f-bear);font-size:14px;letter-spacing:.01em;
+  text-transform:uppercase}
+.nr-r{font-family:var(--f-bear);font-size:21px;line-height:1;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.nr.p .nr-l{font-weight:600}
+.nr.c{padding:5.2px 0 5.2px 23px;border-bottom:1px dashed rgba(0,0,0,.12)}
+.nr.c .nr-l{font-family:var(--f-aleo);font-style:italic;font-size:13px;
+  color:rgba(0,0,0,.6);text-transform:none;letter-spacing:0}
+.nr.c .nr-l::before{content:'—';margin-right:6px;color:rgba(0,0,0,.3);font-style:normal}
+.nr.c .nr-r{font-size:16.6px;color:rgba(0,0,0,.6)}
+
+/* The enlarge. A plain full-screen ground with the photo centred — no chrome,
+   because the only thing to do here is look and then dismiss. */
+.big{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.92);
+  display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.big[hidden]{display:none}
+.big img{max-width:100%;max-height:100%;object-fit:contain}
 
 /* ── the basket ── */
 /* The add button sits on the photo's own corner rather than under the name,
@@ -653,6 +721,62 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `for(var k in m)m[k].className='';var a=m[es[i].target.id];if(a)a.className='on'}},{rootMargin:'-45% 0px -50% 0px'});` +
   `var c=document.querySelectorAll('.cat');for(var j=0;j<c.length;j++)o.observe(c[j]);})();` +
 
+  // ── THE PRODUCT SHEET ───────────────────────────────────────────────────
+  //
+  // The body is already rendered, server-side, into a <template> on each card,
+  // so opening one is a move rather than a build: both languages are in it, the
+  // CSS switch keeps working, and a customer on a slow connection waits for
+  // nothing. That is the same reason the menu itself is server-rendered.
+  `(function(){` +
+  `var sh=document.getElementById('dsheet');if(!sh)return;` +
+  `var body=document.getElementById('dsheetB'),ttl=document.getElementById('dsheetT'),` +
+  `pr=document.getElementById('dPr'),add=document.getElementById('dAdd'),` +
+  `big=document.getElementById('big'),bigImg=document.getElementById('bigImg');` +
+  `var openPid=null;` +
+  `var close=function(){sh.hidden=true;openPid=null};` +
+  `var open=function(card){` +
+  `var t=card.querySelector('template[data-dt]');if(!t)return;` +
+  `openPid=card.getAttribute('data-open');` +
+  // cloneNode rather than innerHTML: the template's content is already parsed,
+  // and re-parsing a string is the step where an unescaped name would become
+  // markup.
+  `body.innerHTML='';body.appendChild(t.content.cloneNode(true));` +
+  `var n=card.querySelector('.t');ttl.innerHTML=n?n.innerHTML:'';` +
+  `var p=card.querySelector('.pr');pr.textContent=p?p.textContent:'';` +
+  // A sold-out product still opens — a customer may want to know what was in
+  // the thing they cannot have — but it cannot be added from here.
+  `var out=card.className.indexOf('out')>=0;add.hidden=out;` +
+  `sh.hidden=false;body.scrollTop=0};` +
+  `document.addEventListener('click',function(e){` +
+  `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
+  `if(z){var pid=z.getAttribute('data-big'),v=z.getAttribute('data-v')||'';` +
+  // The enlarge asks the SAME route for a wider render. It is a separate URL,
+  // so it caches separately and the thumbnail on the menu is never re-fetched.
+  // \\/ NOT \/ — this is inside a template literal, where \/ collapses to a bare
+  // slash and the emitted JS reads `replace(//$/` , which is a line comment that
+  // swallows the whole rest of the script. Cost the entire page's behaviour once.
+  `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=1000';` +
+  `big.hidden=false;return}` +
+  `if(!big.hidden){big.hidden=true;bigImg.src='';return}` +
+  `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
+  // A tap on the card's own + adds; it must not also open the sheet behind it.
+  `if(card&&!(e.target.closest&&e.target.closest('.add'))){open(card);return}` +
+  `},false);` +
+  `document.getElementById('dsheetX').addEventListener('click',close,false);` +
+  `document.getElementById('dsheetBg').addEventListener('click',close,false);` +
+  `document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;` +
+  `if(!big.hidden){big.hidden=true;bigImg.src='';return}close()},false);` +
+  // Keyboard: a card is role=button and focusable, so it answers Enter/Space.
+  `document.addEventListener('keydown',function(e){` +
+  `if(e.key!=='Enter'&&e.key!==' ')return;` +
+  `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
+  `if(card){e.preventDefault();open(card)}},false);` +
+  // Adding from the sheet routes through the card's own + , so there is one
+  // add path and the basket cannot learn a second way to be wrong.
+  `add.addEventListener('click',function(){if(!openPid)return;` +
+  `var b=document.querySelector('.add[data-add="'+openPid+'"]');if(b)b.click();` +
+  `close()},false);` +
+  `})();` +
   // ── THE BASKET ──────────────────────────────────────────────────────────
   //
   // IT IS THE ONLY STATE THIS PAGE HOLDS, and it holds it in a plain object
@@ -766,6 +890,96 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'</div>';sheet.hidden=false};` +
   `})();`;
 
+// ─── What a product's detail sheet knows ────────────────────────────────
+//
+// EVERY LABEL BELOW IS A LIVE PAIR, copied, not composed:
+//   What's in it · 配料      the product editor's own field label (PW_FACTS)
+//   Nutrition · 营养成分      the mini app's nutrition card heading
+//   Gluten free · 无麸质 …    the product wizard's allergen list (PW_FREE_OF)
+// The one thing this page states that no other surface does is the NEGATIVE —
+// "Contains nuts" — and that is a deliberate departure recorded below.
+
+// free_of is stored as a comma-separated bag of keys. The four the wizard
+// offers are the four that mean anything; an unknown key is ignored rather
+// than shown raw, because a chip reading "5 spice " helps nobody.
+const FREE_OF = [
+  { key: 'gluten',  en: 'Gluten free',  cn: '无麸质', hasEn: 'Contains gluten', hasCn: '含麸质' },
+  { key: 'nuts',    en: 'Nut free',     cn: '无坚果', hasEn: 'Contains nuts',   hasCn: '含坚果' },
+  { key: 'soy',     en: 'Soy free',     cn: '无大豆', hasEn: 'Contains soy',    hasCn: '含大豆' },
+  { key: '5 spice', en: '5-spice free', cn: '无五香', hasEn: 'Contains 5 spice', hasCn: '含五香' },
+];
+
+function freeOfSet(raw) {
+  return new Set(String(raw == null ? '' : raw)
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+}
+
+// The ingredients line, and ONLY that, out of the facts bag. The bag also holds
+// origin, storage, shelf life and a serving suggestion; §44's sheet is for a
+// customer deciding whether to eat something, not reading about the farm.
+function ingredientsOf(raw) {
+  let f = raw;
+  if (typeof f === 'string') { try { f = JSON.parse(f); } catch { return null; } }
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
+  const en = String(f.ingredients_en || '').trim();
+  const cn = String(f.ingredients_cn || '').trim();
+  return (en || cn) ? { en, cn } : null;
+}
+
+// The sheet's body for one product. Returns '' when the product has nothing to
+// say beyond its photo and price — the caller then renders no detail at all
+// rather than an empty sheet, and the card stays untappable.
+function detailBody(it, code) {
+  const ing = ingredientsOf(it.product_facts);
+  const nut = nutritionRows(it.nutrition);
+  const flags = freeOfSet(it.free_of);
+
+  // THE NEGATIVE IS STATED, NOT INFERRED FROM AN ABSENCE — decided 2026-09-06,
+  // and a departure from public/shop.html, which shows only what a product is
+  // free OF. On a filterable catalogue an absent chip means "does not match
+  // this filter". On a menu it would mean "nobody checked", and a customer
+  // scanning for an allergen cannot tell that from "contains it". So every one
+  // of the four is answered, and the two answers look different: a free chip is
+  // solid, a contains chip is dashed and muted.
+  //
+  // It is answered ONLY where the product has been filled in at all. A product
+  // with an empty free_of gets no chips rather than four "contains" claims
+  // nobody made — asserting an allergen from missing data is the one failure
+  // here that could actually hurt somebody.
+  const chips = flags.size ? FREE_OF.map(f => flags.has(f.key)
+    ? `<span class="fchip">${bi(f.en, f.cn)}</span>`
+    : `<span class="fchip has">${bi(f.hasEn, f.hasCn)}</span>`).join('') : '';
+
+  if (!ing && !nut && !chips) return '';
+
+  const rows = nut ? nut.rows.map(r => {
+    const k = r.kind === 'parent' ? ' p' : (r.kind === 'child' ? ' c' : '');
+    return `<div class="nr${k}"><span class="nr-l">${bi(r.label_en, r.label_cn)}</span>` +
+      `<span class="nr-r">${esc(r.value)}</span></div>`;
+  }).join('') : '';
+
+  return `<div class="dt-top">` +
+      (it.has_photo
+        ? `<button type="button" class="dt-ph" data-big="${it.store_product_id}"` +
+          ` data-v="${esc(it.updated_at || '')}" aria-label="${esc('Enlarge 放大')}">` +
+          `<img src="/s/${esc(code)}/i/${it.store_product_id}` +
+          `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}" alt="" loading="lazy" decoding="async">` +
+          `</button>`
+        : `<div class="dt-ph empty"></div>`) +
+      `<div class="dt-hd">` +
+        `<div class="dt-nm">${bi(it.name_en, it.name_cn)}</div>` +
+        (chips ? `<div class="fchips">${chips}</div>` : '') +
+      `</div>` +
+    `</div>` +
+    (ing ? `<div class="dt-k">${bi("What\u2019s in it", '配料')}</div>` +
+           `<div class="dt-ing">${bi(ing.en || ing.cn, ing.cn || ing.en)}</div>` : '') +
+    (nut ? `<div class="nut">` +
+             `<div class="nut-top"><div class="nut-ttl">${bi('Nutrition', '营养成分')}</div>` +
+             ((nut.basis_en || nut.basis_cn)
+               ? `<div class="nut-bs">${bi(nut.basis_en || nut.basis_cn, nut.basis_cn || nut.basis_en)}</div>` : '') +
+             `</div>${rows}</div>` : '');
+}
+
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
   return `<div class="lang">` +
@@ -875,7 +1089,15 @@ router.get('/s/:shopCode', (req, res) => {
       ` data-p="${esc(String(Number(it.price) || 0))}"` +
       ` data-en="${esc(it.name_en || '')}" data-cn="${esc(it.name_cn || '')}"` +
       ` aria-label="${esc(it.name_en || it.name_cn || '')}">+</button>`;
-    return `<div class="it${it.sold_out ? ' out' : ''}">` +
+    // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
+    // ingredients, no nutrition and no allergen flags opens a sheet saying
+    // nothing, which is worse than a card that does not respond — so the whole
+    // detail apparatus is absent for it rather than empty.
+    const detail = detailBody(it, code);
+    const tap = detail
+      ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
+    return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
+      (detail ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
@@ -914,6 +1136,26 @@ router.get('/s/:shopCode', (req, res) => {
     // The sheet. One panel, three faces — basket, then the placed order, then
     // the refusal — so the customer never loses their place on the menu behind
     // it.
+    // The product sheet. A second panel rather than a second face of the basket
+    // one: a customer reading a label has not decided to order yet, and putting
+    // the two in one element would mean closing their basket to read a card.
+    `<div class="sheet" id="dsheet" hidden>` +
+      `<div class="sheet-bg" id="dsheetBg"></div>` +
+      `<div class="sheet-p" role="dialog" aria-modal="true">` +
+        `<div class="sheet-h">` +
+          `<div class="sheet-t" id="dsheetT"></div>` +
+          `<button type="button" class="sheet-x" id="dsheetX" aria-label="${esc('Cancel 取消')}">×</button>` +
+        `</div>` +
+        `<div class="sheet-b" id="dsheetB"></div>` +
+        `<div class="sheet-f">` +
+          `<div class="tot"><span id="dPr"></span>` +
+          `<button type="button" class="place dadd" id="dAdd">${bi('ADD TO BASKET', '加入购物车')}</button>` +
+          `</div>` +
+        `</div>` +
+      `</div>` +
+    `</div>` +
+    // The enlarge. Outside both sheets so it can sit over either.
+    `<div class="big" id="big" hidden><img id="bigImg" src="" alt=""></div>` +
     `<div class="sheet" id="sheet" hidden>` +
       `<div class="sheet-bg" id="sheetBg"></div>` +
       `<div class="sheet-p" role="dialog" aria-modal="true">` +

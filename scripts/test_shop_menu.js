@@ -935,6 +935,27 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(!body.includes('/api/retail/orders'),
         'the menu reaches the customer-account order endpoint — a QR order has no account (§44)');
     });
+    await checkAsync('THE PAGE\'S SCRIPT PARSES — every line of it', async () => {
+      // A page whose script fails to parse still renders, still looks right in
+      // a screenshot, and does NOTHING: no language toggle, no rail highlight,
+      // no basket, no product sheet. It happened once, from `\\/` written as
+      // `\/` inside a template literal — the emitted regex became `//$/`, a
+      // line comment that swallowed the rest of the file. Nothing caught it
+      // except a browser check three steps later failing for an unrelated
+      // reason.
+      //
+      // Parsed out of the SERVED page rather than the source, so it covers
+      // whatever the template actually emitted, escapes included.
+      const { body } = await get(`/s/${LIVE}`);
+      const blocks = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+      assert.ok(blocks.length >= 2, `expected the page's inline scripts, found ${blocks.length}`);
+      blocks.forEach((js, i) => {
+        assert.ok(js.trim().length, `script block ${i} is empty`);
+        try { new Function(js); }
+        catch (e) { assert.fail(`script block ${i} does not parse: ${e.message}`); }
+      });
+    });
+
     await checkAsync('NO ATTRIBUTE ON THIS PAGE CONTAINS MARKUP', async () => {
       // Reported from a phone: a stray "Cancel" box beside the sheet's × .
       // bi() returns two <span>s and it had been dropped into an aria-label,
