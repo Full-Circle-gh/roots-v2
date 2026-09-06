@@ -1712,12 +1712,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function metaHtml(it) {
     var bits = [];
     if (state.canRecount && it.physical_qty != null) {
-      bits.push('<span class="shelf">' + tBlocked('On the shelf ') +
+      bits.push('<span class="shelf">' + t('On the shelf ', '在架 ') +
                 '<b class="num">' + (it.physical_qty | 0) + '</b></span>');
     }
     var a = addedToday(it.id);
     if (a > 0) {
-      bits.push('<span class="added">' + tBlocked('Added today ') +
+      bits.push('<span class="added">' + t('Added today ', '今天已加 ') +
                 '<b class="num">+' + a + '</b></span>');
     }
     if (!bits.length) return '<div class="r-meta" data-meta hidden></div>';
@@ -1727,7 +1727,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function fixHtml(it) {
     if (!state.canRecount) return '';
     return '<button class="r-fix" data-fix="' + it.id + '">' +
-      tBlocked('Correct the count') + '</button>';
+      t('Correct the count', '校正数量') + '</button>';
   }
 
   function rowHtml(it) {
@@ -1959,12 +1959,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var add = state.mode === 'add';
     var correcting = add && kp.purpose === 'correct';
     $('#kpLabel').textContent = correcting
-      ? tBlocked('How many are on the shelf?')
+      ? t('How many are on the shelf?', '在架有多少?')
       : (add ? t('How many did you make?', '制作了多少?') : t('Set count', '设置数量'));
     $('#kpSoldKey').textContent = (add && !correcting)
       ? t('Clear', '清除') : t('Sold out', '售罄');
     $('#kpSave').textContent = correcting
-      ? tBlocked('Save the count')
+      ? t('Save the count', '保存数量')
       : (add ? t('Add to stock', '加入库存') : t('Save', '保存'));
   }
   function closeKeypad() {
@@ -2036,9 +2036,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var it = itemById(id); if (!it) return;
     fk.id = id; fk.qty = qty; fk.busy = false;
     $('#fkName').textContent = pname(it);
-    $('#fkSub').textContent = tBlocked('Shelf says ' + (it.physical_qty | 0) + ', you counted ' + qty);
-    $('#fkMiscount').textContent = tBlocked('I counted wrong — save ' + qty);
-    $('#fkGone').textContent = tBlocked('Something is missing or spoiled');
+    $('#fkSub').textContent = t(
+      'Shelf says ' + (it.physical_qty | 0) + ', you counted ' + qty,
+      '在架 ' + (it.physical_qty | 0) + '，你数的是 ' + qty + '。');
+    $('#fkMiscount').textContent = t('I counted wrong — save ' + qty, '数错了——保存 ' + qty);
+    $('#fkGone').textContent = t('Something is missing or spoiled', '少了或坏了');
     $('#fkCancel').textContent = t('Cancel', '取消');
     var note = $('#fkNote'); note.hidden = true; note.textContent = '';
     state.sheet = 'fork';
@@ -2054,8 +2056,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      number they cannot enter anywhere — the sentence is the instruction. */
   function forkGone() {
     var note = $('#fkNote');
-    note.textContent = tBlocked(
-      'The count stays as it is. Tell whoever records waste — they enter what was lost, and the count follows from that.');
+    note.textContent = t(
+      'The count stays as it is. Tell whoever records waste — they enter what was lost, and the count follows from that.',
+      '数量保持不变。请告诉负责记录损耗的人——他们录入损失后，数量会随之更新。');
     note.hidden = false;
     $('#fkMiscount').setAttribute('disabled', '');
     $('#fkGone').setAttribute('disabled', '');
@@ -2089,7 +2092,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       .then(function () {
         delete state.pending[id];
         paintRow(id);
-        toast(tBlocked('Count set to ' + qty) + ' · ' + pname(it));
+        toast(t('Count set to ' + qty, '已设为 ' + qty) + ' · ' + pname(it));
       })
       .catch(function (e) {
         if (e.message === 'auth') return;
