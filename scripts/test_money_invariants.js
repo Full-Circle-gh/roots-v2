@@ -59,11 +59,11 @@ function fixture() {
     CREATE TABLE retail_customers (
       id INTEGER PRIMARY KEY, nickname TEXT, lifetime_spend REAL, balance REAL);
   `);
-  // One customer, two clean orders. Every relationship holds exactly.
-  // lifetime_spend is the sum of the two order subtotals (100 + 60), so the
+  // One customer, three clean orders. Every relationship holds exactly.
+  // lifetime_spend is the sum of the three order subtotals (100 + 60 + 50), so the
   // reconciliation starts clean — a baseline that is already non-zero cannot
   // show a MOVE, which is the only thing the migration gate reads.
-  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 160, 20);
+  db.prepare('INSERT INTO retail_customers VALUES (1,?,?,?)').run('Chen', 210, 20);
   const ord = db.prepare(`INSERT INTO retail_orders
     (id, order_no, customer_id, status, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
      voucher_amount, points_amount, balance_used, total, refund_amount_paid, refund_cash_amount)
@@ -72,6 +72,21 @@ function fixture() {
   ord.run(1, 'A-1', 1, 'completed', 100, 12, 0, 0, 0, 0, 0, 112, 0, 0);
   //  paid partly in points and credit: gross 30+10+20 = 60, cash 20
   ord.run(2, 'A-2', 1, 'completed', 60, 0, 0, 0, 0, 30, 10, 20, 0, 0);
+  /* A SAME-DAY ORDER, and the reason this row exists. Both orders above carry a
+     ZERO surcharge, so for as long as they were the whole fixture, invariant A
+     could not tell "the surcharge is added to the parts" from "it is not" —
+     nothing in the suite distinguished the two readings, and A shipped adding
+     it twice.
+
+     shipping_fee ALREADY CONTAINS the surcharge: routes/retail.js does
+     `shippingFee += sameDaySurcharge` at creation, and same_day_surcharge_fee
+     records how much of that line it was. So this order is CLEAN — 50 + 30 + 0
+     = 80 — and it goes red against the old formula, which made it 95.
+
+     Taken from production: TC000351 was 49 + 30 (15 of it surcharge) = 79, and
+     the first rehearsal flagged it, and two others like it, as broken data. It
+     was not; the check was. */
+  ord.run(3, 'A-3', 1, 'completed', 50, 30, 0, 15, 0, 0, 0, 80, 0, 0);
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')
     .run(1, 1, 'S-1', 4, 25, 100, 0.042);
   db.prepare('INSERT INTO retail_order_items (id, order_id, sku, qty, unit_price, line_total, unit_cost_at_sale) VALUES (?,?,?,?,?,?,?)')

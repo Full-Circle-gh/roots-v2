@@ -302,6 +302,15 @@ function call(method, url, body) {
         path.join('routes', 'retail-shops.js'),
         path.join('routes', 'shop-menu.js'),
         path.join('public', 'retail-admin', '28-shops.js'),
+        /* THE MONEY REGISTRY, which NAMES the column rather than reading it.
+           lib/money-columns.js is one line per money column in the schema, and
+           `shop_listings.price` is decimal yuan, so it has to appear there or
+           the migration scanner reports it as a column nobody has decided
+           about — which is exactly what the first production rehearsal did
+           report, on 2026-09-06. An entry there is a classification, not a
+           reader: nothing in that file queries this table, and the containment
+           this check exists to hold is unaffected. */
+        path.join('lib', 'money-columns.js'),
       ]);
       const hits = [];
       const walk = d => {

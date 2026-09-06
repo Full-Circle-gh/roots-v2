@@ -24,6 +24,10 @@ const addressPin = require('../lib/address-pin');
 // by construction, one lib/store-hours can read back.
 const { parseHm } = require('../lib/store-hours');
 const { requireAuth, logActivity } = require('../middleware/auth');
+// The store's own day boundary. A kitchen shift that runs past midnight is
+// still the same working day to the people in it, and `businessDate` is the
+// one place this system decides where that line falls.
+const { businessDate } = require('../lib/business-date');
 
 // Background geocode for a store row. Called after create + update when
 // an address-y field changed and the admin didn't supply explicit lat/lng.
@@ -71,6 +75,24 @@ function requireInventoryRead(req, res, next) {
     if (u?.retail_store_id) return next();
     return res.status(403).json({ error: 'no_inventory_access' });
   });
+}
+
+// §46's grant predicate, in its own module so it can be tested without booting
+// the server — three routes here read it and they must agree. See the module
+// for why the decision moved from the job title onto the capability.
+const { quickStockMode, mayRecount, addOnlyOperator, RECOUNT_MISCOUNT } = require('../lib/quick-stock-grant');
+
+// The shelf figure as it stands right now. Read outside adjustStock's
+// transaction on purpose — it decides only whether a QUESTION is required, and
+// the question is answered by the operator rather than by this number. A sale
+// landing between the two can make the guard ask when it needn't, which costs a
+// tap; it can never let an unexplained drop through, because the client has
+// already put the fork to the operator before it sends.
+function currentPhysicalQty(storeId, productId) {
+  const row = tdb().prepare(
+    'SELECT COALESCE(physical_qty, 0) AS q FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
+  ).get(storeId, productId);
+  return row ? row.q : 0;
 }
 
 // Normalise a per-store low-stock threshold from a request body: blank/absent
@@ -283,8 +305,9 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
   const id = parseInt(req.params.id, 10);
   if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'store_not_found' });
 
-  // A kitchen operator may only read their own store's product list, and never
-  // the quantities — the Add Stock app needs names/SKUs to search, nothing else.
+  // A kitchen operator may only read their own store's product list. Whether
+  // that list carries QUANTITIES is a separate question and §46's: it depends
+  // on the `quickstock:recount` grant, not on the job title.
   const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
   if (kitchenOp && id !== req.backendUser.retail_store_id) {
     return res.status(403).json({ success: false, error: 'store_not_assigned' });
@@ -309,11 +332,32 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
      ORDER BY p.is_published DESC, p.name_en COLLATE NOCASE
   `).all(id);
 
-  // Kitchen operators get a quantity-free list (id/name/sku only) so the shelf
-  // total is never exposed — not in the UI, not over the raw API.
-  if (kitchenOp) {
+  /* ADD MODE WITHOUT THE GRANT: a quantity-free list (id/name/sku only), so the
+     shelf total is never exposed — not in the UI, not over the raw API. This
+     is the original kitchen contract and it is unchanged for every kitchen that
+     has not been granted the recount capability.
+
+     It is now keyed on the GRANT rather than the role, which widens who it
+     covers: `requireInventoryRead` also admits a plain `users` row carrying a
+     retail_store_id, and such a row whose role is `kitchen` landed in add mode
+     with the quantities in its response and only the client declining to draw
+     them. The claim in the comment above was true of one realm and not the
+     other; keying on the grant makes it true of both. */
+  if (addOnlyOperator(req)) {
     return res.json({ success: true, data: rows.map(r => ({
       product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
+    })) });
+  }
+
+  /* ADD MODE WITH THE GRANT: the shelf total, and nothing else that was hidden.
+     Deliberately NOT the full admin row — reservations, channel quotas and the
+     safety buffer answer questions this operator is not being asked, and §46
+     grants them the count so they can check it against a shelf they can see.
+     The narrow shape is also what the app already maps. */
+  if (quickStockMode(req) === 'add') {
+    return res.json({ success: true, data: rows.map(r => ({
+      product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
+      physical_qty: r.physical_qty,
     })) });
   }
 
@@ -326,6 +370,63 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
   }
 
   res.json({ success: true, data: rows });
+});
+
+/* GET /api/retail-admin/stores/:id/stock/added-today
+   WHAT HAS ALREADY GONE ON THE SHELF TODAY, so the same batch is not added
+   twice.
+
+   THE FAILURE THIS ANSWERS. An add leaves nothing behind on the screen: the
+   row returns to +0 and the toast fades. A few minutes later nobody can tell
+   whether a batch went in, and the honest guess — add it again — is the one
+   that costs. public/stock.html's own note on the "What you made" flow reaches
+   the same conclusion from the other side: "Adding stock twice is worse than
+   adding it late", and it could not offer a second chance precisely because a
+   kitchen operator was refused every endpoint that could read the ledger.
+
+   THE STORE'S ADDS, NOT THE OPERATOR'S, and that is deliberate twice over.
+   The double-add worth preventing is as often a colleague on another phone as
+   the same person coming back — a per-actor figure would show +0 to the second
+   person and invite exactly the duplicate. And `actor_user_id` cannot identify
+   an operator on its own anyway: it holds a kitchen `users.id` or a backend
+   `tenant_users.id`, two id spaces that collide, which is why the column
+   carries no foreign key.
+
+   IT READS THE LEDGER, WHICH IS THE ONLY HONEST SOURCE. A count of what was
+   added is not derivable from the shelf figure — sales move it too. */
+router.get('/api/retail-admin/stores/:id/stock/added-today', requireInventoryRead, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'store_not_found' });
+
+  const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
+  if (kitchenOp && id !== req.backendUser.retail_store_id) {
+    return res.status(403).json({ success: false, error: 'store_not_assigned' });
+  }
+
+  const tz = tdb().prepare('SELECT timezone FROM retail_stores WHERE id = ?').get(id)?.timezone || null;
+  const today = businessDate(tz);
+  /* A TWO-DAY WINDOW NARROWED IN JS, rather than a date comparison in SQL.
+     `created_at` is stored UTC and the business date is the STORE's, so no
+     SQL predicate can select "today" without reimplementing the timezone rule
+     that lib/business-date owns. The window is what keeps that cheap: any row
+     belonging to the store's today is inside the last two days, whatever the
+     offset, and a kitchen's adds at one store over two days are a handful. */
+  const rows = tdb().prepare(`
+    SELECT product_id, delta, created_at
+      FROM retail_stock_ledger
+     WHERE store_id = ? AND reason = 'kitchen_add'
+       AND created_at >= datetime('now', '-2 days')
+  `).all(id);
+
+  const added = {};
+  for (const r of rows) {
+    const at = new Date(String(r.created_at).replace(' ', 'T') + 'Z');
+    if (isNaN(at.getTime()) || businessDate(tz, at) !== today) continue;
+    const n = r.delta | 0;
+    if (n <= 0) continue;
+    added[r.product_id] = (added[r.product_id] || 0) + n;
+  }
+  res.json({ success: true, data: added });
 });
 
 // PATCH /api/retail-admin/stores/:storeId/stock/:productId
@@ -362,7 +463,11 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   }
 
   const b = req.body || {};
-  if (kitchenOp && !('delta' in b)) {
+  /* ADD-ONLY IS NOW THE UNGRANTED CASE, not the kitchen case (§46). A kitchen
+     operator whose tenant has granted `quickstock:recount` may also set an
+     absolute count; one without the grant is refused exactly as before. */
+  const addMode = quickStockMode(req) === 'add';
+  if (addOnlyOperator(req) && !('delta' in b)) {
     return res.status(403).json({ success: false, error: 'kitchen_add_only' });
   }
   const out = {};
@@ -429,6 +534,33 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
         message: 'A shelf count cannot be less than zero. Enter what is there, or 0 if it is empty.',
       });
     }
+    /* A KITCHEN CORRECTION MAY ONLY EVER MEAN "IT WAS COUNTED WRONG" (§46).
+       The kitchen records no waste on this screen, so the vocabulary a lowered
+       count may carry is one word long. If what they found is actually gone —
+       spoiled, expired, broken — it is a loss, it belongs to whoever holds
+       `waste:record`, and the shelf figure must not move until they record it.
+       Letting the count drop here without a loss record is the failure this
+       refusal exists to prevent: the shelf would agree with the room and the
+       business would have no idea anything was lost.
+
+       Only the fork's saving answer is accepted, and any waste code sent here
+       is refused rather than absorbed — a request naming `spoiled` has
+       misunderstood which door it is at, and answering 200 to it would file a
+       destroyed unit as an arithmetic slip.
+
+       An UPWARD correction asks nothing (§46): raising a count is
+       overwhelmingly a miscount being fixed, and a question asked every time is
+       one that stops being read. */
+    if (addMode && newQty < currentPhysicalQty(storeId, productId)) {
+      if (String(b.recount_reason || '').trim() !== RECOUNT_MISCOUNT) {
+        return res.status(400).json({
+          success: false, error: 'recount_reason_required',
+          message: 'Lowering a count here can only mean it was counted wrong. '
+                 + 'If something is missing or spoiled, someone who can record waste has to record it.',
+          accepts: [RECOUNT_MISCOUNT],
+        });
+      }
+    }
     out.adjust = inventory.adjustStock({
       storeId, productId, newPhysicalQty: newQty,
       // actor_user_id is just an audit integer (no FK) — but it can't be
@@ -436,7 +568,12 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
       // collide), so record the display name too. req.user is shimmed for
       // both realms (retail.js requireRetailAdmin).
       actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null,
-      note: b.note || null, reason: b.reason || 'adjust',
+      note: b.note || null,
+      /* THE REASON IS THE SERVER'S TO WRITE IN ADD MODE, not the client's. §46
+         turns on a correction being distinguishable from a batch forever after,
+         and a ledger row that took its reason from the request body could be
+         made to say `kitchen_add` by a client that asked for it. */
+      reason: addMode ? 'kitchen_recount' : (b.reason || 'adjust'),
     });
   }
   const layerFields = {};
@@ -697,11 +834,18 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
   );
 
   // Mode is role-driven: a kitchen operator (backend) or a kitchen-app staffer
-  // gets the relative "Add Stock" flow (log what you made, never see the running
-  // total); a store_stock clerk and everyone else get the absolute recount flow.
-  // Each mode has its own feature flag.
-  const mode = (kitchenOp || (!fullAccess && req.user?.role === 'kitchen')) ? 'add' : 'recount';
+  // gets the relative "Add Stock" flow (log what you made); a store_stock clerk
+  // and everyone else get the absolute recount flow. Each mode has its own
+  // feature flag. Derived by the shared helper so this and the two stock routes
+  // cannot drift apart on who is in which mode.
+  const mode = quickStockMode(req);
   const enabled = mode === 'add' ? kitchenAddEnabled() : quickStockEnabled();
+
+  /* WHETHER ADD MODE ALSO SEES AND CORRECTS THE COUNT (§46). Sent so the app
+     knows which of the two Add stock screens to draw without inferring it from
+     whether a quantity happened to arrive — an inference that would read a
+     stripped list and a genuinely empty shelf the same way. */
+  const canRecount = mode === 'add' && mayRecount(req);
 
   let stores;
   if (restrictedOp) {
@@ -757,6 +901,7 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     data: {
       enabled,
       mode,                       // 'add' (kitchen) | 'recount' (warehouse)
+      can_recount: canRecount,    // add mode may also see and correct the count (§46)
       home,                       // the tool list, when there is somewhere to go back to
       home_label: homeLabel,      // that screen's own name, so Back can say it
       user: {

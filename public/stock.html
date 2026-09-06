@@ -269,6 +269,22 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .row.out .stepper .qty{color:var(--brick-ink);}
 /* In flight — the write says so where the operator is looking. */
 .row.saving .stepper .qty{color:var(--text2);}
+/* The add card's second line (§46): the shelf figure where the operator is
+   allowed to see it, and what has already gone on today. One line, muted, in
+   the same register as the SKU above it — this is context for the decision the
+   stepper makes, never the decision itself. */
+.r-meta{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;margin-top:2px;}
+.r-meta .sep{opacity:.5;padding:0 6px;}
+.r-meta .added{color:var(--text);}
+/* Correcting the count is a SEPARATE control from the stepper, deliberately
+   plain and deliberately not adjacent to it. The two writes must never be one
+   fat finger apart: the stepper says what was made, this says what is there. */
+.r-fix{
+  margin-top:8px;background:none;border:0;padding:0;
+  font:inherit;font-size:13px;color:var(--text2);text-decoration:underline;
+  text-underline-offset:3px;cursor:pointer;
+}
+.r-fix:active{color:var(--text);}
 .r-flight{font-size:13px;color:var(--text2);}
 /* Error — inline, next to the control that failed, and it STAYS until the
    operator acts on it (§1.12). A failed write never leaves in a toast. */
@@ -729,6 +745,35 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     <button class="kp-save" id="kpSave"></button>
   </div>
 </div>
+<!-- THE FORK (§46). A count that has gone DOWN is two different afternoons and
+     they are the same two numbers: the shelf was miscounted, or something is
+     actually gone. Only the first is this operator's to fix. The second is a
+     loss, it belongs to whoever holds the waste permission, and the shelf
+     figure must not move until they record it — a count that drops without a
+     loss record leaves the shelf agreeing with the room and the business with
+     no idea anything went missing.
+
+     NOT A REASON PICKER. The waste vocabulary is deliberately absent from this
+     screen: offering "spoiled" here and writing a waste record from it would
+     put loss-recording in the kitchen's hands through a side door, and offering
+     it without writing one is worse — a loss named by the operator and filed
+     nowhere. Two answers, one of which does not save. -->
+<div class="sheet-back" id="fkBack"></div>
+<div class="sheet" id="fkSheet">
+  <div class="grabber"></div>
+  <div class="kp">
+    <div class="kp-head">
+      <div class="kp-name" id="fkName"></div>
+      <div class="kp-sub" id="fkSub"></div>
+    </div>
+    <div class="sheet-foot" style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-secondary" id="fkMiscount"></button>
+      <button class="btn btn-secondary" id="fkGone"></button>
+      <button class="btn btn-secondary" id="fkCancel"></button>
+    </div>
+    <div class="note" id="fkNote" hidden></div>
+  </div>
+</div>
 <!-- The short-pick sheet. Its own keypad again, for the same reason receiving
      has one: the fields here are an allocation across stores with a remainder
      that gates the save, which is a different machine from a single count. -->
@@ -822,6 +867,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   var lang = 'en';
   try { var s0 = localStorage.getItem(LANG_KEY); if (s0 === 'en' || s0 === 'cn') lang = s0; } catch (e) {}
   function t(en, cn) { return lang === 'cn' ? cn : en; }
+  /* A STRING WITH NO CHINESE YET. §30 forbids composing one and forbids
+     inventing one, and it does not forbid shipping the control — so these read
+     English in both languages until Ash supplies the Chinese, which is visibly
+     missing rather than quietly wrong. Every string that HAS a locked source
+     goes through t() as normal; this is only for the ones that do not. */
+  function tBlocked(en) { return en; }
   function pname(it) {
     var n = lang === 'cn' ? (it.name_cn || it.name_en) : (it.name_en || it.name_cn);
     return n || ('#' + it.id);
@@ -836,7 +887,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     items: [],
     filter: 'all', q: '',
     pending: {},
-    addQty: {},           // add mode: pending "to add" amount per product (never the shelf total)
+    addQty: {},           // add mode: pending "to add" amount per product
+    // §46: add mode may ALSO see the count and correct it, where the kitchen
+    // and the shelf share a building and the tenant has granted it. The server
+    // decides and says so; the client never infers it from whether a quantity
+    // happened to arrive, because a stripped list and an empty shelf look the
+    // same from here.
+    canRecount: false,
+    addedToday: {},       // product id -> units already added at this store today
     rowErr: {},           // per-product write failures — they live in the row, not in a toast
     loadErr: '',
     lastSync: null,
@@ -847,7 +905,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     // three disagreeing sources reduce to. See NOTIFICATIONS below.
     push: 'unsupported', pushBusy: false,
   };
-  var kp = { id: null, entry: null };
+  // `purpose` is 'add' (how many did you make) or 'correct' (what is actually
+  // on the shelf). The same keypad, two different questions and two different
+  // writes — and §46 turns on those two never becoming one.
+  var kp = { id: null, entry: null, purpose: 'add' };
+  // The fork a lowered count opens (§46): counted wrong, or something is gone.
+  var fk = { id: null, qty: null, busy: false };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
 
@@ -914,6 +977,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     api(API + '/quick-stock/context').then(function (d) {
       state.enabled = d.enabled;
       state.mode = d.mode === 'add' ? 'add' : 'recount';
+      state.canRecount = d.can_recount === true;
       state.fullAccess = d.user.full_access;
       state.home = typeof d.home === 'string' ? d.home : null;
       state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
@@ -983,9 +1047,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     $('#signOutBtn').textContent = t('Sign out', '退出登录');
     $('#signOutYes').textContent = t('Sign out', '退出登录');
     $('#signOutNo').textContent = t('Cancel', '取消');
-    $('#kpLabel').textContent = add ? t('How many did you make?', '制作了多少?') : t('Set count', '设置数量');
-    $('#kpSoldKey').textContent = add ? t('Clear', '清除') : t('Sold out', '售罄');
-    $('#kpSave').textContent = add ? t('Add to stock', '加入库存') : t('Save', '保存');
+    applyKpLang();
     setChip('all', t('All', '全部'));
     setChip('low', t('Low', '偏低'));
     setChip('out', t('Out', '售罄'));
@@ -1064,8 +1126,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
        Their list still paints first and the launcher still lands over it. */
     _hold = !!homeDeep();
     if (!_hold) { $('#pageHead').hidden = false; $('#band').hidden = false; }
-    // Add mode hides the All/Low/Out chips — those count current stock, which
-    // kitchen staff are deliberately never shown.
+    /* ADD MODE HIDES THE All/Low/Out CHIPS, AND STILL DOES UNDER §46. The
+       original reason — they count a stock figure the kitchen is never shown —
+       stopped being the whole truth the moment the grant existed. The rule
+       survives on the other reason, which §46 states outright: the count is
+       shown so it can be CHECKED against a shelf in the same building, not so
+       it can decide what gets cooked. A Low filter is a prioritisation surface,
+       and prioritising is the queue's job. */
     $('#filters').style.display = state.mode === 'add' ? 'none' : '';
     // One store is not a choice. The picker self-hides rather than rendering a
     // dead control (§1.9, data precondition).
@@ -1089,6 +1156,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       if (k === 'sold') kpSoldOut(); else if (k === 'back') kpBackspace(); else kpPress(k);
     });
     $('#kpSave').onclick = kpSave;
+    $('#fkBack').onclick = closeFork;
+    $('#fkCancel').onclick = closeFork;
+    $('#fkMiscount').onclick = forkMiscount;
+    $('#fkGone').onclick = forkGone;
     $('#kpBack').onclick = closeKeypad;
     rcMount();
     pkMount();
@@ -1430,12 +1501,37 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       state.items = mapped; state.pending = {}; state.addQty = {}; state.rowErr = {};
       enterOnce = true;
       render();
+      loadAddedToday();
     }).catch(function (e) {
       if (e.message === 'auth') return;
       state.loadErr = e.message || 'error';
       render();
     });
   }
+
+  /* WHAT IS ALREADY ON THE SHELF TODAY. An add leaves nothing behind: the row
+     returns to +0 and the toast fades, and a few minutes later nobody can tell
+     whether a batch went in. The honest guess is to add it again, and that is
+     the one that costs — the note on "What you made" reached the same
+     conclusion from the other side and could do nothing about it, because a
+     kitchen operator was refused every endpoint that could read the ledger.
+
+     THE STORE'S ADDS, NOT THIS OPERATOR'S. The duplicate worth preventing is as
+     often a colleague on the other phone as the same person coming back.
+
+     IT NEVER BLOCKS THE LIST. A failure here leaves the line off the cards and
+     nothing else: the app's job is to add stock, and it can do that whether or
+     not it can say what was added earlier. */
+  function loadAddedToday() {
+    if (state.mode !== 'add' || state.storeId == null) return;
+    var forStore = state.storeId;
+    api(API + '/stores/' + forStore + '/stock/added-today').then(function (d) {
+      if (state.storeId !== forStore) return;   // they switched store mid-flight
+      state.addedToday = d || {};
+      state.items.forEach(function (it) { paintRow(it.id); });
+    }).catch(function () { /* the line simply does not appear */ });
+  }
+  function addedToday(id) { return state.addedToday[id] | 0; }
 
   // A poll never overwrites a count the operator is still working on, and it
   // never re-renders the list when it doesn't have to — a full repaint under a
@@ -1572,16 +1668,56 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var p = state.pending[id];
     if (!p) return '<div class="r-flight" data-flight></div>';
     return '<div class="r-flight" data-flight>' +
-      (state.mode === 'add' ? t('Adding', '添加中') : t('Saving', '保存中')) + '</div>';
+      (p.correct != null ? t('Saving', '保存中')
+       : state.mode === 'add' ? t('Adding', '添加中') : t('Saving', '保存中')) + '</div>';
   }
   function errHtml(id) {
     var e = state.rowErr[id];
     if (!e) return '';
-    var msg = state.mode === 'add'
+    // A failed CORRECTION reports the same fact the failed recount does — the
+    // shelf still shows what it showed — because that is what the operator
+    // needs to know before they try again. A failed ADD reports that nothing
+    // moved, which is a different sentence for a different write.
+    var it0 = itemById(id);
+    var msg = e.correct != null
+      ? t('Didn’t save. The shelf still shows ' + (it0 ? it0.physical_qty : '—') + '.',
+          '未保存,库存仍为 ' + (it0 ? it0.physical_qty : '—') + '。')
+      : state.mode === 'add'
       ? t('Didn’t add. Nothing changed.', '未添加,库存未变。')
       : t('Didn’t save. The shelf still shows ' + e.was + '.', '未保存,库存仍为 ' + e.was + '。');
     return '<div class="r-err" data-err>' + msg +
       '<button class="retry" data-retry="' + id + '">' + t('Retry', '重试') + '</button></div>';
+  }
+
+  /* THE ADD CARD'S SECOND LINE. Two facts, either of which may be absent.
+
+     The shelf figure appears only where §46 grants it. Where it does not, this
+     line carries what was added today alone, which is the half that needs no
+     grant: it is this operator's own work read back, and it is what stops the
+     same batch going on twice.
+
+     ZERO IS NOT SHOWN for the added figure. "Added today +0" on two hundred
+     cards is noise that trains the eye to skip the line on the one card where
+     it says something. */
+  function metaHtml(it) {
+    var bits = [];
+    if (state.canRecount && it.physical_qty != null) {
+      bits.push('<span class="shelf">' + tBlocked('On the shelf ') +
+                '<b class="num">' + (it.physical_qty | 0) + '</b></span>');
+    }
+    var a = addedToday(it.id);
+    if (a > 0) {
+      bits.push('<span class="added">' + tBlocked('Added today ') +
+                '<b class="num">+' + a + '</b></span>');
+    }
+    if (!bits.length) return '<div class="r-meta" data-meta hidden></div>';
+    return '<div class="r-meta" data-meta>' + bits.join('<span class="sep">·</span>') + '</div>';
+  }
+  // The correction door, and only where the grant opens it.
+  function fixHtml(it) {
+    if (!state.canRecount) return '';
+    return '<button class="r-fix" data-fix="' + it.id + '">' +
+      tBlocked('Correct the count') + '</button>';
   }
 
   function rowHtml(it) {
@@ -1593,7 +1729,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       return '<div class="row' + (busy ? ' saving' : '') + '" id="row-' + it.id + '">' +
         '<div class="r-head"><div class="r-name">' + esc(pname(it)) + '</div></div>' +
         '<div class="r-sku num">' + (it.sku ? esc(it.sku) : '#' + it.id) + '</div>' +
+        metaHtml(it) +
         stepperHtml(it, '+' + n0, n0 <= 0) +
+        fixHtml(it) +
         flightHtml(it.id) + errHtml(it.id) +
         '</div>';
     }
@@ -1626,7 +1764,12 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function wireRow(id) {
     var row = $('#row-' + id); if (!row) return;
     var dec = $('[data-dec="' + id + '"]', row), inc = $('[data-inc="' + id + '"]', row),
-        open = $('[data-open="' + id + '"]', row), retry = $('[data-retry="' + id + '"]', row);
+        open = $('[data-open="' + id + '"]', row), retry = $('[data-retry="' + id + '"]', row),
+        fix = $('[data-fix="' + id + '"]', row);
+    // The correction door opens the SAME keypad on a different question. It is
+    // wired separately from the stepper on purpose: nothing about tapping + or
+    // − can ever reach this path (§46).
+    if (fix) fix.onclick = function () { openKeypad(id, 'correct'); };
     if (state.mode === 'add') {
       if (dec) dec.onclick = function () { bumpAdd(id, -1); };
       if (inc) inc.onclick = function () { bumpAdd(id, +1); };
@@ -1646,6 +1789,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var add = state.mode === 'add';
     var q = row.querySelector('.qty');
     if (q) q.textContent = add ? ('+' + (state.addQty[id] || 0)) : it.physical_qty;
+    // The second line carries both figures that move under the operator — the
+    // shelf after a correction, and what today's adds come to after one lands.
+    var meta = row.querySelector('[data-meta]');
+    if (meta) {
+      var want = metaHtml(it);
+      if (meta.outerHTML !== want) meta.outerHTML = want;
+    }
     var st = statusOf(it);
     row.classList.toggle('out', !add && st === 'out');
     row.classList.toggle('saving', !!state.pending[id]);
@@ -1672,6 +1822,15 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function retryRow(id) {
     var e = state.rowErr[id]; if (!e) return;
     state.rowErr[id] = null; delete state.rowErr[id];
+    // A correction retries as a correction. Re-deriving it from the mode would
+    // send the batch write instead, which is the one confusion §46 exists to
+    // make impossible — so the standing error remembers which write it was.
+    if (e.correct != null) {
+      var cur = itemById(id);
+      paintRow(id);
+      commitCorrection(id, e.correct, cur && e.correct < (cur.physical_qty | 0) ? 'miscount' : null);
+      return;
+    }
     if (state.mode === 'add') { paintRow(id); flushAdd(id); return; }
     setQty(id, e.qty, true);
   }
@@ -1745,6 +1904,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: { delta: n, reason: 'kitchen_add', note: 'add-stock' } })
       .then(function () {
         if (it) it.physical_qty += n;
+        // Today's running total moves with the write rather than waiting for
+        // the next poll: the card is what the operator checks before deciding
+        // whether this batch has already gone on, and a line that lags is worse
+        // than no line at all.
+        state.addedToday[id] = (state.addedToday[id] | 0) + n;
         delete state.pending[id];
         paintRow(id);
         toast(t('Added ' + n, '已加 ' + n + ' 件') + (it ? ' · ' + pname(it) : ''));
@@ -1759,14 +1923,37 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   // ── Keypad · one bounded decision, one commit ──────────────────────────
-  function openKeypad(id) {
+  /* ONE KEYPAD, TWO QUESTIONS, and the purpose decides which (§46). Tapping the
+     number on the stepper asks how many were made; the correction door asks
+     what is actually on the shelf. Same sheet, because a second keypad would be
+     a second machine to learn for a difference that is one sentence wide — and
+     different labels, a different starting value and a different write, because
+     the difference is the whole point. */
+  function openKeypad(id, purpose) {
     var it = itemById(id); if (!it) return;
     kp.id = id; kp.entry = null;
+    kp.purpose = (purpose === 'correct' && state.canRecount) ? 'correct' : 'add';
     $('#kpName').textContent = pname(it);
     $('#kpSub').textContent = it.sku || ('#' + it.id);
+    applyKpLang();
     renderKpVal();
     state.sheet = 'keypad';
     $('#kpBack').classList.add('show'); $('#kpSheet').classList.add('show');
+  }
+  /* The keypad's own three labels, set per OPENING rather than per language
+     flip, because in add mode two of them now depend on which question is being
+     asked. applyLang() still calls this so a flip mid-sheet lands. */
+  function applyKpLang() {
+    var add = state.mode === 'add';
+    var correcting = add && kp.purpose === 'correct';
+    $('#kpLabel').textContent = correcting
+      ? tBlocked('How many are on the shelf?')
+      : (add ? t('How many did you make?', '制作了多少?') : t('Set count', '设置数量'));
+    $('#kpSoldKey').textContent = (add && !correcting)
+      ? t('Clear', '清除') : t('Sold out', '售罄');
+    $('#kpSave').textContent = correcting
+      ? tBlocked('Save the count')
+      : (add ? t('Add to stock', '加入库存') : t('Save', '保存'));
   }
   function closeKeypad() {
     $('#kpBack').classList.remove('show'); $('#kpSheet').classList.remove('show');
@@ -1774,7 +1961,16 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
   // Add mode shows the pending "to add" amount (not the shelf total) — typically
   // 0 — so the current count is never revealed.
-  function kpCurrent() { if (state.mode === 'add') return state.addQty[kp.id] || 0; var it = itemById(kp.id); return it ? it.physical_qty : 0; }
+  /* WHAT THE KEYPAD OPENS ON. Logging a batch opens on the pending amount —
+     typically 0, and never the shelf total, because "how many did you make" has
+     nothing to do with what is already there. Correcting opens on the shelf
+     figure, because that is the number being disputed. */
+  function kpCurrent() {
+    var it = itemById(kp.id);
+    if (state.mode === 'add' && kp.purpose === 'correct') return it ? (it.physical_qty | 0) : 0;
+    if (state.mode === 'add') return state.addQty[kp.id] || 0;
+    return it ? it.physical_qty : 0;
+  }
   function renderKpVal() {
     var v = kp.entry !== null ? kp.entry : String(kpCurrent());
     if (v === '') v = '0';
@@ -1798,6 +1994,16 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function kpSave() {
     var id = kp.id, it = itemById(id);
     if (!it) { closeKeypad(); return; }
+    if (state.mode === 'add' && kp.purpose === 'correct') {
+      var was = it.physical_qty | 0;
+      var c = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : was;
+      c = Math.max(0, c);
+      closeKeypad();
+      if (c === was) return;                    // agreed with the shelf; nothing to write
+      if (c < was) return openFork(id, c);      // a drop is never saved unasked (§46)
+      commitCorrection(id, c, null);
+      return;
+    }
     if (state.mode === 'add') {
       var n = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : (state.addQty[id] || 0);
       state.addQty[id] = Math.max(0, n);
@@ -1809,6 +2015,77 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var v = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : it.physical_qty;
     closeKeypad();
     if (v !== it.physical_qty) setQty(id, v, true);
+  }
+
+  /* ── The fork, and the one write it can lead to ─────────────────────────
+     openFork asks; commitCorrection writes. They are separate so that the
+     "something is gone" answer can do what it must do — nothing at all. */
+  function openFork(id, qty) {
+    var it = itemById(id); if (!it) return;
+    fk.id = id; fk.qty = qty; fk.busy = false;
+    $('#fkName').textContent = pname(it);
+    $('#fkSub').textContent = tBlocked('Shelf says ' + (it.physical_qty | 0) + ', you counted ' + qty);
+    $('#fkMiscount').textContent = tBlocked('I counted wrong — save ' + qty);
+    $('#fkGone').textContent = tBlocked('Something is missing or spoiled');
+    $('#fkCancel').textContent = t('Cancel', '取消');
+    var note = $('#fkNote'); note.hidden = true; note.textContent = '';
+    state.sheet = 'fork';
+    $('#fkBack').classList.add('show'); $('#fkSheet').classList.add('show');
+  }
+  function closeFork() {
+    $('#fkBack').classList.remove('show'); $('#fkSheet').classList.remove('show');
+    fk.id = null; fk.qty = null; state.sheet = null;
+  }
+  /* THE ANSWER THAT DOES NOT SAVE. It says what happens next rather than just
+     refusing: the count stays as it is, and the loss goes to somebody who can
+     record one. Deliberately NOT a dead end that leaves the operator holding a
+     number they cannot enter anywhere — the sentence is the instruction. */
+  function forkGone() {
+    var note = $('#fkNote');
+    note.textContent = tBlocked(
+      'The count stays as it is. Tell whoever records waste — they enter what was lost, and the count follows from that.');
+    note.hidden = false;
+    $('#fkMiscount').setAttribute('disabled', '');
+    $('#fkGone').setAttribute('disabled', '');
+  }
+  function forkMiscount() {
+    if (fk.busy) return;
+    var id = fk.id, qty = fk.qty;
+    closeFork();
+    commitCorrection(id, qty, 'miscount');
+  }
+
+  /* A CORRECTION IS ITS OWN WRITE and it says so on the wire: an absolute
+     physical_qty, never a delta. The server records it as a recount and never
+     as production, whatever this client sends — but sending the right shape is
+     what makes the two paths readable side by side here, which is where the
+     next person will look before they change one of them.
+
+     `recount_reason` rides only on a DROP. An upward correction asks nothing
+     (§46), so claiming a miscount on one would be putting an assertion in the
+     operator's mouth that they were never asked to make. */
+  function commitCorrection(id, qty, reason) {
+    var it = itemById(id); if (!it) return;
+    var was = it.physical_qty | 0;
+    var body = { physical_qty: qty, note: 'kitchen-correct' };
+    if (reason) body.recount_reason = reason;
+    state.pending[id] = { correct: qty };
+    if (state.rowErr[id]) delete state.rowErr[id];
+    it.physical_qty = qty;                       // optimistic, and reverted on failure
+    paintRow(id);
+    api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: body })
+      .then(function () {
+        delete state.pending[id];
+        paintRow(id);
+        toast(tBlocked('Count set to ' + qty) + ' · ' + pname(it));
+      })
+      .catch(function (e) {
+        if (e.message === 'auth') return;
+        it.physical_qty = was;
+        delete state.pending[id];
+        state.rowErr[id] = { correct: qty, msg: e.message };
+        paintRow(id);
+      });
   }
 
   // ── Store sheet ────────────────────────────────────────────────────────

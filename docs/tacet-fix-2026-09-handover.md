@@ -18,7 +18,8 @@ Branch: `claude/tacet-audit-2026-09-tpkn60`, deployed in three passes:
 | **Part five** | C-02 on the desktop — 18 hardcoded offsets and a dozen bespoke formatters | merged and live (commit `56accb7`) |
 | **Part six** | D-03 on the customer-facing storefront — 34 hardcoded ¥ | merged and live (commit `d347a59`) |
 | **Part seven** | D-03 on the counter till and the phone | merged and live (commit `48f0d1e`) |
-| **Part eight** | D-04 in the product-copy assistant's prompt and on the parcel label | on the branch, deploys with the next merge |
+| **Part eight** | D-04 in the product-copy assistant's prompt | merged and live (commit `60e7c67`) |
+| **Part nine** | D-04 on the parcel label | **merged to `main` (`d230ec0`) but NOT on the server** — see below |
 
 ---
 
@@ -146,6 +147,8 @@ branch and deploys with the next merge; everything else here is live.
 | **D-03** | High · part seven | And two more surfaces, found by asking the same question of each one. **The counter till** rang up every sale in yuan: its money helper was literally called `yuan()` and hardcoded the symbol, across sixteen call sites and the printed receipt — so a merchant trading in anything else quoted their customer a figure in a currency neither of them uses, on the glass they are both looking at. It already read `/api/retail/config` for the tax settings, so the currency was one field away the whole time. One helper, renamed `money()`, reading symbol, decimals and position. **The phone admin** was already right — `money(cur, n)` and `money0(cur, n)` both take the currency — with exactly one amount written as a literal (`from ¥0 — everyone starts here` on the membership ladder). `scripts/test_customer_currency.js` now covers all four surfaces. |
 | **D-04** | High · part seven | One level below the copy: **the product-copy assistant's own premises.** `composeBlocksHandler` is mounted on two realms — the kitchen app's and `/api/retail-admin/ai/compose-blocks`, which any merchant reaches from their product editor — and its system prompt opened, as a statement of fact, "You are the layout assistant for **Roots**, a small bilingual plant-based food brand in Guangzhou", then four hundred words later forbade the model from using an animal-product emoji because "the shop is fully vegan". So every merchant's copy was organised by an assistant that believed it worked for a Guangzhou plant-based brand, and a merchant selling meat or cheese could not be given the emoji for their own product. Two variants now, chosen from `req.tenant`: the account it was written for reads a **byte-identical** prompt (asserted character for character — a prompt is the one kind of code a diff tells you nothing about), everyone else gets their own name, no category, no city, and an emoji rule about the product in front of it. The CHAT assistant's much larger "Roots context (verified business facts)" block is left alone and pinned: it is reachable only through `/api/ai/chat`, which is `requireAuth` — the kitchen realm, out of scope by the brief, exactly as the audit's own §8.4 says. |
 | **D-04** | High · part eight | And one more, twenty-four thousand lines below the helper written to prevent it. `tenantBrandLabel()` exists in `routes/retail.js` and its own note says why — "a shopper's payment screen never reads another company's name" — and the **JD waybill** set `senderName: 'Roots'` with a comment beside it claiming the field was the brand and "user-set". It was neither. Every account's parcels reached their customers with another company in the sender field, printed on the label that comes off the box. One line. `scripts/test_tenant_branding.js` bans the literal across the admin API and lists the four places it legitimately survives with the reason for each — the seed row the helper reads back, the two kitchen-realm AI prompts, the rider dispatch (out of scope by the brief), and a debug push that reaches only the caller's own device. |
+| **D-04** | High · part ten | *Answered: nothing until they write it.* `ABOUT_DEFAULTS` was the first tenant's own brand copy — the manifesto, EST. 2017, MADE IN 广州, the founder's quote, the in/out list, and a hardcoded hero photograph — handed to every merchant who had not written an About page and merged FIELD BY FIELD, so a merchant who wrote half a page published the other half of somebody else's story to their own customers. Gone from the storefront and the mini app; every section renders only if the shop wrote it, and the hero is content now rather than one shop's picture on every shop's story. The phone admin always had this right for the same config key, which is where the shape came from. The copy is not lost: `scripts/seed_about_account1.js` writes it into account #1's own config, where it should always have been — their story, saved by them, editable like any other shop's — and it refuses to overwrite a page a shop actually wrote. |
+| **D-03** | High · part ten | *Answered: follow the merchant.* The PLATFORM's own screens print merchants' money — their customers' lifetime spend and wallet, their GMV, the commission billed on that GMV — and printed all of it in ¥ because the payloads carried no currency to print it in. So a merchant trading in dollars had their GMV read as yuan on the one screen the platform bills them from. `routes/store-admin.js` and `routes/saas-admin.js` now read each tenant's own currency through `normalizeCurrency`, exported from `routes/retail.js` so there is one answer to what a shop's money looks like rather than a second copy in the control plane; the four labels that named ¥ in their own words take the symbol from the record. |
 | **A-03, L-01, L-02, Q-01, Q-02** | — | Found already fixed, or one line from it. Recorded rather than re-done. |
 
 **Five audit findings were already fixed when the audit was written** — L-01,
@@ -395,6 +398,45 @@ that work.
 
 ---
 
+## 2b. The one thing that is on `main` and not on the server
+
+**GitHub Actions stopped assigning runners at about 15:42 UTC on 5 September.**
+Every job in both workflows since then fails in three seconds with no runner
+assigned and no steps recorded — `runner_name: ""`, `steps: 0` — which is an
+account-level condition (a spending limit, a billing hold, or a GitHub
+incident), not anything in the tree. Re-running the deploy once produced the
+identical failure, so it is not a flake.
+
+What that leaves:
+
+- **The server is running `60e7c67`.** That was the last deploy to succeed, and
+  it succeeded normally.
+- **`main` is one commit ahead, at `d230ec0`** — the JD waybill's sender name,
+  its suite and this document. Both shards are green on it locally (150 fast,
+  34 slow); it simply never got a runner to ship it.
+- Nothing further was merged to `main` after that, deliberately: with no
+  runners, a merge only adds an undeployed commit and a red run.
+
+**Still true nine and a half hours later.** A fresh dispatch at 01:15 UTC on
+6 September (run `34003395569`, on the branch) came back with the same
+signature: both jobs failed in three seconds, `runner_name` empty, zero steps.
+Somebody else's push (`6078ad1`, PR #281) failed the same way at 16:03, so it is
+the repository's Actions rather than anything either of us wrote. Two re-runs
+and one clean dispatch is enough: this is a standing account condition, not an
+incident that will clear itself.
+
+**Where that leaves production.** `main` is at `6078ad1` and carries every code
+change from this pass. The SERVER is still on `60e7c67` and is two commits
+behind it — `d230ec0` (the JD sender name) and `6078ad1` (the CLAUDE.md PR).
+Both are green; neither has had a runner to ship it.
+
+**To finish it:** get Actions runners back — if the cause is a spending limit,
+raising it is the whole fix — then re-run the deploy for `main`'s head. It ships
+the changed files since the last successful deploy, so one run catches
+production up on both commits. Nothing in the tree needs to change first.
+
+---
+
 ## 3. What is still open
 
 **Nothing on this list needs a decision except where it says so.** Everything
@@ -450,20 +492,30 @@ that could be done without one has been.
   `/wallet-adjust`, which map to `customers:edit`. Both are one line each in
   `lib/cap-routes.js`. Both are pinned by assertions, so the day either is
   closed the suite says so.
-- **The currency on three more surfaces**, each left for a stated reason rather
-  than for lack of time. `public/cms.html` has about forty hardcoded ¥, but most
-  are DEMO CONTENT in the block editor's own previews ("¥50 off your first
-  order" as sample coupon copy) and help text describing what a ¥ field means —
-  mixed in with maybe a dozen that render real product and voucher values. Right
-  requires reading each one, and the page is the merchant's editor rather than
-  anything a customer sees. `public/storefront.html` renders eight real prices
+- **The currency on two more surfaces**, each left for a stated reason rather
+  than for lack of time. `public/cms.html` has about forty hardcoded ¥, and they
+  are genuinely mixed: DEMO CONTENT in the block editor's own previews ("¥50 off
+  your first order" as sample coupon copy), help text describing what a ¥ field
+  means, and — among them — roughly eighteen that render REAL product prices,
+  bundle totals and voucher values. Telling those apart is a per-site reading of
+  a fifteen-thousand-line file that no suite covers (only `check-i18n-banners`
+  touches it), and the page is the merchant's editor rather than anything a
+  customer sees, so it ranked below the storefront, the till and the parcel.
+
+  It is not hard, though, and the shape is already there: `displayPrice(p)` at
+  about `:15248` is the one helper, and several call sites re-format
+  `price.value` themselves instead of using its `html`. So the work is (1) a
+  `cmsMoney()` reading the currency from `/api/retail-admin/config`, which this
+  file already fetches for the theme at `:6318`, (2) `displayPrice` through it,
+  and (3) the re-formatting call sites pointed at it — leaving the demo copy and
+  the help text alone, since a sample coupon in a preview is illustrating a
+  layout, not quoting a price. `public/storefront.html` renders eight real prices
   but has no currency machinery at all — it would need its own config fetch —
   and it is a PREVIEW tool ("share the current published layout via a link"),
-  not the storefront. `public/store-admin.html` bills in ¥ on purpose as far as
-  I can tell: it is the platform's own plan and setup-fee screen, and one
-  platform currency is a plausible deliberate choice rather than a bug. That
-  last one is the only one of the three I am genuinely unsure about; say the
-  word and it is ten minutes.
+  not the storefront. `public/store-admin.html` was the third of the three and
+  is now DONE — see part ten. It looked like it might be deliberate (one
+  platform currency for the platform's own plans) and was not: most of the money
+  on that screen is the MERCHANTS' own, and it was all being printed in yuan.
 - **K-02's second half.** The finding asks for two things. The first — a
   bookkeeper preset, which did not exist — shipped with E-11. The second is
   "split purchasing's money out of the stock person's grant": the `warehouse`

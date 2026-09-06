@@ -22,6 +22,31 @@ const {
 const { registerTenantDomain } = require('../lib/provision-tenant');
 const { normalizeHost } = require('../middleware/public-tenant');
 const { getTenantDb } = require('../lib/tenant-db');
+const { normalizeCurrency } = require('./retail');
+
+/* THE TENANT'S OWN CURRENCY, for the platform screens that print a tenant's
+   money — their customers' lifetime spend and wallet, their GMV, the commission
+   billed on it (audit D-03). This screen shows many shops' money side by side
+   and had no way to ask what any of it was denominated in, so it printed all of
+   it in ¥ regardless: a merchant trading in dollars had their GMV read as yuan
+   on the one screen the platform bills them from.
+
+   Read from the tenant's own storefront_config — the same row the shop, the
+   till and their admin all read — and normalised by the same function they use,
+   so there is one answer to what a shop's money looks like rather than a second
+   one living here. null when the account has not set one; the client falls back
+   to the platform default rather than guessing on its behalf. */
+function tenantCurrency(tdb) {
+  try {
+    const row = tdb.prepare("SELECT value_json FROM storefront_config WHERE key = 'currency'").get();
+    if (!row || !row.value_json) return null;
+    return normalizeCurrency(JSON.parse(row.value_json));
+  } catch (e) {
+    /* No such table on an old account DB, or unparseable JSON. Either way the
+       honest answer is "not set", not a guess. */
+    return null;
+  }
+}
 const router = express.Router();
 
 // The merchant backend host — where an impersonation hand-off lands so the
@@ -518,17 +543,20 @@ router.get('/api/store-admin/lookup', requirePlatformAdmin('view'), (req, res) =
   for (const t of tenants) {
     let tdb; try { tdb = getTenantDb(t.id); } catch (e) { continue; }
     const label = t.brand_name || t.name;
+    /* Once per tenant, not once per row: this loop fans out over every active
+       account and the answer cannot change inside it. */
+    const cur = tenantCurrency(tdb);
     try {
       tdb.prepare(`SELECT id, nickname, phone, email, tier_key, lifetime_spend, points_balance, balance, is_blocked, created_at
                    FROM retail_customers WHERE phone LIKE ? OR nickname LIKE ? OR email LIKE ? OR CAST(id AS TEXT) = ?
                    ORDER BY lifetime_spend DESC LIMIT ?`).all(like, like, like, q, PER)
-        .forEach(c => customers.push({ tenantId: t.id, tenant: label, id: c.id, nickname: c.nickname, phone: c.phone, email: c.email, tier: c.tier_key, lifetimeSpend: c.lifetime_spend, pointsBalance: c.points_balance, balance: c.balance, isBlocked: !!c.is_blocked, createdAt: c.created_at }));
+        .forEach(c => customers.push({ tenantId: t.id, tenant: label, currency: cur, id: c.id, nickname: c.nickname, phone: c.phone, email: c.email, tier: c.tier_key, lifetimeSpend: c.lifetime_spend, pointsBalance: c.points_balance, balance: c.balance, isBlocked: !!c.is_blocked, createdAt: c.created_at }));
     } catch (e) { /* tenant has no customer table / unreadable → skip */ }
     try {
       tdb.prepare(`SELECT id, order_no, status, payment_method, recipient_name, recipient_phone, address_full, total, created_at
                    FROM retail_orders WHERE order_no LIKE ? OR recipient_phone LIKE ? OR recipient_name LIKE ?
                    ORDER BY created_at DESC LIMIT ?`).all(like, like, like, PER)
-        .forEach(o => orders.push({ tenantId: t.id, tenant: label, id: o.id, orderNo: o.order_no, status: o.status, paymentMethod: o.payment_method, recipientName: o.recipient_name, recipientPhone: o.recipient_phone, addressFull: o.address_full, total: o.total, createdAt: o.created_at }));
+        .forEach(o => orders.push({ tenantId: t.id, tenant: label, currency: cur, id: o.id, orderNo: o.order_no, status: o.status, paymentMethod: o.payment_method, recipientName: o.recipient_name, recipientPhone: o.recipient_phone, addressFull: o.address_full, total: o.total, createdAt: o.created_at }));
     } catch (e) { /* skip */ }
   }
   customers.sort((a, b) => (b.lifetimeSpend || 0) - (a.lifetimeSpend || 0));
@@ -551,7 +579,7 @@ router.get('/api/store-admin/lookup/customer', requirePlatformAdmin('view'), (re
   try { orders = tdb.prepare(`SELECT id, order_no, status, payment_method, total, created_at FROM retail_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 20`).all(cid); } catch (e) {}
   logAudit(req, { action: 'lookup.customer', targetType: 'tenant', targetId: tid, meta: { customerId: cid } });
   res.json({
-    success: true, store: t.brand_name || t.name,
+    success: true, store: t.brand_name || t.name, currency: tenantCurrency(tdb),
     customer: { id: c.id, nickname: c.nickname, phone: c.phone, email: c.email, tier: c.tier_key, lifetimeSpend: c.lifetime_spend, pointsBalance: c.points_balance, balance: c.balance, couponCount: c.coupon_count, isBlocked: !!c.is_blocked, createdAt: c.created_at, lastLoginAt: c.last_login_at },
     orders: orders.map(o => ({ id: o.id, orderNo: o.order_no, status: o.status, paymentMethod: o.payment_method, total: o.total, createdAt: o.created_at })),
   });
@@ -630,10 +658,11 @@ router.get('/api/store-admin/payouts', requirePlatformAdmin('view'), (req, res) 
   for (const t of tenants) {
     let tdb; try { tdb = getTenantDb(t.id); } catch (e) { continue; }
     const cur = gmvFor(tdb, thisMonth), prev = gmvFor(tdb, lastMonth);
+    const currency = tenantCurrency(tdb);
     const rate = t.commission_rate_bps || 0;
     const unpaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) v FROM billing_invoices WHERE tenant_id = ? AND kind = 'commission' AND status IN ('open','past_due')").get(t.id).v;
     rows.push({
-      tenantId: t.id, tenant: t.brand_name || t.name, rateBps: rate,
+      tenantId: t.id, tenant: t.brand_name || t.name, rateBps: rate, currency,
       gmvThisMonth: cur.v, ordersThisMonth: cur.c, gmvLastMonth: prev.v, ordersLastMonth: prev.c,
       commissionThisMonthCents: Math.round(cur.v * rate / 100),   // gmv(¥)×bps/10000 ×100 = gmv×bps/100
       commissionLastMonthCents: Math.round(prev.v * rate / 100),

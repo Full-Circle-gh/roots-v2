@@ -35616,10 +35616,15 @@ module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;
 
 // Exported for routes/shop-menu.js (the public /s/:shopCode QR menu, §44) so
-// the menu's photo fallback and its money format cannot drift from the
-// storefront's. resolveProductImage carries the variant-sibling fallback;
-// normalizeCurrency is the one place a tenant's display currency is decided.
-// Neither is re-implemented there — a second copy of either would be a second
-// thing to keep right.
+// the menu's photo fallback cannot drift from the storefront's:
+// resolveProductImage carries the variant-sibling fallback and a second copy
+// of it would be a second thing to keep right.
 module.exports.resolveProductImage   = resolveProductImage;
+
+// The one currency shape, exported so the PLATFORM screens read a tenant's
+// money the same way the tenant's own surfaces do. routes/store-admin.js
+// prints other people's money across many tenant databases and had no way to
+// ask what any of them was denominated in; a second normaliser there would be
+// a second answer to a question that already has one. The QR menu reads it for
+// the same reason — one answer, three callers.
 module.exports.normalizeCurrency     = normalizeCurrency;

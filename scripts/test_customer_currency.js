@@ -47,7 +47,9 @@ const section = (t) => console.log('\n' + t);
 
 /* Comments stripped: this file's subject is the symbol itself, and the fixed
    helpers carry notes that name it. */
-const CODE = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const CODE = strip(src);
 
 // ─────────────────────────────────────────────────────────────────────────
 section('1 · the symbol lives in exactly one place');
@@ -149,7 +151,81 @@ section('4 · the counter till and the phone');
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-section('5 · what is deliberately still there');
+section("5 · the platform's own screens print the merchant's money");
+
+/* store-admin.html shows many shops' money side by side — their customers'
+   lifetime spend and wallet, their GMV, the commission billed on that GMV — and
+   printed all of it in ¥ regardless, because the payloads carried no currency
+   to print it in. A merchant trading in dollars had their GMV read as yuan on
+   the one screen the platform bills them from. */
+{
+  const sa = strip(read('public/store-admin.html'));
+  yes(/const sym = cur => \{/.test(sa),
+    'store-admin has a symbol helper that takes the shop, not a constant');
+  /* Every call, not every call that looked like one: the arguments here are
+     `c.lifetimeSpend` and `p.gmvThisMonth`, so a \\w+ pattern walks past the
+     ones that matter. Match the whole call and require a comma in it. */
+  const calls = sa.match(/\byuan\([^)]*\)/g) || [];
+  const bare = calls.filter((c) => !c.includes(','));
+  is(bare.length, 0, `every one of the ${calls.length} yuan() calls passes a currency`);
+  if (bare.length) console.log('      ' + bare.join(', '));
+  yes(!/Setup fee ¥|Price ¥|Amount ¥|Internal · ¥0/.test(sa),
+    'the four labels no longer name the symbol in their own words');
+
+  /* And the server has to send it, or the client falls back forever and the
+     whole pass is decorative — the same trap as the timezone key. */
+  const admin = strip(read('routes/store-admin.js'));
+  yes(/function tenantCurrency\(tdb\)/.test(admin),
+    'routes/store-admin reads each tenant\'s own currency');
+  yes(/normalizeCurrency/.test(admin),
+    "…through the one function that defines that shape, not a second copy");
+  for (const field of ['customers.push', 'orders.push']) {
+    yes(new RegExp(field.replace('.', '\\.') + '\\([^)]*currency: cur').test(admin),
+      `${field} carries it`);
+  }
+  yes(/rateBps: rate, currency,/.test(admin), 'so does every GMV row');
+  yes(/currency: tenantCurrency\(tdb\)/.test(admin), 'and the customer detail');
+  yes(/currency: tenantCurrency\(t\.id\)/.test(strip(read('routes/saas-admin.js'))),
+    'and the onboarding screen, where the setup fee is typed');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section('6 · nobody inherits another shop\'s story');
+
+/* ABOUT_DEFAULTS was the first tenant's own brand copy — the manifesto, EST.
+   2017, MADE IN 广州, the founder's quote, the in/out list — handed to every
+   merchant who had not written an About page, and merged FIELD BY FIELD, so a
+   merchant who wrote half a page published the other half of somebody else's
+   story to their own customers. The phone admin always had the right answer for
+   the same config key: no content, no page. */
+{
+  const shop = strip(read('public/shop.html'));
+  is(/const ABOUT_DEFAULTS\s*=/.test(shop), false,
+    'the storefront carries no default About content at all');
+  is(/Object\.assign\(\{\}, *ABOUT_DEFAULTS/.test(shop), false,
+    '…and merges nothing under what the shop wrote');
+  is(/welcome-roots\.jpg/.test(shop), false,
+    "the hero is the shop's own picture, not a hardcoded brand asset");
+  yes(/hero_image_url/.test(shop), '…read from their content like every other field');
+
+  const mini = strip(read('miniapp/pages/about/about.js'));
+  is(/const DEFAULTS = \{/.test(mini), false, 'nor does the mini app');
+  is(/Object\.assign\(\{\}, DEFAULTS, stored\)/.test(mini), false, '…nor merge them');
+  const wxml = read('miniapp/pages/about/about.wxml');
+  is(/src="\/assets\/brand\/welcome-roots\.jpg"/.test(wxml), false,
+    'and its hero is the shop\'s own too');
+  yes(/wx:if="\{\{manifestoSegments\.length\}\}"/.test(wxml),
+    'every mini-app section renders only if the shop wrote it');
+
+  /* The copy is not lost — it moves to the account it belongs to, as content
+     they can edit, so their page renders exactly as it did. */
+  const seed = read('scripts/seed_about_account1.js');
+  yes(/never overwrites/.test(seed) || /already has/.test(seed),
+    'the seed refuses to overwrite an About page a shop actually wrote');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+section('7 · what is deliberately still there');
 
 /* ABOUT_DEFAULTS is the first tenant's own brand copy — manifesto, founding
    year, city, founder quote, the in/out list — handed to every merchant who
@@ -159,10 +235,10 @@ section('5 · what is deliberately still there');
    should show instead (nothing? neutral prompts?) is a product decision and
    not mine to take. Pinned so it cannot be forgotten, and so the day it is
    answered this check is the thing that fails. */
-yes(/const ABOUT_DEFAULTS=\{/.test(CODE),
-  'ABOUT_DEFAULTS still exists — an open D-04 item, see the note in this file');
-yes(/founder_quote_en:'I started Roots because/.test(src),
-  '…and still carries the first tenant\'s story, awaiting a decision on the empty state');
+/* ABOUT_DEFAULTS used to be pinned here as an OPEN item. It was answered:
+   nothing until they write it. §6 above is what that decision became. */
+is(/founder_quote_en:'I started Roots because/.test(src), false,
+  "the first tenant's founder quote is no longer the storefront's default");
 
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

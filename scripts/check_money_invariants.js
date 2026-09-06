@@ -135,12 +135,21 @@ const CHECKS = [
   {
     id: 'A', kind: 'invariant',
     title: 'an order total is its parts',
-    blurb: 'subtotal + shipping + packing + surcharge − voucher − points − balance = total, to the cent.',
-    notes: ['Skips orders with a NULL subtotal — a draft that was never priced is not a broken order.'],
+    blurb: 'subtotal + shipping + packing − voucher − points − balance = total, to the cent.',
+    notes: [
+      'Skips orders with a NULL subtotal — a draft that was never priced is not a broken order.',
+      'The same-day surcharge is NOT added: it is already inside shipping_fee. routes/retail.js '
+      + 'does `shippingFee += sameDaySurcharge` at order creation ("added to the shipping line so '
+      + 'totals reconcile without a new fee column"), and same_day_surcharge_fee is the BREAKDOWN '
+      + 'of how much of that line is surcharge — the waiver path subtracts it back out for the '
+      + 'same reason. Adding it here counted it twice, so every same-day order failed this check '
+      + 'by exactly its own surcharge. Found by the first production rehearsal, 2026-09-06: three '
+      + 'storefront orders short by exactly 15.00, which was their surcharge to the cent.',
+    ],
     count: `SELECT COUNT(*) AS n FROM retail_orders
              WHERE subtotal IS NOT NULL AND total IS NOT NULL
                AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
-                        + COALESCE(same_day_surcharge_fee,0) - COALESCE(voucher_amount,0)
+                        - COALESCE(voucher_amount,0)
                         - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
                  <> ROUND(COALESCE(total,0) * 100)`,
     detail: `SELECT id, order_no, subtotal, shipping_fee, packing_fee, same_day_surcharge_fee,
@@ -148,7 +157,7 @@ const CHECKS = [
                FROM retail_orders
               WHERE subtotal IS NOT NULL AND total IS NOT NULL
                 AND ROUND((COALESCE(subtotal,0) + COALESCE(shipping_fee,0) + COALESCE(packing_fee,0)
-                         + COALESCE(same_day_surcharge_fee,0) - COALESCE(voucher_amount,0)
+                         - COALESCE(voucher_amount,0)
                          - COALESCE(points_amount,0) - COALESCE(balance_used,0)) * 100)
                   <> ROUND(COALESCE(total,0) * 100)
               ORDER BY id DESC LIMIT ?`,
