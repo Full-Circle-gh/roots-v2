@@ -1,7 +1,8 @@
 // 11 STORY / WHO WE ARE — content lives in /api/retail/config under
-// about.content (edited from retail-admin → About page). Defaults are
-// inlined here so the screen renders even if the config call fails
-// (network blip, fresh DB before seed runs, etc.).
+// about.content (edited from retail-admin → About page). There are no
+// defaults: a shop that has written nothing shows nothing, and a config
+// call that fails shows nothing rather than another shop's story. See the
+// note above onLoad for why the object that used to stand here was removed.
 
 const config = require('../../utils/config');
 const { BASE } = require('../../utils/api');
