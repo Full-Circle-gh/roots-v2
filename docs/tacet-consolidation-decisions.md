@@ -4759,6 +4759,20 @@ This is a defect, not a design question, and the rule for it already exists. It 
 
 **Tacet's Finance routes are built on `tdb()` from the first commit.** There is no migration step here to forget, because there is nothing to migrate — the correct version is the only version that will ever exist.
 
+### 🔴 LIVE DEFECT — the kitchen app renders no blocked-route message, so every refusal reaches the operator as a machine string — FOUND 2026-09-07
+
+**Not fixed, and stated as a defect rather than a design.** `middleware/block-kitchen-cost-writes.js` returns a bilingual `message` explaining that the thing is now owned by Tacet and cannot be edited here. **No operator has ever seen it.** `public/app.html` reads `d.error` in 105 places — always as `toast(d.error || 'Failed · 失败')` — and **never reads a response body's `.message` anywhere at all.**
+
+**So a blocked action surfaces as the toast `kitchen_cost_write_blocked`**: a machine string, untranslated, with no pointer to Tacet. The half of the refusal that was written for a person is dropped by the only client that receives it.
+
+**Fifteen endpoints carry the middleware and all fifteen fail this way** — `routes/admin.js` ×3, `routes/ingredients.js` ×3, `routes/purchases.js` ×3, `routes/recipes.js` ×6. **The count of thirteen recorded above is stale** and should not be quoted; the sentence it sits in — that the same middleware pattern is what the write block uses — is unaffected.
+
+**NOT FIXED HERE, and the reason is scope rather than severity.** The Finance screens now remove the controls entirely rather than leaving them to fail, so on Finance the toast fires only on a stale tab or a direct API call. **It remains the failure mode for every other blocked route**, and for Finance itself whenever the UI and the route layer disagree — which is exactly the state a stale tab is in.
+
+**The consequence for the message's own wording is recorded, because it cuts the other way.** The template interpolates ONE English label into both halves, so the Chinese half reads `此厨房端操作已停用:material cost现由 Tacet 系统管理`. That is English inside the Chinese view and would breach the vocabulary lock **if it were rendered** — and it is not, at any of the fifteen. **Fixing the wording before fixing the rendering would correct a string nobody reads.** Whichever is done first, the other is what makes it worth doing.
+
+**Where a blocked-route sentence IS read today, it carries its own Chinese.** The Finance screens' read-only banner supplies both halves separately, from the locked section pairs at `lib/capabilities.js` — `Finance · 财务` and `Invoices · 发票` — with the trailing clause lifted verbatim from the middleware's own message. That is the shape to copy if the middleware is ever given a Chinese half: the label is restructured onto a pair that already exists rather than a new one being minted.
+
 ### An expense may carry a location, and blank means the whole business — DECIDED 2026-09-01
 
 Revenue and cost of goods already carry a location, because they come from the order record. Operating expenses do not, and today neither ledger table can record one at all.

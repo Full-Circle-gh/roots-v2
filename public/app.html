@@ -24081,13 +24081,34 @@ function _finFmt(n) { return Number(n||0).toLocaleString('zh-CN',{minimumFractio
 // (middleware/block-kitchen-cost-writes.js), label included, so the banner and
 // the refusal behind it are word for word the same. No Chinese is composed
 // here — per the vocabulary lock, this is an existing blocked-route string.
-const FIN_LEDGER_LABEL   = 'the finance ledger';
-const FIN_INVOICES_LABEL = 'the invoice list';
-function _finBlockedNotice(label) {
+// EACH HALF CARRIES ITS OWN NOUN, and that is the whole reason this takes two
+// arguments rather than one. The server's message interpolates a single English
+// label into both halves, which puts English inside the Chinese view — tolerable
+// in a `message` nothing renders (see below), not tolerable on a banner an
+// operator reads. So the two halves are supplied separately here.
+//
+// NOTHING IS COMPOSED. `Finance · 财务` and `Invoices · 发票` are the locked
+// section pairs at lib/capabilities.js:363 — the same pairs the Tacet page
+// heading ships at public/retail-admin.html. The trailing Chinese clause
+// `现由 Tacet 系统管理,无法在此编辑。` is lifted VERBATIM from the existing
+// blocked-route message in middleware/block-kitchen-cost-writes.js. There is no
+// locked pair for "the finance ledger" or "the invoice list" anywhere — checked
+// against the vocabulary document, 22-finance.js, retail-admin.html and
+// capabilities.js — so the label is restructured onto a pair that does exist
+// rather than a new one being minted, which is the standing preference.
+//
+// The section name is also the more useful noun: it names where in Tacet the
+// operator now goes, which is what this banner is for.
+// The verb travels with the label because the two nouns do not agree: Finance
+// is a mass noun and Invoices is plural, so one shared verb would be wrong on
+// one of them. Only the English needs it — the Chinese clause is invariant.
+const FIN_LEDGER_LABEL   = ['Finance',  '财务', 'is'];
+const FIN_INVOICES_LABEL = ['Invoices', '发票', 'are'];
+function _finBlockedNotice([en, cn, verb]) {
   return `<div class="card" style="border:1px dashed rgba(224,82,82,.45);background:rgba(224,82,82,.06);margin-bottom:14px">
       <div class="card-body" style="padding:14px 18px;font-size:13px;line-height:1.65;color:var(--text-2)">
-        <div>This kitchen app action is disabled: ${esc(label)} is now owned by Tacet and can no longer be edited here.</div>
-        <div>此厨房端操作已停用:${esc(label)}现由 Tacet 系统管理,无法在此编辑。</div>
+        <div>${esc(en)} ${esc(verb)} now owned by Tacet and can no longer be edited here.</div>
+        <div>${esc(cn)}现由 Tacet 系统管理,无法在此编辑。</div>
       </div>
     </div>`;
 }

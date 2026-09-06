@@ -205,6 +205,35 @@ async function main() {
     }
   }
 
+  console.log('\n══ 7 · the banner\'s Chinese half carries no English ══');
+  {
+    // The server's message interpolates ONE English label into both halves.
+    // That is invisible today — public/app.html reads d.error everywhere and
+    // never a response body's .message — but the banner below IS read, so its
+    // Chinese half must be Chinese. Locked pairs from lib/capabilities.js:363.
+    const UI = fs.readFileSync(path.join(ROOT, 'public/app.html'), 'utf8');
+    const notice = (UI.match(/function _finBlockedNotice\(\[[\s\S]*?\n}/) || [''])[0];
+    ok(notice.length > 0, 'the banner helper is present');
+
+    const cnLine = (notice.match(/<div>\$\{esc\(cn\)\}([^<]*)<\/div>/) || [])[1] || '';
+    ok(/[一-鿿]/.test(cnLine), 'the Chinese half is Chinese');
+    // `Tacet` is the product name and is Latin in the locked source string
+    // itself; anything else Latin means an English label leaked back in.
+    eq(cnLine.replace(/Tacet/g, '').match(/[A-Za-z]+/g), null,
+      'no English in the Chinese half beyond the product name');
+
+    for (const [label, cn] of [['FIN_LEDGER_LABEL', '财务'], ['FIN_INVOICES_LABEL', '发票']]) {
+      const decl = (UI.match(new RegExp(`const ${label}\\s*=\\s*\\[([^\\]]*)\\]`)) || [])[1] || '';
+      ok(decl.includes(cn), `${label} carries its own locked Chinese half (${cn})`);
+    }
+    // The pairs must match lib/capabilities.js, not a second copy of them.
+    const CAPS = fs.readFileSync(path.join(ROOT, 'lib/capabilities.js'), 'utf8');
+    ok(/finance:\s*\['Finance',\s*'财务'\]/.test(CAPS),
+      'Finance · 财务 is still the locked section pair in lib/capabilities.js');
+    ok(/invoices:\s*\['Invoices',\s*'发票'\]/.test(CAPS),
+      'Invoices · 发票 is still the locked section pair in lib/capabilities.js');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   server.close();
   process.exit(fail ? 1 : 0);
