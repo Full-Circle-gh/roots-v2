@@ -517,7 +517,25 @@ img{display:block;max-width:100%}
    .chipset is (0,1,0), so the switch beats it and the wrapper still collapses
    out of the flex row. */
 .chipset{display:contents}
-.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:1.3;
+/* line-height:normal, WHICH IS THE FONT'S OWN, and it is measured rather than
+   chosen. This pill draws its own background, so the space above the text and
+   the space below it are both visible and any difference between them reads as
+   the text sitting off. Ink measured at 4x, filled chip, both languages:
+
+     1.3 (was)  English 0.1px high, Chinese 0.9px high
+     1.15       English 1.1px high, Chinese 1.9px high
+     1          English 1.1px high, Chinese 1.9px high
+     normal     English 0.4px low,  Chinese 0.1px low
+
+   The Chinese half is what moves, because a CJK glyph fills its em box top to
+   bottom while a Latin one leaves the descender space empty — so a line-height
+   chosen to look right in English rides the Chinese up. normal is the only one
+   of the four that is under half a pixel out in both.
+   NOT the same answer as the count chip, which wanted line-height:1: that box
+   has a FIXED 24px height and the line box had to stop disagreeing with it.
+   Here the pill takes its height FROM the line box, so the font's own figure is
+   the one that balances. */
+.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:normal;
   font-family:var(--f-bear);letter-spacing:.03em}
 /* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK
    IN THE LEFT HALF OF IT. So a chip reading 麸质（燕麦） carries about two thirds

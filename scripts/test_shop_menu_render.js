@@ -541,61 +541,74 @@ function boxOf(text) {
       }
     });
 
-    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS PILL — measured in pixels', async () => {
-      // Reported from a phone, twice. The first report was the row sitting off
-      // the card's middle; this is what was left after that was fixed, and no
-      // box measurement can see it. A full-width CJK bracket reserves a whole
-      // character cell and draws its ink in the left half, so 麸质（燕麦） carries
-      // most of a character of blank at its right end and its text sits nearly
-      // 4px left of the pill drawn around it.
+    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS PILL — measured in pixels, both languages', async () => {
+      // Reported from a phone three times, and it was three different faults:
+      // the ROW sitting off the card's middle, then the TEXT sitting left of
+      // its pill, then the text sitting high in it. None of them is visible to
+      // a box measurement — every box here centres to within a hundredth of a
+      // pixel — so this check screenshots the pill and finds the ink.
       //
-      // ITS OWN PAGE, AT 3x. Two reasons, both learned the hard way. A bracket
-      // is a one-pixel stroke at 11.5px, and at 1x it antialiases below any
-      // threshold that still excludes the pill — the measurement then loses the
-      // right edge of the ink and reports a shift that is the reader's, not the
-      // page's. And this check has to be read in Chinese, which is the only
-      // half with brackets in it; doing that on the shared page left the whole
-      // suite in Chinese the moment this check failed.
-      const hi = await page.context().newPage({ deviceScaleFactor: 3 });
+      // The filled chip: oat ink on an ink-coloured pill is the one pair a
+      // threshold can separate, and it is also the only chip that draws its own
+      // background, which is what makes an imbalance visible at all.
+      //
+      // ITS OWN CONTEXT AT 4x, and the deviceScaleFactor goes on the CONTEXT.
+      // newPage() silently ignores it, and the first version of this check
+      // asked newPage() for 3x, got 1x, and divided by three anyway — it
+      // under-reported every offset threefold and would have passed on all
+      // three of the reported faults.
+      const sharp = require(path.join(ROOT, 'node_modules', 'sharp'));
+      const S = 4;
+      const ctx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, deviceScaleFactor: S });
       try {
-        await hi.setViewportSize({ width: 390, height: 844 });
-        await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
-        await hi.click('[data-lang="cn"]');
-        await hi.click('.it:not(.out)[data-open]');
-        // The filled chip: oat ink on an ink-coloured pill is the one pair a
-        // threshold can separate. Its rounded ends let the page show through,
-        // so the ground behind it is repainted to neither colour first.
-        await hi.evaluate(() => {
-          document.body.style.background = '#808080';
-          document.querySelector('#dsheetB .acard').style.background = '#808080';
-          document.querySelector('#dsheetB .l-cn .achip.has').scrollIntoView({ block: 'center' });
-        });
-        const info2 = await hi.evaluate(() =>
-          document.querySelector('#dsheetB .l-cn .achip.has').textContent);
-        assert.ok(/[）】》」』〕｝]$/.test(info2),
-          `the fixture chip does not end in a full-width bracket, so this proves nothing: ${info2}`);
-        const sharp = require(path.join(ROOT, 'node_modules', 'sharp'));
-        const chip = await hi.$('#dsheetB .l-cn .achip.has');
-        const { data, info } = await sharp(await chip.screenshot()).greyscale().raw()
-          .toBuffer({ resolveWithObject: true });
-        let left = null, right = null;
-        for (let x = 0; x < info.width; x++) for (let y = 0; y < info.height; y++) {
-          if (data[y * info.width + x] > 200) {
-            if (left === null || x < left) left = x;
-            if (right === null || x > right) right = x;
+        for (const lang of ['en', 'cn']) {
+          const hi = await ctx.newPage();
+          await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
+          if (lang === 'cn') await hi.click('[data-lang="cn"]');
+          await hi.click('.it:not(.out)[data-open]');
+          const sel = `#dsheetB .l-${lang} .achip.has`;
+          // The pill's rounded ends let the ground behind it show through, so
+          // that ground is repainted to a value that is neither the ink nor the
+          // oat before anything is counted.
+          await hi.evaluate((q) => {
+            document.body.style.background = '#808080';
+            document.querySelector('#dsheetB .acard').style.background = '#808080';
+            document.querySelector(q).scrollIntoView({ block: 'center' });
+          }, sel);
+          const text = await hi.evaluate((q) => document.querySelector(q).textContent, sel);
+          const chip = await hi.$(sel);
+          const { data, info } = await sharp(await chip.screenshot()).greyscale().raw()
+            .toBuffer({ resolveWithObject: true });
+          let l = null, r = null, t = null, b = null;
+          for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+            if (data[y * info.width + x] > 200) {
+              if (l === null || x < l) l = x;
+              if (r === null || x > r) r = x;
+              if (t === null) t = y;
+              b = y;
+            }
           }
+          assert.ok(l !== null, `the ${lang} chip has no text drawn in it at all`);
+          const dx = (((l + r) / 2) - info.width / 2) / S;
+          const dy = (((t + b) / 2) - info.height / 2) / S;
+          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its pill, across`);
+          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its pill, down`);
+          // And nothing has been trimmed so far that the ink touches the edge.
+          assert.ok(l / S >= 2 && (info.width - r) / S >= 2,
+            `"${text}" is on the pill's edge: ${l / S} / ${(info.width - r) / S}`);
+          await hi.close();
         }
-        assert.ok(left !== null, 'the chip has no text drawn in it at all');
-        const px = (n) => n / 3;
-        const dx = px(((left + right) / 2) - info.width / 2);
-        assert.ok(Math.abs(dx) <= 1.5, `"${info2}" sits ${dx}px off the middle of its pill`);
-        // And the trim has not eaten the padding it was taking back: the ink
-        // must still stand clear of the pill's own edge.
-        assert.ok(px(left) >= 2 && px(info.width - right) >= 2,
-          `the trim pulled the text onto the pill's edge: ${px(left)} / ${px(info.width - right)}`);
       } finally {
-        await hi.close();
+        await ctx.close();
       }
+      // The Chinese half is the only one with full-width brackets in it, and a
+      // bracket is what the trim exists for — so the fixture must still have one
+      // or the trim is being asserted against nothing.
+      const cnText = await page.evaluate(() =>
+        document.querySelector('#dsheetB .l-cn .achip.has').textContent);
+      assert.ok(/[）】》」』〕｝]$/.test(cnText),
+        `the fixture chip no longer ends in a full-width bracket: ${cnText}`);
     });
 
     await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
