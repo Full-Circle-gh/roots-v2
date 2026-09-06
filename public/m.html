@@ -8201,12 +8201,17 @@ function mirrorScreen(which,note){
         <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div></div>
     <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div></div>`;
 }
-/* The desktop's Settings → Features, all eight of them. The phone carried five
-   — socialProof, quickStock and kitchenAdd were missing entirely, so three
-   switches that change what shoppers and shop staff see could not be reached
-   from a phone at all. Each row says what turning it OFF does, because on this
-   list that is the consequence nobody can guess: quickStock off means the
-   staff stock app shows a closed screen. Names follow the desktop's. */
+/* The desktop's Settings → Features, all six of them. The phone once carried
+   three fewer; socialProof was one of the missing ones and is here. Each row
+   says what turning it OFF does, because on this list that is the consequence
+   nobody can guess. Names follow the desktop's.
+
+   QUICK STOCK AND ADD STOCK ARE GONE FROM THIS LIST (§53). They were switches
+   inside Tacet that changed nothing in Tacet: this app's own Add stock screen
+   reads `can_recount` and `stores` off the quick-stock context and never read
+   the `enabled` those flags fed, so an operator could turn "Add Stock
+   (kitchen)" off here and watch the kitchen keep adding stock from More → Add
+   stock. All they ever closed was the separate /stock PWA, which §48 retires. */
 const FEATURE_CATALOG=[
   {key:'membership',  en:'Membership & points', zh:'会员与积分',
    offEn:'Off: no tiers and no points in the mini app.', offZh:'关闭后：小程序不显示等级与积分。'},
@@ -8220,10 +8225,6 @@ const FEATURE_CATALOG=[
    offEn:'Off: no bought-counts, recent buyers or SOLD badge.', offZh:'关闭后：不显示购买人数、最近购买与“已售”标签。'},
   {key:'faq',         en:'Help / FAQ',          zh:'帮助 / 常见问题',
    offEn:'Off: the help screen is hidden in the mini app.', offZh:'关闭后：小程序内隐藏帮助页面。'},
-  {key:'quickStock',  en:'Quick Stock (mobile)', zh:'手机库存',
-   offEn:'Off: shop staff open /stock and get a closed screen.', offZh:'关闭后：门店员工打开 /stock 会看到停用页面。'},
-  {key:'kitchenAdd',  en:'Add Stock (kitchen)',  zh:'加库存',
-   offEn:'Off: kitchen staff cannot add what they just made.', offZh:'关闭后：后厨员工无法录入刚制作的数量。'},
 ];
 /* Entitled, or not on the list. A missing key means entitled — that is the
    server's own rule (lib/features.js entitlements()). */
@@ -9235,7 +9236,7 @@ function localEtaCard(o,sp,label){
 }
 /* One card per parcel that has actually left, at the top of the drawer. */
 function hoistedTracking(o){
-  /* A MIRRORED ORDER HAS NO PARCELS (§52), so it has no tracking of ours to
+  /* A MIRRORED ORDER HAS NO PARCELS (§53), so it has no tracking of ours to
      hoist. The server no longer plans them, but every mirrored order opened
      before that guard went in still carries the row it created, and this is
      what those rows used to draw: a "Land" card reading "No waybill on this
@@ -9603,7 +9604,7 @@ function countLabel(lines,units){
 }
 function orderItemsBlock(o){
   /* Same rule as hoistedTracking: a mirrored order has no parcels of ours
-     (§52), so its lines are one flat manifest — which is what the desktop's
+     (§53), so its lines are one flat manifest — which is what the desktop's
      renderReadonlyItemRow gives these orders. A phantom parcel row left over
      from before the server guard would otherwise head this list "1 parcel"
      and print a Land card with a dispatch state on it. */
@@ -12215,7 +12216,7 @@ const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery
 /* Mirrored channels — the desktop's ordIsReadonlyChannel, on a phone. An order
    from one of these is someone else's system's order: they accept it, prepare
    it, ship it and hold the waybill; we mirror the row in to deduct stock and
-   show progress, and NOTHING here fulfils it (§52).
+   show progress, and NOTHING here fulfils it (§53).
 
    READ OFF THE RAW CHANNEL, never off CH_BACK. This was computed from the
    display key, which has no 'eleme' entry at all — so an Eleme order fell to
@@ -12435,7 +12436,7 @@ function orderNotes(r){
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
    nothing to roll up and the row says nothing. */
 function parcelRollup(r){
-  // A mirrored order has no parcels of ours (§52). It can still carry phantom
+  // A mirrored order has no parcels of ours (§53). It can still carry phantom
   // rows planned before that ruling, and a row reading "2 parcels · 1 to ship"
   // on an order we never ship is the same lie the drawer's Land card was.
   if(isMirrorCh(r.channel)) return null;

@@ -794,32 +794,26 @@ router.put('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin,
   res.json({ success: true, data: list });
 });
 
-// ─── Quick Stock (mobile add-on) ───────────────────────────────────────
-// "Quick Stock" is the phone-first inventory PWA (served at /stock). It's a
-// per-tenant add-on, toggled like every other feature: an operator switch
-// persisted to storefront_config under `features.quickStock` (unset = on, to
-// match the FEATURE_CATALOG default). When off, the mobile app shows an
-// "off" screen and loads no products — the underlying stock APIs stay
-// available to the desktop admin grid either way.
-function quickStockEnabled() {
-  try {
-    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'features.quickStock'").get();
-    if (!row) return true;                       // unset → catalog default (on)
-    return JSON.parse(row.value_json) !== false; // explicit false → off
-  } catch { return true; }
-}
-
-// The kitchen "Add Stock" add-on — same on/off pattern as quickStock, its own
-// flag so a tenant can run either, both, or neither. Unset = on (catalog
-// default). This is the relative-add flow (kitchen logs what they just made),
-// as opposed to quickStock's absolute recount.
-function kitchenAddEnabled() {
-  try {
-    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'features.kitchenAdd'").get();
-    if (!row) return true;
-    return JSON.parse(row.value_json) !== false;
-  } catch { return true; }
-}
+// ─── Quick Stock (mobile) ──────────────────────────────────────────────
+// "Quick Stock" is the phone-first inventory PWA (served at /stock).
+//
+// IT HAS NO ON/OFF SWITCH ANY MORE (§53). Two operator preferences used to
+// live here — `features.quickStock` and `features.kitchenAdd`, read from
+// storefront_config and folded into the `enabled` field below — and the only
+// thing either ever closed was this app's own "off" screen. Tacet Mobile's
+// Add stock screen calls this very endpoint and never read `enabled`, so a
+// tenant who switched "Add Stock (kitchen)" off watched the kitchen carry on
+// adding stock from More → Add stock. Both switches are deleted, and a
+// migration drops the two config rows so a stored `false` cannot sit in the
+// database meaning nothing.
+//
+// `enabled` ITSELF STAYS, HARDCODED TRUE, AND THAT IS DELIBERATE. /stock is an
+// installed PWA: its shell is network-first and not precached, so a stale copy
+// is bounded but not impossible, and a cached stock.html still testing this
+// field would read an omitted `enabled` as falsy and show every staffer the
+// closed screen. One constant removes that failure mode. It goes when the app
+// does, in §48's last step.
+const QUICK_STOCK_ENABLED = true;
 
 // GET /api/retail-admin/quick-stock/context
 // One-shot bootstrap for the mobile app: who the staffer is, whether the
@@ -847,11 +841,12 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
 
   // Mode is role-driven: a kitchen operator (backend) or a kitchen-app staffer
   // gets the relative "Add Stock" flow (log what you made); a store_stock clerk
-  // and everyone else get the absolute recount flow. Each mode has its own
-  // feature flag. Derived by the shared helper so this and the two stock routes
-  // cannot drift apart on who is in which mode.
+  // and everyone else get the absolute recount flow. Derived by the shared
+  // helper so this and the two stock routes cannot drift apart on who is in
+  // which mode. Neither mode has a feature flag any more (§53) — what an
+  // operator may do here is decided by their capabilities and nothing else.
   const mode = quickStockMode(req);
-  const enabled = mode === 'add' ? kitchenAddEnabled() : quickStockEnabled();
+  const enabled = QUICK_STOCK_ENABLED;
 
   /* WHETHER ADD MODE ALSO SEES AND CORRECTS THE COUNT (§46). Sent so the app
      knows which of the two Add stock screens to draw without inferring it from

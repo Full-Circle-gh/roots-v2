@@ -172,7 +172,7 @@ function buildCases(src) {
     // Setup reads /setup's two lists; Settings reads the entitlement ceiling.
     'push:setup-live': "state.setup={percent:60,requiredDone:3,requiredTotal:5,allDone:false,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'both'},{key:'fulfillment',done:false,delivery:false,pickup:false},{key:'open',done:false}],optional:[{key:'wechat',done:false},{key:'brand',done:true}]};APP.cmd('push','setup')",
     'push:setup-done': "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'wechat'},{key:'fulfillment',done:true,pickup:true},{key:'open',done:true}],optional:[]};APP.cmd('push','setup')",
-    'push:settings-gated': "state.ent={socialProof:false,kitchenAdd:false};APP.cmd('push','settings')",
+    'push:settings-gated': "state.ent={socialProof:false,faq:false};APP.cmd('push','settings')",
     'push:social-off': "state.cfg=Object.assign({},state.cfg,{features:{socialProof:false}});APP.cmd('push','social')",
     // The four lists that now have a loaded flag: before it, a screen must say
     // it is loading rather than confidently saying there is nothing.

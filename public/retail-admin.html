@@ -10774,11 +10774,12 @@
             <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
           </div>
 
-          <!-- ── Quick Stock (mobile add-on) ── -->
-          <!-- The on/off switch (.feat-bar) and the "off" card are injected at the
-               top of #qs-home by mountFeatureControls() (05-marketing.js), driven by
-               FEATURE_CATALOG/FEATURE_HOMES. Everything below is the "on" content. -->
-          <div id="qs-home" data-feat="quickStock">
+          <!-- ── Quick Stock (mobile) ── -->
+          <!-- NO SWITCH HERE ANY MORE (§53). This section used to carry an
+               injected .feat-bar and "off" card driven by FEATURE_CATALOG /
+               FEATURE_HOMES; the quickStock feature is deleted, so what is left
+               is the card itself — what the app is, and the staff link. -->
+          <div id="qs-home">
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Quick Stock · 手机库存</h3>
@@ -10792,13 +10793,12 @@
             </div>
           </div>
 
-          <!-- ── Add Stock (kitchen mobile add-on) ── -->
+          <!-- ── Add Stock (kitchen mobile) ── -->
           <!-- Same /stock app as Quick Stock — the view is chosen by role: a
                kitchen-role staffer (Settings → Team) gets this relative "add what
-               you made" flow; warehouse staff get the recount flow. The on/off
-               switch + "off" card are injected at the top of #ka-home by
-               mountFeatureControls(), driven by FEATURE_CATALOG/FEATURE_HOMES. -->
-          <div id="ka-home" data-feat="kitchenAdd">
+               you made" flow; warehouse staff get the recount flow.
+               NO SWITCH HERE ANY MORE (§53), for the reason given on #qs-home. -->
+          <div id="ka-home">
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Add Stock · 加库存</h3>
