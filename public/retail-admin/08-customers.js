@@ -1679,24 +1679,24 @@ function cuRenderDetail() {
       </div>
       <div>
         <div class="lbl">Points · 积分
-          ${/* NOT TAGGED, and that is a finding rather than an omission (audit
-                K-01). `customers:adjust` exists in lib/capabilities.js, is
-                marked `money: 'moves'`, and is what the role editor offers for
-                exactly this — but the endpoint these two buttons call
-                (/customers/:id/points-adjust, /wallet-adjust) is mapped to
-                `customers:edit` in lib/cap-routes.js, so the capability is not
-                enforced on it. Tagging them customers:adjust would hide a
-                control the server accepts, which takes work away from somebody
-                entitled to do it and looks to them like a bug. Closing the gap
-                is a change to what an account may DO — reserved, and recorded
-                in the handover instead. */''}
-          <button class="cux-adj" onclick="cuOpenAdjust('points')">Adjust · 调整</button></div>
+          ${/* TAGGED, now that the server enforces it (audit K-01, closed
+                2026-09-06 on Ash's ruling). It could not be tagged before: the
+                endpoints these two buttons call — /customers/:id/points-adjust
+                and /wallet-adjust — fell through to `customers:edit` because
+                lib/cap-routes.js matched `points` only before a slash or the
+                end of the path, and these carry a HYPHEN. So the capability
+                existed, the role editor offered it, and nothing enforced it.
+                Hiding the button while the server still accepted the request
+                would have taken work away from somebody entitled to do it and
+                looked to them like a bug, which is why the tag waited for the
+                server rather than leading it. */''}
+          <button class="cux-adj" data-cap="customers:adjust" onclick="cuOpenAdjust('points')">Adjust · 调整</button></div>
         <div class="fig${ptsBal ? '' : ' zero'}" data-no-i18n>${ptsBal}</div>
         <div class="sub" data-no-i18n>${ptsSub}</div>
       </div>
       <div>
         <div class="lbl">Wallet · 钱包
-          <button class="cux-adj" onclick="cuOpenAdjust('wallet')">Adjust · 调整</button></div>
+          <button class="cux-adj" data-cap="customers:adjust" onclick="cuOpenAdjust('wallet')">Adjust · 调整</button></div>
         <div class="fig${walletBal ? '' : ' zero'}" data-no-i18n>${yuan(walletBal)}</div>
         <div class="sub" data-no-i18n>${walSub}</div>
       </div>

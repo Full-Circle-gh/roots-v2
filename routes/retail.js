@@ -26,6 +26,10 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 const { computeRecipeCost, unitsReconcilable } = require('../lib/recipe-cost');
 const { productionEnabled } = require('../lib/features');
 const inventory = require('../lib/inventory');
+/* Module scope on purpose. The RBAC choke point below requires this lazily
+   inside its own block, which is fine there; the order-status handler needs
+   capDenied() too and a local const 24,000 lines up is not in its scope. */
+const capRoutes = require('../lib/cap-routes');
 const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
 // English/pinyin address → simplified Chinese. Shared with the Qingyun push
@@ -29160,6 +29164,26 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   const { status, reason, staff_note, pay_method } = req.body || {};
   const def = STATUS_TRANSITIONS[status];
   if (!def) return res.status(400).json({ success: false, error: 'invalid_status' });
+
+  /* A FULL REFUND IS A REFUND, WHICHEVER CONTROL ISSUES IT (audit K-01).
+     This route maps to `orders:edit` in lib/cap-routes.js, which is correct for
+     every other transition on it — a cashier holds orders:edit and moves orders
+     through their day. But `refunded` here sends the customer's money back, the
+     same act as the refund endpoints that have always required `orders:refund`,
+     and the capability cannot be read from the path because the target status
+     is in the body. So the server accepted a full refund from an operator who
+     may not issue one, while the client correctly hid the button — the gap the
+     audit recorded and reserved.
+
+     CANCELLED IS DELIBERATELY NOT GATED HERE. Cancelling is `orders:edit` and
+     always has been; a cashier cancels all day. It can refund money as a
+     consequence (see isPaidRefundEvent below) and that is a real question, but
+     it is a different one — narrowing cancel would take a daily task away from
+     the role that exists to do it, and this change is meant to close a gap
+     rather than open a decision. */
+  if (status === 'refunded' && capRoutes.capDenied(req, 'orders:refund')) {
+    return res.status(403).json({ success: false, error: 'forbidden_capability', need: 'orders:refund' });
+  }
 
   const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });

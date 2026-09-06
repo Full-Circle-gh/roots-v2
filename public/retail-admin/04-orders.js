@@ -6378,13 +6378,19 @@ function renderOpenOrder(o) {
      was this menu — "a shop-floor member of staff opening Orders sees every
      button an owner sees, including refunds".
 
-     THIS CHANGES NO SERVER RULE, and one of the two is worth saying out loud:
-     a FULL refund travels through PATCH /orders/:id/status, which
-     requiredCapFor() answers `orders:edit` for, so the server would accept it
-     from a cashier today. That is a server-side gap and it is deliberately left
-     exactly as it is — closing it is a change to what an account can do, not to
-     what it is shown. What this line does is stop offering a cashier a button
-     the capability model says is not theirs. */
+     THIS CHANGED NO SERVER RULE WHEN IT SHIPPED, and the gap it named has since
+     been closed. A FULL refund travels through PATCH /orders/:id/status, which
+     requiredCapFor() answers `orders:edit` for — the capability a cashier holds
+     to work the till — so the server accepted a full refund from an operator
+     this menu already refused to offer one to. The capability could not be read
+     from the path, because the target status is in the BODY.
+
+     Closed 2026-09-06 on Ash's ruling: the status handler now calls
+     capDenied(req, 'orders:refund') before a `refunded` transition, so the
+     client and the server refuse the same person. This filter is still what
+     stops the button being offered; it is no longer the only thing stopping the
+     act. Cancelling remains `orders:edit` deliberately — a cashier cancels all
+     day, and narrowing that is a different decision nobody has made. */
   const DANGER_CAP = { refunded: 'orders:refund', cancelled: 'orders:edit' };
   const dangerTx = allTx
     .filter(([next]) => next === 'cancelled' || next === 'refunded')

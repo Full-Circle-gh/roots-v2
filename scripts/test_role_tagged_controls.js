@@ -27,12 +27,16 @@
  * assertion is the pairing.
  *
  * ── WHAT IS DELIBERATELY NOT HERE ─────────────────────────────────────────
- * The ~50 routes `requiredCapFor()` maps to nothing, and the server-side gap
- * this work uncovered: a FULL refund travels through PATCH /orders/:id/status,
- * which answers `orders:edit`, so the server would accept one from a cashier
- * today. Both are decisions about what an account may DO, and this pass was
- * scoped to what it is SHOWN. The refund menu's own comment records the gap
- * where somebody changing it will read it.
+ * The ~50 routes `requiredCapFor()` maps to nothing. That is a decision about
+ * what an account may DO, and this pass was scoped to what it is SHOWN.
+ *
+ * THE OTHER ONE THIS PASS UNCOVERED IS NOW CLOSED. A full refund travels
+ * through PATCH /orders/:id/status, which answers `orders:edit`, so the server
+ * accepted one from a cashier — the capability could not be read from the path
+ * because the target status is in the body. Closed 2026-09-06 on Ash's ruling,
+ * with the check in the handler and its own suite at
+ * scripts/test_capability_gaps.js. §3b below was written to fail on the day
+ * that happened, and did.
  */
 'use strict';
 
@@ -171,28 +175,34 @@ section('3 · every screen that renders a tag runs the gate afterwards');
 }
 
 // ── §3b · the capability that is not enforced ─────────────────────────────
-section('3b · the one that was NOT tagged, and why');
+section('3b · the one that could not be tagged until the server caught up');
 
 {
-  /* `customers:adjust` looked like the obvious fifth row: it exists, the role
-     editor offers it, and lib/capabilities.js marks it `money: 'moves'`. But
-     the two Adjust buttons on a customer record call /points-adjust and
-     /wallet-adjust, and lib/cap-routes.js maps those to `customers:edit` — so
-     the capability is not enforced on them. Tagging them would have hidden a
-     control the server accepts, which is the failure this suite's header names.
+  /* `customers:adjust` was the obvious fifth row and could not be used: it
+     exists, the role editor offers it, lib/capabilities.js marks it
+     `money: 'moves'` — and the two Adjust buttons call /points-adjust and
+     /wallet-adjust, which fell through to `customers:edit` because the route
+     rule matched `points` only before a slash or the end of the path and these
+     carry a HYPHEN. Tagging them then would have hidden a control the server
+     still accepted, which is the failure this suite's header names.
 
-     Left alone, and pinned here so the day somebody closes the gap on the
-     server this fails and the tag can go on. */
+     THIS SECTION USED TO ASSERT THE GAP, and said so: "pinned here so the day
+     somebody closes the gap on the server this fails and the tag can go on."
+     That day was 2026-09-06 — it failed exactly as designed, and the tag went
+     on. What it asserts now is the closed state, in both halves, because the
+     client tag and the server rule are only correct together. */
   const byKey = new Map(CAPABILITIES.map((c) => [c.key, c]));
   yes(byKey.has('customers:adjust'), 'customers:adjust is a real capability');
   is(byKey.get('customers:adjust').money, 'moves', 'and it is one that moves money');
-  is(requiredCapFor('POST', '/api/retail-admin/customers/1/points-adjust'), 'customers:edit',
-     'but the endpoint the Adjust button calls is mapped to customers:edit, so nothing enforces it');
+  is(requiredCapFor('POST', '/api/retail-admin/customers/1/points-adjust'), 'customers:adjust',
+     'the server now enforces it on the endpoint the Adjust button calls');
+  is(requiredCapFor('POST', '/api/retail-admin/customers/1/wallet-adjust'), 'customers:adjust',
+     '…and on the wallet one beside it');
   const cust = read('public/retail-admin/08-customers.js');
-  yes(!/data-cap="customers:adjust"/.test(cust),
-      'so the button is NOT tagged with it — a gate stricter than the server takes work away from somebody entitled to do it');
-  yes(/NOT TAGGED, and that is a finding/.test(cust),
-      'and the reason is written where the next person will change it');
+  is((cust.match(/data-cap="customers:adjust"/g) || []).length, 2,
+     'so BOTH Adjust buttons now carry the tag');
+  yes(/TAGGED, now that the server enforces it/.test(cust),
+      'and the reason it waited for the server is written where the next person will read it');
 }
 
 // ── §4 · the gate hides, and never decides ────────────────────────────────
@@ -219,10 +229,10 @@ section('5 · the refund menu the audit used as its example');
       'and the menu is built from what THIS operator may do, rather than tagged — a wrapper that opens onto nothing is worse than no wrapper');
   const at = ord.indexOf('const DANGER_CAP');
   const note = ord.slice(Math.max(0, at - 1400), at);
-  yes(/THIS CHANGES NO SERVER RULE/.test(note),
-      'the comment records that this changes nothing about what is allowed');
-  yes(/orders:edit/.test(note) && /server-side gap/.test(note),
-      'and names the server-side gap it deliberately leaves alone, where somebody changing this will read it');
+  yes(/THIS CHANGED NO SERVER RULE WHEN IT SHIPPED/.test(note),
+      'the comment records that this filter changed nothing about what is allowed');
+  yes(/Closed 2026-09-06/.test(note) && /capDenied\(req, 'orders:refund'\)/.test(note),
+      'and that the server-side gap it named has since been closed, naming the check that closed it');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
