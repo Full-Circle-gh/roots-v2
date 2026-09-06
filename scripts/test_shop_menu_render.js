@@ -123,7 +123,19 @@ function seed() {
   const filler = db.prepare(`INSERT INTO store_products
     (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
     VALUES (?, ?, ?, ?, ?, 1, 1, 'Ready to Eat')`);
-  FILLER.forEach((id, i) => filler.run(id, `Render filler ${i + 1}`, `测试填充${i + 1}`, `__R-8${i}`, 20 + i));
+  // DELIBERATELY UNEVEN NAMES. The alignment check below needs two cards side
+  // by side whose names differ in height — one line against two — which is the
+  // ordinary case on a real menu ("Almond Butter" beside "Maple Cinnamon Almond
+  // Butter") and the one that made the price row read as broken. With names of
+  // equal length the check passes on the bug.
+  const FILLER_NAMES = [
+    'Short one',
+    'A deliberately much longer product name that wraps to two lines',
+    'Short two',
+    'Another very long product name here that also wraps onto two lines',
+    'Short three', 'Short four', 'Short five', 'Short six',
+  ];
+  FILLER.forEach((id, i) => filler.run(id, FILLER_NAMES[i], `测试填充${i + 1}`, `__R-8${i}`, 20 + i));
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
   const add = db.prepare(`INSERT INTO shop_listings
@@ -334,6 +346,44 @@ function boxOf(text) {
       assert.ok(/^rgba?\(/.test(c.bg) && c.bg !== 'rgba(0, 0, 0, 0)',
         `the add button has no ground: ${JSON.stringify(c)}`);
       assert.notStrictEqual(c.bg, c.fg, 'the glyph is the same colour as its ground — an invisible +');
+    });
+
+    await check('two products side by side line their prices up', async () => {
+      // Reported from a phone, 2026-09-06: "not align when there are 2 products
+      // one next to each other". The names are rarely the same height, and with
+      // the price row flowing straight after the name the two prices sat at
+      // different levels. Measured across a real grid row rather than asserted
+      // from the CSS — the fixture above supplies one short name and one that
+      // wraps, which is the case that breaks it.
+      const rows = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.grid .it'));
+        const out = [];
+        for (let i = 0; i + 1 < cards.length; i += 2) {
+          const a = cards[i], b = cards[i + 1];
+          // Same grid row only: cards that wrapped to the next row are not
+          // expected to align with each other.
+          if (Math.abs(a.getBoundingClientRect().top - b.getBoundingClientRect().top) > 1) continue;
+          const pa = a.querySelector('.pr').getBoundingClientRect();
+          const pb = b.querySelector('.pr').getBoundingClientRect();
+          // The TEXT's height, not the box's. The fix makes .t stretch to fill
+          // the card, so both boxes are equal by construction and measuring
+          // them would report every pair as even — the guard below would then
+          // fire on a page that is entirely correct, which it did once.
+          const na = a.querySelector('.t .l-en').getBoundingClientRect();
+          const nb = b.querySelector('.t .l-en').getBoundingClientRect();
+          out.push({ dPrice: Math.abs(pa.top - pb.top), dName: Math.abs(na.height - nb.height) });
+        }
+        return out;
+      });
+      assert.ok(rows.length, 'no side-by-side pair to measure');
+      // The check is only meaningful over a pair whose names DIFFER in height.
+      const uneven = rows.filter(r => r.dName > 4);
+      assert.ok(uneven.length,
+        'no pair has names of differing height, so this check proves nothing — the fixture regressed');
+      for (const r of uneven) {
+        assert.ok(r.dPrice <= 1,
+          `two prices in one row are ${r.dPrice.toFixed(1)}px apart under names ${r.dName.toFixed(1)}px apart`);
+      }
     });
 
     await check('the last row of products is not hidden under the bar', async () => {

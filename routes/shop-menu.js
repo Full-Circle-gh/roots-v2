@@ -405,7 +405,13 @@ img{display:block;max-width:100%}
 /* The price row: price on the left, add on the right, baselines apart because
    the button is a box and the price is type. A sold-out card has no button, so
    the row is the price alone and needs no separate rule. */
-.pf{display:flex;align-items:center;justify-content:space-between;gap:8px}
+/* min-height MATCHES THE BUTTON, so a card that has no button — a sold-out one —
+   still reserves the same row and its price sits at the same level as its
+   neighbour's. Without it the row collapses to the height of the price alone
+   and that price rides 8.5px high, which is half the difference and reads as a
+   wobble rather than as anything deliberate. */
+.pf{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  min-height:36px}
 /* INK GROUND, LIME GLYPH — the mini app's own add control, not a new one. The
    page already borrows that shop's colours through the theme, so this borrows
    its shape too and a customer meets one button in two places. */
@@ -528,13 +534,20 @@ img{display:block;max-width:100%}
 .cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
   font-variant-numeric:tabular-nums}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;padding:0 14px 6px}
-.it{min-width:0}
+/* A COLUMN, SO THE PRICE ROW SITS AT THE BOTTOM OF THE CARD RATHER THAN UNDER
+   THE NAME. Two products side by side rarely have names of the same height —
+   "Almond Butter" against "Maple Cinnamon Almond Butter" — and with the row
+   flowing straight after the name, the two prices and their add buttons landed
+   at different heights and the row read as broken. The grid already stretches
+   both cards to the taller one; this makes the name absorb that difference
+   instead of the price. */
+.it{min-width:0;display:flex;flex-direction:column}
 .ph{position:relative;aspect-ratio:4/5;background:var(--oat);overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover}
 .sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
   font-family:var(--f-bear);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   text-align:center;padding:5px 0}
-.t{font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
+.t{flex:1;font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
   overflow-wrap:anywhere}
 .pf{margin-top:7px}
 .pr{font-family:var(--f-bear);font-size:19px;line-height:1;
