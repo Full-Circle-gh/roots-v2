@@ -117,12 +117,17 @@ run('mobile nav', [
   ['in Chinese', "LANG='cn';state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
     ['厨房制作队列', `${body}.indexOf('厨房制作队列')>-1`],
   ]],
-  // It leaves this app for /stock, where the queue lives, and says which screen
-  // it wants — a row that lands on a launcher is a signpost, not a door.
-  ['the row leaves for the queue itself, not the launcher',
+  /* THE QUEUE NO LONGER LEAVES EITHER (§48). It used to carry a deep link to
+     /stock?go=queue — the deep link mattered because /stock opened on a
+     launcher offering the very row that had just been tapped. The queue is a
+     screen in this app now, so the row pushes to it and there is no launcher
+     left to land on. */
+  ['the queue row is a push, not a departure',
     "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
-      ['it carries the deep link',
-       "moreRowsFlat().some(function(r){return r.key==='kitchenq' && r.href==='/stock?go=queue'})"],
+      ['no deep link out',
+       "!moreRowsFlat().find(function(r){return r.key==='kitchenqueue'}).href"],
+      ['it opens the in-app screen',
+       "moreRowsFlat().find(function(r){return r.key==='kitchenqueue'}).cmd.indexOf('kitchenqueue')>-1"],
     ]],
 
   // And so does the row beside it, for the same reason. /stock's launcher
@@ -144,30 +149,50 @@ run('mobile nav', [
        "moreRowsFlat().find(function(r){return r.key==='stockapp'}).cmd.indexOf('stockadd')>-1"],
     ]],
 
-  /* ── Transfers, the row that still wants the launcher ─────────────────────
-     Pick, Receive, Ask the kitchen and Ask for stock have no rows of their own
-     here and no home anywhere else — /stock's launcher is the screen that holds
-     them. Everyone enters every tool from THIS app now, so without this row
-     that launcher is a screen nothing reaches and four tools go dark. */
-  ['a picker gets the transfer launcher, on a bare /stock',
+  /* ── The transfer launcher is gone, and its four tools are rows ───────────
+     Pick, Receive delivery, Ask the kitchen and Ask for stock used to have no
+     rows here at all: a single "Transfers" row opened /stock's launcher and
+     the launcher held them. Each is a screen in this app now, so the row that
+     held the door open is gone with the door. What must NOT have gone with it
+     is any of the four — a picker who lost the launcher and gained no row
+     would have no way to pick. */
+  ['a picker gets Pick itself, not a launcher',
     "state.caps=['restock:pick'];landOnSomethingReachable();render();", [
-      ['the row is there', `${body}.indexOf('Transfers')>-1`],
-      ['and it goes to the launcher, not past it',
-       "moreRowsFlat().some(function(r){return r.key==='transfers' && r.href==='/stock'})"],
+      ['the row is there', `${body}.indexOf('Pick')>-1`],
+      ['no launcher row survives', `${body}.indexOf('Transfers')===-1`],
+      ['and it is a push',
+       "!moreRowsFlat().find(function(r){return r.key==='pick'}).href"],
     ]],
 
-  // A kitchen account holds restock:fulfil and NOTHING else in that family:
-  // /stock refuses it every tile behind this row, and the launcher it would
-  // land on carries only the queue — which is the row above this one.
-  ['a kitchen account is not offered the transfer launcher',
+  ['a receiver gets Receive delivery, in Chinese',
+    "LANG='cn';state.caps=['restock:receive'];landOnSomethingReachable();render();", [
+      ['收货', `${body}.indexOf('收货')>-1`],
+      ['no launcher row survives', `${body}.indexOf('调拨')===-1`],
+    ]],
+
+  // A kitchen account holds restock:fulfil and NOTHING else in that family,
+  // so none of the four transfer rows is offered to it.
+  ['a kitchen account is offered the queue and none of the transfer rows',
     "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
-      ['no Transfers row', `${body}.indexOf('Transfers')===-1`],
-      ['the queue row is still there', `${body}.indexOf('Kitchen queue')>-1`],
+      ['the queue row is there', `${body}.indexOf('Kitchen queue')>-1`],
+      ['no Pick', `${body}.indexOf('Pick')===-1`],
+      ['no Receive delivery', `${body}.indexOf('Receive delivery')===-1`],
     ]],
 
-  ['Transfers in Chinese', "LANG='cn';state.caps=['restock:receive'];landOnSomethingReachable();render();", [
-    ['调拨', `${body}.indexOf('调拨')>-1`],
-  ]],
+  /* LOG A BATCH IS THE ONLY PRODUCTION ROW. `whatmade` is where both the queue
+     and this row arrive carrying lines; a row that opened it cold would open
+     it empty, so it has none. */
+  ['a kitchen that can log production gets one row for it, not two',
+    "state.caps=['quickstock:add','production:log'];landOnSomethingReachable();render();", [
+      ['Log a batch', `${body}.indexOf('Log a batch')>-1`],
+      ['and no row into the record screen',
+       "!moreRowsFlat().some(function(r){return r.key==='whatmade'})"],
+    ]],
+
+  ['and nothing production-shaped without the capability',
+    "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
+      ['no Log a batch', `${body}.indexOf('Log a batch')===-1`],
+    ]],
 
   ['a store stocker, whose only tool leaves this app',
     "state.caps=['quickstock:recount'];landOnSomethingReachable();render();", [

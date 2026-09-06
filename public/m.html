@@ -642,6 +642,41 @@ const state = {
      a time: opening another folds the last, so the screen never carries two
      live counters and the operator is never asked which one they meant. */
   recvOpenLine:null,
+  /* THE KITCHEN'S QUEUE, and the two screens that close it (§48).
+     kq  — what has been asked of this kitchen.
+     hd  — "What you made": how much of it actually reached the shelf.
+     bat — logging a batch nobody asked for, which feeds the same hd screen.
+         Named bat, not lb: `lb` two hundred lines above is the leaderboard,
+         and a duplicate key in this literal is the later one silently winning.
+     They are one piece of work: closing a request moves NO stock, so the lines
+     have to be carried to the screen that adds them or the shelf stays short. */
+  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:''},
+  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1},
+  bat:{qty:{},q:''},
+  /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
+     walking, which the old screen never had to ask because it ran pinned to
+     one. Named pik so it cannot be confused with the local `pk` in the
+     packaging screen. */
+  pik:{list:null,tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null},
+  /* RECEIVING A TRANSFER (§48) — the STORE end of a stock movement, which is a
+     different job from the `rcv*` supplier receiving above: that one counts a
+     purchase order in from a supplier, this one counts in what another location
+     sent. Named xfr rather than rcv so the two can never be mistaken for one. */
+  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:''},
+  /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
+     dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
+     thing on /stock's launcher that this app could only point at. */
+  kr:{list:null,tried:false,order:null,orderId:null,seen:false,busy:false,err:''},
+  /* RAISING A REQUEST (§48). Two screens — Ask the kitchen and Ask for stock —
+     and one basket, because they are never open at once and a basket that
+     survived the switch would send one screen's list from the other. Entering
+     either clears it. The CATALOGUE is shared and cached: both screens list the
+     same products and re-reading it on every entry is a wait for nothing. */
+  rq:{products:null,tried:false,fromShelf:false,q:'',
+      purpose:null,          // kitchen only: 'order' | 'shelf', no default (§39)
+      from:null,             // ask-for-stock: the location being asked to supply
+      to:null,               // ...and the one asking, where there is a choice
+      qty:{},busy:false,err:'',sent:null},
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
       add:{},inflight:{},rowErr:{},timers:{},
@@ -725,7 +760,27 @@ function copyText(t){
   else fallback();
 }
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
-function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return; state.stack.push({route,title:s.title}); render(); }
+function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
+  /* A REQUEST SCREEN OPENS EMPTY. The two directions share one basket — they
+     are never open at once — so entering either clears what the other left,
+     and a screen reopened after a send does not reappear on its receipt. */
+  if(route==='askkitchen'||route==='askstock') rqReset();
+  /* The list is re-read on every entry and the seen-stamp re-armed: it is a
+     record of what the kitchen finished, and one taken at boot would be stale
+     by the time somebody opened it. */
+  if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
+  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
+  if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
+    // The freezer is re-asked on every entry where there is a choice: which one
+    // they are standing in is a fact about now, not about last time.
+    if(pikStores().length>1) k.at=null; }
+  /* The queue is re-read on entry for the same reason the kitchen-ready list
+     is: what is waiting to be made is a fact about this minute. */
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; }
+  /* Log a batch opens with nothing counted. A basket left over from a batch
+     that was already recorded would add it a second time. */
+  if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
+  state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
@@ -767,6 +822,61 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
+reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
+  const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
+  // Same caret rescue the stock search does: a re-render moves focus, and a
+  // search box that loses the caret mid-word is one nobody can type in.
+  const el2=document.getElementById('mRqQ');
+  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
+reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
+reg('rqTo', id=>{ state.rq.to=Number(id);
+  // The supplier list is everywhere except the asker, so a destination change
+  // can leave a supplier that is now the destination itself.
+  if(state.rq.from===state.rq.to) state.rq.from=null;
+  render(); });
+reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
+reg('rqSendKitchen', ()=>rqSendKitchen());
+reg('rqSendStock', ()=>rqSendStock());
+reg('krOpen', id=>krOpen(id));
+reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
+reg('xfrOpen', id=>xfrOpen(id));
+reg('xfrList', ()=>{ const x=state.xfr; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; render(); });
+reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
+reg('xfrConfirm', ()=>xfrConfirm());
+reg('pikAt', id=>{ const k=state.pik; k.at=Number(id); k.tried=false; k.list=null; k.dest='all'; render(); });
+reg('pikDest', d=>{ state.pik.dest=String(d); render(); });
+reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pikWriteLine(L,null); });
+reg('pikShort', key=>pikAskShort(String(key)));
+reg('pikDispatch', ()=>pikDispatch());
+reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
+reg('kqOpen', id=>kqOpen(id));
+reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; render(); });
+reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
+reg('kqAdvance', to=>kqAdvance(to));
+reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
+/* The chip sets the reason and closes the row's picker in one tap — there is
+   no second confirm, because the answer IS the confirmation. */
+reg('hdReason', (i,code)=>{ const l=(state.hd.lines||[])[i]; if(!l||state.hd.busy) return;
+  l.reason=String(code); state.hd.openReason=-1; render(); });
+reg('hdWhy', i=>{ state.hd.openReason=state.hd.openReason===Number(i)?-1:Number(i); render(); });
+reg('hdCommit', ()=>hdCommit());
+reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
+  const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
+  const el2=document.getElementById('mBatQ');
+  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+reg('batBump', (id,d)=>batBump(Number(id),Number(d)));
+reg('batNext', ()=>batContinue());
+reg('xfrAsk', id=>{
+  const it=xfrItems().find(y=>y.id===Number(id));
+  if(!it) return;
+  const cur=xfrCount(it);
+  state.ask={ title:T('Count what actually arrived.','清点实际到货数量。'), body:xfrName(it),
+    fields:[{id:'n',label:T('sent','发出')+' '+xfrSent(it),numeric:true,value:cur==null?'':String(cur)}],
+    validate:v=>/^\d+$/.test(String(v.n||'').trim())?null
+      :T('Enter what arrived — a whole number, 0 or more.','请输入到货数量 — 0 或以上的整数。'),
+    run:v=>xfrSaveCount(Number(id), parseInt(String(v.n).trim(),10)) };
+  render(); });
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -2732,20 +2842,28 @@ const MORE_GROUPS=[
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction.
 
-     THE NAMED /stock ROWS CARRY ?go=, and that is what keeps them doors rather
-     than signposts. /stock used to open on a launcher whose tiles were "Add
-     stock" and "Kitchen queue" — the two rows right here — so landing on it
-     answered a tap on either row with a menu offering both again. Each names
-     the screen it is for and goes straight there now.
-
-     TRANSFERS IS THE ONE THAT STILL WANTS THE LAUNCHER, and it is the reason
-     the launcher still exists. Pick, Receive, Ask the kitchen and Ask for stock
-     have no rows of their own here and no home anywhere else; the launcher is
-     the screen that holds them, and it is the screen that TEACHES them — its
-     tiles stay put on a quiet day, so "Nothing to pick" is what tells somebody
-     the tool is there before the morning they need it. Four rows here would say
-     the same thing louder and worse. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenq','chef-hat','Kitchen queue','厨房制作队列','/stock?go=queue'],['transfers','route','Transfers','调拨','/stock'],['stockapp','package-plus','Add stock','加库存','/stock?go=add']]},
+     NOTHING IN THIS LIST LEAVES FOR /stock ANY MORE (§48). Two rows used to:
+     Kitchen queue, which carried ?go=queue, and Transfers, which opened that
+     app's launcher because Pick, Receive, Ask the kitchen and Ask for stock had
+     no rows of their own. They have rows of their own now, so the launcher held
+     nothing that is not named here — and a menu that offers what the list above
+     it already offers is a second way to reach one screen, which is the drift
+     this file keeps out. The rows stay put on a quiet day for the reason the
+     launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
+     there before the morning they need it. */
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存','/stock?go=add'],
+    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
+       own and lived on /stock's launcher, which the Transfers row above still
+       reaches for what has not moved yet. As each of those flows lands here
+       that launcher empties, and the row goes with the last of them. */
+    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
+    ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
+    /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
+       is never opened from here — it is where the queue and this row both
+       arrive, carrying lines with them, and a row that opened it cold would
+       open it empty. */
+    ['logbatch','clipboard-list','Log a batch','登记批次']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -6221,6 +6339,693 @@ SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenS
        count at the door is the one failure nobody forgives, and a toast that
        fades has told the operator nothing they can act on.
    ────────────────────────────────────────────────────────────────────────── */
+/* ══ ASKING FOR SOMETHING ══════════════════════════════════════════════════
+   Two directions, one shape. Ask the kitchen asks for something to be MADE and
+   moves no stock — §39: stock changes when the kitchen makes it, not when
+   somebody asks — so it carries a purpose and no locations. Ask for stock asks
+   another location to SEND what it already has, so it carries the two ends and
+   no purpose.
+
+   NO product_id IS SENT BY EITHER, and that is deliberate rather than a
+   shortcut. `restock_items.product_id` is read as a KITCHEN products.id, and
+   the two catalogues are separate AUTOINCREMENT counters over one integer
+   space — so a store id written into that field points at a different thing on
+   the other side and nothing would ever say so. The name is what a picker or a
+   cook reads off the row, so the name is what is sent. */
+function rqReset(){
+  const r=state.rq;
+  r.purpose=null; r.from=null; r.qty={}; r.q=''; r.err=''; r.sent=null; r.busy=false;
+  // One store is not a choice; more than one is a question this app has to ask
+  // and the old screen never did, because it ran pinned to a single shelf.
+  const st=state.stores||[];
+  r.to = st.length===1 ? st[0].id : null;
+}
+/* THE CATALOGUE TACET OWNS. /api/retail-admin/products is the sellable list and
+   is reachable by exactly the operator who can raise one of these. The shelf
+   already in memory stands in if it cannot be read — a request screen with no
+   products is no screen at all — and says so rather than pretending. */
+function loadRqProducts(){
+  const r=state.rq;
+  if(r.products||r.tried) return;
+  r.tried=true;
+  api('/products').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.products)||[]);
+    r.products=rows.map(p=>({id:p.id,name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+    r.fromShelf=false; render();
+  }).catch(()=>{
+    r.products=(state.qs.items||[]).map(p=>({id:p.product_id!=null?p.product_id:p.id,
+      name_en:p.name_en,name_cn:p.name_cn,sku:p.sku}));
+    r.fromShelf=true; render();
+  });
+}
+function rqName(p){ return LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''); }
+function rqLines(){
+  const all=state.rq.products||[];
+  const q=state.rq.q.trim().toLowerCase();
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+function rqChosen(){ return (state.rq.products||[]).filter(p=>(state.rq.qty[p.id]||0)>0); }
+function rqUnits(){ return rqChosen().reduce((a,p)=>a+(state.rq.qty[p.id]||0),0); }
+function rqBump(id,d){
+  const n=(state.rq.qty[id]||0)+d;
+  state.rq.qty[id]=n>0?n:0;
+  render();
+}
+// Everywhere except the location doing the asking.
+function rqSuppliers(){ return (state.stores||[]).filter(s=>s.id!==state.rq.to); }
+function rqStoreName(id){
+  const s=(state.stores||[]).find(x=>x.id===id);
+  return s ? (LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')) : '';
+}
+// One line per chosen product, in the shape the restock API takes.
+function rqItems(){
+  return rqChosen().map(p=>({
+    product_id:null,
+    product_name:p.name_en||p.name_cn||('#'+p.id),
+    product_cn:p.name_cn||null,
+    sku:p.sku||null,
+    qty_requested:state.rq.qty[p.id],
+    unit:'pcs',
+  }));
+}
+/* THE NUMBERS STAY ON SCREEN WHEN A SEND FAILS. Losing a list somebody just
+   built is the one failure that makes people stop using a screen. */
+function rqSend(body,cannot){
+  const r=state.rq;
+  if(r.busy) return;
+  r.busy=true; r.err=''; render();
+  const lines=rqChosen().length, units=rqUnits(), to=r.from;
+  apiWrite('/api/restock', body).then(j=>{
+    r.busy=false;
+    r.sent={rs:(j&&j.rs_number)||('#'+((j&&j.id)||'')), lines:lines, units:units,
+            who:to?rqStoreName(to):''};
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    r.busy=false;
+    r.err = e.code==='norealm' ? cannot
+          : (e.message||T('That did not send. Nothing has changed — try again.','未发送,数据未变 — 请重试。'));
+    render();
+  });
+}
+function rqSendKitchen(){
+  const r=state.rq;
+  // The purpose is mandatory and the server refuses a request without it by
+  // name, so the screen asks first and the button stays shut until it is
+  // answered — §39's no-prefill rule means it cannot be chosen for them.
+  if(!r.purpose||!rqChosen().length) return;
+  rqSend({to_role:'kitchen', purpose:r.purpose, status:'sent', items:rqItems()},
+         T('This account cannot raise kitchen requests.','此账号无法向厨房下单。'));
+}
+function rqSendStock(){
+  const r=state.rq;
+  if(!r.from||!r.to||!rqChosen().length) return;
+  // BOTH ENDS NAMED OUTRIGHT. The server still derives the roles for its
+  // notification routing, but the locations are the order's own — which is what
+  // makes a request TO a shop as ordinary as one to the warehouse.
+  rqSend({from_store_id:r.from, to_store_id:r.to, status:'sent', items:rqItems()},
+         T('This account cannot ask for stock.','此账号无法发起补货申请。'));
+}
+
+/* ══ THE KITCHEN QUEUE ═════════════════════════════════════════════════════
+   What has been asked of this kitchen. `received` = we have seen it;
+   `prepared` = it is made, and that closes it.
+
+   CLOSING IT IS NOT PUTTING IT ON THE SHELF, and `prepared` is where those two
+   part company: the server moves no stock for a kitchen request by design, so
+   the shelf is still short at the moment the request stops existing. That is
+   why the lines are carried straight to the screen that adds them. */
+function loadKq(force){
+  const k=state.kq;
+  if(k.tried&&!force) return;
+  k.tried=true;
+  api('/api/restock?to_role=kitchen&tab='+k.tab).then(j=>{
+    k.list=Array.isArray(j)?j:((j&&j.data)||[]);
+    k.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.list=[]; k.err=''; render();
+  });
+}
+function kqOpen(id){
+  const k=state.kq;
+  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    k.order=(j&&j.data)||j; k.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+function kqAdvance(to){
+  const k=state.kq;
+  if(k.busy||!k.order) return;
+  k.busy=true; k.err=''; render();
+  apiWrite('/api/restock/'+k.order.id+'/status',{status:String(to)},'PUT').then(()=>{
+    k.busy=false; k.order.status=String(to);
+    if(String(to)==='prepared'){
+      // Read BEFORE the reload clears it — this is the only copy of what was
+      // asked for, and loadKq drops it.
+      const made=k.order;
+      k.order=null; k.orderId=null; loadKq(true);
+      if(hdStart(made)) return;   // falls through to the queue when there is nothing to hand over
+    }
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false;
+    k.err=e.code==='norealm'?T('This account cannot work the kitchen queue.','此账号无法处理厨房队列。')
+                            :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
+
+/* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
+   The step between closing a request and the shelf being right.
+
+   ONE NUMBER PER ROW, AND THE SECOND IS INFERRED. The operator adjusts what
+   goes on the SHELF — the thing in front of them, that they can count. What was
+   MADE is then max(asked, shelved), which is right in all three shapes without
+   asking a second question:
+     asked 20, shelved 18 → made 20, 2 short, and it wants a reason
+     asked 20, shelved 20 → made 20, nothing short, no question
+     asked 20, shelved 22 → made 22, nothing short (an extra tray, not a loss)
+   A screen with two steppers per line would be more expressive and would be
+   wrong more often, on a phone, with cold hands. */
+function hdMade(l){ return Math.max(l.asked,l.want); }
+function hdShort(l){ return hdMade(l)-l.want; }
+function hdKey(v){ return String(v==null?'':v).trim().toLowerCase(); }
+function hdName(l){ return (LANG==='en'?(l.name_en||l.name_cn):(l.name_cn||l.name_en))||l.sku||'—'; }
+/* NO ID TO TRUST, SO IT MATCHES ON SKU. A kitchen request carries no
+   product_id — it is sent null on purpose, because restock_items.product_id is
+   read as a KITCHEN products.id and this app only knows store ids. Both sides
+   draw from the same catalogue, so the SKU is the honest join: it is the
+   operator's own code for the thing, printed on both lists. The name is a
+   fallback and only on an exact match — a fuzzy match that puts units on the
+   wrong product is the failure the transfer side has its own guard against.
+   A line that cannot be matched is SHOWN, greyed, saying so — never silently
+   dropped, because a dropped line is a product that quietly never reaches the
+   shelf. */
+function hdResolve(order){
+  const bySku={},byName={};
+  (state.qs.items||[]).forEach(it=>{
+    const id=it.product_id!=null?it.product_id:it.id;
+    const k=hdKey(it.sku);
+    if(k&&bySku[k]===undefined) bySku[k]={id:id,it:it};
+    [it.name_en,it.name_cn].forEach(n=>{ const kn=hdKey(n); if(kn&&byName[kn]===undefined) byName[kn]={id:id,it:it}; });
+  });
+  const out=[];
+  (order.items||[]).forEach(li=>{
+    const qty=xfrNum(li.qty_requested);
+    if(qty<=0) return;
+    const m=bySku[hdKey(li.sku)]||byName[hdKey(li.product_name)]||byName[hdKey(li.product_cn)]||null;
+    out.push({ id:m?m.id:null,
+      name_en:li.product_name||null, name_cn:li.product_cn||null, sku:li.sku||null,
+      asked:qty, want:qty, reason:'', st:'', msg:'' });
+  });
+  return out;
+}
+function hdStart(order){
+  if(qsMode()!=='add'||state.qs.storeId==null) return false;
+  const lines=hdResolve(order);
+  if(!lines.length||!lines.some(l=>l.id!=null)) return false;
+  return hdOpen(lines, order.rs_number||('#'+order.id), order.id);
+}
+/* THE PREFILL IS A PROPOSAL, NOT A DEFAULT. §39's no-prefill rule is about not
+   putting words in somebody's mouth — a purpose picked for them is a reason
+   they did not give. A quantity here is not that: it is what was ASKED for,
+   quoted back, and the operator says whether it is also what was made. */
+function hdOpen(lines,rs,rsId){
+  const h=state.hd;
+  h.lines=lines; h.rs=rs||null; h.rsId=rsId||null;
+  h.busy=false; h.err=''; h.done=null; h.openReason=-1;
+  loadHdReasons();
+  push('whatmade');
+  return true;
+}
+// Read from the server rather than kept as a second copy that drifts out of
+// step with the waste module's own list.
+function loadHdReasons(){
+  if(state.hd.reasons) return;
+  api('/production/reasons').then(rows=>{
+    state.hd.reasons=Array.isArray(rows)?rows:((rows&&rows.data)||[]);
+    render();
+  }).catch(()=>{});
+}
+function hdReasonLabel(code){
+  const r=(state.hd.reasons||[]).find(x=>x.code===code);
+  if(!r) return code;
+  return LANG==='cn'?(r.cn||r.en):(r.en||r.cn);
+}
+function hdBump(i,d){
+  const l=(state.hd.lines||[])[i];
+  if(!l||state.hd.busy||l.st==='ok'||l.id==null) return;
+  l.want=Math.max(0,l.want+Number(d));
+  if(l.st==='err'){ l.st=''; l.msg=''; }
+  // Back to full means there is nothing to explain, so the answer goes with the
+  // question — a stale "damaged" on a line that is no longer short would file a
+  // loss that did not happen.
+  if(hdShort(l)===0){ l.reason=''; if(state.hd.openReason===i) state.hd.openReason=-1; }
+  else if(!l.reason) state.hd.openReason=i;   // it just went short: ask, do not wait to be found
+  render();
+}
+// Every short line must say why before anything is written. The server refuses
+// a bare gap too (gap_reason_required); saying so here means the operator is
+// told by the screen rather than by a failed write.
+function hdUnexplained(){
+  return (state.hd.lines||[]).filter(l=>l.id!=null&&l.st!=='ok'&&hdShort(l)>0&&!l.reason);
+}
+/* A line is still to do when it was matched and has not landed. `want` is NOT
+   required to be > 0: a tray that was made and entirely lost is made 6,
+   shelved 0, which moves no stock and is exactly the morning most worth
+   recording. */
+function hdPending(){
+  return (state.hd.lines||[]).filter(l=>l.id!=null&&l.st!=='ok'&&(l.want>0||hdShort(l)>0));
+}
+/* ONE CALL PER LINE, and it is the PRODUCTION endpoint rather than the stock
+   one: that endpoint writes the batch and moves the shelf inside a single
+   transaction, so a line cannot end up half-recorded — which two calls from
+   here could not promise however carefully they were ordered. It is also what
+   keeps `made` alive; the stock route only ever knew the number that arrived.
+
+   A line that succeeded is marked ok and is never pending again, so pressing
+   Record after a partial failure retries ONLY what failed — the guard that
+   keeps a shaky connection from adding a batch twice. */
+function hdCommit(){
+  const h=state.hd;
+  if(h.busy) return;
+  const todo=hdPending();
+  if(!todo.length) return;
+  h.busy=true; h.err='';
+  todo.forEach(l=>{ l.st='saving'; l.msg=''; });
+  render();
+  let left=todo.length, failed=0, added=0, units=0, short=0;
+  todo.forEach(l=>{
+    apiWrite('/production',{
+      store_id:state.qs.storeId, product_id:l.id,
+      qty_made:hdMade(l), qty_shelved:l.want,
+      gap_reason:hdShort(l)>0?l.reason:null,
+      // Names the request, so a batch can be traced back to what asked for it
+      // rather than matched by eye on a timestamp.
+      request_id:h.rsId||null,
+    }).then(()=>{
+      l.st='ok'; added++; units+=l.want; short+=hdShort(l);
+      const it=(state.qs.items||[]).find(x=>(x.product_id===l.id||x.id===l.id));
+      if(it&&it.physical_qty!=null) it.physical_qty=(it.physical_qty|0)+l.want;
+    }).catch(e=>{
+      if(String(e.message)==='auth'){ l.st=''; return; }
+      l.st='err'; failed++; l.msg=e.message||'';
+    }).then(()=>{
+      if(--left>0){ render(); return; }
+      h.busy=false;
+      if(failed){
+        h.err=T('Some lines were not recorded. Nothing was counted twice — press Record again for the ones still marked.',
+                '部分商品未登记。已登记的不会重复计入 — 请对仍标记错误的商品再按一次「登记」。');
+      }else{
+        h.done={added:added,units:units,short:short};
+        loadKq(true);
+      }
+      render();
+    });
+  });
+}
+
+/* ══ LOG A BATCH ═══════════════════════════════════════════════════════════
+   What was made with nobody asking. It hands the chosen quantities to the same
+   record screen as what was MADE, with `asked` set to the same figure so the
+   short-batch arithmetic reads identically: drop the shelf number and it asks
+   why. */
+function batLines(){
+  const q=state.bat.q.trim().toLowerCase();
+  const all=state.qs.items||[];
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+function batId(p){ return p.product_id!=null?p.product_id:p.id; }
+function batChosen(){ return (state.qs.items||[]).filter(p=>(state.bat.qty[batId(p)]||0)>0); }
+function batUnits(){ return batChosen().reduce((a,p)=>a+(state.bat.qty[batId(p)]||0),0); }
+function batBump(id,d){
+  const n=(state.bat.qty[id]||0)+Number(d);
+  state.bat.qty[id]=n>0?n:0;
+  render();
+}
+function batContinue(){
+  const chosen=batChosen();
+  if(!chosen.length) return;
+  hdOpen(chosen.map(p=>({ id:batId(p), name_en:p.name_en, name_cn:p.name_cn, sku:p.sku,
+    asked:state.bat.qty[batId(p)], want:state.bat.qty[batId(p)], reason:'', st:'', msg:'' })), null, null);
+}
+
+/* ══ PICKING A RUN ═════════════════════════════════════════════════════════
+   Pulling what other locations have asked this one to send.
+
+   WHAT THIS LOCATION HAS BEEN ASKED TO SUPPLY. `from_store_id` is the supplier,
+   so a Tianhe→Yuexiu request appears in YUEXIU's pick list — they are the ones
+   who have to walk to a freezer. Filtering on the roles instead would put it in
+   Tianhe's, asking the requester to pick their own order.
+
+   THE LIST IS COMBINED, ONE ROW PER PRODUCT. Several stores' requests are
+   merged into a single walk of the freezer; the merge is a VIEW, never a row of
+   its own, which is why picking a line writes one PUT per contributing request.
+
+   NOTHING HERE CHECKS STOCK BEFORE DISPATCHING and nothing refuses on it — the
+   server owns that (§39 Ruling 1), and this screen must not reintroduce a gate
+   that ruling deleted. */
+function pikStores(){ return state.stores||[]; }
+function loadPik(force){
+  const k=state.pik;
+  if(k.at==null) return;                       // nothing to pick until a freezer is named
+  if(k.tried&&!force) return;
+  k.tried=true;
+  api('/api/restock?tab=active').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    // A run is what has been asked for and not yet dispatched: goods_state
+    // 'none' is the pre-dispatch state, anything else has already left.
+    const want=rows.filter(o=>{
+      const mine=o.from_store_id ? o.from_store_id===k.at
+        : ((o.from_role||'store')==='store' && (o.to_role||'warehouse')==='warehouse');
+      return mine && ['sent','received'].indexOf(o.status)>=0
+                  && (!o.goods_state||o.goods_state==='none');
+    });
+    // Each in FULL, because the merged row needs every contributing line.
+    return Promise.all(want.map(o=>api('/api/restock/'+o.id).then(d=>(d&&d.data)||d)))
+      .then(full=>{ k.list=full; k.err=''; render(); });
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.list=[]; k.err=''; render();
+  });
+}
+function pikOrders(){ return Array.isArray(state.pik.list)?state.pik.list:[]; }
+function pikDestOf(o){
+  return o.to_store_id ? rqStoreName(o.to_store_id)
+       : (LANG==='en'?(o.store_name||o.store_cn):(o.store_cn||o.store_name))||T('Warehouse','仓库');
+}
+function pikLines(){
+  const by={},order=[];
+  pikOrders().forEach(o=>{
+    (o.items||[]).forEach(it=>{
+      const asked=xfrNum(it.qty_requested);
+      if(!(asked>0)) return;
+      // Merged on the product where there is one, and on the NAME where there
+      // is not — a kitchen-direction line carries no product_id by design.
+      const key=it.product_id!=null?('p'+it.product_id):('n'+(it.product_name||it.id));
+      if(!by[key]){ by[key]={key:key,name:xfrName(it),sku:it.sku,parts:[]}; order.push(key); }
+      by[key].parts.push({orderId:o.id,itemId:it.id,dest:pikDestOf(o),asked:asked,
+                          sent:it.qty_sent==null?null:xfrNum(it.qty_sent),
+                          checked:!!it.is_checked});
+    });
+  });
+  return order.map(k=>{
+    const L=by[k];
+    L.asked=L.parts.reduce((a,p)=>a+p.asked,0);
+    L.done=L.parts.every(p=>p.checked);
+    L.sent=L.done?L.parts.reduce((a,p)=>a+(p.sent==null?p.asked:p.sent),0):null;
+    return L;
+  });
+}
+function pikDests(){
+  const seen=[];
+  pikOrders().forEach(o=>{ const n=pikDestOf(o); if(seen.indexOf(n)<0) seen.push(n); });
+  return seen;
+}
+function pikVisible(){
+  const all=pikLines();
+  if(state.pik.dest==='all') return all;
+  return all.filter(L=>L.parts.some(p=>p.dest===state.pik.dest));
+}
+/* Writing a picked line: one PUT per contributing request, because a combined
+   row is several stores' lines standing next to each other. qty_sent is what
+   actually leaves; is_checked is what marks the walk done. */
+function pikWriteLine(L,per){
+  const k=state.pik;
+  k.busy=true; k.err=''; render();
+  return Promise.all(L.parts.map(p=>{
+    const q=per?per[p.itemId]:p.asked;
+    return apiWrite('/api/restock/'+p.orderId+'/item/'+p.itemId,{qty_sent:q,is_checked:1},'PUT')
+      .then(()=>{
+        const o=pikOrders().find(x=>x.id===p.orderId);
+        const it=o&&(o.items||[]).find(x=>x.id===p.itemId);
+        if(it){ it.qty_sent=q; it.is_checked=1; }
+      });
+  })).then(()=>{ k.busy=false; render(); })
+    .catch(e=>{
+      if(String(e.message)==='auth') return;
+      k.busy=false;
+      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+                              :T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。');
+      render();
+    });
+}
+/* THE SHORT PICK. The old screen asked how many were FOUND and then how those
+   go across the stores; here the allocation IS the answer and the found total
+   is its sum, because a number the operator types twice is a number they can
+   disagree with themselves about. The remainder still gates the save: nothing
+   may be allocated that was not asked for. */
+function pikAskShort(key){
+  const L=pikVisible().find(x=>x.key===key);
+  if(!L) return;
+  state.ask={
+    title:T('How many did you find?','找到多少？'),
+    body:L.name+(L.sku?' · '+L.sku:'')+' · '+T('asked for '+L.asked,'申请 '+L.asked),
+    fields:L.parts.map(p=>({id:String(p.itemId),
+      label:p.dest+' · '+T('asked '+p.asked,'申请 '+p.asked), numeric:true, value:''})),
+    validate:v=>{
+      let sum=0;
+      for(const p of L.parts){
+        const raw=String(v[String(p.itemId)]||'').trim();
+        if(!/^\d+$/.test(raw)) return T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。');
+        const n=parseInt(raw,10);
+        if(n>p.asked) return T('More than was asked for.','超过申请数量。');
+        sum+=n;
+      }
+      if(sum<=0) return T('Nothing to send.','没有可发出的数量。');
+      return null;
+    },
+    run:v=>{
+      const per={};
+      L.parts.forEach(p=>{ per[p.itemId]=parseInt(String(v[String(p.itemId)]).trim(),10); });
+      pikWriteLine(L,per);
+    } };
+  render();
+}
+/* THE DISPATCH. One PUT per order, which is what fires _applyDispatch. A
+   failure is SHOWN and nothing more — retrying it is its own work, and offering
+   a retry here would be building that feature by the back door. */
+function pikDispatch(){
+  const k=state.pik;
+  if(k.busy) return;
+  k.busy=true; k.err=''; k.result=null; render();
+  const orders=pikOrders(); const failed=[];
+  Promise.all(orders.map(o=>
+    apiWrite('/api/restock/'+o.id+'/status',{status:'prepared'},'PUT').then(j=>{
+      if(j&&j.stock_transfer&&j.stock_transfer.ok===false){
+        failed.push({rs:o.rs_number||('#'+o.id),error:j.stock_transfer.error});
+      }
+    }).catch(e=>{ failed.push({rs:o.rs_number||('#'+o.id),error:e.message}); })
+  )).then(()=>{
+    k.busy=false; k.result={failed:failed}; k.step='sent'; render();
+    // The shelf this app counts has just changed underneath it.
+    state.qs.itemsTried=false; loadQsItems(true);
+    loadPik(true);
+  });
+}
+
+/* ══ RECEIVING A TRANSFER ══════════════════════════════════════════════════
+   Counting in what another location sent. NOT the Receiving row already in this
+   app — that one counts a purchase order in from a supplier, and folding the
+   two together would put a supplier's invoice and a sister shop's van behind
+   one word.
+
+   WHAT IS COMING TO A SHELF THIS OPERATOR HOLDS. The old screen ran pinned to a
+   single store, so "is this mine" was one id comparison. Here an operator can
+   hold several, so the list spans them and every row names where it is going —
+   a delivery counted in against the wrong shop is stock that never arrives and
+   stock that arrives twice. */
+function xfrStoreIds(){ return (state.stores||[]).map(s=>s.id); }
+function xfrMine(o){
+  // Since #259 an order records to_store_id, so this is an id comparison rather
+  // than a guess. Rows written before that column existed carry only the name.
+  if(o.to_store_id) return xfrStoreIds().indexOf(o.to_store_id)>=0;
+  return true;
+}
+function loadXfr(force){
+  const x=state.xfr;
+  if(x.tried&&!force) return;
+  x.tried=true;
+  api('/api/restock?tab=active').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    // A kitchen request is not a delivery: it moves no stock and closes when
+    // the kitchen makes it, so it has nothing to count in.
+    x.list=rows.filter(o=>(o.to_role||'warehouse')!=='kitchen'
+                       && o.goods_state==='in_transit' && xfrMine(o));
+    x.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.list=[]; x.err=''; render();
+  });
+}
+function xfrArrived(o){ return !!(o&&o.delivered_at); }
+function xfrItems(){
+  const xs=state.xfr.order&&state.xfr.order.items;
+  // Only lines that were actually sent. A line asked for and not picked has
+  // nothing on the van to count.
+  return (Array.isArray(xs)?xs:[]).filter(it=>xfrSent(it)>0);
+}
+function xfrNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+function xfrSent(it){ return xfrNum(it.qty_sent!=null?it.qty_sent:it.qty_requested); }
+function xfrGot(it){ return it.qty_received==null?null:xfrNum(it.qty_received); }
+function xfrHeldFor(it){ const h=state.xfr.held; return h&&h.item_id===it.id?h.qty:null; }
+function xfrCount(it){ const h=xfrHeldFor(it); return h!=null?h:xfrGot(it); }
+function xfrName(it){
+  return (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—';
+}
+function xfrOpen(id){
+  const x=state.xfr;
+  x.busy=true; x.err=''; x.order=null; x.held=null; x.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    x.order=(j&&j.data)||j; x.busy=false;
+    // Counting in something that has not arrived is the one thing this screen
+    // must not invite, so an order still on the road says so instead.
+    x.step=xfrArrived(x.order)?'count':'transit';
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false; x.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+/* THE LAST LINE IS HELD, and that is the whole reason this is not one write per
+   tap. Sending every count as it is typed would settle the delivery the moment
+   the final line landed — before anybody had looked at the totals — so the last
+   outstanding line is kept on the screen and goes to the server with the
+   confirm. A held line that stops being the last one goes with the next save,
+   so nothing is held except while the set is genuinely complete. */
+function xfrSaveCount(itemId,qty){
+  const x=state.xfr;
+  const outstanding=xfrItems().filter(it=>it.id!==itemId&&xfrCount(it)==null).length;
+  if(outstanding===0){ x.held={item_id:itemId,qty:qty}; x.step='confirm'; render(); return; }
+  const counts=[{item_id:itemId,qty_received:qty}];
+  if(x.held&&x.held.item_id!==itemId) counts.push({item_id:x.held.item_id,qty_received:x.held.qty});
+  x.busy=true; x.err=''; render();
+  apiWrite('/api/restock/'+x.order.id+'/receive',{counts:counts},'PUT').then(()=>{
+    counts.forEach(c=>{ const it=(x.order.items||[]).find(y=>y.id===c.item_id); if(it) it.qty_received=c.qty_received; });
+    x.held=null; x.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false;
+    // The number they typed is never thrown away by a failed write. Losing a
+    // delivery's counts at the door is the one failure nobody forgives.
+    x.held={item_id:itemId,qty:qty};
+    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+                             : T('That count did not save. It is still on screen — try again.','数量未保存,仍显示在屏幕上 — 请重试。');
+    render();
+  });
+}
+function xfrConfirm(){
+  const x=state.xfr;
+  if(x.busy) return;
+  const counts=xfrItems().map(it=>({item_id:it.id,qty_received:xfrCount(it)}))
+                         .filter(c=>c.qty_received!=null);
+  x.busy=true; x.err=''; render();
+  apiWrite('/api/restock/'+x.order.id+'/receive',{counts:counts},'PUT').then(j=>{
+    x.busy=false;
+    // The server is the one that decides the delivery is settled; a client that
+    // assumed it would close a delivery with a line still uncounted.
+    if(j&&j.settled===false){ x.err=T('Some lines are still uncounted.','仍有未点数的项目。'); x.step='count'; render(); return; }
+    counts.forEach(c=>{ const it=(x.order.items||[]).find(y=>y.id===c.item_id); if(it) it.qty_received=c.qty_received; });
+    x.held=null; x.step='done'; render();
+    // The shelf this app counts has just changed underneath it.
+    state.qs.itemsTried=false; loadQsItems(true);
+    loadXfr(true);
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false;
+    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+                             : (e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
+
+/* ══ READY FROM THE KITCHEN ════════════════════════════════════════════════
+   A kitchen request that is `prepared` has already been made AND put on the
+   shelf by the kitchen itself, so nothing is physically waiting for anybody.
+   The screen exists so the people who raised it know it was handled — Ash:
+   "the only thing needed is that the warehouse knows the kitchen handled his
+   request." It moves no stock and says so, as a statement of where the stock
+   already went rather than a warning about a button.
+
+   THE LIST IS NOT THE DOT. It shows what the kitchen has finished, seen or
+   not, because it is a record — "what did they make today" has to still answer
+   the day after somebody glanced at it. Only the COUNT is unseen-only, and
+   that count is the one the dot already polls. */
+function loadKr(force){
+  const k=state.kr;
+  if(k.tried&&!force) return;
+  k.tried=true;
+  /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
+     defined for this direction as "prepared" — for warehouse→kitchen, prepared
+     IS the closure — and the endpoint drops archived rows from every tab. The
+     status filter is belt and braces for a row that reached 'delivered' under
+     an older client. */
+  api('/api/restock?to_role=kitchen&tab=history').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    k.list=rows.filter(o=>o.status==='prepared');
+    k.err=''; render(); krMarkSeen();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    // A refusal is not an error worth shouting: the row is gated on the same
+    // pair the count is, and an operator who cannot read it never sees it.
+    k.list=[]; k.err=''; render();
+  });
+}
+function krUnseen(){ return (state.kr.list||[]).filter(o=>!o.seen_at); }
+/* READING IT IS THE ACKNOWLEDGEMENT, and this is the whole of it. No button and
+   no confirmation.
+
+   THE IDS IT ACTUALLY DREW, never "everything unseen": the kitchen can mark
+   something made between this list rendering and the post landing, and
+   clearing a request nobody has laid eyes on is the one failure that would
+   make the dot worth ignoring.
+
+   THE STAMP IS SERVER-SIDE, so one person looking clears it for the whole
+   team rather than each handset holding its own opinion and chasing the next
+   person about a request everybody already knows about.
+
+   A FAILURE IS SILENT AND HARMLESS: nothing the operator did has gone wrong,
+   and the worst case is a dot still lit next time, which is the safe direction
+   to fail in. */
+function krMarkSeen(){
+  const k=state.kr;
+  if(k.seen) return;
+  const ids=krUnseen().map(o=>o.id);
+  if(!ids.length) return;
+  k.seen=true;
+  apiWrite('/api/restock/kitchen-ready/seen',{ids:ids}).then(()=>{
+    const now=new Date().toISOString();
+    (k.list||[]).forEach(o=>{ if(ids.indexOf(o.id)>=0) o.seen_at=now; });
+    // The dot behind this screen goes out on the way back rather than on the
+    // next poll a minute later.
+    state.kitchenReady=Math.max(0,Number(state.kitchenReady||0)-ids.length);
+    render();
+  }).catch(()=>{ k.seen=false; });
+}
+function krOpen(id){
+  const k=state.kr;
+  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  api('/api/restock/'+Number(id)).then(j=>{
+    k.order=(j&&j.data)||j; k.busy=false; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
+  });
+}
+function krPurpose(o){
+  return o.purpose==='order' ? T('For an order','用于发货')
+       : o.purpose==='shelf' ? T('For the shelf','货架补货') : '';
+}
+
 function qsStore(){ const c=state.qs.ctx; if(!c) return null;
   return (c.stores||[]).find(s=>s.id===state.qs.storeId) || (c.stores||[])[0] || null; }
 function qsStoreName(){ const s=qsStore(); return s ? (LANG==='en'?(s.name_en||s.name_cn||''):(s.name_cn||s.name_en||'')) : ''; }
@@ -6628,6 +7433,492 @@ function screenStockAdd(){
    would render as one. titleOf is the hook that exists for a title that is not
    a fixed word; Receive is the other screen using it. `title` stays the
    array so the stack entry is still valid on its own. */
+/* ── The two request screens ──────────────────────────────────────────────
+   One product picker, drawn once, with the question that belongs to each
+   direction above it: what the kitchen request is FOR, or which two locations
+   the stock is moving between. */
+function rqPicker(){
+  const r=state.rq;
+  if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=rqLines();
+  const search=`<div style="padding:4px 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)"></div>`;
+  // Said plainly rather than silently: a shorter list is a different list, and
+  // an operator who cannot find a product needs to know why before they conclude
+  // the shop does not sell it.
+  const note=r.fromShelf?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+    T('Showing what this shelf holds — the full catalogue could not be read.','显示本店货架商品 — 无法读取完整商品目录。')}</div>`:'';
+  if(!rows.length) return search+note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    T('No products match','没有匹配的商品')}</div>`;
+  const row=p=>{
+    const n=r.qty[p.id]||0;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
+        ${p.sku?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku)}</span>`:''}
+      </span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},-1)"${n<=0?' disabled':''}
+        aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
+      <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
+        aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+    </div>`;
+  };
+  return search+note+`<div>${rows.map(row).join('')}</div>`;
+}
+/* The bar that sends. It carries the tally because the list above it scrolls —
+   an operator who has picked eleven things cannot see all eleven, and "11 items
+   · 40 units" is the only place the total exists. */
+function rqFoot(cmd,ready){
+  const r=state.rq;
+  const chosen=rqChosen().length;
+  return `${r.err?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(r.err)}</div>`:''}
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${chosen}</b> ${T('items','项')}
+        · <span class="num">${rqUnits()}</span> ${T('units','件')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${(ready&&!r.busy)?'':' disabled'}
+        onclick="APP.cmd('${cmd}')">${r.busy?T('Sending…','发送中…'):T('Send','发送')}</button>
+    </div>`;
+}
+// What a sent request leaves behind. It names the number so it can be quoted,
+// and says what happens next rather than only that something happened.
+function rqSentHtml(title,line){
+  const r=state.rq;
+  return `<div style="padding:24px 16px">
+    <div style="font-size:18px;font-weight:500">${title}</div>
+    <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:6px">${escAttr(r.sent.rs)}</div>
+    <div style="font-size:15px;margin-top:12px">${r.sent.lines} ${T('items','项')} · <span class="num">${r.sent.units}</span> ${T('units','件')}</div>
+    <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${line}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${T('Done','完成')}</button>
+  </div>`;
+}
+function screenAskKitchen(){
+  loadRqProducts();
+  const r=state.rq;
+  if(r.sent) return rqSentHtml(T('Sent to the kitchen','已发送至厨房'),
+    T('The kitchen sees it now. Nothing moves until they make it.','厨房已收到。制作完成后库存才会变动。'));
+  /* THE PURPOSE IS MANDATORY and the server enforces it by name, so it is asked
+     FIRST — before the list, because it is a property of the whole request —
+     and nothing is chosen for them: §39's no-prefill rule is that a purpose
+     picked on somebody's behalf is a reason they did not give. */
+  const opt=(k,en,zh,subEn,subZh)=>`<button class="row" style="flex:1;min-height:64px;padding:10px 12px;text-align:left;
+    border:1px solid ${r.purpose===k?'var(--text-primary)':'var(--border-default)'};border-radius:12px;
+    background:${r.purpose===k?'var(--text-primary)':'var(--surface-card)'};
+    color:${r.purpose===k?'var(--surface-card)':'var(--text-secondary)'};display:block"
+    onclick="APP.cmd('rqPurpose','${k}')">
+    <b style="display:block;font-size:15px;font-weight:500;line-height:1.3;color:inherit">${T(en,zh)}</b>
+    <i style="display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75">${T(subEn,subZh)}</i></button>`;
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      T('They make it — nothing moves until it is made.','由厨房制作 — 制作完成前库存不变。')}</div>
+    <div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What is it for?','用途')}</div>
+    <div style="display:flex;gap:8px;padding:0 16px 14px">
+      ${opt('order','For an order','用于发货','A customer is waiting on it','有客户订单等待')}
+      ${opt('shelf','For the shelf','货架补货','Restocking what we hold','补充本店库存')}
+    </div>
+    ${rqPicker()}
+    ${rqFoot('rqSendKitchen', !!r.purpose && rqChosen().length>0)}`;
+}
+function screenAskStock(){
+  loadRqProducts();
+  const r=state.rq;
+  if(r.sent) return rqSentHtml(T('Sent','已发送'),
+    T('They pick it and send it. Count it in when it arrives.','对方拣货发出后，到货时清点入库。'));
+  const stores=state.stores||[];
+  /* A DOOR INTO A WALL IS WORSE THAN NO DOOR. With one location there is
+     nowhere to ask, and the screen says so instead of drawing a picker with a
+     single disabled option. */
+  if(stores.length<2) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--text-secondary);line-height:1.6">${
+    T('There is nowhere else to ask — this is the only location.','没有其他地点可申请 — 当前仅此一个门店。')}</div>`;
+  const chip=(id,on,cmd)=>`<button class="row" style="min-height:44px;padding:8px 14px;border-radius:999px;
+    border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};
+    background:${on?'var(--text-primary)':'var(--surface-card)'};color:${on?'var(--surface-card)':'var(--text-primary)'};
+    font-size:14px;width:auto;display:inline-flex" onclick="APP.cmd('${cmd}',${id})">${escAttr(rqStoreName(id))}</button>`;
+  // Which store is ASKING is a question the old screen never had to put: it ran
+  // pinned to one shelf. Here an operator can hold several, and a request that
+  // guessed the destination would send stock to the wrong shop.
+  const askedBy = stores.length>1 ? `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('For which store?','送到哪家门店？')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${stores.map(st=>chip(st.id,r.to===st.id,'rqTo')).join('')}</div>` : '';
+  const suppliers=rqSuppliers();
+  const from = r.to==null ? '' : `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Ask which location?','向哪个地点申请？')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${suppliers.map(st=>chip(st.id,r.from===st.id,'rqFrom')).join('')}</div>`;
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      T('Have another location send it','请其他地点发货')}</div>
+    ${askedBy}${from}
+    ${r.to!=null?rqPicker():''}
+    ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
+}
+function screenKitchenReady(){
+  loadKr();
+  const k=state.kr;
+  if(k.orderId!=null){
+    if(k.busy) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(k.err) return `<div style="padding:24px 16px"><div style="font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:16px" onclick="APP.cmd('krList')">${T('Back','返回')}</button></div>`;
+    const o=k.order||{};
+    const items=(o.items||[]).filter(it=>Number(it.qty_requested||0)>0);
+    const p=krPurpose(o);
+    return `<div style="padding:4px 16px 12px">
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('krList')">${T('Ready','已完成')}</button>
+      </div>
+      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span class="num" style="min-width:44px;font-size:18px;font-weight:500">${Number(it.qty_requested||0)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(
+          (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—')}</span>
+      </div>`).join('')}</div>
+      <div style="padding:16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+        T('The kitchen has already put this on the shelf. Nothing to collect.','厨房已将其上架，无需领取。')}</div>`;
+  }
+  if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!k.list.length) return nothingYet(T('Nothing finished yet','暂无已完成'),
+    T('What the kitchen makes for you shows up here.','厨房为你制作完成的申请会显示在这里。'));
+  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
+      T(k.list.length+' made · already on the shelf',k.list.length+' 项已完成 · 已上架')}</div>
+    <div>${k.list.map(o=>{
+      const p=krPurpose(o);
+      return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+        onclick="APP.cmd('krOpen',${o.id})">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+        </span>
+        ${!o.seen_at?`<span style="width:8px;height:8px;border-radius:99px;background:var(--sage-ink);flex:none"></span>`:''}
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+      </button>`;
+    }).join('')}</div>`;
+}
+function screenReceiveTransfer(){
+  loadXfr();
+  const x=state.xfr;
+  const err=x.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(x.err)}</div>`:'';
+  const backRow=lbl=>`<div style="padding:4px 16px 12px">
+    <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrList')">${lbl}</button></div>`;
+
+  if(x.step==='done'){
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${T('Counted in','已入库')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T('The shelf has been updated.','库存已更新。')}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('xfrList')">${T('Done','完成')}</button>
+    </div>`;
+  }
+  if(x.orderId!=null){
+    if(x.busy&&!x.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    const o=x.order||{};
+    if(x.step==='transit'){
+      return backRow(T('Receiving','收货'))+err+`<div style="padding:0 16px">
+        <div style="font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+        <div style="font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
+          T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
+    }
+    const items=xfrItems();
+    if(x.step==='confirm'){
+      const counted=items.reduce((a,it)=>a+(xfrCount(it)||0),0);
+      const sent=items.reduce((a,it)=>a+xfrSent(it),0);
+      // Against the VAN — all this screen can compare before they confirm.
+      const diff=items.filter(it=>xfrCount(it)!==xfrSent(it));
+      return `<div style="padding:4px 16px 12px">
+          <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrCount')">${T('Receiving','收货')}</button></div>
+        ${err}
+        <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${T('Confirm receipt','确认收货')}</div>
+        <div style="padding:0 16px 14px;font-size:14px;color:var(--text-secondary)">
+          <span class="num">${counted}</span> ${T('counted','已点')} · <span class="num">${sent}</span> ${T('sent','发出')}</div>
+        ${diff.length?`<div style="padding:0 16px 12px">${diff.map(it=>`<div style="display:flex;gap:12px;padding:8px 0;font-size:14px">
+            <span style="flex:1;min-width:0">${escAttr(xfrName(it))}</span>
+            <span class="num" style="color:var(--amber-ink)">${xfrCount(it)} / ${xfrSent(it)}</span></div>`).join('')}</div>`:''}
+        <div style="padding:0 16px 20px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+          T('Confirming puts these counts on the shelf.','确认后将按此数量入库。')}</div>
+        <div style="padding:0 16px calc(env(safe-area-inset-bottom,0px) + 16px)">
+          <button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
+            onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button></div>`;
+    }
+    // The count itself: one row per line, each opening a number entry.
+    return backRow(T('Receiving','收货'))+err+`
+      <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">${
+        T('Count what actually arrived.','清点实际到货数量。')}</div>
+      <div>${items.map(it=>{
+        const got=xfrCount(it);
+        return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+          onclick="APP.cmd('xfrAsk',${it.id})">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
+            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+          </span>
+          <span class="num" style="font-size:20px;font-weight:500;color:${got==null?'var(--text-secondary)':'var(--text-primary)'}">${got==null?'—':got}</span>
+        </button>`;
+      }).join('')}</div>`;
+  }
+  if(!x.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!x.list.length) return nothingYet(T('Nothing on its way','暂无在途'),
+    T('Deliveries from another location show up here.','其他地点发来的货会显示在这里。'));
+  return err+`<div>${x.list.map(o=>`<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+      onclick="APP.cmd('xfrOpen',${o.id})">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${
+          o.to_store_id?' · '+escAttr(rqStoreName(o.to_store_id)):''}</span>
+      </span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+    </button>`).join('')}</div>`;
+}
+function screenPick(){
+  const k=state.pik;
+  const stores=pikStores();
+  const chip=(label,on,cmd,arg)=>`<button class="row" style="min-height:40px;padding:7px 14px;border-radius:999px;width:auto;display:inline-flex;
+    border:1px solid ${on?'var(--text-primary)':'var(--border-default)'};background:${on?'var(--text-primary)':'var(--surface-card)'};
+    color:${on?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('${cmd}',${arg})">${escAttr(label)}</button>`;
+
+  /* WHICH FREEZER IS BEING WALKED. The old screen never asked — it ran pinned
+     to one location. Merging two locations' runs into one list would be a walk
+     of two freezers drawn as one, so it is asked wherever there is a choice. */
+  if(k.at==null){
+    if(stores.length===1){ k.at=stores[0].id; }
+    else return `<div style="margin-top:12px;padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Picking at which location?','在哪个地点拣货？')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 16px">${
+        stores.map(st=>chip(rqStoreName(st.id),false,'pikAt',st.id)).join('')}</div>`;
+  }
+  loadPik();
+  const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+
+  if(k.step==='sent'){
+    const failed=(k.result&&k.result.failed)||[];
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${failed.length?T('Sent, with problems','已发出，但有问题'):T('Sent','已发送')}</div>
+      ${failed.length?`<div style="margin-top:12px">${failed.map(f=>`<div style="font-size:14px;color:var(--brick-ink);padding:4px 0">
+          ${escAttr(f.rs)} — ${escAttr(f.error||'')}</div>`).join('')}</div>`
+        :`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+          T('The stores can count it in when it arrives.','门店到货后即可清点入库。')}</div>`}
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('pikList')">${T('Done','完成')}</button>
+    </div>`;
+  }
+  if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const lines=pikLines();
+  if(!lines.length) return nothingYet(T('Nothing to pick','暂无拣货'),
+    T('Requests for this location to supply show up here.','需要本地点发货的申请会显示在这里。'));
+
+  const dests=pikDests();
+  const filter=dests.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px">
+    ${chip(T('All stores','全部门店'),k.dest==='all','pikDest',"'all'")}
+    ${dests.map(d=>chip(d,k.dest===d,'pikDest',"'"+String(d).replace(/'/g,"\\'")+"'")).join('')}</div>`:'';
+
+  const visible=pikVisible();
+  const picked=lines.filter(L=>L.done).length;
+  const rows=visible.map(L=>{
+    const split=L.parts.map(p=>escAttr(p.dest)+' '+(L.done?(p.sent==null?p.asked:p.sent):p.asked)).join(' · ');
+    return `<div style="padding:12px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px">
+      <span class="num" style="min-width:44px;font-size:20px;font-weight:500;color:${L.done?'var(--text-secondary)':'var(--text-primary)'}">${L.done?L.sent:L.asked}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500${L.done?';color:var(--text-secondary)':''}">${escAttr(L.name)}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${split}</span>
+      </span>
+      ${L.done
+        ? `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`
+        : `<span style="display:flex;gap:8px">
+             <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('pikShort','${L.key}')">${T('Short','缺货')}</button>
+             <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('pikAll','${L.key}')">${T('Picked','已拣')}</button>
+           </span>`}
+    </div>`;
+  }).join('');
+
+  const allDone=lines.length>0&&lines.every(L=>L.done);
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+      escAttr(rqStoreName(k.at))} · <span class="num">${picked}</span>/${lines.length} ${T('picked','已拣')}</div>
+    ${filter}${err}<div>${rows}</div>
+    <div style="padding:16px;position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default)">
+      <button class="btn2" style="width:auto;padding:11px 26px"${(allDone&&!k.busy)?'':' disabled'}
+        onclick="APP.cmd('pikDispatch')">${k.busy?T('Sending…','发送中…'):T('Dispatch','发货')}</button>
+    </div>`;
+}
+function screenKitchenQueue(){
+  loadQsCtx(); loadKq();
+  const k=state.kq;
+  const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+  if(k.orderId!=null){
+    if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    const o=k.order||{};
+    const items=(o.items||[]).filter(it=>xfrNum(it.qty_requested)>0);
+    const p=krPurpose(o);
+    const next=o.status==='sent'?'received':o.status==='received'?'prepared':null;
+    return `<div style="padding:4px 16px 12px">
+        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
+      ${err}
+      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span></div>`).join('')}</div>
+      ${next?`<div style="padding:16px">
+        <button class="btn2" style="width:auto;padding:11px 26px"${k.busy?' disabled':''}
+          onclick="APP.cmd('kqAdvance','${next}')">${k.busy?T('Saving…','保存中…')
+            :(next==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>
+        ${next==='prepared'?`<div style="font-size:13px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
+          T('The next screen asks how many reached the shelf.','下一步会询问实际入库数量。')}</div>`:''}
+      </div>`:''}`;
+  }
+  const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;
+    border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
+    color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
+  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
+  if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!k.list.length) return tabs+nothingYet(T('Nothing to make','暂无待制作'),
+    T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
+  return tabs+err+`<div>${k.list.map(o=>{
+    const p=krPurpose(o);
+    return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+      onclick="APP.cmd('kqOpen',${o.id})">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+      </span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
+function screenWhatMade(){
+  const h=state.hd;
+  if(h.done){
+    return `<div style="padding:24px 16px">
+      <div style="font-size:18px;font-weight:500">${T('Recorded','已登记')}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:6px">${h.rs?escAttr(h.rs):T('Made without a request','无申请的制作')}</div>
+      <div style="font-size:17px;font-weight:500;margin-top:14px">${T(h.done.units+' units on the shelf','已入库 '+h.done.units+' 件')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:6px;line-height:1.55">${
+        h.rs?T('Across '+h.done.added+' products. The request is closed.','共 '+h.done.added+' 种商品。该申请已关闭。')
+            :T('Across '+h.done.added+' products.','共 '+h.done.added+' 种商品。')}</div>
+      ${h.done.short?`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T(h.done.short+' made but did not reach the shelf — recorded against this batch.',
+          '另有 '+h.done.short+' 件已制作但未入库 — 已记录在本批次。')}</div>`:''}
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${
+        h.rs?T('Back to the queue','返回制作队列'):T('Done','完成')}</button>
+    </div>`;
+  }
+  const lines=h.lines||[];
+  const pending=hdPending();
+  const units=pending.reduce((a,l)=>a+l.want,0);
+  const shortTotal=pending.reduce((a,l)=>a+hdShort(l),0);
+  const unexplained=hdUnexplained().length;
+  const ready=pending.length>0&&!unexplained&&!h.busy;
+  const lost=lines.filter(l=>l.id==null).length;
+  const row=(l,i)=>{
+    const dead=l.id==null, shortBy=dead?0:hdShort(l);
+    const badge=l.st==='ok'?T('Recorded','已登记')
+      :l.st==='saving'?T('Recording…','登记中…')
+      :l.st==='err'?T('Not recorded','未登记')
+      :dead?T('Not on this store\u2019s list','本店商品目录中没有')
+      :(shortBy>0?T('Made '+hdMade(l)+' · '+shortBy+' short','制作 '+hdMade(l)+' 件 · 少 '+shortBy+' 件')
+        :(l.want>l.asked?T(l.asked+' asked for','申请 '+l.asked+' 件'):''));
+    /* THE ONE QUESTION THIS SCREEN ASKS, and it only ever appears on a line
+       that is actually short. On a normal morning nobody sees it at all.
+       Answered inline rather than in a sheet: a modal over a three-line list,
+       on a phone, to answer one word, is a screen between the operator and the
+       thing they are already looking at. */
+    let ask='';
+    if(!dead&&l.st!=='ok'&&shortBy>0){
+      if(l.reason&&h.openReason!==i){
+        ask=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 12px">
+          <button class="row" style="min-height:34px;padding:6px 12px;border-radius:999px;width:auto;display:inline-flex;
+            border:1px solid var(--text-primary);background:var(--text-primary);color:var(--surface-card);font-size:13px"
+            onclick="APP.cmd('hdWhy',${i})">${escAttr(hdReasonLabel(l.reason))}</button>
+          <span style="font-size:13px;color:var(--text-secondary)">${T('tap to change','点击可修改')}</span></div>`;
+      }else{
+        const opts=(h.reasons||[]).map(r=>`<button class="row" style="min-height:34px;padding:6px 12px;border-radius:999px;width:auto;display:inline-flex;
+          border:1px solid ${l.reason===r.code?'var(--text-primary)':'var(--border-default)'};
+          background:${l.reason===r.code?'var(--text-primary)':'var(--surface-card)'};
+          color:${l.reason===r.code?'var(--surface-card)':'var(--text-primary)'};font-size:13px"
+          onclick="APP.cmd('hdReason',${i},'${escAttr(r.code)}')">${escAttr(LANG==='cn'?(r.cn||r.en):(r.en||r.cn))}</button>`).join('');
+        ask=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 16px 12px">
+          <span style="font-size:13px;color:var(--text-secondary)">${T(shortBy+' short — why?','少 '+shortBy+' 件 — 原因?')}</span>
+          ${opts||`<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`}</div>`;
+      }
+    }
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)${dead?';opacity:.55':''}">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(hdName(l))}</span>
+          <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(l.sku||'')}${badge?(l.sku?' · ':'')+escAttr(badge):''}</span>
+        </span>
+        ${(dead||l.st==='ok')
+          ? `<span class="num" style="font-size:20px;color:var(--text-secondary)">${l.st==='ok'?('+'+l.want):'—'}</span>`
+          : `<span style="display:flex;align-items:center;gap:8px">
+              <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('hdBump',${i},-1)"${(l.want<=0||h.busy)?' disabled':''}>${ic('minus',18)}</button>
+              <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">+${l.want}</span>
+              <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('hdBump',${i},1)"${h.busy?' disabled':''}>${ic('plus',18)}</button>
+            </span>`}
+      </div>${ask}`;
+  };
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      h.rs?escAttr(h.rs)+' · '+T('Marked made — the shelf has not changed yet','已标记完成 — 库存尚未变动')
+          :T('Set what actually went on the shelf.','请填写实际入库数量。')}</div>
+    ${h.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(h.err)}</div>`:''}
+    <div>${lines.map(row).join('')}</div>
+    ${lost?`<div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T(lost+' line(s) are not on this store\u2019s product list, so they cannot be added here. Tell whoever looks after the catalogue.',
+        lost+' 项不在本店商品目录中,无法在此入库。请联系管理商品目录的同事。')}</div>`:''}
+    <div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T('If it is less than was made, say why — that is how the difference gets recorded instead of disappearing.',
+        '少于制作数量时请选择原因 — 差额才会被记录,而不是凭空消失。')}</div>
+    ${unexplained?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+      T(unexplained+' line(s) are short and have no reason yet.','有 '+unexplained+' 项数量不足且尚未选择原因。')}</div>`:''}
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${units}</b> ${T('units','件')}${
+          shortTotal?' · '+T(shortTotal+' short','少 '+shortTotal+' 件'):''}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${ready?'':' disabled'}
+        onclick="APP.cmd('hdCommit')">${h.busy?T('Recording…','登记中…'):T('Record','登记')}</button>
+    </div>`;
+}
+function screenLogBatch(){
+  loadQsCtx();
+  const rows=batLines();
+  const search=`<div style="padding:12px 16px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
+  if(!state.qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return search+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    T('Nothing on this store\u2019s list matches.','本店商品目录中没有匹配项。')}</div>`;
+  const chosen=batChosen();
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
+      T('What you made, with nobody asking','主动制作,无对应申请')}</div>
+    ${search}
+    <div>${rows.map(p=>{
+      const id=batId(p), n=state.bat.qty[id]||0;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(qsName(p))}</span>
+          <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${escAttr(p.sku||('#'+id))}</span>
+        </span>
+        <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('batBump',${id},-1)"${n<=0?' disabled':''}>${ic('minus',18)}</button>
+        <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+        <button class="stepbtn" style="width:40px;height:40px" onclick="APP.cmd('batBump',${id},1)">${ic('plus',18)}</button>
+      </div>`;
+    }).join('')}</div>
+    <div style="padding:14px 16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+      T('Set how many you MADE. The next screen asks how many reached the shelf.',
+        '请填写制作数量。下一步会询问实际入库数量。')}</div>
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${batUnits()}</b> ${T('units','件')} · ${chosen.length} ${T('products','种商品')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${chosen.length?'':' disabled'}
+        onclick="APP.cmd('batNext')">${T('Next','下一步')}</button>
+    </div>`;
+}
+SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
+SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
+SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
+SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
+SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
+SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
+SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
+SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
@@ -9461,19 +10752,34 @@ const ROUTE_CAP={
      refused the recount would be the row opening onto a refusal. */
   stockadd:['quickstock:add','quickstock:recount'],
   stockapp:['quickstock:add','quickstock:recount'],
-  /* THE KITCHEN'S QUEUE, WHICH IS WHY IT IS HERE AND NOT ONLY IN /stock. The
-     queue shipped as a tile on the Stock home, and a kitchen operator whose
-     role puts them in THIS app never sees that home — they see this list, and
-     "Add stock" is not a name anybody reads as "the orders waiting for you".
-     Gated on fulfil, the capability the queue's own writes are gated on, so the
-     row cannot appear for somebody whose first tap 403s. */
-  kitchenq:'restock:fulfil',
-  /* THE TRANSFER LAUNCHER, gated on the three transfer capabilities and NOT on
-     fulfil. A kitchen account holds fulfil alone: /stock would refuse it every
-     tile behind this row and hand it a launcher carrying nothing but the queue
-     — which is the row directly above. Any-of the three, because the launcher
-     itself shows a tile per job and each of those is refused on its own. */
-  transfers:['restock:pick','restock:receive','restock:request'],
+  /* RAISING A REQUEST, either direction (§48). Both are screens whose entire
+     purpose is the Send at the bottom, and that send is gated on
+     restock:request server-side — so gating them on anything weaker would be
+     two screens that 403 after the list has been built. Asking the kitchen
+     rides with the same key: it is a request, it just goes to a pot. */
+  askkitchen:'restock:request', askstock:'restock:request',
+  /* The same pair the count is gated on, and the same pair routes/restock.js
+     addresses the 'prepared' push to — the people who RAISE these requests. A
+     fulfil-only kitchen operator is the one who made it, and telling them
+     their own work is waiting is telling them about themselves. */
+  kitchenready:['restock:request','restock:pick'],
+  /* Counting a transfer in, gated on the capability its save is gated on
+     server-side — the same call the supplier Receiving row makes above, for the
+     same reason: a screen whose whole purpose is the save must not be offered
+     to somebody whose save will 403. */
+  receivexfer:'restock:receive',
+  // Pulling a run, gated on the capability its own writes are gated on.
+  pick:'restock:pick',
+  /* THE KITCHEN'S QUEUE. Gated on fulfil, the capability its own writes are
+     gated on (PUT /api/restock/:id/status), so the row cannot appear for
+     somebody whose first tap 403s. */
+  kitchenqueue:'restock:fulfil',
+  /* THE TWO PRODUCTION SCREENS, on the capability POST /production is gated on
+     server-side. `whatmade` is gated even though no row opens it: the queue
+     pushes to it, and a kitchen that could close a request but not record the
+     batch would be sent to a screen whose Record 403s — better it never
+     advances than that it advances into a dead end. */
+  logbatch:'production:log', whatmade:'production:log',
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
   sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
@@ -9806,14 +11112,17 @@ function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 /* Made and not collected. Gated on the row it points at for the same reason
    the inbox count is: a dot must never promise work behind a door this operator
    cannot open. */
-function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('transfers')
+/* Gated on the row it points at, for the reason the inbox count is: a dot must
+   never promise work behind a door this operator cannot open. That row is this
+   app's own screen now (§48) rather than the Transfers departure. */
+function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('kitchenready')
   ? Number(state.kitchenReady||0) : 0; }
 /* Which More ROWS carry a dot of their own. The folder's dot says something
    inside wants you; without this the operator opens More and has to guess
    which of thirty rows it meant — and on a role with no tab bar at all
    (flatNav) this list IS the home screen, so the row dot is the only one
    there is. */
-function moreRowDot(key){ return key==='transfers' ? readyFromKitchen()>0 : false; }
+function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0 : false; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
