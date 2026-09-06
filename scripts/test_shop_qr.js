@@ -184,6 +184,34 @@ const get = (u) => fetch(`http://127.0.0.1:${PORT}${u}`);
       assert.deepStrictEqual([...b.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'not a PNG');
       assert.ok(b.length > 200, 'suspiciously small PNG');
     });
+    await checkAsync('the download asks for a bigger picture and names the file', async () => {
+      clearDomains(); addDomain(TEST_HOSTS[0], 'active', 1);
+      const small = await get(`/api/retail-admin/shops/${shopId}/qr.png`);
+      const big = await get(`/api/retail-admin/shops/${shopId}/qr.png?download=1&scale=20`);
+      assert.strictEqual(big.status, 200);
+      const cd = big.headers.get('content-disposition') || '';
+      assert.ok(cd.includes('attachment'), 'the download does not download');
+      assert.ok(cd.includes(`shop-${CODE}.png`), `filename should name the code: ${cd}`);
+      const sBytes = (await small.arrayBuffer()).byteLength;
+      const bBytes = (await big.arrayBuffer()).byteLength;
+      assert.ok(bBytes > sBytes, `print copy (${bBytes}) should exceed the on-screen one (${sBytes})`);
+      // The on-screen image must NOT be an attachment, or clicking the admin
+      // would download instead of rendering.
+      assert.ok(!/attachment/.test(small.headers.get('content-disposition') || ''),
+        'the inline image was served as a download');
+    });
+    await checkAsync('scale is clamped, not trusted', async () => {
+      clearDomains(); addDomain(TEST_HOSTS[0], 'active', 1);
+      // An unbounded scale is an easy way to ask this endpoint for a
+      // hundred-megabyte PNG from a session that is allowed to ask.
+      const huge = await get(`/api/retail-admin/shops/${shopId}/qr.png?scale=99999`);
+      const max = await get(`/api/retail-admin/shops/${shopId}/qr.png?scale=24`);
+      assert.strictEqual(huge.status, 200);
+      assert.strictEqual((await huge.arrayBuffer()).byteLength, (await max.arrayBuffer()).byteLength,
+        'a huge scale was honoured rather than clamped');
+      const junk = await get(`/api/retail-admin/shops/${shopId}/qr.png?scale=abc`);
+      assert.strictEqual(junk.status, 200, 'a junk scale should fall back, not fail');
+    });
     await checkAsync('an unknown shop gets nothing', async () => {
       assert.strictEqual((await get('/api/retail-admin/shops/999999/qr.png')).status, 404);
       assert.strictEqual((await get('/api/retail-admin/shops/999999/qr')).status, 404);

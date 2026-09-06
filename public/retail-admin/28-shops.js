@@ -223,13 +223,18 @@
     // from a wrong one, and the wrong one gets discovered after it is printed
     // and stuck to a table. The address is shown in full beneath it.
     // 二维码 / QR CODE and 二维码不可用 / QR unavailable are pairs already live
-    // in this admin; nothing here is composed (§30).
+    // in this admin. 下载 is the verb this admin already downloads with —
+    // '下载模板', '下载备份' — LIFTED from those rather than found as a bare
+    // pair, which is the one string on this screen Ash should look at (§30).
     const qr = _shop && _shop.is_active
       ? `<div class="shp-qr">
            <div class="shp-qr-h">${esc(T('QR code', '二维码'))}</div>
            <img class="shp-qr-img" alt="" src="/api/retail-admin/shops/${_shop.id}/qr.png?v=${encodeURIComponent(_shop.updated_at || '')}"
                 onerror="this.style.display='none'">
            <div class="shp-qr-url" id="shp-qr-url"></div>
+           <a class="shp-qr-dl" id="shp-qr-dl"
+              href="/api/retail-admin/shops/${_shop.id}/qr.png?download=1&scale=20"
+              download="shop-${esc(_shop.public_code)}.png">${esc(T('Download', '下载'))}</a>
          </div>`
       : '';
     const state = _shop && !_shop.is_active ? `<span class="shp-pill off">${esc(T('Inactive', '已停用'))}</span>` : '';
@@ -249,6 +254,9 @@
         box.textContent = T('QR unavailable', '二维码不可用');
         box.className = 'shp-qr-url off';
         const img = document.querySelector('.shp-qr-img'); if (img) img.style.display = 'none';
+        // Nothing was minted, so there is nothing to download. A live-looking
+        // link that returns a 409 is worse than no link.
+        const dl = document.getElementById('shp-qr-dl'); if (dl) dl.style.display = 'none';
       }
     } catch (e) { /* the header still renders; the address line simply stays empty */ }
   }
