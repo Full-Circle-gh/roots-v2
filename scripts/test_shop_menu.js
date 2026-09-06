@@ -242,7 +242,7 @@ function rowFor(html, nameEn) {
   const end = html.indexOf('<div class="it', at);
   return html.slice(start, end === -1 ? html.length : end);
 }
-const soldOut = (row) => /class="tag"/.test(row);
+const soldOut = (row) => /class="sold"/.test(row);
 
 (async () => {
   saveConfig();
@@ -297,7 +297,9 @@ const soldOut = (row) => /class="tag"/.test(row);
       // as a fault in the shop rather than a product nobody photographed.
       const { body } = await get(`/s/${LIVE}`);
       const withPhoto = rowFor(body, 'Fixture cold brew');
-      const without = rowFor(body, 'Fixture kombucha');
+      // Available AND photoless, so the frame is empty rather than holding a
+      // sold-out bar — the case that would otherwise draw a broken glyph.
+      const without = rowFor(body, 'Fixture oat latte');
       assert.ok(/<img /.test(withPhoto), 'a product WITH a photo lost its image');
       assert.ok(!/<img /.test(without), 'a product with no photo still emits an <img> that will 404');
       assert.ok(/<div class="ph"><\/div>/.test(without), 'the empty photo frame is missing');
@@ -365,12 +367,22 @@ const soldOut = (row) => /class="tag"/.test(row);
       assert.ok(ready < drinks,
         'Drinks sorted first in the menu, so insertion order won — the tree decides group order');
     });
-    await checkAsync('the uncategorised group is last and carries NO heading', async () => {
+    await checkAsync('the uncategorised band is last, and its labels are the shop\'s own', async () => {
       const { body } = await get(`/s/${LIVE}`);
       const loose = body.indexOf('Fixture unfiled');
-      assert.ok(loose > body.indexOf('Fixture oat latte'), 'the unfiled group is not last');
-      const tail = body.slice(body.lastIndexOf('<div class="grp">', loose), loose);
-      assert.ok(!/<h2>/.test(tail), 'the unfiled group grew a heading — §30 forbids minting one');
+      assert.ok(loose > body.indexOf('Fixture oat latte'), 'the unfiled band is not last');
+      // OTHER / 其他 and ALL / 全部 are copied from miniapp/pages/shop/shop.js,
+      // so the rail mints nothing. The unfiled band's own section heading stays
+      // EMPTY rather than inventing a word for it.
+      assert.ok(body.includes('OTHER') && body.includes('其他'), 'the OTHER band lost its live label');
+      assert.ok(body.includes('ALL') && body.includes('全部'), 'the ALL tab lost its live label');
+      const band = body.slice(body.lastIndexOf('<section class="cat"', loose), loose);
+      assert.ok(/<div class="kick"><\/div>/.test(band), 'the unfiled band grew a section heading');
+    });
+    await checkAsync('the rail lists every category holding something, and the count is padded', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      assert.ok(/<nav class="rail">/.test(body), 'no category rail');
+      assert.ok(/class="cnt">0\d</.test(body), 'the section count is not zero-padded to two digits');
     });
 
     console.log('\nLanguage — both sides present, CSS chooses, detection never re-runs');

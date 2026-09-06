@@ -56,7 +56,7 @@ const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
-const { themeToCssVars } = require('../lib/brand-theme');
+const { themeToCssVars, sanitizeTheme } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
 // file so the photo fallback and the money format cannot drift from the
@@ -134,6 +134,15 @@ const INSTALLED_FACES = {
 };
 const FACE_FORMAT = { otf: 'opentype', ttf: 'truetype', woff: 'woff', woff2: 'woff2' };
 
+// A display face whose DIGITS do not match its letters, and the library face
+// that stands in for them. A price is the second thing a customer reads, so a
+// menu whose numerals are thin and geometric beside chunky letters reads as a
+// mistake. app.wxss states the problem and this is the same remedy: map the
+// digits, the currency signs and the ampersand to the substitute by
+// unicode-range. A family that is not here simply sets its own digits.
+const DIGIT_SUBSTITUTE = { 'Bear Serif': 'Lilita One' };
+const DIGIT_RANGE = 'U+0024-0026, U+0030-0039, U+00A5';
+
 // @font-face rules for the two families THIS TENANT's theme names — an
 // installed library face, or the tenant's own https upload. Nothing else is
 // emitted, so a tenant on a stock system font ships no font bytes at all.
@@ -152,6 +161,14 @@ function fontFaces(fonts) {
     if (!url) continue;
     const ext = (String(url).toLowerCase().match(/\.(woff2|woff|otf|ttf)(?:[?#]|$)/) || [])[1];
     const fmt = ext ? ` format('${FACE_FORMAT[ext]}')` : '';
+    // The substitute goes FIRST and carries the narrow unicode-range, so the
+    // full face below it covers everything the range does not claim.
+    const sub = DIGIT_SUBSTITUTE[fam];
+    if (sub && INSTALLED_FACES[sub]) {
+      out.push(`@font-face{font-family:'${fam}';src:url('/assets/fonts/${INSTALLED_FACES[sub]}')` +
+        ` format('${FACE_FORMAT[INSTALLED_FACES[sub].split('.').pop()]}');` +
+        `unicode-range:${DIGIT_RANGE};font-display:swap;}`);
+    }
     out.push(`@font-face{font-family:'${fam}';src:url('${url}')${fmt};font-display:swap;}`);
   }
   return out.join('');
@@ -168,7 +185,14 @@ function themeBits() {
     density:  cfg('theme.density', null),
     audience: cfg('theme.audience', null),
   };
-  return { vars: themeToCssVars(theme), fonts: (theme.fonts && typeof theme.fonts === 'object') ? theme.fonts : {} };
+  // SANITISE ONCE AND USE THAT FOR BOTH. Reading the raw config for the font
+  // faces while themeToCssVars sanitised its own copy meant a tenant with no
+  // saved theme — which is every tenant that has never opened Brand Studio,
+  // Roots included — got the DEFAULT family names in the CSS variables and no
+  // @font-face for them, so the brand face silently never loaded and the page
+  // fell back to a system serif. The two must see the same theme.
+  const clean = sanitizeTheme(theme);
+  return { vars: themeToCssVars(clean), fonts: clean.fonts };
 }
 
 // The tenant's own wordmark text, used as the document title. NOT
@@ -216,7 +240,7 @@ function shopName(shop) {
 function buildMenu(shop) {
   const listings = tdb().prepare(`
     SELECT sl.id, sl.store_product_id, sl.price, sl.fulfilment_mode, sl.is_available,
-           sl.sort_position, p.name_en, p.name_cn, p.top_category, p.updated_at,
+           sl.sort_position, p.name_en, p.name_cn, p.top_category, p.subcategory, p.updated_at,
            -- Does a photo EXIST for this product? Mirrors resolveProductImage,
            -- including its variant-sibling fallback, so the two never disagree.
            -- Asked here because the alternative is an <img> pointing at a route
@@ -249,27 +273,56 @@ function buildMenu(shop) {
     r.sold_out = !a || a.available <= 0;      // absent shelf record IS sold out — §46
   }
 
-  // Grouped by the tenant's own category tree, in the tree's order, and only
-  // the groups that hold something. A listing whose top_category is empty or
-  // is not in the tree goes to a final group with NO heading — there is no
-  // live Chinese source for a word like "other" and §30 forbids minting one.
+  // TWO LEVELS, because that is what the shop already is. The tenant's own
+  // category tree gives the rail its top categories and each section its
+  // subcategory heading — the same shape miniapp/pages/shop reads, so a
+  // customer who knows the online shop recognises this one.
+  //
+  // A listing with no subcategory sits in a section headed by its top
+  // category; one with no top category at all falls to a trailing OTHER
+  // band, exactly as the shop's own orphan handling does. Nothing is
+  // invented for either: OTHER / 其他 and ALL / 全部 are the shop's own
+  // labels, copied.
   const tree = getCategoryTree(tdb());
-  const byName = new Map();
-  const groups = [];
+  const cats = [];
+  const byTop = new Map();
   for (const t of tree) {
-    const g = { name_en: t.name, name_cn: t.name_cn || '', items: [] };
-    byName.set(t.name, g);
-    groups.push(g);
+    const cat = { id: 'c' + cats.length, en: t.name, cn: t.name_cn || '', subs: t.subs || [], sections: [] };
+    byTop.set(t.name, cat);
+    cats.push(cat);
   }
-  const loose = { name_en: '', name_cn: '', items: [] };
+  const other = { id: 'other', en: 'OTHER', cn: '其他', subs: [], sections: [] };
+
   for (const r of listings) {
-    const g = (r.top_category && byName.get(r.top_category)) || loose;
-    g.items.push(r);
+    const cat = (r.top_category && byTop.get(r.top_category)) || other;
+    const subNode = cat.subs.find(x => x.name === r.subcategory) || null;
+    const key = subNode ? subNode.name : '';
+    let sec = cat.sections.find(x => x.key === key);
+    if (!sec) {
+      sec = {
+        key,
+        en: subNode ? subNode.name : (cat === other ? '' : cat.en),
+        cn: subNode ? (subNode.name_cn || '') : (cat === other ? '' : cat.cn),
+        items: [],
+      };
+      cat.sections.push(sec);
+    }
+    sec.items.push(r);
   }
-  const out = groups.filter(g => g.items.length);
-  if (loose.items.length) out.push(loose);
+  // Sections follow the tree's own subcategory order, not the order products
+  // happened to be listed in.
+  for (const cat of cats) {
+    const order = new Map(cat.subs.map((x, i) => [x.name, i]));
+    cat.sections.sort((a, b) => (order.has(a.key) ? order.get(a.key) : -1) - (order.has(b.key) ? order.get(b.key) : -1));
+  }
+  const out = cats.filter(c => c.sections.length);
+  if (other.sections.length) out.push(other);
   return out;
 }
+
+// The count beside a section heading, zero-padded to two digits — the shop's
+// own countStr treatment.
+function pad2(n) { return n < 10 ? '0' + n : String(n); }
 
 // ─── page ───────────────────────────────────────────────────────────────
 
@@ -289,48 +342,76 @@ const VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalab
 function cssSafe(s) { return String(s == null ? '' : s).replace(/[<>]/g, ''); }
 
 function styles(vars, faces) {
-  // Every colour and family below is a token set from the tenant's theme.
-  // The only literals are neutral overlays (a white veil, a hairline) and
-  // geometry. Squared cards, pill toggle, 2px borders and a 4:5 photo are the
-  // customer system's shape, matching public/shop.html and the mini app.
+  // The shop's own visual language, not a second one invented for this page:
+  // a 92px category rail on the oat ground with a lime active tab, a paler
+  // content pane, letterspaced olive section kickers with a zero-padded count,
+  // squared photo cards, and the sold-out bar laid across the bottom of the
+  // photo. Values are the mini-app shop's (miniapp/pages/shop/shop.wxss,
+  // converted from rpx at a 390px phone) and public/shop.html's, so a customer
+  // who knows the online shop recognises the counter menu as the same shop.
+  //
+  // Every colour and family is still a token from the tenant's theme. The only
+  // literals are neutral veils and the black sold-out scrim.
   return `${cssSafe(faces)}
 :root{${cssSafe(vars)}}
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
-  font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
-  padding:0 0 calc(28px + env(safe-area-inset-bottom))}
+  font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 img{display:block;max-width:100%}
 .lang-en .l-cn,.lang-cn .l-en{display:none}
-.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;
-  padding:calc(14px + env(safe-area-inset-top)) 18px 14px;
-  background:var(--oat);border-bottom:1px solid rgba(0,0,0,.10)}
-.nm{flex:1;min-width:0;font-family:var(--f-bear);font-size:22px;line-height:1.1;
+
+.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:calc(13px + env(safe-area-inset-top)) 14px 13px;
+  background:var(--oat);border-bottom:2px solid var(--ink)}
+.nm{flex:1;min-width:0;font-family:var(--f-bear);font-size:21px;line-height:1.1;
   overflow-wrap:anywhere}
 .lang{flex:none;display:inline-flex;border:2px solid var(--ink);overflow:hidden;
   background:rgba(255,255,255,.72)}
-.lang button{border:0;background:transparent;padding:7px 11px;font:inherit;
-  font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--olive);cursor:pointer}
+.lang button{border:0;background:transparent;padding:6px 10px;font:inherit;
+  font-family:var(--f-bear);font-size:13px;letter-spacing:.04em;color:var(--olive);cursor:pointer}
 .lang button.on{background:var(--lime);color:var(--ink)}
-.grp{padding:26px 18px 0}
-.grp h2{font-family:var(--f-bear);font-size:13px;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--olive);margin-bottom:12px;overflow-wrap:anywhere}
-.it{display:flex;gap:14px;align-items:flex-start;padding:13px 0;
+
+.wrap{display:flex;align-items:stretch;min-height:100vh}
+
+/* ── the rail ── */
+.rail{position:sticky;top:0;flex:none;width:92px;height:100vh;overflow-y:auto;
+  align-self:flex-start;background:var(--oat);border-right:2px solid var(--ink)}
+.rail a{display:flex;align-items:center;gap:2px;padding:16px 5px;
+  font-family:var(--f-bear);font-size:13px;line-height:1.15;color:var(--ink);
+  text-align:center;text-decoration:none;text-transform:uppercase;
   border-bottom:1px solid rgba(0,0,0,.08)}
-.grp .it:last-child{border-bottom:0}
-.ph{flex:none;width:76px;aspect-ratio:4/5;background:rgba(0,0,0,.05);
-  position:relative;overflow:hidden}
+.rail a::before{content:'';flex:none;width:9px}
+.rail a .lb{flex:1;min-width:0;overflow-wrap:anywhere}
+.rail a .cv{flex:none;width:9px;color:var(--olive);font-size:13px;line-height:1}
+.rail a.on{background:var(--lime)}
+.rail a.on .cv{color:var(--ink)}
+
+/* ── the menu ── */
+.pane{flex:1;min-width:0;background:rgba(255,255,255,.62);
+  padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding:16px 14px 8px}
+.kick{font-family:var(--f-bear);font-size:10.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
+.cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
+  font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;padding:0 14px 6px}
+.it{min-width:0}
+.ph{position:relative;aspect-ratio:4/5;background:var(--oat);overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover}
-.tx{flex:1;min-width:0}
-.tx .t{font-size:16px;line-height:1.25;overflow-wrap:anywhere}
-.pr{margin-top:5px;font-family:var(--f-bear);font-size:16px;color:var(--olive)}
-.out .ph img{filter:grayscale(.55);opacity:.78}
-.out .tx .t,.out .pr{opacity:.55}
-.tag{display:inline-block;margin-top:6px;padding:2px 9px;background:var(--ink);
-  color:var(--oat);font-size:11px;font-weight:700;letter-spacing:.06em;
-  text-transform:uppercase}
+.sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
+  font-family:var(--f-bear);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  text-align:center;padding:5px 0}
+.t{font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
+  overflow-wrap:anywhere}
+.pr{font-family:var(--f-bear);font-size:19px;line-height:1;margin-top:7px;
+  font-variant-numeric:tabular-nums}
+.out .ph img{filter:grayscale(.5);opacity:.72}
+.out .t,.out .pr{opacity:.5}
+
 .empty{padding:64px 24px;text-align:center}
-.empty .t{font-family:var(--f-bear);font-size:22px;line-height:1.2}
+.empty .t{font-family:var(--f-bear);font-size:22px;line-height:1.2;margin:0}
 .empty .s{margin-top:8px;color:var(--olive);font-size:14px}`;
 }
 
@@ -357,7 +438,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var n=document.querySelectorAll('[data-lang]');` +
   `for(var i=0;i<n.length;i++){var on=n[i].getAttribute('data-lang')===l;` +
   `if(on)n[i].className='on';else n[i].className=''}` +
-  `},false)})();`;
+  `},false)})();` +
+  // The rail follows the scroll. Progressive enhancement only: without it the
+  // rail is still a working list of anchors, which is the whole of its job.
+  `(function(){var r=document.querySelectorAll('.rail a[data-cat]');if(!r.length||!window.IntersectionObserver)return;` +
+  `var m={};for(var i=0;i<r.length;i++)m[r[i].getAttribute('data-cat')]=r[i];` +
+  `var o=new IntersectionObserver(function(es){for(var i=0;i<es.length;i++){if(!es[i].isIntersecting)continue;` +
+  `for(var k in m)m[k].className='';var a=m[es[i].target.id];if(a)a.className='on'}},{rootMargin:'-45% 0px -50% 0px'});` +
+  `var c=document.querySelectorAll('.cat');for(var j=0;j<c.length;j++)o.observe(c[j]);})();`;
 
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
@@ -434,29 +522,46 @@ router.get('/s/:shopCode', (req, res) => {
 
   const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>`;
 
-  // The launch state. shops and shop_listings are both empty today, so this is
-  // the first thing anybody will see and it is a first-class state, not an
-  // edge case. Strings are the storefront's own, live.
+  // The rail: ALL, every category holding something, then OTHER. Anchors, not
+  // tabs — a menu is short enough to scroll, and an anchor needs no state and
+  // no script to work. ALL / 全部 and OTHER / 其他 are the shop's own labels.
+  const rail = groups.length
+    ? `<nav class="rail"><a href="#top" data-cat="top" class="on">${bi('ALL', '全部')}</a>` +
+      groups.map(c => `<a href="#${c.id}" data-cat="${c.id}">` +
+        `<span class="lb">${bi(c.en, c.cn)}</span><span class="cv">\u203a</span></a>`).join('') +
+      `</nav>`
+    : '';
+
+  const card = (it) => {
+    const src = `/s/${esc(code)}/i/${it.store_product_id}` +
+      `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
+    // No photo → the empty frame, never an <img> that cannot resolve. A
+    // product nobody has photographed is ordinary; a broken-image glyph beside
+    // its name reads as a fault in the shop.
+    const photo = it.has_photo
+      ? `<img src="${src}" alt="" loading="lazy" decoding="async">`
+      : '';
+    return `<div class="it${it.sold_out ? ' out' : ''}">` +
+      `<div class="ph">${photo}` +
+      (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
+      `</div>` +
+      `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
+      `<div class="pr">${esc(money(it.price, cur))}</div>` +
+      `</div>`;
+  };
+
+  // The launch state. shops and shop_listings are both empty, so this is the
+  // first thing anybody will see and it is a first-class state, not an edge
+  // case. Strings are the storefront's own, live.
   const body = groups.length
-    ? groups.map(g => `<div class="grp">` +
-        (g.name_en || g.name_cn ? `<h2>${bi(g.name_en, g.name_cn)}</h2>` : '') +
-        g.items.map(it => {
-          const src = `/s/${esc(code)}/i/${it.store_product_id}` +
-            `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}`;
-          // No photo → the empty frame, never an <img> that cannot resolve. A
-          // product nobody has photographed is ordinary; a broken-image glyph
-          // beside its name reads as a fault in the shop.
-          const photo = it.has_photo
-            ? `<img src="${src}" alt="" loading="lazy" decoding="async">`
-            : '';
-          return `<div class="it${it.sold_out ? ' out' : ''}">` +
-            `<div class="ph">${photo}</div>` +
-            `<div class="tx"><div class="t">${bi(it.name_en, it.name_cn)}</div>` +
-            `<div class="pr">${esc(money(it.price, cur))}</div>` +
-            (it.sold_out ? `<span class="tag">${bi('Sold out', '售罄')}</span>` : '') +
-            `</div></div>`;
-        }).join('') +
-        `</div>`).join('')
+    ? `<div class="wrap">${rail}<div class="pane">` +
+      groups.map(c => `<section class="cat" id="${c.id}">` +
+        c.sections.map(sec => `<div class="sec-h">` +
+            `<div class="kick">${bi(sec.en, sec.cn)}</div>` +
+            `<div class="cnt">${pad2(sec.items.length)}</div>` +
+          `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
+        `</section>`).join('') +
+      `</div></div>`
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
       `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`;
 
@@ -466,7 +571,7 @@ router.get('/s/:shopCode', (req, res) => {
   res.type('html').send(shell({
     lang, hasParam,
     title: [name.en || name.cn, brand].filter(Boolean).join(' · '),
-    vars, faces: fontFaces(fonts), body: head + body,
+    vars, faces: fontFaces(fonts), body: `<a id="top"></a>` + head + body,
   }));
 });
 
