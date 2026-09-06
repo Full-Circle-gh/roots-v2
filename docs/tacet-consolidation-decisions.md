@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.136
+# Tacet shared-core consolidation — decisions record, v4.137
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-06 · v4.137 — **§52 ADDED: A MIRRORED ORDER HAS NO PARCELS — DECIDED by Ash.** Raised from a phone, on a gzgrocery order: *"no way I'll for gzgrocery. this is mobile. no land it air option."* **The "Land · No waybill on this parcel yet — add it on the desktop" card the phone was showing is NOT a display bug — the parcel is real, and we create it on every read.** The chain is four steps and each one is correct in isolation: `scripts/gzgrocery-order-daemon.js` mirrors the order in as `fulfillment_type='delivery'` with no address; the order-detail GET runs `shipsNothing(o) ? [] : ensureShipments(id)`, and `shipsNothing` knows only pickup and counter — **it has never heard of a channel**; `planShipments` reads an empty city, finds neither Guangzhou nor Guangdong, and falls through to the air/land split, where the default `ship_modes` of `'air,land'` yields one **Land** parcel; and the legacy back-fill then stamps that phantom parcel dispatched and delivered because the order's status is `delivered`, which is what makes it render. **The instruction on the card could not be followed**: the desktop routes read-only channels to `renderReadonlyOrder`, which shows no parcels, no tracking and no waybill field at all — so the phone was sending an operator to a screen that does not offer the thing. **The desktop was never right, only silent**: it hid the rows it was still causing to be written on every drawer open. **Ruling: BOTH ENDS — the server stops planning them and the phone stops showing them.** Either alone is a half-fix, and the reason is asymmetric rather than belt-and-braces: stopping the planner leaves every gzgrocery order already opened once carrying its Land row, and guarding only the phone leaves the rows accumulating for every other reader. **Ruling: the rule is the CHANNEL SET, not gzgrocery** — Meituan (`routes/meituan-internal.js`) and Eleme (`routes/eleme-internal.js`) mirror in the same shape, `fulfillment_type='delivery'`, and grow the same phantom parcels; the set is the one the desktop's `ordIsReadonlyChannel` has always used. **The guard goes INSIDE `ensureShipments`, and that deviates from this repo's own convention deliberately** — fulfilment type is guarded at each of the eleven callers, and §24's split/undo entry records what that convention already cost: one branch that did not guard, creating Air/Land parcels for a counter sale, with no self-heal because the detail read returns `[]` for those orders rather than reconciling them. A channel that ships nothing of ours is a property of the ORDER, not of one read path, so it is enforced where it cannot be forgotten. **`shipsNothing` is deliberately NOT widened to cover channels**, and the reason is a live dependency rather than caution: `maybeEnqueueQingyunPush` gates on it, and a Meituan order IS fulfilled by a Qingyun rider — widening it would stop the rider push on the channel that most needs it, and the desktop's read-only drawer shows that rider card on purpose. **Mobile gains the channel set the desktop already had**: `viewOnly` was computed from a display key that has no Eleme entry, so an Eleme order was not read-only on the phone at all. **Not fixed here and recorded rather than left to be found:** the ship-by tile still says "Ship when ready · courier" on a mirrored order — same class of fiction, different tile, and a separate change; the waybill POST answers `no_shipments` with a **500** where a mirrored order deserves a 4xx; and mobile's `CH_ICON`/`CH_BACK` still have no Eleme entry, so an Eleme order wears the mini-app icon. No new user-facing strings, so `docs/tacet-delivery-vocabulary.md` is untouched. Appended as §52 under the append-only convention; Related documents stays at §38.
 
 2026-09-06 · v4.136 — **§51 ADDED: A KITCHEN REQUEST PRINTS ON PAPER WHEN IT REACHES THE QUEUE; ONE KITCHEN PRINTER, AND THE TENANT SAYS WHEN IT PRINTS — DECIDED by Ash.** A warehouse→kitchen request has announced itself by push since #261, which reaches a phone; Ash raised the gap as what it is — *"except of notification, i want to have a printer that printer the order for them in the kitchen"* — and the slip is an ADDITION, the push going out unchanged. **Nothing new is wired for it, which is most of why it was a day's work**: the store printers already run on Feieyun's cloud (`lib/feie.js`), the kitchen's printer is one more device on the SAME account, and the paid-order auto-print is copied wholesale — best-effort, fire-and-forget, recording BOTH outcomes. **Ruling: ONE kitchen printer, not a map keyed by location** — the per-location alternative was offered and declined, and **the cost is recorded rather than glossed**: a second kitchen means a config shape change, a migration and the routing touched again. The single SN is also what the data model already forces, so the two answers do not conflict today — a kitchen request carries NO locations at all, `routes/restock.js` nulling both ends for anything with a kitchen on it, so there is nothing for `printer.by_store` to key on. **Ruling: WHEN it prints is per-tenant and Roots prints on arrival only** — in Ash's words *"It depends on the tenant. For roots only when job arrive"* — because **the people who would read a completion slip are the people who just cooked it**, and whoever is waiting to hear is at the other end of a push. `delivered` never prints in any setting: the kitchen direction closes at `prepared` and `PUSH_AUDIENCE` already gives it no `delivered` entry. **The slip carries no money anywhere** — a production ticket is not priced, and a cost column would invite the kitchen to think a transfer owes it something. **A failed print is recorded, not swallowed** (`print_status`/`printed_at`/`print_error` on `restock_orders`, the three `retail_orders` already carries), and a result that never reached a printer is explicitly NOT a failure — no SN, event off, or not a kitchen request would otherwise put a red mark and a reprint button on a request that was never owed a slip. **TWO DEFECTS THE NEW SUITE FOUND ARE FIXED IN THE SAME COMMIT and both would have shipped green**: the reprint leaned on `kitchenScopedOrder` to refuse a store transfer, which that middleware does not do for the roles that hold `restock:pick` — it is a SCOPE limiter confining a kitchen-only account, not an object-type guard — so the refusal was not refusing; and the reprint stamped its outcome unconditionally, so refusing a transfer stamped a failed print on the transfer. **The middleware is correctly left alone**, and the concern first filed against it — that it is "a no-op for a Tacet session" — was AUDITED THE SAME DAY AND WITHDRAWN in §51's NOT DECIDED, where the working is kept: across every shipped preset exactly one role is scoped by it, `kitchen`, and every other role reaching these endpoints works transfers legitimately. **A wrong finding is left corrected rather than deleted**, because the next reader is otherwise free to file it again. Vocabulary goes to v1.24 in the same commit per Rule 4's standing delegation — twenty-one entries, fifteen already live, six composed and all six in the settings block, with one live pair (`重打小票`) REJECTED and the rejection recorded, because `小票` is a receipt and this slip is not one. Appended as §51 under the append-only convention; Related documents stays at §38.
 
@@ -5699,3 +5701,129 @@ refusing a transfer stamped `print_status = 'failed'` on the transfer.
   reprint control.** It is still a client of these endpoints and its request
   detail view is the obvious second home for the button. Left out of this build
   to keep one PR to one change; the endpoint serves both realms already.
+
+## 52. A mirrored order has no parcels
+
+An order mirrored in from someone else's system — Meituan, Eleme, gzgrocery —
+is a **ledger row**, not work. We do not accept it, prepare it, pack it, put it
+on a courier or enter a waybill for it; the platform that owns it does all of
+that. Ash raised the gap from a phone, looking at gzgrocery order GZ-140695:
+*"no way I'll for gzgrocery. this is mobile. no land it air option."*
+
+**Ruling (Ash, 2026-09-06): a mirrored order gets no shipment rows, ever, and
+no screen offers a parcel mode or a waybill for one.**
+
+### The card was not a display bug — we were creating the parcel
+
+Four steps, each correct on its own:
+
+1. `scripts/gzgrocery-order-daemon.js` mirrors the order in with
+   `fulfillment_type = 'delivery'` and no address. That is the honest value —
+   the goods did go somewhere — and there is no fourth fulfilment type meaning
+   "not ours to fulfil".
+2. The order-detail read calls `shipsNothing(o) ? [] : ensureShipments(id)`.
+   `shipsNothing` (`lib/fulfilment.js`) answers pickup and counter. **It has
+   never read a channel**, so a mirrored order is planned like any delivery.
+3. `planShipments` finds an empty destination city: not Guangzhou, not
+   Guangdong, so it falls through to the air/land split. **It lands on Land
+   for a second reason worth recording, because it is one column from being
+   worse**: the mirror does not copy `ship_modes` either, so
+   `COALESCE(ship_modes, 'air,land')` gives every mirrored line the Any bucket,
+   which `bucketForItem` sends to land. **Cold chain is NOT a factor** — it
+   stopped being a per-item one when ice packing moved to "everything in the
+   air parcel is packed with ice anyway". So the Air parcel is reachable only
+   for an air-ONLY product, which is a mode the mirror has no way to set today
+   and would set the moment anyone taught it to copy the column.
+4. The order's status is `delivered`, so the legacy back-fill stamps that
+   phantom parcel dispatched and delivered — which is exactly what promotes it
+   into the phone's hoisted tracking block.
+
+The result on the glass: **"Land — No waybill on this parcel yet — add it on
+the desktop."**
+
+### And the instruction could not be followed
+
+The desktop routes a read-only channel to `renderReadonlyOrder`, which renders
+no parcels, no tracking and no waybill field. So the phone was sending an
+operator to a screen that does not offer the thing it named. **The desktop was
+never right about this, only silent** — it hid the rows its own drawer opens
+were causing to be written.
+
+### Both ends, and the reason is asymmetric
+
+**Ruling: the server stops planning them AND the phone stops showing them.**
+Not belt-and-braces — each half covers what the other cannot:
+
+- Stopping the planner alone leaves every mirrored order **already opened once**
+  carrying its Land row. There is no self-heal: the detail read returns `[]`
+  for these orders rather than reconciling them.
+- Guarding the phone alone leaves the rows accumulating on every drawer open,
+  for every other reader.
+
+Existing phantom rows are **left in place, not swept**. Nothing reads them once
+both guards are in, a delete migration over live order data is a larger
+decision than this one, and a row that is never read is cheaper than a
+migration that is wrong.
+
+### The rule is the channel set, not gzgrocery
+
+**Ruling: Meituan, Eleme and gzgrocery.** Meituan
+(`routes/meituan-internal.js`) and Eleme (`routes/eleme-internal.js`) mirror in
+with the same `fulfillment_type='delivery'` and grow the same phantom parcels;
+gzgrocery is simply the one with a phone screen pointed at it. The set is the
+one the desktop's `ordIsReadonlyChannel` has used since these channels landed —
+`isMirroredChannel` in `lib/fulfilment.js` is that list given a name the server
+can share.
+
+### The guard goes inside ensureShipments, against this repo's own convention
+
+Fulfilment type is guarded at each of the eleven callers, and `ensureShipments`
+deliberately reads no fulfilment column. **The channel guard is put inside it
+anyway**, and the precedent for doing so is in this file's own §24 record: the
+split/undo branch was the one caller that forgot, created Air/Land parcels for
+a counter sale, and the damage persisted because the detail read returns `[]`
+for those orders instead of reconciling them.
+
+**A channel that ships nothing of ours is a property of the ORDER, not of one
+read path.** Enforced at the single materialisation point, it cannot be
+forgotten by caller twelve. The endpoints that ask for parcels on a mirrored
+order now get an empty list and refuse, which is the correct answer.
+
+### shipsNothing is deliberately NOT widened
+
+It would have been one line, and it would have broken a live rail.
+`maybeEnqueueQingyunPush` gates on `shipsNothing`, and **a Meituan order really
+is fulfilled by a Qingyun rider** — the desktop's read-only drawer shows that
+rider card and its dispatch control on purpose. Widening `shipsNothing` to
+cover mirrored channels would stop the rider push on the channel that most
+needs it. Two different questions — "does a parcel of ours leave?" and "is this
+order ours to fulfil at all?" — get two predicates.
+
+### Mobile gains the channel set the desktop already had
+
+The phone computed `viewOnly` from its display-channel key, which has **no
+Eleme entry at all** — so an Eleme order was not read-only on the phone in any
+respect. It now reads the raw channel through the same helper, which also
+corrects the list row's delivery cell.
+
+### NOT decided / not fixed here
+
+- **The ship-by tile still reads "Ship when ready · courier" on a mirrored
+  order.** Same class of fiction as the Land card, different tile, and
+  `annotateShipBy` guards `shipsNothing` only. One PR to one change; this is
+  the next one.
+- **The waybill POST answers `no_shipments` with a 500.** Correct refusal,
+  wrong code — a mirrored order asking for a waybill is a 4xx. Untouched
+  because no shipped screen offers it.
+- **Mobile's `CH_ICON` / `CH_BACK` have no Eleme entry**, so an Eleme order
+  wears the mini-app icon and lands in the mini-app channel filter. Display
+  only, and a separate change.
+- **The phone's DRAWER carries no read-only marking at all.** Found while
+  writing the probe for this change, which had assumed one: the "View only"
+  pill is the LIST row's, and the sheet says nothing — where the desktop's
+  read-only panel tags its own header with the channel and "view only". So an
+  operator who opens a mirrored order from the list loses the only thing on
+  screen telling them it is not theirs to work. The probe asserts the mapped
+  `viewOnly` flag instead of a pill, and this is left as its own change rather
+  than added in passing.
+- **The phantom rows already written are not swept.** See above.

@@ -51,7 +51,7 @@ const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
-const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
+const { isCounter, shipsNothing, isTerminalOnPaid, isMirroredChannel } = require('../lib/fulfilment');
 // delivery_slot_label is a SNAPSHOT — its leading "Today"/"Tomorrow" was true
 // when the customer picked, not when they read it. attachSlotDisplay() derives a
 // fresh `delivery_slot_display` from scheduled_for at read time; the column is
@@ -9431,7 +9431,7 @@ function ensureShipments(orderId, h = tdb()) {
   if (existing.length) return existing;
 
   const o = h.prepare(
-    `SELECT id, address_json, delivery_slot_kind,
+    `SELECT id, channel, address_json, delivery_slot_kind,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at, tracking_last_error,
             tracking_kd100_subscribed, tracking_scenario, tracking_scenario_data_json,
@@ -9439,6 +9439,30 @@ function ensureShipments(orderId, h = tdb()) {
        FROM retail_orders WHERE id = ?`
   ).get(orderId);
   if (!o) return [];
+  // A MIRRORED ORDER HAS NO PARCELS (§52). Meituan / Eleme / gzgrocery orders
+  // are mirrored in from someone else's system: the platform accepts, prepares
+  // and ships them, and we hold the row to deduct stock and show progress. They
+  // carry fulfillment_type='delivery' — honestly, the goods did go somewhere —
+  // and no address, so without this the planner found no city, fell through to
+  // the air/land split, and materialized a phantom Land parcel — land because
+  // the mirror copies no ship_modes either, so every line takes the Any bucket.
+  // The order-detail read then stamped it dispatched and
+  // delivered off the order's own status, and the phone drew a tracking card
+  // saying "No waybill on this parcel yet — add it on the desktop" for a parcel
+  // no desktop screen offers a waybill field for.
+  //
+  // THE GUARD IS HERE AND NOT AT THE CALLER, deliberately, and it is the one
+  // predicate in this function that is not read from the items or the address.
+  // Fulfilment type is guarded by each of the eleven callers, and §24 records
+  // what that cost: the split/undo branch was the one that forgot and created
+  // Air/Land parcels for a counter sale, with no self-heal behind it. Whether
+  // an order is OURS TO FULFIL is a property of the order, not of one read
+  // path, so it is enforced where caller twelve cannot forget it. Callers that
+  // want a parcel get an empty list and refuse, which is the right answer.
+  //
+  // NOT shipsNothing() — see lib/fulfilment.js. Widening that predicate would
+  // stop the Qingyun rider push on Meituan, which is a real rail.
+  if (isMirroredChannel(o)) return [];
   let destCity = '', destProvince = '', destDistrict = '';
   try {
     const a = JSON.parse(o.address_json || '{}');
