@@ -1311,12 +1311,19 @@ router.post('/api/restock/:id/reprint', requireRestockAccess, kitchenScopedOrder
   const conn = tdb();
   const order = conn.prepare('SELECT id, status, to_role FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
-  // REFUSED FOR BOTH REALMS, HERE. kitchenScopedOrder above says the same
-  // thing but only to a kitchen-realm session — it returns early for a Tacet
-  // operator, who is exactly who works this queue. Leaving the check to it let
-  // a Tacet reprint reach a store transfer, and the failed print then stamped
-  // print_status on a row that was never owed a slip. The guard belongs on the
-  // endpoint, not on the realm.
+  // THE OBJECT TYPE, CHECKED HERE, BECAUSE THE MIDDLEWARE ABOVE CHECKS
+  // SOMETHING ELSE. kitchenScopedOrder is a SCOPE limiter: it confines an
+  // account that can fulfil but not pick — the `kitchen` role, and on the
+  // shipped presets only that one — to kitchen requests. Every other role that
+  // reaches these endpoints (owner, admin, manager, warehouse, store_manager)
+  // works transfers legitimately and passes through, which is correct for the
+  // endpoints that serve both.
+  //
+  // This endpoint does not serve both. It only ever prints a kitchen request,
+  // for anybody, so it needs the object type refused rather than the caller
+  // scoped. Leaning on the middleware let a warehouse picker's reprint reach a
+  // store transfer, and the failed print then stamped print_status on a row
+  // that was never owed a slip.
   if ((order.to_role || 'warehouse') !== 'kitchen') {
     return res.status(403).json({
       error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',

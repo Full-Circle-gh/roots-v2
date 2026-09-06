@@ -13,7 +13,7 @@
  * routes/restock.js nulls both for anything with a kitchen on it, so there is
  * nothing for `printer.by_store` to key on.
  *
- * FOUR THINGS HAVE TO BE TRUE, and each part below is one of them:
+ * FIVE THINGS HAVE TO BE TRUE, and each part below is one of them:
  *
  *   PART A  the SLIP says what a cook needs — every line, its quantity and its
  *           unit — and says nothing a cook does not need. Nothing here is
@@ -30,6 +30,9 @@
  *           certainty about a thermal printer in a kitchen is that some morning
  *           it is out of paper — a print that fails silently is the whole
  *           reason the retail side records its own, and this copies it.
+ *   PART E  the GUARD this endpoint deliberately does not lean on still has the
+ *           subject it is written for. Added after an audit, and it locks a
+ *           shape rather than a rule — see the block above it.
  *
  * The Feieyun POST is intercepted at `fetch` rather than stubbed at the module,
  * so the real renderer and the real printContent (its signature, its 5000-byte
@@ -273,6 +276,46 @@ const printStatus = (id) =>
   eq(printStatus(transferId).print_status, null, 'a transfer carries no print state at all');
 
   ok(notes.operator.length > 0, 'and the push fan-out still happens — paper is an addition, not a replacement');
+
+  section('Part E · the guard the reprint deliberately does NOT rely on');
+
+  /* WHY THIS PART EXISTS. The reprint refuses a store transfer itself rather
+     than leaving it to kitchenScopedOrder, and a reader is entitled to ask why
+     a second check was added when a middleware on the same route already says
+     something that sounds identical. It is not identical, and the difference is
+     the reason the first version of this endpoint had a hole in it.
+
+     kitchenScopedOrder is a SCOPE limiter keyed on a role SHAPE: it confines an
+     account that can fulfil but cannot pick. That is a kitchen account, and it
+     is meant to pass everyone else through, because every other role reaching
+     these endpoints works transfers legitimately. The reprint needed the OTHER
+     kind of check — an object-type refusal, "this endpoint only ever prints a
+     kitchen request, for anybody."
+
+     So this locks the shape rather than restating the rule: the set of shipped
+     roles the guard scopes. If a later edit gives the kitchen preset
+     `restock:pick`, the guard silently stops scoping the only role it scopes,
+     and this says so instead of the change being found by its consequences. */
+  const caps = require(path.join(h.REPO, 'lib/capabilities.js'));
+  const scoped = (role) => {
+    const c = caps.presetCapsFor(role);
+    return c.includes('restock:fulfil') && !c.includes('restock:pick');
+  };
+
+  ok(scoped('kitchen'), 'the kitchen role IS scoped to kitchen requests — the guard has a subject');
+  ok(!scoped('warehouse') && !scoped('store_manager'),
+     'the roles that pick are NOT scoped — they work transfers, and that is correct, not a hole');
+  ok(!scoped('owner') && !scoped('admin') && !scoped('manager'),
+     'nor are the roles that run everything');
+  ok(!scoped('staff'), 'nor a role with no restock capability at all');
+
+  // The claim the audit withdrew, held as a test so it cannot be re-filed from
+  // memory: the guard is NOT a blanket no-op outside the kitchen realm. It has
+  // exactly one subject among the shipped presets, and that subject is real.
+  const allScoped = ['owner', 'admin', 'staff', 'manager', 'store_manager', 'warehouse',
+                     'bookkeeper', 'customer_service', 'dispatch', 'marketing',
+                     'fulfillment', 'channel', 'kitchen', 'store_stock'].filter(scoped);
+  eq(allScoped.join(','), 'kitchen', 'and it is the ONLY preset the guard scopes');
 
   server.close();
   done();
