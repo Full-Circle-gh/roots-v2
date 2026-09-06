@@ -3051,19 +3051,33 @@ is a floating-point decimal (A-06).
 **Where:** the full list is in Part 1; the ones that will bite first are below
 
 > **AMENDED 2026-09-06 — re-verified in `docs/tacet-j01-row-limits-survey.md`.**
-> **Five of the seven below are now paged** (`LIMIT ? OFFSET ?`): `/materials`,
-> `/suppliers`, `/recipes`, `/inventory/grid`, `/purchasing/invoices`. Half of
-> **J-02** closed with them.
+> **CLOSED as written. Six of the seven below have a row ceiling; the seventh
+> should not have one.**
 >
-> **One is genuinely open:** `/finance/transactions` — and it is bounded by a
-> 30-day default window over a ledger of ~209 rows, so it is not unbounded in
-> the way this finding reads. The survey recommends capping the window span
-> rather than paging, because the screen shows a net total under the list and a
-> total computed from one page is worse than a slow one.
+> **Five are paged in SQL** (`LIMIT ? OFFSET ?`): `/materials`, `/suppliers`,
+> `/recipes`, `/inventory/grid`, `/purchasing/invoices`. Half of **J-02** closed
+> with them.
+>
+> **`/finance/transactions` is capped too**, since `188a50bf` — in JavaScript,
+> on the merged list, because its three reads are interleaved by date and a
+> per-query `LIMIT` would leave holes in the middle of the ledger. Totals and
+> counts are computed **before** the cut so the figure under the list still
+> describes the whole window, and `truncated` is reported.
+>
+> ⚠️ *The first version of this amendment, merged earlier the same day, called
+> this endpoint "genuinely open" and recommended a span cap instead of paging.
+> Both were wrong: the survey had read as far as the unlimited `.all()` calls
+> and stopped short of the cap 120 lines below them. Corrected here and in the
+> survey, which records how the mistake was made.*
 >
 > **One should NOT be paged:** `/products/export.csv`. An export that silently
 > returns part of your catalogue is worse than one that is slow; if it needs
 > fixing the fix is streaming, which is a different job.
+>
+> **What genuinely remains** is narrower than this finding and should not be
+> filed under it: `readTransactions()` bounds its *response* but still reads the
+> whole window into *memory*. Against ~209 ledger rows that is not worth a
+> behaviour change. The survey records the shape of a fix for the day it is.
 >
 > **Every line number in the table below has drifted** — the survey lists the
 > current ones. The "63" could not be reproduced (240 such handlers, 141 without
@@ -3526,16 +3540,56 @@ dialogs, the native browser `confirm`/`prompt` on Settings and Team (C-01), and 
 app's own sheets. `public/tacet-dialogs.js` exists to be the one answer and is not used by
 Settings or Team.
 
+> **AMENDED 2026-09-06 — re-verified. Nearly closed, and no longer where this says.**
+> **Settings and Team are clean.** `02-settings-ops.js`, which holds both, has
+> **zero** native dialogs. `23-sku.js:614` records the closure in place: *"The
+> shared dialog, not the browser's. This was the last native `confirm()` in the
+> admin — audit C-01 replaced five of them and this one, in a file added
+> afterwards, was missed."*
+>
+> **One native dialog remains, and this finding does not mention it:** a
+> `window.prompt` at `04-orders.js:7629`, asking for the exact OS name of the JD
+> label printer. Looking for the problem where this text points finds nothing.
+>
+> **Not converted, and the reason is the shape rather than the size:**
+> `jdPromptPrinterName()` is synchronous and returns its value to two callers,
+> while the shared `askPrompt()` is a Promise — so it is an async change threaded
+> through a print path that cannot be exercised without the JD component. Small,
+> real, and worth doing deliberately rather than in passing.
+
 **Q-02 · Four date formatters and nine money formats** — Severity Medium. C-02 and I-01.
+
+> **Re-verified 2026-09-06 — still exactly four**, and still the four this
+> implies: `tmdDateFmt` (`02-settings-ops.js:3727`, the Team one the table calls
+> out), `bxFmtDateTime` (`05-marketing.js:2316`), `cuFmtTime`
+> (`08-customers.js:2629`) and `pdFmtVersionTime` (`09-products.js:3296`). No
+> change.
 
 **Q-03 · Three "clear the filters" behaviours** — Severity Low. Waste shows the button in
 the toolbar whenever a filter is set; Customers shows it only in the empty state; every
 other screen has none (B-06). Waste's is the right one.
 
+> **AMENDED 2026-09-06 — re-verified. Both named screens have moved on.**
+> **Orders now has a clear-filters control** (`04-orders.js:1360`, `:1515`), so
+> the table row above reading *"Filters can be cleared: **no**"* is out of date.
+> **Customers now clears from the applied pills too** — an `×` per pill
+> (`08-customers.js:153`, `:169`) as well as the empty state's own action
+> (`:232`) — so it is no longer "only in the empty state".
+>
+> The finding's *conclusion* still holds: the behaviours are still not one
+> behaviour, and Waste's is still the one to copy. What has changed is that the
+> gap is narrower and two of its three examples now describe something else.
+
 **Q-04 · Two navigation models inside one shell** — Severity Low. Most sections are a page
 with a drawer. Purchasing is a stack of screens with its own back button
 (`16-purchasing.js` `_screen` state, `backBtn(...)`), which is the phone app's model
 arriving on the desktop.
+
+> **Re-verified 2026-09-06 — still true, and it has NOT spread.**
+> `16-purchasing.js` still carries the stack (40 `_screen` references, `backBtn`
+> at `:308`) and is still the only file in `public/retail-admin/` that does. The
+> inconsistency is contained, which is the useful half of the answer: this is
+> one screen to bring into line, not a pattern taking hold.
 
 ---
 
