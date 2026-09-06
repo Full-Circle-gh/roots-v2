@@ -10,7 +10,10 @@
 // DASHBOARD (Tacet) + REPORTS — the Dashboard answers one question
 // ("is everything okay?"): The Recap, then anything needing attention,
 // then today's pulse. All historical analytics live in #tab-reports
-// (reads /api/retail-admin/dashboard). Charts are hand-rolled SVG/CSS.
+// (reads /api/retail-admin/dashboard). Charts are hand-rolled SVG/CSS —
+// the drawing itself lives in chart-primitives.js (chartTrend, chartBarList,
+// chartBarRows, chartMiniCurve, chartHeatCells, chartSparkline); this file
+// shapes the data, picks the copy, and wires the tooltips.
 // ════════════════════════════════════════════════════════════════
 let DASH_DATA = null;
 let DASH_METRIC = 'revenue';
@@ -29,120 +32,6 @@ function dashDelta(pct) {
   const cls = pct === 0 ? 'flat' : (up ? 'up' : 'down');
   const arrow = pct === 0 ? '' : (up ? '▲' : '▼');
   return `<span class="db-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
-}
-
-// ── Bento data-viz helpers ────────────────────────────────────────────────
-// Build list-tile rows with a left-anchored magnitude bar. `opt.value(item)`
-// drives the bar (scaled to the row set's own max); `opt.display(item)` is the
-// right-hand string; `opt.name(item)` is the raw (un-escaped) left label.
-function dashBarRows(items, opt) {
-  // Bars top out at BAR_CAP (not full width) so even the leader keeps a visible
-  // right edge instead of washing the whole row into a flat tint. opt.curve =
-  // 'sqrt' gives whale-skewed sets (e.g. revenue with one big customer) a
-  // gentler ramp so the non-leaders stay distinguishable rather than all
-  // collapsing into near-identical slivers.
-  const BAR_CAP = 0.85;
-  const curve = opt.curve === 'sqrt' ? (x => Math.sqrt(x)) : (x => x);
-  const vals = items.map(it => Math.max(0, Number(opt.value(it)) || 0));
-  const max = Math.max(1, ...vals);
-  return items.map((it, i) => {
-    const v = vals[i];
-    const mag = v <= 0 ? 0 : curve(Math.min(1, v / max)) * BAR_CAP;
-    const zero = v <= 0;
-    return `<div class="db-tile-list-row has-bar${zero ? ' is-zero' : ''}" style="--mag:${mag.toFixed(3)}">
-      <span class="name">${escapeHtml(opt.name(it))}</span>
-      <span class="val">${opt.display(it)}</span>
-    </div>`;
-  }).join('');
-}
-
-// Catmull-Rom → cubic-bézier path through the points: turns the old straight
-// segments into one flowing curve. Tension is gentle and the Y of each control
-// point is clamped to the box so the curve can't overshoot under the horizontal
-// stretch. Anchor points stay exactly on the data vertices, so the dot/scrub
-// (which key off dashSparkPct) still land on the line.
-let _dashSparkSeq = 0;
-function dashSmoothPath(p, H, pad) {
-  if (p.length < 2) return '';
-  const cy = v => Math.max(pad, Math.min(H - pad, v));
-  let d = `M ${p[0].x.toFixed(1)} ${p[0].y.toFixed(1)}`;
-  for (let i = 0; i < p.length - 1; i++) {
-    const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2, t = 0.85;
-    const c1x = p1.x + (p2.x - p0.x) / 6 * t, c1y = cy(p1.y + (p2.y - p0.y) / 6 * t);
-    const c2x = p2.x - (p3.x - p1.x) / 6 * t, c2y = cy(p2.y - (p3.y - p1.y) / 6 * t);
-    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-  }
-  return d;
-}
-
-// A soft sparkline stretched full-width via preserveAspectRatio="none" +
-// non-scaling-stroke: a smooth Catmull-Rom curve over an ink→transparent
-// vertical wash (vs the old straight line + flat fill). opts.dot adds an HTML
-// last-point marker (opts.pulse = the softly breathing variant).
-// Shared y-scale for a sparkline. When a ghost (typical-day) series of the SAME
-// length is present, both curves scale to their combined max/min so their
-// heights compare directly. Stashed on the wrap so the dot + hover-scrub use the
-// same scale as the drawn line.
-function dashSparkScale(vals, ghost) {
-  const v = (vals || []).map(x => Number(x) || 0);
-  const g = (ghost || []).map(x => Number(x) || 0);
-  const use = (g.length === v.length && g.length) ? v.concat(g) : v;
-  return { max: Math.max(1, ...use), min: Math.min(0, ...use) };
-}
-function dashSparkline(values, opts) {
-  opts = opts || {};
-  const vals = (values || []).map(v => Number(v) || 0);
-  const ghost = (opts.ghost || []).map(v => Number(v) || 0);
-  const W = 100, H = 24, pad = 2;
-  const hasGhost = ghost.length >= 2 && ghost.length === vals.length && ghost.some(v => v > 0);
-  const todayFlat = vals.length < 2 || vals.every(v => v <= 0);
-  // Nothing today AND no ghost: draw a faint dashed baseline instead of
-  // vanishing — the sparkline is always visibly present, saying "no activity".
-  if (todayFlat && !hasGhost) {
-    const midY = (H / 2).toFixed(1);
-    return `<svg class="db-spark is-flat" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
-      + `<line x1="${pad}" y1="${midY}" x2="${W - pad}" y2="${midY}" stroke="currentColor" stroke-width="1" `
-      + `vector-effect="non-scaling-stroke" stroke-dasharray="2 3" opacity="0.35"/></svg>`;
-  }
-  const n = vals.length;
-  const sc = dashSparkScale(vals, hasGhost ? ghost : null);
-  const max = sc.max, min = sc.min, span = (max - min) || 1;
-  const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
-  const y = v => (H - pad) - ((v - min) / span) * (H - 2 * pad);
-  // The typical-day ghost — a dotted curve behind today's line, same y-scale so
-  // heights compare directly. No fill, no dot: a reference, not data.
-  let ghostSvg = '';
-  if (hasGhost) {
-    const gp = ghost.map((v, i) => ({ x: x(i), y: y(v) }));
-    ghostSvg = `<path class="db-spark-ghost" d="${dashSmoothPath(gp, H, pad)}" fill="none" stroke="currentColor" `
-      + `stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-dasharray="1.5 2.5" stroke-linecap="round" opacity="0.4"/>`;
-  }
-  // Today may not have started yet (all zero) while the ghost carries shape —
-  // show the ghost alone, no line/area/dot.
-  if (todayFlat) {
-    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${ghostSvg}</svg>`;
-  }
-  const p = vals.map((v, i) => ({ x: x(i), y: y(v) }));
-  const d = dashSmoothPath(p, H, pad);
-  // Unique gradient id per render so multiple sparklines on one screen never
-  // share/clobber a <defs> id. The wash fades the brand ink down to nothing.
-  const gid = 'dbSparkG' + (++_dashSparkSeq);
-  const defs = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">`
-    + `<stop offset="0" stop-color="currentColor" stop-opacity="0.26"/>`
-    + `<stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>`;
-  const area = `<path class="db-spark-area" d="${d} L ${x(n - 1).toFixed(1)} ${(H - pad).toFixed(1)} L ${x(0).toFixed(1)} ${(H - pad).toFixed(1)} Z" fill="url(#${gid})" stroke="none"/>`;
-  const line = `<path class="db-spark-line" pathLength="1" d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
-  // Last-point marker as an HTML overlay (not an SVG circle): the chart uses
-  // preserveAspectRatio="none", which would squash a <circle> into an ellipse.
-  // The wrap is position:relative, so percentage offsets land it on the point.
-  // Computed with the shared scale (not dashSparkPct's own) so it sits on the
-  // line when a ghost has changed the y-scale. W=100 → viewBox unit == percent.
-  let dot = '';
-  if (opts.dot) {
-    const idx = n - 1;
-    dot = `<i class="db-spark-dot${opts.pulse ? ' is-breathing' : ''}" style="left:${x(idx).toFixed(1)}%;top:${((y(vals[idx]) / H) * 100).toFixed(1)}%"></i>`;
-  }
-  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${defs}${ghostSvg}${area}${line}</svg>${dot}`;
 }
 
 // Period caption ("Last 30 days · 近30天") from the active date-range window —
@@ -722,24 +611,10 @@ function dashWeekdayName(idx, n) {
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
 function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost) {
   if (!wrap) return;
-  wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost });
+  wrap.innerHTML = chartSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost });
   // Stash the shared scale so the hover-scrub places the dot on the same line
   // the ghost may have re-scaled.
-  wrap._spark = { vals, labels, fmt, scale: dashSparkScale(vals, ghost) };
-}
-// Percent position of point `idx` — shared by the rendered dot and the scrub so
-// the dot always lands exactly on the line vertex. Mirrors dashSparkline's math.
-// `scale` (optional) forces a y-scale — used when a ghost series widened it.
-function dashSparkPct(vals, idx, scale) {
-  const W = 100, H = 24, pad = 2, n = vals.length;
-  if (n < 2) return { x: 50, y: 50 };
-  const max = scale ? scale.max : Math.max(1, ...vals);
-  const min = scale ? scale.min : Math.min(0, ...vals);
-  const span = (max - min) || 1;
-  return {
-    x: (pad + (idx / (n - 1)) * (W - 2 * pad)) / W * 100,
-    y: ((H - pad) - ((vals[idx] - min) / span) * (H - 2 * pad)) / H * 100,
-  };
+  wrap._spark = { vals, labels, fmt, scale: chartSparkScale(vals, ghost) };
 }
 // One shared tip element, re-parented into whichever host (sparkline wrap or
 // delta badge) is currently hovered. A single element means two tips can never
@@ -762,7 +637,7 @@ function dashSparkMove(e) {
   const rect = wrap.getBoundingClientRect();
   const f = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
   const idx = Math.round(f * (s.vals.length - 1));
-  const p = dashSparkPct(s.vals, idx, s.scale);
+  const p = chartSparkPct(s.vals, idx, s.scale);
   const dot = wrap.querySelector('.db-spark-dot');
   if (dot) {
     dot.style.left = p.x.toFixed(1) + '%';
@@ -792,7 +667,7 @@ function dashSparkLeave(e) {
   const wrap = e.currentTarget, s = wrap._spark;
   const dot = wrap.querySelector('.db-spark-dot');
   if (dot && s && s.vals && s.vals.length >= 2) {
-    const p = dashSparkPct(s.vals, s.vals.length - 1, s.scale);
+    const p = chartSparkPct(s.vals, s.vals.length - 1, s.scale);
     dot.style.left = p.x.toFixed(1) + '%';
     dot.style.top  = p.y.toFixed(1) + '%';
     dot.classList.remove('is-active');
@@ -818,22 +693,11 @@ function fcSparkLeave(e) { return dashSparkLeave(e); }
 // fcDeltaHover / fcDeltaLeave retired with the bespoke delta tooltip — the
 // Orders KPI badges they served now carry data-tt like everything else, and
 // their inline handlers came off the markup in the same change.
-// Magnitude-bar rows in the shared .fc-barrow markup (mirror of dashBarRows,
-// which emits the dashboard's db-tile-list-row markup).
-function fcBarRows(items, opt) {
-  const BAR_CAP = 0.85;
-  const curve = opt.curve === 'sqrt' ? (x => Math.sqrt(x)) : (x => x);
-  const vals = items.map(it => Math.max(0, Number(opt.value(it)) || 0));
-  const max = Math.max(1, ...vals);
-  return items.map((it, i) => {
-    const v = vals[i];
-    const mag = v <= 0 ? 0 : curve(Math.min(1, v / max)) * BAR_CAP;
-    const zero = v <= 0;
-    return `<div class="fc-barrow has-bar${zero ? ' is-zero' : ''}" style="--mag:${mag.toFixed(3)}">`
-      + `<span class="name">${escapeHtml(opt.name(it))}</span>`
-      + `<span class="val">${opt.display(it)}</span></div>`;
-  }).join('');
-}
+// Magnitude-bar rows. Both markups — the dashboard's db-tile-list-row and the
+// neutral .fc-barrow — are now one function in chart-primitives.js; these two
+// keep the names the KPI strips know them by.
+function dashBarRows(items, opt) { return chartBarRows(items, Object.assign({}, opt, { variant: 'db' })); }
+function fcBarRows(items, opt)   { return chartBarRows(items, Object.assign({}, opt, { variant: 'fc' })); }
 
 // On the way — purchase orders the buying department has placed and are in
 // transit (status 'Ordered'), newest ETA first. Warehouse-only block. Its own
@@ -3241,49 +3105,23 @@ function dashKpiAnimate(prev) {
   });
 }
 
+// The trend chart. Reports' job here is the data and the words: pick the
+// metric, shorten each bucket to the label it should carry, say how a y-axis
+// value is written. chartTrend draws it.
 function dashRenderTrend() {
   const t = DASH_DATA.trend || [];
   const metric = DASH_METRIC;
   const isMoney = metric === 'revenue';
-  const vals = t.map(p => Number(p[metric] || 0));
-  const max = Math.max(1, ...vals);
-  const W = 1000, H = 270, padL = 8, padR = 8, padT = 20, padB = 30;
-  const innerW = W - padL - padR, innerH = H - padT - padB;
-  const n = t.length || 1;
-  const x = i => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
-  const y = v => padT + innerH - (v / max) * innerH;
-
-  // Three gridlines only (the mockup): a solid baseline at ¥0 and dashed lines
-  // at the half and full marks, each labelled just above its line at the left.
-  let grid = '';
-  for (const g of [0, 2, 4]) {
-    const gy = padT + (g / 4) * innerH;
-    const gv = max * (1 - g / 4);
-    grid += `<line class="grid-line${g === 4 ? '' : ' dash'}" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
-    grid += `<text class="ax" x="${padL + 2}" y="${(gy - 4).toFixed(1)}">${isMoney ? dashMoney(gv) : dashNum(Math.round(gv))}</text>`;
-  }
-  const linePts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
-  const area = n > 1 ? `<path class="area" d="M ${linePts.join(' L ')} L ${x(n - 1).toFixed(1)},${(padT + innerH).toFixed(1)} L ${x(0).toFixed(1)},${(padT + innerH).toFixed(1)} Z"/>` : '';
-  const line = n > 1 ? `<polyline class="line" points="${linePts.join(' ')}" pathLength="1"/>` : '';
-  // Last-point marker — the "you are here" dot the mockup ends the line with.
-  const enddot = n > 1 ? `<circle class="enddot" cx="${x(n - 1).toFixed(1)}" cy="${y(vals[n - 1]).toFixed(1)}" r="4"/>` : '';
-
-  // A handful of x-axis date labels (the mockup shows ~4), never per-point dots
-  // — the line + end dot carry the shape; hover still reads every bucket.
-  const labelEvery = Math.max(1, Math.ceil(n / 4));
-  let xl = '', hover = '';
-  t.forEach((p, i) => {
-    const px = x(i);
-    if (i % labelEvery === 0 || i === n - 1) {
-      const lbl = String(p.bucket).length > 5 ? String(p.bucket).slice(5) : String(p.bucket);
-      const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
-      xl += `<text class="ax" x="${px.toFixed(1)}" y="${H - 8}" text-anchor="${anchor}">${escapeHtml(lbl)}</text>`;
-    }
-    const colW = innerW / Math.max(1, n - 1);  // tile contiguously, point-to-point
-    hover += `<rect class="hovercol" data-i="${i}" onmousemove="dashTrendTip(event)" x="${(px - colW / 2).toFixed(1)}" y="${padT}" width="${colW.toFixed(1)}" height="${innerH}"></rect>`;
+  const points = t.map(p => ({
+    v: Number(p[metric] || 0),
+    // "2026-09-06" → "09-06"; anything already short stays whole.
+    label: String(p.bucket).length > 5 ? String(p.bucket).slice(5) : String(p.bucket),
+  }));
+  $('#db-trend').innerHTML = chartTrend(points, {
+    fmtY: gv => (isMoney ? dashMoney(gv) : dashNum(Math.round(gv))),
+    onMove: 'dashTrendTip(event)',   // per-column binding is on each .hovercol
+    onLeave: 'dashTrendHide()',      // tooltip is a body-level singleton
   });
-
-  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmouseleave="dashTrendHide()">${grid}${area}${line}${enddot}${hover}${xl}</svg>`;  /* per-column hover binding is on each .hovercol; tooltip is a body-level singleton */
 }
 
 // Cursor-following tooltip for the trend chart. Computes the nearest data
@@ -3401,20 +3239,6 @@ function cuBarTipHide() {
   if (tip) tip.style.display = 'none';
 }
 
-function dashBarList(rows) {
-  // rows: [{ k, kSub, value, valueSub, frac (numeric weight), muted }]
-  // Mockup bar rows: label left / value right on one baseline, then a thin
-  // 5px track spanning the full row beneath them. The fill keeps the
-  // `.db-track > span` shape so the phone clones' sweep animation still bites.
-  const max = Math.max(1, ...rows.map(r => r.frac || 0));
-  return `<div class="db-bars">${rows.map(r => `
-    <div class="db-bar-row">
-      <div class="k" title="${escapeAttr(r.kTitle || r.k)}">${escapeHtml(r.k)}${r.kSub ? ` <span class="sub">${escapeHtml(r.kSub)}</span>` : ''}</div>
-      <div class="v">${escapeHtml(r.value)}${r.valueSub ? ` <span class="sub">${escapeHtml(r.valueSub)}</span>` : ''}</div>
-      <div class="db-track"><span class="${r.muted ? 'muted' : ''}" style="width:${(((r.frac || 0) / max) * 100).toFixed(1)}%"></span></div>
-    </div>`).join('')}</div>`;
-}
-
 const DASH_STATUS_LABELS = {
   pending_payment: 'Pending · 待付款', paid: 'Paid · 已付款', preparing: 'Preparing · 备货中',
   rider_pickup: 'Rider coming · 骑手前往取货',
@@ -3453,7 +3277,7 @@ function dashRenderAcqFunnel() {
   // (the mockup); the foot names the one number worth acting on.
   const rows = stages.map(s => ({ k: s.k, value: dashNum(s.n), frac: s.n }));
   const footPct = paidStep == null ? null : Math.round(paidStep);
-  host.innerHTML = dashBarList(rows)
+  host.innerHTML = chartBarList(rows)
     + (footPct != null && reached
       ? `<div class="db-funnel-foot">${cuT(`${footPct}% of checkouts become paid orders.`, `${footPct}% 的结算最终完成支付。`)}</div>`
       : '');
@@ -3484,7 +3308,7 @@ function dashRenderArticleViews() {
       frac: seen,
     };
   });
-  host.innerHTML = dashBarList(rows);
+  host.innerHTML = chartBarList(rows);
 }
 
 function dashRenderFunnel() {
@@ -3512,9 +3336,9 @@ function dashRenderSplits() {
   const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'Same-city · 同城', sameday: 'Same-day · 当日', pickup: 'Pickup · 自提', unknown: 'Unknown · 未知' }[m] || m);
   // Two quiet bar groups (the mockup has no group headers): payment methods by
   // revenue, then delivery modes by order count with dimmed fills.
-  let html = pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
+  let html = pay.length ? chartBarList(pay.map(p => ({ k: payLabel(p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
   html += '<div class="db-bars-gap"></div>';
-  html += del.length ? dashBarList(del.map(p => ({ k: delLabel(p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
+  html += del.length ? chartBarList(del.map(p => ({ k: delLabel(p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
   $('#db-splits').innerHTML = html;
 }
 
@@ -3554,7 +3378,7 @@ function dashRenderTiers() {
     + `<div class="db-tile"><div class="t-val">${shr(nvr.new_buyers)}</div><div class="t-lbl">new · 新客</div></div>`
     + `<div class="db-tile"><div class="t-val">${shr(nvr.returning_buyers)}</div><div class="t-lbl">returning · 回头客</div></div>`
     + '</div>';
-  html += tiers.length ? dashBarList(tiers.map(t => ({ k: tierLabel(t.tier), value: dashNum(t.n), frac: t.n }))) : '<div class="db-muted">—</div>';
+  html += tiers.length ? chartBarList(tiers.map(t => ({ k: tierLabel(t.tier), value: dashNum(t.n), frac: t.n }))) : '<div class="db-muted">—</div>';
   $('#db-tiers').innerHTML = html;
 }
 
@@ -3562,7 +3386,7 @@ function dashRenderGeo() {
   const cities = DASH_DATA.geoCities || [];
   if (!cities.length) { $('#db-geo').innerHTML = '<div class="db-muted">No location data · 暂无地域数据</div>'; return; }
   // City bars by order count (the mockup); revenue + customers ride the hover.
-  $('#db-geo').innerHTML = dashBarList(cities.map(c => ({
+  $('#db-geo').innerHTML = chartBarList(cities.map(c => ({
     k: c.city || '—',
     kTitle: `${dashMoney(c.revenue)} · ${dashNum(c.customers)} ${cuT('customers', '顾客')}`,
     value: `${dashNum(c.orders)} ${cuT(Number(c.orders) === 1 ? 'order' : 'orders', '单')}`,
@@ -3579,7 +3403,7 @@ function dashRenderMarketing() {
     + `<div class="db-tile"><div class="t-val">${dashMoney(p.points_value)}</div><div class="t-lbl">Points value · 积分抵扣</div></div>`
     + '</div>';
   html += '<div class="db-group-h">Vouchers · 优惠券</div>';
-  html += v.length ? dashBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} ${cuT('uses','次')}`, value: '−' + dashMoney(x.discount), valueSub: `${dashMoney(x.revenue)} ${cuT('rev','营收')}`, frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
+  html += v.length ? chartBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} ${cuT('uses','次')}`, value: '−' + dashMoney(x.discount), valueSub: `${dashMoney(x.revenue)} ${cuT('rev','营收')}`, frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
   $('#db-marketing').innerHTML = html;
 }
 
@@ -3634,7 +3458,7 @@ function dashRenderTraffic() {
     + '</div>';
   html += '<div class="db-group-h">Entry scenes · 进入场景</div>';
   html += '<div class="db-muted" style="font-size:11px;margin:-2px 0 8px">Hover a source to see what it means · 将鼠标移到来源上查看其含义</div>';
-  html += scenes.length ? dashBarList(scenes.map(s => {
+  html += scenes.length ? chartBarList(scenes.map(s => {
     const sc = DASH_SCENES[s.scene];
     const label = sc ? `${sc[0]} · ${sc[1]}` : (`Scene ${s.scene} · 场景 ${s.scene}`);
     const tip = sc && sc[2] ? `${sc[2]} · ${sc[3]}` : `Unlabelled WeChat scene code ${s.scene}. · 未识别的微信场景值 ${s.scene}。`;
@@ -3664,19 +3488,23 @@ function dashRenderHeatmap() {
   // Compact mockup grid: a single-letter day rail, 7×24 ink-tinted cells (the
   // tint colour is the theme's text ink via --td-heat-rgb), hour detail on
   // hover, and a foot naming the busiest hour beside a fewer→more legend.
-  let rows = '';
+  // Reports says what each hour READS as; chartHeatCells decides how dark it is.
+  const cells = [];
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
       const cell = grid[d + '-' + h];
-      const intensity = cell ? cell.orders / max : 0;
-      const bg = intensity === 0 ? 'var(--td-raised)' : `rgba(var(--td-heat-rgb),${(0.1 + intensity * 0.75).toFixed(2)})`;
       const hh = String(h).padStart(2, '0');
-      const tip = cell
-        ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} ${cuT('orders','单')} · ${dashMoney(cell.revenue)}`
-        : `${DASH_DOW[d]} ${hh}:00 — 0`;
-      rows += `<i style="background:${bg}" title="${escapeAttr(tip)}"></i>`;
+      cells.push({
+        v: cell ? cell.orders : 0,
+        title: cell
+          ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} ${cuT('orders','单')} · ${dashMoney(cell.revenue)}`
+          : `${DASH_DOW[d]} ${hh}:00 — 0`,
+      });
     }
   }
+  // The busiest hour above is already the scale, so it is handed over rather
+  // than found twice.
+  const rows = chartHeatCells(cells, { max });
   const days = DASH_DOW_1.map(l => `<span>${l}</span>`).join('');
   const busyTxt = busiest
     ? `Busiest: ${DASH_DOW_EN[busiest.dow]} ${String(busiest.hour).padStart(2, '0')}:00 · 最忙：${DASH_DOW_CN[busiest.dow]} ${String(busiest.hour).padStart(2, '0')}:00`
@@ -3797,18 +3625,9 @@ function dashRenderCohorts() {
   // The mockup: month 1/3/6/12 tiles + a quiet weighted decay curve above a
   // single baseline. The old per-cohort matrix went with the redesign — the
   // curve IS the story; per-cohort detail wasn't worth its screenful.
-  let curveSvg = '';
-  if (curve.length > 1) {
-    const W = 400, H = 80, padT = 6, padB = 8;
-    const ih = H - padT - padB;
-    const xs = i => (i / (curve.length - 1)) * W;
-    const ys = v => padT + ih - (v / 100) * ih;
-    const pts = curve.map((c, i) => `${xs(i).toFixed(1)},${ys(c.pct).toFixed(1)}`).join(' ');
-    curveSvg = `<svg class="db-ret-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-      <line class="base" x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}"/>
-      <polyline class="line" points="${pts}"/>
-    </svg>`;
-  }
+  // Percentages, so the curve is drawn on the fixed 0–100 scale; one month of
+  // history is not a curve and chartMiniCurve returns nothing for it.
+  const curveSvg = chartMiniCurve(curve.map(c => c.pct), { max: 100 });
 
   host.innerHTML =
     `<div class="db-tiles">${tile(1, 'month 1', '第1个月')}${tile(3, 'month 3', '第3个月')}${tile(6, 'month 6', '第6个月')}${tile(12, 'month 12', '第12个月')}</div>`
