@@ -14,6 +14,13 @@ name: Tests
 #
 # It does not replace deploy.yml's gates. Those run against the changed-file
 # list on the way out of the door and are cheap; this runs the suites.
+#
+# ── WHAT RUNS, SINCE 2026-09-07 ──────────────────────────────────────────────
+# A pull request or a push to main runs the FAST shard only (~45s, 164 suites,
+# no browser). The SLOW shard — 37 suites driving a real Chromium, ~30 minutes —
+# runs ONLY on a manual `workflow_dispatch`, on Ash's instruction, because it
+# was the whole of the Actions bill. The reasoning and what it costs are on the
+# matrix below; read them before assuming a green tick covers rendering.
 
 on:
   pull_request:
@@ -33,12 +40,32 @@ jobs:
     name: ${{ matrix.shard }} suites
     runs-on: ubuntu-latest
     strategy:
-      # Both shards always report. Failing fast here would hide a browser
+      # Both shards report when both run. Failing fast would hide a browser
       # regression behind an unrelated unit failure, and the browser shard is
       # the slow one you least want to re-queue.
       fail-fast: false
       matrix:
-        shard: [fast, slow]
+        # ── THE SLOW SHARD NO LONGER RUNS AUTOMATICALLY (2026-09-07, Ash) ────
+        # It is ON DEMAND ONLY: `workflow_dispatch` runs both shards, a pull
+        # request or a push to main runs `fast` alone.
+        #
+        # WHY. Cost, and it was not close. The fast shard is ~45 seconds; the
+        # slow shard drives a real Chromium and takes ~30 MINUTES. In the eight
+        # hours to 2026-09-07 06:00 China time, 62 Tests runs across three
+        # concurrent sessions spent on the order of thirty runner-hours, nearly
+        # all of it here, and GitHub Actions stopped starting jobs for
+        # non-payment at 06:52. A gate nobody can afford to run is not a gate.
+        #
+        # WHAT THIS COSTS, said plainly rather than discovered later: 37 browser
+        # suites stop running on every change. That includes
+        # test_shop_menu_render.js, which was RED ON MAIN for six consecutive
+        # merges when this landed. Main will now go green, and it will be green
+        # because nothing is looking — not because the chip is centred. That
+        # failure is diagnosed on PR #322 and #330 and is still open.
+        #
+        # This is a spending decision, not a verdict on the suites. Restoring
+        # them is one line: put `slow` back in the list unconditionally.
+        shard: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["fast","slow"]') || fromJSON('["fast"]') }}
     steps:
       - uses: actions/checkout@v4
 
