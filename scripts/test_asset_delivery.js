@@ -32,7 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const ROOT = path.join(__dirname, '..');
-const { assetHandler } = require('../lib/static-assets');
+const { assetHandler, negotiate } = require('../lib/static-assets');
 
 let pass = 0, fail = 0;
 const ok  = (m) => { pass++; console.log('  ✓ ' + m); };
@@ -66,12 +66,13 @@ section('1 · the admin is compressed on the way out');
 {
   const r = get('/retail-admin/04-orders.js', { query: { v: 'abc' } });
   yes(!r.nexted, 'the biggest file is served by this handler');
-  is(r.headers['content-encoding'], 'gzip', 'and compressed');
+  is(r.headers['content-encoding'], 'br',
+    'and compressed as BROTLI — a browser offering both gets the better one');
   const raw = fs.statSync(path.join(ROOT, 'public/retail-admin/04-orders.js')).size;
   yes(r.body.length < raw / 3,
     `and it is at least three times smaller (${Math.round(raw / 1024)}KB → ${Math.round(r.body.length / 1024)}KB)`);
   is(r.headers['content-length'], r.body.length, 'the length header describes what was actually sent');
-  yes(zlib.gunzipSync(r.body).length === raw, 'and it uncompresses back to the file, byte for byte');
+  yes(zlib.brotliDecompressSync(r.body).length === raw, 'and it decompresses back to the file, byte for byte');
 }
 {
   // The whole admin, measured. This is the number the finding is about.
@@ -88,7 +89,7 @@ section('1 · the admin is compressed on the way out');
 {
   const r = get('/retail-admin/04-orders.js', { gzip: false });
   is(r.headers['content-encoding'], undefined,
-    'a client that cannot take gzip is sent the file as it is, not a broken one');
+    'a client that can take no encoding is sent the file as it is, not a broken one');
   yes(r.body.length > 0, 'and gets the whole of it');
   is(r.headers['vary'], 'Accept-Encoding', 'with Vary set, so a cache never serves one to the other');
 }
@@ -139,6 +140,53 @@ section('4 · the part of the finding that is still open');
     'which is written down as the open half, not left to be discovered');
 }
 
+// ── §4b · which encoding, and the cache behind it ─────────────────────────
+section('4b · content negotiation, and the two caches that must not cross');
+
+/* THE HEADER IS READ, NOT PATTERN-MATCHED. `q=0` is a refusal — `br;q=0` means
+   "do not send me brotli" — and a handler that greps for the token ignores it
+   and sends brotli to a client that just said it cannot read it. */
+for (const [hdr, want, why] of [
+  ['gzip, deflate, br', 'br', 'a modern browser offers both and gets the better one'],
+  ['gzip, deflate', 'gzip', 'an older one that cannot take brotli still gets gzip'],
+  ['br', 'br', 'brotli alone'],
+  ['', 'identity', 'a client that offers nothing is sent the file as it is'],
+  [undefined, 'identity', 'and so is one that sends no header at all'],
+  ['br;q=0, gzip', 'gzip', 'br;q=0 is a REFUSAL of brotli, not a mild preference for it'],
+  ['br;q=0, gzip;q=0', 'identity', '…and refusing both leaves identity'],
+  ['gzip;q=0.5, br;q=1.0', 'br', 'explicit q values are accepted, not choked on'],
+  ['BR, GZIP', 'br', 'the header is case-insensitive, as the RFC says'],
+  ['brotli-x', 'identity', "`br` must not match inside a longer token"],
+]) {
+  is(negotiate(hdr), want, `${JSON.stringify(hdr)} → ${want} — ${why}`);
+}
+
+/* THE CACHE IS KEYED ON THE ENCODING TOO. With one key per file, the gzip and
+   brotli copies overwrite each other, and the next client is handed the other
+   one's bytes under its own Content-Encoding — a corrupt page, not a slow one.
+   Fetched in both orders because a bug like this only shows on the second. */
+{
+  const file = '/retail-admin/23-sku.js';
+  const raw = fs.readFileSync(path.join(ROOT, 'public/retail-admin/23-sku.js'));
+  for (const order of [['gzip', 'br'], ['br', 'gzip']]) {
+    for (const enc of order) {
+      const r = get(file, { headers: { 'accept-encoding': enc }, query: { v: 'k' } });
+      is(r.headers['content-encoding'], enc, `${enc} after ${order[0]} is still ${enc}`);
+      // CAUGHT, NOT THROWN. Handed the wrong encoding's bytes, the decoder
+      // raises Z_DATA_ERROR and takes the process with it — no tally, no
+      // remaining checks, and nothing for the runner to lift into CI but a
+      // stack. The failure this exists to catch must READ as a failure.
+      let back = null; let why = '';
+      try {
+        back = enc === 'br' ? zlib.brotliDecompressSync(r.body) : zlib.gunzipSync(r.body);
+      } catch (e) { why = `${enc} body would not decode as ${enc}: ${e.code || e.message}`; }
+      yes(back && back.equals(raw),
+        `…and decodes to the real file, not the other encoding's bytes`,
+        why || 'decoded, but to something that is not the file');
+    }
+  }
+}
+
 // ── §5 · over a real socket ───────────────────────────────────────────────
 // The sections above drive the handler directly, which checks the rule. This
 // one runs it inside express, behind the same static server it sits in front
@@ -155,10 +203,21 @@ section('5 · mounted, and fetched');
 
   (async () => {
     const raw = fs.readFileSync(path.join(ROOT, 'public/retail-admin/01-core.js'), 'utf8');
+    // NODE'S OWN fetch ADVERTISES `gzip, deflate` AND NOT `br`, so the default
+    // request here exercises the gzip path — which is worth having, because it
+    // is also what every non-browser client in this repo looks like. The brotli
+    // path is asked for explicitly below rather than assumed from the client.
     let r = await fetch(base() + '/assets/retail-admin/01-core.js?v=abc');
     is(r.status, 200, 'a stamped file is served');
-    is(r.headers.get('content-encoding'), 'gzip', 'compressed');
+    is(r.headers.get('content-encoding'), 'gzip',
+      "a client advertising only gzip gets gzip — Node's fetch is one");
     is(await r.text(), raw, 'and what arrives is the file, exactly — the round trip is lossless');
+
+    r = await fetch(base() + '/assets/retail-admin/01-core.js?v=abc',
+      { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
+    is(r.headers.get('content-encoding'), 'br', 'a browser-shaped client gets brotli');
+    is(await r.text(), raw,
+      '…and decodes to the same file — undici decompresses br, so a wrong body would be caught here');
     is(r.headers.get('cache-control'), 'public, max-age=31536000, immutable', 'cached for a year');
 
     const et = r.headers.get('etag');

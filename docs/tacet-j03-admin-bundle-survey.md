@@ -75,9 +75,25 @@ So the audit's *"every screen's code is loaded on every visit"* is no longer
 true. It is loaded on the **first visit after each deploy**, compressed.
 
 **One cheap thing left in this half:** the handler is gzip-only. Brotli on the
-same files is typically a further 15–20% for a `zlib.brotliCompressSync` call
-beside the existing one, negotiated by the same `Accept-Encoding` header. That
-is a small, self-contained change — unlike everything below.
+same files is a further ~9% for a `zlib.brotliCompressSync` call beside the
+existing one, negotiated by the same `Accept-Encoding` header. That is a small,
+self-contained change — unlike everything below.
+
+> **DONE, and the estimate here was wrong.** This said "typically a further
+> 15–20%", which is the figure quoted for brotli in general and not what these
+> files give at a quality that can be served. Measured over the 28 parts:
+>
+> | | size | ratio | CPU |
+> |---|---|---|---|
+> | gzip 6 (before) | 1,092 KB | 3.12× | 3 ms/file |
+> | **brotli 6 (now)** | **994 KB** | **3.43×** | **3 ms/file** |
+> | brotli 11 | 884 KB | 3.86× | **147 ms/file** |
+>
+> So **9%, not 15–20%** — 19% exists only at quality 11, and `brotliCompressSync`
+> blocks the event loop, so paying it for 28 files on the first load after a
+> deploy would stall every other request in the process for about four seconds.
+> q6 is the same CPU as the gzip it replaces. The reasoning is recorded in
+> `lib/static-assets.js` beside the constant.
 
 ---
 
