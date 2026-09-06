@@ -8,7 +8,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Roots · Storefront Preview</title>
+<title>Storefront Preview</title>
 <style>
   /* ═══════════════ BRAND FONTS ═══════════════ */
   /* Bear Serif's digits are thin/geometric and don't match its chunky letters.
@@ -1081,10 +1081,15 @@
 <body>
 
 <div class="topbar">
+  <!-- The mark and the name are the MERCHANT'S, filled from their own config
+       once it loads (audit D-04). This page is public and host-scoped, so on a
+       merchant's own domain their stakeholders were shown another company's
+       name above their own storefront. Neutral until the fetch lands rather
+       than a borrowed default; the fetch is the first thing the page does. -->
   <div class="brand">
-    <div class="brand-mark">R</div>
-    <span>Roots</span>
-    <span class="sub">Storefront Preview</span>
+    <div class="brand-mark" id="brandMark">·</div>
+    <span id="brandName">Storefront</span>
+    <span class="sub">Preview</span>
   </div>
   <div class="live-pill">
     <span class="dot"></span>
@@ -1157,6 +1162,26 @@ const RESOLUTIONS = [
 ];
 
 const state = { config: null, products: [], categories: [], flashSales: [], lang: 'en' };
+
+/* THE MERCHANT'S DISPLAY CURRENCY — audit D-03. Every price this preview drew
+   was a hardcoded ¥, and this page is PUBLIC and HOST-SCOPED: /api/retail is
+   wrapped in publicTenantScope (server.js:414), which resolves the tenant from
+   tenant_domains, so served on a merchant's own domain it renders THEIR live
+   layout — and printed their prices in yuan whatever they sell in.
+
+   Unlike the admin, nothing here has to defend the shape: /api/retail/config
+   normalises the currency before responding (routes/retail.js:794, "always
+   surface a fully-defaulted object so every client can format money from one
+   source of truth"). This is that client. The `|| {}` covers the window before
+   the first fetch lands, not a malformed value. Same two helpers, same names,
+   as public/shop.html — this page previews what that page renders, so a second
+   spelling of the same formatting would be a way for the two to disagree. */
+function money(n) {
+  const c = (state.config && state.config.currency) || {};
+  const dec = (c.decimals != null ? c.decimals : 2), sym = c.symbol || '¥';
+  const v = (Number(n) || 0).toFixed(dec);
+  return c.position === 'after' ? (v + sym) : (sym + v);
+}
 // Initial lang from query — lets the /cms iframe sync its EN/中 toggle by
 // re-loading /storefront?lang=cn. The visible lang-toggle still wins on tap.
 try {
@@ -1364,6 +1389,18 @@ async function reload() {
     state.categories = cats?.data || [];
     state.flashSales = flash?.data || [];
     $('#version').textContent = (state.config.version || '—') + (DRAFT_MODE ? ' · DRAFT' : '');
+    /* The shop's own wordmark, the same field public/shop.html reads through
+       brandName(). A shop that has not set one keeps the neutral placeholder —
+       no other tenant's name is ever substituted for a missing value. */
+    {
+      const w = state.config?.brand?.me_footer?.wordmark_text;
+      const brand = (w && String(w).trim()) || '';
+      if (brand) {
+        $('#brandName').textContent = brand;
+        $('#brandMark').textContent = brand.slice(0, 1).toUpperCase();
+        document.title = brand + ' · Storefront Preview';
+      }
+    }
     const page = currentPage();
     render(state.config[page]?.layout || []);
   } catch (e) {
@@ -1632,7 +1669,7 @@ function renderBlock(b) {
           <div>
             <div class="kicker">${biLabel(k.en, k.cn)}</div>
             <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
-            <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+            <div class="price">${price > 0 ? money(price) : '—'}</div>
           </div>
         </div>
       </div>`;
@@ -1686,7 +1723,7 @@ function renderBlock(b) {
         return `<div class="card${rankCardCls}">
           <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}${rankBadge(idx)}</div>
           <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
-          <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+          <div class="price">${price > 0 ? money(price) : '—'}</div>
           ${soldCaption(p)}
         </div>`;
       }).join('');
@@ -1703,7 +1740,7 @@ function renderBlock(b) {
             <div class="meta">
               <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
               ${tagline ? `<div class="tagline">${escapeHtml(tagline.slice(0, 80))}${tagline.length > 80 ? '…' : ''}</div>` : ''}
-              <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+              <div class="price">${price > 0 ? money(price) : '—'}</div>
               ${soldCaption(p)}
             </div>
           </div>`;
@@ -1773,8 +1810,8 @@ function renderBlock(b) {
           <div class="meta">
             <div class="name">${escapeHtml(name)}</div>
             <div class="prices">
-              <span class="now">¥${fp.toFixed(2)}</span>
-              ${rp > fp ? `<span class="was">¥${rp.toFixed(2)}</span>` : ''}
+              <span class="now">${money(fp)}</span>
+              ${rp > fp ? `<span class="was">${money(rp)}</span>` : ''}
             </div>
             ${pct != null ? `<div class="meter"><span style="width:${pct}%"></span></div>` : ''}
             <div class="meter-lbl">${escapeHtml(meterLabel)}</div>
@@ -1833,8 +1870,8 @@ function renderBlock(b) {
               <div class="fsd-name">${escapeHtml(nm)}</div>
               ${sub ? `<div class="fsd-cn">${escapeHtml(sub)}</div>` : ''}
               <div class="fsd-prices">
-                <span class="fsd-now">¥${fp.toFixed(2)}</span>
-                ${rp > fp ? `<span class="fsd-was">¥${rp.toFixed(2)}</span>` : ''}
+                <span class="fsd-now">${money(fp)}</span>
+                ${rp > fp ? `<span class="fsd-was">${money(rp)}</span>` : ''}
               </div>
               ${pct != null ? `<div class="fsd-meter"><span style="width:${pct}%"></span></div>` : ''}
               <div class="fsd-sold">${escapeHtml(soldLbl)}</div>

@@ -151,6 +151,18 @@ function target(key) {
   const c = moneyColumns.classify(table, column);
   if (!c) return { key, skip: 'not in the inventory — classify it before migrating it' };
   if (c.unit === 'unresolved') return { key, skip: 'UNRESOLVED: ' + c.note };
+  /* A QUOTIENT COLUMN. Its unit is settled — it is an amount — but the value
+     stored in it was divided out of another column, and rounding a quotient
+     independently makes it disagree with its own source. retail_order_items
+     .unit_price is the worked case: an Eleme line of 10.00 over 3 units stores
+     3.3333…, which multiplies back to 1000 cents today and to 999 once rounded
+     to 333. Invariant B — the check that exists to catch a rate converted as an
+     amount — would be reporting the migration's own arithmetic.
+     Refused OUT LOUD rather than converted on the generic path, the same way an
+     unresolved column is, until the derivation is implemented. */
+  if (c.deriveFrom) {
+    return { key, skip: `DERIVED FROM ${table}.${c.deriveFrom}: rounding this column independently breaks its own line. ${c.note}` };
+  }
   if (c.unit === 'not_money') return { key, skip: 'not money: ' + c.note };
   if (c.done) return { key, skip: 'already an integer column' };
   return {

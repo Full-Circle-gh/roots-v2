@@ -222,5 +222,37 @@ section('7 · rung 1 is reversible, which is the whole reason it ships alone');
     'with every original value still in place');
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+section('8 · a quotient column is refused, not converted on the generic path');
+
+/* retail_order_items.unit_price is an AMOUNT — its unit is settled — but the
+   value in it was DIVIDED out of line_total: routes/eleme-internal.js:316
+   computes `line / qty` when the channel sends a total and no unit price. An
+   Eleme line of 10.00 over 3 units stores 3.3333…, which multiplies back to
+   1000 cents today and to 999 once rounded to 333.
+
+   Invariant B is `ROUND(unit_price × qty) = ROUND(line_total)` — the check that
+   exists to catch a rate converted as an amount. Converting this column on the
+   generic ROUND(col × 100) path would make that check report the migration's
+   own arithmetic, on 5.4% of lines, at a cent each.
+
+   So the registry carries `deriveFrom` and migrate_money.js refuses the column.
+   The marker is a FIELD rather than a sentence in the note because a note does
+   not execute, and this assertion is what stops it being dropped as redundant. */
+{
+  const moneyColumns = require(path.join(ROOT, 'lib', 'money-columns'));
+  const c = moneyColumns.classify('retail_order_items', 'unit_price');
+  is(c.unit, 'amount', 'its unit is settled — it is an amount, not unresolved');
+  is(c.deriveFrom, 'line_total', '…and it is marked as derived FROM line_total');
+
+  // The arithmetic, run rather than recalled.
+  const line = 10.00, qty = 3, unit = line / qty;
+  is(Math.round(unit * qty * 100), Math.round(line * 100),
+    'the stored REAL multiplies back to its line total today');
+  const naive = Math.round(unit * 100);
+  yes(naive * qty !== Math.round(line * 100),
+    `…and rounding it independently would not: ${naive} x ${qty} = ${naive * qty} against ${Math.round(line * 100)}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

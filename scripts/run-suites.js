@@ -221,9 +221,79 @@ function run(entry) {
   };
 }
 
-// The last few lines of a failure, which is where these suites put their tally.
+/* WHAT A FAILING SUITE GETS TO SAY HERE.
+ *
+ * This was the last 14 lines and nothing else, on the reasoning that "these
+ * suites put their tally there". That holds for a suite that prints a summary
+ * block at the end. It does not hold for one that prints `✗` INLINE as it goes
+ * and then a bare count — and on 2026-09-06 that cost a real diagnosis:
+ * test_mobile_home.js failed its 10th case of 26, the runner kept twelve later
+ * `✓` lines and `1 of 26 home cases failed.`, and the one line naming the
+ * failing case was discarded. The job log was the only copy and it had already
+ * thrown it away, so the failure could not be read from CI at all.
+ *
+ * So the failing lines are lifted out of the WHOLE output first, wherever they
+ * fall, and the tail follows for the tally and context. A suite that fails
+ * late prints much as it did before, because the lifted lines are already in
+ * the tail and are not repeated; one that fails early now says which case.
+ *
+ * The cap on lifted lines exists because a suite with 300 failing assertions
+ * would otherwise bury every other suite in the run. When it bites, the count
+ * says so rather than trimming silently.
+ *
+ * A FAILING LINE IS LIFTED WITH ITS DETAIL, not on its own. The common helper
+ * in these suites prints the label and the assertion message on two lines:
+ *
+ *     ✗ A CHIP'S TEXT SITS IN THE MIDDLE OF ITS PILL
+ *         "小食（小）" sits 1.375px off the middle of its pill, down
+ *
+ * and the second line carries the only number worth having. Lifting the `✗`
+ * alone loses it, which is what happened on 2026-09-06 to
+ * test_shop_menu_render.js: the label came through and the measurement did not,
+ * so CI said which check failed but not by how much. The continuation is
+ * whatever follows the failing line indented FURTHER than it, which is exactly
+ * how those helpers lay a message under its label, and it stops at the next
+ * result line so a passing case is never dragged in. */
+const FAIL_MARK = /^\s*(✗|✘|×|FAIL\b|not ok\b|AssertionError\b)/;
+const PASS_MARK = /^\s*(✓|✔|ok\b|PASS\b)/;
+const MAX_LIFTED = 12;
+const MAX_DETAIL = 4;
+
+const indentOf = (l) => (/^\s*/.exec(l)[0] || '').length;
+
 function tail(out, n = 14) {
-  return String(out).trimEnd().split('\n').slice(-n).map((l) => '      ' + l).join('\n');
+  const lines = String(out).trimEnd().split('\n');
+  const indent = (l) => '      ' + l;
+  const cut = Math.max(0, lines.length - n);   // where the tail begins
+  const last = lines.slice(cut);
+
+  /* By INDEX, not by value: two identical failing lines are two failures, and
+     comparing strings hid the second one behind the first. */
+  const groups = [];
+  for (let i = 0; i < cut; i++) {
+    if (!FAIL_MARK.test(lines[i])) continue;
+    const g = [lines[i]];
+    const base = indentOf(lines[i]);
+    for (let j = i + 1; j < cut && g.length <= MAX_DETAIL; j++) {
+      const l = lines[j];
+      if (!l.trim()) break;
+      if (FAIL_MARK.test(l) || PASS_MARK.test(l)) break;
+      if (indentOf(l) <= base) break;
+      g.push(l);
+    }
+    groups.push(g);
+  }
+
+  const shown = groups.slice(0, MAX_LIFTED);
+  const head = shown.length
+    ? shown.flat().map(indent).concat(
+      groups.length > shown.length
+        ? [indent(`… and ${groups.length - shown.length} more failing line(s) above the tail`)]
+        : [],
+    ).concat([indent('      ⋮')])
+    : [];
+
+  return head.concat(last.map(indent)).join('\n');
 }
 
 function main() {
@@ -288,4 +358,11 @@ function main() {
   if (broke.length) process.exit(1);
 }
 
-main();
+/* Run when invoked, importable when required. scripts/test_run_suites.js
+   exercises tail() against the real function rather than a copy of it — a test
+   that validates its own copy proves nothing about the code that ships, and the
+   two drift the first time either is edited. Without this guard, requiring this
+   file would run the entire suite as a side effect. */
+if (require.main === module) main();
+
+module.exports = { tail, FAIL_MARK, SLOW, QUARANTINE };
