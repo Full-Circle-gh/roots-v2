@@ -7732,7 +7732,16 @@ function cancelStalePendingOrdersForTenant() {
           WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)
             -- never reap an Alipay order the customer has uploaded a screenshot
             -- for: it's (claimed) paid and awaiting staff/auto-verify.
-            AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)`
+            AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)
+            -- §45: A COUNTER-FULFILMENT ORDER IS NEVER REAPED ON THIS
+            -- TIMING. The customer is in the shop, at a table or in the queue,
+            -- and this sweep would cancel their order underneath them. §45
+            -- exempts them from "their existing timings", not from ever
+            -- expiring, so an abandoned counter order waits for staff to
+            -- cancel it — which releases its reservation on the existing path.
+            -- A counter-specific timing is nobody's ruling yet.
+            AND COALESCE(fulfillment_type, '') <> 'counter'
+            `
       ).all(`-${hours} hours`)) byId.set(o.id, o.status);
     }
     // Manual-Alipay orders past their pay window — but ONLY when the customer
@@ -7744,7 +7753,16 @@ function cancelStalePendingOrdersForTenant() {
         `SELECT id, status FROM retail_orders
           WHERE status = 'pending_payment' AND payment_method = 'alipay'
             AND alipay_proof_image IS NULL
-            AND placed_at <= datetime('now', ?)`
+            AND placed_at <= datetime('now', ?)
+            -- §45: A COUNTER-FULFILMENT ORDER IS NEVER REAPED ON THIS
+            -- TIMING. The customer is in the shop, at a table or in the queue,
+            -- and this sweep would cancel their order underneath them. §45
+            -- exempts them from "their existing timings", not from ever
+            -- expiring, so an abandoned counter order waits for staff to
+            -- cancel it — which releases its reservation on the existing path.
+            -- A counter-specific timing is nobody's ruling yet.
+            AND COALESCE(fulfillment_type, '') <> 'counter'
+            `
       ).all(`-${alipayWin} minutes`)) byId.set(o.id, o.status);
     }
   } catch (e) {
