@@ -24454,6 +24454,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.invoice_number, o.invoice_file_url, o.invoice_issued_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
+                    -- §49: the short number a shop calls across its counter, and
+                    -- the trading day it was drawn on. NOT unique — two shops
+                    -- both call 14 on the same afternoon — so the ruling requires
+                    -- it be shown with its shop and its date or not at all. This
+                    -- row already carries both: the Store column and Placed.
+                    -- Null for every order that did not arrive by QR.
+                    o.shop_order_code, o.shop_order_date,
                     o.channel_status, o.channel_status_at, o.channel_eta,
                     -- 预订单 marker: the list's delivery cell shows a booked window
                     -- differently from a live ETA (same clock time, different job).
