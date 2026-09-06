@@ -1173,20 +1173,16 @@ function ordRepaintKpiLabels() {
   ordSetDelta('#ord-kpi-rev-d',    revenue, revAvg, days,
     () => (b && b.revenue && b.revenue.delta != null ? b.revenue.delta : pct(revenue, revAvg)), '%',
     money, perDay);
-  // No local rev/ord fallback and no baseline comparison for AOV — the same
-  // ruling already applied to m.html's Avg. order tile. baseline.revenue is
-  // blended with top-up cash and gzgrocery takings while baseline.orders
-  // counts storefront orders only, so revenue.avg / orders.avg is not a
-  // like-for-like AOV baseline — it carries the exact top-up inflation this
-  // tile exists to avoid. The server sends no baseline for AOV, so the badge
-  // says nothing rather than a confident lie.
-  const aovEl = $('#ord-kpi-aov-d');
-  if (aovEl) {
-    aovEl.classList.remove('is-up', 'is-down', 'is-flat');
-    aovEl.classList.add('is-flat');
-    aovEl.textContent = '—';
-    ttSet(aovEl, cuT('no comparable baseline', '暂无可比基准'));
-  }
+  // No local rev/ord fallback for AOV — the server's own `baseline.aov` is
+  // total storefront revenue over total storefront orders across the same
+  // weekdays (matching kpi.aov's population), never baseline.revenue (blended
+  // with top-up cash and gzgrocery takings) divided by baseline.orders
+  // (storefront-only), which would carry the exact inflation this tile exists
+  // to avoid.
+  const aov    = Number(k.aov || 0);
+  const aovAvg = b && b.aov ? Number(b.aov.avg || 0) : 0;
+  ordSetDelta('#ord-kpi-aov-d',    aov,     aovAvg, days, pct, '%',
+    money, cuT('order', '单'));
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

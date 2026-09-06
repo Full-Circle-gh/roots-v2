@@ -15,8 +15,8 @@
  *   1. money() — it printed ¥3,271.4, one decimal, because the formatter capped
  *      the fraction without padding it.
  *   2. deltaText() — the tiles read "−23.8% vs a typical day": a raw unrounded
- *      delta against a baseline the line never named, and under Avg. order the
- *      comparison label with nothing beneath it at all.
+ *      delta against a baseline the line never named, and Avg. order comparing
+ *      against a storefront-only baseline rather than a blended one.
  *   3. The `payment_unconfirmed` fire — the amber sibling of "Payment doesn't
  *      match", covering a proof that was verified-but-unflipped, unreadable, or
  *      never read. Asserted inside the REAL opsFires(), so a restructure of that
@@ -210,15 +210,24 @@ it('flat is ±0%, not an arrow in either direction', () => {
 });
 
 it('a metric with NO baseline says nothing at all', () => {
-  // Average order value has none. The tile used to print the comparison label
-  // with no comparison under it, which reads as a broken tile.
+  // The tile used to print the comparison label with no comparison under it,
+  // which reads as a broken tile — still true for whatever a future metric
+  // ships with no baseline of its own.
   assert.strictEqual(delta(270, undefined, BL), null);
   assert.strictEqual(delta(270, null, BL), null);
 });
 
-it('the Avg. order tile is wired to that silence, and renders no line for it', () => {
-  assert.ok(/\[\['Avg\. order','客单价'\], k\.aov[^\]]*, null\]/.test(M_HTML),
-    'Avg. order must pass no delta, not a bare label');
+it('the Avg. order tile compares against the storefront-only baseline, never the blended one', () => {
+  // baseline.aov exists now (total storefront revenue over total storefront
+  // orders across the trailing same weekdays — the same population as
+  // kpi.aov). The tile must read THAT field, not baseline.revenue (blended
+  // with top-up cash and gzgrocery takings) divided by baseline.orders
+  // (storefront-only), which would reintroduce the exact top-up inflation
+  // this tile exists to avoid.
+  assert.ok(/\[\['Avg\. order','客单价'\], k\.aov[^\]]*, deltaText\(k\.aov, b\.aov, bl\)\]/.test(M_HTML),
+    'Avg. order must pass deltaText(k.aov, b.aov, bl), not a bare label or a b.revenue/b.orders ratio');
+  assert.ok(!/deltaText\(k\.aov,\s*b\.(revenue|orders)/.test(M_HTML),
+    'Avg. order must not compare against a blended-revenue or storefront-order-count baseline');
   assert.ok(/\$\{d\?`<span class="num"[^`]*`:''\}/.test(M_HTML),
     'the delta span must be conditional, or an empty one still takes the space');
 });
@@ -228,7 +237,7 @@ it('the Avg. order tile is wired to that silence, and renders no line for it', (
    comment explaining the fix cannot satisfy them: a file-wide search for
    "rev/ord" would go green on a page that still divided, as long as somebody
    had written the words down somewhere else. */
-const AVG_TILE = (M_HTML.match(/\[\['Avg\. order','客单价'\],([\s\S]*?), null\]/) || [])[1] || '';
+const AVG_TILE = (M_HTML.match(/\[\['Avg\. order','客单价'\],([\s\S]*?), deltaText\(k\.aov, b\.aov, bl\)\]/) || [])[1] || '';
 
 it('the tile reads the server aov', () => {
   assert.ok(AVG_TILE, 'the Avg. order tile expression was not found at all');
