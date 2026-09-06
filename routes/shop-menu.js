@@ -519,6 +519,21 @@ img{display:block;max-width:100%}
 .chipset{display:contents}
 .achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:1.3;
   font-family:var(--f-bear);letter-spacing:.03em}
+/* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK
+   IN THE LEFT HALF OF IT. So a chip reading 麸质（燕麦） carries about two thirds
+   of a character of blank at its right end, its text sits nearly 4px left of
+   the pill it is in, and once the row is centred that is exactly what the eye
+   catches — reported from a phone as still not centred after the row itself had
+   been. Measured from the pixels: the ink, not the box, is what was off.
+   Trimming the padding by that reserved half is the only thing that moves it,
+   and it is what a Chinese typesetter does by hand. 'palt' and
+   font-variant-east-asian:proportional-width were both tried first and neither
+   does anything here — the bracket comes from the phone's own CJK fallback
+   face, which implements neither.
+   Two thirds of an em rather than a half: half leaves a pixel, three quarters
+   overshoots, and the measurement says .67 lands it dead centre. */
+.achip.tr{padding-right:calc(10px - .67em)}
+.achip.tl{padding-left:calc(10px - .67em)}
 /* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
    lime is this menu's "yes, add it" colour and an allergen is not that. */
 .achip.has{background:var(--ink);color:var(--oat)}
@@ -1151,6 +1166,14 @@ function detailBody(it, code) {
 
   if (!ing && !alg && !nut) return '';
 
+  // WHICH CHIPS CARRY A RESERVED HALF-BOX AT ONE END. A CJK bracket occupies a
+  // full character cell wherever it sits, so one at either end of a chip's text
+  // is mostly blank — the CSS above trims it back. Brackets only: a full-width
+  // comma or period cannot end a name, and trimming one that had not been
+  // measured would be moving something on a guess.
+  const trimmed = (t) => (/^[（【《「『〔｛]/.test(t) ? ' tl' : '') +
+                         (/[）】》」』〕｝]$/.test(t) ? ' tr' : '');
+
   // THE HERO INGREDIENT IS FILLED, THE REST OUTLINED — the mini app's own chip
   // cloud, where `lead` marks the one the product is mostly made of. A pct the
   // office stated rides on the chip; most have none and that is normal.
@@ -1167,7 +1190,8 @@ function detailBody(it, code) {
   // rather than deriving anything.
   const algRow = (label, en, cn, cls) => {
     if (!en.length && !cn.length) return '';
-    const one = (list) => list.map(t => `<span class="achip ${cls}">${esc(t)}</span>`).join('');
+    const one = (list) => list.map(t =>
+      `<span class="achip ${cls}${trimmed(t)}">${esc(t)}</span>`).join('');
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
