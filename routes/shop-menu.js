@@ -488,17 +488,19 @@ img{display:block;max-width:100%}
 .acard{border:1px solid var(--ink);padding:12px;margin-top:18px}
 .atitle{font-family:var(--f-bear);font-size:16px;line-height:1;
   padding-bottom:9px;border-bottom:2px solid var(--ink);margin-bottom:10px}
-/* CENTRED BOTH WAYS. The chips sat at the left edge of a 96px-wide column with
-   a short label beside them, so a single chip floated in the gap and read as
-   misplaced rather than aligned to anything. Centring gives each row its own
-   balance, which is what a one-chip row and a three-chip row need to look like
-   the same card. */
-.arow{display:flex;gap:10px;align-items:center;padding:7px 0}
+/* THE LABEL SITS ABOVE ITS CHIPS, AND BOTH CENTRE ON THE CARD. Centring them
+   beside a fixed 96px label only centred them in what the label left over, so
+   a short label like CONTAINS pushed its chip well right of the card's middle
+   and it still read as misplaced — the second report of the same thing. With
+   the label on its own line there is no leftover column to be centred in: the
+   chips have the card's full width and the card's own middle. It also ends the
+   collision this card was always one long chip away from. */
+.arow{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
 .arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
-.alab{flex:none;width:96px;font-family:var(--f-bear);font-size:9.5px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
-  line-height:1.35;padding-top:3px}
-.achips{flex:1;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
+.alab{flex:none;max-width:100%;text-align:center;font-family:var(--f-bear);
+  font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
+  line-height:1.35}
+.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
    stated at the head of the file and this is where its cost is paid. Naming it
@@ -611,8 +613,16 @@ img{display:block;max-width:100%}
   border:2px solid var(--ink);background:var(--lime);color:var(--ink);
   padding:12px 14px;font:inherit;font-family:var(--f-bear);font-size:15px;
   cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* line-height:1 IS THE CENTRING, not a nicety. The chip inherited the body's
+   1.45 — a line-height meant for reading paragraphs — so its line box was
+   18.85px tall inside a 24px square, and the digit rode a full pixel above the
+   middle of the black. Measured from the pixels, not from the box: on this page
+   the digits come from the substitute face (a display face whose numerals stand
+   in for the display face's own), so the line box was being sized by one font's
+   metrics while the glyph in it belonged to another. */
 .cbar-n{flex:none;min-width:24px;height:24px;display:flex;align-items:center;
-  justify-content:center;background:var(--ink);color:var(--oat);font-size:13px}
+  justify-content:center;background:var(--ink);color:var(--oat);
+  font-size:13px;line-height:1}
 .cbar-l{flex:1;text-align:left;letter-spacing:.04em}
 .cbar-v{flex:none;font-variant-numeric:tabular-nums}
 
@@ -693,14 +703,22 @@ img{display:block;max-width:100%}
 .sheet-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
   border-top:2px solid var(--ink)}
 
-.ln{display:flex;align-items:center;gap:10px;padding:12px 0;
+/* THE NAME GETS ITS OWN LINE. Name, stepper and price on one row is three
+   things competing for 362px, and the name wins because it is the widest — so
+   a product called "Apple Pie Overnight Oats" pushed the price off the right
+   edge of the phone and the customer could not read what they were paying.
+   Stacked, the name can be as long as it likes in either language and the row
+   beneath it is a fixed stepper and a fixed price with the whole width to sit
+   in. The cost is about 30px per line, which the sheet scrolls. */
+.ln{display:flex;flex-direction:column;gap:8px;padding:12px 0;
   border-bottom:1px solid rgba(0,0,0,.08)}
-.ln-t{flex:1;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.ln-t{min-width:0;overflow-wrap:anywhere;font-size:14px}
+.ln-r{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ln-p{flex:none;font-variant-numeric:tabular-nums;font-size:14px}
 .qty{flex:none;display:flex;align-items:center;border:2px solid var(--ink)}
 .qty button{width:30px;height:30px;border:0;background:transparent;color:var(--ink);
   font-family:var(--f-bear);font-size:16px;line-height:1;cursor:pointer;padding:0}
-.qty span{min-width:26px;text-align:center;font-variant-numeric:tabular-nums;
+.qty span{min-width:26px;text-align:center;line-height:1;font-variant-numeric:tabular-nums;
   font-size:14px}
 
 .tot{display:flex;justify-content:space-between;align-items:center;gap:12px;
@@ -1018,10 +1036,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var paintSheet=function(){var k=ids(),h='';` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
   `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+'</div>'+` +
-  `'<div class="qty"><button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
+  `'<div class="ln-r"><div class="qty">'+` +
+  `'<button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
   `'<span>'+it.qty+'</span>'+` +
   `'<button type="button" data-i="'+esc(k[i])+'" aria-label="+">+</button></div>'+` +
-  `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div>'}` +
+  `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div></div>'}` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
   `var add=function(b){var id=b.getAttribute('data-add');` +
