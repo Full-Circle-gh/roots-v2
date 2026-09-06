@@ -47,6 +47,16 @@
  *     over the rate limit — leaves NOTHING behind. Counted rows before and
  *     after, because a half-written order is a ticket in a kitchen for
  *     something nobody ordered.
+ * 10. THE TICKET PRINTS ONCE. On submit, to that shop's own printer, carrying
+ *     the number and the name staff call and the item to make — and NOT again
+ *     when the cashier settles it, because a second slip is indistinguishable
+ *     from a second order to whoever picks it up. The printer is stubbed at
+ *     lib/feie.js's module object, so everything up to the wire is the real
+ *     path: real printer resolution, real rows, real renderer.
+ * 11. The once-only guard is NARROW, held by its paired opposite. A non-QR
+ *     order that already printed still prints at paid, and a QR order whose
+ *     submit print FAILED still gets its chance — losing the ticket entirely
+ *     is the worse failure of the two.
  */
 'use strict';
 
@@ -60,6 +70,9 @@ const ROOT = path.join(__dirname, '..');
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
 const router  = require(path.join(ROOT, 'routes', 'shop-menu.js'));
+// The paid path's own print trigger, so the "prints once" checks below drive
+// the REAL function the cashier's Mark-paid reaches rather than a stand-in.
+const retail  = require(path.join(ROOT, 'routes', 'retail.js'));
 const db = tdb();
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -99,7 +112,8 @@ async function checkAsync(label, fn) {
   catch (e) { failures++; console.log(`  ✗ ${label}\n      ${e.message}`); }
 }
 
-const CFG_KEYS = ['theme.palette', 'theme.fonts', 'brand.me_footer', 'currency'];
+const CFG_KEYS = ['theme.palette', 'theme.fonts', 'brand.me_footer', 'currency',
+                  'printer.by_store', 'printer.auto_print'];
 
 // THIS SUITE CREATES THE FIRST STORE ROWS AND THE FIRST SHELF ROWS A FRESH
 // DATABASE HAS EVER SEEN, and that has a consequence nobody would predict from
@@ -160,6 +174,20 @@ function restoreConfig() {
 
 function cleanup() {
   const qs = LOCS.map(() => '?').join(',');
+  // ORDERS FIRST, AND UNCONDITIONALLY. The order checks below delete what they
+  // create, but a check that FAILS half-way leaves rows behind, and those rows
+  // hold foreign keys into the fixture products and stores. Without this the
+  // teardown threw SQLITE_CONSTRAINT_FOREIGNKEY and the crash buried the
+  // assertion that actually failed — the second failure hiding the first.
+  const orderIds = db.prepare(
+    `SELECT id FROM retail_orders WHERE store_id IN (${qs})`).all(...LOCS).map(r => r.id);
+  if (orderIds.length) {
+    const oq = orderIds.map(() => '?').join(',');
+    db.prepare(`DELETE FROM retail_stock_reservations WHERE order_id IN (${oq})`).run(...orderIds);
+    db.prepare(`DELETE FROM retail_order_items WHERE order_id IN (${oq})`).run(...orderIds);
+    db.prepare(`DELETE FROM retail_payments WHERE order_id IN (${oq})`).run(...orderIds);
+    db.prepare(`DELETE FROM retail_orders WHERE id IN (${oq})`).run(...orderIds);
+  }
   db.prepare(`DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id IN (${qs}))`).run(...LOCS);
   db.prepare(`DELETE FROM shops WHERE location_id IN (${qs})`).run(...LOCS);
   db.prepare(`DELETE FROM retail_store_stock WHERE store_id IN (${qs})`).run(...LOCS);
@@ -754,6 +782,131 @@ const soldOut = (row) => /class="sold"/.test(row);
       }
       await resetOrderLimit();
     });
+
+    // ─── The ticket prints on submit, and only once (§44) ────────────────
+    //
+    // THE PRINTER IS STUBBED AT THE MODULE OBJECT, not at the network. Both
+    // routes/retail.js and this suite hold the SAME lib/feie.js module object,
+    // and printOrderById calls `_feie.printContent(...)` — a property lookup at
+    // call time — so replacing the property here reaches the real code path.
+    // Everything before the POST is genuine: the printer is resolved from the
+    // tenant's own config, the order and its lines are read back from the
+    // database, and lib/feie's real renderer builds the slip. Only the wire is
+    // fake. A stub of printOrderById itself would have proved nothing.
+    console.log('\nThe kitchen ticket prints on submit, and once (§44)');
+    const feieMod = require(path.join(ROOT, 'lib', 'feie.js'));
+    const realPrint = feieMod.printContent;
+    const realEnabled = feieMod.feieEnabled;
+    const slips = [];
+    feieMod.feieEnabled = () => true;
+    feieMod.printContent = (content, opts) => {
+      slips.push({ content: String(content || ''), sn: opts && opts.sn });
+      return Promise.resolve({ ok: true });
+    };
+    setConfig('printer.by_store', { [String(LOC_LIVE)]: { sn: 'TEST-SN-9861', copies: 1, template: 'receipt' } });
+
+    // The print is fire-and-forget: the response returns before the (stubbed)
+    // send resolves. Wait for the promise chain rather than for a clock.
+    const settle = () => new Promise(r => setImmediate(() => setImmediate(r)));
+
+    await checkAsync('submitting prints ONE ticket, to that shop\'s own printer', async () => {
+      await resetOrderLimit();
+      slips.length = 0;
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 2 }] });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      await settle();
+      assert.strictEqual(slips.length, 1, `printed ${slips.length} slips on one submit`);
+      assert.strictEqual(slips[0].sn, 'TEST-SN-9861', 'the ticket went to the wrong counter');
+      // The slip has to carry what the kitchen needs to act: the name that gets
+      // called and the thing to make. If either is missing the print is useless
+      // even though it "succeeded".
+      assert.ok(slips[0].content.includes('Mei'), 'the customer name is not on the slip');
+      assert.ok(slips[0].content.includes(`<CB>${r.json.data.order_code}</CB>`),
+        `the number staff call — ${r.json.data.order_code} — is not on the slip`);
+      assert.ok(slips[0].content.includes('Fixture oat latte') && slips[0].content.includes('__M-55'),
+        'the item to make, and its SKU, are not on the slip');
+      assert.ok(/x2/.test(slips[0].content), 'the quantity to make is not on the slip');
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      const o = db.prepare('SELECT print_status, printed_at, status FROM retail_orders WHERE id = ?').get(oid);
+      assert.strictEqual(o.print_status, 'printed', 'the outcome was not recorded, so the drawer cannot offer a reprint');
+      assert.ok(o.printed_at, 'printed_at was not stamped');
+      assert.strictEqual(o.status, 'pending_payment', 'printing must not settle the order');
+
+      // AND IT MUST NOT PRINT AGAIN WHEN THE CASHIER SETTLES IT. This is the
+      // whole reason the guard in autoPrintOrder exists: a second slip is
+      // indistinguishable from a second order to whoever picks it up.
+      slips.length = 0;
+      retail.autoPrintOrder(oid);
+      await settle();
+      assert.strictEqual(slips.length, 0, 'the paid path printed the QR ticket a second time');
+
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+    });
+
+    await checkAsync('the guard is NARROW — it does not silence a non-QR order', async () => {
+      // Written as the paired opposite so the guard cannot be widened into
+      // "never print an order that already printed", which would suppress the
+      // real slip of any order an operator had reprinted while it was unpaid.
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+      assert.strictEqual(r.status, 201);
+      await settle();
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      // Same row, same successful print — only the source differs.
+      db.prepare("UPDATE retail_orders SET source = 'manual' WHERE id = ?").run(oid);
+      slips.length = 0;
+      retail.autoPrintOrder(oid);
+      await settle();
+      assert.strictEqual(slips.length, 1, 'the guard suppressed a slip that is not a QR resubmit');
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+    });
+
+    await checkAsync('a submit-print that FAILS still gets its chance at the counter', async () => {
+      // Losing the ticket altogether is the worse failure. A failed print must
+      // not look like a successful one to the guard.
+      await resetOrderLimit();
+      feieMod.printContent = () => Promise.resolve({ ok: false, msg: 'printer_offline' });
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+      assert.strictEqual(r.status, 201, 'an offline printer must not fail the order');
+      await settle();
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      const o = db.prepare('SELECT print_status, print_error FROM retail_orders WHERE id = ?').get(oid);
+      assert.strictEqual(o.print_status, 'failed');
+      assert.strictEqual(o.print_error, 'printer_offline');
+      slips.length = 0;
+      feieMod.printContent = (content, opts) => {
+        slips.push({ content: String(content || ''), sn: opts && opts.sn });
+        return Promise.resolve({ ok: true });
+      };
+      retail.autoPrintOrder(oid);
+      await settle();
+      assert.strictEqual(slips.length, 1, 'a failed submit print left the kitchen with nothing at all');
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+    });
+
+    await checkAsync('a shop with auto-print OFF prints nothing, and the order still lands', async () => {
+      await resetOrderLimit();
+      setConfig('printer.auto_print', false);
+      slips.length = 0;
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+      assert.strictEqual(r.status, 201, 'the order must not depend on the printer');
+      await settle();
+      assert.strictEqual(slips.length, 0, 'auto-print is off and it printed anyway');
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+      setConfig('printer.auto_print', true);
+    });
+
+    feieMod.printContent = realPrint;
+    feieMod.feieEnabled = realEnabled;
 
     console.log('\nThe page still offers no ordering surface — that is step 5b\'s cart, not this page');
     await checkAsync('the page offers no cart, no quantity control and no submit', async () => {

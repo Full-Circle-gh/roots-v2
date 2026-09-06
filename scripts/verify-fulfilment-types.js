@@ -236,6 +236,20 @@ const cntrSlip = slipFor(3);
 check('receipt To/Tel: delivery yes, pickup yes, counter no',
   [delSlip, pickSlip, cntrSlip].map(s => /^To {4}/m.test(s)), [true, true, false]);
 
+// …EXCEPT THE ONE COUNTER SALE WHERE THE NAME IS THE POINT — §44, §49. A QR
+// order's customer is sitting down waiting to be called, not standing at the
+// till holding the goods, so the slip the kitchen works from carries the short
+// number and the name, both enlarged and both unlabelled. `shop_order_code` is
+// the discriminator; the till sale above has none, and the check right after
+// this is the paired opposite proving the plain counter slip did not gain them.
+const qrSlip = feie.renderOrder('receipt',
+  { ...ROWS.find(r => r.id === 3), shop_order_code: 7, source: 'qr', recipient_name: 'Mei' },
+  ITEMS, 'Tacet', []);
+check('a QR counter slip carries the called number and the called name',
+  [/<CB>7<\/CB>/.test(qrSlip), /<CB>Mei<\/CB>/.test(qrSlip)], [true, true]);
+check('a TILL counter slip gains neither, so no existing slip changed',
+  [/<CB>7<\/CB>/.test(cntrSlip), /<CB>Walk-in<\/CB>/.test(cntrSlip)], [false, false]);
+
 // Nothing was promised, so no promise prints — tested against a counter row that
 // DOES carry a slot. The natural fixture has no scheduled_for, so steps 2–4 of
 // shipByPrintParts would print nothing anyway and the assertion would pass with

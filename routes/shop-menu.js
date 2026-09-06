@@ -7,6 +7,11 @@
 // counter order. No login, no session, no cookie and no account: a name and a
 // short number are the whole of the customer's identity here (§44).
 //
+// THE TICKET PRINTS ON SUBMIT, not on paid (§44) — the kitchen starts making
+// the drink while the customer is still walking to the till. It reuses the paid
+// path's own printer, and routes/retail.js declines to print a QR order a
+// second time when the cashier settles it.
+//
 // THE PAGE ITSELF STILL CARRIES NO CART. The submit surface is the next piece
 // of Step 5b; the endpoint is built and proved first so the page has something
 // correct to post to.
@@ -72,6 +77,10 @@ const {
   // costed by the same code. A second answer to any of the three would show up
   // as a margin report nobody can reconcile.
   nextOrderNo, taxSettings, costAtSale,
+  // §44: the kitchen ticket prints on SUBMIT for a QR order. Same function the
+  // paid path uses, so the printer resolution, the template and the print_status
+  // the drawer's Reprint reads cannot drift from the till's.
+  autoPrintOrder,
 } = require('./retail');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const moneyLib = require('../lib/money');   // the money MATHS; money() below is this page's formatter
@@ -689,7 +698,11 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   const b = req.body || {};
   // §44: "The customer selects from that shop's listings, supplies a name, and
   // submits." A name and nothing else — it is what gets called across a room.
-  const name = String(b.name == null ? '' : b.name).trim().slice(0, 40);
+  // The angle brackets go the same way they go out of the injected CSS above:
+  // this name is printed into lib/feie.js's slip markup, whose <CB>/<BOLD> tags
+  // are the same shape. A name is a name — nobody loses one to this — and it is
+  // the only customer-supplied string on this whole path.
+  const name = String(b.name == null ? '' : b.name).replace(/[<>]/g, '').trim().slice(0, 40);
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
 
   const rawLines = Array.isArray(b.items) ? b.items : [];
@@ -840,6 +853,24 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     console.error('[shop-menu/order]', code, e.message);
     return res.status(500).json({ success: false, error: 'order_failed' });
   }
+
+  // THE TICKET PRINTS NOW, NOT WHEN THEY PAY — §44. The customer is walking to
+  // the till; the kitchen should already be making it. AFTER the commit, never
+  // inside it: a printer that is offline must not roll back an order that is
+  // otherwise good, and a slip for an order that failed to save is worse than
+  // no slip. Fire-and-forget by the same reasoning the paid path gives — the
+  // network POST settles long after this response, and the outcome lands on the
+  // order as print_status, where the admin drawer shows it and offers Reprint.
+  //
+  // NO STAFF-ACCEPT GATE. §44 leaves one available and Ash ruled on 2026-09-06
+  // that it is not built here: the only place to record "waiting for a human"
+  // is print_status, whose two readers ask solely whether the print FAILED, so
+  // a held order would sit in the admin looking entirely normal with nobody
+  // told to tap anything. That is the pending_accept mistake again — a state
+  // the code knows and no screen does. If phantom orders become real, the
+  // accept step arrives with a surface a person can see, not as a flag.
+  try { autoPrintOrder(created.orderId); }
+  catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
 
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(201).json({

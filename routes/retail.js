@@ -27515,6 +27515,27 @@ function autoPrintOrder(orderId) {
   try {
     const pp = loadPrinterPrefs();
     if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    // ONE TICKET PER ORDER, AND A QR ORDER'S ALREADY PRINTED.
+    //
+    // §44 puts the QR ticket at SUBMIT, not at paid: the kitchen starts making
+    // the drink while the customer is still walking to the till. Every other
+    // order in this system prints here, on the paid transition, and that has
+    // not changed. Without this line a QR order would print twice — once from
+    // routes/shop-menu.js on submit, and again from here when the cashier
+    // settles it — and the second slip is indistinguishable from a second
+    // order to whoever picks it up.
+    //
+    // DELIBERATELY NARROW. It keys on source='qr' AND a print that actually
+    // SUCCEEDED, so: nothing that exists today changes behaviour (no other path
+    // can set print_status='printed' before paid), a QR order whose submit
+    // print FAILED still gets its chance here rather than losing the ticket
+    // altogether, and an operator's manual reprint of an unpaid non-QR order
+    // does not silently suppress that order's real slip.
+    const prior = db.prepare('SELECT source, print_status FROM retail_orders WHERE id = ?').get(orderId);
+    if (prior && prior.source === 'qr' && prior.print_status === 'printed') {
+      console.log('[feie print]', orderId, 'skipped — QR ticket already printed on submit');
+      return;
+    }
     printOrderById(orderId, pp)
       .then(r => {
         if (r.ok) console.log('[feie print]', orderId, 'ok');
@@ -35657,3 +35678,9 @@ module.exports.normalizeCurrency     = normalizeCurrency;
 module.exports.nextOrderNo           = nextOrderNo;
 module.exports.taxSettings           = taxSettings;
 module.exports.costAtSale            = costAtSale;
+// §44: a QR order's kitchen ticket prints on SUBMIT rather than on paid, so the
+// menu route needs the same printer resolution, the same template and the same
+// outcome recording the paid path uses. It is the whole function rather than a
+// copy of it — a second renderer would drift, and the drawer's Reprint reads
+// the columns this one writes.
+module.exports.autoPrintOrder        = autoPrintOrder;
