@@ -15,22 +15,39 @@ name: Tests
 # It does not replace deploy.yml's gates. Those run against the changed-file
 # list on the way out of the door and are cheap; this runs the suites.
 #
-# ── WHAT RUNS, SINCE 2026-09-07 ──────────────────────────────────────────────
-# A pull request or a push to main runs the FAST shard only (~45s, 164 suites,
-# no browser). The SLOW shard — 37 suites driving a real Chromium, ~30 minutes —
-# runs ONLY on a manual `workflow_dispatch`, on Ash's instruction, because it
-# was the whole of the Actions bill. The reasoning and what it costs are on the
-# matrix below; read them before assuming a green tick covers rendering.
-
+# ── NOTHING RUNS AUTOMATICALLY, SINCE 2026-09-07 ─────────────────────────────
+# ASH'S INSTRUCTION, TWICE: "don't do slow shared at all", then "I don't want
+# all those tests". This workflow is now MANUAL ONLY. No pull request and no
+# push to main starts it. It runs when a person presses Run workflow, and at no
+# other time.
+#
+# WHAT THAT COSTS, so nobody has to work it out later: nothing is watched. The
+# 164 fast suites and the 37 browser suites still exist, still pass, and still
+# run locally — but no push is checked by anything, so a regression reaches
+# production and is found by a person using the shop. That is the trade that
+# was chosen, deliberately, and it is a spending decision rather than a verdict
+# on the suites.
+#
+# WHAT THIS DOES NOT CHANGE: deploys. deploy.yml fires on `push: main` on its
+# own and has never had a `needs:` on this workflow — a merge to main shipped to
+# production whether these tests passed, failed, or never ran. Turning them off
+# does not make deploying faster or slower; it removes the warning, not a gate.
+#
+# TO PUT IT BACK: restore the `pull_request:` and `push: branches: [main]`
+# triggers below. To run it right now against any branch: Actions → Tests → Run
+# workflow. A manual run does BOTH shards, fast and slow.
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
-# A second push to a PR makes the first run's answer worthless — cancel it
-# rather than pay for it. Never on main: those runs are the record of what each
-# commit did, and a cancelled one is a hole in it.
+# Two manual runs on the same branch queue rather than cancel: a run somebody
+# started ON PURPOSE is not noise to be discarded, and there is no longer a
+# stream of pushes to out-race. The condition below is now always false — kept
+# in its evaluated form rather than hard-coded, so restoring the `pull_request`
+# trigger restores the cancelling with it.
+#
+# (It read "a second push to a PR makes the first run's answer worthless" while
+# this ran on pushes. That was true then and is left here as the reason the line
+# is shaped this way.)
 concurrency:
   group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
