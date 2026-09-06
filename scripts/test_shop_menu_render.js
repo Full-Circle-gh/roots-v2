@@ -150,9 +150,13 @@ function seed() {
   // still are indistinguishable, and the sticky checks below would pass on the
   // bug they exist to catch. They are in their own category so the rail has more
   // than one destination to jump to.
+  //
+  // 'Fresh & Deli' ON PURPOSE, not 'Ready to Eat': its SEED_TREE name_cn is
+  // '鲜食 & 熟食' — a category with "&" in the Chinese half, which is what the
+  // noOrphanAmp() check below needs on the rail.
   const filler = db.prepare(`INSERT INTO store_products
     (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
-    VALUES (?, ?, ?, ?, ?, 1, 1, 'Ready to Eat')`);
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Fresh & Deli')`);
   // DELIBERATELY UNEVEN NAMES. The alignment check below needs two cards side
   // by side whose names differ in height — one line against two — which is the
   // ordinary case on a real menu ("Almond Butter" beside "Maple Cinnamon Almond
@@ -321,6 +325,28 @@ function boxOf(text) {
       await page.evaluate(() => window.scrollTo(0, 0));
     });
 
+    await check('a Chinese rail label does not strand "&" at the end of a line', async () => {
+      // Reported from a phone: SEED_TREE's Fresh & Deli node wrapped in the
+      // rail with "&" alone on the first line and 熟食 on the second —
+      // noOrphanAmp() glues "&" to the word after it with a non-breaking space
+      // so a wrap, if the label still needs one, lands BEFORE "&" instead.
+      //
+      // SCOPED TO THE RAIL, not the whole page: the same category name is
+      // also a .kick heading in the wide content pane, where the narrow-rail
+      // wrap this fix is for does not happen, and it is deliberately left as
+      // plain text there — the unscoped page HTML legitimately contains both
+      // forms. page.content() serialises the NBSP back out as the &nbsp;
+      // entity (confirmed against this exact page: 鲜食 &amp;&nbsp;熟食), so
+      // that is what the glued form is checked against, not a raw \u00a0.
+      const html = await page.content();
+      const rail = html.slice(html.indexOf('<nav class="rail"'), html.indexOf('</nav>'));
+      assert.ok(rail, 'the rail markup is missing');
+      assert.ok(rail.includes('鲜食 &amp;&nbsp;熟食'),
+        'the rail\'s Chinese label does not carry the non-breaking space after "&"');
+      assert.ok(!rail.includes('鲜食 &amp; 熟食'),
+        'the rail\'s Chinese label still has a plain breakable space after "&"');
+    });
+
     // ─── The basket, driven ───────────────────────────────────────────────
     // Step 5b part 4. Everything here is a real tap on a real page against the
     // real endpoint: the order that comes out the far end is written to the
@@ -358,6 +384,20 @@ function boxOf(text) {
       }
       assert.deepStrictEqual(m.rows, ['p', 'c', ''], `nutrition rows classified wrong: ${m.rows}`);
       assert.ok(/\d/.test(m.price), `no price on the sheet: ${JSON.stringify(m.price)}`);
+    });
+
+    await check('the sheet price and ADD TO BASKET do not touch', async () => {
+      // Reported from a phone: .dadd is .place, and .place's own width:100%
+      // set the button's flex-basis to the whole row, so it fought #dPr for
+      // space inside .tot's flex row and the two ran together with no visible
+      // gap between the price and the button beside it.
+      const r = await page.evaluate(() => {
+        const pr = document.getElementById('dPr').getBoundingClientRect();
+        const add = document.getElementById('dAdd').getBoundingClientRect();
+        return { prRight: pr.right, addLeft: add.left };
+      });
+      assert.ok(r.addLeft - r.prRight >= 8,
+        `the price and the button are ${(r.addLeft - r.prRight).toFixed(1)}px apart`);
     });
 
     await check('CONTAINS AND MAY-CONTAIN ARE TWO STATEMENTS, and they do not look alike', async () => {
