@@ -44,6 +44,19 @@ const SHELF = KITCHEN + `
 
 const body = "txt('content').replace(/\\s+/g,' ')";
 
+/* THE SAME SHELF, WITH THE GRANT (decisions §46). Derived from SHELF rather
+   than written out again, so the two fixtures cannot drift on anything but the
+   one fact that separates them: whether this tenant has ticked
+   `quickstock:recount` onto the kitchen role. The server sends the answer as
+   `can_recount`; the screen never infers it from whether a quantity happened to
+   arrive, because a stripped list and a genuinely empty shelf look the same. */
+const GRANTED = SHELF.replace('render();', 'state.qs.canRecount=true; render();');
+
+// A write recorder, for the cases that are about what goes on the wire.
+const CATCH = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
+
 run('add stock', [
   ['it is a screen in this app, reached from the home',
     KITCHEN + "state.tab='more';state.stack=[];render();", [
@@ -136,6 +149,73 @@ run('add stock', [
       ['only the match', `${body}.indexOf('Turkish Tomato Salad')>-1 && ${body}.indexOf('Hummus')===-1`],
       ['the field keeps focus', "document.activeElement && document.activeElement.id==='mQsQ'"],
     ]],
+  /* ── §46: the count, and the one correction it allows ────────────────────
+     WITHOUT THE GRANT NOTHING CHANGED — asserted by the case above this block,
+     which is every kitchen until an owner ticks the capability on. */
+  ['without the grant there is no correction door', SHELF, [
+    ['no shelf line', `${body}.indexOf('On the shelf')===-1`],
+    ['and nothing to open', `${body}.indexOf('Correct the count')===-1`],
+  ]],
+  ['the grant shows the count and opens the door', GRANTED, [
+    ['the shelf figure is named', `${body}.indexOf('On the shelf')>-1`],
+    ['and it is the shelf figure', `${body}.indexOf('11')>-1`],
+    ['with a way to correct it', `${body}.indexOf('Correct the count')>-1`],
+  ]],
+  /* WHAT HAS ALREADY GONE ON TODAY. The half that needs NO grant — it is the
+     operator's own work read back, and it is what stops the same batch going
+     on twice. Zero is not drawn: "Added today +0" on two hundred cards trains
+     the eye to skip the line on the one card where it says something. */
+  ['todays adds are read back on the card',
+    SHELF + "state.qs.addedToday={7:6}; render();", [
+      ['the line is there', `${body}.indexOf('Added today')>-1`],
+      ['carrying what went on', `${body}.indexOf('+6')>-1`],
+    ]],
+  ['and it is absent when nothing went on', SHELF, [
+    ['no line', `${body}.indexOf('Added today')===-1`],
+  ]],
+
+  /* A DROP IS NEVER SAVED UNASKED. 11 on the shelf, 8 counted: the fork opens
+     and the wire stays silent until it is answered. */
+  ['a drop asks before it writes', GRANTED + CATCH + "qsCountEntered(7,8);", [
+    ['the fork is open', "!!state.ask"],
+    ['offering the miscount', "state.ask.options.some(function(o){return o.key==='miscount'})"],
+    ['and the loss', "state.ask.options.some(function(o){return o.key==='gone'})"],
+    ['carrying no waste vocabulary at all',
+      "state.ask.options.every(function(o){return ['miscount','gone'].indexOf(o.key)>-1})"],
+    ['and nothing has been written', "window.__sent.length===0"],
+  ]],
+  /* THE ANSWER THAT WRITES NOTHING. The kitchen records no waste, so a loss
+     stops here and goes to whoever can record one — and the screen says so
+     rather than merely refusing. */
+  ['something gone writes nothing and says where it goes',
+    GRANTED + CATCH + "qsCountEntered(7,8); APP.cmd('askRun','gone');", [
+      ['nothing on the wire', "window.__sent.length===0"],
+      ['the shelf is untouched', "state.qs.items[0].physical_qty===11"],
+      ['and it says what happens instead', "String(state.toast).indexOf('records waste')>-1"],
+    ]],
+  ['counted wrong writes an absolute count carrying the answer',
+    GRANTED + CATCH + "qsCountEntered(7,8); APP.cmd('askRun','miscount');", [
+      ['one request', "window.__sent.length===1"],
+      ['an absolute count, never a delta', "JSON.parse(window.__sent[0].b).physical_qty===8"],
+      ['the two writes stay two', "!('delta' in JSON.parse(window.__sent[0].b))"],
+      ['and it carries the fork answer', "JSON.parse(window.__sent[0].b).recount_reason==='miscount'"],
+    ]],
+  /* A RISE ASKS NOTHING (§46), ruled that way against the symmetry argument on
+     the friction case — so a fork appearing here is a decision reversed in
+     silence. And no answer rides along: an upward correction was never asked. */
+  ['raising the count asks nothing and claims nothing',
+    GRANTED + CATCH + "qsCountEntered(7,19);", [
+      ['no fork', "!state.ask"],
+      ['one request', "window.__sent.length===1"],
+      ['carrying the new count', "JSON.parse(window.__sent[0].b).physical_qty===19"],
+      ['and no answer nobody was asked for', "!('recount_reason' in JSON.parse(window.__sent[0].b))"],
+    ]],
+  ['a count that agrees with the shelf writes nothing at all',
+    GRANTED + CATCH + "qsCountEntered(7,11);", [
+      ['no fork', "!state.ask"],
+      ['and no write', "window.__sent.length===0"],
+    ]],
+
   ['a role without the permission cannot reach it at all',
     "state.caps=['purchasing:receive'];push('stockadd');render();", [
       ['push refuses it', "state.stack.length===0"],
