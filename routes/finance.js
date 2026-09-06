@@ -13,7 +13,24 @@ const { billableQty } = require('../lib/po-returns');
 // the tenant's master list). Applied at every write of expense_entries.category
 // / income_entries.category below, same as routes/finance-transactions.js.
 const { storeCategory } = require('../lib/category-text');
+// §36, `routes/finance.js` is not fixed — it is blocked and left to die.
+// This file has no tenant handling anywhere: all seventeen routes use the
+// module-level global handle above and none calls tdb(), so a second tenant
+// reaching them would read and write Roots' ledger. §36 rules that the fix is
+// NOT to thread tdb() through a file scheduled for deletion — it is to block
+// the WRITE routes at the route layer and leave the reads alone, using the
+// same middleware already applied to the kitchen cost writes. That is what the
+// nine blockCostWrite() calls below are; the eight read routes are untouched,
+// so these screens still load and still show what is already recorded.
+const { blockCostWrite } = require('../middleware/block-kitchen-cost-writes');
 const router = express.Router();
+
+// The two labels the refusal interpolates into both halves of its bilingual
+// message. Kept as constants rather than repeated at nine call sites so the
+// operator meets ONE sentence per subject however they reached it, and so the
+// Tacet-side name for each can be corrected in one place.
+const LEDGER = 'the finance ledger';   // income_entries / expense_entries → Tacet Finance
+const INVOICES = 'the invoice list';   // invoices → Tacet Purchasing (§36: dropped, not migrated)
 
 // Map a row from income_entries / expense_entries to the shape the
 // frontend uses (v1 parity: notes/source fields).
@@ -134,7 +151,7 @@ router.get('/api/finance/income', requireAuth, requirePermission('finance'), (re
   res.json({ success: true, data });
 });
 
-router.post('/api/finance/income', requireAuth, requirePermission('finance'), (req, res) => {
+router.post('/api/finance/income', requireAuth, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   const { date, amount, category, notes, channel, payment_method } = req.body;
   const amt = parseFloat(amount);
   if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
@@ -155,7 +172,7 @@ router.post('/api/finance/income', requireAuth, requirePermission('finance'), (r
 // Editing is a create-grade action, so this sits behind the same
 // requirePermission('finance') as the POST and deliberately NOT behind
 // requireDelete: a bookkeeper who may log income may also correct it.
-router.put('/api/finance/income/:id', requireAuth, requirePermission('finance'), (req, res) => {
+router.put('/api/finance/income/:id', requireAuth, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   // Sales rows are synthetic — getSalesAsIncomeRows() builds them by grouping
   // sales_entries and hands out ids like 'sale-2026-04-12-Meituan'. There is no
   // income_entries row behind them, so say so plainly instead of letting the
@@ -201,7 +218,7 @@ router.put('/api/finance/income/:id', requireAuth, requirePermission('finance'),
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/api/finance/income/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
+router.delete('/api/finance/income/:id', requireAuth, requireDelete, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   const row = db.prepare('SELECT * FROM income_entries WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
   db.prepare('DELETE FROM income_entries WHERE id = ?').run(req.params.id);
@@ -229,7 +246,7 @@ router.get('/api/finance/expenses', requireAuth, requirePermission('finance'), (
   res.json({ success: true, data: db.prepare(q).all(...params).map(mapExpense) });
 });
 
-router.post('/api/finance/expenses', requireAuth, requirePermission('finance'), (req, res) => {
+router.post('/api/finance/expenses', requireAuth, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   const { date, amount, category, notes, payment_method } = req.body;
   const amt = parseFloat(amount);
   if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
@@ -247,7 +264,7 @@ router.post('/api/finance/expenses', requireAuth, requirePermission('finance'), 
 
 // PUT /api/finance/expenses/:id — edit a manual expense entry.
 // Same permission reasoning as the income PUT above: finance, not requireDelete.
-router.put('/api/finance/expenses/:id', requireAuth, requirePermission('finance'), (req, res) => {
+router.put('/api/finance/expenses/:id', requireAuth, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   const row = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
   // PO-linked rows are not editable for the same reason they're not deletable:
@@ -288,7 +305,7 @@ router.put('/api/finance/expenses/:id', requireAuth, requirePermission('finance'
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/api/finance/expenses/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
+router.delete('/api/finance/expenses/:id', requireAuth, requireDelete, requirePermission('finance'), blockCostWrite(LEDGER), (req, res) => {
   const row = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
   if (row.po_id) return res.status(400).json({ error: 'PO-linked expenses cannot be deleted directly · 关联采购单的支出不能直接删除' });
@@ -556,7 +573,7 @@ const allocatedByLine = (lineIds) => {
 // POST /api/finance/invoices — create invoice + link lines.
 // Body: { supplier, invoice_number, amount, date, notes,
 //         links: [{line_id, allocated_amount}] }
-router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), (req, res) => {
+router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), blockCostWrite(INVOICES), (req, res) => {
   const { supplier, invoice_number, amount, date, notes, links } = req.body || {};
   if (!supplier || !supplier.trim()) return res.status(400).json({ error: 'supplier required · 供应商必填' });
   if (!(parseFloat(amount) > 0))     return res.status(400).json({ error: 'amount must be > 0 · 金额必须大于零' });
@@ -605,7 +622,7 @@ router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), 
 });
 
 // PUT /api/finance/invoices/:id — replace header + diff link list.
-router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'), (req, res) => {
+router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'), blockCostWrite(INVOICES), (req, res) => {
   const inv = db.prepare(`SELECT * FROM invoices WHERE id = ? AND ${KITCHEN_SCOPE}`).get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found · 未找到' });
   const { supplier, invoice_number, amount, date, notes, links } = req.body || {};
@@ -658,7 +675,7 @@ router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
 
 // DELETE /api/finance/invoices/:id — drops the invoice + all its links
 // (FK ON DELETE CASCADE handles invoice_lines cleanup).
-router.delete('/api/finance/invoices/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
+router.delete('/api/finance/invoices/:id', requireAuth, requireDelete, requirePermission('finance'), blockCostWrite(INVOICES), (req, res) => {
   const r = db.prepare(`DELETE FROM invoices WHERE id = ? AND ${KITCHEN_SCOPE}`).run(req.params.id);
   if (r.changes === 0) return res.status(404).json({ error: 'Not found · 未找到' });
   logActivity(req.user.id, req.user.username, 'delete', 'invoice', req.params.id, null, req.ip);

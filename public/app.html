@@ -24067,6 +24067,52 @@ function saveFinCats() {
 }
 function _finFmt(n) { return Number(n||0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
+// §36 blocks every WRITE route in routes/finance.js — POST, PUT and DELETE on
+// income, expenses and invoices alike. The eight READ routes are untouched, so
+// every Finance screen still loads and still shows everything already recorded.
+//
+// What had to change here is the controls. Add, Edit and Delete all posted into
+// routes that now refuse with a 403, and a control that posts into a blocked
+// route is a lie to the operator — it looks like the entry was possible and
+// fails only after they have typed it. They are removed rather than left to
+// fail, and this notice takes their place so the screen says why.
+//
+// THE SENTENCE IS COPIED VERBATIM from what the blocked route now returns
+// (middleware/block-kitchen-cost-writes.js), label included, so the banner and
+// the refusal behind it are word for word the same. No Chinese is composed
+// here — per the vocabulary lock, this is an existing blocked-route string.
+// EACH HALF CARRIES ITS OWN NOUN, and that is the whole reason this takes two
+// arguments rather than one. The server's message interpolates a single English
+// label into both halves, which puts English inside the Chinese view — tolerable
+// in a `message` nothing renders (see below), not tolerable on a banner an
+// operator reads. So the two halves are supplied separately here.
+//
+// NOTHING IS COMPOSED. `Finance · 财务` and `Invoices · 发票` are the locked
+// section pairs at lib/capabilities.js:363 — the same pairs the Tacet page
+// heading ships at public/retail-admin.html. The trailing Chinese clause
+// `现由 Tacet 系统管理,无法在此编辑。` is lifted VERBATIM from the existing
+// blocked-route message in middleware/block-kitchen-cost-writes.js. There is no
+// locked pair for "the finance ledger" or "the invoice list" anywhere — checked
+// against the vocabulary document, 22-finance.js, retail-admin.html and
+// capabilities.js — so the label is restructured onto a pair that does exist
+// rather than a new one being minted, which is the standing preference.
+//
+// The section name is also the more useful noun: it names where in Tacet the
+// operator now goes, which is what this banner is for.
+// The verb travels with the label because the two nouns do not agree: Finance
+// is a mass noun and Invoices is plural, so one shared verb would be wrong on
+// one of them. Only the English needs it — the Chinese clause is invariant.
+const FIN_LEDGER_LABEL   = ['Finance',  '财务', 'is'];
+const FIN_INVOICES_LABEL = ['Invoices', '发票', 'are'];
+function _finBlockedNotice([en, cn, verb]) {
+  return `<div class="card" style="border:1px dashed rgba(224,82,82,.45);background:rgba(224,82,82,.06);margin-bottom:14px">
+      <div class="card-body" style="padding:14px 18px;font-size:13px;line-height:1.65;color:var(--text-2)">
+        <div>${esc(en)} ${esc(verb)} now owned by Tacet and can no longer be edited here.</div>
+        <div>${esc(cn)}现由 Tacet 系统管理,无法在此编辑。</div>
+      </div>
+    </div>`;
+}
+
 async function _finReload() {
   const [iRes, eRes] = await Promise.all([
     fetch('/api/finance/income').then(r=>r.json()),
@@ -24516,13 +24562,9 @@ function _finDrawLine() {
 
 // ── Income tab ──────────────────────────────────────────────────────────────
 function _finRenderIncome(body) {
-  const today = new Date().toISOString().slice(0,10);
-  // Same dual-purpose form as the Expenses tab — see _finRenderExpenses.
-  const editing = _finEditingIncomeId != null
-    ? _income.find(x => String(x.id) === String(_finEditingIncomeId))
-    : null;
-  if (!editing) _finEditingIncomeId = null;
-  const catOpts = _finCategoryOpts('income', editing ? (editing.category || '') : '');
+  // The Log Income form that stood here is gone: §36 blocks POST/PUT/DELETE on
+  // /api/finance/income, so the form could only ever have collected a value and
+  // then refused it. The date/editing/category locals it needed went with it.
   // Counts for the header summary.
   const salesRows = _income.filter(e => e.source === 'sales');
   const manualRows = _income.filter(e => e.source !== 'sales');
@@ -24546,21 +24588,7 @@ function _finRenderIncome(body) {
         <span class="help-tip" data-help="Sales appear here automatically as one row per channel per day. To add, edit, or delete sales, use the <strong>Sales</strong> module — they update here on the next page load."></span>
       </div>
     </div>
-    <div class="card" id="inc_form_card">
-      <div class="card-header"><div class="card-title">${editing
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>编辑收入 Edit income'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>记录收入 Log Income <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px">— for non-sales income only (refunds, investor capital, rent, etc.)</span>'
-      }</div></div>
-      <div class="fin-form-row">
-        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="inc_date" value="${editing ? esc(editing.date||'') : today}" style="width:160px"></div>
-        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="inc_amount" min="0" step="0.01" placeholder="0.00" value="${editing ? esc(String(editing.amount ?? '')) : ''}" style="width:140px"></div>
-        <div class="fin-form-field"><label>分类 Category</label><select id="inc_cat">${catOpts}</select></div>
-        <div class="fin-form-field"><label>支付方式 Payment</label><select id="inc_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts(editing ? (editing.payment_method || '') : '')}</select></div>
-        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="inc_notes" placeholder="Optional notes(选填)" value="${editing ? esc(editing.notes||'') : ''}"></div>
-        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" id="inc_save_btn" onclick="addIncomeEntry()">${editing ? '保存修改 Save changes' : '＋ 添加 Add'}</button></div>
-        ${editing ? '<div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-secondary" id="inc_cancel_btn" onclick="cancelEditIncome()">取消 Cancel</button></div>' : ''}
-      </div>
-    </div>
+    ${_finBlockedNotice(FIN_LEDGER_LABEL)}
     <div class="card">
       <div class="card-header"><div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>收入记录 Income Records</div></div>
       <table class="ledger-table">
@@ -24584,19 +24612,16 @@ function _finRenderIncomeRows() {
       </tr>`;
     }
     const payChip = e.payment_method ? `<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(204,217,0,.18);color:var(--lime-text);margin-left:6px;white-space:nowrap">${esc(e.payment_method)}</span>` : '';
-    const editCls = (_finEditingIncomeId != null && String(e.id) === String(_finEditingIncomeId)) ? ' fin-row-editing' : '';
-    // Only real manual rows are editable. Keyed off source, not the id shape —
-    // sales rows carry string ids like 'sale-2026-04-12-Meituan' and are handled
-    // by the branch above, but source is the thing that actually decides this.
-    const editBtn = e.source === 'manual'
-      ? `<button class="btn-icon" title="编辑 Edit" onclick="editIncomeEntry(${e.id})">✎</button>`
-      : '';
-    return `<tr class="ledger-income${editCls}">
+    // The ✎ and ✕ that sat here are gone — §36 blocks PUT and DELETE on
+    // /api/finance/income, so both could only fail. The lock matches the
+    // sales-derived row above, which has always been read-only for its own
+    // reason; the whole ledger now reads the same way.
+    return `<tr class="ledger-income">
       <td>${esc(e.date||'—')}${tcell}</td>
       <td>${esc(e.category||'—')}${payChip}</td>
       <td style="color:var(--muted)">${esc(e.notes||'—')}</td>
       <td style="text-align:right" class="ledger-amount-income">+¥${_finFmt(e.amount||0)}</td>
-      <td>${editBtn}<button class="btn-icon" style="color:#e74c3c" onclick="deleteIncomeEntry(${e.id})">✕</button></td>
+      <td><span title="Recorded in Tacet · 现由 Tacet 系统管理" style="color:var(--muted);font-size:13px;cursor:help">🔒</span></td>
     </tr>`;
   }).join('');
 }
@@ -24687,34 +24712,12 @@ async function deleteIncomeEntry(id) {
 
 // ── Expenses tab ────────────────────────────────────────────────────────────
 function _finRenderExpenses(body) {
-  const today = new Date().toISOString().slice(0,10);
-  // When an edit is in flight the same form doubles as the editor, pre-filled
-  // from the row. If the id no longer resolves (deleted in another tab) fall
-  // back to a blank create form rather than an editor pointing at nothing.
-  const editing = _finEditingExpenseId != null
-    ? _expenses.find(x => String(x.id) === String(_finEditingExpenseId))
-    : null;
-  if (!editing) _finEditingExpenseId = null;
-  const catOpts = _finCategoryOpts('expense', editing ? (editing.category || '') : '');
-  const title = editing
-    ? '编辑支出 Edit expense'
-    : '记录支出 Log Expense';
-  const titleIcon = editing
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  // The Log Expense form that stood here is gone, on the same §36 reasoning as
+  // the Income tab: POST/PUT/DELETE on /api/finance/expenses are blocked, so the
+  // form and its edit mode had nothing left to post to. PO-derived rows were
+  // already read-only here and are unaffected.
   body.innerHTML = `
-    <div class="card" id="exp_form_card">
-      <div class="card-header"><div class="card-title">${titleIcon}${title}</div></div>
-      <div class="fin-form-row">
-        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="exp_date" value="${editing ? esc(editing.date||'') : today}" style="width:160px"></div>
-        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="exp_amount" min="0" step="0.01" placeholder="0.00" value="${editing ? esc(String(editing.amount ?? '')) : ''}" style="width:140px"></div>
-        <div class="fin-form-field"><label>分类 Category</label><select id="exp_cat">${catOpts}</select></div>
-        <div class="fin-form-field"><label>支付方式 Payment</label><select id="exp_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts(editing ? (editing.payment_method || '') : '')}</select></div>
-        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="exp_notes" placeholder="Optional notes(选填)" value="${editing ? esc(editing.notes||'') : ''}"></div>
-        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" id="exp_save_btn" onclick="addExpenseEntry()">${editing ? '保存修改 Save changes' : '＋ 添加 Add'}</button></div>
-        ${editing ? '<div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-secondary" id="exp_cancel_btn" onclick="cancelEditExpense()">取消 Cancel</button></div>' : ''}
-      </div>
-    </div>
+    ${_finBlockedNotice(FIN_LEDGER_LABEL)}
     <div class="card">
       <div class="card-header"><div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5h-3a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3H10"/><line x1="12" y1="7.5" x2="12" y2="9.5"/><line x1="12" y1="15.5" x2="12" y2="17.5"/></svg>支出记录 Expense Records</div></div>
       <table class="ledger-table">
@@ -24733,19 +24736,16 @@ function _finRenderExpenseRows() {
     // Manual rows aren't clickable (nothing to drill into); the delete X
     // still works because we stop propagation on it.
     const rowClick = (isPo && e.po_id) ? `style="cursor:pointer" onclick="_navFromFinanceTab='expenses';navigate('purchases');setTimeout(()=>viewPO(${e.po_id}),200)" title="Open source PO · 打开采购单"` : '';
-    // Manual rows get pencil + ✕; PO rows keep the inert "PO" marker and neither
-    // control — they're rebuilt from the buying order on every status change.
-    // Both buttons stop propagation so they can't trigger the row's PO jump.
-    // The handler name matters: the can_delete gate at the top of this file
-    // hides .btn-icon[onclick*="delete" i], so the pencil must not say "delete".
+    // The manual row's ✎ and ✕ are gone — §36 blocks PUT and DELETE on
+    // /api/finance/expenses, so both could only fail. A PO row keeps its inert
+    // "PO" marker exactly as before; a manual row now carries the same lock the
+    // Income ledger uses, so every row on this screen reads the same way.
     const delBtn = isPo
       ? '<span style="font-size:11px;color:var(--muted)">PO</span>'
-      : `<button class="btn-icon" title="编辑 Edit" onclick="event.stopPropagation();editExpenseEntry(${e.id})">✎</button>`
-        + `<button class="btn-icon" style="color:#e74c3c" onclick="event.stopPropagation();deleteExpenseEntry(${e.id})">✕</button>`;
+      : '<span title="Recorded in Tacet · 现由 Tacet 系统管理" style="color:var(--muted);font-size:13px;cursor:help">🔒</span>';
     const tcell = e.created_at ? `<div style="font-size:10px;color:var(--muted);font-weight:500;margin-top:2px;font-variant-numeric:tabular-nums">${esc(_fmtTime(e.created_at))}</div>` : '';
     const payChip = e.payment_method ? `<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(204,217,0,.18);color:var(--lime-text);margin-left:6px;white-space:nowrap">${esc(e.payment_method)}</span>` : '';
-    const editCls = (_finEditingExpenseId != null && String(e.id) === String(_finEditingExpenseId)) ? ' fin-row-editing' : '';
-    return `<tr class="ledger-expense${editCls}" ${rowClick}>
+    return `<tr class="ledger-expense" ${rowClick}>
       <td>${esc(e.date||'—')}${tcell}</td>
       <td>${esc(e.category||'—')}${payChip}</td>
       <td style="color:var(--muted);font-size:11px">${srcLabel}</td>
@@ -24976,6 +24976,7 @@ async function _finRenderInvoices(body) {
   const tot = outstanding.totals;
 
   body.innerHTML = `
+    ${_finBlockedNotice(FIN_INVOICES_LABEL)}
     <!-- Filter bar -->
     <div class="fin-filter-bar" style="margin-bottom:14px">
       <select id="finInvMonth" onchange="_finInvMonth=this.value;renderFinance('invoices')" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
@@ -24994,7 +24995,6 @@ async function _finRenderInvoices(body) {
         onclick="_finInvSearch='';_finInvSupplier='';_finInvMonth='';renderFinance('invoices')">✕ Clear 清除</button>
       <span style="flex:1"></span>
       <span id="autoRefreshIndicator"></span>
-      <button class="btn btn-primary btn-sm" onclick="showAddInvoiceModal()">+ Add Invoice 添加发票</button>
     </div>
 
     <!-- Totals strip -->
@@ -25080,7 +25080,7 @@ function _finRedrawInvoiceLists() {
                   <td style="text-align:center" onclick="event.stopPropagation()">
                     ${g.supplier === '未指定 Unspecified'
                       ? `<span style="font-size:10px;color:var(--muted);font-style:italic;line-height:1.4">Set line suppliers first ↓<br>请先设置行供应商</span>`
-                      : (hasAwaiting ? `<button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="showAddInvoiceModal('${sKey}')" title="Add an invoice for this supplier · 为此供应商添加发票">+ Invoice 发票</button>` : '<span style="font-size:11px;color:var(--muted)">all set ✓</span>')}
+                      : (hasAwaiting ? '<span style="font-size:11px;color:var(--muted)">awaiting 待开票</span>' : '<span style="font-size:11px;color:var(--muted)">all set ✓</span>')}
                   </td>
                 </tr>
                 <tr data-drill-key="${esc(g.supplier)}" style="display:${expanded?'table-row':'none'}">
@@ -25151,8 +25151,7 @@ function _finRedrawInvoiceLists() {
     if (filtered.invoices.length === 0) {
       listBody.innerHTML = `
         <div style="padding:24px;text-align:center;color:var(--muted)">
-          ${_finInvSearch ? `No invoices match "${esc(_finInvSearch)}" · 无匹配发票` : 'No invoices recorded in this scope · 此范围内未记录发票'}<br>
-          <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="showAddInvoiceModal()">+ Add invoice 添加发票</button>
+          ${_finInvSearch ? `No invoices match "${esc(_finInvSearch)}" · 无匹配发票` : 'No invoices recorded in this scope · 此范围内未记录发票'}
         </div>`;
     } else {
       listBody.innerHTML = `
@@ -25178,8 +25177,7 @@ function _finRedrawInvoiceLists() {
                   : '<span style="color:var(--muted);font-style:italic">unlinked</span>'}</td>
                 <td style="font-size:12px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(inv.notes||'')}">${esc(inv.notes || '—')}</td>
                 <td style="white-space:nowrap;text-align:center">
-                  <button class="btn btn-secondary btn-sm" onclick="showAddInvoiceModal(null, ${inv.id})">✏️</button>
-                  <button class="btn btn-danger btn-sm" onclick="deleteInvoice(${inv.id})">🗑</button>
+                  <span title="Recorded in Tacet · 现由 Tacet 系统管理" style="color:var(--muted);font-size:13px;cursor:help">🔒</span>
                 </td>
               </tr>`).join('')}
           </tbody>
