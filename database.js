@@ -2355,6 +2355,30 @@ addColumn('retail_orders', 'created_by',              'INTEGER');
 // (`fulfillment_type`, `routing_reason`, `channel`). Nothing reads this column
 // after the change that adds it.
 addColumn('retail_orders', 'shop_entry_method',       'TEXT');
+// THE SHORT CODE A SHOP CALLS OUT — §44, shape ruled by Ash 2026-09-06: plain
+// numbers, restarting each day.
+//
+// §44 asks for "a short order code … what staff use to retrieve the order",
+// because order_no (R2026090601234) is unshoutable across a counter. This is
+// that code: 1, 2, 3 … through the shop's day, back to 1 the next morning.
+//
+// TWO COLUMNS, NOT ONE, AND THE DATE IS THE LOAD-BEARING HALF. The number alone
+// is ambiguous — today's 14 and yesterday's 14 are different orders — so the
+// business date it was drawn on is stored beside it. Stored rather than derived
+// from placed_at, because deriving it needs the shop's timezone at read time
+// and a timezone that is later corrected would silently renumber history.
+//
+// The date is the LOCATION's business date (lib/business-date.js), not UTC:
+// a shop open past midnight is still on the same trading day, and the zone is
+// the location's per §32 rule 12's 2026-08-27 addendum.
+//
+// Scoped per shop: two shops both call "14" on the same day and neither is
+// wrong, because a customer only ever hears the counter they are standing at.
+addColumn('retail_orders', 'shop_order_code',         'INTEGER');
+addColumn('retail_orders', 'shop_order_date',         'TEXT');
+try {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_retail_orders_shop_code ON retail_orders(store_id, shop_order_date, shop_order_code)').run();
+} catch (e) { /* index only — a failure here costs a scan, never correctness */ }
 // Guest-pay token — an unguessable handle that lets a customer WITHOUT an app
 // account open a public pay page (/pay/:token) for a single manual order and
 // pay by QR. Minted for manual orders at creation; NULL for app orders (those

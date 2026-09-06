@@ -1,11 +1,15 @@
 // The public QR menu — docs/tacet-consolidation-decisions.md §41, §42, §44,
-// §47. Step 5a of the location commerce module.
+// §45, §47. Steps 5a and 5b of the location commerce module.
 //
 // WHAT THIS IS. One page, served at /s/:shopCode, that shows a shop's menu to
-// a customer who has just scanned a QR code. No login, no session, no cookie,
-// no cart and no ordering: ordering is Step 5b and is deliberately built
-// behind this page rather than with it, so the menu can be reviewed and
-// corrected while the order flow is written.
+// a customer who has just scanned a QR code, and one endpoint,
+// POST /s/:shopCode/order, that turns a selection from that menu into a
+// counter order. No login, no session, no cookie and no account: a name and a
+// short number are the whole of the customer's identity here (§44).
+//
+// THE PAGE ITSELF STILL CARRIES NO CART. The submit surface is the next piece
+// of Step 5b; the endpoint is built and proved first so the page has something
+// correct to post to.
 //
 // IT IS A CUSTOMER SURFACE, NOT AN ADMIN ONE. It must look like the web
 // storefront and the mini app, which share one visual language, and NOT like
@@ -62,7 +66,17 @@ const inventory = require('../lib/inventory');
 // file so the photo fallback and the money format cannot drift from the
 // storefront's. routes/retail-shops.js requires retail.js the same way; both
 // are mounted after it in server.js, so the module is fully loaded by then.
-const { resolveProductImage, normalizeCurrency } = require('./retail');
+const {
+  resolveProductImage, normalizeCurrency,
+  // A QR sale and a till sale at the same counter are numbered, taxed and
+  // costed by the same code. A second answer to any of the three would show up
+  // as a margin report nobody can reconcile.
+  nextOrderNo, taxSettings, costAtSale,
+} = require('./retail');
+const { allocateShopOrderCode } = require('../lib/shop-order-code');
+const moneyLib = require('../lib/money');   // the money MATHS; money() below is this page's formatter
+const tax = require('../lib/tax');
+const rateLimit = require('express-rate-limit');
 
 let sharp = null;
 try { sharp = require('sharp'); } catch (e) {
@@ -638,4 +652,216 @@ router.get('/s/:shopCode/i/:productId', async (req, res) => {
   res.send(buf);
 });
 
+// ─── Submitting an order — §44, §45 ─────────────────────────────────────
+
+// THIS IS A PUBLIC, UNAUTHENTICATED WRITE, and it is the only one this module
+// has. §44 designs it that way on purpose: no login, no phone number, no
+// account, because the customer is standing in the shop and every field asked
+// for is friction at the point of highest abandonment. The cost of that choice
+// is that anyone who can see the QR can post here, so the guards below are the
+// whole of what stands between a shop and a printer full of nonsense.
+//
+// THE STAFF-ACCEPT STEP IS A PRINT GATE, NOT A STATUS, and it belongs with the
+// printing rather than here. §44 places it "between submit and print": the
+// order EXISTS either way, and what waits for a human is the ticket. An earlier
+// draft of this handler invented a `pending_accept` status, which no screen, no
+// sweep and no report in this repo understands — an order in it would have been
+// invisible in the admin and untouched by the twenty-minute counter clock. A
+// QR order is therefore an ordinary pending_payment order from the moment it is
+// submitted, and the accept step arrives with the print trigger.
+const ORDER_LIMIT = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,                    // a table of six ordering separately, twice over
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'too_many_orders' },
+});
+
+const MAX_LINES = 40;         // a menu is not a wholesale order form
+const MAX_QTY = 20;           // per line
+
+router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), (req, res) => {
+  const code = String(req.params.shopCode || '');
+  if (!isShopCode(code)) return res.status(404).json({ success: false, error: 'not_found' });
+  const shop = resolveShop(code);
+  if (!shop) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const b = req.body || {};
+  // §44: "The customer selects from that shop's listings, supplies a name, and
+  // submits." A name and nothing else — it is what gets called across a room.
+  const name = String(b.name == null ? '' : b.name).trim().slice(0, 40);
+  if (!name) return res.status(400).json({ success: false, error: 'name_required' });
+
+  const rawLines = Array.isArray(b.items) ? b.items : [];
+  if (!rawLines.length) return res.status(400).json({ success: false, error: 'no_items' });
+  if (rawLines.length > MAX_LINES) return res.status(400).json({ success: false, error: 'too_many_lines' });
+
+  // PRICES ARE NEVER TAKEN FROM THE CLIENT. The browser sends product ids and
+  // quantities; every price, every line total and the order total are read from
+  // shop_listings here. A price posted by a customer is not a price.
+  const listings = tdb().prepare(`
+    SELECT sl.store_product_id AS pid, sl.price, sl.fulfilment_mode, sl.is_available,
+           p.name_en, p.name_cn, p.sku, p.weight AS size,
+           p.ship_modes, p.needs_ice_pack, p.ship_from_supplier
+      FROM shop_listings sl
+      JOIN store_products p ON p.id = sl.store_product_id
+     WHERE sl.shop_id = ? AND COALESCE(p.is_active, 1) = 1
+  `).all(shop.id);
+  const byId = new Map(listings.map(r => [r.pid, r]));
+
+  const wanted = new Map();
+  for (const raw of rawLines) {
+    const pid = parseInt(raw && raw.store_product_id, 10);
+    const qty = parseInt(raw && raw.qty, 10);
+    if (!Number.isInteger(pid) || !byId.has(pid)) {
+      return res.status(400).json({ success: false, error: 'not_on_this_menu', store_product_id: pid || null });
+    }
+    if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) {
+      return res.status(400).json({ success: false, error: 'bad_qty', store_product_id: pid });
+    }
+    wanted.set(pid, (wanted.get(pid) || 0) + qty);
+  }
+
+  // AVAILABILITY IS RE-CHECKED AT SUBMIT, not trusted from the page the
+  // customer has been reading. The menu they loaded may be minutes old and the
+  // last one may have gone in between. Same two rules the page renders by:
+  // made-here obeys its switch, stocked obeys the switch AND the shelf, and an
+  // absent shelf record is sold out (§47).
+  const stockedIds = [...wanted.keys()].filter(pid => byId.get(pid).fulfilment_mode === 'stocked');
+  const avail = stockedIds.length
+    ? inventory.getAvailableMap(shop.location_id, stockedIds, SHOP_CHANNEL)
+    : new Map();
+  const soldOut = [];
+  for (const [pid, qty] of wanted) {
+    const l = byId.get(pid);
+    if (!l.is_available) { soldOut.push(pid); continue; }
+    if (l.fulfilment_mode !== 'stocked') continue;
+    const a = avail.get(pid);
+    if (!a || a.available < qty) soldOut.push(pid);
+  }
+  if (soldOut.length) {
+    // Refused whole rather than silently short — a customer must never be
+    // charged for, or handed, something different from what they chose.
+    return res.status(409).json({
+      success: false, error: 'unavailable',
+      items: soldOut.map(pid => ({ store_product_id: pid, name_en: byId.get(pid).name_en, name_cn: byId.get(pid).name_cn })),
+    });
+  }
+
+  const cur = normalizeCurrency(cfg('currency', null));
+  const lines = [...wanted].map(([pid, qty]) => {
+    const l = byId.get(pid);
+    const unit = Number(l.price) || 0;
+    return { l, pid, qty, unit, lineTotal: Math.round(unit * qty * 100) / 100 };
+  });
+  const subtotal = Math.round(lines.reduce((n, r) => n + r.lineTotal, 0) * 100) / 100;
+
+  // Taxed by the same code as a till sale at the same counter. A shop that
+  // charges tax charges it however the customer reached it.
+  const taxCfg = taxSettings();
+  const taxLine = tax.taxOn({ subtotalMinor: moneyLib.toMinor(subtotal) || 0 }, taxCfg);
+  let total = subtotal;
+  if (taxLine.addedMinor) total = moneyLib.round(total + moneyLib.fromMinor(taxLine.addedMinor));
+
+  let created;
+  try {
+    const h = tdb();
+    // ONE TRANSACTION, and the code allocation is inside it. MAX + 1 over the
+    // shop's day is only safe if the read and the insert cannot interleave;
+    // better-sqlite3 serialises transactions, so two customers submitting at
+    // once cannot be handed the same number.
+    created = h.transaction(() => {
+      const orderNo = nextOrderNo(h);
+      const { code: shopCode, date: shopDate } = allocateShopOrderCode(h, shop.location_id);
+      // THE TENDER IS 'offline', NOT 'counter', AND THAT IS DELIBERATE.
+      // Nobody has paid yet: the customer walks to the till after submitting,
+      // and the real tender — cash, bank transfer, off-app WeChat or Alipay —
+      // is written by staff's Mark-paid, which overwrites this column with what
+      // actually arrived. 'offline' is the value routes/retail.js already gives
+      // an unpaid order at create (its ALLOWED_PAY fallback) and the one every
+      // reader of this column understands. 'counter' is in NO such list: it
+      // would render as a raw string in the admin's tender picker and reconcile
+      // against nothing — the same mistake as the invented status above, one
+      // column over.
+      const PLACEHOLDER_TENDER = 'offline';
+      const info = h.prepare(`
+        INSERT INTO retail_orders (
+          order_no, customer_id, status, payment_method,
+          recipient_name, subtotal, shipping_fee, packing_fee, total,
+          channel, source, fulfillment_type, store_id,
+          shop_entry_method, shop_order_code, shop_order_date,
+          tax_amount, tax_rate_micro, tax_mode, placed_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      `).run(
+        orderNo, null, 'pending_payment', PLACEHOLDER_TENDER,
+        name, subtotal, 0, 0, total,
+        // §44: till and QR share the channel `shop` and are told apart by
+        // source, so a shop's revenue is never split across two channel lines.
+        'shop', 'qr', 'counter', shop.location_id,
+        'qr', shopCode, shopDate,
+        taxCfg.enabled ? moneyLib.fromMinor(taxLine.taxMinor) : null,
+        taxCfg.enabled ? taxCfg.rateMicro : null,
+        taxCfg.enabled ? taxCfg.mode : null
+      );
+      const orderId = info.lastInsertRowid;
+
+      const insItem = h.prepare(`
+        INSERT INTO retail_order_items
+          (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
+           ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `);
+      for (const r of lines) {
+        insItem.run(
+          orderId, r.pid, r.l.name_en, r.l.name_cn, r.l.sku, r.l.size, r.qty, r.unit, r.lineTotal,
+          r.l.ship_modes || 'air,land',
+          r.l.needs_ice_pack ? 1 : 0,
+          r.l.ship_from_supplier ? 1 : 0,
+          costAtSale(h, r.pid)
+        );
+      }
+      h.prepare(
+        "INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no) VALUES (?,?,?,'pending',?)"
+      ).run(orderId, PLACEHOLDER_TENDER, total, orderNo);
+
+      // §45: a QR order RESERVES on submit and decrements on paid. Stocked
+      // lines only — a made-here item has no shelf to hold (§43).
+      const resItems = lines
+        .filter(r => r.l.fulfilment_mode === 'stocked')
+        .map(r => ({ product_id: r.pid, qty: r.qty }));
+      if (resItems.length) {
+        inventory.reserveForOrder(
+          { storeId: shop.location_id, orderId, items: resItems, channel: SHOP_CHANNEL }, h
+        );
+      }
+      return { orderId, orderNo, shopCode, shopDate };
+    })();
+  } catch (e) {
+    console.error('[shop-menu/order]', code, e.message);
+    return res.status(500).json({ success: false, error: 'order_failed' });
+  }
+
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.status(201).json({
+    success: true,
+    data: {
+      // The short code is what staff call and what the customer watches for.
+      order_code: created.shopCode,
+      order_no: created.orderNo,
+      name,
+      status: 'pending_payment',
+      total,
+      currency: cur,
+      items: lines.map(r => ({
+        store_product_id: r.pid, name_en: r.l.name_en, name_cn: r.l.name_cn,
+        qty: r.qty, unit_price: r.unit, line_total: r.lineTotal,
+      })),
+    },
+  });
+});
+
 module.exports = router;
+// The rate limiter is exported so a suite can prove it fires and then clear the
+// count — without this, the first dozen checks would silently starve every
+// later one of a 2xx and the failures would read as bugs in the handler.
+module.exports.orderLimiter = ORDER_LIMIT;

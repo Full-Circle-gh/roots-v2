@@ -35646,3 +35646,14 @@ module.exports.resolveProductImage   = resolveProductImage;
 // a second answer to a question that already has one. The QR menu reads it for
 // the same reason — one answer, three callers.
 module.exports.normalizeCurrency     = normalizeCurrency;
+
+// Exported for routes/shop-menu.js — the public QR order path (§44). A QR sale
+// and a till sale at the same counter must be numbered, taxed and costed by the
+// SAME code: a second answer to any of these three is a bug that shows up as a
+// margin report nobody can reconcile, or a tax figure the shop cannot defend.
+//   nextOrderNo   — the public order number, and its uniqueness contract
+//   taxSettings   — the tenant's tax mode and rate, one source
+//   costAtSale    — the unit-cost snapshot every order item carries
+module.exports.nextOrderNo           = nextOrderNo;
+module.exports.taxSettings           = taxSettings;
+module.exports.costAtSale            = costAtSale;

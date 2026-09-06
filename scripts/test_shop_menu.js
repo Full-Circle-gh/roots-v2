@@ -4,8 +4,10 @@
  *
  *   node scripts/test_shop_menu.js
  *
- * docs/tacet-consolidation-decisions.md §41, §42, §44, §47, built in
- * routes/shop-menu.js. Menu only: no cart, no ordering, no order creation.
+ * docs/tacet-consolidation-decisions.md §41, §42, §44, §45, §47, built in
+ * routes/shop-menu.js — the page, and the order endpoint behind it. The PAGE
+ * still carries no cart; that is the next piece of Step 5b, and the last
+ * section of this file holds it to that.
  *
  * Everything runs against a REAL sqlite database and the REAL express router,
  * mounted and called over HTTP, so every status and body asserted here is
@@ -37,6 +39,14 @@
  *  7. scripts/check_shop_listing_names.js actually goes RED, and names the
  *     product and the missing language. The checker passes on an empty
  *     database by design, so without this it could pass by doing nothing.
+ *  8. A PRICE POSTED BY THE CUSTOMER IS NOT A PRICE. The listing price is
+ *     moved away from the catalogue price and a contradicting price is posted
+ *     alongside the order; the total must be the shop's. No reading of the
+ *     handler proves this, because the proof is that a field was IGNORED.
+ *  9. A submit that is refused — sold out, over the shelf, off the menu, or
+ *     over the rate limit — leaves NOTHING behind. Counted rows before and
+ *     after, because a half-written order is a ticket in a kitchen for
+ *     something nobody ordered.
  */
 'use strict';
 
@@ -574,7 +584,178 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(!out.includes('__M-60'), `the fixture is still blocked after being unlisted:\n${out}`);
     });
 
-    console.log('\nNo ordering surface exists yet — step 5a is the menu and only the menu');
+    console.log('\nSubmitting an order (§44, §45)');
+    const post = (u, body) => fetch(`http://127.0.0.1:${PORT}${u}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).then(async r => ({ status: r.status, json: await r.json().catch(() => null) }));
+
+    // The handler rate-limits a single caller to 12 orders a minute, and this
+    // whole section posts more than that from one address. The count is cleared
+    // between checks so a limiter working correctly cannot be mistaken for a
+    // handler that has stopped creating orders; the limiter itself is proved at
+    // the end of the section, where the clearing stops.
+    const resetOrderLimit = async () => {
+      for (const k of ['127.0.0.1', '::ffff:127.0.0.1', '::1']) {
+        await router.orderLimiter.resetKey(k);
+      }
+    };
+
+    await checkAsync('a valid order is created, priced from the LISTING, with a short code', async () => {
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 2 }] });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      const d = r.json.data;
+      assert.strictEqual(d.name, 'Mei');
+      assert.strictEqual(d.status, 'pending_payment', 'a status no screen understands would hide the order');
+      assert.ok(Number.isInteger(d.order_code) && d.order_code >= 1, `short code: ${d.order_code}`);
+      // The listing price is 28; the catalogue price is also 28 in this fixture,
+      // so the next check is the one that proves WHICH was used.
+      assert.strictEqual(d.items[0].unit_price, 28);
+      assert.strictEqual(d.total, 56);
+      const row = db.prepare('SELECT channel, source, fulfillment_type, shop_entry_method, store_id, customer_id FROM retail_orders WHERE order_no = ?').get(d.order_no);
+      assert.strictEqual(row.channel, 'shop');
+      assert.strictEqual(row.source, 'qr');
+      assert.strictEqual(row.fulfillment_type, 'counter', 'not counter → the twenty-minute clock and §45 both miss it');
+      assert.strictEqual(row.shop_entry_method, 'qr');
+      assert.strictEqual(row.customer_id, null, 'a QR order has no account, by §44');
+      db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (SELECT id FROM retail_orders WHERE order_no = ?)').run(d.order_no);
+      db.prepare('DELETE FROM retail_order_items WHERE order_id IN (SELECT id FROM retail_orders WHERE order_no = ?)').run(d.order_no);
+      db.prepare('DELETE FROM retail_payments WHERE order_id IN (SELECT id FROM retail_orders WHERE order_no = ?)').run(d.order_no);
+      db.prepare('DELETE FROM retail_orders WHERE order_no = ?').run(d.order_no);
+    });
+
+    await checkAsync('THE PRICE IS THE SHOP\'S, NOT THE CLIENT\'S', async () => {
+      await resetOrderLimit();
+      // The single most important assertion in this file. A customer posting a
+      // price must never be charged it.
+      const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC_LIVE).id;
+      db.prepare('UPDATE shop_listings SET price = 99 WHERE shop_id = ? AND store_product_id = ?').run(shopId, P_STOCK_OK);
+      const r = await post(`/s/${LIVE}/order`, {
+        name: 'Mei',
+        items: [{ store_product_id: P_STOCK_OK, qty: 1, price: 1, unit_price: 1, line_total: 1 }],
+      });
+      assert.strictEqual(r.status, 201);
+      assert.strictEqual(r.json.data.total, 99, 'a price posted by the customer was honoured');
+      db.prepare('UPDATE shop_listings SET price = 28 WHERE shop_id = ? AND store_product_id = ?').run(shopId, P_STOCK_OK);
+      db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (SELECT id FROM retail_orders WHERE order_no = ?)').run(r.json.data.order_no);
+      db.prepare('DELETE FROM retail_orders WHERE order_no = ?').run(r.json.data.order_no);
+    });
+
+    await checkAsync('a sold-out item is refused WHOLE, not silently shortened', async () => {
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_NONE, qty: 1 }] });
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+      assert.strictEqual(r.json.error, 'unavailable');
+      assert.ok(r.json.items.some(i => i.store_product_id === P_STOCK_NONE));
+    });
+    await checkAsync('more than the shelf holds is refused', async () => {
+      await resetOrderLimit();
+      // P_STOCK_OK has 5 on the shelf. Asking for 6 must not sell the sixth.
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 6 }] });
+      assert.strictEqual(r.status, 409, 'oversold past the shelf');
+    });
+    await checkAsync('a product not on THIS menu is refused', async () => {
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_NONAME, qty: 1 }] });
+      assert.strictEqual(r.status, 400);
+      assert.strictEqual(r.json.error, 'not_on_this_menu');
+    });
+    await checkAsync('a name is required, and junk quantities are refused', async () => {
+      await resetOrderLimit();
+      assert.strictEqual((await post(`/s/${LIVE}/order`, { items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).json.error, 'name_required');
+      assert.strictEqual((await post(`/s/${LIVE}/order`, { name: 'Mei', items: [] })).json.error, 'no_items');
+      for (const qty of [0, -1, 999, 'x']) {
+        const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty }] });
+        assert.strictEqual(r.json.error, 'bad_qty', `qty ${qty} was accepted`);
+      }
+    });
+    await checkAsync('a switched-off shop and a bad code take no orders', async () => {
+      await resetOrderLimit();
+      assert.strictEqual((await post(`/s/${CODES[LOC_OFF]}/order`, { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).status, 404);
+      assert.strictEqual((await post('/s/lower123/order', { name: 'Mei', items: [{ store_product_id: P_STOCK_OK, qty: 1 }] })).status, 404);
+    });
+    await checkAsync('a made-here line reserves nothing; a stocked line reserves', async () => {
+      await resetOrderLimit();
+      const r = await post(`/s/${LIVE}/order`, {
+        name: 'Mei',
+        items: [{ store_product_id: P_MADE_ON, qty: 1 }, { store_product_id: P_STOCK_OK, qty: 1 }],
+      });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      const res = db.prepare('SELECT product_id FROM retail_stock_reservations WHERE order_id = ?').all(oid).map(x => x.product_id);
+      assert.deepStrictEqual(res, [P_STOCK_OK],
+        'a made-here item reserved stock it has none of, or a stocked one reserved nothing (§43, §45)');
+      db.prepare('DELETE FROM retail_stock_reservations WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+    });
+    await checkAsync('the short code counts up per shop, per day', async () => {
+      await resetOrderLimit();
+      const made = [];
+      for (let i = 0; i < 3; i++) {
+        const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+        assert.strictEqual(r.status, 201);
+        made.push(r.json.data.order_code);
+      }
+      assert.deepStrictEqual(made, [made[0], made[0] + 1, made[0] + 2], `codes did not count up: ${made}`);
+      for (const on of made) {
+        const oid = db.prepare('SELECT id FROM retail_orders WHERE shop_order_code = ? AND store_id = ?').get(on, LOC_LIVE).id;
+        db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+        db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+        db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+      }
+    });
+
+    await checkAsync('the tender is one the rest of the system already knows', async () => {
+      // A QR order is unpaid at create and staff's Mark-paid writes the real
+      // tender over this. What it must NOT carry meanwhile is a value invented
+      // here: routes/retail.js's ALLOWED_PAY is the list every reader of this
+      // column shares, and a value outside it reconciles against nothing.
+      await resetOrderLimit();
+      const src = require('fs').readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+      const m = src.match(/const ALLOWED_PAY = \[([\s\S]*?)\];/);
+      assert.ok(m, 'ALLOWED_PAY has moved or been renamed — this check cannot see it any more');
+      const allowed = [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]);
+      const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.json));
+      const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
+      const o = db.prepare('SELECT payment_method, status FROM retail_orders WHERE id = ?').get(oid);
+      const pay = db.prepare('SELECT method, status FROM retail_payments WHERE order_id = ?').get(oid);
+      assert.ok(allowed.includes(o.payment_method), `tender '${o.payment_method}' is not in ALLOWED_PAY`);
+      assert.strictEqual(pay.method, o.payment_method, 'the order and its payment row disagree on the tender');
+      assert.strictEqual(pay.status, 'pending', 'a QR order is unpaid until the counter says otherwise');
+      db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+      db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+    });
+
+    await checkAsync('a flood from one phone is stopped, and stopped WITHOUT creating orders', async () => {
+      // No reset here — that is the point. A refused submit must leave nothing
+      // behind: an order counted against the limiter but written to the table
+      // anyway would fill the kitchen with tickets nobody ordered.
+      await resetOrderLimit();
+      const before = db.prepare('SELECT COUNT(*) AS n FROM retail_orders WHERE store_id = ?').get(LOC_LIVE).n;
+      let refused = 0, made = [];
+      for (let i = 0; i < 15; i++) {
+        const r = await post(`/s/${LIVE}/order`, { name: 'Mei', items: [{ store_product_id: P_MADE_ON, qty: 1 }] });
+        if (r.status === 429) refused++;
+        else { assert.strictEqual(r.status, 201, JSON.stringify(r.json)); made.push(r.json.data.order_code); }
+      }
+      assert.strictEqual(made.length, 12, `the limiter let ${made.length} through, not 12`);
+      assert.strictEqual(refused, 3);
+      const after = db.prepare('SELECT COUNT(*) AS n FROM retail_orders WHERE store_id = ?').get(LOC_LIVE).n;
+      assert.strictEqual(after - before, 12, 'a refused submit still wrote an order');
+      for (const on of made) {
+        const oid = db.prepare('SELECT id FROM retail_orders WHERE shop_order_code = ? AND store_id = ?').get(on, LOC_LIVE).id;
+        db.prepare('DELETE FROM retail_order_items WHERE order_id = ?').run(oid);
+        db.prepare('DELETE FROM retail_payments WHERE order_id = ?').run(oid);
+        db.prepare('DELETE FROM retail_orders WHERE id = ?').run(oid);
+      }
+      await resetOrderLimit();
+    });
+
+    console.log('\nThe page still offers no ordering surface — that is step 5b\'s cart, not this page');
     await checkAsync('the page offers no cart, no quantity control and no submit', async () => {
       const { body } = await get(`/s/${LIVE}`);
       for (const s of ['<form', '<input', 'type="submit"', 'addToCart', '/api/retail/orders']) {
