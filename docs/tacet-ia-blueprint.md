@@ -1,6 +1,20 @@
 # Tacet admin — IA blueprint
 
-**v2.5 · header line reversed 2026-07-31 (see below). §§1, 3, 4, 7, 8, 9 amended 2026-07-29 (rail drill-down + Content rename). §2 amended 2026-07-25 (survey-corrected). Surveyed 2026-07-16 from `/root/roots-v2` (roots-v2-hk), not from v1 of this document.**
+**v2.6 · §§1, 4, 5, 10, 11 reconciled against the live rail 2026-09-06 (see below); the 2026-07-16 survey had drifted. v2.5 · header line reversed 2026-07-31 (see below). §§1, 3, 4, 7, 8, 9 amended 2026-07-29 (rail drill-down + Content rename). §2 amended 2026-07-25 (survey-corrected). Surveyed 2026-07-16 from `/root/roots-v2` (roots-v2-hk), not from v1 of this document.**
+
+> ## 🔴 v2.6 changes, 2026-09-06 — reconciled against the live rail. The section count was wrong by eight.
+>
+> **What was done.** `public/retail-admin.html` was re-enumerated at `2d15500`: every `data-tab` button in the rail, every `<section id="tab-*">`, and the topbar Inbox entries. §4 was reconciled against that enumeration. **Nothing recorded in §4 has disappeared from the code** — all 34 sections v2 found still exist. Eight more had landed and were never recorded.
+>
+> **The count is now 42, not 34.** Added to §4: **Finance**, **Materials**, **Recipes**, **Waste**, **New order**, **One material**, **One recipe** (all RUN) and **Shop menu** (SELL). Their landing commits and dates are in §5, *Shipped since the v2.5 survey*.
+>
+> **🔴 EVERY LINE NUMBER IN §4 HAD DRIFTED — ALL 34 OF THEM.** Not one row's `line` column still pointed at its section. The drift runs from +323 (Setup) to +2,468 (Team); the further down the file a section sits, the further its citation had moved. The prose beside those numbers was still true. **This is the house rule in `docs/tacet-consolidation-decisions.md` doing exactly what it warns about: a line number in a dated document is a historical coordinate, not a current position.** Every row's `line` column has been re-measured at `2d15500` and will drift again — re-verify before quoting one.
+>
+> **What was NOT done, deliberately.** **No archetype is assigned to any of the eight new sections.** The `Section → archetype` map in §10 lives in `tacet-desktop-patterns.md` §4 and still holds 34 rows; assigning the missing eight is a design decision and is not this reconciliation's to make. §10's cross-reference now says so instead of claiming the map is complete. `tacet-desktop-patterns.md` was not edited by this pass.
+>
+> **Also corrected, as live cross-references rather than rewrites:** §1's section count · §3's "Sales has no rail children" list (Shop menu joins the three channel admins) · §5's *Ungated sections* count · §5's *Live bug*, whose `goTab('activity')` entry is no longer in the tree · §10 and §11's "all 34" · §11 gains the **Counter till** rail row, which is a satellite by that section's own definition and appeared nowhere in this document.
+>
+> **Nothing dated was rewritten.** The v2/v2.1/v2.4/v2.5 records of what was true in July stand as written, including the sentence in *Why v2 exists* that says there are 34 — that was the true count when it was written. Where a July finding has since been overtaken, the amendment is added beside it and dated, not substituted for it.
 
 > ## 🔴 v2.5 changes, 2026-07-31 — the header line above reversed. Read this if you read v2.4.
 >
@@ -31,7 +45,7 @@ A single-page admin shell. One left **rail** of tabs (three **drill-down folders
 - **One global JS scope** across 17 `NN-*.js` parts; load order matters.
 - **One section visible at a time**; `goTab(tab)` switches and fires that tab's init.
 - **No page reloads** — navigation is DOM show/hide.
-- **34 sections** in the markup. Not all are rail destinations (see §3).
+- **42 sections** in the markup (v2.6, re-enumerated 2026-09-06; it was 34 at the 2026-07-16 survey). Not all are rail destinations (see §3) — eight are sub-pages or channel admins with no rail row of their own.
 
 ---
 
@@ -112,6 +126,13 @@ BOTTOM NAV (phone):  Dashboard · Orders · Customers · Products · More
 - **Sales has no rail children.** Meituan / gzgrocery / Eleme sections exist but are reachable only from the Sales page via `salesGo(channel)`. This independently validates the Board archetype: channel cards route in; no rail entry needed.
 - **Bottom nav ≠ v1 spec.** Live `PRIMARY = { dashboard, orders, customers, products }` + `__more__` (`retail-admin.html:11017`). `tacet-mobile-patterns.md` §1 specifies Home / Orders / **Inbox** / **Sales** / More. Two of five differ. The More sheet rebuilds from the live desktop nav on each open (`buildMore`, ~11041) — no hardcoded list — so it stays in sync by construction.
 
+**Amended 2026-09-06 (v2.6), from the re-enumeration.** The three findings above have been overtaken; the July text stands as the record of what was true then, and this is what the rail shows now:
+
+- **The `order:9` collision is now five-way, and there is a second one at `order:8`.** Full list in §5, *Live bug*. The July finding named two tabs; three more have joined that value since, and the till/Sales/Finance trio collides at 8.
+- **`VIA SALES` gains a fourth: `shop-menu`.** A shop's menu is a sub-page of Sales → Locations under the same §1.7a takeover (`RAIL_STANDIN` in `01-core.js`), so the Sales row stays lit. The Board-archetype reading in the July finding is unaffected.
+- **The `BOTTOM NAV (phone)` row in the map above is dead.** §1 records the removal (2026-08-24, phones get `m.html`); the map was not updated with it. There is no bottom-nav markup in `retail-admin.html` at `2d15500` — the only surviving trace is a comment at `:1392` that still calls the `data-go` mirror load-bearing. The *Bottom nav ≠ v1 spec* finding above is therefore moot for this shell and now belongs to `tacet-mobile-patterns.md`.
+- **Two rail rows carry no `data-tab` and so appear nowhere in this map:** `#setup-nav` (which does have one — `setup` — but is `display:none` until setup finishes) and `#rail-till`, the **Counter till**, which opens `/till` in a new tab and is a satellite, not a section. It is now recorded in §11.
+
 ### 3.1 The Content rename — why the group could not stay called Editor
 
 *Added 2026-07-29.* `Editor` was a group **and** a destination — the only one of the three with a page of its own, which broke the folder-loads-nothing rule. Its page moved inside it as an ordinary child. That left a folder named Editor whose first row was also an editor: **the word nested inside itself.** Renaming the parent removes the collision rather than asking the operator to hold both meanings.
@@ -152,68 +173,82 @@ reviews feedback   →  root               (nothing)   ← Inbox lives in the to
 
 ---
 
-## 4. Section inventory — 34
+## 4. Section inventory — 42
 
 Grouped by function. "Skin" flags surfaces carrying something that is **per-business configuration, not product structure** — currency, time zone, channels, carriers, payment methods, loyalty tier names, language pairs. **`money` means the surface renders amounts and therefore depends on the business's currency; it is not a claim that the currency is ¥** (`docs/tacet-consolidation-decisions.md` §0).
+
+> **🔴 Every `line` value below was re-measured at `2d15500` on 2026-09-06 and every one of them had moved** — the July figures were wrong by between +323 and +2,468 rows. They will drift again on the next build that touches the file. **Re-grep before quoting one**; the house rule is at the head of `docs/tacet-consolidation-decisions.md`. The `tab id` is the stable handle — use it.
+>
+> **Rows marked (v2.6)** were added by the 2026-09-06 reconciliation and carry **no archetype** in §10 / `tacet-desktop-patterns.md` §4. That is deliberate and is not an oversight to close casually — see §10.
 
 ### RUN — daily operations
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Dashboard | `dashboard` | 1258 | `03-dashboard.js` | The Recap, money, loyalty tier names |
-| Reports **(new)** | `reports` | 1684 | `03-dashboard.js` | money · cites `reference/reports-ai-mockup.html` (absent from box) |
-| Orders | `orders` | 1847 | `04-orders.js` | money, carriers, **fapiao (absorbed)** |
-| Delivery | `delivery` | 5246 | `06-delivery.js` | China carriers · `data-dlv="hub"` |
-| Purchasing | `purchasing` | 9653 | `16-purchasing.js` | shell only — hosts `#prod-view-purchasing` |
+| Dashboard | `dashboard` | 1581 | `03-dashboard.js` | The Recap, money, loyalty tier names |
+| Reports **(new)** | `reports` | 2057 | `03-dashboard.js` | money · cites `reference/reports-ai-mockup.html` (absent from box) |
+| Orders | `orders` | 2219 | `04-orders.js` | money, carriers, **fapiao (absorbed)** |
+| New order **(v2.6)** | `orders-new` | 2825 | `04-orders.js` | money · **no rail row** — a sub-page of Orders under the §1.7a takeover (`RAIL_STANDIN`), so the Orders row stays lit |
+| Delivery | `delivery` | 6747 | `06-delivery.js` | China carriers · `data-dlv="hub"` |
+| Purchasing | `purchasing` | 12001 | `16-purchasing.js` | shell only — hosts `#prod-view-purchasing` |
+| Finance **(v2.6)** | `finance` | 11486 | `22-finance.js` | money · two sub-views (Summary · Transactions) · **no store filter, deliberately** (§36 — neither ledger table carries a location) |
+| Materials **(v2.6)** | `materials` | 12021 | `18-materials.js` | money · `data-feat="production"` |
+| One material **(v2.6)** | `materials-record` | 12025 | `18-materials.js` | money · **no rail row** — sub-page of Materials, same takeover |
+| Recipes **(v2.6)** | `recipes` | 12051 | `19-recipes.js` | money · `data-feat="production"` — same switch as Materials, no second `FEATURE_CATALOG` entry |
+| One recipe **(v2.6)** | `recipes-record` | 12080 | `19-recipes.js` | money · **no rail row** — sub-page of Recipes, same takeover |
+| Waste **(v2.6)** | `waste` | 12063 | `20-waste.js` | money · `data-feat="waste"` — its **own** switch, not Production's (§32) |
 
 ### SELL — channels & catalog
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Sales (channel overview) | `sales` | 9332 | `01-core.js` + `15-integrations.js` | China channels |
-| Meituan | `meituan` | 9527 | `11-meituan.js` | **China-only** |
-| gzgrocery / Guanyi | `guanyi` | 9667 | `12-guanyi.js` | **China-only (account ERP)** |
-| Eleme | `eleme` | 9936 | `14-eleme.js` | **China-only** |
-| Products | `products` | 3156 | `09-products.js` | money · hosts 3 sub-views |
-| Customers | `customers` | 2313 | `08-customers.js` | money, loyalty tier names |
+| Sales (channel overview) | `sales` | 11636 | `01-core.js` + `15-integrations.js` | China channels |
+| Meituan | `meituan` | 11900 | `11-meituan.js` | **China-only** · no rail row — via `salesGo()` |
+| gzgrocery / Guanyi | `guanyi` | 12135 | `12-guanyi.js` | **China-only (account ERP)** · no rail row — via `salesGo()` |
+| Eleme | `eleme` | 12404 | `14-eleme.js` | **China-only** · no rail row — via `salesGo()` |
+| Shop menu **(v2.6)** | `shop-menu` | 12074 | `28-shops.js` | money · **no rail row** — sub-page of Sales → Locations (§41/§42), same takeover |
+| Products | `products` | 4425 | `09-products.js` | money · hosts 3 sub-views |
+| Customers | `customers` | 3024 | `08-customers.js` | money, loyalty tier names |
 
 ### MARKET — promotion & retention
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Coupons | `vouchers` | 3906 | `05-marketing.js` | money |
-| Flash sales | `flash` | 4136 | `05-marketing.js` | money |
-| Pop-ups | `popups` | 4393 | `05-marketing.js` | — |
-| Affiliate | `affiliate` | 6696 | `05-marketing.js` | feat `affiliate` |
-| Share cards | `sharing` | 6675 | `05-marketing.js` | WeChat framing · has `.sc-spreview` preview pane |
-| Broadcasts | `broadcasts` | 4912 | `05-marketing.js` | WeChat/SMS |
-| Social proof | `social` | 8893 | `05-marketing.js` | feat `socialProof` |
-| Membership & points | `membership` | 7362 | `05/10` | feat `membership`, money |
-| Top-up (wallet) | `topup` | 6501 | `10-extras.js` | money, payment methods |
-| Leaderboard | `leaderboard` | 7084 | `10-extras.js` | — |
-| Voting | `voting` | 7427 | `10-extras.js` | — |
+| Coupons | `vouchers` | 5356 | `05-marketing.js` | money |
+| Flash sales | `flash` | 5604 | `05-marketing.js` | money |
+| Pop-ups | `popups` | 5861 | `05-marketing.js` | — |
+| Affiliate | `affiliate` | 8214 | `05-marketing.js` | feat `affiliate` |
+| Share cards | `sharing` | 8193 | `05-marketing.js` | WeChat framing · has `.sc-spreview` preview pane |
+| Broadcasts | `broadcasts` | 6407 | `05-marketing.js` | WeChat/SMS |
+| Social proof | `social` | 11028 | `05-marketing.js` | feat `socialProof` |
+| Membership & points | `membership` | 9168 | `05/10` | feat `membership`, money |
+| Top-up (wallet) | `topup` | 8019 | `10-extras.js` | money, payment methods |
+| Leaderboard | `leaderboard` | 8890 | `10-extras.js` | — |
+| Voting | `voting` | 9233 | `10-extras.js` | — |
+
+> **These eleven are ONE doc group but TWO rail folders.** The rail splits them: `data-group="marketing"` (*Marketing · 营销*, `order:11`) holds Coupons · Flash sales · Pop-ups · Affiliate · Share cards · Broadcasts · Social proof, and `data-group="loyalty"` (*Loyalty & wallet · 会员与钱包*, `order:12`) holds Membership & points · Top-up · Leaderboard · Voting. §3's rail map has always drawn them as two; this table's single MARKET heading is the doc's own functional grouping, not a rail group name. Recorded 2026-09-06 so the two are not read as contradicting each other.
 
 ### CONTENT — online store editing
 *Rail label since 2026-07-29: **`Content · 内容`**. The `Editor` row inside it is the Mini App Editor, promoted out of the old group row (§3.1).*
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Mini App Editor (embeds `/cms`) | `mini-app-editor` | 10026 | `07-content-billing.js` | WeChat framing · `.tab-embed-editor` |
-| Product Page Editor (swap-in) | `product-editor` | 10029 | `09-products.js` | `.tab-embed-editor` · **entered only from inside the Mini App Editor — this file is where its code lives, not a route** |
-| Copy / snippets | `snippets` | 4375 | `07-content-billing.js` | bilingual copy |
-| About page | `about` | 7723 | `07-content-billing.js` | brand story |
-| Media library | `media` | 7552 | `07-content-billing.js` | — |
-| Legal pages | `legal` | 9173 | `07-content-billing.js` | jurisdiction |
-| FAQ & help | `faq` | 9262 | `07-content-billing.js` | feat `faq` |
+| Mini App Editor (embeds `/cms`) | `mini-app-editor` | 12482 | `07-content-billing.js` | WeChat framing · `.tab-embed-editor` |
+| Product Page Editor (swap-in) | `product-editor` | 12485 | `09-products.js` | `.tab-embed-editor` · **entered only from inside the Mini App Editor — this file is where its code lives, not a route** |
+| Copy / snippets | `snippets` | 5843 | `07-content-billing.js` | bilingual copy |
+| About page | `about` | 9529 | `07-content-billing.js` | brand story |
+| Media library | `media` | 9358 | `07-content-billing.js` | — |
+| Legal pages | `legal` | 11308 | `07-content-billing.js` | jurisdiction |
+| FAQ & help | `faq` | 11397 | `07-content-billing.js` | feat `faq` |
 
 ### SET UP — configuration & people
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Settings (+ Operations, Quick Stock) | `config` | 7937 | `02-settings-ops.js` | payments, region, carriers |
-| Team **(new)** | `team` | 10043 | `02-settings-ops.js` | RBAC roles · promoted from account menu 2026-07-16 |
-| Open your store (setup guide) | `setup` | 1253 | `17-setup-guide.js` | onboarding |
+| Settings (+ Operations, Quick Stock) | `config` | 9775 | `02-settings-ops.js` | payments, region, carriers |
+| Team **(new)** | `team` | 12499 | `02-settings-ops.js` | RBAC roles · promoted from account menu 2026-07-16 |
+| Open your store (setup guide) | `setup` | 1576 | `17-setup-guide.js` | onboarding |
 
 ### INBOX — topbar, not rail
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Reviews | `reviews` | 6925 | `10-extras.js` | feat `reviews` |
-| Feedback | `feedback` | 7006 | `10-extras.js` | feat `feedback` |
+| Reviews | `reviews` | 8650 | `10-extras.js` | feat `reviews` |
+| Feedback | `feedback` | 8812 | `10-extras.js` | feat `feedback` |
 
 ---
 
@@ -234,6 +269,25 @@ This is the same consolidation v1 already recorded for *Channels → Sales* and 
 - **Reports** (`tab-reports`, order:3) — range bar (Today/7d/30d/90d + custom dates + store filter) → **chapter rail** (Overview · Sales · Customers · Products & traffic) → KPI strip → **The read** (the AI's plain-words analysis) → charts. Shares `03-dashboard.js`; chapters only show/hide wrappers. (The phone dashboard that cloned these container ids was deleted 2026-08-24 — phones get `m.html`.)
 - **Team** (`tab-team`, order:16) — stats → **`tm-enforce`** master switch (sage when on) → member list with role pills (owner / staff / op) + per-member Edit → Add member. Carries its own `:root` block from `backend-team.html` (`retail-admin.html:10041`).
 
+### Shipped since the v2.5 survey (8)
+
+*Added 2026-09-06 (v2.6).* Eight sections landed after the 2026-07-16 survey and were never recorded here. Dates and SHAs are from `git log -S'<section id="tab-…">' -- public/retail-admin.html`, oldest first — **the commit that introduced the section markup**, not the last one to touch it.
+
+| Section | tab id | Landed | Commit | Rail row? |
+|---|---|---|---|---|
+| New order | `orders-new` | 2026-07-30 | `a95eebf2` — *New order gets its container: the takeover the detail view left behind* | No — sub-page of Orders |
+| Materials | `materials` | 2026-08-24 | `e6f6c456` — *Materials: the ingredients table, wearing a name every trade can read* | Yes · `order:9` · feat `production` |
+| One material | `materials-record` | 2026-08-24 | `e6f6c456` — same commit | No — sub-page of Materials |
+| Recipes | `recipes` | 2026-08-25 | `1cd5b4d7` — *Recipes screen (step 4): retail-admin list + full-page record* | Yes · `order:9` · feat `production` |
+| One recipe | `recipes-record` | 2026-08-25 | `1cd5b4d7` — same commit | No — sub-page of Recipes |
+| Waste | `waste` | 2026-08-27 | `33f4d4a4` — *The Waste screen: a ledger you can add one line to* | Yes · `order:9` · feat `waste` |
+| Finance | `finance` | 2026-09-02 | `2ca061d3` — *Finance Summary — the money staircase (§36)* | Yes · `order:8` |
+| Shop menu | `shop-menu` | 2026-09-05 | `0813e24d` — *Shops and shop listings: the record, the code, the join, and the screen — read by nothing yet* | No — sub-page of Sales → Locations |
+
+**`orders-new` predates the v2.5 bump by one day** and was missed by it as well as by the survey — v2.5 only reversed the header line and re-surveyed nothing. It is listed here rather than under *Shipped new* because *Shipped new (2)* is the July record and is not to be rewritten.
+
+**Four of the eight carry no rail row of their own.** They are §1.7a takeovers: a full-page child that replaces the parent's content while `RAIL_STANDIN` (`01-core.js`) keeps the parent's rail row lit. That pattern is why the section count and the rail-row count are different numbers, and it is the same mechanism the Product Page Editor has used since v2.
+
 ### Flattened (3)
 Orders, Products, and Sales lost their `nav-parent` dropdowns. Orders' child (Invoices) was absorbed; Products' children (Categories, Purchasing) became sub-views or a flat tab; Sales' children moved behind `salesGo()`.
 
@@ -243,10 +297,27 @@ Orders, Products, and Sales lost their `nav-parent` dropdowns. Orders' child (In
 
 **Ungated sections (4)** — `setup`, `sales`, `team`, `product-editor` have no `TAB_CAP` entry. `applyCapGates` does `if (cap === undefined) return`, so they are **always visible to every operator**. With RBAC going live, **Team being ungated is a security-relevant gap**: any operator could reach the page that assigns roles. Assign caps before `tm-enforce` ships.
 
+> **Amended 2026-09-06 (v2.6): it is eight, not four.** The four above are unchanged and `team` is still ungated. The four sections added since carry no `TAB_CAP` entry either: **`orders-new`, `materials-record`, `recipes-record`, `shop-menu`**. All four are §1.7a sub-pages, so the practical exposure is narrower than Team's — each is reached through a parent that *is* gated (`orders:view`, `materials:view`, `recipes:view`, and `sales`, itself ungated) — but `applyCapGates` keys off `data-tab` and none of the four has one, so **nothing in `TAB_CAP` can gate them whatever is decided**. A sub-page's gate has to be the parent's, or `data-cap` on its own controls. Recorded, not fixed. The four sections added *with* caps are Finance (`finance:view`), Materials (`materials:view`), Recipes (`recipes:view`) and Waste (`waste:view`) — all present in `TAB_CAP` and all backed by `lib/capabilities.js`, where they sit in `group: 'run'`.
+
 **Feature flags (8)** — v1 knew 6. Live: `affiliate`, `faq`, `feedback`, `membership`, `reviews`, `socialProof`, **`kitchenAdd`** (new), **`quickStock`** (new). The last two gate controls, not sections. v1 stated Quick Stock had no flag; it now does.
 
 ### Live bug
 `retail-admin.html:1529` — `<button onclick="goTab('activity')">Stock activity › · 前往库存动态 ›</button>`. `tab-activity` no longer exists. This dashboard link is dead. Should be `goTab('products')` + `prodShowView('activity')`.
+
+**✅ Closed 2026-09-06 (v2.6).** No longer in the tree: at `2d15500` there is no `goTab('activity')` anywhere under `public/`, and no *Stock activity ›* button. The July entry stands as the record of a real defect that has since been fixed. Line 1529 today is an unrelated comment about the Team tab — another line-number drift, and the reason this entry could not be checked by looking where it pointed.
+
+**🔴 Open, found by the 2026-09-06 re-enumeration — duplicate `order:` values in the rail.**
+
+CSS `order` ties resolve to DOM order, so the rail *renders* deterministically today. That is the trap: the visual result looks intentional, and any future reorder that moves one of these buttons in the markup silently reorders the rail with no CSS change to explain it. Two collisions, seven rows:
+
+| `order:` | Rows sharing it | Rendered order today (DOM) |
+|---|---|---|
+| **8** | `sales` · `rail-till` *(no `data-tab`)* · `finance` | Sales → Counter till → Finance |
+| **9** | `products` · `purchasing` · `materials` · `recipes` · `waste` | Products → Purchasing → Materials → Recipes → Waste |
+
+Note the interleaving: `order:8` and `order:9` rows are **not contiguous in the markup** — `sales` is authored at `:1294`, `rail-till` at `:1318`, `finance` at `:1327`, but `products` (`:1343`) and `purchasing` (`:1347`) sit between `customers` (`order:10`, authored at `:1334`) and the `order:9` block that follows. **Reading the file top-to-bottom does not give the rail's order**, and neither does reading the `order:` values alone.
+
+The July finding named the `order:9` collision when it was two rows; it is now five, and a second collision has appeared at 8. **Order gaps at 1, 5, 7, 13** (July) are unchanged. A renumber on a clean `1..N` remains the fix, and is now worth more than it was: five rows deep, "resolution falls to DOM order" stops being a footnote.
 
 ---
 
@@ -310,17 +381,25 @@ Feature on/off also lives on each feature's own page (an enable switch), with an
 
 Composition is governed by `tacet-desktop-patterns.md`. The map lives there (§4), one row per section, all 34, seven archetypes.
 
+> **🔴 Amended 2026-09-06 (v2.6): the map is no longer complete.** It holds **34 rows against this document's 42**. The eight sections added by the v2.6 reconciliation — `finance`, `materials`, `materials-record`, `recipes`, `recipes-record`, `waste`, `shop-menu`, `orders-new` — **have no archetype**, and none was assigned by that pass.
+>
+> **That is a deliberate refusal, not an unfinished edit.** Choosing an archetype is a design decision about how a surface is composed; it is Ash's to make, and inferring one from a screen's current markup would launder an implementation detail into the rulebook. A survey may find that a section exists; it may not decide what shape it is.
+>
+> `tacet-desktop-patterns.md` was **not edited** by the v2.6 pass. Assigning the eight is the follow-on task, and until it is done, treat the §4 map there as covering the 34 it names and being silent — not authoritative — on the rest.
+
 ---
 
-## 11. Satellite apps — real surfaces, outside the 34
+## 11. Satellite apps — real surfaces, outside the 42
 
 **Added 2026-07-19.** Some surfaces are complete applications that do not ride the shell:
 own document, own `:root`, own i18n, reached from the shell but not part of it. Three
 surveys missed the Profile app because this category did not exist. It does now.
-The 34-section count is unchanged — satellites are not sections.
+The section count is unchanged by anything in this section — satellites are not sections.
+*(That count was 34 when this was written and is 42 as of v2.6; the principle is the same.)*
 
 | Satellite | Route / file | Reached via | Notes |
 |---|---|---|---|
+| **Counter till** **(v2.6)** | `/till` · `till.html` | **Rail row `#rail-till`** (`retail-admin.html:1318`, `order:8`) → `window.open('/till', '_blank')` | Added to this table 2026-09-06. Own PWA on its own `till-manifest.webmanifest`, installed on the shop tablet from its own URL. **Carries no `data-tab` and has no `<section>`** — which is why every previous survey of "rail entries" and of "sections" each missed it from the other side. Gated by neither `TAB_CAP` nor `data-cap`: it needs **both** `till:use` and `orders:edit`, and `data-cap`'s multi-value form is any-of, so its gate is a named branch in `applyCapGates()` (`01-core.js`) reached by element id. Tacet Mobile states the same pair the same way in `canRoute()`. |
 | **Profile** | `/backend/account` · `backend-account.html` | Avatar menu `#acctProfileBtn` → `#profModal`/`#profFrame` (also serves standalone; `html.embedded` when framed) | Surveyed 2026-07-18 (`survey-account-profile.md`). Four panes: My Info · Security · Devices · Notifications. |
 | **Login** | `/backend/login` · `backend-login.html` | Signed-out redirect | Not surveyed. Hosts the 2FA which-channel step. |
 
@@ -352,7 +431,9 @@ The 34-section count is unchanged — satellites are not sections.
   no focus trap in either layer.
 
 Its archetype (**A4 Console**) and its place in the build order are recorded in
-`tacet-desktop-patterns.md` §4, alongside the 34.
+`tacet-desktop-patterns.md` §4, alongside the 34 that map covers (see §10 — it does
+not yet cover the eight sections added at v2.6, and the Counter till above has no
+archetype recorded either).
 
 ---
 
