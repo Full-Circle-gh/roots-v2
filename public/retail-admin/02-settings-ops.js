@@ -988,6 +988,15 @@ async function loadPrinterPrefs() {
     if (autoRefund) autoRefund.checked = p.auto_print_refund !== false;
     if (shop) shop.value = p.shop_name || '';
 
+    // The kitchen's own printer. Not a store row — a kitchen request carries
+    // no store id at either end, so it routes on a single SN of its own.
+    const kSn = document.getElementById('feie-kitchen-sn');
+    const kWhen = document.getElementById('feie-kitchen-when');
+    const kCopies = document.getElementById('feie-kitchen-copies');
+    if (kSn) kSn.value = p.kitchen_sn || '';
+    if (kWhen) kWhen.value = p.kitchen_print_on || 'sent';
+    if (kCopies) kCopies.value = Number(p.kitchen_copies) || 1;
+
     const box = document.getElementById('feie-stores');
     if (box) {
       const stores = p.stores || [];
@@ -1111,6 +1120,9 @@ async function _savePrinter() {
       auto_print_addon: document.getElementById('feie-auto-addon')?.checked,
       auto_print_refund: document.getElementById('feie-auto-refund')?.checked,
       shop_name:  document.getElementById('feie-shop')?.value || '',
+      kitchen_sn: document.getElementById('feie-kitchen-sn')?.value || '',
+      kitchen_print_on: document.getElementById('feie-kitchen-when')?.value || 'sent',
+      kitchen_copies: document.getElementById('feie-kitchen-copies')?.value || 1,
       by_store:   _collectPrinterByStore(),
       out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
     };

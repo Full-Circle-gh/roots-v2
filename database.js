@@ -997,6 +997,16 @@ addColumn('restock_orders', 'received_confirmed_at', 'DATETIME');
 addColumn('restock_orders', 'from_store_id', 'INTEGER');
 addColumn('restock_orders', 'to_store_id',   'INTEGER');
 
+// Kitchen production ticket — the outcome of the slip that prints in the
+// kitchen when a request lands in its queue (lib/kitchen-print.js). The same
+// three columns retail_orders carries for its Feie slips, and for the same
+// reason: a print that fails must be visible and reprintable, not silent.
+// Only warehouse→kitchen rows ever carry a value; every other transfer leaves
+// them NULL, which reads as "no slip was ever owed".
+addColumn('restock_orders', 'print_status', 'TEXT');
+addColumn('restock_orders', 'printed_at',   'DATETIME');
+addColumn('restock_orders', 'print_error',  'TEXT');
+
 try {
   db.exec('CREATE INDEX IF NOT EXISTS idx_restock_goods_state ON restock_orders(goods_state)');
 } catch (e) { console.error('[index idx_restock_goods_state]', e); }
