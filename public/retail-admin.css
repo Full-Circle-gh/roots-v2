@@ -5541,6 +5541,28 @@
      whatever background the row-rhythm tweak (striped / cards) paints, without a
      specificity fight. Complements the one-shot 6s arrival flash above. */
   .ord-no { font-family: var(--f-mono); font-weight: 400; font-size: 12px; }
+  /* §49 — the number a shop calls across its counter, on a QR order only.
+     Deliberately the loudest thing in the cell: an operator matching a customer
+     saying "seven" scans this column, and the order number beside it is what
+     they never say out loud. Tabular figures so a column of them lines up.
+     No label (see ordShopCode in 04-orders.js for why), so the chip's own
+     weight is what says "this is the number", and it sits directly before the
+     order number rather than in a column of its own — a column would be empty
+     on every row of a tenant with no shop. */
+  /* The label beside the number, drawer only — see ordShopCode. The list keeps
+     it as a tooltip: on a dense table the numeral is what an operator scans. */
+  .ord-shopno-lbl {
+    display: inline-block; vertical-align: middle; margin-right: 8px;
+    color: var(--text-2); font-size: 11px; letter-spacing: .02em;
+  }
+  .ord-shopno {
+    display: inline-block; vertical-align: middle; margin-right: 8px;
+    min-width: 22px; padding: 1px 6px; border-radius: 3px;
+    background: var(--bg-elev-2, var(--bg-elev-1)); color: var(--text-1);
+    border: 1px solid var(--border);
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px;
+    line-height: 1.35; text-align: center;
+  }
   tr.order-row.is-unread td { box-shadow: inset 0 0 0 999px rgba(163, 180, 159, .12); }
   tr.order-row.is-unread .ord-no,
   tr.order-row.is-unread .ord-cust { font-weight: 700; color: var(--text-1); }

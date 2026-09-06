@@ -13868,7 +13868,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       .reduce((s, h) => s + Number((byBucket[h] || {}).revenue || 0), 0);
 
     const days = cand.length;
-    let sumRev = 0, sumOrd = 0, sumNew = 0;
+    let sumRev = 0, sumOrd = 0, sumNew = 0, sumStorefrontRev = 0;
     // Each same-weekday's own takings, not just their total. The loop already
     // pays for these queries to build the average, so keeping the individual
     // numbers costs nothing — and it is the only way to answer "is today the
@@ -13879,6 +13879,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const k = clip ? tdb().prepare(kpiSqlClip).get(d, d, nowHms)
                      : tdb().prepare(kpiSql).get(d, d);
       sumOrd += Number(k.orders || 0);
+      // Storefront-only revenue, same population as sumOrd (and as kpi.aov's
+      // own numerator via NOTGZ above) — kept separate from the blended `rev`
+      // below so a baseline AOV can divide like-for-like, never top-up/gzgrocery
+      // money by a storefront order count.
+      sumStorefrontRev += Number(k.revenue || 0);
       sumNew += clip ? tdb().prepare(newCustSqlClip).get(d, d, nowHms).n
                      : tdb().prepare(newCustSql).get(d, d).n;
       // Blend gzgrocery pickup takings and top-up cash into each baseline day,
@@ -13898,6 +13903,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const avg = days > 0 ? sum / days : 0;
       return { avg, delta: days > 0 ? pctOf(cur, avg) : null };
     };
+    // AOV's own average isn't a per-day mean divided by `days` like the other
+    // three — it's total storefront revenue over total storefront orders across
+    // the baseline window (weighted by each day's order volume), which is the
+    // same shape as kpi.aov itself. Never sumRev (blended) / sumOrd: that
+    // divides top-up and gzgrocery money by an order count that never counted
+    // them, and reproduces the exact inflation this field exists to avoid.
+    const aovAvg = sumOrd > 0 ? sumStorefrontRev / sumOrd : 0;
     baseline = {
       days,
       // 0–6, Sunday first. Sent as an index, never a word: the client owns the
@@ -13912,6 +13924,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       revenue:       mk(kpi.revenue, sumRev),
       orders:        mk(kpi.orders,  sumOrd),
       new_customers: mk(newCust,     sumNew),
+      aov:           { avg: aovAvg, delta: (days > 0 && aovAvg > 0) ? pctOf(kpi.aov, aovAvg) : null },
       // Is today outright ahead of EVERY same weekday behind it? Strictly
       // greater, so a tie is not a record, and null rather than false when
       // there are too few days to make the claim mean anything — one prior
@@ -24454,6 +24467,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.invoice_number, o.invoice_file_url, o.invoice_issued_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
+                    -- §49: the short number a shop calls across its counter, and
+                    -- the trading day it was drawn on. NOT unique — two shops
+                    -- both call 14 on the same afternoon — so the ruling requires
+                    -- it be shown with its shop and its date or not at all. This
+                    -- row already carries both: the Store column and Placed.
+                    -- Null for every order that did not arrive by QR.
+                    o.shop_order_code, o.shop_order_date,
                     o.channel_status, o.channel_status_at, o.channel_eta,
                     -- 预订单 marker: the list's delivery cell shows a booked window
                     -- differently from a live ETA (same clock time, different job).
@@ -27515,6 +27535,27 @@ function autoPrintOrder(orderId) {
   try {
     const pp = loadPrinterPrefs();
     if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    // ONE TICKET PER ORDER, AND A QR ORDER'S ALREADY PRINTED.
+    //
+    // §44 puts the QR ticket at SUBMIT, not at paid: the kitchen starts making
+    // the drink while the customer is still walking to the till. Every other
+    // order in this system prints here, on the paid transition, and that has
+    // not changed. Without this line a QR order would print twice — once from
+    // routes/shop-menu.js on submit, and again from here when the cashier
+    // settles it — and the second slip is indistinguishable from a second
+    // order to whoever picks it up.
+    //
+    // DELIBERATELY NARROW. It keys on source='qr' AND a print that actually
+    // SUCCEEDED, so: nothing that exists today changes behaviour (no other path
+    // can set print_status='printed' before paid), a QR order whose submit
+    // print FAILED still gets its chance here rather than losing the ticket
+    // altogether, and an operator's manual reprint of an unpaid non-QR order
+    // does not silently suppress that order's real slip.
+    const prior = db.prepare('SELECT source, print_status FROM retail_orders WHERE id = ?').get(orderId);
+    if (prior && prior.source === 'qr' && prior.print_status === 'printed') {
+      console.log('[feie print]', orderId, 'skipped — QR ticket already printed on submit');
+      return;
+    }
     printOrderById(orderId, pp)
       .then(r => {
         if (r.ok) console.log('[feie print]', orderId, 'ok');
@@ -35646,3 +35687,20 @@ module.exports.resolveProductImage   = resolveProductImage;
 // a second answer to a question that already has one. The QR menu reads it for
 // the same reason — one answer, three callers.
 module.exports.normalizeCurrency     = normalizeCurrency;
+
+// Exported for routes/shop-menu.js — the public QR order path (§44). A QR sale
+// and a till sale at the same counter must be numbered, taxed and costed by the
+// SAME code: a second answer to any of these three is a bug that shows up as a
+// margin report nobody can reconcile, or a tax figure the shop cannot defend.
+//   nextOrderNo   — the public order number, and its uniqueness contract
+//   taxSettings   — the tenant's tax mode and rate, one source
+//   costAtSale    — the unit-cost snapshot every order item carries
+module.exports.nextOrderNo           = nextOrderNo;
+module.exports.taxSettings           = taxSettings;
+module.exports.costAtSale            = costAtSale;
+// §44: a QR order's kitchen ticket prints on SUBMIT rather than on paid, so the
+// menu route needs the same printer resolution, the same template and the same
+// outcome recording the paid path uses. It is the whole function rather than a
+// copy of it — a second renderer would drift, and the drawer's Reprint reads
+// the columns this one writes.
+module.exports.autoPrintOrder        = autoPrintOrder;
