@@ -35607,3 +35607,9 @@ module.exports.nextFreshBatchDate    = nextFreshBatchDate;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;
+// The one currency shape, exported so the PLATFORM screens read a tenant's
+// money the same way the tenant's own surfaces do. routes/store-admin.js
+// prints other people's money across many tenant databases and had no way to
+// ask what any of them was denominated in; a second normaliser there would be
+// a second answer to a question that already has one.
+module.exports.normalizeCurrency     = normalizeCurrency;
