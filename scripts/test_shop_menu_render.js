@@ -368,10 +368,13 @@ function boxOf(text) {
       const m = await page.evaluate(() => {
         const card = document.querySelector('#dsheetB .acard');
         if (!card) return null;
-        // SCOPED TO ONE LANGUAGE ON PURPOSE. Both are in the DOM and CSS hides
-        // one — but innerText falls back to textContent for a hidden element,
-        // so an unscoped read returns the English chips AND the Chinese ones
-        // and the assertion fails on a page that is entirely correct.
+        // Scoped to one language, and the check right after this one is what
+        // makes that safe. An earlier version of this file scoped here and
+        // stopped there, having decided the unscoped read was picking up hidden
+        // text — it was not: BOTH languages were visible, because a rule in
+        // this sheet outweighed the language switch. Scoping to make a test
+        // pass, without asking why the other language was there, is what let
+        // that reach a customer's phone.
         const rows = Array.from(card.querySelectorAll('.arow')).map(r => ({
           label: r.querySelector('.alab').innerText.trim(),
           chips: Array.from(r.querySelectorAll('.l-en .achip')).map(c => c.textContent.trim()),
@@ -425,7 +428,9 @@ function boxOf(text) {
     await check('Add from the sheet puts it in the basket, once', async () => {
       const m = await page.evaluate(async () => {
         document.getElementById('dAdd').click();
-        await new Promise(r => setTimeout(r, 60));
+        // Past the 140ms close animation — the sheet is only [hidden] once its
+        // travel has played, so a 60ms read here caught it mid-slide.
+        await new Promise(r => setTimeout(r, 260));
         return { n: document.getElementById('cbarN').textContent,
                  sheet: document.getElementById('dsheet').hidden };
       });
@@ -450,15 +455,133 @@ function boxOf(text) {
       assert.strictEqual(m.withDt, 2, `only the two real products carry blocks: ${JSON.stringify(m)}`);
     });
 
-    await check('the sheet carries both languages, so the toggle works inside it', async () => {
+    await check('IN ENGLISH, NOTHING CHINESE IS ON SCREEN — anywhere in the sheet', async () => {
+      // Reported from a phone: the allergen card showed "Gluten (oats)" and
+      // 麸质（燕麦）together. The sheet set display:contents on .l-cn at the
+      // same specificity as the language switch and later in the stylesheet,
+      // so it won. Measured as VISIBILITY rather than presence — both languages
+      // are in the DOM by design, and a check that only counted them passed
+      // over the bug for a whole release.
       await page.click('.it:not(.out)[data-open]');
       const m = await page.evaluate(() => {
         const b = document.getElementById('dsheetB');
-        return { en: b.querySelectorAll('.l-en').length, cn: b.querySelectorAll('.l-cn').length };
+        const shown = [];
+        b.querySelectorAll('.l-cn').forEach(el => {
+          if (getComputedStyle(el).display !== 'none') shown.push(el.textContent.trim().slice(0, 24));
+        });
+        const en = [];
+        b.querySelectorAll('.l-en').forEach(el => {
+          if (getComputedStyle(el).display !== 'none') en.push(el.textContent.trim().slice(0, 24));
+        });
+        return { shown, en, cjk: /[一-鿿]/.test(b.innerText) };
       });
-      assert.ok(m.en > 0 && m.en === m.cn,
-        `the sheet is not bilingual: ${JSON.stringify(m)}`);
+      assert.deepStrictEqual(m.shown, [],
+        `Chinese is rendered in the English sheet: ${JSON.stringify(m.shown)}`);
+      assert.ok(m.en.length > 0, 'the English half is not rendering either — the sheet is empty');
+    });
+
+    await check('...and in Chinese, nothing English is', async () => {
+      // THE TOGGLE IS SWITCHED BEFORE THE SHEET IS OPENED, and that is a fact
+      // about the page rather than a convenience here: the sheet's backdrop
+      // covers the header, so EN/中 cannot be reached while a product is open.
+      // A customer closes the sheet, switches, and opens it again. Recorded
+      // because the first version tapped the toggle through the backdrop and
+      // hung waiting for it to become clickable.
       await page.click('#dsheetX');
+      await page.click('[data-lang="cn"]');
+      await page.click('.it:not(.out)[data-open]');
+      const shown = await page.evaluate(() => {
+        const out = [];
+        document.getElementById('dsheetB').querySelectorAll('.l-en').forEach(el => {
+          if (getComputedStyle(el).display !== 'none') out.push(el.textContent.trim().slice(0, 24));
+        });
+        return out;
+      });
+      assert.deepStrictEqual(shown, [],
+        `English is rendered in the Chinese sheet: ${JSON.stringify(shown)}`);
+      // Same fact on the way back: close first, THEN switch. Tapping the
+      // toggle with the sheet open hung this suite for thirty seconds.
+      await page.click('#dsheetX');
+      await page.click('[data-lang="en"]');
+    });
+
+    await check('the enlarge closes on its own button, not only on a delegated tap', async () => {
+      // Reported from a phone: no way out of the full-screen photo but leaving
+      // the menu. It closed on a document-level tap, which passed here and did
+      // not work in the WeChat web view. The button is bound directly.
+      await page.click('.it:not(.out)[data-open]');
+      await page.click('#dsheetB .dt-ph[data-big]');
+      const open = await page.evaluate(() => !document.getElementById('big').hidden);
+      assert.strictEqual(open, true, 'the enlarge did not open');
+      const hasBtn = await page.evaluate(() => {
+        const b = document.getElementById('bigX');
+        if (!b) return null;
+        const r = b.getBoundingClientRect();
+        return { w: r.width, h: r.height, label: b.getAttribute('aria-label') };
+      });
+      assert.ok(hasBtn, 'the enlarge has no close button at all');
+      // A 44px target is the smallest a thumb finds reliably.
+      assert.ok(hasBtn.w >= 40 && hasBtn.h >= 40, `the close button is too small: ${JSON.stringify(hasBtn)}`);
+      await page.click('#bigX');
+      const shut = await page.evaluate(() => ({
+        big: document.getElementById('big').hidden,
+        sheet: document.getElementById('dsheet').hidden,
+      }));
+      assert.strictEqual(shut.big, true, 'the close button did not close the enlarge');
+      // And it returns to the sheet rather than dumping the customer on the menu.
+      assert.strictEqual(shut.sheet, false, 'closing the photo also closed the product sheet');
+      await page.click('#dsheetX');
+    });
+
+    await check('the sheet arrives and leaves with movement, and reduced motion turns both off', async () => {
+      // Reported from a phone: the panel appeared with no travel and read as
+      // the page having jumped. Both directions are measured, because the
+      // closing keyframes shipped once with no script to add the class that
+      // drives them — dead CSS that no check would have noticed.
+      await page.click('.it:not(.out)[data-open]');
+      const anim = await page.evaluate(() => {
+        const p = document.querySelector('#dsheet .sheet-p');
+        return getComputedStyle(p).animationName;
+      });
+      assert.notStrictEqual(anim, 'none', 'the sheet has no open animation');
+      const out = await page.evaluate(async () => {
+        document.getElementById('dsheetX').click();
+        // Read INSIDE the 140ms travel: the panel is still on screen, and the
+        // class that plays it away is what proves the close is not a snap.
+        await new Promise(r => setTimeout(r, 40));
+        const sh = document.getElementById('dsheet');
+        return { cls: sh.className, hidden: sh.hidden,
+                 anim: getComputedStyle(sh.querySelector('.sheet-p')).animationName };
+      });
+      assert.strictEqual(out.hidden, false, 'the sheet was hidden mid-travel, so nothing was seen');
+      assert.ok(/closing/.test(out.cls), `the closing class is never added: ${out.cls}`);
+      assert.strictEqual(out.anim, 'shOut', `the sheet snaps shut instead of sliding: ${out.anim}`);
+      const gone = await page.evaluate(async () => {
+        await new Promise(r => setTimeout(r, 260));
+        const sh = document.getElementById('dsheet');
+        return { hidden: sh.hidden, cls: sh.className };
+      });
+      assert.strictEqual(gone.hidden, true, 'the sheet never finished closing');
+      assert.strictEqual(gone.cls, 'sheet', `the closing class was left behind: ${gone.cls}`);
+      const reduced = await page.context().newPage();
+      await reduced.emulateMedia({ reducedMotion: 'reduce' });
+      await reduced.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
+      await reduced.click('.it:not(.out)[data-open]');
+      const off = await reduced.evaluate(() => {
+        const p = document.querySelector('#dsheet .sheet-p');
+        return { anim: getComputedStyle(p).animationName, open: !document.getElementById('dsheet').hidden };
+      });
+      assert.strictEqual(off.anim, 'none',
+        'a customer who asked their phone to stop animating still gets the slide');
+      assert.strictEqual(off.open, true, 'reduced motion stopped the sheet opening at all');
+      // And they do not wait 140ms for a travel they are not being shown.
+      const offShut = await reduced.evaluate(() => {
+        document.getElementById('dsheetX').click();
+        return document.getElementById('dsheet').hidden;
+      });
+      assert.strictEqual(offShut, true,
+        'reduced motion still holds the panel open for an animation it is not playing');
+      await reduced.close();
     });
 
     await check('adding shows the bar, and the bar counts and totals', async () => {
@@ -702,10 +825,14 @@ function boxOf(text) {
 
     await check('taking the last one out empties the basket and closes the sheet', async () => {
       await page.click('#sheetB .qty button[data-d]');
-      const m = await page.evaluate(() => ({
-        sheet: document.getElementById('sheet').hidden,
-        bar: document.getElementById('cbar').hidden,
-      }));
+      const m = await page.evaluate(async () => {
+        // The basket slides away like the product sheet does; read after it.
+        await new Promise(r => setTimeout(r, 260));
+        return {
+          sheet: document.getElementById('sheet').hidden,
+          bar: document.getElementById('cbar').hidden,
+        };
+      });
       assert.strictEqual(m.bar, true, 'an empty basket still shows its bar');
       assert.strictEqual(m.sheet, true, 'an empty basket sheet stayed open over the menu');
     });

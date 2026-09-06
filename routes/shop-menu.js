@@ -473,7 +473,15 @@ img{display:block;max-width:100%}
    rule being blunt on purpose rather than misfiring. display:contents
    makes the two language wrappers vanish from layout so the chips are the
    flex items, rather than two blocks each holding a row. */
-.achips .l-en,.achips .l-cn{display:contents}
+/* A CLASS OF ITS OWN, NOT .achips .l-cn — and that is the whole point of this
+   rule rather than a tidiness preference. The language switch — the rule above
+   that hides .l-cn under .lang-en — has specificity (0,2,0). A rule written as
+   .achips .l-cn is ALSO (0,2,0), and this sheet is written later, so it WON and
+   both languages rendered inside the allergen card: an English customer read
+   "Gluten (oats)" followed by "麸质（燕麦）". Reported from a phone.
+   .chipset is (0,1,0), so the switch beats it and the wrapper still collapses
+   out of the flex row. */
+.chipset{display:contents}
 .achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:1.3;
   font-family:var(--f-bear);letter-spacing:.03em}
 /* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
@@ -510,6 +518,14 @@ img{display:block;max-width:100%}
   display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
 .big[hidden]{display:none}
 .big img{max-width:100%;max-height:100%;object-fit:contain}
+/* Top-right, clear of the phone's own status bar and of the notch inset. It is
+   the only control on this screen, so it is large and unmissable rather than
+   discreet. */
+.big-x{position:absolute;top:calc(10px + env(safe-area-inset-top));right:10px;
+  width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  border:2px solid #fff;background:rgba(0,0,0,.5);color:#fff;
+  font-family:var(--f-bear);font-size:24px;line-height:1;padding:0;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
 
 /* ── the basket ── */
 /* The add button sits on the photo's own corner rather than under the name,
@@ -571,6 +587,32 @@ img{display:block;max-width:100%}
 .sheet-p{position:relative;width:100%;max-height:86vh;max-height:86dvh;
   display:flex;flex-direction:column;background:var(--oat);
   border-top:2px solid var(--ink)}
+
+/* IT SLIDES UP RATHER THAN APPEARING. A panel that arrives with no movement
+   reads as the page having jumped; the travel is what tells a customer this
+   came from the bottom and goes back there. Keyframes rather than a transition,
+   because the sheet opens by losing [hidden] — an element coming out of
+   display:none has no previous value to transition FROM, and a transition
+   would simply not play. Closing plays the same pair backwards, driven by a
+   class the script adds and then removes.
+   Deliberately short: 180ms out, 140ms back. This sits between a customer and
+   their order, and an animation they wait for twice is a slower menu. */
+@keyframes shIn{from{transform:translateY(100%)}to{transform:none}}
+@keyframes shOut{from{transform:none}to{transform:translateY(100%)}}
+@keyframes bgIn{from{opacity:0}to{opacity:1}}
+@keyframes bgOut{from{opacity:1}to{opacity:0}}
+.sheet:not([hidden]) .sheet-p{animation:shIn .18s cubic-bezier(.22,.7,.3,1) both}
+.sheet:not([hidden]) .sheet-bg{animation:bgIn .18s ease both}
+.sheet.closing .sheet-p{animation:shOut .14s cubic-bezier(.5,0,.8,.4) both}
+.sheet.closing .sheet-bg{animation:bgOut .14s ease both}
+.big:not([hidden]){animation:bgIn .14s ease both}
+/* Somebody who has asked their phone to stop animating gets the panel with no
+   travel at all — not a slower one. */
+@media (prefers-reduced-motion:reduce){
+  .sheet:not([hidden]) .sheet-p,.sheet:not([hidden]) .sheet-bg,
+  .sheet.closing .sheet-p,.sheet.closing .sheet-bg,
+  .big:not([hidden]){animation:none}
+}
 .sheet-h{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;
   border-bottom:2px solid var(--ink)}
 .sheet-t{flex:1;font-family:var(--f-bear);font-size:16px;letter-spacing:.04em}
@@ -767,6 +809,27 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `for(var k in m)m[k].className='';var a=m[es[i].target.id];if(a)a.className='on'}},{rootMargin:'-45% 0px -50% 0px'});` +
   `var c=document.querySelectorAll('.cat');for(var j=0;j<c.length;j++)o.observe(c[j]);})();` +
 
+  // ── OPENING AND CLOSING A PANEL ─────────────────────────────────────────
+  //
+  // SHARED BY BOTH SHEETS, because a basket that snaps shut beside a product
+  // card that slides shut is the same jump reported on the way in, just later.
+  // The class drives the keyframes; [hidden] is only set once they have played,
+  // so the panel is never yanked out from under the travel. Any pending close
+  // is cancelled on open — a customer who taps a second card while the first is
+  // still on its way down must not have the new sheet hidden underneath them.
+  //
+  // Somebody who asked their phone to stop animating gets neither the travel
+  // nor the wait: the panel is simply gone, which is what they asked for.
+  `var shRM=function(){try{return window.matchMedia('(prefers-reduced-motion:reduce)').matches}` +
+  `catch(x){return false}};` +
+  `var shOpen=function(el){if(el.shT){clearTimeout(el.shT);el.shT=null}` +
+  `el.className='sheet';el.hidden=false};` +
+  `var shClose=function(el){if(el.hidden)return;` +
+  `if(el.shT){clearTimeout(el.shT);el.shT=null}` +
+  `if(shRM()){el.hidden=true;el.className='sheet';return}` +
+  `el.className='sheet closing';` +
+  `el.shT=setTimeout(function(){el.shT=null;el.hidden=true;el.className='sheet'},140)};` +
+
   // ── THE PRODUCT SHEET ───────────────────────────────────────────────────
   //
   // The body is already rendered, server-side, into a <template> on each card,
@@ -779,7 +842,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `pr=document.getElementById('dPr'),add=document.getElementById('dAdd'),` +
   `big=document.getElementById('big'),bigImg=document.getElementById('bigImg');` +
   `var openPid=null;` +
-  `var close=function(){sh.hidden=true;openPid=null};` +
+  `var close=function(){shClose(sh);openPid=null};` +
   `var open=function(card){` +
   `var t=card.querySelector('template[data-dt]');if(!t)return;` +
   `openPid=card.getAttribute('data-open');` +
@@ -792,7 +855,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // A sold-out product still opens — a customer may want to know what was in
   // the thing they cannot have — but it cannot be added from here.
   `var out=card.className.indexOf('out')>=0;add.hidden=out;` +
-  `sh.hidden=false;body.scrollTop=0};` +
+  `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
   `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
   `if(z){var pid=z.getAttribute('data-big'),v=z.getAttribute('data-v')||'';` +
@@ -803,15 +866,20 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // swallows the whole rest of the script. Cost the entire page's behaviour once.
   `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=1000';` +
   `big.hidden=false;return}` +
-  `if(!big.hidden){big.hidden=true;bigImg.src='';return}` +
   `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
   // A tap on the card's own + adds; it must not also open the sheet behind it.
   `if(card&&!(e.target.closest&&e.target.closest('.add'))){open(card);return}` +
   `},false);` +
+  // CLOSING THE ENLARGE IS BOUND TO THE ELEMENTS THEMSELVES, not delegated:
+  // the button, and the overlay behind it for the tap-anywhere habit.
+  `var shut=function(){big.hidden=true;bigImg.src=''};` +
+  `document.getElementById('bigX').addEventListener('click',function(e){` +
+  `e.stopPropagation();shut()},false);` +
+  `big.addEventListener('click',shut,false);` +
   `document.getElementById('dsheetX').addEventListener('click',close,false);` +
   `document.getElementById('dsheetBg').addEventListener('click',close,false);` +
   `document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;` +
-  `if(!big.hidden){big.hidden=true;bigImg.src='';return}close()},false);` +
+  `if(!big.hidden){shut();return}close()},false);` +
   // Keyboard: a card is role=button and focusable, so it answers Enter/Space.
   `document.addEventListener('keydown',function(e){` +
   `if(e.key!=='Enter'&&e.key!==' ')return;` +
@@ -878,7 +946,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'<button type="button" data-i="'+esc(k[i])+'" aria-label="+">+</button></div>'+` +
   `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div>'}` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
-  `var closeIfEmpty=function(){if(count()===0){sheet.hidden=true}};` +
+  `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
   `var add=function(b){var id=b.getAttribute('data-add');` +
   `if(!cart[id])cart[id]={qty:0,price:parseFloat(b.getAttribute('data-p'))||0,` +
   `en:b.getAttribute('data-en'),cn:b.getAttribute('data-cn')};` +
@@ -895,8 +963,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(iu){if(cart[iu]&&cart[iu].qty<20)cart[iu].qty++;paintBar();paintSheet();return}` +
   `},false);` +
   `document.getElementById('cbarOpen').addEventListener('click',function(){` +
-  `errEl.hidden=true;foot.hidden=false;paintSheet();sheet.hidden=false},false);` +
-  `var close=function(){sheet.hidden=true};` +
+  `errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
+  `var close=function(){shClose(sheet)};` +
   `document.getElementById('sheetX').addEventListener('click',close,false);` +
   `document.getElementById('sheetBg').addEventListener('click',close,false);` +
   `document.addEventListener('keydown',function(e){if(e.key==='Escape')close()},false);` +
@@ -933,7 +1001,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
   `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
   `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
-  `'</div>';sheet.hidden=false};` +
+  `'</div>';shOpen(sheet)};` +
   `})();`;
 
 // ─── What a product's detail sheet knows ────────────────────────────────
@@ -974,7 +1042,8 @@ function detailBody(it, code) {
     if (!en.length && !cn.length) return '';
     const one = (list) => list.map(t => `<span class="achip ${cls}">${esc(t)}</span>`).join('');
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
-      `<div class="achips"><span class="l-en">${one(en)}</span><span class="l-cn">${one(cn.length ? cn : en)}</span></div></div>`;
+      `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
+      `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
   };
   const algCard = alg
     ? `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
@@ -1188,7 +1257,16 @@ router.get('/s/:shopCode', (req, res) => {
       `</div>` +
     `</div>` +
     // The enlarge. Outside both sheets so it can sit over either.
-    `<div class="big" id="big" hidden><img id="bigImg" src="" alt=""></div>` +
+    // A REAL BUTTON, AND A LISTENER ON THE OVERLAY ITSELF. The first version
+    // closed on a document-level tap and nothing else: it passed in headless
+    // Chromium and did not work on the phone, where the customer was left with
+    // a full-screen photo and no way out but leaving the menu. Reported from
+    // a phone. A delegated tap on a non-interactive full-screen div is not
+    // something to rely on in a WeChat web view; a button is.
+    `<div class="big" id="big" hidden>` +
+      `<button type="button" class="big-x" id="bigX" aria-label="${esc('Close 关闭')}">×</button>` +
+      `<img id="bigImg" src="" alt="">` +
+    `</div>` +
     `<div class="sheet" id="sheet" hidden>` +
       `<div class="sheet-bg" id="sheetBg"></div>` +
       `<div class="sheet-p" role="dialog" aria-modal="true">` +
