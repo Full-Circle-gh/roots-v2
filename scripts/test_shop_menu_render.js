@@ -300,6 +300,42 @@ function boxOf(text) {
       assert.strictEqual(two, '2', 'a second tap did not count');
     });
 
+    await check('the add button sits BESIDE THE PRICE, not over the photo', async () => {
+      // Reported from a phone, 2026-09-06, with the mini app beside it: the
+      // button was on the photo's corner, covering the product it was offering
+      // to add and sitting where this shop's own customers do not look for it.
+      // Geometry rather than a class name — the whole complaint was about where
+      // it is on the screen, and a class can be right while the box is wrong.
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('.it:not(.out)');
+        const b = card.querySelector('.add').getBoundingClientRect();
+        const ph = card.querySelector('.ph').getBoundingClientRect();
+        const pr = card.querySelector('.pr').getBoundingClientRect();
+        return { bTop: b.top, bLeft: b.left, bRight: b.right,
+                 phBottom: ph.bottom, phRight: ph.right,
+                 prTop: pr.top, prBottom: pr.bottom, prRight: pr.right };
+      });
+      assert.ok(m.bTop >= m.phBottom - 1,
+        `the add button is still over the photo: ${JSON.stringify(m)}`);
+      // On the price's row, and to the right of it.
+      assert.ok(m.bTop < m.prBottom && m.bRight > m.prRight,
+        `the add button is not on the price row, right of the price: ${JSON.stringify(m)}`);
+    });
+
+    await check('the add button is the mini app\'s colours, not the page background', async () => {
+      // An ink square with a lime glyph. Read off the computed style so a token
+      // that stopped resolving shows up here rather than as an invisible button
+      // on a customer's phone.
+      const c = await page.evaluate(() => {
+        const b = document.querySelector('.it:not(.out) .add');
+        const cs = getComputedStyle(b);
+        return { bg: cs.backgroundColor, fg: cs.color };
+      });
+      assert.ok(/^rgba?\(/.test(c.bg) && c.bg !== 'rgba(0, 0, 0, 0)',
+        `the add button has no ground: ${JSON.stringify(c)}`);
+      assert.notStrictEqual(c.bg, c.fg, 'the glyph is the same colour as its ground — an invisible +');
+    });
+
     await check('the last row of products is not hidden under the bar', async () => {
       // The bar is fixed over the page. Without the floor it adds, the final
       // card sits underneath it and cannot be tapped — the same class of fault
