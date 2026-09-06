@@ -124,6 +124,7 @@
     "test:stock-receiving": "node scripts/test_stock_receiving.js",
     "test:stock-picking": "node scripts/test_stock_picking.js",
     "test:stock-home": "node scripts/test_stock_home.js",
+    "test:kitchen-stock-visibility": "node scripts/test_kitchen_stock_visibility.js",
     "test:restock-notifications": "node scripts/test_restock_notifications.js",
     "test:kitchen-queue": "node scripts/test_kitchen_queue_reachable.js",
     "test:kitchen-ready": "node scripts/test_kitchen_ready_signal.js",
