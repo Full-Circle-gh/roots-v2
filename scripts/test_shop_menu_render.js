@@ -334,65 +334,70 @@ function boxOf(text) {
         `the add button is not on the price row, right of the price: ${JSON.stringify(m)}`);
     });
 
-    await check('the card\'s TYPE is the mini app\'s, read from its own stylesheet', async () => {
-      // Reported from a phone, 2026-09-06: "the price of each product, its too
-      // big... do it the same as the mini app exactly". It was 19px against a
-      // 15px name; both were guessed. The real values are .card .name and
-      // .card .price in miniapp/pages/shop/shop.wxss, and this reads them there
-      // rather than restating them — the same reason the chip's size does.
-      const wxss = require('fs').readFileSync(
-        path.join(ROOT, 'miniapp/pages/shop/shop.wxss'), 'utf8');
-      // The 2-column card's rules. Deliberately NOT .grid-3's, which are the
-      // three-across variant and smaller; this page lays out two across.
-      const rpxOf = (sel) => {
-        const line = wxss.split('\n').find(l => l.trim().startsWith(sel));
-        const m = line && /font-size:\s*calc\((\d+)rpx/.exec(line);
+    await check('the card is public/shop.html\'s .sl-* card, measured against it', async () => {
+      // Reported from a phone twice — "the + is too big", then "the price is too
+      // big", then "use the same colors, fonts size, position, exactly".
+      //
+      // THE WEBSITE IS THE SOURCE, NOT THE MINI APP'S WXSS. Both are the same
+      // design by the same house, but the website's half is already in CSS
+      // pixels for a browser and this is a browser page. Converting the wxss's
+      // rpx at an assumed 390px phone is what produced two wrong numbers in a
+      // row; there is nothing to convert here. Read out of public/shop.html so
+      // the two cannot drift apart silently.
+      const html = require('fs').readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+      const ruleOf = (sel) => {
+        const i = html.indexOf(sel + '{');
+        return i < 0 ? null : html.slice(i + sel.length + 1, html.indexOf('}', i));
+      };
+      const num = (rule, prop) => {
+        const m = rule && new RegExp(prop + ':\\s*([\\d.]+)px').exec(rule);
         return m ? Number(m[1]) : null;
       };
-      const nameRpx = rpxOf('.card .name');
-      const priceRpx = rpxOf('.card .price ');
-      assert.ok(nameRpx && priceRpx,
-        `could not read the card's type out of the wxss: name=${nameRpx} price=${priceRpx}`);
-      const px = (r) => r * (390 / 750);
+      const cn    = ruleOf('.sl-card .cn');
+      const pr    = ruleOf('.sl-pr');
+      const plus  = ruleOf('.sl-plus');
+      const foot  = ruleOf('.sl-cfoot');
+      const grid  = ruleOf('.sl-grid');
+      assert.ok(cn && pr && plus && foot && grid,
+        'the .sl-* card rules have moved in public/shop.html — this check cannot see them');
+
+      const want = {
+        name:  num(cn, 'font-size'),
+        price: num(pr, 'font-size'),
+        plus:  num(plus, 'width'),
+        gap:   num(foot, 'gap'),
+        gridGap: num(grid, 'gap'),
+      };
+      assert.ok(Object.values(want).every(v => v > 0),
+        `could not read every value: ${JSON.stringify(want)}`);
+
       const got = await page.evaluate(() => {
         const card = document.querySelector('.it:not(.out)');
-        const t = getComputedStyle(card.querySelector('.t'));
-        const p = getComputedStyle(card.querySelector('.pr'));
-        return { name: parseFloat(t.fontSize), price: parseFloat(p.fontSize),
-                 tracking: p.letterSpacing };
+        const cs = (el) => getComputedStyle(el);
+        return {
+          name:  parseFloat(cs(card.querySelector('.t')).fontSize),
+          price: parseFloat(cs(card.querySelector('.pr')).fontSize),
+          plus:  card.querySelector('.add').getBoundingClientRect().width,
+          gap:   parseFloat(cs(card.querySelector('.pf')).columnGap),
+          gridGap: parseFloat(cs(document.querySelector('.grid')).rowGap),
+          tracking: cs(card.querySelector('.pr')).letterSpacing,
+          nameColour:  cs(card.querySelector('.t')).color,
+          priceColour: cs(card.querySelector('.pr')).color,
+        };
       });
-      assert.ok(Math.abs(got.name - px(nameRpx)) <= 0.6,
-        `the name is ${got.name}px against the mini app's ${px(nameRpx).toFixed(1)}px`);
-      assert.ok(Math.abs(got.price - px(priceRpx)) <= 0.6,
-        `the price is ${got.price}px against the mini app's ${px(priceRpx).toFixed(1)}px`);
-      // The price must not be the louder of the two by more than the mini app
-      // makes it — that ratio is the whole of what "too big" described.
-      assert.ok(got.price / got.name <= (priceRpx / nameRpx) + 0.05,
-        `the price shouts over the name: ${got.price}/${got.name} against ${(priceRpx / nameRpx).toFixed(2)}`);
-      assert.ok(/px$/.test(got.tracking) && parseFloat(got.tracking) > 0,
-        `the price lost the mini app's letter-spacing: ${got.tracking}`);
-    });
-
-    await check('the add button is the mini app\'s SIZE, read from its own stylesheet', async () => {
-      // Reported from a phone, 2026-09-06: "the + is too big". It was 36px,
-      // which was guessed. The real number lives in .card-plus in
-      // miniapp/pages/shop/shop.wxss, and this reads it there rather than
-      // restating it — so if that shop ever resizes its chip, this goes red and
-      // names the gap instead of the two drifting apart unnoticed.
-      const wxss = require('fs').readFileSync(
-        path.join(ROOT, 'miniapp/pages/shop/shop.wxss'), 'utf8');
-      const block = wxss.slice(wxss.indexOf('.card-plus {'));
-      const rpx = /width:\s*(\d+)rpx;\s*height:\s*(\d+)rpx/.exec(block);
-      assert.ok(rpx, '.card-plus no longer states its size in rpx — this check cannot see it');
-      // The same 390px-phone conversion the rest of routes/shop-menu.js used.
-      const want = Number(rpx[1]) * (390 / 750);
-      const got = await page.evaluate(() => {
-        const r = document.querySelector('.it:not(.out) .add').getBoundingClientRect();
-        return { w: r.width, h: r.height };
-      });
-      assert.ok(Math.abs(got.w - want) <= 1.5,
-        `the add chip is ${got.w}px against the mini app's ${want.toFixed(1)}px`);
-      assert.ok(Math.abs(got.h - got.w) <= 1, `the add chip is not square: ${JSON.stringify(got)}`);
+      for (const k of Object.keys(want)) {
+        assert.ok(Math.abs(got[k] - want[k]) <= 0.5,
+          `${k} is ${got[k]}px against the website's ${want[k]}px`);
+      }
+      // .sl-pr carries letter-spacing:.04em and .sl-card .cn does not.
+      assert.ok(parseFloat(got.tracking) > 0, `the price lost its tracking: ${got.tracking}`);
+      // BOTH are color:var(--ink) on the website — .sl-card .cn says so
+      // explicitly and .sl-pr says so explicitly. A theme that resolved one and
+      // not the other would show up here rather than on a customer's phone.
+      assert.strictEqual(got.priceColour, got.nameColour,
+        `the price and the name are different colours: ${got.priceColour} vs ${got.nameColour}`);
+      assert.ok(/^rgba?\(/.test(got.priceColour) && got.priceColour !== 'rgba(0, 0, 0, 0)',
+        `the price has no resolved colour: ${got.priceColour}`);
     });
 
     await check('the + is two bars and both are actually drawn', async () => {

@@ -417,8 +417,12 @@ img{display:block;max-width:100%}
    neighbour's. Without it the row collapses to the height of the price alone
    and that price rides high by half the difference, which reads as a wobble
    rather than as anything deliberate. */
-.pf{display:flex;align-items:center;justify-content:space-between;gap:6px;
-  min-height:27px}
+/* .sl-cfoot, plus one deliberate DEPARTURE: min-height. The website's foot has
+   none, so a card with no + — a sold-out one — collapses to the height of its
+   price and that price rides high beside its neighbour's. Reported from a phone
+   and fixed here rather than copied faithfully. */
+.pf{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:auto;padding-top:5px;min-height:26px}
 /* THE MINI APP'S OWN ADD CHIP, AT ITS OWN SIZE. Taken from .card-plus in
    miniapp/pages/shop/shop.wxss — 52rpx square with a 26x5rpx bar — converted at
    the same 390px phone the rest of this file's values were converted at
@@ -430,14 +434,14 @@ img{display:block;max-width:100%}
    in the square and that no flex-centring could fix it, because centring aligns
    the text line box and not the ink inside it. This page uses the same serif,
    so it had the same bug — the first version of this button centred a glyph. */
-.add{flex:none;position:relative;width:27px;height:27px;
+.add{flex:none;position:relative;width:26px;height:26px;
   border:0;background:var(--ink);color:var(--lime);
   font-size:0;line-height:1;cursor:pointer;
   padding:0;-webkit-tap-highlight-color:transparent}
 .add::before,.add::after{content:'';position:absolute;top:50%;left:50%;
   background:currentColor;transform:translate(-50%,-50%)}
-.add::before{width:13.5px;height:2.6px}
-.add::after{width:2.6px;height:13.5px}
+.add::before{width:13px;height:2.5px}
+.add::after{width:2.5px;height:13px}
 .add:active{transform:translateY(1px)}
 
 /* The bar clears the phone's home indicator; without the inset the tap target
@@ -551,7 +555,15 @@ img{display:block;max-width:100%}
   text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
 .cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
   font-variant-numeric:tabular-nums}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;padding:0 14px 6px}
+/* ── the product card: public/shop.html's .sl-* grid card, verbatim ──
+   THE WEBSITE IS THE RIGHT SOURCE FOR THIS PAGE, not the mini app's wxss. Both
+   are the same design by the same house, but the website's half is already
+   expressed in CSS pixels for a browser, and this is a browser page — so the
+   values are copied rather than converted from rpx at an assumed phone width,
+   which is where two rounds of "it is too big" came from. .sl-grid.g2,
+   .sl-card, .sl-ci, .cn, .sl-cfoot, .sl-pr, .sl-plus and .sl-coos are the
+   rules below, one for one. */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:12px 16px}
 /* A COLUMN, SO THE PRICE ROW SITS AT THE BOTTOM OF THE CARD RATHER THAN UNDER
    THE NAME. Two products side by side rarely have names of the same height —
    "Almond Butter" against "Maple Cinnamon Almond Butter" — and with the row
@@ -562,25 +574,22 @@ img{display:block;max-width:100%}
 .it{min-width:0;display:flex;flex-direction:column}
 .ph{position:relative;aspect-ratio:4/5;background:var(--oat);overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover}
-.sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
-  font-family:var(--f-bear);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-  text-align:center;padding:5px 0}
-/* NAME AND PRICE ARE THE MINI APP'S OWN TYPE, converted from its .card rules in
-   miniapp/pages/shop/shop.wxss at the same 390px phone the rest of this file
-   used (390/750 = 0.52). name 28rpx becomes 14.6px at line-height 1.2, margin-top
-   18rpx becomes 9.4px; price 32rpx becomes 16.6px with its 0.04em letter-spacing; the
-   foot's 8rpx becomes 4.2px. The price was 19px and read as shouting beside a 15px
-   name — both numbers were guessed, and both are measured now. The wxss scales
-   these by a --font-scale the customer sets in that app; this page has no such
-   control, so the scale is 1. */
-.t{flex:1;font-family:var(--f-bear);font-size:14.6px;line-height:1.2;margin-top:9.4px;
-  overflow-wrap:anywhere}
-.pf{padding-top:4.2px}
+/* .sl-coos — the veil is rgba(0,0,0,.75) there, not .78, and the type is 10px. */
+.sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);color:#fff;
+  font-family:var(--f-bear);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  text-align:center;padding:4px 0}
+/* .sl-card .cn and .sl-pr, copied. The name was 15px then 14.6px and the price
+   19px then 16.6px — guessed, then converted from rpx; these are the numbers
+   the website actually ships to a browser. The foot pushes itself down with
+   margin-top:auto, which is .sl-cfoot's own way of making the price row sit at
+   the bottom of a card whose neighbour has a taller name. */
+.t{font-family:var(--f-bear);font-size:14px;line-height:1.2;margin-top:9px;
+  color:var(--ink);overflow-wrap:anywhere}
 /* tabular-nums is this page's own and is kept: it stops the figures jittering
-   as prices change down a column, which the wxss wants too — its
+   as prices change down a column, which the mini app wants too — its
    .row-price-stack comment asks for exactly that, by a different means. */
-.pr{font-family:var(--f-bear);font-size:16.6px;line-height:1;letter-spacing:.04em;
-  font-variant-numeric:tabular-nums}
+.pr{font-family:var(--f-bear);font-size:16px;line-height:1;letter-spacing:.04em;
+  color:var(--ink);font-variant-numeric:tabular-nums}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
 
