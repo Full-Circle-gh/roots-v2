@@ -83,6 +83,60 @@ if (grant.mayRecount(Object.assign({}, KITCHEN_OP, { caps: null }))) {
 }
 if (grant.RECOUNT_MISCOUNT !== 'miscount') fail(P, 'the fork answer changed name without the client');
 
+// ── What went on the shelf today, and who put it there ────────────────────
+// The fold lives in lib/ so these rules can be exercised without a database.
+// Every one of them is quiet when broken: a wrong total reads as a plausible
+// total, and a missing name reads as an add nobody made.
+const { summariseKitchenAdds } = require('../lib/kitchen-adds');
+const TZ = 'Asia/Shanghai';
+const NOW = new Date('2026-09-06T05:00:00Z');          // 13:00 in Shanghai
+const row = (o) => Object.assign(
+  { product_id: 7, delta: 1, actor_label: 'Ah Ming', created_at: '2026-09-06 02:00:00' }, o);
+
+const A = 'added-today';
+{
+  const one = summariseKitchenAdds([row({ delta: 6 })], TZ, NOW);
+  if (!one[7] || one[7].qty !== 6) fail(A, `one add should total 6, got ${JSON.stringify(one[7])}`);
+  if (String((one[7] || {}).who) !== 'Ah Ming') fail(A, 'the one who added it is not named');
+
+  // TWO PEOPLE ON THE SAME PRODUCT is the case the line exists for: the second
+  // needs to see the first already did it, so BOTH are named.
+  const two = summariseKitchenAdds([
+    row({ delta: 6 }),
+    row({ delta: 8, actor_label: 'Lily', created_at: '2026-09-06 03:00:00' }),
+    row({ delta: 1, created_at: '2026-09-06 04:00:00' }),
+  ], TZ, NOW);
+  if (two[7].qty !== 15) fail(A, `two people should total 15, got ${two[7].qty}`);
+  if (two[7].who.join(',') !== 'Ah Ming,Lily') {
+    fail(A, `expected both names in the order they first added, got ${two[7].who.join(',')}`);
+  }
+
+  // AN ADD NOBODY CAN BE NAMED FOR IS STILL AN ADD — dropping it would make the
+  // figure disagree with the shelf, which is worse than an unattributed number.
+  const anon = summariseKitchenAdds([row({ delta: 5, actor_label: null })], TZ, NOW);
+  if (anon[7].qty !== 5) fail(A, 'an unnamed add lost its units');
+  if (anon[7].who.length) fail(A, 'an unnamed add invented a name');
+
+  // YESTERDAY IS NOT TODAY, and the day is the STORE's. 2026-09-05 17:00 UTC is
+  // already the 6th in Shanghai, so the boundary is the one being tested here
+  // rather than UTC midnight.
+  const days = summariseKitchenAdds([
+    row({ delta: 4, created_at: '2026-09-04 02:00:00' }),
+    row({ delta: 3, created_at: '2026-09-05 17:00:00' }),
+  ], TZ, NOW);
+  if (!days[7] || days[7].qty !== 3) {
+    fail(A, `only the store's own today should count, got ${JSON.stringify(days[7])}`);
+  }
+
+  // Only what was ADDED. The route refuses a negative delta, but this reads the
+  // ledger rather than the route, and a total that could go down is not "added".
+  const neg = summariseKitchenAdds([row({ delta: -4 }), row({ delta: 0 })], TZ, NOW);
+  if (Object.keys(neg).length) fail(A, 'a non-positive delta reached the figure');
+
+  if (Object.keys(summariseKitchenAdds([], TZ, NOW)).length) fail(A, 'an empty ledger invented a row');
+  if (Object.keys(summariseKitchenAdds(null, TZ, NOW)).length) fail(A, 'a missing ledger threw or invented a row');
+}
+
 // ── The door ──────────────────────────────────────────────────────────────
 // A screen and its door go in together: the kitchen role is stock-app-only, and
 // a route missing from that list is refused before any handler runs.
@@ -345,7 +399,7 @@ function main() {
     console.log(`\n${failures.length} failure(s).`);
     process.exit(1);
   }
-  console.log(`ok — predicate, door and ${Object.keys(CASES).length} screen states.`);
+  console.log(`ok — predicate, today's adds, door and ${Object.keys(CASES).length} screen states.`);
 }
 
 main();

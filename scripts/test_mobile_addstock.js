@@ -186,9 +186,32 @@ run('add stock', [
      on twice. Zero is not drawn: "Added today +0" on two hundred cards trains
      the eye to skip the line on the one card where it says something. */
   ['todays adds are read back on the card',
-    SHELF + "state.qs.addedToday={7:6}; render();", [
+    SHELF + "state.qs.addedToday={7:{qty:6,who:['Ah Ming']}}; render();", [
       ['the line is there', `${body}.indexOf('Added today')>-1`],
       ['carrying what went on', `${body}.indexOf('+6')>-1`],
+      /* AND WHO PUT IT THERE. "somebody already added 30" is a weaker answer
+         than the name: the name is what tells the reader whether the 30 was
+         their own work or the colleague they can go and ask. */
+      ['and who put it there', `${body}.indexOf('Ah Ming')>-1`],
+    ]],
+  ['two people on the same product are both named',
+    SHELF + "state.qs.addedToday={7:{qty:14,who:['Ah Ming','Lily']}}; render();", [
+      ['the total is the two of them', `${body}.indexOf('+14')>-1`],
+      ['the first is named', `${body}.indexOf('Ah Ming')>-1`],
+      ['and so is the second', `${body}.indexOf('Lily')>-1`],
+    ]],
+  /* AN ADD NOBODY CAN BE NAMED FOR IS STILL AN ADD. The units are what keep the
+     figure agreeing with the shelf, so a row with no label contributes them and
+     no name rather than being dropped. */
+  ['an add with no name still counts',
+    SHELF + "state.qs.addedToday={7:{qty:9,who:[]}}; render();", [
+      ['the units are there', `${body}.indexOf('+9')>-1`],
+      ['and no stray separator', `${body}.indexOf('+9 ·')===-1`],
+    ]],
+  ['a landed write names this operator on the line',
+    SHELF + "state.me={name:'Ah Ming'}; state.qs.inflight[7]=2; qsWriteLanded(7,2,state.qs.items[0]);", [
+      ['today\u2019s figure moved', "qsAdded(7)===2"],
+      ['and it says who', "qsAddedWho(7).indexOf('Ah Ming')>-1"],
     ]],
   ['and it is absent when nothing went on', SHELF, [
     ['no line', `${body}.indexOf('Added today')===-1`],
