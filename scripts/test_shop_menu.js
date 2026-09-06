@@ -935,6 +935,38 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.ok(!body.includes('/api/retail/orders'),
         'the menu reaches the customer-account order endpoint — a QR order has no account (§44)');
     });
+    await checkAsync('NO ATTRIBUTE ON THIS PAGE CONTAINS MARKUP', async () => {
+      // Reported from a phone: a stray "Cancel" box beside the sheet's × .
+      // bi() returns two <span>s and it had been dropped into an aria-label,
+      // which closed the attribute at its first quote and spilled the rest into
+      // the header as text. The page still parsed, so nothing else caught it.
+      //
+      // Held for the WHOLE page rather than for that one control, because the
+      // mistake is a shape — a bilingual helper reaching for an attribute — and
+      // it will be reachable for again the next time a control needs a label.
+      const { body } = await get(`/s/${LIVE}`);
+      const bad = [];
+      // Every attribute value in the document, double-quoted as this page emits
+      // them. A '<' inside one can only be markup that escaped.
+      const re = /\s[a-zA-Z-]+="([^"]*)"/g;
+      let m;
+      while ((m = re.exec(body))) {
+        if (/[<>]/.test(m[1])) bad.push(m[0].slice(0, 80));
+      }
+      assert.deepStrictEqual(bad, [], `markup reached an attribute:\n${bad.join('\n')}`);
+    });
+
+    await checkAsync('the sheet\'s close control says what it is, once', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      // The button's own text is the glyph; the label is for a screen reader.
+      const m = /<button[^>]*id="sheetX"[^>]*>([^<]*)<\/button>/.exec(body);
+      assert.ok(m, 'the sheet lost its close button');
+      assert.strictEqual(m[1].trim(), '×', `the close button renders text: ${JSON.stringify(m[1])}`);
+      assert.ok(/id="sheetX"[^>]*aria-label="[^"<>]+"/.test(body) ||
+                /aria-label="[^"<>]+"[^>]*id="sheetX"/.test(body),
+        'the close button has no plain-text label');
+    });
+
     await checkAsync('a sold-out product gets NO add button', async () => {
       const { body } = await get(`/s/${LIVE}`);
       const soldOut = rowFor(body, 'Fixture kombucha');   // shelf 0

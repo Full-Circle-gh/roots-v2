@@ -7105,7 +7105,7 @@ function qsMeta(p,id){
   const bits=[];
   const shelf=qsShelf(p);
   if(state.qs.canRecount&&shelf!=null)
-    bits.push(`<span>${TB('On the shelf')} <b class="num">${shelf}</b></span>`);
+    bits.push(`<span>${T('On the shelf','在架')} <b class="num">${shelf}</b></span>`);
   const a=qsAdded(id);
   if(a>0){
     /* WHO PUT IT THERE. The line exists so the same batch does not go on
@@ -7114,7 +7114,7 @@ function qsMeta(p,id){
        work or the colleague they can go and ask. Names are names: nothing to
        translate, so this adds no blocked string. */
     const who=qsAddedWho(id);
-    bits.push(`<span style="color:var(--text-primary)">${TB('Added today')} <b class="num">+${a}</b></span>`
+    bits.push(`<span style="color:var(--text-primary)">${T('Added today','今天已加')} <b class="num">+${a}</b></span>`
       + (who.length?`<span> · ${escAttr(who.join(', '))}</span>`:''));
   }
   if(!bits.length) return '';
@@ -7128,7 +7128,7 @@ function qsFix(id){
   if(!state.qs.canRecount) return '';
   return `<button data-qsfix="${id}" style="align-self:flex-start;background:none;border:0;padding:0;font:inherit;
     font-size:13px;color:var(--text-secondary);text-decoration:underline;text-underline-offset:3px"
-    onclick="APP.cmd('qsFix',${id})">${TB('Correct the count')}</button>`;
+    onclick="APP.cmd('qsFix',${id})">${T('Correct the count','校正数量')}</button>`;
 }
 
 function qsRows(){
@@ -7235,14 +7235,15 @@ function qsAskCount(id){
   const was=qsShelf(p);
   state.ask={
     // "Set count" and "Sold out" are live strings this product already ships;
-    // the add-mode wording is not, and stays blocked per §30.
-    title: recount ? T('Set count','设置数量') : TB('How many are on the shelf?'),
+    // the add-mode wording reuses composed pairs recorded in
+    // docs/tacet-delivery-vocabulary.md (Quick stock — the count keypad).
+    title: recount ? T('Set count','设置数量') : T('How many are on the shelf?','在架有多少?'),
     body: qsName(p) + (recount ? ' · ' + T('0 is sold out','0 表示售罄') : ''),
-    fields:[{id:'n', label: recount ? T('Set count','设置数量') : TB('Count on the shelf'),
+    fields:[{id:'n', label: recount ? T('Set count','设置数量') : T('Count on the shelf','在架数量'),
              numeric:true, value:was==null?'':String(was)}],
     validate:v=>{
       const n=String(v.n||'').trim();
-      if(!/^\d+$/.test(n)) return TB('Enter the number of units on the shelf — a whole number, 0 or more.');
+      if(!/^\d+$/.test(n)) return T('Enter the number of units on the shelf — a whole number, 0 or more.','请输入在架数量——整数，0 或以上。');
       return null;
     },
     run:v=>qsCountEntered(id, parseInt(String(v.n).trim(),10)) };
@@ -7281,16 +7282,16 @@ function qsCountEntered(id,n){
     return;
   }
   if(was!=null&&n<was){
-    state.ask={ title:TB('The count has gone down'),
-      body:TB('Shelf says '+was+', you counted '+n+'.'),
-      options:[{key:'miscount', label:TB('I counted wrong — save '+n)},
-               {key:'gone',     label:TB('Something is missing or spoiled')}],
+    state.ask={ title:T('The count has gone down','数量变少了'),
+      body:T('Shelf says '+was+', you counted '+n+'.', '在架 '+was+'，你数的是 '+n+'。'),
+      options:[{key:'miscount', label:T('I counted wrong — save '+n, '数错了——保存 '+n)},
+               {key:'gone',     label:T('Something is missing or spoiled','少了或坏了')}],
       run:key=>{
         if(key==='miscount') return qsCorrect(id,n,'miscount');
         // The answer that writes NOTHING. It says what happens next rather than
         // just refusing — a dead end that leaves the operator holding a number
         // they cannot enter anywhere is how a count stays wrong.
-        showToast(TB('The count stays as it is. Tell whoever records waste.'));
+        showToast(T('The count stays as it is. Tell whoever records waste.', '数量保持不变。请告诉负责记录损耗的人。'));
       } };
     render();
     return;
@@ -7313,7 +7314,7 @@ function qsCorrect(id,n,reason){
   render();
   apiWrite('/stores/'+state.qs.storeId+'/stock/'+id, body, 'PATCH')
     .then(()=>{ delete state.qs.fixing[id]; render();
-      showToast(TB('Count set to '+n)+(p?' · '+qsName(p):'')); })
+      showToast(T('Count set to '+n, '已设为 '+n)+(p?' · '+qsName(p):'')); })
     .catch(e=>{ if(String(e.message)==='auth') return;
       // The shelf goes back to what it showed, because that is what the
       // operator has to know before they try again.
@@ -7413,7 +7414,7 @@ function screenStockAdd(){
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
         ${recount
           ? `<button class="num" style="flex:1;height:56px;background:none;border:0;padding:0;font:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
-              onclick="APP.cmd('qsFix',${id})" aria-label="${TB('Set the count')}">${shown}</button>`
+              onclick="APP.cmd('qsFix',${id})" aria-label="${T('Set count','设置数量')}">${shown}</button>`
           : `<span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}">${shown}</span>`}
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>

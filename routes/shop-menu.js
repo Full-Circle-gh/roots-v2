@@ -375,6 +375,13 @@ function styles(vars, faces) {
   //
   // Every colour and family is still a token from the tenant's theme. The only
   // literals are neutral veils and the black sold-out scrim.
+  // NO ANGLE BRACKET MAY APPEAR ANYWHERE IN THIS STYLESHEET, comments included.
+  // cssSafe() strips them from injected config, and scripts/test_shop_menu.js
+  // asserts the whole sheet is free of them — a coarse rule on purpose, because
+  // the thing it protects is that no markup can be built out of a tenant's own
+  // palette or font name. It costs the child combinator (a > b), which nothing
+  // here needs, and it costs "->" in a comment, which is how it was tripped: an
+  // arrow in a note about rpx conversion went red as a security failure.
   return `${cssSafe(faces)}
 :root{${cssSafe(vars)};--barh:58px;--cbarh:0px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -408,18 +415,33 @@ img{display:block;max-width:100%}
 /* min-height MATCHES THE BUTTON, so a card that has no button — a sold-out one —
    still reserves the same row and its price sits at the same level as its
    neighbour's. Without it the row collapses to the height of the price alone
-   and that price rides 8.5px high, which is half the difference and reads as a
-   wobble rather than as anything deliberate. */
+   and that price rides high by half the difference, which reads as a wobble
+   rather than as anything deliberate. */
+/* .sl-cfoot, plus one deliberate DEPARTURE: min-height. The website's foot has
+   none, so a card with no + — a sold-out one — collapses to the height of its
+   price and that price rides high beside its neighbour's. Reported from a phone
+   and fixed here rather than copied faithfully. */
 .pf{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  min-height:36px}
-/* INK GROUND, LIME GLYPH — the mini app's own add control, not a new one. The
-   page already borrows that shop's colours through the theme, so this borrows
-   its shape too and a customer meets one button in two places. */
-.add{flex:none;width:36px;height:36px;
-  display:flex;align-items:center;justify-content:center;
+  margin-top:auto;padding-top:5px;min-height:26px}
+/* THE MINI APP'S OWN ADD CHIP, AT ITS OWN SIZE. Taken from .card-plus in
+   miniapp/pages/shop/shop.wxss — 52rpx square with a 26x5rpx bar — converted at
+   the same 390px phone the rest of this file's values were converted at
+   (390/750), which is 27px and 13.5x2.6px. It was 36px first and read as
+   overbearing beside the price; the number was guessed then and is measured
+   now.
+   THE + IS TWO BARS, NOT A GLYPH, and that is borrowed with its reason rather
+   than reinvented: the wxss records that the brand serif's "+" sat off-centre
+   in the square and that no flex-centring could fix it, because centring aligns
+   the text line box and not the ink inside it. This page uses the same serif,
+   so it had the same bug — the first version of this button centred a glyph. */
+.add{flex:none;position:relative;width:26px;height:26px;
   border:0;background:var(--ink);color:var(--lime);
-  font-family:var(--f-bear);font-size:22px;line-height:1;cursor:pointer;
+  font-size:0;line-height:1;cursor:pointer;
   padding:0;-webkit-tap-highlight-color:transparent}
+.add::before,.add::after{content:'';position:absolute;top:50%;left:50%;
+  background:currentColor;transform:translate(-50%,-50%)}
+.add::before{width:13px;height:2.5px}
+.add::after{width:2.5px;height:13px}
 .add:active{transform:translateY(1px)}
 
 /* The bar clears the phone's home indicator; without the inset the tap target
@@ -465,10 +487,23 @@ img{display:block;max-width:100%}
 .tot{display:flex;justify-content:space-between;align-items:baseline;
   font-family:var(--f-bear);font-size:17px;margin-bottom:10px}
 .tot span:last-child{font-variant-numeric:tabular-nums}
-.nm-l{display:block;font-size:12px;letter-spacing:.04em;color:var(--olive);
-  text-transform:uppercase;margin-bottom:4px}
+.nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
+  color:var(--olive);text-transform:uppercase;margin-bottom:6px}
 .nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
-  padding:11px 12px;font:inherit;font-size:16px;color:var(--ink)}
+  padding:11px 12px;font:inherit;font-size:16px;color:var(--ink);
+  border-radius:0;-webkit-appearance:none;appearance:none;
+  -webkit-tap-highlight-color:transparent}
+/* THE FOCUS RING IS OURS, NOT THE BROWSER'S. Left alone, the WeChat/Android
+   web view paints its own amber ring on a focused field — reported from a phone
+   as an orange frame that belongs to no design system here. It is drawn in the
+   tenant's own ink instead, so the field reads as part of the shop in every
+   browser, and outline-offset:-2px puts it over the border rather than outside
+   it, so nothing shifts when the customer taps in.
+   THE COMMENT ITSELF MUST NAME NO BRAND: this text is served inside the style
+   element to every tenant, and §0's test greps the response for the seed
+   tenant's name.
+   Naming it here failed that check, which is the rule working on a comment. */
+.nm-i:focus{outline:2px solid var(--ink);outline-offset:-2px}
 /* 16px is not a style choice: iOS Safari zooms the whole page in on focus for
    anything smaller, and the customer lands zoomed into a menu they then have to
    pinch back out of. */
@@ -533,7 +568,15 @@ img{display:block;max-width:100%}
   text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
 .cnt{font-family:var(--f-bear);font-size:18px;letter-spacing:.04em;color:var(--olive);
   font-variant-numeric:tabular-nums}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;padding:0 14px 6px}
+/* ── the product card: public/shop.html's .sl-* grid card, verbatim ──
+   THE WEBSITE IS THE RIGHT SOURCE FOR THIS PAGE, not the mini app's wxss. Both
+   are the same design by the same house, but the website's half is already
+   expressed in CSS pixels for a browser, and this is a browser page — so the
+   values are copied rather than converted from rpx at an assumed phone width,
+   which is where two rounds of "it is too big" came from. .sl-grid.g2,
+   .sl-card, .sl-ci, .cn, .sl-cfoot, .sl-pr, .sl-plus and .sl-coos are the
+   rules below, one for one. */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:12px 16px}
 /* A COLUMN, SO THE PRICE ROW SITS AT THE BOTTOM OF THE CARD RATHER THAN UNDER
    THE NAME. Two products side by side rarely have names of the same height —
    "Almond Butter" against "Maple Cinnamon Almond Butter" — and with the row
@@ -544,14 +587,22 @@ img{display:block;max-width:100%}
 .it{min-width:0;display:flex;flex-direction:column}
 .ph{position:relative;aspect-ratio:4/5;background:var(--oat);overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover}
-.sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);color:#fff;
-  font-family:var(--f-bear);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-  text-align:center;padding:5px 0}
-.t{flex:1;font-family:var(--f-bear);font-size:15px;line-height:1.25;margin-top:9px;
-  overflow-wrap:anywhere}
-.pf{margin-top:7px}
-.pr{font-family:var(--f-bear);font-size:19px;line-height:1;
-  font-variant-numeric:tabular-nums}
+/* .sl-coos — the veil is rgba(0,0,0,.75) there, not .78, and the type is 10px. */
+.sold{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);color:#fff;
+  font-family:var(--f-bear);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  text-align:center;padding:4px 0}
+/* .sl-card .cn and .sl-pr, copied. The name was 15px then 14.6px and the price
+   19px then 16.6px — guessed, then converted from rpx; these are the numbers
+   the website actually ships to a browser. The foot pushes itself down with
+   margin-top:auto, which is .sl-cfoot's own way of making the price row sit at
+   the bottom of a card whose neighbour has a taller name. */
+.t{font-family:var(--f-bear);font-size:14px;line-height:1.2;margin-top:9px;
+  color:var(--ink);overflow-wrap:anywhere}
+/* tabular-nums is this page's own and is kept: it stops the figures jittering
+   as prices change down a column, which the mini app wants too — its
+   .row-price-stack comment asks for exactly that, by a different means. */
+.pr{font-family:var(--f-bear);font-size:16px;line-height:1;letter-spacing:.04em;
+  color:var(--ink);font-variant-numeric:tabular-nums}
 .out .ph img{filter:grayscale(.5);opacity:.72}
 .out .t,.out .pr{opacity:.5}
 
@@ -868,7 +919,13 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="sheet-p" role="dialog" aria-modal="true">` +
         `<div class="sheet-h">` +
           `<div class="sheet-t">${bi('YOUR BASKET', '购物车')}</div>` +
-          `<button type="button" class="sheet-x" id="sheetX" aria-label="${bi('Cancel', '取消')}">×</button>` +
+          // AN ATTRIBUTE TAKES TEXT, NOT MARKUP. bi() returns two <span>s, and
+          // putting that in aria-label closed the attribute at its first quote
+          // and spilled the rest into the header as visible text — a stray
+          // "Cancel" box beside the ×, reported from a phone. Both languages go
+          // in as one plain escaped string: an accessibility label is read out,
+          // never laid out, so it has no CSS switch to obey.
+          `<button type="button" class="sheet-x" id="sheetX" aria-label="${esc('Cancel 取消')}">×</button>` +
         `</div>` +
         `<div class="sheet-b" id="sheetB"></div>` +
         `<div class="sheet-f" id="sheetF">` +

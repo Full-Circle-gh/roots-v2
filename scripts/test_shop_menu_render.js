@@ -334,6 +334,97 @@ function boxOf(text) {
         `the add button is not on the price row, right of the price: ${JSON.stringify(m)}`);
     });
 
+    await check('the card is public/shop.html\'s .sl-* card, measured against it', async () => {
+      // Reported from a phone twice — "the + is too big", then "the price is too
+      // big", then "use the same colors, fonts size, position, exactly".
+      //
+      // THE WEBSITE IS THE SOURCE, NOT THE MINI APP'S WXSS. Both are the same
+      // design by the same house, but the website's half is already in CSS
+      // pixels for a browser and this is a browser page. Converting the wxss's
+      // rpx at an assumed 390px phone is what produced two wrong numbers in a
+      // row; there is nothing to convert here. Read out of public/shop.html so
+      // the two cannot drift apart silently.
+      const html = require('fs').readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+      const ruleOf = (sel) => {
+        const i = html.indexOf(sel + '{');
+        return i < 0 ? null : html.slice(i + sel.length + 1, html.indexOf('}', i));
+      };
+      const num = (rule, prop) => {
+        const m = rule && new RegExp(prop + ':\\s*([\\d.]+)px').exec(rule);
+        return m ? Number(m[1]) : null;
+      };
+      const cn    = ruleOf('.sl-card .cn');
+      const pr    = ruleOf('.sl-pr');
+      const plus  = ruleOf('.sl-plus');
+      const foot  = ruleOf('.sl-cfoot');
+      const grid  = ruleOf('.sl-grid');
+      assert.ok(cn && pr && plus && foot && grid,
+        'the .sl-* card rules have moved in public/shop.html — this check cannot see them');
+
+      const want = {
+        name:  num(cn, 'font-size'),
+        price: num(pr, 'font-size'),
+        plus:  num(plus, 'width'),
+        gap:   num(foot, 'gap'),
+        gridGap: num(grid, 'gap'),
+      };
+      assert.ok(Object.values(want).every(v => v > 0),
+        `could not read every value: ${JSON.stringify(want)}`);
+
+      const got = await page.evaluate(() => {
+        const card = document.querySelector('.it:not(.out)');
+        const cs = (el) => getComputedStyle(el);
+        return {
+          name:  parseFloat(cs(card.querySelector('.t')).fontSize),
+          price: parseFloat(cs(card.querySelector('.pr')).fontSize),
+          plus:  card.querySelector('.add').getBoundingClientRect().width,
+          gap:   parseFloat(cs(card.querySelector('.pf')).columnGap),
+          gridGap: parseFloat(cs(document.querySelector('.grid')).rowGap),
+          tracking: cs(card.querySelector('.pr')).letterSpacing,
+          nameColour:  cs(card.querySelector('.t')).color,
+          priceColour: cs(card.querySelector('.pr')).color,
+        };
+      });
+      for (const k of Object.keys(want)) {
+        assert.ok(Math.abs(got[k] - want[k]) <= 0.5,
+          `${k} is ${got[k]}px against the website's ${want[k]}px`);
+      }
+      // .sl-pr carries letter-spacing:.04em and .sl-card .cn does not.
+      assert.ok(parseFloat(got.tracking) > 0, `the price lost its tracking: ${got.tracking}`);
+      // BOTH are color:var(--ink) on the website — .sl-card .cn says so
+      // explicitly and .sl-pr says so explicitly. A theme that resolved one and
+      // not the other would show up here rather than on a customer's phone.
+      assert.strictEqual(got.priceColour, got.nameColour,
+        `the price and the name are different colours: ${got.priceColour} vs ${got.nameColour}`);
+      assert.ok(/^rgba?\(/.test(got.priceColour) && got.priceColour !== 'rgba(0, 0, 0, 0)',
+        `the price has no resolved colour: ${got.priceColour}`);
+    });
+
+    await check('the + is two bars and both are actually drawn', async () => {
+      // The wxss records why: the brand serif's "+" sits off-centre in the
+      // square and flex-centring cannot fix it, because it centres the text
+      // line box rather than the ink. Borrowed with its reason — so the bars
+      // have to be real, and a pseudo-element that collapsed to nothing would
+      // leave a blank chip that still passes every colour and size check.
+      const bars = await page.evaluate(() => {
+        const b = document.querySelector('.it:not(.out) .add');
+        const rd = (which) => {
+          const cs = getComputedStyle(b, which);
+          return { w: parseFloat(cs.width), h: parseFloat(cs.height), c: cs.content };
+        };
+        return { before: rd('::before'), after: rd('::after'),
+                 fontSize: parseFloat(getComputedStyle(b).fontSize) };
+      });
+      assert.ok(bars.before.w > 4 && bars.before.h > 0.5,
+        `the horizontal bar is not drawn: ${JSON.stringify(bars.before)}`);
+      assert.ok(bars.after.h > 4 && bars.after.w > 0.5,
+        `the vertical bar is not drawn: ${JSON.stringify(bars.after)}`);
+      assert.ok(bars.before.w > bars.before.h, 'the horizontal bar is not horizontal');
+      assert.ok(bars.after.h > bars.after.w, 'the vertical bar is not vertical');
+      assert.strictEqual(bars.fontSize, 0,
+        'a text glyph is still being rendered alongside the bars — it will sit off-centre');
+    });
+
     await check('the add button is the mini app\'s colours, not the page background', async () => {
       // An ink square with a lime glyph. Read off the computed style so a token
       // that stopped resolving shows up here rather than as an invisible button
@@ -430,6 +521,50 @@ function boxOf(text) {
       }));
       assert.strictEqual(m.bar, true, 'an empty basket still shows its bar');
       assert.strictEqual(m.sheet, true, 'an empty basket sheet stayed open over the menu');
+    });
+
+    await check('the basket header shows the × and nothing else', async () => {
+      // Reported from a phone: a stray "Cancel" box beside the ×. bi() had been
+      // dropped into an aria-label, which closed the attribute and spilled its
+      // markup into the header. Measured on screen, because the page still
+      // parsed and the server-side check alone would not show what a customer
+      // actually saw.
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      const head = await page.evaluate(() => {
+        const h = document.querySelector('.sheet-h');
+        const strays = Array.from(h.childNodes)
+          .filter(n => n.nodeType === 3 && n.textContent.trim())
+          .map(n => n.textContent.trim());
+        return { text: h.innerText.replace(/\s+/g, ' ').trim(), strays };
+      });
+      assert.deepStrictEqual(head.strays, [], `loose text in the sheet header: ${JSON.stringify(head.strays)}`);
+      assert.ok(!/Cancel|取消/.test(head.text),
+        `the close button's label is being drawn, not just read: ${JSON.stringify(head.text)}`);
+    });
+
+    await check('the name field wears the shop\'s focus ring, not the browser\'s', async () => {
+      // Reported from a phone as an orange frame. Left alone the WeChat/Android
+      // web view paints its own; this asserts the page draws one, so the
+      // default can never be what the customer sees.
+      const ring = await page.evaluate(() => {
+        const el = document.getElementById('cName');
+        el.focus();
+        const cs = getComputedStyle(el);
+        return { style: cs.outlineStyle, width: cs.outlineWidth, colour: cs.outlineColor,
+                 border: cs.borderTopColor, focused: document.activeElement === el };
+      });
+      assert.ok(ring.focused, 'the field did not take focus');
+      assert.notStrictEqual(ring.style, 'none', 'the page draws no focus ring, so the browser draws its own');
+      assert.ok(parseFloat(ring.width) > 0, `the focus ring has no width: ${ring.width}`);
+      // Ours is the tenant's ink — the same token the border uses.
+      assert.strictEqual(ring.colour, ring.border,
+        `the focus ring is not the field's own ink: ${ring.colour} vs ${ring.border}`);
+      // Hand the next check a clean page. These two opened the sheet and left a
+      // line in the basket; the basket lives in memory, so a reload empties it.
+      // Without this the next check's first tap lands on the open sheet's
+      // backdrop and it fails for a reason that has nothing to do with it.
+      await page.reload({ waitUntil: 'domcontentloaded' });
     });
 
     await check('a nameless order is refused BEFORE it reaches the counter', async () => {
