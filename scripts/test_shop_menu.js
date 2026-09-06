@@ -340,7 +340,14 @@ const soldOut = (row) => /class="sold"/.test(row);
       const without = rowFor(body, 'Fixture oat latte');
       assert.ok(/<img /.test(withPhoto), 'a product WITH a photo lost its image');
       assert.ok(!/<img /.test(without), 'a product with no photo still emits an <img> that will 404');
-      assert.ok(/<div class="ph"><\/div>/.test(without), 'the empty photo frame is missing');
+      // The frame is emitted and holds no image. Asserted as "opens, and has no
+      // <img> before it closes" rather than as the exact empty string it used
+      // to be: step 5b's add button now lives inside this frame, and pinning
+      // the frame's whole contents made an unrelated feature look like a
+      // regression in the photo fallback.
+      const frame = /<div class="ph">([\s\S]*?)<\/div>/.exec(without);
+      assert.ok(frame, 'the empty photo frame is missing');
+      assert.ok(!/<img /.test(frame[1]), 'the frame holds an image it should not');
     });
 
     console.log('\nThe page is not an oracle — every unresolvable code answers the same');
@@ -908,12 +915,51 @@ const soldOut = (row) => /class="sold"/.test(row);
     feieMod.printContent = realPrint;
     feieMod.feieEnabled = realEnabled;
 
-    console.log('\nThe page still offers no ordering surface — that is step 5b\'s cart, not this page');
-    await checkAsync('the page offers no cart, no quantity control and no submit', async () => {
+    // THIS SECTION USED TO ASSERT THE OPPOSITE, and the reversal is the point.
+    // Through steps 5a and 5b parts 1-3 it held that the page carried NO cart —
+    // no form, no input, no submit — because the ordering surface was
+    // deliberately built behind the page rather than with it. Part 4 is that
+    // surface arriving, so the check is rewritten rather than deleted: what it
+    // guards now is that the cart is on the page AND that it did not bring an
+    // account, a cookie or a second order path with it.
+    console.log('\nThe cart is on the page now (§44, step 5b part 4)');
+    await checkAsync('the menu carries a basket, and it posts to THIS shop only', async () => {
       const { body } = await get(`/s/${LIVE}`);
-      for (const s of ['<form', '<input', 'type="submit"', 'addToCart', '/api/retail/orders']) {
-        assert.ok(!body.includes(s), `the menu grew an ordering surface: ${s}`);
+      for (const s of ['id="cbar"', 'id="sheet"', 'id="cName"', 'id="cPlace"', 'data-add=']) {
+        assert.ok(body.includes(s), `the cart is missing its ${s}`);
       }
+      // The submit path is built from location.pathname, so it can only ever be
+      // this shop's own order endpoint. A hardcoded /s/CODE/order would be a
+      // second place the shop code lives.
+      assert.ok(body.includes("location.pathname.replace"), 'the cart posts somewhere other than this page\'s own shop');
+      assert.ok(!body.includes('/api/retail/orders'),
+        'the menu reaches the customer-account order endpoint — a QR order has no account (§44)');
+    });
+    await checkAsync('a sold-out product gets NO add button', async () => {
+      const { body } = await get(`/s/${LIVE}`);
+      const soldOut = rowFor(body, 'Fixture kombucha');   // shelf 0
+      const live    = rowFor(body, 'Fixture oat latte');
+      assert.ok(/data-add=/.test(live), 'an available product has no way to be added');
+      assert.ok(!/data-add=/.test(soldOut),
+        'a sold-out product offers an add button, which can only ever be refused');
+    });
+    await checkAsync('the basket prices in the TENANT\'s currency, not a literal', async () => {
+      // §0. The symbol, the decimal places and the side all reach the client
+      // from configuration; none of them is written into routes/shop-menu.js.
+      const { body } = await get(`/s/${LIVE}`);
+      assert.ok(/data-sym="[^"]*"/.test(body), 'the cart carries no currency symbol');
+      assert.ok(/data-dec="\d"/.test(body), 'the cart carries no decimal places');
+      assert.ok(/data-pos="(before|after)"/.test(body), 'the cart carries no symbol position');
+      // And no currency symbol is written into the route AT ALL — §0's actual
+      // property, checked over the whole file rather than the cart alone.
+      // Comment lines are excluded: the reasoning for this rule has to be able
+      // to name the symbols it is about.
+      const src = require('fs').readFileSync(path.join(ROOT, 'routes', 'shop-menu.js'), 'utf8');
+      const code = src.split('\n')
+        .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
+        .join('\n');
+      const lit = /[¥€£₩₽]/.exec(code);
+      assert.ok(!lit, `a currency literal is written into the route: ${lit && lit[0]}`);
     });
     await checkAsync('the page sets no cookie', async () => {
       const r = await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}`);

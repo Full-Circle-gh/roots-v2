@@ -376,7 +376,7 @@ function styles(vars, faces) {
   // Every colour and family is still a token from the tenant's theme. The only
   // literals are neutral veils and the black sold-out scrim.
   return `${cssSafe(faces)}
-:root{${cssSafe(vars)};--barh:58px}
+:root{${cssSafe(vars)};--barh:58px;--cbarh:0px}
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
@@ -396,6 +396,90 @@ img{display:block;max-width:100%}
 .lang button.on{background:var(--lime);color:var(--ink)}
 
 .wrap{display:flex;align-items:stretch;min-height:100vh}
+
+/* ── the basket ── */
+/* The add button sits on the photo's own corner rather than under the name,
+   because the photo is the biggest tap target on the card and the thumb is
+   already there. Square, ink-bordered, lime — the same three moves the rest of
+   this page makes, so it reads as part of the shop rather than as a widget. */
+/* Anchored on .ph, which is already position:relative for the sold-out bar —
+   the button sits inside that frame, so it needs no positioning context of its
+   own. A sold-out card has the bar and no button, so the two never collide. */
+.it .add{position:absolute;right:6px;bottom:6px;width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;
+  border:2px solid var(--ink);background:var(--lime);color:var(--ink);
+  font-family:var(--f-bear);font-size:20px;line-height:1;cursor:pointer;
+  padding:0;-webkit-tap-highlight-color:transparent}
+.it .add:active{transform:translateY(1px)}
+
+/* The bar clears the phone's home indicator; without the inset the tap target
+   sits under it on every iPhone since the X. */
+.cbar{position:fixed;left:0;right:0;bottom:0;z-index:30;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+.cbar[hidden]{display:none}
+.cbar-b{width:100%;display:flex;align-items:center;gap:10px;
+  border:2px solid var(--ink);background:var(--lime);color:var(--ink);
+  padding:12px 14px;font:inherit;font-family:var(--f-bear);font-size:15px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cbar-n{flex:none;min-width:24px;height:24px;display:flex;align-items:center;
+  justify-content:center;background:var(--ink);color:var(--oat);font-size:13px}
+.cbar-l{flex:1;text-align:left;letter-spacing:.04em}
+.cbar-v{flex:none;font-variant-numeric:tabular-nums}
+
+.sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end}
+.sheet[hidden]{display:none}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.sheet-p{position:relative;width:100%;max-height:86vh;max-height:86dvh;
+  display:flex;flex-direction:column;background:var(--oat);
+  border-top:2px solid var(--ink)}
+.sheet-h{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;
+  border-bottom:2px solid var(--ink)}
+.sheet-t{flex:1;font-family:var(--f-bear);font-size:16px;letter-spacing:.04em}
+.sheet-x{flex:none;width:32px;height:32px;border:2px solid var(--ink);
+  background:transparent;color:var(--ink);font-size:20px;line-height:1;
+  cursor:pointer;padding:0}
+.sheet-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 14px}
+.sheet-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  border-top:2px solid var(--ink)}
+
+.ln{display:flex;align-items:center;gap:10px;padding:12px 0;
+  border-bottom:1px solid rgba(0,0,0,.08)}
+.ln-t{flex:1;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.ln-p{flex:none;font-variant-numeric:tabular-nums;font-size:14px}
+.qty{flex:none;display:flex;align-items:center;border:2px solid var(--ink)}
+.qty button{width:30px;height:30px;border:0;background:transparent;color:var(--ink);
+  font-family:var(--f-bear);font-size:16px;line-height:1;cursor:pointer;padding:0}
+.qty span{min-width:26px;text-align:center;font-variant-numeric:tabular-nums;
+  font-size:14px}
+
+.tot{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--f-bear);font-size:17px;margin-bottom:10px}
+.tot span:last-child{font-variant-numeric:tabular-nums}
+.nm-l{display:block;font-size:12px;letter-spacing:.04em;color:var(--olive);
+  text-transform:uppercase;margin-bottom:4px}
+.nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
+  padding:11px 12px;font:inherit;font-size:16px;color:var(--ink)}
+/* 16px is not a style choice: iOS Safari zooms the whole page in on focus for
+   anything smaller, and the customer lands zoomed into a menu they then have to
+   pinch back out of. */
+.place{width:100%;margin-top:10px;border:2px solid var(--ink);background:var(--lime);
+  color:var(--ink);padding:13px;font:inherit;font-family:var(--f-bear);font-size:16px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.place[disabled]{opacity:.55;cursor:default}
+.err{margin-top:10px;padding:10px 12px;border:2px solid var(--ink);
+  background:rgba(255,255,255,.72);font-size:14px}
+.err[hidden]{display:none}
+
+/* The placed order. The number is the biggest thing on the phone, because the
+   whole of what happens next is somebody calling it across a room. */
+.done{padding:26px 14px 30px;text-align:center}
+.done-n{font-family:var(--f-bear);font-size:76px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.done-nm{font-family:var(--f-bear);font-size:20px;margin-top:6px}
+.done-h{font-family:var(--f-bear);font-size:17px;margin-top:16px}
+.done-s{font-size:14px;color:var(--olive);margin-top:8px}
+.done-o{font-size:12px;color:var(--olive);margin-top:14px;
+  font-variant-numeric:tabular-nums}
 
 /* Tapping a rail category jumps to its section, and the bar is sticky over the
    top of wherever that lands — so without this the heading the customer just
@@ -429,8 +513,10 @@ img{display:block;max-width:100%}
 .rail a.on .cv{color:var(--ink)}
 
 /* ── the menu ── */
+/* The pane's floor clears the basket bar when there is one, so the last row of
+   products is never sitting underneath it. --cbarh is 0 until the bar appears. */
 .pane{flex:1;min-width:0;background:rgba(255,255,255,.62);
-  padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+  padding-bottom:calc(30px + var(--cbarh) + env(safe-area-inset-bottom))}
 .sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   padding:16px 14px 8px}
 .kick{font-family:var(--f-bear);font-size:10.5px;letter-spacing:.2em;
@@ -496,7 +582,120 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var m={};for(var i=0;i<r.length;i++)m[r[i].getAttribute('data-cat')]=r[i];` +
   `var o=new IntersectionObserver(function(es){for(var i=0;i<es.length;i++){if(!es[i].isIntersecting)continue;` +
   `for(var k in m)m[k].className='';var a=m[es[i].target.id];if(a)a.className='on'}},{rootMargin:'-45% 0px -50% 0px'});` +
-  `var c=document.querySelectorAll('.cat');for(var j=0;j<c.length;j++)o.observe(c[j]);})();`;
+  `var c=document.querySelectorAll('.cat');for(var j=0;j<c.length;j++)o.observe(c[j]);})();` +
+
+  // ── THE BASKET ──────────────────────────────────────────────────────────
+  //
+  // IT IS THE ONLY STATE THIS PAGE HOLDS, and it holds it in a plain object
+  // that dies with the tab. No cookie, no storage, no session (§44, and the
+  // brief). A basket that survived a reload would be an old order waiting to be
+  // submitted by somebody who had forgotten it.
+  //
+  // BOTH LANGUAGES GO INTO EVERY LINE IT DRAWS, exactly as the server-rendered
+  // half does, and CSS decides which is visible. Rendering only the current
+  // language would make the toggle stop working for anything added after load —
+  // the one place where a client-side render silently breaks a §26 property the
+  // rest of the page holds.
+  `(function(){` +
+  `var bar=document.getElementById('cbar');if(!bar)return;` +
+  `var sheet=document.getElementById('sheet'),body=document.getElementById('sheetB'),` +
+  `foot=document.getElementById('sheetF'),nEl=document.getElementById('cbarN'),` +
+  `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
+  `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
+  `place=document.getElementById('cPlace');` +
+  // { pid: {qty, price, en, cn} } — insertion order is the order the customer
+  // chose, which is the order the basket lists and the order the kitchen reads.
+  `var cart={},sending=false;` +
+  `var esc=function(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){` +
+  `return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};` +
+  `var bi=function(en,cn){return '<span class="l-en">'+esc(en)+'</span>'+` +
+  `'<span class="l-cn">'+esc(cn)+'</span>'};` +
+  // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
+  // attributes rather than baked in here: this script is built once at module
+  // load and the currency is resolved per request (§0 — no currency literal in
+  // this file). Symbol, decimal places AND side, because a shop configured to
+  // print "12.00€" or to use no decimals would otherwise get a basket total
+  // formatted by different rules than the price on the card right above it.
+  // This is money() from this same file, transcribed once.
+  `var SYM=bar.getAttribute('data-sym')||'',` +
+  `DEC=parseInt(bar.getAttribute('data-dec'),10),` +
+  `AFTER=bar.getAttribute('data-pos')==='after';` +
+  `if(!(DEC>=0))DEC=2;` +
+  `var money=function(n){var v=(Number(n)||0).toFixed(DEC);return AFTER?(v+SYM):(SYM+v)};` +
+  `var ids=function(){return Object.keys(cart)};` +
+  `var count=function(){var n=0,k=ids();for(var i=0;i<k.length;i++)n+=cart[k[i]].qty;return n};` +
+  `var total=function(){var t=0,k=ids();for(var i=0;i<k.length;i++)t+=cart[k[i]].qty*cart[k[i]].price;` +
+  `return Math.round(t*100)/100};` +
+  `var paintBar=function(){var n=count();bar.hidden=n===0;` +
+  // The floor under the menu follows the bar's real height rather than a guess,
+  // the same measured-not-written-down rule the header uses.
+  `document.documentElement.style.setProperty('--cbarh',(n?bar.offsetHeight:0)+'px');` +
+  `nEl.textContent=String(n);vEl.textContent=money(total())};` +
+  `var paintSheet=function(){var k=ids(),h='';` +
+  `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
+  `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+'</div>'+` +
+  `'<div class="qty"><button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
+  `'<span>'+it.qty+'</span>'+` +
+  `'<button type="button" data-i="'+esc(k[i])+'" aria-label="+">+</button></div>'+` +
+  `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div>'}` +
+  `body.innerHTML=h;tEl.textContent=money(total())};` +
+  `var closeIfEmpty=function(){if(count()===0){sheet.hidden=true}};` +
+  `var add=function(b){var id=b.getAttribute('data-add');` +
+  `if(!cart[id])cart[id]={qty:0,price:parseFloat(b.getAttribute('data-p'))||0,` +
+  `en:b.getAttribute('data-en'),cn:b.getAttribute('data-cn')};` +
+  // MAX_QTY on the server is 20 and it refuses past it. Stopping here as well
+  // means the customer meets the ceiling as a button that stops moving rather
+  // than as an error after they have filled in their name.
+  `if(cart[id].qty<20)cart[id].qty++;paintBar();if(!sheet.hidden)paintSheet()};` +
+  `document.addEventListener('click',function(e){` +
+  `var b=e.target.closest?e.target.closest('.add'):null;if(b){add(b);return}` +
+  `var d=e.target.getAttribute&&e.target.getAttribute('data-d');` +
+  `if(d){if(cart[d]){cart[d].qty--;if(cart[d].qty<1)delete cart[d]}` +
+  `paintBar();paintSheet();closeIfEmpty();return}` +
+  `var iu=e.target.getAttribute&&e.target.getAttribute('data-i');` +
+  `if(iu){if(cart[iu]&&cart[iu].qty<20)cart[iu].qty++;paintBar();paintSheet();return}` +
+  `},false);` +
+  `document.getElementById('cbarOpen').addEventListener('click',function(){` +
+  `errEl.hidden=true;foot.hidden=false;paintSheet();sheet.hidden=false},false);` +
+  `var close=function(){sheet.hidden=true};` +
+  `document.getElementById('sheetX').addEventListener('click',close,false);` +
+  `document.getElementById('sheetBg').addEventListener('click',close,false);` +
+  `document.addEventListener('keydown',function(e){if(e.key==='Escape')close()},false);` +
+  `var fail=function(t){errEl.innerHTML=t;errEl.hidden=false};` +
+  // Submitting. The button locks for the round trip: a customer who taps twice
+  // on a slow connection must not put two orders through the counter.
+  `place.addEventListener('click',function(){if(sending)return;` +
+  `var name=(nameEl.value||'').trim();` +
+  `if(!name){fail(bi(${JSON.stringify('Name')},${JSON.stringify('姓名')}));nameEl.focus();return}` +
+  `var k=ids();if(!k.length)return;` +
+  `var items=[];for(var i=0;i<k.length;i++)items.push({store_product_id:parseInt(k[i],10),qty:cart[k[i]].qty});` +
+  `sending=true;place.disabled=true;errEl.hidden=true;` +
+  `fetch(location.pathname.replace(/\\/$/,'')+'/order',{method:'POST',` +
+  `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items})})` +
+  `.then(function(r){return r.json().then(function(j){return {s:r.status,j:j}})})` +
+  `.then(function(o){sending=false;place.disabled=false;` +
+  `if(o.s===201&&o.j&&o.j.data){done(o.j.data);return}` +
+  // A refusal names the items rather than saying "something went wrong": the
+  // customer is standing in the shop and can choose again in ten seconds if
+  // they are told what went.
+  `if(o.s===409&&o.j&&o.j.items&&o.j.items.length){var gone='';` +
+  `for(var i=0;i<o.j.items.length;i++){var it=o.j.items[i];` +
+  `delete cart[String(it.store_product_id)];` +
+  `gone+='<div>'+bi(it.name_en,it.name_cn)+' — '+bi(${JSON.stringify('Sold out')},${JSON.stringify('售罄')})+'</div>'}` +
+  `paintBar();paintSheet();closeIfEmpty();fail(gone);return}` +
+  `fail(bi(${JSON.stringify('Please try again.')},${JSON.stringify('请重试。')}))})` +
+  `.catch(function(){sending=false;place.disabled=false;` +
+  `fail(bi(${JSON.stringify('Please try again.')},${JSON.stringify('请重试。')}))})},false);` +
+  // THE PLACED ORDER. The number fills the screen because the entire next step
+  // is somebody calling it across a room, and the customer's job is to hear it.
+  `var done=function(d){cart={};paintBar();foot.hidden=true;` +
+  `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
+  `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
+  `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
+  `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  `'</div>';sheet.hidden=false};` +
+  `})();`;
 
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
@@ -592,9 +791,20 @@ router.get('/s/:shopCode', (req, res) => {
     const photo = it.has_photo
       ? `<img src="${src}" alt="" loading="lazy" decoding="async">`
       : '';
+    // A SOLD-OUT CARD GETS NO ADD BUTTON AT ALL, rather than a disabled one.
+    // The sold-out bar already says why, and a greyed control beside it invites
+    // a tap that has to be refused — the availability is re-checked at submit
+    // anyway (§47), so this is the honest half of the same answer, not the
+    // whole of it.
+    const add = it.sold_out ? '' :
+      `<button type="button" class="add" data-add="${it.store_product_id}"` +
+      ` data-p="${esc(String(Number(it.price) || 0))}"` +
+      ` data-en="${esc(it.name_en || '')}" data-cn="${esc(it.name_cn || '')}"` +
+      ` aria-label="${esc(it.name_en || it.name_cn || '')}">+</button>`;
     return `<div class="it${it.sold_out ? ' out' : ''}">` +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
+      add +
       `</div>` +
       `<div class="t">${bi(it.name_en, it.name_cn)}</div>` +
       `<div class="pr">${esc(money(it.price, cur))}</div>` +
@@ -604,6 +814,53 @@ router.get('/s/:shopCode', (req, res) => {
   // The launch state. shops and shop_listings are both empty, so this is the
   // first thing anybody will see and it is a first-class state, not an edge
   // case. Strings are the storefront's own, live.
+  // ── THE CART (§44) ────────────────────────────────────────────────────
+  //
+  // IT LIVES IN MEMORY AND NOWHERE ELSE. No cookie, no localStorage, no
+  // session — the brief's constraint, and right on its own terms: a customer
+  // standing at a counter has one order, and a basket that survived a reload
+  // would be a stale order from an earlier visit waiting to be submitted by
+  // accident. Losing it on refresh is the correct behaviour, not a limitation.
+  //
+  // EVERY STRING HERE IS COPIED FROM THE LIVE STOREFRONT, not composed. The
+  // customer who buys online and the customer standing in the shop are the same
+  // person and should meet the same words. Sources are named against each pair
+  // in docs/tacet-delivery-vocabulary.md; the two that had no live source are
+  // marked there as composed.
+  const cartUi = groups.length ? (
+    // The bar. Hidden until something is in the basket — an empty bar is a
+    // permanent strip of chrome over the menu it exists to serve.
+    `<div class="cbar" id="cbar" hidden data-sym="${esc(cur.symbol)}"` +
+      ` data-dec="${esc(String(cur.decimals))}" data-pos="${esc(cur.position)}">` +
+      `<button type="button" class="cbar-b" id="cbarOpen">` +
+        `<span class="cbar-n" id="cbarN">0</span>` +
+        `<span class="cbar-l">${bi('YOUR BASKET', '购物车')}</span>` +
+        `<span class="cbar-v" id="cbarV"></span>` +
+      `</button>` +
+    `</div>` +
+    // The sheet. One panel, three faces — basket, then the placed order, then
+    // the refusal — so the customer never loses their place on the menu behind
+    // it.
+    `<div class="sheet" id="sheet" hidden>` +
+      `<div class="sheet-bg" id="sheetBg"></div>` +
+      `<div class="sheet-p" role="dialog" aria-modal="true">` +
+        `<div class="sheet-h">` +
+          `<div class="sheet-t">${bi('YOUR BASKET', '购物车')}</div>` +
+          `<button type="button" class="sheet-x" id="sheetX" aria-label="${bi('Cancel', '取消')}">×</button>` +
+        `</div>` +
+        `<div class="sheet-b" id="sheetB"></div>` +
+        `<div class="sheet-f" id="sheetF">` +
+          `<div class="tot"><span>${bi('Total', '合计')}</span><span id="cTot"></span></div>` +
+          `<label class="nm-l" for="cName">${bi('Name', '姓名')}</label>` +
+          `<input class="nm-i" id="cName" type="text" maxlength="40" autocomplete="name"` +
+            ` enterkeyhint="done" inputmode="text">` +
+          `<div class="err" id="cErr" hidden></div>` +
+          `<button type="button" class="place" id="cPlace">${bi('Place order →', '提交订单 →')}</button>` +
+        `</div>` +
+      `</div>` +
+    `</div>`
+  ) : '';
+
   const body = groups.length
     ? `<div class="wrap">${rail}<div class="pane">` +
       groups.map(c => `<section class="cat" id="${c.id}">` +
@@ -612,7 +869,7 @@ router.get('/s/:shopCode', (req, res) => {
             `<div class="cnt">${pad2(sec.items.length)}</div>` +
           `</div><div class="grid">${sec.items.map(card).join('')}</div>`).join('') +
         `</section>`).join('') +
-      `</div></div>`
+      `</div></div>` + cartUi
     : `<div class="empty"><div class="t">${bi('No products yet.', '暂无商品')}</div>` +
       `<div class="s">${bi('Check back soon.', '请稍后再来')}</div></div>`;
 

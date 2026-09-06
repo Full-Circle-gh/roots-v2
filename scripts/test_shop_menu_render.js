@@ -85,6 +85,18 @@ async function check(label, fn) {
 }
 
 function cleanup() {
+  // ORDERS FIRST. This suite now PLACES REAL ORDERS through the page — that is
+  // the point of the basket checks — and those rows hold foreign keys into the
+  // fixture products and store. Without this the teardown throws
+  // SQLITE_CONSTRAINT_FOREIGNKEY and the crash buries whatever actually failed.
+  const oids = db.prepare('SELECT id FROM retail_orders WHERE store_id = ?').all(LOC).map(r => r.id);
+  if (oids.length) {
+    const q = oids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM retail_stock_reservations WHERE order_id IN (${q})`).run(...oids);
+    db.prepare(`DELETE FROM retail_order_items WHERE order_id IN (${q})`).run(...oids);
+    db.prepare(`DELETE FROM retail_payments WHERE order_id IN (${q})`).run(...oids);
+    db.prepare(`DELETE FROM retail_orders WHERE id IN (${q})`).run(...oids);
+  }
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id = ?)').run(LOC);
   db.prepare('DELETE FROM shops WHERE location_id = ?').run(LOC);
   db.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(LOC);
@@ -263,6 +275,129 @@ function boxOf(text) {
       assert.ok(heading.secTop >= heading.barBottom - 1,
         `the section the customer asked for landed behind the header: ${JSON.stringify(heading)}`);
       await page.evaluate(() => window.scrollTo(0, 0));
+    });
+
+    // ─── The basket, driven ───────────────────────────────────────────────
+    // Step 5b part 4. Everything here is a real tap on a real page against the
+    // real endpoint: the order that comes out the far end is written to the
+    // database by routes/shop-menu.js, not by a stub. A cart tested by reading
+    // its markup would prove the buttons EXIST and nothing about what they do.
+    await check('adding shows the bar, and the bar counts and totals', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const before = await page.evaluate(() => document.getElementById('cbar').hidden);
+      assert.strictEqual(before, true, 'the basket bar is showing before anything is in it');
+      await page.click('.it:not(.out) .add');
+      const one = await page.evaluate(() => ({
+        hidden: document.getElementById('cbar').hidden,
+        n: document.getElementById('cbarN').textContent,
+        v: document.getElementById('cbarV').textContent,
+      }));
+      assert.strictEqual(one.hidden, false, 'the bar did not appear');
+      assert.strictEqual(one.n, '1');
+      assert.ok(/\d/.test(one.v), `the bar shows no money: ${JSON.stringify(one)}`);
+      await page.click('.it:not(.out) .add');
+      const two = await page.evaluate(() => document.getElementById('cbarN').textContent);
+      assert.strictEqual(two, '2', 'a second tap did not count');
+    });
+
+    await check('the last row of products is not hidden under the bar', async () => {
+      // The bar is fixed over the page. Without the floor it adds, the final
+      // card sits underneath it and cannot be tapped — the same class of fault
+      // as the rail, one element down.
+      const m = await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        const cards = document.querySelectorAll('.it');
+        const last = cards[cards.length - 1].getBoundingClientRect();
+        const bar = document.getElementById('cbar').getBoundingClientRect();
+        return { lastBottom: last.bottom, barTop: bar.top };
+      });
+      assert.ok(m.lastBottom <= m.barTop + 1,
+        `the last product is underneath the basket bar: ${JSON.stringify(m)}`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    });
+
+    await check('a sold-out product has no way to be added', async () => {
+      const n = await page.evaluate(() => document.querySelectorAll('.it.out .add').length);
+      assert.strictEqual(n, 0, 'a sold-out card carries an add button');
+    });
+
+    await check('the sheet lists the lines, and − and + really change them', async () => {
+      await page.click('#cbarOpen');
+      const open = await page.evaluate(() => document.getElementById('sheet').hidden);
+      assert.strictEqual(open, false, 'the sheet did not open');
+      const lines = await page.evaluate(() => document.querySelectorAll('#sheetB .ln').length);
+      assert.strictEqual(lines, 1, 'two of one product should be ONE line, not two');
+      await page.click('#sheetB .qty button[data-d]');
+      const after = await page.evaluate(() => ({
+        qty: document.querySelector('#sheetB .qty span').textContent,
+        n: document.getElementById('cbarN').textContent,
+      }));
+      assert.strictEqual(after.qty, '1', 'minus did not decrement the line');
+      assert.strictEqual(after.n, '1', 'the bar did not follow the sheet');
+    });
+
+    await check('taking the last one out empties the basket and closes the sheet', async () => {
+      await page.click('#sheetB .qty button[data-d]');
+      const m = await page.evaluate(() => ({
+        sheet: document.getElementById('sheet').hidden,
+        bar: document.getElementById('cbar').hidden,
+      }));
+      assert.strictEqual(m.bar, true, 'an empty basket still shows its bar');
+      assert.strictEqual(m.sheet, true, 'an empty basket sheet stayed open over the menu');
+    });
+
+    await check('a nameless order is refused BEFORE it reaches the counter', async () => {
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      await page.click('#cPlace');
+      const err = await page.evaluate(() => ({
+        hidden: document.getElementById('cErr').hidden,
+        placed: !!document.querySelector('.done'),
+      }));
+      assert.strictEqual(err.hidden, false, 'no name and no complaint');
+      assert.strictEqual(err.placed, false, 'a nameless order went through');
+    });
+
+    await check('PLACING IT REALLY PLACES IT — a number comes back and a row is written', async () => {
+      await page.fill('#cName', 'Mei');
+      await page.click('#cPlace');
+      await page.waitForSelector('.done-n', { timeout: 8000 });
+      const shown = await page.evaluate(() => ({
+        code: document.querySelector('.done-n').textContent.trim(),
+        name: document.querySelector('.done-nm').textContent.trim(),
+        bar: document.getElementById('cbar').hidden,
+      }));
+      assert.ok(/^\d+$/.test(shown.code), `the number is not a plain number: ${shown.code}`);
+      assert.strictEqual(shown.name, 'Mei', 'the name the customer will be called by is not shown');
+      assert.strictEqual(shown.bar, true, 'the basket survived the order that emptied it');
+      // The half a screenshot cannot show: the order exists.
+      const row = db.prepare(
+        `SELECT recipient_name, status, channel, source, fulfillment_type, shop_order_code
+           FROM retail_orders WHERE store_id = ? ORDER BY id DESC LIMIT 1`).get(LOC);
+      assert.ok(row, 'the page said an order was placed and no order was written');
+      assert.strictEqual(row.recipient_name, 'Mei');
+      assert.strictEqual(row.status, 'pending_payment');
+      assert.strictEqual(row.source, 'qr');
+      assert.strictEqual(row.fulfillment_type, 'counter');
+      assert.strictEqual(String(row.shop_order_code), shown.code,
+        'the number on the phone is not the number in the database');
+    });
+
+    await check('both languages are in the basket, so the toggle still works on it', async () => {
+      // The server-rendered half puts both languages in the DOM and lets CSS
+      // choose (§26's narrowing). A cart that rendered only the current language
+      // would silently break that for everything added after load — and it is
+      // drawn by script, so nothing else would catch it.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      const m = await page.evaluate(() => {
+        const ln = document.querySelector('#sheetB .ln .ln-t');
+        return { en: ln.querySelectorAll('.l-en').length, cn: ln.querySelectorAll('.l-cn').length };
+      });
+      assert.ok(m.en === 1 && m.cn === 1,
+        `a basket line carries one language only: ${JSON.stringify(m)}`);
+      await page.click('#sheetX');
     });
 
     await check('tapping 中 swaps the visible language, both ways, with real boxes', async () => {
