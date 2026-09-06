@@ -130,7 +130,12 @@ function seed() {
       { name_en: 'Probiotics', name_cn: '益生菌' },
     ] },
     { type: 'allergen_card',
-      contains_en: 'Coconut', contains_cn: '椰子',
+      // COPIED FROM PRODUCTION, brackets and all. The reported defect only
+      // appears when a chip's text ENDS in a full-width bracket — that is the
+      // character that reserves a whole cell and draws in half of it — so a
+      // fixture without one cannot see the bug. "Gluten (oats)" / 麸质（燕麦）
+      // is the office's own pair, read off the live menu, not composed here.
+      contains_en: 'Gluten (oats)', contains_cn: '麸质（燕麦）',
       may_contain_en: 'Soy, Nuts, Gluten', may_contain_cn: '大豆、坚果、麸质' },
     { type: 'how_to_use', tiles: [{ label_en: 'Spoon it over oats' }] },
   ]);
@@ -484,13 +489,13 @@ function boxOf(text) {
       assert.ok(m, 'the allergen card is missing');
       assert.ok(/Allergen/i.test(m.title), `the card is not titled: ${m.title}`);
       assert.strictEqual(m.rows.length, 2, `contains and may-contain are two rows: ${JSON.stringify(m.rows)}`);
-      assert.deepStrictEqual(m.rows[0].chips, ['Coconut']);
+      assert.deepStrictEqual(m.rows[0].chips, ['Gluten (oats)']);
       assert.deepStrictEqual(m.rows[1].chips, ['Soy', 'Nuts', 'Gluten']);
       assert.deepStrictEqual(m.rows[0].kinds, ['has'], 'the contains row is not marked as contains');
       assert.deepStrictEqual(m.rows[1].kinds, ['may', 'may', 'may'], 'a may-contain chip reads as contains');
       // And the Chinese half is really there, split on its own separators —
       // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones.
-      assert.deepStrictEqual(m.rows[0].cn, ['椰子']);
+      assert.deepStrictEqual(m.rows[0].cn, ['麸质（燕麦）']);
       assert.deepStrictEqual(m.rows[1].cn, ['大豆', '坚果', '麸质'],
         'the Chinese list was not split on its own separators');
       // They must not merge visually — that is the whole reason the card exists.
@@ -533,6 +538,63 @@ function boxOf(text) {
           `a row of ${r.n} chip(s) sits ${r.off}px off the card's middle`);
         assert.ok(Math.abs(r.labOff) <= 2, `its label sits ${r.labOff}px off the middle`);
         assert.strictEqual(r.above, true, 'the label is still beside its chips, not above them');
+      }
+    });
+
+    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS PILL — measured in pixels', async () => {
+      // Reported from a phone, twice. The first report was the row sitting off
+      // the card's middle; this is what was left after that was fixed, and no
+      // box measurement can see it. A full-width CJK bracket reserves a whole
+      // character cell and draws its ink in the left half, so 麸质（燕麦） carries
+      // most of a character of blank at its right end and its text sits nearly
+      // 4px left of the pill drawn around it.
+      //
+      // ITS OWN PAGE, AT 3x. Two reasons, both learned the hard way. A bracket
+      // is a one-pixel stroke at 11.5px, and at 1x it antialiases below any
+      // threshold that still excludes the pill — the measurement then loses the
+      // right edge of the ink and reports a shift that is the reader's, not the
+      // page's. And this check has to be read in Chinese, which is the only
+      // half with brackets in it; doing that on the shared page left the whole
+      // suite in Chinese the moment this check failed.
+      const hi = await page.context().newPage({ deviceScaleFactor: 3 });
+      try {
+        await hi.setViewportSize({ width: 390, height: 844 });
+        await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
+        await hi.click('[data-lang="cn"]');
+        await hi.click('.it:not(.out)[data-open]');
+        // The filled chip: oat ink on an ink-coloured pill is the one pair a
+        // threshold can separate. Its rounded ends let the page show through,
+        // so the ground behind it is repainted to neither colour first.
+        await hi.evaluate(() => {
+          document.body.style.background = '#808080';
+          document.querySelector('#dsheetB .acard').style.background = '#808080';
+          document.querySelector('#dsheetB .l-cn .achip.has').scrollIntoView({ block: 'center' });
+        });
+        const info2 = await hi.evaluate(() =>
+          document.querySelector('#dsheetB .l-cn .achip.has').textContent);
+        assert.ok(/[）】》」』〕｝]$/.test(info2),
+          `the fixture chip does not end in a full-width bracket, so this proves nothing: ${info2}`);
+        const sharp = require(path.join(ROOT, 'node_modules', 'sharp'));
+        const chip = await hi.$('#dsheetB .l-cn .achip.has');
+        const { data, info } = await sharp(await chip.screenshot()).greyscale().raw()
+          .toBuffer({ resolveWithObject: true });
+        let left = null, right = null;
+        for (let x = 0; x < info.width; x++) for (let y = 0; y < info.height; y++) {
+          if (data[y * info.width + x] > 200) {
+            if (left === null || x < left) left = x;
+            if (right === null || x > right) right = x;
+          }
+        }
+        assert.ok(left !== null, 'the chip has no text drawn in it at all');
+        const px = (n) => n / 3;
+        const dx = px(((left + right) / 2) - info.width / 2);
+        assert.ok(Math.abs(dx) <= 1.5, `"${info2}" sits ${dx}px off the middle of its pill`);
+        // And the trim has not eaten the padding it was taking back: the ink
+        // must still stand clear of the pill's own edge.
+        assert.ok(px(left) >= 2 && px(info.width - right) >= 2,
+          `the trim pulled the text onto the pill's edge: ${px(left)} / ${px(info.width - right)}`);
+      } finally {
+        await hi.close();
       }
     });
 
