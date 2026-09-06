@@ -110,10 +110,34 @@ function seed() {
   db.prepare(`INSERT INTO retail_stores (id, code, name_en, name_cn, is_active, sort_order)
               VALUES (?, '__test_menu_render', 'Render fixture shop', '测试渲染门店', 1, 96)`).run(LOC);
   const prod = db.prepare(`INSERT INTO store_products
-    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
-    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks')`);
-  prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33);
-  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18);
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
+     product_facts, nutrition, free_of, image_data)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?, ?)`);
+  // A REAL IMAGE, because the detail sheet's photo — and the tap that enlarges
+  // it — exist only for a product that has one. Without this the sheet renders
+  // its empty frame and the enlarge cannot be driven at all.
+  const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  // REAL SHAPES, not stand-ins. product_facts holds four keys the sheet must
+  // IGNORE alongside the one it reads; nutrition carries a parent, a child and
+  // an unrecognised label, so the classifier is exercised on all three; free_of
+  // names two of the four allergens, so both the free chip and the contains
+  // chip appear on one product.
+  const FACTS = JSON.stringify({
+    origin_en: 'Peru', origin_cn: '秘鲁',
+    ingredients_en: 'Roasted almonds (100%)', ingredients_cn: '烘焙杏仁（100%）',
+    storage_en: 'Cool, dry place', storage_cn: '阴凉干燥处',
+    shelf_life_en: '12 months', serving_en: 'Add to oats',
+  });
+  const NUTR = JSON.stringify({
+    basis_en: 'per 100 g', basis_cn: '每100克',
+    rows: [
+      { label_en: 'Energy', label_cn: '能量', value: '612 kcal' },
+      { label_en: 'Saturated', label_cn: '饱和脂肪', value: '4.2 g' },
+      { label_en: 'Fibre', label_cn: '膳食纤维', value: '11 g' },
+    ],
+  });
+  prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33, FACTS, NUTR, 'gluten, soy', PIXEL);
+  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18, FACTS, NUTR, 'gluten, soy', PIXEL);
   // A SECOND CATEGORY AND ENOUGH ROWS THAT THE PAGE ACTUALLY SCROLLS. With the
   // two products above, a phone viewport holds the whole menu and window.scrollY
   // never leaves 0 — on which a rail that scrolls away and a rail that holds
@@ -135,6 +159,8 @@ function seed() {
     'Another very long product name here that also wraps onto two lines',
     'Short three', 'Short four', 'Short five', 'Short six',
   ];
+  // The filler rows carry NO facts at all — they are the products that must not
+  // become tappable, and the check below asserts exactly that.
   FILLER.forEach((id, i) => filler.run(id, FILLER_NAMES[i], `测试填充${i + 1}`, `__R-8${i}`, 20 + i));
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
@@ -294,6 +320,123 @@ function boxOf(text) {
     // real endpoint: the order that comes out the far end is written to the
     // database by routes/shop-menu.js, not by a stub. A cart tested by reading
     // its markup would prove the buttons EXIST and nothing about what they do.
+    // ─── The product sheet, driven ────────────────────────────────────────
+    await check('tapping a card opens what is in it, its nutrition and its allergens', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.click(`.it:not(.out)[data-open]`);
+      const m = await page.evaluate(() => {
+        const b = document.getElementById('dsheetB');
+        const rows = Array.from(b.querySelectorAll('.nr')).map(r => ({
+          label: r.querySelector('.nr-l').innerText.trim(),
+          value: r.querySelector('.nr-r').textContent.trim(),
+          kind: r.className.replace('nr', '').trim(),
+        }));
+        return {
+          open: !document.getElementById('dsheet').hidden,
+          text: b.innerText,
+          rows,
+          chips: Array.from(b.querySelectorAll('.fchip')).map(c => ({
+            t: c.innerText.trim(), has: c.className.includes('has'),
+          })),
+          price: document.getElementById('dPr').textContent.trim(),
+        };
+      });
+      assert.strictEqual(m.open, true, 'the sheet did not open');
+      assert.ok(/Roasted almonds/.test(m.text), `ingredients missing: ${JSON.stringify(m.text)}`);
+      // The facts bag holds origin, storage, shelf life and a serving note too.
+      // §44's sheet is for deciding whether to eat something — none of those
+      // may leak in, or the sheet becomes the mini app's page again.
+      for (const leak of ['Peru', 'Cool, dry place', '12 months', 'Add to oats']) {
+        assert.ok(!m.text.includes(leak), `the sheet leaked a fact it should not show: ${leak}`);
+      }
+      assert.ok(/\d/.test(m.price), `no price on the sheet: ${JSON.stringify(m.price)}`);
+      // Parent, child and an unrecognised label, classified by lib/nutrition-rows.
+      assert.deepStrictEqual(m.rows.map(r => r.kind), ['p', 'c', ''],
+        `nutrition rows classified wrong: ${JSON.stringify(m.rows)}`);
+      assert.strictEqual(m.rows[0].value, '612 kcal');
+    });
+
+    await check('THE NEGATIVE IS STATED — a contains chip, and it does not look like a free one', async () => {
+      // Decided 2026-09-06 and a departure from public/shop.html, which shows
+      // only what a product is free OF. On a menu an absent chip would read as
+      // "nobody checked" to somebody scanning for an allergen.
+      const chips = await page.evaluate(() => Array.from(
+        document.querySelectorAll('#dsheetB .fchip')).map(c => {
+          const cs = getComputedStyle(c);
+          return { t: c.innerText.trim(), has: c.className.includes('has'),
+                   style: cs.borderTopStyle, opacity: parseFloat(cs.opacity) };
+        }));
+      const free = chips.filter(c => !c.has), has = chips.filter(c => c.has);
+      assert.strictEqual(chips.length, 4, `all four allergens should be answered: ${JSON.stringify(chips)}`);
+      assert.strictEqual(free.length, 2, 'the fixture is free of gluten and soy');
+      assert.strictEqual(has.length, 2, 'the other two must be stated, not left silent');
+      assert.ok(/Contains/i.test(has[0].t), `a contains chip does not say so: ${JSON.stringify(has[0])}`);
+      // The two must not read alike — that is the whole point of stating it.
+      assert.strictEqual(free[0].style, 'solid');
+      assert.strictEqual(has[0].style, 'dashed');
+      assert.ok(has[0].opacity < free[0].opacity, 'the contains chip is not muted against the free one');
+    });
+
+    await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
+      const src = await page.evaluate(async () => {
+        document.querySelector('#dsheetB .dt-ph[data-big]').click();
+        await new Promise(r => setTimeout(r, 60));
+        return { hidden: document.getElementById('big').hidden,
+                 src: document.getElementById('bigImg').getAttribute('src') };
+      });
+      assert.strictEqual(src.hidden, false, 'the enlarge did not open');
+      assert.ok(/\/i\/\d+\?/.test(src.src), `the enlarge points somewhere odd: ${src.src}`);
+      const w = /[?&]w=(\d+)/.exec(src.src);
+      assert.ok(w && Number(w[1]) > 320,
+        `the enlarge re-uses the thumbnail width, so it is not bigger: ${src.src}`);
+      // And it closes on the next tap anywhere.
+      const shut = await page.evaluate(async () => {
+        document.getElementById('big').click();
+        await new Promise(r => setTimeout(r, 60));
+        return document.getElementById('big').hidden;
+      });
+      assert.strictEqual(shut, true, 'the enlarge would not close');
+    });
+
+    await check('Add from the sheet puts it in the basket, once', async () => {
+      const m = await page.evaluate(async () => {
+        document.getElementById('dAdd').click();
+        await new Promise(r => setTimeout(r, 60));
+        return { n: document.getElementById('cbarN').textContent,
+                 sheet: document.getElementById('dsheet').hidden };
+      });
+      assert.strictEqual(m.n, '1', `Add from the sheet counted ${m.n}`);
+      assert.strictEqual(m.sheet, true, 'the sheet stayed open over the basket bar');
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    });
+
+    await check('a product with nothing to say is NOT tappable', async () => {
+      // The filler rows carry no facts, no nutrition and no allergens. A sheet
+      // for them would be an empty panel, which is worse than a card that does
+      // not respond — so the whole apparatus is absent rather than empty.
+      const m = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.it'));
+        const withDt = cards.filter(c => c.hasAttribute('data-open')).length;
+        const withTpl = cards.filter(c => c.querySelector('template[data-dt]')).length;
+        return { total: cards.length, withDt, withTpl };
+      });
+      assert.ok(m.total > m.withDt,
+        'every card is tappable, so the factless case is not being excluded');
+      assert.strictEqual(m.withDt, m.withTpl, 'a card is tappable but carries no sheet body');
+      assert.strictEqual(m.withDt, 2, `only the two real products have facts: ${JSON.stringify(m)}`);
+    });
+
+    await check('the sheet carries both languages, so the toggle works inside it', async () => {
+      await page.click('.it:not(.out)[data-open]');
+      const m = await page.evaluate(() => {
+        const b = document.getElementById('dsheetB');
+        return { en: b.querySelectorAll('.l-en').length, cn: b.querySelectorAll('.l-cn').length };
+      });
+      assert.ok(m.en > 0 && m.en === m.cn,
+        `the sheet is not bilingual: ${JSON.stringify(m)}`);
+      await page.click('#dsheetX');
+    });
+
     await check('adding shows the bar, and the bar counts and totals', async () => {
       await page.evaluate(() => window.scrollTo(0, 0));
       const before = await page.evaluate(() => document.getElementById('cbar').hidden);
