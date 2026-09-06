@@ -7512,7 +7512,7 @@ function screenAskKitchen(){
     onclick="APP.cmd('rqPurpose','${k}')">
     <b style="display:block;font-size:15px;font-weight:500;line-height:1.3;color:inherit">${T(en,zh)}</b>
     <i style="display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75">${T(subEn,subZh)}</i></button>`;
-  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('They make it — nothing moves until it is made.','由厨房制作 — 制作完成前库存不变。')}</div>
     <div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What is it for?','用途')}</div>
     <div style="display:flex;gap:8px;padding:0 16px 14px">
@@ -7545,7 +7545,7 @@ function screenAskStock(){
   const suppliers=rqSuppliers();
   const from = r.to==null ? '' : `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Ask which location?','向哪个地点申请？')}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px">${suppliers.map(st=>chip(st.id,r.from===st.id,'rqFrom')).join('')}</div>`;
-  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('Have another location send it','请其他地点发货')}</div>
     ${askedBy}${from}
     ${r.to!=null?rqPicker():''}
@@ -7679,7 +7679,7 @@ function screenPick(){
      of two freezers drawn as one, so it is asked wherever there is a choice. */
   if(k.at==null){
     if(stores.length===1){ k.at=stores[0].id; }
-    else return `<div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Picking at which location?','在哪个地点拣货？')}</div>
+    else return `<div style="margin-top:12px;padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Picking at which location?','在哪个地点拣货？')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 16px">${
         stores.map(st=>chip(rqStoreName(st.id),false,'pikAt',st.id)).join('')}</div>`;
   }
@@ -7729,7 +7729,7 @@ function screenPick(){
   }).join('');
 
   const allDone=lines.length>0&&lines.every(L=>L.done);
-  return `<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
       escAttr(rqStoreName(k.at))} · <span class="num">${picked}</span>/${lines.length} ${T('picked','已拣')}</div>
     ${filter}${err}<div>${rows}</div>
     <div style="padding:16px;position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default)">
@@ -7766,7 +7766,7 @@ function screenKitchenQueue(){
   const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;
     border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
     color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
-  const tabs=`<div style="display:flex;gap:8px;padding:0 16px 12px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
+  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
   if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!k.list.length) return tabs+nothingYet(T('Nothing to make','暂无待制作'),
     T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
@@ -7852,7 +7852,7 @@ function screenWhatMade(){
             </span>`}
       </div>${ask}`;
   };
-  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+  return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       h.rs?escAttr(h.rs)+' · '+T('Marked made — the shelf has not changed yet','已标记完成 — 库存尚未变动')
           :T('Set what actually went on the shelf.','请填写实际入库数量。')}</div>
     ${h.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(h.err)}</div>`:''}
@@ -7877,7 +7877,7 @@ function screenWhatMade(){
 function screenLogBatch(){
   loadQsCtx();
   const rows=batLines();
-  const search=`<div style="padding:4px 16px 12px;position:relative">
+  const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
@@ -7885,7 +7885,7 @@ function screenLogBatch(){
   if(!rows.length) return search+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('Nothing on this store\u2019s list matches.','本店商品目录中没有匹配项。')}</div>`;
   const chosen=batChosen();
-  return `<div style="padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
       T('What you made, with nobody asking','主动制作,无对应申请')}</div>
     ${search}
     <div>${rows.map(p=>{
