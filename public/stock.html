@@ -1531,7 +1531,17 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       state.items.forEach(function (it) { paintRow(it.id); });
     }).catch(function () { /* the line simply does not appear */ });
   }
-  function addedToday(id) { return state.addedToday[id] | 0; }
+  /* The endpoint answers {qty, who:[names]} per product now. This app is on its
+     way out (§48) and does not draw the names, but it must not read the object
+     as a number — `{qty:6} | 0` is 0, which would have silently emptied this
+     line rather than failing loudly. Read through an accessor that takes
+     either shape. */
+  function addedEntry(id) {
+    var e = state.addedToday[id];
+    if (e == null) return null;
+    return typeof e === 'object' ? e : { qty: e | 0, who: [] };
+  }
+  function addedToday(id) { var e = addedEntry(id); return e ? (e.qty | 0) : 0; }
 
   // A poll never overwrites a count the operator is still working on, and it
   // never re-renders the list when it doesn't have to — a full repaint under a
@@ -1908,7 +1918,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
         // the next poll: the card is what the operator checks before deciding
         // whether this batch has already gone on, and a line that lags is worse
         // than no line at all.
-        state.addedToday[id] = (state.addedToday[id] | 0) + n;
+        var ae = addedEntry(id) || { qty: 0, who: [] };
+        ae.qty = (ae.qty | 0) + n;
+        state.addedToday[id] = ae;
         delete state.pending[id];
         paintRow(id);
         toast(t('Added ' + n, '已加 ' + n + ' 件') + (it ? ' · ' + pname(it) : ''));
