@@ -505,12 +505,18 @@ function boxOf(text) {
       // Reported from a phone twice — "the + is too big", then "the price is too
       // big", then "use the same colors, fonts size, position, exactly".
       //
-      // THE WEBSITE IS THE SOURCE, NOT THE MINI APP'S WXSS. Both are the same
-      // design by the same house, but the website's half is already in CSS
-      // pixels for a browser and this is a browser page. Converting the wxss's
-      // rpx at an assumed 390px phone is what produced two wrong numbers in a
-      // row; there is nothing to convert here. Read out of public/shop.html so
-      // the two cannot drift apart silently.
+      // THE WEBSITE IS THE SOURCE FOR EVERYTHING HERE EXCEPT PRICE SIZE. Both
+      // are the same design by the same house, but the website's half is
+      // already in CSS pixels for a browser and this is a browser page, so
+      // name/plus/gap/gridGap are read out of public/shop.html rather than
+      // converted, and the two cannot drift apart silently.
+      //
+      // PRICE IS THE ONE DELIBERATE EXCEPTION, on Ash's direction: the
+      // website's 16px still read as too big next to this page's chunky
+      // Lilita-One digit substitute, so .pr now matches the MINI APP's
+      // .card .price instead — read out of shop.wxss and converted at this
+      // file's own 390/750 phone-width ratio (routes/shop-menu.js's .pr
+      // comment carries the same number and the same reasoning).
       const html = require('fs').readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
       const ruleOf = (sel) => {
         const i = html.indexOf(sel + '{');
@@ -521,22 +527,34 @@ function boxOf(text) {
         return m ? Number(m[1]) : null;
       };
       const cn    = ruleOf('.sl-card .cn');
-      const pr    = ruleOf('.sl-pr');
       const plus  = ruleOf('.sl-plus');
       const foot  = ruleOf('.sl-cfoot');
       const grid  = ruleOf('.sl-grid');
-      assert.ok(cn && pr && plus && foot && grid,
+      assert.ok(cn && plus && foot && grid,
         'the .sl-* card rules have moved in public/shop.html — this check cannot see them');
+
+      const wxss = require('fs').readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.wxss'), 'utf8');
+      const miniRuleOf = (sel) => {
+        const m = new RegExp(sel.replace(/\./g, '\\.') + '\\s*\\{([^}]*)\\}').exec(wxss);
+        return m ? m[1] : null;
+      };
+      const miniPrice = miniRuleOf('.card .price');
+      const miniPriceRpx = (() => {
+        const m = miniPrice && /calc\(\s*([\d.]+)rpx/.exec(miniPrice);
+        return m ? Number(m[1]) : null;
+      })();
+      assert.ok(miniPriceRpx > 0,
+        'the mini app .card .price rule has moved in shop.wxss — this check cannot see it');
 
       const want = {
         name:  num(cn, 'font-size'),
-        price: num(pr, 'font-size'),
         plus:  num(plus, 'width'),
         gap:   num(foot, 'gap'),
         gridGap: num(grid, 'gap'),
       };
       assert.ok(Object.values(want).every(v => v > 0),
         `could not read every value: ${JSON.stringify(want)}`);
+      const wantPrice = Math.round(miniPriceRpx * (390 / 750) * 10) / 10;
 
       const got = await page.evaluate(() => {
         const card = document.querySelector('.it:not(.out)');
@@ -556,6 +574,8 @@ function boxOf(text) {
         assert.ok(Math.abs(got[k] - want[k]) <= 0.5,
           `${k} is ${got[k]}px against the website's ${want[k]}px`);
       }
+      assert.ok(Math.abs(got.price - wantPrice) <= 0.5,
+        `price is ${got.price}px against the mini app's ${wantPrice}px`);
       // .sl-pr carries letter-spacing:.04em and .sl-card .cn does not.
       assert.ok(parseFloat(got.tracking) > 0, `the price lost its tracking: ${got.tracking}`);
       // BOTH are color:var(--ink) on the website — .sl-card .cn says so
