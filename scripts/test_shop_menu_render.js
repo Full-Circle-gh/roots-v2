@@ -130,7 +130,12 @@ function seed() {
       { name_en: 'Probiotics', name_cn: '益生菌' },
     ] },
     { type: 'allergen_card',
-      contains_en: 'Coconut', contains_cn: '椰子',
+      // COPIED FROM PRODUCTION, brackets and all. The reported defect only
+      // appears when a chip's text ENDS in a full-width bracket — that is the
+      // character that reserves a whole cell and draws in half of it — so a
+      // fixture without one cannot see the bug. "Gluten (oats)" / 麸质（燕麦）
+      // is the office's own pair, read off the live menu, not composed here.
+      contains_en: 'Gluten (oats)', contains_cn: '麸质（燕麦）',
       may_contain_en: 'Soy, Nuts, Gluten', may_contain_cn: '大豆、坚果、麸质' },
     { type: 'how_to_use', tiles: [{ label_en: 'Spoon it over oats' }] },
   ]);
@@ -484,13 +489,13 @@ function boxOf(text) {
       assert.ok(m, 'the allergen card is missing');
       assert.ok(/Allergen/i.test(m.title), `the card is not titled: ${m.title}`);
       assert.strictEqual(m.rows.length, 2, `contains and may-contain are two rows: ${JSON.stringify(m.rows)}`);
-      assert.deepStrictEqual(m.rows[0].chips, ['Coconut']);
+      assert.deepStrictEqual(m.rows[0].chips, ['Gluten (oats)']);
       assert.deepStrictEqual(m.rows[1].chips, ['Soy', 'Nuts', 'Gluten']);
       assert.deepStrictEqual(m.rows[0].kinds, ['has'], 'the contains row is not marked as contains');
       assert.deepStrictEqual(m.rows[1].kinds, ['may', 'may', 'may'], 'a may-contain chip reads as contains');
       // And the Chinese half is really there, split on its own separators —
       // the office types 大豆、坚果、麸质 with CJK commas, not ASCII ones.
-      assert.deepStrictEqual(m.rows[0].cn, ['椰子']);
+      assert.deepStrictEqual(m.rows[0].cn, ['麸质（燕麦）']);
       assert.deepStrictEqual(m.rows[1].cn, ['大豆', '坚果', '麸质'],
         'the Chinese list was not split on its own separators');
       // They must not merge visually — that is the whole reason the card exists.
@@ -498,13 +503,20 @@ function boxOf(text) {
       assert.strictEqual(m.mayBorder, 'dashed');
     });
 
-    await check('the allergen chips are centred in their column, not left against it', async () => {
+    await check('the allergen chips centre on the card, not on what the label left over', async () => {
       // Reported from a phone: a single "Gluten (oats)" chip floated in the gap
       // between a short label and the middle of the card, aligned to nothing.
       const m = await page.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('#dsheetB .arow'));
-        return rows.map(r => {
-          const col = r.querySelector('.achips').getBoundingClientRect();
+        const card = document.querySelector('#dsheetB .acard');
+        const cs = getComputedStyle(card);
+        const cb = card.getBoundingClientRect();
+        // The CARD's own middle, inside its padding — the line the eye takes as
+        // centre. Measuring against the chips' own container was the first
+        // version of this check and it passed while the chips sat well right of
+        // here, because that container was only ever what a 96px label left over.
+        const mid = (cb.left + parseFloat(cs.paddingLeft)
+                   + cb.right - parseFloat(cs.paddingRight)) / 2;
+        return Array.from(card.querySelectorAll('.arow')).map(r => {
           const chips = Array.from(r.querySelectorAll('.achips span'))
             .filter(el => el.getBoundingClientRect().width > 0);
           if (!chips.length) return null;
@@ -512,19 +524,91 @@ function boxOf(text) {
           const left = Math.min(...boxes.map(b => b.left));
           const right = Math.max(...boxes.map(b => b.right));
           const lab = r.querySelector('.alab').getBoundingClientRect();
-          return { pad: (left - col.left) - (col.right - right),
-                   n: chips.length,
-                   // And the label sits level with them rather than riding high.
-                   dy: ((lab.top + lab.bottom) / 2) - ((col.top + col.bottom) / 2) };
+          return { off: ((left + right) / 2) - mid, n: chips.length,
+                   // The label centres on the same line, and sits ABOVE its
+                   // chips rather than beside them — which is what stops a long
+                   // chip from ever being squeezed by a long label.
+                   labOff: ((lab.left + lab.right) / 2) - mid,
+                   above: lab.bottom <= left * 0 + boxes[0].top + 1 };
         }).filter(Boolean);
       });
       assert.ok(m.length >= 2, `the allergen card has too few rows to measure: ${m.length}`);
       for (const r of m) {
-        assert.ok(Math.abs(r.pad) <= 2,
-          `a row of ${r.n} chip(s) is off centre by ${r.pad}px`);
-        assert.ok(Math.abs(r.dy) <= 2,
-          `the label rides ${r.dy}px off the chips it belongs to`);
+        assert.ok(Math.abs(r.off) <= 2,
+          `a row of ${r.n} chip(s) sits ${r.off}px off the card's middle`);
+        assert.ok(Math.abs(r.labOff) <= 2, `its label sits ${r.labOff}px off the middle`);
+        assert.strictEqual(r.above, true, 'the label is still beside its chips, not above them');
       }
+    });
+
+    await check('A CHIP\'S TEXT SITS IN THE MIDDLE OF ITS PILL — measured in pixels, both languages', async () => {
+      // Reported from a phone three times, and it was three different faults:
+      // the ROW sitting off the card's middle, then the TEXT sitting left of
+      // its pill, then the text sitting high in it. None of them is visible to
+      // a box measurement — every box here centres to within a hundredth of a
+      // pixel — so this check screenshots the pill and finds the ink.
+      //
+      // The filled chip: oat ink on an ink-coloured pill is the one pair a
+      // threshold can separate, and it is also the only chip that draws its own
+      // background, which is what makes an imbalance visible at all.
+      //
+      // ITS OWN CONTEXT AT 4x, and the deviceScaleFactor goes on the CONTEXT.
+      // newPage() silently ignores it, and the first version of this check
+      // asked newPage() for 3x, got 1x, and divided by three anyway — it
+      // under-reported every offset threefold and would have passed on all
+      // three of the reported faults.
+      const sharp = require(path.join(ROOT, 'node_modules', 'sharp'));
+      const S = 4;
+      const ctx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, deviceScaleFactor: S });
+      try {
+        for (const lang of ['en', 'cn']) {
+          const hi = await ctx.newPage();
+          await hi.goto(`http://127.0.0.1:${PORT}/s/${CODE}`, { waitUntil: 'domcontentloaded' });
+          if (lang === 'cn') await hi.click('[data-lang="cn"]');
+          await hi.click('.it:not(.out)[data-open]');
+          const sel = `#dsheetB .l-${lang} .achip.has`;
+          // The pill's rounded ends let the ground behind it show through, so
+          // that ground is repainted to a value that is neither the ink nor the
+          // oat before anything is counted.
+          await hi.evaluate((q) => {
+            document.body.style.background = '#808080';
+            document.querySelector('#dsheetB .acard').style.background = '#808080';
+            document.querySelector(q).scrollIntoView({ block: 'center' });
+          }, sel);
+          const text = await hi.evaluate((q) => document.querySelector(q).textContent, sel);
+          const chip = await hi.$(sel);
+          const { data, info } = await sharp(await chip.screenshot()).greyscale().raw()
+            .toBuffer({ resolveWithObject: true });
+          let l = null, r = null, t = null, b = null;
+          for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+            if (data[y * info.width + x] > 200) {
+              if (l === null || x < l) l = x;
+              if (r === null || x > r) r = x;
+              if (t === null) t = y;
+              b = y;
+            }
+          }
+          assert.ok(l !== null, `the ${lang} chip has no text drawn in it at all`);
+          const dx = (((l + r) / 2) - info.width / 2) / S;
+          const dy = (((t + b) / 2) - info.height / 2) / S;
+          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its pill, across`);
+          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its pill, down`);
+          // And nothing has been trimmed so far that the ink touches the edge.
+          assert.ok(l / S >= 2 && (info.width - r) / S >= 2,
+            `"${text}" is on the pill's edge: ${l / S} / ${(info.width - r) / S}`);
+          await hi.close();
+        }
+      } finally {
+        await ctx.close();
+      }
+      // The Chinese half is the only one with full-width brackets in it, and a
+      // bracket is what the trim exists for — so the fixture must still have one
+      // or the trim is being asserted against nothing.
+      const cnText = await page.evaluate(() =>
+        document.querySelector('#dsheetB .l-cn .achip.has').textContent);
+      assert.ok(/[）】》」』〕｝]$/.test(cnText),
+        `the fixture chip no longer ends in a full-width bracket: ${cnText}`);
     });
 
     await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
@@ -839,6 +923,37 @@ function boxOf(text) {
       assert.strictEqual(two, '2', 'a second tap did not count');
     });
 
+    await check('THE COUNT SITS IN THE MIDDLE OF ITS SQUARE — measured in pixels', async () => {
+      // Reported from a phone: the number rode high in the black chip. Nothing
+      // about the BOX was wrong, which is why no geometric check could see it —
+      // the chip inherited the body's 1.45 reading line-height, so an 18.85px
+      // line box sat inside a 24px square and the digit sat high in that. On
+      // this page the digits come from the substitute face while the line box
+      // was sized by the display face's metrics, so the two disagreed by a
+      // whole pixel. The only honest measurement is of the ink itself.
+      const sharp = require(path.join(ROOT, 'node_modules', 'sharp'));
+      const el = await page.$('#cbarN');
+      const { data, info } = await sharp(await el.screenshot()).greyscale().raw()
+        .toBuffer({ resolveWithObject: true });
+      let top = null, bot = null, left = null, right = null;
+      for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+        // Oat ink on an ink-coloured chip: the light pixels ARE the digit.
+        if (data[y * info.width + x] > 128) {
+          if (top === null) top = y;
+          bot = y;
+          if (left === null || x < left) left = x;
+          if (right === null || x > right) right = x;
+        }
+      }
+      assert.ok(top !== null, 'the count chip has no digit drawn in it at all');
+      const dy = ((top + bot) / 2) - info.height / 2;
+      const dx = ((left + right) / 2) - info.width / 2;
+      assert.ok(Math.abs(dy) <= 0.5,
+        `the count sits ${dy}px off the middle of its square, down the page`);
+      assert.ok(Math.abs(dx) <= 0.75,
+        `the count sits ${dx}px off the middle of its square, across`);
+    });
+
     await check('the add button sits BESIDE THE PRICE, not over the photo', async () => {
       // Reported from a phone, 2026-09-06, with the mini app beside it: the
       // button was on the photo's corner, covering the product it was offering
@@ -1058,6 +1173,27 @@ function boxOf(text) {
       }));
       assert.strictEqual(after.qty, '1', 'minus did not decrement the line');
       assert.strictEqual(after.n, '1', 'the bar did not follow the sheet');
+      // AND THE PRICE IS STILL ON THE PHONE. Reported: "Apple Pie Overnight
+      // Oats" beside a stepper and a price was three things competing for one
+      // 362px row, and the price lost — it was clipped by the right edge. The
+      // name now has its own line. Measured against the panel that scrolls,
+      // because that is what does the clipping.
+      const fit = await page.evaluate(() => {
+        const b = document.getElementById('sheetB');
+        const bb = b.getBoundingClientRect();
+        const cs = getComputedStyle(b);
+        const p = b.querySelector('.ln-p').getBoundingClientRect();
+        const t = b.querySelector('.ln-t').getBoundingClientRect();
+        const q = b.querySelector('.qty').getBoundingClientRect();
+        return { spill: p.right - (bb.right - parseFloat(cs.paddingRight)),
+                 scroll: b.scrollWidth - b.clientWidth,
+                 // Stacked, not side by side: the name's row ends above them.
+                 stacked: t.bottom <= q.top + 1 };
+      });
+      assert.ok(fit.spill <= 1, `the price hangs ${fit.spill}px past the panel's edge`);
+      assert.ok(fit.scroll <= 1, `the basket line scrolls sideways by ${fit.scroll}px`);
+      assert.strictEqual(fit.stacked, true,
+        'the name is still on the same row as the stepper, so a long one squeezes the price');
     });
 
     await check('taking the last one out empties the basket and closes the sheet', async () => {

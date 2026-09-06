@@ -495,17 +495,19 @@ img{display:block;max-width:100%}
 .acard{border:1px solid var(--ink);padding:12px;margin-top:18px}
 .atitle{font-family:var(--f-bear);font-size:16px;line-height:1;
   padding-bottom:9px;border-bottom:2px solid var(--ink);margin-bottom:10px}
-/* CENTRED BOTH WAYS. The chips sat at the left edge of a 96px-wide column with
-   a short label beside them, so a single chip floated in the gap and read as
-   misplaced rather than aligned to anything. Centring gives each row its own
-   balance, which is what a one-chip row and a three-chip row need to look like
-   the same card. */
-.arow{display:flex;gap:10px;align-items:center;padding:7px 0}
+/* THE LABEL SITS ABOVE ITS CHIPS, AND BOTH CENTRE ON THE CARD. Centring them
+   beside a fixed 96px label only centred them in what the label left over, so
+   a short label like CONTAINS pushed its chip well right of the card's middle
+   and it still read as misplaced — the second report of the same thing. With
+   the label on its own line there is no leftover column to be centred in: the
+   chips have the card's full width and the card's own middle. It also ends the
+   collision this card was always one long chip away from. */
+.arow{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
 .arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
-.alab{flex:none;width:96px;font-family:var(--f-bear);font-size:9.5px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
-  line-height:1.35;padding-top:3px}
-.achips{flex:1;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
+.alab{flex:none;max-width:100%;text-align:center;font-family:var(--f-bear);
+  font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
+  line-height:1.35}
+.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
    stated at the head of the file and this is where its cost is paid. Naming it
@@ -522,8 +524,41 @@ img{display:block;max-width:100%}
    .chipset is (0,1,0), so the switch beats it and the wrapper still collapses
    out of the flex row. */
 .chipset{display:contents}
-.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:1.3;
+/* line-height:normal, WHICH IS THE FONT'S OWN, and it is measured rather than
+   chosen. This pill draws its own background, so the space above the text and
+   the space below it are both visible and any difference between them reads as
+   the text sitting off. Ink measured at 4x, filled chip, both languages:
+
+     1.3 (was)  English 0.1px high, Chinese 0.9px high
+     1.15       English 1.1px high, Chinese 1.9px high
+     1          English 1.1px high, Chinese 1.9px high
+     normal     English 0.4px low,  Chinese 0.1px low
+
+   The Chinese half is what moves, because a CJK glyph fills its em box top to
+   bottom while a Latin one leaves the descender space empty — so a line-height
+   chosen to look right in English rides the Chinese up. normal is the only one
+   of the four that is under half a pixel out in both.
+   NOT the same answer as the count chip, which wanted line-height:1: that box
+   has a FIXED 24px height and the line box had to stop disagreeing with it.
+   Here the pill takes its height FROM the line box, so the font's own figure is
+   the one that balances. */
+.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:normal;
   font-family:var(--f-bear);letter-spacing:.03em}
+/* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK
+   IN THE LEFT HALF OF IT. So a chip reading 麸质（燕麦） carries about two thirds
+   of a character of blank at its right end, its text sits nearly 4px left of
+   the pill it is in, and once the row is centred that is exactly what the eye
+   catches — reported from a phone as still not centred after the row itself had
+   been. Measured from the pixels: the ink, not the box, is what was off.
+   Trimming the padding by that reserved half is the only thing that moves it,
+   and it is what a Chinese typesetter does by hand. 'palt' and
+   font-variant-east-asian:proportional-width were both tried first and neither
+   does anything here — the bracket comes from the phone's own CJK fallback
+   face, which implements neither.
+   Two thirds of an em rather than a half: half leaves a pixel, three quarters
+   overshoots, and the measurement says .67 lands it dead centre. */
+.achip.tr{padding-right:calc(10px - .67em)}
+.achip.tl{padding-left:calc(10px - .67em)}
 /* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
    lime is this menu's "yes, add it" colour and an allergen is not that. */
 .achip.has{background:var(--ink);color:var(--oat)}
@@ -618,8 +653,16 @@ img{display:block;max-width:100%}
   border:2px solid var(--ink);background:var(--lime);color:var(--ink);
   padding:12px 14px;font:inherit;font-family:var(--f-bear);font-size:15px;
   cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* line-height:1 IS THE CENTRING, not a nicety. The chip inherited the body's
+   1.45 — a line-height meant for reading paragraphs — so its line box was
+   18.85px tall inside a 24px square, and the digit rode a full pixel above the
+   middle of the black. Measured from the pixels, not from the box: on this page
+   the digits come from the substitute face (a display face whose numerals stand
+   in for the display face's own), so the line box was being sized by one font's
+   metrics while the glyph in it belonged to another. */
 .cbar-n{flex:none;min-width:24px;height:24px;display:flex;align-items:center;
-  justify-content:center;background:var(--ink);color:var(--oat);font-size:13px}
+  justify-content:center;background:var(--ink);color:var(--oat);
+  font-size:13px;line-height:1}
 .cbar-l{flex:1;text-align:left;letter-spacing:.04em}
 .cbar-v{flex:none;font-variant-numeric:tabular-nums}
 
@@ -700,14 +743,22 @@ img{display:block;max-width:100%}
 .sheet-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
   border-top:2px solid var(--ink)}
 
-.ln{display:flex;align-items:center;gap:10px;padding:12px 0;
+/* THE NAME GETS ITS OWN LINE. Name, stepper and price on one row is three
+   things competing for 362px, and the name wins because it is the widest — so
+   a product called "Apple Pie Overnight Oats" pushed the price off the right
+   edge of the phone and the customer could not read what they were paying.
+   Stacked, the name can be as long as it likes in either language and the row
+   beneath it is a fixed stepper and a fixed price with the whole width to sit
+   in. The cost is about 30px per line, which the sheet scrolls. */
+.ln{display:flex;flex-direction:column;gap:8px;padding:12px 0;
   border-bottom:1px solid rgba(0,0,0,.08)}
-.ln-t{flex:1;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.ln-t{min-width:0;overflow-wrap:anywhere;font-size:14px}
+.ln-r{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ln-p{flex:none;font-variant-numeric:tabular-nums;font-size:14px}
 .qty{flex:none;display:flex;align-items:center;border:2px solid var(--ink)}
 .qty button{width:30px;height:30px;border:0;background:transparent;color:var(--ink);
   font-family:var(--f-bear);font-size:16px;line-height:1;cursor:pointer;padding:0}
-.qty span{min-width:26px;text-align:center;font-variant-numeric:tabular-nums;
+.qty span{min-width:26px;text-align:center;line-height:1;font-variant-numeric:tabular-nums;
   font-size:14px}
 
 .tot{display:flex;justify-content:space-between;align-items:center;gap:12px;
@@ -1036,10 +1087,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var paintSheet=function(){var k=ids(),h='';` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
   `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+'</div>'+` +
-  `'<div class="qty"><button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
+  `'<div class="ln-r"><div class="qty">'+` +
+  `'<button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
   `'<span>'+it.qty+'</span>'+` +
   `'<button type="button" data-i="'+esc(k[i])+'" aria-label="+">+</button></div>'+` +
-  `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div>'}` +
+  `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div></div>'}` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
   `var add=function(b){var id=b.getAttribute('data-add');` +
@@ -1173,6 +1225,14 @@ function detailBody(it, code) {
 
   if (!ing && !alg && !nut) return '';
 
+  // WHICH CHIPS CARRY A RESERVED HALF-BOX AT ONE END. A CJK bracket occupies a
+  // full character cell wherever it sits, so one at either end of a chip's text
+  // is mostly blank — the CSS above trims it back. Brackets only: a full-width
+  // comma or period cannot end a name, and trimming one that had not been
+  // measured would be moving something on a guess.
+  const trimmed = (t) => (/^[（【《「『〔｛]/.test(t) ? ' tl' : '') +
+                         (/[）】》」』〕｝]$/.test(t) ? ' tr' : '');
+
   // THE HERO INGREDIENT IS FILLED, THE REST OUTLINED — the mini app's own chip
   // cloud, where `lead` marks the one the product is mostly made of. A pct the
   // office stated rides on the chip; most have none and that is normal.
@@ -1189,7 +1249,8 @@ function detailBody(it, code) {
   // rather than deriving anything.
   const algRow = (label, en, cn, cls) => {
     if (!en.length && !cn.length) return '';
-    const one = (list) => list.map(t => `<span class="achip ${cls}">${esc(t)}</span>`).join('');
+    const one = (list) => list.map(t =>
+      `<span class="achip ${cls}${trimmed(t)}">${esc(t)}</span>`).join('');
     return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
