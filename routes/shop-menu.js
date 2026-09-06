@@ -138,15 +138,31 @@ function bi(en, cn) {
 }
 
 // Reported on the rail: a Chinese category name carrying "&" ("鲜食 & 熟食")
-// wrapped at the rail's own narrow width with "&" stranded alone at the end
-// of the first line ("鲜食 &" / "熟食") — CJK text breaks between any two
-// characters, so the greedy line-breaker fills the first line right up to
-// that trailing "&" before wrapping. A non-breaking space AFTER "&" glues it
-// to the word that follows instead, so a label that must wrap breaks BEFORE
-// "&" ("鲜食" / "& 熟食") rather than orphaning it. The space before "&"
-// stays a normal one, so that is still where the break lands.
+// wrapped at the rail's own narrow width with "&" stranded alone on the
+// first line ("鲜食 &" / "熟食") — CJK text breaks between any two
+// characters, so the greedy line-breaker fills each line as full as it can.
+// A non-breaking space alone was not enough: gluing only "&" to the very
+// next character ("& 熟") still let the break land between THAT character
+// and the one after it ("食"), splitting the two-character word "熟食"
+// itself — reported again on the actual device even though it fixed the
+// specific case this was first tested against.
+//
+// So the whole tail from "&" to the end of the string is joined with
+// U+2060 WORD JOINER between every character — a zero-width, invisible
+// character whose only effect is to forbid a line break at that point
+// (unlike NBSP, it adds no width, so it is safe between two CJK characters
+// that never had a space there). The result is one unbreakable run from
+// "&" onward: it either fits entirely on the current line, or the WHOLE of
+// it — "& 熟食" together — moves to the next one. Only the space BEFORE
+// "&" (kept a normal space) is still a valid break point, so a label that
+// must wrap breaks there ("鲜食" / "& 熟食"), never inside the "& phrase".
 function noOrphanAmp(s) {
-  return String(s == null ? '' : s).replace(/&\s+/g, '& ');
+  const str = String(s == null ? '' : s);
+  const i = str.indexOf('&');
+  if (i < 0) return str;
+  const head = str.slice(0, i);
+  const tail = str.slice(i).replace(/\s+/g, '\u00a0').split('').join('\u2060');
+  return head + tail;
 }
 
 // Money in the tenant's own display currency. normalizeCurrency is retail.js's,

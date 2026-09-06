@@ -352,26 +352,53 @@ function boxOf(text) {
       await page.evaluate(() => window.scrollTo(0, 0));
     });
 
-    await check('a Chinese rail label does not strand "&" at the end of a line', async () => {
-      // Reported from a phone: SEED_TREE's Fresh & Deli node wrapped in the
-      // rail with "&" alone on the first line and 熟食 on the second —
-      // noOrphanAmp() glues "&" to the word after it with a non-breaking space
-      // so a wrap, if the label still needs one, lands BEFORE "&" instead.
+    await check('a Chinese rail label does not strand "&" or split the word after it', async () => {
+      // Reported from a phone, twice. First: SEED_TREE's Fresh & Deli node
+      // wrapped in the rail with "&" alone on the first line and 熟食 on the
+      // second. A first fix glued only "&" to the very next character with a
+      // non-breaking space — which passed a markup-only check here, shipped,
+      // and was reported AGAIN on the real device: the break had simply moved
+      // one character over, now splitting 熟食 itself (熟 / 食) instead of
+      // stranding "&" alone. A markup check cannot catch that; only measuring
+      // where each character actually lands can.
       //
-      // SCOPED TO THE RAIL, not the whole page: the same category name is
-      // also a .kick heading in the wide content pane, where the narrow-rail
-      // wrap this fix is for does not happen, and it is deliberately left as
-      // plain text there — the unscoped page HTML legitimately contains both
-      // forms. page.content() serialises the NBSP back out as the &nbsp;
-      // entity (confirmed against this exact page: 鲜食 &amp;&nbsp;熟食), so
-      // that is what the glued form is checked against, not a raw \u00a0.
-      const html = await page.content();
-      const rail = html.slice(html.indexOf('<nav class="rail"'), html.indexOf('</nav>'));
-      assert.ok(rail, 'the rail markup is missing');
-      assert.ok(rail.includes('鲜食 &amp;&nbsp;熟食'),
-        'the rail\'s Chinese label does not carry the non-breaking space after "&"');
-      assert.ok(!rail.includes('鲜食 &amp; 熟食'),
-        'the rail\'s Chinese label still has a plain breakable space after "&"');
+      // noOrphanAmp() now joins the ENTIRE tail from "&" onward with U+2060
+      // WORD JOINER, so the whole "& 熟食" phrase is one atomic run: this
+      // check asserts every character from "&" to the end of the label sits
+      // on the SAME line — the only thing that actually proves the phrase
+      // wraps as a unit rather than splitting somewhere inside it.
+      //
+      // SWITCHED TO CHINESE FOR THE MEASUREMENT, then back to English: the
+      // suite is in English mode here, where .l-cn is display:none and every
+      // Range.getClientRects() on it comes back empty — every top would be
+      // null, and null === null made the very first version of this check
+      // pass on an element it never actually saw.
+      await page.click('[data-lang="cn"]');
+      const info = await page.evaluate(() => {
+        const a = Array.from(document.querySelectorAll('.rail a[data-cat]'))
+          .find(x => x.textContent.includes('鲜食'));
+        if (!a) return null;
+        const cnSpan = a.querySelector('.l-cn');
+        const textNode = cnSpan.firstChild;
+        const tops = [];
+        for (let i = 0; i < textNode.length; i++) {
+          const r = document.createRange();
+          r.setStart(textNode, i);
+          r.setEnd(textNode, i + 1);
+          const rc = r.getClientRects()[0];
+          tops.push({ ch: textNode.textContent[i], top: rc ? Math.round(rc.top) : null });
+        }
+        return tops;
+      });
+      await page.click('[data-lang="en"]');
+      assert.ok(info, 'the Fresh & Deli rail label is not on screen');
+      const ampIdx = info.findIndex(c => c.ch === '&');
+      assert.ok(ampIdx >= 0, `no "&" found in the rail label: ${JSON.stringify(info)}`);
+      const tail = info.slice(ampIdx);
+      assert.ok(tail.every(c => c.top !== null), `a tail character was not on screen: ${JSON.stringify(info)}`);
+      const tailLine = tail[0].top;
+      assert.ok(tail.every(c => c.top === tailLine),
+        `"&" and the word after it do not share one line: ${JSON.stringify(info)}`);
     });
 
     // ─── The basket, driven ───────────────────────────────────────────────
