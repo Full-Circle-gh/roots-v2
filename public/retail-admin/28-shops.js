@@ -218,13 +218,48 @@
     const code = _shop
       ? `<div class="shp-code"><code>${esc(_shop.public_code)}</code></div>`   // unlabelled on purpose — see header
       : '';
+    // THE QR, AND THE ADDRESS IT ENCODES. Both, deliberately: a QR is opaque to
+    // a human, so an operator shown only the picture cannot tell a correct one
+    // from a wrong one, and the wrong one gets discovered after it is printed
+    // and stuck to a table. The address is shown in full beneath it.
+    // 二维码 / QR CODE and 二维码不可用 / QR unavailable are pairs already live
+    // in this admin; nothing here is composed (§30).
+    const qr = _shop && _shop.is_active
+      ? `<div class="shp-qr">
+           <div class="shp-qr-h">${esc(T('QR code', '二维码'))}</div>
+           <img class="shp-qr-img" alt="" src="/api/retail-admin/shops/${_shop.id}/qr.png?v=${encodeURIComponent(_shop.updated_at || '')}"
+                onerror="this.style.display='none'">
+           <div class="shp-qr-url" id="shp-qr-url"></div>
+         </div>`
+      : '';
     const state = _shop && !_shop.is_active ? `<span class="shp-pill off">${esc(T('Inactive', '已停用'))}</span>` : '';
+  // Ask what a scan will actually open, and say so under the picture. A tenant
+  // that has not told the platform where it serves customers gets the reason
+  // rather than a broken image and no explanation — the endpoint answers
+  // no_public_domain for exactly that case.
+  async function _shpLoadQrUrl() {
+    const el = () => document.getElementById('shp-qr-url');
+    if (!_shop || !_shop.is_active) return;
+    try {
+      const j = await api('/api/retail-admin/shops/' + _shop.id + '/qr');
+      const box = el(); if (!box) return;
+      const url = j && j.data && j.data.url;
+      if (url) { box.textContent = url; box.className = 'shp-qr-url'; }
+      else {
+        box.textContent = T('QR unavailable', '二维码不可用');
+        box.className = 'shp-qr-url off';
+        const img = document.querySelector('.shp-qr-img'); if (img) img.style.display = 'none';
+      }
+    } catch (e) { /* the header still renders; the address line simply stays empty */ }
+  }
+
+    _shpLoadQrUrl();
     return `<div class="shp-head">
       <div class="shp-head-l">
         <button type="button" class="shp-back" onclick="shopMenuBack()">${I.back}<span>${esc(T('Sales', '销售'))}</span></button>
         <h1 class="shp-title">${esc(T('Shop menu', '门店商品'))}${state}</h1>
         <div class="shp-sub">${locName()}</div>
-        ${code}
+        ${code}${qr}
       </div>
       <div class="shp-head-r">${cta}</div>
     </div>`;

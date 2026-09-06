@@ -14561,6 +14561,19 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 /* The public code — unlabelled by decision (no locked source for its label),
    mono so it reads as a code and not a word. */
 #tab-shop-menu .shp-code { margin-top: 8px; }
+/* The shop's QR and the address it encodes. Deliberately quiet — it sits under
+   the title beside the code, not as a card: it is a reference an operator
+   reads before printing, not an action. */
+#tab-shop-menu .shp-qr { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+#tab-shop-menu .shp-qr-h {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--td-text2);
+}
+#tab-shop-menu .shp-qr-img { width: 148px; height: 148px; image-rendering: pixelated; background: #fff; }
+#tab-shop-menu .shp-qr-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: var(--td-text2); word-break: break-all; max-width: 260px;
+}
+#tab-shop-menu .shp-qr-url.off { color: var(--td-brick); }
 #tab-shop-menu .shp-code code {
   font: 500 13px/1 var(--f-mono, ui-monospace, monospace); letter-spacing: .08em;
   color: var(--td-text2); background: var(--td-raised);

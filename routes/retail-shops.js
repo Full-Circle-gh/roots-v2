@@ -27,6 +27,9 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { newShopCode } = require('../lib/shop-code');
+const { menuUrlFor } = require('../lib/shop-qr');
+const { currentTenantId } = require('../lib/tenant-db');
+const qrpng = require('../lib/qrpng');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
 
@@ -320,6 +323,53 @@ router.delete('/api/retail-admin/shops/:id/listings/:lid', requireRetailAdmin, r
   if (!r.changes) return bad(res, 404, 'not_found');
   logActivity(req.user.id, req.user.username, 'delete', 'shop_listing', lid, { shop_id: id }, req.ip);
   ok(res, { removed: lid });
+});
+
+// ─── The shop's QR ──────────────────────────────────────────────────────
+
+// What a scan opens, and whether we can say. Read by the shop screen so it can
+// show the operator the actual address before anything is printed — a QR is
+// opaque to a human, and an operator who cannot read what it says cannot catch
+// it being wrong.
+router.get('/api/retail-admin/shops/:id/qr', requireRetailAdmin, (req, res) => {
+  const id = intParam(req.params.id);
+  const shop = id && getShop(id);
+  if (!shop) return bad(res, 404, 'not_found');
+  const url = menuUrlFor(currentTenantId(), shop.public_code);
+  // no_public_domain is a real answer, not an error: this tenant has not told
+  // the platform where it serves customers, so nobody can say what a scan
+  // should open. Named so the screen can explain it rather than print "failed".
+  if (!url) return ok(res, { url: null, reason: 'no_public_domain' });
+  ok(res, { url });
+});
+
+// The picture itself. PNG bytes, so the operator can save, print or drop it
+// into a poster without the browser re-encoding anything.
+//
+// NOT CACHED. A shop's code never changes, but the DOMAIN it is minted against
+// can — a tenant moves to its own domain and every QR minted before that points
+// somewhere it no longer controls. A stale cached image is a sticker printed
+// against yesterday's answer, so this is always recomputed.
+router.get('/api/retail-admin/shops/:id/qr.png', requireRetailAdmin, (req, res) => {
+  const id = intParam(req.params.id);
+  const shop = id && getShop(id);
+  if (!shop) return res.status(404).end();
+  const url = menuUrlFor(currentTenantId(), shop.public_code);
+  if (!url) return bad(res, 409, 'no_public_domain');
+  // Scale is the module width in pixels. 8 gives a ~300px image for the
+  // versions these URLs need — big enough to print at table-tent size without
+  // resampling, small enough to sit in the admin beside the code.
+  let png;
+  try { png = qrpng.qrPng(url, { scale: 8, quiet: 4 }); }
+  catch (e) {
+    // lib/qrpng carries versions 1-6, about 103 bytes. A customer domain long
+    // enough to overflow that is possible and must say so rather than 500.
+    console.error('[shop-qr]', shop.public_code, e.message);
+    return bad(res, 422, 'url_too_long_for_qr', { length: url.length });
+  }
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.send(png);
 });
 
 module.exports = router;
