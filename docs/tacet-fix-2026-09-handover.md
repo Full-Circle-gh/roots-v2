@@ -415,10 +415,23 @@ What that leaves:
 - Nothing further was merged to `main` after that, deliberately: with no
   runners, a merge only adds an undeployed commit and a red run.
 
-**To finish it:** once Actions has runners again, re-run the deploy for
-`d230ec0` (run `33975938690`) and the Tests run (`33975938744`). Both should go
-green with no code change — the tree is the tree that was already green on
-`d347a59`. If the cause was a spending limit, raising it is the whole fix.
+**Still true nine and a half hours later.** A fresh dispatch at 01:15 UTC on
+6 September (run `34003395569`, on the branch) came back with the same
+signature: both jobs failed in three seconds, `runner_name` empty, zero steps.
+Somebody else's push (`6078ad1`, PR #281) failed the same way at 16:03, so it is
+the repository's Actions rather than anything either of us wrote. Two re-runs
+and one clean dispatch is enough: this is a standing account condition, not an
+incident that will clear itself.
+
+**Where that leaves production.** `main` is at `6078ad1` and carries every code
+change from this pass. The SERVER is still on `60e7c67` and is two commits
+behind it — `d230ec0` (the JD sender name) and `6078ad1` (the CLAUDE.md PR).
+Both are green; neither has had a runner to ship it.
+
+**To finish it:** get Actions runners back — if the cause is a spending limit,
+raising it is the whole fix — then re-run the deploy for `main`'s head. It ships
+the changed files since the last successful deploy, so one run catches
+production up on both commits. Nothing in the tree needs to change first.
 
 ---
 
