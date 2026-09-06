@@ -131,10 +131,17 @@ run('mobile nav', [
   // itself again, so it names the screen it is for.
   // Only the operator whose row LEAVES this app, of course: an add-only role
   // keeps its counting screen in here (stockAppInApp) and never sees /stock.
-  ['the Add stock row leaves for the shelf itself, not the launcher',
+  /* THE STOCK ROW NO LONGER LEAVES AT ALL (§48). It used to carry a deep link
+     into /stock for anyone holding the recount, because that is where the
+     recount lived. That app is being retired and the recount is a mode of the
+     screen this app carries, so the row is a push for everybody who holds
+     either capability. */
+  ['the stock row is a push for a recounter, not a departure',
     "state.caps=['quickstock:recount','restock:fulfil'];landOnSomethingReachable();render();", [
-      ['it carries the deep link',
-       "moreRowsFlat().some(function(r){return r.key==='stockapp' && r.href==='/stock?go=add'})"],
+      ['no deep link out',
+       "!moreRowsFlat().find(function(r){return r.key==='stockapp'}).href"],
+      ['it opens the in-app screen',
+       "moreRowsFlat().find(function(r){return r.key==='stockapp'}).cmd.indexOf('stockadd')>-1"],
     ]],
 
   /* ── Transfers, the row that still wants the launcher ─────────────────────
