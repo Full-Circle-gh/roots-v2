@@ -12679,7 +12679,15 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
     delivery_status: job.delivery_status,
     carrier: job.carrier_name || null,
     waybill_id: job.waybill_id || null,
-    rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+    // A rider with a number but no name still has to be reachable. The mini-app
+    // "Call rider" button, the web storefront's call link and the admin drawer's
+    // tel: link all hang off this object, so gating it on the NAME meant a job
+    // Qingyun returned nameless showed a live map and no way to phone the person
+    // on it. The name is the optional half; either field alone builds the object.
+    // The order-row twin below (o.courier) shapes this identically — keep them so.
+    rider: (job.rider_name || job.rider_phone)
+      ? { name: job.rider_name || null, phone: job.rider_phone || null }
+      : null,
     // Prefer the live column; fall back to the last-known rider point in raw_track.
     // Track-less reconcile polls can null the column while raw_track keeps the last
     // real fix, so without this the map loses the rider between pings.
@@ -25011,7 +25019,11 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
       o.courier = {
         stage,                                            // scheduled | awaiting_dispatch | in_transit | delivered
         carrier: job.carrier_name || null,
-        rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+        // Same shape, same reason as buildDeliveryTrackData's rider above: a
+        // nameless rider still carries a number the customer can call.
+        rider: (job.rider_name || job.rider_phone)
+          ? { name: job.rider_name || null, phone: job.rider_phone || null }
+          : null,
         // No ETA/distance before a rider is on it — suppress for the pre-dispatch
         // preview so we never show a bogus "~N min".
         eta_seconds:     stage === 'scheduled' ? null : (job.eta_seconds ?? null),

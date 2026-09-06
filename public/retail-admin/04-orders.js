@@ -4184,9 +4184,15 @@ function orderStatusPill(o) {
 // `stale` = an "on the way" order whose row has frozen (likely a rider cancel /
 // drop); we warn instead of trusting the last-seen rider position.
 function renderCourierStatusCard(o, c, meta, stale, delivered) {
-  const rider = c.rider
+  // Name and number are independent — Qingyun can hand back either alone. Built
+  // as parts so a nameless rider shows the number without a leading separator,
+  // and a named rider with no number still shows who is carrying the order.
+  const riderBits = [];
+  if (c.rider && c.rider.name) riderBits.push(`<b>${escapeHtml(c.rider.name)}</b>`);
+  if (c.rider && c.rider.phone) riderBits.push(`<a href="tel:${escapeAttr(c.rider.phone)}" style="color:var(--brand);">${escapeHtml(c.rider.phone)}</a>`);
+  const rider = riderBits.length
     ? `<div style="font-size:12px; margin-top:5px;" data-no-i18n>
-         <b>${escapeHtml(c.rider.name)}</b>${c.rider.phone ? ` · <a href="tel:${escapeAttr(c.rider.phone)}" style="color:var(--brand);">${escapeHtml(c.rider.phone)}</a>` : ''}
+         ${riderBits.join(' · ')}
        </div>`
     : '';
   // ETA + distance — only meaningful while a rider is actually moving, and never
