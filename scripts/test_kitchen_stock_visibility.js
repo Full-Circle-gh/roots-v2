@@ -81,6 +81,34 @@ if (!grant.addOnlyOperator(legacyKitchen)) {
 if (grant.mayRecount(Object.assign({}, KITCHEN_OP, { caps: null }))) {
   fail(P, 'a missing cap set was read as a grant');
 }
+/* WHO MAY RECORD A BATCH (§59). The mode cannot answer this and never could:
+   the owner below is in RECOUNT mode and can post to /api/retail-admin/production
+   all day, which is exactly how the kitchen queue's handover came to be shut for
+   every operator on /stock except one role. */
+const owner2 = { backendUser: { role: 'owner' }, user: { role: 'owner' },
+  caps: caps('quickstock:recount', 'production:log') };
+const fulfilOnly = Object.assign({}, KITCHEN_OP, { caps: caps('quickstock:add', 'restock:fulfil') });
+if (!grant.mayLogProduction(owner2)) {
+  fail(P, 'a recount-mode operator holding production:log was refused the record screen');
+}
+if (grant.quickStockMode(owner2) !== 'recount') fail(P, 'the owner stopped being the recount case');
+if (!grant.mayLogProduction(Object.assign({}, KITCHEN_OP, { caps: caps('production:log') }))) {
+  fail(P, 'a kitchen operator holding the capability was refused');
+}
+if (grant.mayLogProduction(fulfilOnly)) {
+  fail(P, 'an operator without production:log was offered a screen whose Record 403s');
+}
+// No backendUser requirement, unlike mayRecount: this realm can genuinely post
+// to the endpoint, and refusing it would shut the screen to the very operator
+// the flow exists for.
+if (!grant.mayLogProduction({ user: { role: 'kitchen' }, caps: caps('production:log') })) {
+  fail(P, 'a store-pinned kitchen staffer was refused a write the endpoint accepts');
+}
+// Fails OPEN, as Tacet Mobile's mCan() does, and for the reason it gives.
+if (!grant.mayLogProduction(Object.assign({}, KITCHEN_OP, { caps: null }))) {
+  fail(P, 'a resolution hiccup locked an operator out of their own screen');
+}
+
 if (grant.RECOUNT_MISCOUNT !== 'miscount') fail(P, 'the fork answer changed name without the client');
 
 // ── What went on the shelf today, and who put it there ────────────────────
