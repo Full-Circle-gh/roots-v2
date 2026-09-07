@@ -114,10 +114,24 @@ const DOCS = [
     // entries use v1.0/v2.x/v3.x forms and are matched too; they are real
     // entries and their uniqueness is worth holding.
     entry:    /^\d{4}-\d{2}-\d{2} · v(?<version>\d+\.\d+) —/gm,
-    // `## 14. Channels` and `## 0.1 Domains and app structure`. The optional dot
-    // is what lets one pattern read both `## 0. Governing rules` (number, dot,
-    // space) and `## 0.1 Domains` (number, space).
-    sections: /^## (\d+(?:\.\d+)?)\.? /gm,
+    // BOTH LIVE HEADING FORMS, and accepting only one was a real defect caught
+    // on 2026-09-07 before this shipped:
+    //
+    //   `## 14. Channels`      · `## 0.1 Domains and app structure`
+    //   `## §58 — A FRESH LINE ON AN ORDER THAT IS NOT GOING OUT TODAY...`
+    //
+    // The second form is what the most recent sections use. A pattern matching
+    // only the first reported "the highest section is §57" while §58, §59 and
+    // §60 sat in the file unread — a GREEN result with a blind spot exactly
+    // where new sections land, which is the one place this check has to see.
+    //
+    // The `no sections matched` guard below does not catch that: it fires at
+    // zero, and this was a PARTIAL match. So the pattern reads the file as it
+    // actually is rather than as one convention says it should be. The optional
+    // `§`, and the alternation of `.` `—` or nothing, are what span both:
+    // `## 0. Governing rules` (dot), `## 0.1 Domains` (bare space), and
+    // `## §58 — TITLE` (section sign, em dash).
+    sections: /^## §?(\d+(?:\.\d+)?)(?:\.|\s+—)?\s/gm,
   },
   {
     file: 'docs/tacet-delivery-vocabulary.md',
@@ -219,7 +233,7 @@ function checkDoc(doc) {
   // ── 3 & 4 · section numbers ───────────────────────────────────────────────
   if (doc.sections === null) {
     // Not a skip: assert the premise, or the config goes stale in silence.
-    const anyNumbered = [...src.matchAll(/^## (\d+(?:\.\d+)?)\.? /gm)];
+    const anyNumbered = [...src.matchAll(/^## §?(\d+(?:\.\d+)?)(?:\.|\s+—)?\s/gm)];
     if (anyNumbered.length) {
       fail(doc.file, `configured as having no numbered sections, but ${anyNumbered.length} were found`,
            `first: "## ${anyNumbered[0][1]}" — give this file a sections pattern in DOCS `
