@@ -226,6 +226,12 @@ check('one request, opened', () => {
 check('and moving it along — sent → received → prepared', () => {
   assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/status'), true);
 });
+// The kitchen queue split (decisions §61): one line at a time, not the whole
+// order. Left off this list the queue's own per-item button would 403 before
+// the route ever ran — the exact failure this file's whole history is about.
+check('and moving ONE ITEM along on its own — the queue split (§61)', () => {
+  assert.strictEqual(stockAppOnlyAllows('PUT', '/api/restock/91/item/4/status'), true);
+});
 
 // METHOD IS THE WHOLE DISTINCTION on the first of those URLs. Admitting the path
 // would hand a confined role the create route, and cap-routes only refuses that
