@@ -27745,14 +27745,29 @@ function autoPrintOrder(orderId) {
     // settles it — and the second slip is indistinguishable from a second
     // order to whoever picks it up.
     //
-    // DELIBERATELY NARROW. It keys on source='qr' AND a print that actually
-    // SUCCEEDED, so: nothing that exists today changes behaviour (no other path
-    // can set print_status='printed' before paid), a QR order whose submit
-    // print FAILED still gets its chance here rather than losing the ticket
-    // altogether, and an operator's manual reprint of an unpaid non-QR order
-    // does not silently suppress that order's real slip.
-    const prior = db.prepare('SELECT source, print_status FROM retail_orders WHERE id = ?').get(orderId);
-    if (prior && prior.source === 'qr' && prior.print_status === 'printed') {
+    // DELIBERATELY NARROW. It keys on the order having come through the QR door
+    // AND a print that actually SUCCEEDED, so: nothing that exists today changes
+    // behaviour (no other path can set print_status='printed' before paid), a QR
+    // order whose submit print FAILED still gets its chance here rather than
+    // losing the ticket altogether, and an operator's manual reprint of an
+    // unpaid non-QR order does not silently suppress that order's real slip.
+    //
+    // IT READS shop_entry_method, NOT source, as of §44's 2026-09-07 amendment.
+    // It read `source='qr'` until then — one of TWO readers of the value
+    // routes/shop-menu.js should never have written, the other being that
+    // file's own WeChat payment page, which 404s an order whose door is not the
+    // QR menu. Both had to move with the writer: moving the writer alone would
+    // reprint every QR order's kitchen ticket at the counter AND 404 every
+    // payment page. `shop_entry_method='qr'` is the same fact stated in the
+    // column that owns it, and the QR handler has always written it.
+    //
+    // The amendment's own text says "the only reader anywhere". That was wrong
+    // when it was written — the payment-page reader was already in the tree —
+    // and §44 is corrected in the same commit rather than left saying it.
+    const prior = db.prepare(
+      'SELECT shop_entry_method, print_status FROM retail_orders WHERE id = ?'
+    ).get(orderId);
+    if (prior && prior.shop_entry_method === 'qr' && prior.print_status === 'printed') {
       console.log('[feie print]', orderId, 'skipped — QR ticket already printed on submit');
       return;
     }

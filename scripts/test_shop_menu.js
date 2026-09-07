@@ -649,8 +649,17 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual(d.total, 56);
       const row = db.prepare('SELECT channel, source, fulfillment_type, shop_entry_method, store_id, customer_id FROM retail_orders WHERE order_no = ?').get(d.order_no);
       assert.strictEqual(row.channel, 'shop');
-      assert.strictEqual(row.source, 'qr');
+      // `source` is NULL, and that is the assertion rather than an omission.
+      // It records how a row was CREATED — keyed by staff, or arrived by itself
+      // (§44, amended 2026-09-07). A QR order arrived by itself, like the
+      // mini-app checkout, the web store and every mirrored channel, all of
+      // which leave this NULL. It held 'qr' until that amendment, which is the
+      // defect the amendment recorded: a door written into the column that
+      // answers a different question.
+      assert.strictEqual(row.source, null,
+        'a QR order claimed a `source` — that column says who created the row, not which door');
       assert.strictEqual(row.fulfillment_type, 'counter', 'not counter → the twenty-minute clock and §45 both miss it');
+      // The door lives here, and always has.
       assert.strictEqual(row.shop_entry_method, 'qr');
       assert.strictEqual(row.customer_id, null, 'a QR order has no account, by §44');
       db.prepare('DELETE FROM retail_stock_reservations WHERE order_id IN (SELECT id FROM retail_orders WHERE order_no = ?)').run(d.order_no);
@@ -861,8 +870,13 @@ const soldOut = (row) => /class="sold"/.test(row);
       assert.strictEqual(r.status, 201);
       await settle();
       const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?').get(r.json.data.order_no).id;
-      // Same row, same successful print — only the source differs.
-      db.prepare("UPDATE retail_orders SET source = 'manual' WHERE id = ?").run(oid);
+      // Same row, same successful print — only the DOOR differs. This flipped
+      // `source` to 'manual' until §44's 2026-09-07 amendment moved the guard
+      // onto shop_entry_method; flipping source now would leave the row still
+      // reading as a QR order and this test would assert nothing. 'till' rather
+      // than NULL because it is the real other door — the guard has to tell the
+      // two apart, not merely notice an absence.
+      db.prepare("UPDATE retail_orders SET shop_entry_method = 'till' WHERE id = ?").run(oid);
       slips.length = 0;
       retail.autoPrintOrder(oid);
       await settle();
@@ -1145,7 +1159,8 @@ const soldOut = (row) => /class="sold"/.test(row);
       await checkAsync('THE PAID PATH THEN PRINTS IT — once, and without a guard change', async () => {
         paySlips.length = 0;
         // The real function the async notify reaches through markOrderPaid. Its
-        // skip guard is source='qr' AND print_status='printed'; this order never
+        // skip guard is shop_entry_method='qr' AND print_status='printed' (it
+        // read source='qr' until §44's 2026-09-07 amendment); this order never
         // printed, so the guard must not fire.
         retail.autoPrintOrder(wxOrder.id);
         await settle();
