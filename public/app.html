@@ -25066,7 +25066,12 @@ function _finRedrawInvoiceLists() {
             ${filtered.groups.map(g => {
               const expanded = !!_finInvSearch || _finInvExpanded.has(g.supplier);
               const hasAwaiting = (g.awaiting + g.partially_invoiced) > 0;
-              const sKey = esc(g.supplier).replace(/'/g,"\\'");
+              // JS-escape (backslash, then quote) BEFORE html-escaping — see the
+              // matching fix in retail-admin/16-purchasing.js. esc() first turns a
+              // literal ' into &#39;, leaving nothing for a later quote-escape to
+              // find; the browser then decodes &#39; straight back to a bare ' inside
+              // the onclick string, which broke any supplier name with an apostrophe.
+              const sKey = esc(g.supplier.replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
               return `
                 <tr style="cursor:pointer" onclick="_finToggleInvSupplier('${sKey}')">
                   <td style="text-align:center;color:var(--muted)" data-arrow-key="${esc(g.supplier)}">${expanded?'▼':'▶'}</td>

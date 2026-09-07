@@ -2691,7 +2691,13 @@
         // A search result opens every group — the operator asked to see inside.
         const open = !!_invSearch || _invExpanded.has(g.supplier);
         const chase = (g.awaiting || 0) + (g.partially_invoiced || 0);
-        const key = esc(g.supplier).replace(/'/g, "\\'");
+        // JS-escape (backslash, then quote) BEFORE html-escaping, not after: esc()
+        // already turns a literal ' into &#39;, so escaping quotes post-esc() found
+        // none left to touch. The browser then decoded &#39; straight back into a
+        // bare ' inside the onclick string, breaking it out of the JS literal — any
+        // supplier name carrying an apostrophe (an English store name, a name typed
+        // with a curly quote) threw a syntax error on click and the row never opened.
+        const key = esc(g.supplier.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
         return `
           <tr class="grow" onclick="puInvToggleGroup('${key}')">
             <td class="arrowcol">${open ? I.chevDown : I.chevRight}</td>
