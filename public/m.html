@@ -677,7 +677,9 @@ const state = {
   kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
       note:''},   // why a closed request did not reach the record screen
   hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
-      awaiting:null},   // the request whose lines are waiting on the shelf to load
+      awaiting:null,        // the request whose lines are waiting on the shelf to load
+      awaitingItemId:null,  // set alongside `awaiting` when only ONE of its lines is owed (§61)
+      closesRequest:false}, // whether recording this closes the whole request (§61) — set at hdOpen time
   bat:{qty:{},q:''},
   /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
      walking, which the old screen never had to ask because it ran pinned to
@@ -6596,15 +6598,18 @@ function kqAdvance(to){
     render();
   });
 }
-/* THE KITCHEN QUEUE SPLIT (decisions §61). One line, not the whole order —
-   the request that shipped this was Ash's own: "they can split what they
-   start making, what was made. its all one batch." Each item advances on its
-   own tap; the order's own status is a rollup the server brings forward once
-   every line has caught up, which is what still fires the print/push/dispatch
-   that used to hang off the single button, and the What-you-made handover
-   (§59) the moment the LAST line reaches 'prepared'. The order is re-fetched
-   rather than guessed locally, because whether that rollup just happened is
-   the one thing the client cannot know on its own. */
+/* THE KITCHEN QUEUE SPLIT (decisions §61, corrected same day by Ash: "the
+   what you made (stock update) come up only after all products in the list
+   marked as made. it should show up after every product marked as made,
+   after stock updated it goes back to the products list that not made
+   yet"). One line, not the whole order, on BOTH axes now — not only does
+   each item advance on its own tap, the What-you-made handover (§59) opens
+   for THAT ITEM the moment IT reaches 'prepared', not once every line has.
+   The order's own status stays the rollup the server brings forward once
+   every line has caught up — that is still what fires the print/push/
+   dispatch that used to hang off the single button — but the shelf-recording
+   handover no longer waits on it. The order is re-fetched rather than
+   guessed locally so the item list `back` returns to is never stale. */
 function kqItemAdvance(itemId,to){
   const k=state.kq;
   if(k.busy||!k.order) return;
@@ -6612,14 +6617,21 @@ function kqItemAdvance(itemId,to){
   const orderId=k.order.id;
   apiWrite('/api/restock/'+orderId+'/item/'+itemId+'/status',{status:String(to)},'PUT').then(()=>api('/api/restock/'+orderId)).then(j=>{
     k.busy=false;
-    const wasPrepared=k.order&&k.order.status==='prepared';
     const updated=(j&&j.data)||j;
-    if(!wasPrepared&&updated.status==='prepared'){
+    // k.order/k.orderId are left set (not cleared) so that "Back to the
+    // queue" out of the What-you-made screen returns to THIS order's item
+    // list — showing the item just recorded with its checkmark and whatever
+    // is still not made — rather than the top-level queue.
+    k.order=updated;
+    if(String(to)==='prepared'){
+      const item=(updated.items||[]).find(it=>it.id===itemId);
+      const why=item?hdStart(updated,item):true;
+      if(why===true) return;          // whatmade opened; push() already rendered
+      // Declined (no capability, no store, …) — never silent on a refusal
+      // that lands right after the operator changed state (§59), so this
+      // ONE case still drops back to the list with a note explaining why.
       k.order=null; k.orderId=null; loadKq(true);
-      const why=hdStart(updated);
-      if(why!==true) k.note=kqNote(why);
-    } else {
-      k.order=updated;
+      k.note=kqNote(why);
     }
     render();
   }).catch(e=>{
@@ -6706,17 +6718,30 @@ function hdResolve(order){
    shelf is still short, and a silent fall-back to an empty list tells them the
    opposite of what happened. `true` when the screen opened, otherwise a reason
    kqAdvance turns into a sentence. There is no path left that says nothing. */
-function hdStart(order){
+/* `item`, when passed, hands over ONE line rather than the whole order (the
+   kitchen queue split correction, decisions §61): every guard below reads
+   the same either way, and only what gets resolved into `state.hd.lines`
+   differs. Omitted, this is the whole-order hand-over §59 was written for. */
+function hdStart(order,item){
   if(!canRoute('whatmade')) return 'nocap';
   // Nothing was asked for, so there is nothing to hand over. The only refusal
   // left that is about the REQUEST rather than about this app's own readiness.
-  if(!(order.items||[]).some(li=>xfrNum(li.qty_requested)>0)) return 'nolines';
+  const hasQty=item?xfrNum(item.qty_requested)>0:(order.items||[]).some(li=>xfrNum(li.qty_requested)>0);
+  if(!hasQty) return 'nolines';
   /* A STORE IS THE ONE THING THE RECORD SCREEN CANNOT DO WITHOUT — hdCommit
      sends store_id — so this is still a refusal, but only once the context has
      ANSWERED and said there is no store. Refusing while it is merely in flight
      is what the two guards below stopped doing. */
   if(state.qs.ctx&&state.qs.storeId==null) return 'nostore';
   const rs=order.rs_number||('#'+order.id);
+  /* WHETHER RECORDING THIS CLOSES THE WHOLE REQUEST. Known up front, before
+     the shelf has even loaded — it does not depend on `hdResolve`. A
+     whole-order hand-over (`item` omitted) is only ever reached once the
+     order itself has just gone `prepared`, so it always closes the request;
+     a per-item hand-over (§61) closes it only when THIS line was the last
+     one, which `order.status` already says — it is re-fetched after the
+     item PUT, so it already carries the rollup's answer. */
+  const closesRequest=item?order.status==='prepared':true;
   /* THE SHELF MAY SIMPLY NOT HAVE ARRIVED YET, AND THAT IS NOT A REASON TO
      REFUSE. `state.qs.items` starts null and is filled two chained round trips
      after this route first renders — loadQsCtx, then loadQsItems on its answer.
@@ -6739,19 +6764,22 @@ function hdStart(order){
      than the problem it was avoiding: a request whose lines this store cannot
      take is exactly what somebody needs to be told. */
   if(!Array.isArray(state.qs.items)){
-    state.hd.awaiting=order;
+    state.hd.awaiting=order; state.hd.awaitingItemId=item?item.id:null;
     loadQsCtx();
     if(state.qs.storeId!=null) loadQsItems();
-    return hdOpen(null, rs, order.id);
+    return hdOpen(null, rs, order.id, closesRequest);
   }
-  state.hd.awaiting=null;
-  return hdOpen(hdResolve(order), rs, order.id);
+  state.hd.awaiting=null; state.hd.awaitingItemId=null;
+  return hdOpen(item?hdResolveItem(item):hdResolve(order), rs, order.id, closesRequest);
 }
+// One line, wrapped as the single-item order hdResolve already knows how to
+// read — same matching, same shape, no logic duplicated.
+function hdResolveItem(item){ return hdResolve({items:[item]}); }
 /* THE PREFILL IS A PROPOSAL, NOT A DEFAULT. §39's no-prefill rule is about not
    putting words in somebody's mouth — a purpose picked for them is a reason
    they did not give. A quantity here is not that: it is what was ASKED for,
    quoted back, and the operator says whether it is also what was made. */
-function hdOpen(lines,rs,rsId){
+function hdOpen(lines,rs,rsId,closesRequest){
   /* push() DECLINES A ROUTE THIS OPERATOR CANNOT REACH, AND SAYS NOTHING, so
      answering "opened" without asking sends kqAdvance home believing it handed
      over: the request closes, the screen does not change, and the early return
@@ -6760,6 +6788,10 @@ function hdOpen(lines,rs,rsId){
   if(!canRoute('whatmade')) return 'nocap';
   const h=state.hd;
   h.lines=lines||null; h.rs=rs||null; h.rsId=rsId||null;
+  // Whether recording this closes the request (§61) — explicit per call, not
+  // a global left over from whichever hand-over opened last. Log a batch
+  // (batContinue) omits it and carries no `rs` anyway, so it is never read.
+  h.closesRequest=!!closesRequest;
   h.busy=false; h.err=''; h.done=null; h.openReason=-1;
   loadHdReasons();
   push('whatmade');
@@ -6844,7 +6876,10 @@ function hdCommit(){
         h.err=T('Some lines were not recorded. Nothing was counted twice — press Record again for the ones still marked.',
                 '部分商品未登记。已登记的不会重复计入 — 请对仍标记错误的商品再按一次「登记」。');
       }else{
-        h.done={added:added,units:units,short:short};
+        // "The request is closed." is only true when EVERY line on it has
+        // been made (§61's per-item hand-over can fire mid-request) — read
+        // off h.closesRequest, decided at hdOpen time, not re-derived here.
+        h.done={added:added,units:units,short:short,closed:!!h.closesRequest};
         loadKq(true);
       }
       render();
@@ -7255,7 +7290,15 @@ function loadQsItems(force){
     // A record screen opened before the shelf existed is waiting on exactly
     // this. Resolve it here rather than making the operator go back and start
     // the request again — it is already closed, and there is no way back to it.
-    if(state.hd.awaiting){ state.hd.lines=hdResolve(state.hd.awaiting); state.hd.awaiting=null; }
+    // awaitingItemId, when set, means only ONE line of that request is owed
+    // (the per-item hand-over, §61) — the rest of the order is untouched.
+    if(state.hd.awaiting){
+      const awaitingItem=state.hd.awaitingItemId!=null
+        ? (state.hd.awaiting.items||[]).find(it=>it.id===state.hd.awaitingItemId)
+        : null;
+      state.hd.lines=awaitingItem?hdResolveItem(awaitingItem):hdResolve(state.hd.awaiting);
+      state.hd.awaiting=null; state.hd.awaitingItemId=null;
+    }
     render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
@@ -8156,7 +8199,11 @@ function screenWhatMade(){
       <div style="font-size:13px;color:var(--text-secondary);margin-top:6px">${h.rs?escAttr(h.rs):T('Made without a request','无申请的制作')}</div>
       <div style="font-size:17px;font-weight:500;margin-top:14px">${T(h.done.units+' units on the shelf','已入库 '+h.done.units+' 件')}</div>
       <div style="font-size:14px;color:var(--text-secondary);margin-top:6px;line-height:1.55">${
-        h.rs?T('Across '+h.done.added+' products. The request is closed.','共 '+h.done.added+' 种商品。该申请已关闭。')
+        // "The request is closed." only when it actually is (§61: one item
+        // recorded is not the whole request) — otherwise the same neutral
+        // line an unrequested batch already uses, reused rather than a new
+        // string composed for "some of it is still to make".
+        (h.rs&&h.done.closed)?T('Across '+h.done.added+' products. The request is closed.','共 '+h.done.added+' 种商品。该申请已关闭。')
             :T('Across '+h.done.added+' products.','共 '+h.done.added+' 种商品。')}</div>
       ${h.done.short?`<div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
         T(h.done.short+' made but did not reach the shelf — recorded against this batch.',

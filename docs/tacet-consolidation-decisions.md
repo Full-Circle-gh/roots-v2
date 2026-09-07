@@ -6403,3 +6403,58 @@ reachable.js`'s history is entirely about.
   function, its own DOM-patching discipline (§60) — and is left for its own
   change rather than folded in unread, the way §59's first round found out
   costs a second bug report.
+
+### AMENDED 2026-09-07, same day, by Ash: the What-you-made hand-over splits too
+
+Reported minutes after the ruling above deployed: *"the current problem is
+that the what you made ( stock update ) come up only after all products in
+the list market as maid. it shouls should up after every product marked as
+made, after stock updated it goes back to the products list that not made
+yet."*
+
+**What was wrong.** The ruling above only split which STATUS door each line
+goes through. `kqItemAdvance` still called `hdStart` — the §59 hand-over to
+the shelf-quantity screen — only once the ORDER rolled to `prepared`, i.e.
+once every line had caught up. Four items meant three of them opened no
+hand-over at all; the fourth (whichever happened to be last) opened one
+carrying all four. That is the same all-or-nothing shape §61 was written to
+remove, just moved one screen downstream.
+
+**The ruling.** The hand-over now fires per LINE, independently of the order
+rollup: the moment any one item is marked `prepared`, `hdStart(order, item)`
+opens the shelf-recording screen for THAT item alone, and pressing *Back to
+the queue* returns to the same order's item list — showing the one just
+recorded (checked) beside whatever is still not made — rather than exiting
+to the top-level queue. The order-level rollup is untouched: dispatch,
+push, print and `restock_orders.status` itself still advance only once
+every line has reached the same point, exactly as the ruling above states.
+Only the shelf-recording screen's trigger moved from the order to the line.
+
+**Mechanics.**
+- `hdStart(order, item)` takes an optional `item`: every existing guard
+  (`nocap`, `nolines`, `nostore`, the shelf-not-loaded wait) reads identically
+  either way: `state.hd.awaitingItemId` carries which single line is owed if
+  the shelf has not loaded yet, alongside the existing `state.hd.awaiting`.
+  Omitted, `hdStart` is exactly the whole-order hand-over §59 built.
+- `hdResolveItem(item)` is `hdResolve({items:[item]})` — one line, wrapped
+  rather than a second matching implementation.
+- A refusal (no capability, no store, nothing asked) still drops back to the
+  top-level queue with a note, per §59's "never silent on a refusal that
+  lands right after the operator changed state" — that one case is
+  unchanged, because a note only makes sense on a screen the operator can
+  read without more taps.
+- **"The request is closed." no longer follows automatically from `h.rs`
+  being set.** That sentence was written for the whole-order hand-over,
+  where it was always true; recording one line out of four is not closing
+  the request. `hdOpen` now takes a fourth argument, `closesRequest`, and
+  stores it as `state.hd.closesRequest` — decided by `hdStart` at the moment
+  it opens (`item ? order.status==='prepared' : true`, since `order.status`
+  is already the post-rollup value the item PUT was re-fetched for), not
+  re-derived later from `state.kq.order`, which the whole-order path clears
+  before opening the hand-over and would have made this false even when the
+  whole order genuinely had just closed. `h.done.closed` is a plain copy of
+  that flag taken when the batch finishes recording. The sentence shown when
+  it is false is the SAME neutral line an unrequested batch already used
+  (`Across N products.`) — no new string, a fallback that already existed
+  for a different reason.
+- No schema change, no migration, no new capability, no new strings.
