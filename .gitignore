@@ -38,7 +38,19 @@ data/alert-latch/
 *.swp
 .idea/
 .vscode/
-.claude/
+# .claude/ holds two different things and they do not belong on the same side
+# of this line. Personal session state (history, local overrides) is cruft like
+# the entries above it. `.claude/settings.json` is TEAM config — the permission
+# allowlist every session in this repo reads — and a gitignored copy helps only
+# the one machine that wrote it, because every session clones the repo fresh.
+#
+# The glob is `.claude/*` and not `.claude/`: git cannot re-include a file whose
+# PARENT DIRECTORY is excluded, so the negation below would silently do nothing
+# against `.claude/`. Changed 2026-09-07 with settings.json, and called out in
+# that commit rather than slipped in — this file's own history is why that rule
+# exists.
+.claude/*
+!.claude/settings.json
 AGENTS.md
 .cursor/
 .aider*
