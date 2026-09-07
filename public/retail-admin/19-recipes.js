@@ -172,6 +172,12 @@
   let _type = '';          // '' = all | 'made' | 'repacked' — client-side, opens on all
   let _archived = false;
   let _searchTimer = null;
+  // The list shell — heading, filter bar, search box — is painted once and then
+  // left alone; see paintList(). Same fix, same reasons, as 18-materials.js.
+  let _shell = false;
+  // Every load takes a ticket, so a slow answer for "sou" cannot repaint over
+  // the answer for "sourdough".
+  let _loadSeq = 0;
 
   let _rec = null;        // the open record: server row + cost + backsMaterial + materialBlock
   let _lines = [];         // editable draft ingredient lines
@@ -207,7 +213,8 @@
   window.rcpInit = async function () {
     if (_init) { load(); return; }
     _init = true;
-    if (typeof onLangChange === 'function') onLangChange(() => { paintList(); if (_recOpen) paintRecord(); });
+    // A language change rebuilds the shell — every label in it is bilingual.
+    if (typeof onLangChange === 'function') onLangChange(() => { _shell = false; paintList(); if (_recOpen) paintRecord(); });
     try {
       const c = await api('/api/retail-admin/recipes/meta/categories').catch(() => ({ data: [] }));
       _cats = c.data || [];
@@ -217,20 +224,32 @@
 
   async function load() {
     const r = listRoot();
-    if (r && !_rows.length) r.innerHTML = `<div class="rcp-loading">${esc(T('Loading…', '加载中…'))}</div>`;
+    const seq = ++_loadSeq;
+    // ONLY BEFORE THERE IS A SHELL. This replaces the whole root, search box
+    // included; the condition used to be `!_rows.length`, so once a search
+    // matched nothing every following keystroke tore down the field being typed
+    // into and painted "Loading…" over it.
+    if (r && !_shell) r.innerHTML = `<div class="rcp-loading">${esc(T('Loading…', '加载中…'))}</div>`;
     const qs = new URLSearchParams();
     if (_q) qs.set('search', _q);
     if (_cat) qs.set('category', _cat);
     if (_archived) qs.set('archived', '1');
     try {
       const j = await api('/api/retail-admin/recipes?' + qs.toString());
+      if (seq !== _loadSeq) return;   // a later keystroke already asked; this answer is stale
       _rows = j.data || [];
       // Row ceiling (audit J-01) — say so when it bites, clear it when it does
       // not, which is every load on every tenant today.
       if (typeof tdShowTruncation === 'function') tdShowTruncation(r, j, 'recipes', '个食谱');
     } catch (e) {
+      if (seq !== _loadSeq) return;
       _rows = [];
-      if (r) r.innerHTML = `<div class="rcp-emptyline">${esc(T('Could not load recipes', '无法加载食谱'))} — ${esc(e.message || '')}</div>`;
+      const line = `<div class="rcp-emptyline">${esc(T('Could not load recipes', '无法加载食谱'))} — ${esc(e.message || '')}</div>`;
+      // Into the table area when there is one, so a failed keystroke-load does
+      // not take the search box down with it.
+      const body = document.getElementById('rcp-list');
+      if (body) { body.innerHTML = line; }
+      else { if (r) r.innerHTML = line; _shell = false; }
       return;
     }
     paintList();
@@ -255,11 +274,17 @@
       <div class="rcp-filters">
         <div class="rcp-srch">
           <span class="rcp-ic">${I.search}</span>
-          <input class="rcp-input" type="search" id="rcp-q" value="${esc(_q)}" oninput="rcpSearch(this.value)"
+          ${/* The event goes to rcpSearch() as well as the value — half-typed
+                pinyin arrives as input events too, and it is not a term anybody
+                meant to search for. compositionend is bound in code rather than
+                here; see bindComposition(). */''}
+          <input class="rcp-input" type="search" id="rcp-q" value="${esc(_q)}"
+                 oninput="rcpSearch(this.value, event)"
+                 autocomplete="off"
                  placeholder="${esc(T('Search name or SKU', '搜索名称或货号'))}">
         </div>
-        <select class="rcp-input rcp-sel" onchange="rcpSetCat(this.value)">${catOpts}</select>
-        <label class="rcp-check"><input type="checkbox" ${_archived ? 'checked' : ''} onchange="rcpSetArchived(this.checked)"> ${esc(T('Archived', '已归档'))}</label>
+        <select class="rcp-input rcp-sel" id="rcp-cat" onchange="rcpSetCat(this.value)">${catOpts}</select>
+        <label class="rcp-check"><input type="checkbox" id="rcp-arch" ${_archived ? 'checked' : ''} onchange="rcpSetArchived(this.checked)"> ${esc(T('Archived', '已归档'))}</label>
         <span class="rcp-spacer"></span>
         <button class="rcp-btn primary" data-cap="recipes:edit" onclick="rcpRecordNew()"><span class="rcp-ic">${I.plus}</span>${esc(T('New recipe', '新建食谱'))}</button>
       </div>
@@ -274,27 +299,67 @@
   // OPENS ON ALL, always, for every tenant. There is no default and no
   // setting: a tenant whose catalogue is mostly repacks must not open their
   // Recipes list with most of it hidden.
-  function typeChips() {
+  // The chips carry live counts off _rows, so they are repainted by every load —
+  // hence the split: the row keeps its identity in the DOM, only its contents
+  // are rewritten.
+  function typeChipsInner() {
     const count = v => (v ? _rows.filter(r => (r.recipe_type || 'made') === v).length : _rows.length);
     const chip = (val, label) =>
       `<button type="button" class="rcp-chip${_type === val ? ' is-on' : ''}" onclick="rcpSetType('${val}')">`
       + `${esc(label)}<span class="rcp-chip-n">${count(val)}</span></button>`;
-    return `<div class="rcp-chips">`
-      + chip('', T('All', '全部'))
-      + RECIPE_TYPES.map(([v, lbl]) => chip(v, lbl())).join('')
-      + `</div>`;
+    return chip('', T('All', '全部'))
+      + RECIPE_TYPES.map(([v, lbl]) => chip(v, lbl())).join('');
+  }
+  function typeChips() {
+    return `<div class="rcp-chips" id="rcp-chiprow">${typeChipsInner()}</div>`;
   }
 
+  // THE SEARCH BOX IS NEVER REBUILT WHILE SOMEBODY IS TYPING INTO IT — the same
+  // fix as 18-materials.js paintList(), where the reasoning is written out in
+  // full. Short version: repainting the root destroyed the field mid-word, the
+  // focus-and-caret hand-back always put the caret at the END, and an IME
+  // composition cannot be handed back at all — it dies with the element that
+  // owned it. So the shell is painted once and a load repaints only what a
+  // search changes: the chip row and the table.
   function paintList() {
     const r = listRoot();
     if (!r) return;
-    const wasSearching = document.activeElement && document.activeElement.id === 'rcp-q';
-    r.innerHTML = chrome() + filterBar() + tableHtml();
-    if (wasSearching) {
-      const q = document.getElementById('rcp-q');
-      if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    if (!_shell || !r.querySelector || !r.querySelector('#rcp-q')) {
+      r.innerHTML = chrome() + filterBar() + `<div id="rcp-list">${tableHtml()}</div>`;
+      _shell = true;
+      bindComposition();
+    } else {
+      const chiprow = document.getElementById('rcp-chiprow');
+      const body = document.getElementById('rcp-list');
+      if (chiprow) chiprow.innerHTML = typeChipsInner();
+      syncFilters();
+      if (body) body.innerHTML = tableHtml();
     }
     try { applyCapGates(); } catch (_) {}
+  }
+
+  // Composition events are not in GlobalEventHandlers, so `oncompositionend` in
+  // the markup is not a handler at all — the browser ignores it in silence. It
+  // has to be bound here, and it is not optional: committing a pinyin candidate
+  // fires `input` with isComposing still TRUE carrying the finished characters,
+  // and only then compositionend — so without this the guard in rcpSearch()
+  // swallows the one event that had the real term in it. Written out in full
+  // above bindComposition() in 18-materials.js.
+  function bindComposition() {
+    const q = document.getElementById('rcp-q');
+    if (q && typeof q.addEventListener === 'function') {
+      q.addEventListener('compositionend', () => { window.rcpSearch(q.value); });
+    }
+  }
+
+  // The filter bar outlives its own repaint now, so a filter changed in code
+  // has to be written back onto its control. #rcp-q is deliberately not among
+  // them — it is the one control somebody may be mid-word in.
+  function syncFilters() {
+    const cat = document.getElementById('rcp-cat');
+    const arch = document.getElementById('rcp-arch');
+    if (cat && cat.value !== _cat) cat.value = _cat;
+    if (arch) arch.checked = _archived;
   }
 
   // Primary cost figure with the other on hover (title=), per plan: cost per
@@ -414,7 +479,14 @@
   // flash of “Loading…” between two states of the same list.
   window.rcpSetType = function (t) { _type = t || ''; paintList(); };
   window.rcpSetArchived = function (on) { _archived = !!on; load(); };
-  window.rcpSearch = function (v) {
+  // TYPING IS NOT A SEARCH TERM UNTIL THE IME SAYS IT IS — see matSearch() in
+  // 18-materials.js for the full reasoning. A Chinese keyboard fires an input
+  // event per letter of the pinyin while the candidate window is open; those
+  // letters match nothing in a catalogue stored in characters, and searching on
+  // them spent a request and a repaint apiece. `event.isComposing` is true for
+  // exactly those and false for ordinary typing.
+  window.rcpSearch = function (v, ev) {
+    if (ev && ev.isComposing) return;
     _q = v;
     clearTimeout(_searchTimer);
     _searchTimer = setTimeout(load, 250);

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.141
+# Tacet shared-core consolidation — decisions record, v4.148
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,16 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-07 · v4.148 — **§59 AMENDED A THIRD TIME: `hdStart` REPORTS WHY IT DECLINED, AND NO PATH OUT OF THE KITCHEN QUEUE SAYS NOTHING — DECIDED by Ash, 2026-09-07**, after a fourth report of one symptom: *"once i click 'marked as made' thats it. nothing pop up"*. **The three amendments before this each removed a real cause and none of them removed the SILENCE, which is why it took four rounds to find one bug.** `hdStart` returned a bare `false` on every refusal, and `kqAdvance` fell back to the queue without a word — so an operator who had just closed a request saw an empty list and nothing else, whichever of the refusals had fired. **THE RULING: every refusal names itself.** `hdStart` returns `true` when the screen opened and otherwise a reason — `nocap`, `nolines`, `nostore` — which `kqAdvance` turns into a sentence on the queue it drops back to. **The note is a NOTE, not an error**: nothing failed and the operator did exactly the right thing; what is wrong is the state they are now in. **It renders ABOVE THE EMPTY STATE as well as above the list**, because *Nothing to make* with no explanation is precisely the screen this defect showed somebody — a queue that has just gone quiet reads as success. It clears on re-entry and on opening another request, being about the last one closed and nothing else. **WHAT EACH ONE SAYS matters more than that it says something**: `nocap` names `production:log` by the label an admin will see on the permissions screen (`Record what was made · 登记生产批次`, quoted from `lib/capabilities.js`), so the operator can ask for the right thing instead of reporting a blank screen; `nostore` names the missing store; `nolines` says the request carried no quantities. **THE GENERAL RULE THIS SETTLES, and it is worth more than the three sentences**: a refusal that lands on somebody who has just changed state — a request closed, stock still short — may not be silent, because silence there does not read as *nothing happened*, it reads as *that worked*. **Recorded as the fourth lesson in this section's run**: a fixture must not assert the state a gate wants (§59); a green suite is not evidence when its case was written to match the gate (v4.145); a fixture whose stubs answer instantly cannot see a race (v4.147); **and a diagnosis is impossible when the failure has no voice — the first three rounds were all spent guessing between causes the app could have named.** Two new cases hold it shut, each verified to fail without the change. **Version v4.148.** No schema, no migration, no capability grant changes. **Four composed Chinese pairs** are declared in `docs/tacet-delivery-vocabulary.md` v1.29, per §30 rule 3. **No section is added** — §59 is amended in place — so Related documents stays at §38.
+
+2026-09-07 · v4.147 — **§59 AMENDED AGAIN: THE HANDOVER STOPS REFUSING ON A SHELF THAT IS MERELY LATE, AND ON LINES IT CANNOT MATCH — DECIDED by Ash, 2026-09-07**, from the third report of one symptom: *"once i click marked as made it doesnt show me any restock for the kitchen"*, with a screenshot of Tacet Mobile's Kitchen queue reading *Nothing to make*. **The first two amendments fixed the GATE and this one fixes what was behind it.** §59 moved the gate off the quick-stock mode and v4.145 carried that to `/stock`; both were real and neither was the whole cause, because `hdStart` carried two further refusals that were silence rather than an answer. **THE CAUSE, REPRODUCED RATHER THAN REASONED**: `state.qs.items` starts `null` and is filled two CHAINED round trips after the queue first renders — `loadQsCtx`, then `loadQsItems` on its answer. `hdResolve` matches a request's lines against that list by SKU, so a list that has not arrived marks EVERY line unmatched, and the guard `!lines.some(l => l.id != null)` then refused to open at all. **An operator who taps *Start making* and *Mark as made* faster than two round trips on a phone — or whose shelf fetch simply failed — closed the request and got nothing.** The probe that proved it is one line: set `items` to `null`, its real initial value, and the tap produces exactly the reported silence. **THE RULING, in two parts.** (1) **A LATE SHELF IS NOT A MISSING PRODUCT**: the lines are HELD and the screen opens now in its loading state, `loadQsItems` resolving them the moment the shelf lands; a shelf that never lands gets a named failure carrying the way forward — Retry, and the batch door that needs no request — because the request is already closed by the time anybody is on that screen and there is no way back to it. (2) **NOT ONE LINE MATCHED IS A SENTENCE, NOT A SILENCE**: the screen has always drawn an unmatched line greyed, badged *Not on this store's list*, with the count named underneath and the operator told to go and fix the catalogue. **Refusing to open threw that sentence away and left nothing in its place, which is strictly worse than the problem it avoided** — a request whose lines this store cannot take is exactly what somebody needs to be told. **WHAT STILL REFUSES, and all three are about the request or the operator rather than about the app's own readiness**: no `production:log`; a request with nothing asked for; and no store to add to, once the context has ANSWERED and said so — `hdCommit` sends `store_id` and there is nothing to record without one. **BOTH APPS, IN THE SAME COMMIT.** `public/stock.html` carries the identical pair of refusals and is fixed with `public/m.html` rather than reasoned about: that file was scoped out once on a plausible argument and the same symptom came back, so the argument that its shelf loads at boot and the race is therefore unlikely is recorded as the reason it is LESS likely there, never as a reason to leave it. **THE THIRD FIXTURE LESSON, and the sharpest**: §59 recorded that a fixture must not assert the state a gate wants, v4.145 added that a green suite is not evidence when its own case was written to match the gate, and this adds that **a fixture whose stubs answer instantly cannot see a race the real network has** — the suites set `items` by hand and every stub resolved in a microtask, so no case had ever executed the ordinary path where the shelf is still in flight. Four new cases hold it shut in Tacet Mobile and one in `/stock`, each verified to fail without the change. **Version v4.147**; v4.144 was taken by PR #348, v4.145 by the previous amendment and v4.146 by PR #350 — the sixth and seventh collisions of this kind, both of them a header bumped with no changelog entry beside it, which is the one shape this file's own v4.141 note says a version collision hides in. No schema, no migration, no capability grant changes. **Two composed strings** are declared in `docs/tacet-delivery-vocabulary.md` in this commit, per §30 rule 3. **No section is added** — §59 is amended in place — so Related documents stays at §38.
+
+2026-09-07 · v4.145 — **§59 AMENDED BY INSERTION: THE RULING APPLIES TO `/stock` TOO, AND THE SCOPE LINE THAT EXCLUDED IT WAS WRONG — DECIDED by Ash, 2026-09-07**, from the second report of the same symptom: *"i still cant see the stock window after production is ready"*. **§59 shipped the fix in `public/m.html` and scoped `public/stock.html` out**, on the reasoning that there the `kitchen` role does read `mode:'add'` so the flow works. **That is true of the `kitchen` role and of no other, and it is the wrong half of the users.** The word *Production* exists only in `/stock` — Tacet Mobile calls the same screen *Kitchen queue* — so the report named the app the fix had skipped. **Everyone else who can open that queue on `/stock` reads `'recount'`**: the owner, an admin, and any `retail` operator, none of them `stock_app_only`, all of them able to open a request, close it, and be handed nothing. **The original §59 diagnosis was right and its scope line was not**: the roles confined to `/stock` are exactly the ones that did not need the fix. **The remedy is §59's own gate, unchanged in substance** — `production:log`, the capability `POST /api/retail-admin/production` is gated on. **`/stock` HOLDS NO CAPABILITY LIST**, only what `/quick-stock/context` tells it, which is why it had nothing to gate on but the mode; **the derivation moves into `lib/quick-stock-grant.js` as `mayLogProduction(req)`, beside the `quickStockMode` it replaces, and ships as `can_log_production` on that response** — one derivation, both apps, so they cannot answer the same question differently. **NO `req.backendUser` REQUIREMENT, unlike `mayRecount` beside it**: that one demands it so the recount GRANT stays revocable per tenant, while this is not a grant but the capability the write already enforces, and the legacy kitchen realm — no `backendUser` row, full capability set — can genuinely post to that endpoint. **It FAILS OPEN on an unresolvable capability set**, matching Tacet Mobile's `mCan()` and for the reason that function gives; the client reads `!== false` for the same reason. **THE LOG A BATCH TILE ON `/stock` STAYS ON THE MODE and is deliberately not moved**: that tile carries a separate decision written where it stands — stating what a batch yielded is the kitchen's job and a warehouse recount has no batches — and the handover is not that case, the operator reaching it having just closed a kitchen request. **§59's premise for Tacet Mobile (that `logbatch` already hands the same screen to a recount-mode operator) does not hold on `/stock`, and the ruling does not need it**: the gate is the capability the write is gated on, on its own. **A SECOND SUITE WAS ASSERTING THE DEFECT, and this is the second time in two days that a fixture has done so.** `scripts/test_stock_home.js` carried `a-recount-operator-gets-the-queue-back`, which asserted that a recount operator lands back on the queue and defended it in a comment — *a warehouse recount has no business being sent to a screen that adds*. It is replaced by two honest cases: a recount operator holding the capability is handed the screen, and one without it still lands back on the queue. **The lesson is recorded rather than left to be relearned a third time**: where §59 said a fixture must not assert the state a gate wants, this adds that a green suite is not evidence the flow works when the suite's own case was written to match the gate. **Nothing in §59's body is rewritten, withdrawn or re-worded** — paragraphs are added beside its scope section and dated, per this file's amendment convention. **VERSION COORDINATION: this claimed v4.144 and no longer does.** PR #348 (§60, a kitchen types its batch on the card) took that number on main while this branch was open — the fifth collision of this kind recorded in this file, arising the way every one of them has. **It is also noted, and deliberately not written for them, that #348 bumped the header to v4.144 and added §60 without a changelog entry of its own**; that gap is theirs to fill and inventing one here would put words in another author's mouth. This entry takes **v4.145**. Nothing is renumbered to make room and no live section moves. No schema, no migration, no capability grant changes, no new strings. **No section is added** — §59 is amended in place — so Related documents stays at §38.
+
+2026-09-07 · v4.143 — **§59 ADDED: THE KITCHEN QUEUE HANDS OVER TO "WHAT YOU MADE" ON THE CAPABILITY THAT SCREEN'S OWN WRITE IS GATED ON, NOT ON THE QUICK-STOCK MODE — DECIDED by Ash, 2026-09-07**, from the report that *"the kitchen queue, after making the next window should be how many items reached the shelf but that window never open"*. **The window had never opened once in Tacet Mobile, for anybody.** `hdStart` in `public/m.html` gated the handover on `qsMode()==='add'`; `lib/quick-stock-grant.js` derives that mode from the ROLE, answering `'add'` only for a backend operator whose `tenant_users.role` is literally `kitchen` — and that role ships `stock_app_only`, which `server.js` uses to refuse it Tacet Mobile outright, every `/api/` call outside `lib/stock-app-only.js`'s list returning `kitchen_add_only`. **So the two conditions could not both hold**: every session that can reach the queue reads `'recount'`, `hdStart` returned false on every tap, and the queue's own promise one screen earlier — *The next screen asks how many reached the shelf* — was never kept. **The ruling: the gate is `production:log`, asked through `canRoute('whatmade')`** — the capability `POST /api/retail-admin/production` is gated on, which is what the Record button actually calls. **The mode was never load-bearing and the proof was already shipped**: `logbatch` opens the SAME screen with the SAME write for a recount-mode operator and always has, and the endpoint has no mode gate at all — only a store-scope check on restricted roles. **The superseded reason is quoted rather than deleted**: *an absolute recounter has no business being handed a delta to apply*. This screen hands over no delta; it posts a production batch that moves the shelf server-side in one transaction. **A SECOND, SMALLER DEFECT IS FIXED IN THE SAME CHANGE**: `hdOpen` returned `true` unconditionally while `push()` silently declines a route the operator cannot reach, so an operator without `production:log` closed the request and got a dead tap — no screen, and `kqAdvance`'s early return skipping even the re-render; `hdOpen` now asks first and the caller falls through to the queue. **THE SUITE PASSED THROUGHOUT AND IS THE THIRD FINDING**: `scripts/test_mobile_production.js` set `mode:'add'` by hand and its own note called that fixture load-bearing, so 70 assertions proved a flow in a state no live session can be in; the fixture now says `mode:'recount'` and the old code fails it. **`public/stock.html` carries the identical gate and is NOT changed** — there the `kitchen` role does read `'add'`, so the flow works, and §48 retires that app. **Recorded and deliberately not fixed**: neither production screen names WHICH store it is adding to, `state.qs.storeId` being the first active store with no picker — pre-existing, shared with Log a batch, and a separate change. No schema, no migration, no capability grant changes, no new strings. Appended as §59 under the append-only convention; Related documents stays at §38.
+
+2026-09-07 · v4.142 — **§58 ADDED: A FRESH LINE ON AN ORDER THAT IS NOT GOING OUT TODAY IS DEDUCTED WHEN IT GOES OUT, NOT WHEN IT IS PAID — DECIDED by Ash, 2026-09-07**, from an order screenshot: *"这是包含鲜食的预约单，明天发送。但是鲜食的库存已经自动扣除了"*. **The rule: a batch-made line (`store_products.is_batch_made = 1`) on an order that is not a counter sale does NOT decrement `physical_qty` at the paid transition; it decrements at the first forward transition into fulfilment**, where the existing Start-preparing / dispatch / waybill / parcel / rider calls already take it. **Everything else on the same order still decrements at payment, grocery lines in the same basket included — the 2026-08-31 "every paid order decrements, whatever its address" change STANDS for anything the kitchen does not make, and is not reopened.** **Why the fresh line alone earns it:** the shop sells a sold-out fresh item on the stated premise that the kitchen makes the next batch on a named day and the delivery date is floored onto that day — the premise the fresh pre-order exemption enforces and `promised_ship_date` records, printed on the kitchen slip as *MAKE FRESH 当天现做*. Deducting at payment contradicts it twice: **it takes tomorrow's food out of today's count**, so today's shoppers read sold out while the units sit in the fridge, **and where the shelf is already at zero — which that exemption deliberately permits — it drives `physical_qty` negative**, the decrement path having no availability check at all. **A shelf-stable jar has no batch behind it**, which is why the ruling is narrow. **Counter sales are excluded BY NAME** (`isCounter`, not the absence of an address): the goods leave in the same instant the money arrives. **Guangzhou same-day is untouched** — those orders reserve at checkout and commit on payment, and their food does leave today. **No new decrement site, no new ledger reason, no schema change, no migration**: the deferred line lands on the existing `order_prepare` row, and the per-product idempotency guard already lets a mixed order commit its grocery half at payment and its fresh half later without double-counting. **Refunds need no change** — the ledger-backed reverser caps each product at what the ledger says is still out, so a line never decremented returns nothing. **No new strings**: the operator's *Stock pending · 库存待扣* note is once again true of exactly these orders and is reused, so `docs/tacet-delivery-vocabulary.md` is untouched. **ONE GAP THE DEFERRAL OPENED IS CLOSED IN THE SAME CHANGE**: the two auto-deliver sweeps claim straight out of `paid` (`AUTO_DELIVER_FROM_STATUSES`) and committed no stock, because until now payment had always taken it already — a sweep closing a local fresh pre-order would have stranded those units on the count with nothing left to fire, so both gained the same idempotent call every other forward transition makes. **THREE THINGS ARE RECORDED AND DELIBERATELY NOT FIXED**: (1) **nothing caps how many pre-orders one batch takes** — forty orders against a batch of twenty are accepted today and still would be, and a batch-capacity gate needs a per-product per-day batch size that §40 defines for a recipe and nothing yet exposes to checkout; (2) the stock-pending note is **order-item deep, not bundle deep**, a bundle of batch-made components not being walked per list row, while the decrement itself runs on expanded components as it always did; (3) **`is_batch_made`, NOT `oos_policy = 'backorder_gz'`** — the broader flag opens any product to out-of-city pre-order including shelf goods with no batch behind them. Appended as §58 under the append-only convention; Related documents stays at §38.
 
 2026-09-07 · v4.141 — **§44's "ORDER SOURCE" IS NAMED: IT IS `retail_orders.shop_entry_method`, VALUES `till` AND `qr`, AND NOT `retail_orders.source` — DECIDED by Ash, 2026-09-07.** **§44 ruled that till and QR share the channel `shop` and are told apart by "order source"; it never named a column or a value, and a session sent to implement it stopped rather than choose** — correctly, because the tree offers two candidates and they disagree. **The ruling: `source` answers HOW THE ROW WAS CREATED — keyed by staff, or arrived by itself — and a till sale and a QR sale are both a person standing in the shop, so it cannot separate them.** `shop_entry_method` was added for this exact distinction and its own suite says so: `scripts/test_shop_channel.js` opens by recording that the column exists to name "which of a shop's two doors an order came through" and that it is **"deliberately NOT new values on `source`"**. **`routes/retail.js`'s rule that a client may not claim `source` STANDS and is affirmed as correct** — the till goes on posting through the manual-order endpoint, that endpoint goes on binding `'manual'`, and staff did key the order in, which remains true. **AMENDMENT IS INSERTION ONLY**: §44's Channel-and-source paragraph is not rewritten, not withdrawn and not re-worded; four paragraphs are added beside it and dated. **A LIVE DEFECT IS RECORDED AND DELIBERATELY NOT FIXED: the QR submit handler writes `source = 'qr'` as well as `shop_entry_method = 'qr'`** (`routes/shop-menu.js`, the `'shop', 'qr', 'counter'` value row in `POST /s/:shopCode/order`), which is the widening its own test file records as deliberately not done — so the tree contradicts itself and the contradiction is now written down rather than left to be re-derived. **Removing it is NOT a one-liner, which is why it is filed rather than done**: the paid-order auto-print de-dupe reads `prior.source === 'qr'` (`routes/retail.js`, inside `autoPrintOrder`) and is the column's ONLY reader anywhere, so dropping the writer without moving that predicate onto `shop_entry_method` would reprint every QR order's kitchen ticket on payment — the reader and the writer move in one commit or neither. **NO BACKFILL is ruled, implied or performed**, on `source` or on `channel`; historical rows are untouched and out of scope. **VERSION COORDINATION, and this entry has already been moved once by it.** **It first claimed v4.139 and no longer does**: main took that number for §54 (the phone's order drawer on a mirrored order, PR #340) while this branch sat open, and because both sides carried the identical header line the merge resolved it SILENTLY rather than conflicting — the collision was found by reading the log, not by git. **Recorded because that is the failure mode this file keeps meeting**: a version collision between two open branches does not announce itself, and the one place it shows is a duplicated number in the changelog. **This entry now takes v4.141.** **v4.140 is RESERVED and deliberately skipped here** — PR #328's three Finance rulings take it, renumbered in the same pass to §55, §56 and §57 after all three of the numbers it claimed were taken on main (§52 by PR #335, §53 by PR #336, §54 by PR #340). That renumbering is done and pushed; this entry is written against it rather than predicting it. **PR #333 also edits this file but claims no version** (it inserts a live-defect block under §36's Finance routes and leaves the header line alone) and carries no section cross-reference at all, so it collides with neither. **Nothing here is renumbered to make room and no live section moves.** Docs only; no code, no schema, no migration. **No section is added** — §44 is amended in place — so Related documents stays at §38.
 
@@ -6076,3 +6086,224 @@ No charting library is introduced. Finance charts are hand-written SVG, as Repor
 The chart primitives are extracted into a shared module BEFORE Finance draws anything, and Finance and Reports both consume it. Two hand-rolled copies of the same chart is the "shared components live in one place and are never re-implemented per page" rule broken, and it drifts silently — a change made for one page leaves the other on the old look with nobody noticing.
 
 Charts obey the existing rules: no gridlines, no axis box, no gradient, one accent colour and only where it means something, one question per chart.
+
+## §58 — A FRESH LINE ON AN ORDER THAT IS NOT GOING OUT TODAY IS DEDUCTED WHEN IT GOES OUT, NOT WHEN IT IS PAID
+
+Decided by Ash, 2026-09-07, from an order screenshot: *"这是包含鲜食的预约单，明天发送。但是鲜食的库存已经自动扣除了。if that's correct then it's not following the rule we agreed on"* — TC000578, eight lines, eleven units, 空运 to 北京, paid and unshipped, its 鲜食 already off the count.
+
+### The ruling
+
+A **batch-made** line — `store_products.is_batch_made = 1`, the kitchen's own flag, the same one the fresh pre-order exemption reads — on an order that is **not handed over at the counter** does NOT decrement `physical_qty` at the paid transition. It decrements at the first forward transition into fulfilment, where the existing calls already take it: Start preparing, Mark dispatched, a parcel dispatched, a waybill pasted, a JD waybill minted, a rider collecting.
+
+**Every other line on the same order still decrements at payment**, including every grocery line in the same basket. The 2026-08-31 change — *every paid order decrements, whatever its address* — **stands for everything that is not made in the kitchen**, and is not reopened here.
+
+**A counter sale is excluded by name.** It is handed over in the same instant it is paid; the food has already left the fridge. `isCounter` is the test, not the absence of an address.
+
+### Why the fresh line is different, and a jar is not
+
+The shop sells a sold-out fresh item on a stated premise: the kitchen makes the next batch on a named day, and the delivery date is floored onto that day. That premise is enforced in code — the fresh exemption in the local pre-order gate turns the refusal off only for a caller that floors the date, and the order carries `promised_ship_date` / `promised_delivery_date`, which the kitchen slip prints as *MAKE FRESH 当天现做*.
+
+**Deducting at payment contradicts that premise twice.** It takes tomorrow's food out of today's count, so today's shoppers are told sold out while the units sit in the fridge; and where the shelf is already at zero — which the fresh exemption deliberately permits — it drives `physical_qty` negative, because that decrement path performs no availability check at all.
+
+A shelf-stable jar has no batch behind it. If its count does not move at payment, the out-of-stock gate reads the same number for the next shopper and the next, and the shop oversells stock it does not have with nothing to make good on it. That is exactly what the 2026-08-31 change was made to stop, and it is why this ruling is narrow: **the kitchen's cadence is what earns the deferral, so only what the kitchen makes gets it.**
+
+### What is NOT changed
+
+- **Guangzhou same-day is untouched.** Those orders reserve at checkout and commit their reservations on payment. Nothing on this path reaches them, and their food does leave today.
+- **No new decrement site, no new ledger reason.** The deferred line lands on the existing `order_prepare` row written by the existing fulfilment-transition calls. The per-product idempotency guard already skips a product that reserved or already decremented, so a mixed order commits its grocery half at payment and its fresh half later, with neither double-counting.
+- **Refunds need no change and get none.** The ledger-backed reverser caps each product at what the ledger says is still out, so a deferred line that was never decremented returns nothing. This is arithmetic, not a new flag.
+- **No new strings.** The operator already has the *Stock pending · 库存待扣* note and its title *Real stock deducts once this order moves to Preparing · 库存要等这单推进到备货中才会真正扣减*, which is once again true of exactly these orders. `docs/tacet-delivery-vocabulary.md` is untouched.
+- **No schema change and no migration.** Both flags this reads already exist.
+
+### One gap this opened, and closed with it
+
+**The two auto-deliver sweeps can claim an order straight out of `paid`** — `AUTO_DELIVER_FROM_STATUSES` is `['paid','preparing','dispatched','rider_pickup']` — and neither committed stock, because until now nothing was ever owed by the time they ran: payment had already taken it. **With the kitchen's lines held back, a sweep closing a local fresh pre-order would have stranded those units on the count with nothing left to fire.** Both sweeps therefore gained the same idempotent call every other forward transition makes, labelled *Auto · delivered (ETA)* and *Auto · delivered (rider)*. It is a no-op for the preparing and dispatched orders they mostly close.
+
+**This is the shape to look for if the deferral is ever widened:** the held-back line is only safe while every path out of `paid` takes it, and that set is not obvious from the status column alone.
+
+### Recorded, and deliberately NOT fixed here
+
+1. **NOTHING CAPS HOW MANY PRE-ORDERS ONE BATCH TAKES.** The fresh exemption admits a sold-out batch-made line without comparing the quantity asked for against the batch that will cover it. Forty orders against a batch of twenty are accepted today and would be accepted after this change; what moves is only that the count no longer drifts downward while it happens. **A batch-capacity gate is separate work and is not implied by this ruling** — it needs a batch size per product per day, which §40 defines for a recipe and nothing yet exposes to checkout.
+2. **THE STOCK-PENDING NOTE IS ORDER-ITEM DEEP, NOT BUNDLE DEEP.** The badge asks whether the order holds a batch-made item still owed; a bundle whose *components* are batch-made is not walked, because the badge is an operator hint and walking bundles per list row is a query per row. The decrement itself is unaffected — it runs on the expanded component lines and always did.
+3. **`is_batch_made`, NOT `oos_policy = 'backorder_gz'`.** The broader policy flag lets an operator open any product to out-of-city pre-order, kitchen-made or not, and a shelf item opened that way still has no batch behind it. The narrow flag is the one that means *the kitchen makes this*, and it is the one the rest of the fresh machinery already reads.
+
+
+## §59 — THE KITCHEN QUEUE HANDS OVER ON THE CAPABILITY THAT SCREEN'S WRITE IS GATED ON, NOT ON THE QUICK-STOCK MODE
+
+Decided by Ash, 2026-09-07, from the report that *"the kitchen queue, after making the next window should be how many items reached the shelf but that window never open"*.
+
+### What was wrong
+
+"What you made" is the screen between closing a kitchen request and the shelf being right. Marking a request `prepared` moves no stock — that is §39 and is correct — so the queue is supposed to carry the request's own lines straight onto the screen that adds them. The queue says so on the button's own screen: *The next screen asks how many reached the shelf.*
+
+It never did. `hdStart` in `public/m.html` opened only when `qsMode()==='add'`. That mode comes off `/api/retail-admin/quick-stock/context`, and `lib/quick-stock-grant.js` derives it from the **role**, not from a capability: `'add'` is returned only for a backend operator whose `tenant_users.role` is literally `kitchen`. That role ships `stock_app_only`, and `server.js` uses that flag to keep it out of Tacet Mobile entirely — a page request to `/retail-admin` is redirected to `/stock`, and every `/api/` call outside `lib/stock-app-only.js`'s allowlist is refused `kitchen_add_only`.
+
+**The two conditions could therefore never both hold.** Everybody who can open this queue reads `'recount'`. `hdStart` returned false on every tap, `kqAdvance` fell through to the queue, and the promise made one screen earlier was kept for nobody.
+
+### The ruling
+
+**The handover is gated on `production:log`, asked through `canRoute('whatmade')`** — the capability `POST /api/retail-admin/production` is gated on, which is the call the Record button at the bottom of that screen actually makes. The quick-stock mode is not consulted.
+
+**The reason the old gate carried is quoted rather than deleted**, because it was a real argument and it is worth knowing why it fails: *an absolute recounter has no business being handed a delta to apply.* This screen hands over no delta. It posts a production batch, and `routes/retail-production.js` writes the batch and moves the shelf inside one transaction, with no mode gate of its own — only a store-scope check on the restricted roles. **The proof was already shipped one row up the More list**: `logbatch` opens this same screen, with this same write, for a recount-mode operator, and always has. A gate that refuses from one door what it grants from the other is not a rule; it is a defect with a comment on it.
+
+### The second defect, fixed in the same change
+
+`hdOpen` answered `true` unconditionally, while `push()` silently declines a route the operator cannot reach. An operator holding `restock:fulfil` without `production:log` therefore closed the request and got nothing: no screen, and `kqAdvance`'s early return skipping even the re-render. `hdOpen` now asks `canRoute('whatmade')` first and returns false, so the caller falls through to the queue exactly as it does for a request with nothing to hand over.
+
+### The suite proved a state the app cannot be in
+
+`scripts/test_mobile_production.js` set `mode:'add'` in its fixture by hand, and the note beside it called that line load-bearing for the same reason `hdStart` did. Seventy assertions passed across every version of this flow while the flow itself was dead, because the fixture reproduced the only session that would have worked and no session can be it. **The fixture now says `mode:'recount'`**, which is what every operator who can reach these screens actually holds, and the old code fails it. This is the general lesson and it is not new here: a fixture that asserts the state a gate wants, rather than the state the app is in, tests the gate against itself.
+
+### Scope, and what is deliberately not changed
+
+- **`public/stock.html` carries the identical gate and is not touched.** In that app the `kitchen` role does read `'add'`, so the flow works there; §48 retires the app.
+
+  > **AMENDED 2026-09-07 (v4.145) — THIS LINE WAS WRONG, and the same symptom was reported a second time because of it.** It is true of the `kitchen` role and of no other. Every other operator who can open that app's *Production* queue — the owner, an admin, a `retail` operator, none of them `stock_app_only` — reads `'recount'` there exactly as they do in Tacet Mobile, so the handover was shut for them too. The roles confined to `/stock` are precisely the ones that did not need the fix; the reasoning covered the users who were not reporting it. **The word *Production* appears only in `/stock`** — Tacet Mobile calls the same screen *Kitchen queue* — which is how the second report named the app the first fix had skipped.
+  >
+  > **`/stock` now takes the same gate**, and because that app holds no capability list of its own the answer is computed server-side: `mayLogProduction(req)` in `lib/quick-stock-grant.js`, beside the `quickStockMode` it replaces, shipped as `can_log_production` on `/api/retail-admin/quick-stock/context`. One derivation, both apps. It carries **no `req.backendUser` requirement** — unlike `mayRecount` beside it, this is not a revocable grant but the capability the write already enforces, and the legacy kitchen realm can genuinely post to that endpoint — and it **fails open** on an unresolvable capability set, as Tacet Mobile's `mCan()` does.
+  >
+  > **The Log a batch tile on `/stock` stays on the mode.** That tile carries its own decision, written where it stands: stating what a batch yielded is the kitchen's job, and a warehouse recount has no batches. The handover is not that case — the operator reaching it has just closed a kitchen request. §59's Tacet Mobile argument leaned on `logbatch` already opening the same screen for a recount-mode operator; that premise does not hold here, and the ruling does not need it.
+  >
+  > **A second suite was asserting the defect.** `scripts/test_stock_home.js` held `a-recount-operator-gets-the-queue-back`, defending it as *a warehouse recount has no business being sent to a screen that adds*. Two honest cases replace it. Where the section below says a fixture must not assert the state a gate wants, add this: **a green suite is not evidence the flow works when the suite's own case was written to match the gate.**
+
+  > **AMENDED AGAIN 2026-09-07 (v4.147) — THE GATE WAS NOT THE WHOLE CAUSE.** Both amendments above were real and neither closed the report, because `hdStart` carried two further refusals that were silence rather than an answer. **`state.qs.items` starts `null`** and is filled two CHAINED round trips after the queue first renders — `loadQsCtx`, then `loadQsItems` on its answer — and `hdResolve` matches by SKU against that list. A list that has not arrived marks **every** line unmatched, and `!lines.some(l => l.id != null)` then refused to open at all. An operator tapping through faster than two round trips on a phone, or whose shelf fetch failed, closed the request and got nothing. Reproduced, not reasoned: set `items` to `null` — its real initial value — and the tap produces the reported silence exactly.
+  >
+  > **A late shelf is not a missing product.** The lines are held and the screen opens now, in its loading state; `loadQsItems` resolves them when the shelf lands. A shelf that never lands gets a named failure carrying the way forward — Retry, and the batch door that needs no request — because the request is already closed by the time anybody is on that screen and there is no way back to it.
+  >
+  > **Not one line matched is a sentence, not a silence.** The screen has always drawn an unmatched line greyed, badged *Not on this store's list*, with the count named underneath. Refusing to open threw that away and left nothing in its place — strictly worse than the problem it avoided, since a request whose lines this store cannot take is exactly what somebody needs to be told.
+  >
+  > **What still refuses**, all three about the request or the operator rather than the app's own readiness: no `production:log`; a request with nothing asked for; and no store to add to *once the context has answered and said so*, since `hdCommit` sends `store_id`.
+  >
+  > **Both apps, in the same commit.** `public/stock.html` carries the identical pair and is fixed alongside rather than reasoned about. Its shelf loads at boot, so the race is *less* likely there — recorded as a fact, never again as a reason to leave a file out.
+  >
+  > **The third fixture lesson, and the sharpest.** §59 said a fixture must not assert the state a gate wants; v4.145 added that a green suite is not evidence when its own case was written to match the gate; this adds that **a fixture whose stubs answer instantly cannot see a race the real network has.** Every suite set `items` by hand and every stub resolved in a microtask, so no case had ever run the ordinary path where the shelf is still in flight.
+
+  > **AMENDED A THIRD TIME 2026-09-07 (v4.148) — THE SILENCE WAS THE REAL DEFECT, and removing it should have come first.** Each of the three amendments above removed a genuine cause; none of them removed the silence, which is why one bug took four rounds. `hdStart` returned a bare `false` on every refusal and `kqAdvance` fell back to the queue without a word, so an operator who had just closed a request saw an empty list and nothing else — whichever refusal had fired, and with no way to tell which.
+  >
+  > **Every refusal now names itself.** `hdStart` returns `true` when the screen opened and otherwise `nocap`, `nolines` or `nostore`, which `kqAdvance` turns into a sentence on the queue. It is a **note, not an error** — nothing failed, and the operator did the right thing; what is wrong is the state they are now in. It renders **above the empty state** as well as the list, because *Nothing to make* with no explanation is exactly the screen this defect showed somebody: a queue that has just gone quiet reads as success. `nocap` names `production:log` by the label an admin sees on the permissions screen, so the operator can ask for the right thing rather than report a blank screen.
+  >
+  > **The general rule, which is worth more than the three sentences: a refusal that lands on somebody who has just changed state — a request closed, the stock still short — may not be silent.** Silence there does not read as *nothing happened*. It reads as *that worked*.
+  >
+  > **And the fourth lesson in this section's run:** a diagnosis is impossible when the failure has no voice. The first three rounds were spent guessing between causes the app could have named.
+- **Neither production screen names which store it is adding to.** `state.qs.storeId` is the first active store from the context response and there is no picker. This is pre-existing, shared with Log a batch, and unchanged by this ruling — recorded here so it is not re-derived, and left for its own change.
+- No schema change, no migration, no capability grant changes, no new strings.
+
+## §60 — A KITCHEN TYPES ITS BATCH ON THE CARD; A RECOUNT KEEPS THE SHEET
+
+Decided by Ash, 2026-09-07, from the report that entering a batch still took two
+taps: *"i want to click one time on the number and input a number directly. now
+need 2 click."* Two mockups were put up and **Option B was chosen.**
+
+### What was wrong
+
+§46's add door had just been given a keypad (v4.142): tapping the count on an
+Add stock card opened the shared ask sheet with a Quantity field. That removed
+the hundred-and-thirty taps and left a smaller defect behind, which is what this
+ruling is about.
+
+**The sheet opened with nothing focused.** `sheetAsk()` renders its `<input>`
+with no `autofocus` and no `focus()` call, so the keyboard stayed down until a
+SECOND tap landed on the field. One tap to open the sheet, one to reach the
+field it exists for. The field also asked for `inputmode="text"` — the full
+keyboard rather than a number pad — for a control that accepts only digits.
+
+### The ruling
+
+**In add mode the count IS the field.** One tap turns the cell into an
+`<input inputmode="numeric">` with the caret already in it; the commit button
+takes the correction door's place on the card while it is open; there is no
+sheet. **In recount mode the sheet stays**, and the two are reached by different
+functions on purpose.
+
+**The asymmetry is the ruling, not an inconsistency.** A recount is a bounded
+decision about a figure that is not the operator's own, it is the number §46
+guards, and the drop fork hangs off it — a sheet naming the product and offering
+Cancel is the right shape for one of those. A kitchen entering what it made is
+the opposite: its own count, no fork on the way up, and twenty of them in a row
+down a list a sheet would cover between every one.
+
+### What the change must not do, and how each is held
+
+- **The two writes stay apart (§46).** `qsTypeOpen` and `qsAskCount` are
+  separate functions, not one function branching on mode — deriving one from the
+  other is how a delta and an absolute count become one write. While the count
+  is being typed the correction door is **not on the card at all**: the commit
+  button stands in its place, so the two are never one fat finger apart even for
+  the moment the keyboard is up.
+- **The shelf total still never seeds this control (§46).** The field opens on
+  the pending amount, and empty at the usual +0 — a "0" would have to be cleared
+  before anything could be typed over it.
+- **Typing never re-renders.** This is the rule already written at the head of
+  the Onwards commands and learned on the waste picker: `render()` rewrites the
+  whole app in one `innerHTML`, and destroying a field under a thumb does not
+  reliably keep an Android soft keyboard up — Ash saw it drop a letter at a
+  time. `qsTyped` stores the digits and does nothing else; no `render()`, no
+  `state.focus`. The one focus this control arms is the tap that opens it.
+- **The digits are held in state, not read off the DOM at commit**, so they
+  survive a render this card did not ask for — a toast, or a poller's dot
+  changing state.
+- **A non-number is not stripped to the digits inside it.** `13o` silently
+  becoming `13` writes a quantity nobody entered, so the field stays open and
+  says why. That message carries **no Retry**: Retry belongs to a failed write,
+  and this is not one — hence `typeErr` beside `rowErr` rather than inside it.
+
+### Scope, and what is deliberately not changed
+
+- **An empty field is zero, and goes through the same call as any figure.** The
+  field IS the amount, so clearing it and committing means add nothing — and it
+  CLEARS the pending amount rather than leaving it. Returning early instead
+  stranded those taps: opening the field stands the 700ms pause down, so a `+5`
+  left behind would have sat on the card for ever, never flushing, until another
+  tap restarted a timer nobody knew was gone. Found by the suite, on the one case
+  written with taps already made.
+- **That is also the way out of a card opened by mistake**, and there is no
+  separate Cancel, matching the mockup that was approved. If it proves too quiet
+  in the kitchen, a Cancel beside the commit button is the fix, and it is not
+  made here.
+- **`public/stock.html` is untouched.** Its own keypad opens from the count in
+  both modes and always has; §48 retires that app.
+- **No new strings.** `How many did you make? · 制作了多少?` moves from the
+  sheet's title to the field's `aria-label`, `Add to stock · 加入库存` from the
+  sheet's confirm to the card's button, and the composed validation pair locked
+  at `docs/tacet-delivery-vocabulary.md` v1.26 keeps its job. `Quantity · 数量`
+  is no longer used on this screen — a field with the count in it needs no label
+  above it — and is recorded as retired there rather than deleted from the lock.
+- No schema change, no migration, no capability change.
+
+### AMENDED 2026-09-07, from the floor, on the first build of this ruling
+
+Reported by Ash against the deployed v4.144: *"* and - doesnt work now if i edit
+a number manually, also if i dont add a number and i just click on the row it
+stay blank even if i leave the row. it should go back to the same dfult it is."*
+The screenshot carried three cards blank and open at once.
+
+**Both defects were one mistake: the field was a MODE WITH NO WAY OUT, and the
+two keys were switched off inside it.** A card tapped by accident stayed blank,
+and stayed blank with dead keys beside it, until something else re-rendered the
+app. Nothing on the card said how to leave, because there was nothing to say —
+no path existed. The empty-field escape this section already described only ran
+when the operator pressed the commit button, which is not what anyone does with
+a card they opened by mistake.
+
+**Two corrections, and neither changes the ruling above:**
+
+1. **The keys stay live and FOLD what was typed.** Typing 130 and tapping `+`
+   is 131; the field closes and the pending amount carries on as it always has.
+   The field and the keys are two ways at one number, not two modes. A
+   non-number is still not folded — `13o` says so rather than becoming 13 and
+   then 14, exactly as committing it would.
+2. **Leaving an empty field puts the card back** to the `+N` it opened on. A
+   field with digits in it is left alone: closing that on the way past would
+   throw away work nobody asked to discard.
+
+**THE REVERT PATCHES ONE CARD AND NEVER CALLS `render()`, and that is the whole
+reason it is safe.** Blur fires on the way to whatever was tapped next, so a
+`render()` there would rebuild the entire app under that tap and the click would
+land on a node that no longer exists — the `+` being reached for, or the next
+card's count. `qsTypeBlur` replaces that card's own two elements and touches
+nothing else, so the stepper buttons either side stay the same DOM nodes and
+every pending tap still lands. A probe asserts that identity directly.
+
+`qsCountCell` and `qsCardFoot` exist for the same reason: the full render and
+the patch draw an idle card through ONE function, so a patch cannot disagree
+with a render about what the card goes back to.

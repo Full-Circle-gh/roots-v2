@@ -109,6 +109,15 @@
   let _q = '';
   let _archived = false;
   let _searchTimer = null;
+  // The list shell — heading, filter bar, search box — is painted once and then
+  // left alone; see paintList(). False means it is not on screen (first load, a
+  // language change, a load that errored out over it).
+  let _shell = false;
+  // Every load takes a ticket. A search fires one request per settled keystroke
+  // and they do not come back in order — without this, a slow answer for "sa"
+  // repaints over the answer for "salt" and the table shows rows that do not
+  // match what is in the box.
+  let _loadSeq = 0;
 
   let _rec = null;        // the open record: { row, priceHistory, purchases, derived }
   let _recOpen = false;
@@ -131,7 +140,10 @@
   window.matInit = async function () {
     if (_init) { load(); return; }
     _init = true;
-    if (typeof onLangChange === 'function') onLangChange(() => { paintList(); if (_recOpen) paintRecord(); });
+    // A language change is the one thing that DOES have to rebuild the shell —
+    // every label in it is bilingual. Nobody is mid-word in the search box when
+    // they reach for the language switch.
+    if (typeof onLangChange === 'function') onLangChange(() => { _shell = false; paintList(); if (_recOpen) paintRecord(); });
     // The three pickers are read once — they change on a scale of months, and a
     // failed picker fetch must not stop the list from painting.
     try {
@@ -151,7 +163,14 @@
 
   async function load() {
     const r = listRoot();
-    if (r && !_rows.length) r.innerHTML = `<div class="mat-loading">${esc(T('Loading…', '加载中…'))}</div>`;
+    const seq = ++_loadSeq;
+    // ONLY BEFORE THERE IS A SHELL. This line replaces the whole list root, the
+    // search box with it, and the condition used to be `!_rows.length` — so once
+    // a search matched nothing, every following keystroke tore down the field
+    // being typed into and painted "Loading…" over it. That is most of what the
+    // box felt like: it went dead the moment you were mid-word on a term with no
+    // matches yet, which for a Chinese name is every pinyin letter of it.
+    if (r && !_shell) r.innerHTML = `<div class="mat-loading">${esc(T('Loading…', '加载中…'))}</div>`;
     const qs = new URLSearchParams();
     if (_q) qs.set('search', _q);
     if (_kind) qs.set('kind', _kind);
@@ -161,6 +180,7 @@
     if (_source) qs.set('source', _source);
     try {
       const j = await api('/api/retail-admin/materials?' + qs.toString());
+      if (seq !== _loadSeq) return;   // a later keystroke already asked; this answer is stale
       _rows = j.data || [];
       _counts = j.counts || {};
       _srcCounts = j.sourceCounts || { bought: 0, made: 0 };
@@ -169,8 +189,14 @@
       // today. `r` is the list root this screen already holds.
       if (typeof tdShowTruncation === 'function') tdShowTruncation(r, j, 'materials', '条物料');
     } catch (e) {
+      if (seq !== _loadSeq) return;
       _rows = [];
-      if (r) r.innerHTML = `<div class="mat-emptyline">${esc(T('Could not load materials', '无法加载物料'))} — ${esc(e.message || '')}</div>`;
+      const line = `<div class="mat-emptyline">${esc(T('Could not load materials', '无法加载物料'))} — ${esc(e.message || '')}</div>`;
+      // Into the table area when there is one, so a failed keystroke-load does
+      // not take the search box down with it — the operator is still typing.
+      const body = document.getElementById('mat-list');
+      if (body) { body.innerHTML = line; }
+      else { if (r) r.innerHTML = line; _shell = false; }
       return;
     }
     paintList();
@@ -244,31 +270,101 @@
       <div class="mat-filters">
         <div class="mat-srch">
           <span class="mat-ic">${I.search}</span>
-          <input class="mat-input" type="search" id="mat-q" value="${esc(_q)}" oninput="matSearch(this.value)"
+          ${/* The event goes to matSearch() as well as the value: an IME's
+                half-typed pinyin arrives as input events too, and searching on
+                it is searching for something the operator has not typed yet.
+                The other half of that — compositionend — is bound in code, not
+                here; see bindComposition(). */''}
+          <input class="mat-input" type="search" id="mat-q" value="${esc(_q)}"
+                 oninput="matSearch(this.value, event)"
+                 autocomplete="off"
                  placeholder="${esc(T('Search name or SKU', '搜索名称或货号'))}">
         </div>
-        <select class="mat-input mat-sel" onchange="matSetCat(this.value)">${catOpts}</select>
-        <select class="mat-input mat-sel" onchange="matSetSup(this.value)">${supOpts}</select>
-        <label class="mat-check"><input type="checkbox" ${_archived ? 'checked' : ''} onchange="matSetArchived(this.checked)"> ${esc(T('Archived', '已归档'))}</label>
+        <select class="mat-input mat-sel" id="mat-cat" onchange="matSetCat(this.value)">${catOpts}</select>
+        <select class="mat-input mat-sel" id="mat-sup" onchange="matSetSup(this.value)">${supOpts}</select>
+        <label class="mat-check"><input type="checkbox" id="mat-arch" ${_archived ? 'checked' : ''} onchange="matSetArchived(this.checked)"> ${esc(T('Archived', '已归档'))}</label>
         <span class="mat-spacer"></span>
         <button class="mat-btn primary" data-cap="materials:edit" onclick="matRecordNew()"><span class="mat-ic">${I.plus}</span>${esc(T('New material', '新建物料'))}</button>
       </div>`;
   }
 
+  // THE SEARCH BOX IS NEVER REBUILT WHILE SOMEBODY IS TYPING INTO IT.
+  //
+  // This used to write the whole list root on every load, which destroyed the
+  // field mid-word and then put focus and the caret back by hand. That hand-back
+  // cost more than it looked: the caret always landed at the END, so correcting
+  // a typo in the middle of a term threw you to the end of it a quarter-second
+  // later; and an IME composition cannot be restored at all — the browser drops
+  // the candidate window with the element that owned it, which is why the box
+  // stuttered before a single Chinese character had been committed.
+  //
+  // So the shell — heading, source tabs, chip row, filter bar, table frame — is
+  // painted ONCE. A load afterwards repaints only what a search actually
+  // changes: the two count rows and the table. The <input> is never touched, so
+  // there is nothing to restore, no caret to guess at, and no composition to
+  // lose. `_shell` says whether it is up; the #mat-q check is what notices if
+  // something outside this module cleared the root.
   function paintList() {
     const r = listRoot();
     if (!r) return;
-    // Typing in the search box triggers a reload, which repaints this whole
-    // node — so the field the operator is typing into is destroyed mid-word.
-    // Remember whether it held focus and put the caret back at the end.
-    const wasSearching = document.activeElement && document.activeElement.id === 'mat-q';
-    r.innerHTML = chrome() + `<div class="mat-srcrow">${sourceTabs()}</div>`
-      + `<div class="mat-chiprow">${kindChips()}</div>` + filterBar() + tableHtml();
-    if (wasSearching) {
-      const q = document.getElementById('mat-q');
-      if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    if (!_shell || !r.querySelector || !r.querySelector('#mat-q')) {
+      r.innerHTML = chrome()
+        + `<div class="mat-srcrow" id="mat-srcrow">${sourceTabs()}</div>`
+        + `<div class="mat-chiprow" id="mat-chiprow">${kindChips()}</div>`
+        + filterBar()
+        + `<div id="mat-list">${tableHtml()}</div>`;
+      _shell = true;
+      bindComposition();
+    } else {
+      const srcrow = document.getElementById('mat-srcrow');
+      const chiprow = document.getElementById('mat-chiprow');
+      const body = document.getElementById('mat-list');
+      if (srcrow) srcrow.innerHTML = sourceTabs();
+      if (chiprow) chiprow.innerHTML = kindChips();
+      syncFilters();
+      if (body) body.innerHTML = tableHtml();
     }
     try { applyCapGates(); } catch (_) {}
+  }
+
+  // THE ONE EVENT THAT CANNOT BE WIRED IN THE MARKUP, and it is the one that
+  // matters most here.
+  //
+  // Composition events are not in GlobalEventHandlers, so `oncompositionend="…"`
+  // as an HTML attribute is not a handler at all — the browser ignores it in
+  // silence, exactly as it would ignore `onbanana`. It has to be addEventListener
+  // or nothing.
+  //
+  // WHY IT IS NOT OPTIONAL. Measured in Chromium, committing a pinyin candidate
+  // fires `input` with isComposing STILL TRUE, carrying the finished characters,
+  // and only THEN compositionend. So matSearch()'s isComposing guard skips the
+  // one input event that had the real term in it — without this listener the
+  // search would never run for a Chinese term at all, and the box would look
+  // broken in the other direction.
+  //
+  // Bound on the element the shell paint just minted, and only there: a fresh
+  // element each time means no listener is ever attached twice. No event is
+  // passed on, because by definition there is no composition left to guard
+  // against — whatever the browser sets isComposing to on this event.
+  function bindComposition() {
+    const q = document.getElementById('mat-q');
+    if (q && typeof q.addEventListener === 'function') {
+      q.addEventListener('compositionend', () => { window.matSearch(q.value); });
+    }
+  }
+
+  // The filter bar outlives its own repaint now, so a filter changed in code
+  // rather than by hand — matClearFilters() is the only one — has to be written
+  // back onto its control. #mat-q is deliberately NOT among them: it is the one
+  // control the operator may be mid-word in, and matClearFilters clears it
+  // itself, at the moment it is asked to.
+  function syncFilters() {
+    const cat = document.getElementById('mat-cat');
+    const sup = document.getElementById('mat-sup');
+    const arch = document.getElementById('mat-arch');
+    if (cat && cat.value !== _cat) cat.value = _cat;
+    if (sup && sup.value !== _sup) sup.value = _sup;
+    if (arch) arch.checked = _archived;
   }
 
   function tableHtml() {
@@ -367,7 +463,21 @@
     const q = document.getElementById('mat-q'); if (q) q.value = '';
     load();
   };
-  window.matSearch = function (v) {
+  // TYPING IS NOT A SEARCH TERM UNTIL THE IME SAYS IT IS.
+  //
+  // A Chinese keyboard fires an `input` event for every letter of the pinyin
+  // while the candidate window is still open — "s", "sh", "sha", "shai" — none
+  // of which the operator typed or would search for, and none of which the
+  // catalogue matches, since every name is stored in characters. The old handler
+  // took each one as a term: four requests and four repaints for one character,
+  // each landing while the composition was still open.
+  //
+  // `event.isComposing` is true for exactly those events and false everywhere
+  // else, so plain English typing is unchanged. `compositionend` carries the
+  // committed characters and is what actually starts the search; browsers that
+  // also fire a trailing `input` just reset the same timer.
+  window.matSearch = function (v, ev) {
+    if (ev && ev.isComposing) return;
     _q = v;
     clearTimeout(_searchTimer);
     _searchTimer = setTimeout(load, 250);

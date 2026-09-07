@@ -358,6 +358,30 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
 .stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
+/* THE COUNT ON A QUICK STOCK CARD IS A CONTROL, and it has to look like one.
+   Typing is the only way to reach a big number without fifty taps, and the count
+   sat between the two keys with no edge of its own — indistinguishable from the
+   SKU line above it, which is a label. A kitchen adding 130 bowls of soup tapped
+   + a hundred and thirty times. WIDE RATHER THAN SQUARE (`flex:1` against the
+   keys' fixed side), so it reads as the field it is and never as a third key.
+
+   `font-family` rather than the `font` shorthand, deliberately: the shorthand
+   resets font-variant-numeric, which would quietly drop the tabular figures
+   `.num` puts on this element — and a count that changes width as it counts is
+   the one thing a stepper must not do. */
+.qsnum{flex:1;height:56px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
+  padding:0;font-family:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;cursor:pointer}
+/* THE SAME CELL, NOW BEING TYPED IN (§60). An <input> rather than a button, so
+   it must beat the global `input` rule on width, padding and font-size — every
+   one of which is set here rather than inherited, and `min-width:0` because a
+   flex item with a default width does not shrink. Accent edge and ring, because
+   the operator has to see WHICH card the keyboard belongs to: the sheet used to
+   say that by covering everything else, and nothing covers anything now. */
+input.qsnum{width:100%;min-width:0;text-align:center;padding:0;font-size:30px;
+  background:var(--surface-card);border-color:var(--accent);color:var(--text-primary);
+  box-shadow:0 0 0 3px rgba(110,103,175,.18);
+  font-variant-numeric:tabular-nums;}
+input.qsnum:focus{outline:none;border-color:var(--accent);}
 .chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid var(--edge);
   background:var(--surface-card);color:var(--text-secondary)}
@@ -650,8 +674,10 @@ const state = {
          and a duplicate key in this literal is the later one silently winning.
      They are one piece of work: closing a request moves NO stock, so the lines
      have to be carried to the screen that adds them or the shelf stays short. */
-  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:''},
-  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1},
+  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
+      note:''},   // why a closed request did not reach the record screen
+  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
+      awaiting:null},   // the request whose lines are waiting on the shelf to load
   bat:{qty:{},q:''},
   /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
      walking, which the old screen never had to ask because it ran pinned to
@@ -684,7 +710,14 @@ const state = {
          quantity happened to arrive — a stripped list and a genuinely empty
          shelf look identical from here. `addedToday` is what has already gone
          on this store's shelf today, which is the half that needs no grant. */
-      canRecount:false, addedToday:{}, addedTried:false, fixing:{}, setBase:{}},
+      canRecount:false, addedToday:{}, addedTried:false, fixing:{}, setBase:{},
+      /* THE COUNT BEING TYPED, per product, as a RAW STRING rather than a
+         number: it is what is in the field, and a half-typed "1" on the way to
+         130 is not the number 1. Absent key = that card is not being typed in.
+         `typeErr` is the same key space, and only ever carries the one message
+         a non-numeric entry earns — never a failed WRITE, which is `rowErr`
+         and comes with a Retry the typed case must not offer. */
+      typing:{}, typeErr:{}},
   /* WASTE — the ledger and its one write. Namespaced like `qs` rather than
      spread across a dozen flat keys, for the reason the note above this
      literal gives: `pick`, `note`, `range` and `busy` are exactly the short
@@ -776,7 +809,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     if(pikStores().length>1) k.at=null; }
   /* The queue is re-read on entry for the same reason the kitchen-ready list
      is: what is waiting to be made is a fact about this minute. */
-  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; }
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note=''; }
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
@@ -822,6 +855,13 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
+reg('qsType', id=>qsTypeOpen(Number(id)));
+/* No render and no state.focus — see the rule at the head of the Onwards
+   commands. This is a text field storing what was typed, nothing more. */
+reg('qsTyped', (id,v)=>qsTyped(Number(id),v));
+reg('qsTypeCommit', id=>qsTypeCommit(Number(id)));
+/* Patches this card only, never renders — see qsTypeBlur. */
+reg('qsTypeBlur', id=>qsTypeBlur(Number(id)));
 reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
   const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
   // Same caret rescue the stock search does: a re-render moves focus, and a
@@ -861,6 +901,14 @@ reg('hdReason', (i,code)=>{ const l=(state.hd.lines||[])[i]; if(!l||state.hd.bus
   l.reason=String(code); state.hd.openReason=-1; render(); });
 reg('hdWhy', i=>{ state.hd.openReason=state.hd.openReason===Number(i)?-1:Number(i); render(); });
 reg('hdCommit', ()=>hdCommit());
+// Re-ask for the shelf a record screen is still waiting on. `itemsTried` is the
+// latch loadQsItems keeps, so the retry has to lift it or the call never goes.
+reg('hdRetryShelf', ()=>{
+  state.qs.itemsErr=null; state.qs.itemsTried=false;
+  if(state.qs.storeId==null){ state.qs.ctxTried=false; loadQsCtx(); }
+  else loadQsItems(true);
+  render();
+});
 reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
   const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
   const el2=document.getElementById('mBatQ');
@@ -6495,13 +6543,31 @@ function loadKq(force){
 }
 function kqOpen(id){
   const k=state.kq;
-  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  // The note is about the request that last closed; opening another is done
+  // reading it.
+  k.busy=true; k.err=''; k.note=''; k.order=null; k.orderId=Number(id); render();
   api('/api/restock/'+Number(id)).then(j=>{
     k.order=(j&&j.data)||j; k.busy=false; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
   });
+}
+/* WHY A CLOSED REQUEST DID NOT REACH THE RECORD SCREEN, said on the queue it
+   drops back to. The lead clause is the locked pair from
+   docs/tacet-delivery-vocabulary.md's *A batch that could not be matched to a
+   shelf*; `登记生产批次` is `production:log`'s own label in lib/capabilities.js,
+   quoted so the operator asks an admin for the thing by the name the admin will
+   see on the permissions screen. */
+function kqNote(why){
+  const lead=T('Marked made — but the stock has not been recorded.',
+               '已标记完成 — 但库存尚未登记。');
+  if(why==='nocap') return lead+' '+T('This account cannot record a batch. Ask an admin for “Record what was made”.',
+                                      '此账号无法登记批次。请向管理员申请「登记生产批次」权限。');
+  if(why==='nostore') return lead+' '+T('There is no store on this account to add it to.',
+                                        '此账号没有可入库的门店。');
+  return lead+' '+T('This request asked for no quantities, so there is nothing to add.',
+                    '该申请没有数量，无需入库。');
 }
 function kqAdvance(to){
   const k=state.kq;
@@ -6514,7 +6580,11 @@ function kqAdvance(to){
       // asked for, and loadKq drops it.
       const made=k.order;
       k.order=null; k.orderId=null; loadKq(true);
-      if(hdStart(made)) return;   // falls through to the queue when there is nothing to hand over
+      const why=hdStart(made);
+      if(why===true) return;
+      // It closed and the stock did not move. Say so on the way back, naming
+      // what is missing — never the empty queue on its own.
+      k.note=kqNote(why);
     }
     render();
   }).catch(e=>{
@@ -6571,19 +6641,90 @@ function hdResolve(order){
   });
   return out;
 }
+/* WHO IT HANDS OVER TO IS THE CAPABILITY ITS OWN WRITE IS GATED ON, and until
+   §59 it was the quick-stock MODE — which is why this screen had never once
+   opened from this queue. `qsMode()` reads `mode` off /quick-stock/context, and
+   lib/quick-stock-grant.js derives that from the ROLE: it answers 'add' only for
+   a backend operator whose `tenant_users.role` is literally `kitchen`. That role
+   ships `stock_app_only`, and server.js uses that flag to keep it out of Tacet
+   Mobile altogether — every /api/ call not on lib/stock-app-only.js's list 403s
+   `kitchen_add_only`. So the two conditions could not both hold: everybody who
+   can actually reach this queue reads 'recount', hdStart returned false on every
+   tap, and the queue's own promise one screen earlier — "The next screen asks
+   how many reached the shelf" — was never kept for anybody.
+
+   NOTHING ABOUT THE MODE WAS LOAD-BEARING, which is the part worth saying out
+   loud, because the line it replaces carried a reason. That reason was that an
+   absolute recounter has no business being handed a delta to apply. This screen
+   hands over no delta: Record posts /api/retail-admin/production, which writes
+   the batch and moves the shelf in one transaction and has no mode gate of its
+   own — only a store-scope check on restricted roles. The proof it was already
+   wrong is one row up the More list: `logbatch` opens THIS screen with THIS
+   write for a recount-mode operator and always has.
+
+   So the gate is the capability that write is gated on, `production:log`, which
+   is exactly ROUTE_CAP.whatmade — asked through canRoute so this and push()
+   cannot answer differently. */
+/* IT REPORTS WHY IT DECLINED, and until now it returned a bare `false` — which
+   is how one bug took four rounds to find. Every refusal here lands on somebody
+   who has JUST closed a kitchen request: the request is gone from the queue, the
+   shelf is still short, and a silent fall-back to an empty list tells them the
+   opposite of what happened. `true` when the screen opened, otherwise a reason
+   kqAdvance turns into a sentence. There is no path left that says nothing. */
 function hdStart(order){
-  if(qsMode()!=='add'||state.qs.storeId==null) return false;
-  const lines=hdResolve(order);
-  if(!lines.length||!lines.some(l=>l.id!=null)) return false;
-  return hdOpen(lines, order.rs_number||('#'+order.id), order.id);
+  if(!canRoute('whatmade')) return 'nocap';
+  // Nothing was asked for, so there is nothing to hand over. The only refusal
+  // left that is about the REQUEST rather than about this app's own readiness.
+  if(!(order.items||[]).some(li=>xfrNum(li.qty_requested)>0)) return 'nolines';
+  /* A STORE IS THE ONE THING THE RECORD SCREEN CANNOT DO WITHOUT — hdCommit
+     sends store_id — so this is still a refusal, but only once the context has
+     ANSWERED and said there is no store. Refusing while it is merely in flight
+     is what the two guards below stopped doing. */
+  if(state.qs.ctx&&state.qs.storeId==null) return 'nostore';
+  const rs=order.rs_number||('#'+order.id);
+  /* THE SHELF MAY SIMPLY NOT HAVE ARRIVED YET, AND THAT IS NOT A REASON TO
+     REFUSE. `state.qs.items` starts null and is filled two chained round trips
+     after this route first renders — loadQsCtx, then loadQsItems on its answer.
+     An operator who taps "Start making" and "Mark as made" faster than that,
+     or whose shelf fetch simply failed, resolved every line against an EMPTY
+     list, so every line came back unmatched and the old guard
+     `!lines.some(l => l.id != null)` refused to open at all.
+
+     That is the shape §59 was reported for a third time in: the request closed,
+     no screen appeared, and the queue came back empty with nothing anywhere
+     saying why. A late list is not a missing product. So the lines are HELD and
+     the screen opens now, in its loading state; loadQsItems resolves them the
+     moment the shelf lands.
+
+     AND WHEN THE SHELF HAS LANDED, AN UNMATCHED LINE NO LONGER REFUSES EITHER.
+     The screen has always been able to say it — it draws the row greyed, badges
+     it "Not on this store's list" and names the count underneath, telling the
+     operator to go and fix the catalogue. Refusing to open was throwing that
+     sentence away and leaving silence in its place, which is strictly worse
+     than the problem it was avoiding: a request whose lines this store cannot
+     take is exactly what somebody needs to be told. */
+  if(!Array.isArray(state.qs.items)){
+    state.hd.awaiting=order;
+    loadQsCtx();
+    if(state.qs.storeId!=null) loadQsItems();
+    return hdOpen(null, rs, order.id);
+  }
+  state.hd.awaiting=null;
+  return hdOpen(hdResolve(order), rs, order.id);
 }
 /* THE PREFILL IS A PROPOSAL, NOT A DEFAULT. §39's no-prefill rule is about not
    putting words in somebody's mouth — a purpose picked for them is a reason
    they did not give. A quantity here is not that: it is what was ASKED for,
    quoted back, and the operator says whether it is also what was made. */
 function hdOpen(lines,rs,rsId){
+  /* push() DECLINES A ROUTE THIS OPERATOR CANNOT REACH, AND SAYS NOTHING, so
+     answering "opened" without asking sends kqAdvance home believing it handed
+     over: the request closes, the screen does not change, and the early return
+     skips even the re-render. Ask first and let the caller fall through to the
+     queue, which is what it already does for a request with nothing to add. */
+  if(!canRoute('whatmade')) return 'nocap';
   const h=state.hd;
-  h.lines=lines; h.rs=rs||null; h.rsId=rsId||null;
+  h.lines=lines||null; h.rs=rs||null; h.rsId=rsId||null;
   h.busy=false; h.err=''; h.done=null; h.openReason=-1;
   loadHdReasons();
   push('whatmade');
@@ -7075,7 +7216,12 @@ function loadQsItems(force){
   state.qs.itemsTried=true;
   api('/stores/'+state.qs.storeId+'/stock').then(rows=>{
     state.qs.items=Array.isArray(rows)?rows:((rows&&rows.rows)||[]);
-    state.qs.itemsErr=null; render();
+    state.qs.itemsErr=null;
+    // A record screen opened before the shelf existed is waiting on exactly
+    // this. Resolve it here rather than making the operator go back and start
+    // the request again — it is already closed, and there is no way back to it.
+    if(state.hd.awaiting){ state.hd.lines=hdResolve(state.hd.awaiting); state.hd.awaiting=null; }
+    render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
 }
@@ -7155,6 +7301,55 @@ function qsFix(id){
     onclick="APP.cmd('qsFix',${id})">${T('Correct the count','校正数量')}</button>`;
 }
 
+/* THE COUNT CELL AND THE CARD'S LAST CONTROL, drawn by BOTH the full render and
+   the blur patch below. They are functions rather than inline template so the
+   two paths cannot drift on what an idle card looks like — a patch that
+   disagreed with the render would leave a card that repaired itself wrong. */
+function qsCountCell(p,id,recount){
+  if(!recount&&state.qs.typing[id]!=null)
+    return `<input id="qsnum-${id}" class="num qsnum" inputmode="numeric" enterkeyhint="done"
+      value="${escAttr(state.qs.typing[id])}" aria-label="${escAttr(T('How many did you make?','制作了多少?'))}"
+      oninput="APP.cmd('qsTyped',${id},this.value)"
+      onblur="APP.cmd('qsTypeBlur',${id})"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('qsTypeCommit',${id})}">`;
+  const shelf=qsShelf(p);
+  const busy=recount?state.qs.fixing[id]!=null:!!state.qs.inflight[id];
+  const shown=recount?(shelf==null?0:shelf):('+'+(state.qs.add[id]||0));
+  return `<button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
+    onclick="APP.cmd('${recount?'qsFix':'qsType'}',${id})"
+    aria-label="${escAttr(recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?'))}">${shown}</button>`;
+}
+function qsCardFoot(id,recount){
+  if(!recount&&state.qs.typing[id]!=null)
+    return `<button class="cta" onclick="APP.cmd('qsTypeCommit',${id})">${T('Add to stock','加入库存')}</button>`;
+  return recount?'':qsFix(id);
+}
+/* LEAVING A FIELD NOBODY TYPED IN PUTS THE CARD BACK. Reported from the floor:
+   tapping a count and walking away left that card blank for ever, and three of
+   them blank at once down the list. A field with DIGITS in it is left alone —
+   closing that would throw away work nobody asked to discard — so only an empty
+   one reverts, to the +N the card showed before it was opened.
+
+   IT PATCHES, AND THAT IS THE WHOLE REASON IT IS SAFE. Blur fires on the way to
+   whatever was tapped next, so a render() here would rebuild the entire app
+   under that tap and the click would land on a node that no longer exists — the
+   + being reached for, or the next card's count. This replaces THIS card's two
+   elements and nothing else, so the stepper buttons either side stay the same
+   nodes and every pending tap still lands. */
+function qsTypeBlur(id){
+  if(state.qs.typing[id]==null) return;
+  if(String(state.qs.typing[id]).trim()!=='') return;
+  delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  const inp=document.getElementById('qsnum-'+id); if(!inp) return;
+  const row=inp.parentNode, card=row.parentNode;
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  inp.outerHTML=qsCountCell(p,id,false);
+  const foot=card.querySelector('.cta'); if(foot) foot.outerHTML=qsCardFoot(id,false);
+  const errln=card.querySelector('.qs-typeerr'); if(errln) errln.parentNode.removeChild(errln);
+  // The minus follows the amount the card has gone back to showing.
+  const less=row.querySelector('.stepbtn');
+  if(less){ if((state.qs.add[id]||0)<=0) less.setAttribute('disabled',''); else less.removeAttribute('disabled'); }
+}
 function qsRows(){
   const all=state.qs.items||[];
   const q=state.qs.q.trim().toLowerCase();
@@ -7166,6 +7361,19 @@ function qsRows(){
    FLUSH, not the tap. */
 function qsBump(id,d){
   if(qsMode()==='recount') return qsBumpCount(id,d);
+  /* A KEY TAPPED WHILE THE FIELD IS OPEN FOLDS WHAT WAS TYPED and closes it,
+     rather than being refused. Reported from the floor: the two keys were
+     disabled whenever a count had been typed by hand, and on a card that never
+     closed itself that meant disabled for good. Typing 130 and tapping + is
+     131 — the field and the keys are two ways at one number, not two modes. */
+  if(state.qs.typing[id]!=null){
+    const raw=String(state.qs.typing[id]).trim();
+    // Junk is not folded into a quantity: say so and keep the field, exactly as
+    // committing it would. "13o" must never become 13 by way of the + key.
+    if(raw!==''&&!/^\d+$/.test(raw)) return qsTypeCommit(id);
+    if(raw!=='') state.qs.add[id]=parseInt(raw,10);
+    delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  }
   const cur=state.qs.add[id]||0;
   state.qs.add[id]=Math.max(0,cur+d);
   delete state.qs.rowErr[id];
@@ -7238,6 +7446,81 @@ function qsFlush(id){
   apiWrite('/stores/'+state.qs.storeId+'/stock/'+id,{delta:n,reason:'kitchen_add',note:'add-stock'},'PATCH')
     .then(()=>qsWriteLanded(id,n,p))
     .catch(e=>{ if(String(e.message)==='auth') return; qsWriteFailed(id,n,e.message); });
+}
+/* ── TYPING A BATCH IN, ON THE CARD ITSELF (§60) ─────────────────
+   THE COUNT IS THE FIELD. One tap puts the caret in it and the number pad up;
+   there is no sheet in between, which is the whole of §60 — a sheet cost a
+   second tap to reach its field, and covered the list an operator adding to
+   twenty products has to get back to.
+
+   IT IS NOT THE CORRECTION DOOR (§46). This writes a DELTA and is the kitchen's
+   own job, needing no grant; qsAskCount writes an ABSOLUTE COUNT and needs
+   `quickstock:recount`. Separate functions, separate controls, and while the
+   count is being typed the correction door is not on the card at all — the
+   commit button stands in its place, so the two writes are never one fat finger
+   apart even for the moment the keyboard is up.
+
+   THE SEED IS THE PENDING AMOUNT, not the shelf: §46 keeps the shelf total off
+   this control, and what the taps have already built is this operator's own
+   work. Empty at the usual +0, because "0" would have to be cleared before
+   anything could be typed over it. */
+function qsTypeOpen(id){
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  if(!p||qsMode()==='recount') return;
+  const pend=state.qs.add[id]||0, seed=pend>0?String(pend):'';
+  state.qs.typing[id]=seed;
+  delete state.qs.typeErr[id]; delete state.qs.rowErr[id];
+  // The pause behind any taps already made is stood down: the typed figure is
+  // about to replace them, and a timer left armed lands a SECOND write.
+  clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
+  /* The one focus this control ever arms, spent by the render on the next line.
+     Typing itself never arms one and never renders (see qsTyped) — the rule at
+     the head of the Onwards commands, learned on the waste picker: rebuilding a
+     field under a thumb drops the soft keyboard on a real phone. */
+  state.focus={id:'qsnum-'+id,pos:seed.length};
+  render();
+}
+/* WHAT THE OPERATOR HAS TYPED, STORED AND NOTHING ELSE. No render, no
+   state.focus — the field is not rebuilt by its own typing, so there is no
+   caret to put back, and an armed focus would be spent by whatever rendered
+   next. Kept in state rather than read off the DOM at commit so the digits
+   survive a render this card did not ask for (a toast, a poller's dot). */
+function qsTyped(id,v){ state.qs.typing[id]=String(v==null?'':v); }
+/* A TYPED BATCH COMMITS AT ONCE, where a tapped one waits out the 700ms pause.
+   The pause exists to collect a RUN of taps into one ledger row; a figure typed
+   whole is already that row.
+
+   AN EMPTY FIELD IS ZERO, and goes through the same call as any other figure.
+   The field IS the amount — it opened showing what the taps had built — so
+   clearing it and committing means add nothing, and that has to CLEAR the
+   pending amount rather than leave it. Returning early instead stranded it:
+   qsTypeOpen has already stood the tap pause down, so a +5 left behind would
+   have sat on the card for ever, never flushing, until another tap restarted a
+   timer nobody knew was gone.
+
+   A non-number keeps the field open and says why, rather than being stripped to
+   the digits inside it: "13o" silently becoming 13 writes a quantity nobody
+   entered. It carries no Retry — that button belongs to a failed WRITE. */
+function qsTypeCommit(id){
+  const raw=String(state.qs.typing[id]==null?'':state.qs.typing[id]).trim();
+  if(raw!==''&&!/^\d+$/.test(raw)){
+    state.qs.typeErr[id]=T('Enter how many you made — a whole number, 0 or more.','请输入制作数量——整数，0 或以上。');
+    state.focus={id:'qsnum-'+id,pos:raw.length};
+    render(); return;
+  }
+  delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  qsMadeEntered(id, raw===''?0:parseInt(raw,10));
+}
+/* The write itself, shared with nothing else: it REPLACES the pending amount
+   rather than adding to it — the field opened showing that amount, so what the
+   operator left in it is what they mean — and stands the tap pause down for the
+   same reason qsTypeOpen does. Zero writes nothing (qsFlush refuses it). */
+function qsMadeEntered(id,n){
+  clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
+  state.qs.add[id]=Math.max(0,n);
+  delete state.qs.rowErr[id];
+  if(state.qs.add[id]>0) return qsFlush(id);
+  render();
 }
 /* ── CORRECTING THE COUNT (§46) ──────────────────────────────────────────
    A SEPARATE WRITE FROM THE BATCH, and the whole ruling turns on the two never
@@ -7412,9 +7695,15 @@ function screenStockAdd(){
 
      ADD: the number is what you are ADDING and starts at +0; the shelf total is
      context on the line above, where §46 allows it.
-     RECOUNT: the number IS the shelf, − and + move it, and tapping it types a
-     count straight in — which is the only way to reach a big number without
-     fifty taps, and the way the old app did it.
+     RECOUNT: the number IS the shelf, and − and + move it.
+
+     TAPPING THE NUMBER TYPES ONE IN, IN BOTH MODES — the only way to reach a
+     big number without fifty taps. The two modes reach it DIFFERENTLY, and §60
+     is why: a recount opens the shared ask sheet, because it is a bounded
+     decision about somebody else's figure; an add turns THIS CELL into the
+     field, because it is the kitchen's own count and they enter twenty of them
+     in a row. A sheet cost a second tap to reach its own field and covered the
+     list they were working down.
 
      The two write DIFFERENT THINGS — a delta and an absolute count — and that
      is the distinction §46 turns on, so the number's meaning is never left to
@@ -7425,27 +7714,28 @@ function screenStockAdd(){
     const pend=qs.add[id]||0, flying=qs.inflight[id], err=qs.rowErr[id];
     const shelf=qsShelf(p);
     const busy=recount ? state.qs.fixing[id]!=null : !!flying;
-    const shown=recount ? (shelf==null?0:shelf) : ('+'+pend);
     // A recount can always go down to zero; an add has nothing to take away
-    // from until something has been tapped in.
+    // from until something has been tapped in — but a card being typed in keeps
+    // BOTH keys live, because they now fold what was typed (see qsBump).
     const lessOff=recount ? (shelf==null||shelf<=0) : pend<=0;
+    // Typing is an ADD-MODE state only: a recount's own door is qsAskCount, and
+    // the two must not become one control (§46).
+    const typing=!recount && qs.typing[id]!=null;
     return `<div style="background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px">
       <div style="font-size:18px;font-weight:500;line-height:1.3;letter-spacing:-.01em;min-width:0">${escAttr(qsName(p))}</div>
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.sku||'')}</div>
       ${recount?'':qsMeta(p,id)}
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${lessOff?' disabled':''}
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${lessOff&&!typing?' disabled':''}
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
-        ${recount
-          ? `<button class="num" style="flex:1;height:56px;background:none;border:0;padding:0;font:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
-              onclick="APP.cmd('qsFix',${id})" aria-label="${T('Set count','设置数量')}">${shown}</button>`
-          : `<span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}">${shown}</span>`}
+        ${qsCountCell(p,id,recount)}
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>
       </div>
       ${flying?`<div style="font-size:13px;color:var(--text-secondary)">${T('Adding '+flying+'…','正在加 '+flying+' 件…')}</div>`:''}
       ${state.qs.fixing[id]!=null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
-      ${recount?'':qsFix(id)}
+      ${typing&&qs.typeErr[id]?`<div class="qs-typeerr" style="font-size:13px;color:var(--brick-ink)">${escAttr(qs.typeErr[id])}</div>`:''}
+      ${qsCardFoot(id,recount)}
       ${err?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:13px;color:var(--brick-ink)">${escAttr(err)}</span>
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('${recount?'qsFix':'qsFlush'}',${id})">${T('Retry','重试')}</button></div>`:''}
@@ -7766,6 +8056,13 @@ function screenKitchenQueue(){
   loadQsCtx(); loadKq();
   const k=state.kq;
   const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+  /* WHAT HAPPENED TO THE REQUEST THAT JUST LEFT. It closed and the stock did not
+     move, and an empty queue on its own says the opposite. It is a NOTE rather
+     than an error — nothing failed, the operator did exactly the right thing —
+     and it sits above both the list and the empty state, because the empty
+     state is the one they are most likely to be looking at. */
+  const note=k.note?`<div style="margin:0 16px 12px;padding:12px 14px;border-radius:12px;
+    background:var(--surface-sunken,rgba(0,0,0,.04));font-size:14px;line-height:1.55">${escAttr(k.note)}</div>`:'';
   if(k.orderId!=null){
     if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     const o=k.order||{};
@@ -7793,9 +8090,11 @@ function screenKitchenQueue(){
     color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
   const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
   if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!k.list.length) return tabs+nothingYet(T('Nothing to make','暂无待制作'),
+  // The note goes ABOVE the empty state, not after it: "Nothing to make" with
+  // no explanation is precisely the screen this whole defect showed somebody.
+  if(!k.list.length) return tabs+note+nothingYet(T('Nothing to make','暂无待制作'),
     T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
-  return tabs+err+`<div>${k.list.map(o=>{
+  return tabs+note+err+`<div>${k.list.map(o=>{
     const p=krPurpose(o);
     return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
       onclick="APP.cmd('kqOpen',${o.id})">
@@ -7823,6 +8122,23 @@ function screenWhatMade(){
       <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${
         h.rs?T('Back to the queue','返回制作队列'):T('Done','完成')}</button>
     </div>`;
+  }
+  /* OPENED BEFORE THE SHELF ARRIVED. hdStart no longer refuses on a list that is
+     merely late (see the note there), so this screen can be reached with its
+     lines still on the way. It says so, rather than drawing an empty list that
+     reads as "there is nothing to add". The request is already closed by the
+     time anybody gets here, so a failure has to offer the way forward — Retry,
+     and the batch door that needs no request — never a dead end. */
+  if(h.lines===null){
+    if(state.qs.itemsErr) return `<div style="padding:24px 16px">
+      <div style="font-size:17px;font-weight:500">${T('The shelf didn’t load.','货架加载失败。')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T('The request is closed, but nothing has been added to stock yet. Try again, or record the batch from Log a batch.',
+          '该申请已关闭，但库存尚未登记。请重试，或从「登记批次」记录本批次。')}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px"
+        onclick="APP.cmd('hdRetryShelf')">${T('Try again','重试')}</button></div>`;
+    return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${
+      T('Loading…','加载中…')}</div>`;
   }
   const lines=h.lines||[];
   const pending=hdPending();

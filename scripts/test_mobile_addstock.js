@@ -114,6 +114,168 @@ run('add stock', [
     ['still +0', "state.qs.add[7]===0"],
   ]],
 
+  /* ── TYPING A BATCH ON THE CARD (§60) ──────────────────────────────────
+     ONE TAP PUTS THE CARET IN THE COUNT. The sheet that used to stand between
+     cost a second tap to reach its own field and covered the list. These cases
+     pin what that tap must produce, the one-write rule at 130, and the §46 line
+     the change must not cross. */
+  ['one tap on the count turns it into a field, with no sheet in the way',
+    SHELF + "APP.cmd('qsType',7);", [
+      ['the cell is now an input', "!!document.querySelector('input.qsnum')"],
+      ['it asks for the number pad', "document.querySelector('input.qsnum').getAttribute('inputmode')==='numeric'"],
+      ['it asks how many were made',
+        "document.querySelector('input.qsnum').getAttribute('aria-label')==='How many did you make?'"],
+      ['nothing is covering the list', "!state.ask"],
+      ['and the commit button stands where the correction door was',
+        `${body}.indexOf('Add to stock')>-1 && ${body}.indexOf('Correct the count')===-1`],
+    ]],
+  /* THE FIELD OPENS EMPTY at the usual +0 — a "0" would have to be cleared
+     before anything could be typed over it — and the SHELF never seeds it, which
+     is §46: this control has never shown the shelf total and still must not. */
+  ['the field opens empty, and never on the shelf figure',
+    GRANTED + "APP.cmd('qsType',7);", [
+      ['empty rather than a zero to clear', "state.qs.typing[7]===''"],
+      ['and not the shelf total, which is 11 on this fixture',
+        "document.querySelector('input.qsnum').getAttribute('value')!=='11'"],
+    ]],
+  ['a batch typed in goes on in ONE write, whatever its size',
+    SHELF + CATCH + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsTypeCommit',7);", [
+      ['one request, not a hundred and thirty', "window.__sent.length===1"],
+      ['carrying the whole batch', "JSON.parse(window.__sent[0].b).delta===130"],
+      ['still a delta — §46 is untouched by the door it came through',
+        "!('physical_qty' in JSON.parse(window.__sent[0].b))"],
+      ['and recorded as production', "JSON.parse(window.__sent[0].b).reason==='kitchen_add'"],
+      ['the field is closed and nothing is left pending',
+        "state.qs.typing[7]==null && state.qs.add[7]===0"],
+    ]],
+  /* TYPING NEVER RE-RENDERS. Rebuilding a field under a thumb drops the soft
+     keyboard on a real phone — the waste picker learned it, and the rule at the
+     head of the Onwards commands states it. So qsTyped stores and does nothing
+     else: the node the operator is typing into must be the SAME node after. */
+  ['typing does not rebuild the field under the thumb',
+    SHELF + "APP.cmd('qsType',7); window.__el=document.querySelector('input.qsnum');"
+          + "APP.cmd('qsTyped',7,'13');", [
+      ['the digits are held', "state.qs.typing[7]==='13'"],
+      ['the very same node is still in the document',
+        "document.querySelector('input.qsnum')===window.__el"],
+      ['and no focus was armed for the next render to spend', "!state.focus"],
+    ]],
+  /* A TYPED FIGURE REPLACES THE PENDING TAPS rather than adding to them, and
+     stands their 700ms pause down — or the taps behind it land a SECOND write,
+     two ledger rows for one batch. */
+  ['a typed figure replaces the taps and cancels their pending write',
+    SHELF + CATCH + "APP.cmd('qsBump',7,1); APP.cmd('qsBump',7,1);"
+          + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsTypeCommit',7);", [
+      ['the two taps did not add themselves on', "JSON.parse(window.__sent[0].b).delta===130"],
+      ['and their pause was stood down', "!state.qs.timers[7]"],
+      ['so still exactly one write', "window.__sent.length===1"],
+    ]],
+  /* AN EMPTY FIELD IS ZERO, and must CLEAR the pending amount rather than leave
+     it. Leaving it stranded the taps: qsTypeOpen has already stood the 700ms
+     pause down, so a +5 left on the card would never flush — it would sit there
+     until another tap restarted a timer nobody knew had been cancelled. This
+     case is written with taps already made for exactly that reason. */
+  ['a field cleared to empty adds nothing and leaves nothing stranded',
+    SHELF + CATCH + "APP.cmd('qsBump',7,5); APP.cmd('qsType',7); qsTyped(7,''); APP.cmd('qsTypeCommit',7);", [
+      ['nothing went on the shelf', "window.__sent.length===0"],
+      ['the field is closed', "state.qs.typing[7]==null"],
+      ['the five it opened on are gone', "state.qs.add[7]===0"],
+      ['and no pause is left armed over them', "!state.qs.timers[7]"],
+    ]],
+  /* A NON-NUMBER IS NOT STRIPPED TO THE DIGITS INSIDE IT: "13o" silently
+     becoming 13 writes a quantity nobody entered. The field stays open. */
+  ['a non-number keeps the field open and writes nothing',
+    SHELF + CATCH + "APP.cmd('qsType',7); qsTyped(7,'13o'); APP.cmd('qsTypeCommit',7);", [
+      ['nothing was written', "window.__sent.length===0"],
+      ['the field is still open on what was typed', "state.qs.typing[7]==='13o'"],
+      ['it says why', "!!state.qs.typeErr[7]"],
+      ['and offers no Retry, which belongs to a failed write',
+        `${body}.indexOf('Retry')===-1`],
+    ]],
+  /* ── THE TWO DEFECTS REPORTED FROM THE FLOOR ON THE FIRST BUILD ──────────
+     "* and - doesnt work now if i edit a number manually, also if i dont add a
+     number and i just click on the row it stay blank even if i leave the row.
+     it should go back to the same dfult it is." Both came from the same cause:
+     the field was a mode with no way out, and the keys were disabled inside it,
+     so a card tapped by accident was blank AND dead until the app re-rendered
+     for some other reason. Three of them were blank at once in the report. */
+  ['the keys stay live while a count is being typed',
+    SHELF + "APP.cmd('qsType',7);", [
+      ['plus is not disabled', "!document.querySelectorAll('.stepbtn')[1].hasAttribute('disabled')"],
+    ]],
+  ['a key tapped after typing folds the typed number rather than refusing it',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsBump',7,1);", [
+      ['130 became 131', "state.qs.add[7]===131"],
+      ['and the field closed behind it', "state.qs.typing[7]==null"],
+      ['the card shows it', `${body}.indexOf('+131')>-1`],
+    ]],
+  ['minus works on a typed number too',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsBump',7,-1);", [
+      ['130 became 129', "state.qs.add[7]===129"],
+    ]],
+  /* JUNK IS NOT FOLDED INTO A QUANTITY by way of the + key any more than by the
+     commit button: "13o" must not become 13 and then 14. */
+  ['a key tapped on a non-number says so instead of folding it',
+    SHELF + CATCH + "APP.cmd('qsType',7); qsTyped(7,'13o'); APP.cmd('qsBump',7,1);", [
+      ['nothing was written', "window.__sent.length===0"],
+      ['the amount was not invented', "!state.qs.add[7]"],
+      ['and the field is still open, saying why', "state.qs.typing[7]==='13o' && !!state.qs.typeErr[7]"],
+    ]],
+  /* LEAVING AN EMPTY FIELD PUTS THE CARD BACK. This is the "it should go back
+     to the same default" half of the report. */
+  ['leaving a field nobody typed in puts the card back to its count',
+    SHELF + "APP.cmd('qsBump',7,3); APP.cmd('qsType',7); qsTyped(7,''); APP.cmd('qsTypeBlur',7);", [
+      ['the field is closed', "state.qs.typing[7]==null"],
+      ['the count it opened on is still there', "state.qs.add[7]===3"],
+      ['the cell is a button again, not an input',
+        "!document.getElementById('qsnum-7') && !!document.querySelector('button.qsnum')"],
+      ['and the commit button went with it', `${body}.indexOf('Add to stock')===-1`],
+    ]],
+  /* The same revert WITH the grant, where the card has a correction door to put
+     back — it is `qsFix` that the commit button stands in for, and this fixture
+     is the only one where that door exists to be checked. */
+  ['and with the grant, the correction door comes back with it',
+    GRANTED + "APP.cmd('qsType',7); qsTyped(7,''); APP.cmd('qsTypeBlur',7);", [
+      ['the correction door is on the card again', `${body}.indexOf('Correct the count')>-1`],
+      ['and the commit button is gone', `${body}.indexOf('Add to stock')===-1`],
+    ]],
+  /* A FIELD WITH DIGITS IN IT IS LEFT ALONE — closing it on the way past would
+     throw away work nobody asked to discard. */
+  ['leaving a field that HAS digits keeps them',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsTypeBlur',7);", [
+      ['still open on what was typed', "state.qs.typing[7]==='130'"],
+      ['and still an input', "!!document.getElementById('qsnum-7')"],
+    ]],
+  /* THE BLUR PATCH MUST NOT REBUILD THE APP. Blur fires on the way to whatever
+     was tapped next, so a render() here would replace the very node the tap is
+     travelling towards. The stepper buttons either side must survive it. */
+  ['leaving an empty field patches the card without rebuilding the row',
+    SHELF + "APP.cmd('qsType',7); window.__less=document.querySelectorAll('.stepbtn')[0];"
+          + "APP.cmd('qsTypeBlur',7);", [
+      ['the minus key is the very same node', "document.querySelectorAll('.stepbtn')[0]===window.__less"],
+    ]],
+  /* THE DOOR IS THE KITCHEN'S OWN AND NEEDS NO GRANT (§46) — it writes a delta,
+     the job this screen exists for. The correction door writes an absolute count
+     and needs `quickstock:recount`; one shared function would have handed the
+     ungranted operator that write. */
+  ['typing a batch needs no recount grant', SHELF, [
+    ['the shelf is not shown, so there is no grant', "!state.qs.canRecount"],
+    ['and the field still opens', "(APP.cmd('qsType',7), state.qs.typing[7]==='')"],
+    ['without opening the correction sheet', "!state.ask"],
+  ]],
+  /* A RECOUNT KEEPS ITS SHEET (§60). Its count is a bounded decision about a
+     figure that is not the operator's own, and the drop fork hangs off it. */
+  ['a recount still opens the sheet, not a field on the card',
+    COUNTING + "APP.cmd('qsFix',7);", [
+      ['the sheet is open', "!!state.ask"],
+      ['on the shelf question', "state.ask.title==='Set count'"],
+      ['and no field was opened on the card', "!document.querySelector('input.qsnum')"],
+    ]],
+  ['the typing door refuses a recount outright',
+    COUNTING + "qsTypeOpen(7);", [
+      ['nothing is being typed', "state.qs.typing[7]==null"],
+    ]],
+
   ['the write is a DELTA — the server refuses anything else from a kitchen',
     SHELF + `window.__sent=[];
       window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});

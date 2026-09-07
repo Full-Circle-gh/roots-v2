@@ -53,7 +53,12 @@ function findChrome() {
 }
 
 const CTX = {
-  enabled: true, mode: 'recount',
+  /* §59: whether this operator may record a batch — the capability the Record
+     button's write is gated on. TRUE here because it is the ordinary case: the
+     owner, an admin and a `retail` operator all hold it, and all three are in
+     RECOUNT mode, which is precisely why the mode could never gate this. The
+     `noLogProd` option below takes it away for the one case that needs it. */
+  enabled: true, mode: 'recount', can_log_production: true,
   user: { name: 'Asher', full_access: true },
   stores: [{ id: 1, name_en: 'Tianhe', name_cn: '天河店', code: 'TH' }],
 };
@@ -128,6 +133,7 @@ function stub(o) {
   // 'add' is the kitchen's mode — the one the server sends an operator holding
   // quickstock:add. The handoff after "Mark as made" exists only for them.
   if (o.mode) ctx.mode = o.mode;
+  if (o.noLogProd) ctx.can_log_production = false;
   const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
   const ready = o.ready ? [READY] : [];
   return '<script>\n' +
@@ -136,6 +142,7 @@ function stub(o) {
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(ctx) +
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
+    'var HANGSHELF=' + JSON.stringify(!!o.hangShelf) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
     'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) + ';\n' +
     'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
@@ -147,7 +154,12 @@ function stub(o) {
        that decides whether holding the boot screen is safe. */
     '  if(HANG&&url.indexOf("/api/restock")===0) return new Promise(function(){});\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
-    '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
+    /* THE SHELF, HELD OPEN. state.items is empty until this answers, and
+       resolving a request's lines against an empty list marks every one of them
+       unmatched — which used to make the handover refuse to open at all,
+       silently. The screen must say it is waiting instead. */
+    '  else if(/\\/stock$/.test(url)){ if(HANGSHELF) return new Promise(function(){});\n' +
+    '    body={success:true,data:STOCK}; }\n' +
     // The one write Add stock has ever done. The production flow no longer uses
     // it — kept answering so a stray call is recorded rather than silently 404ing.
     '  else if(/\\/stores\\/\\d+\\/stock\\/\\d+$/.test(url)){\n' +
@@ -481,13 +493,50 @@ const CASES = {
     absent: ['On the shelf'] },
 
   // AN OPERATOR WHO RECOUNTS IS NOT HANDED THIS. Add stock is the kitchen's
-  // mode; a warehouse recount sets absolute counts and has no business being
-  // sent to a screen that adds. They land back on the queue, as before.
-  'a-recount-operator-gets-the-queue-back': { kitchenOnly: true,
+  /* THE HANDOVER IS NOT GATED ON THE MODE, AND THIS CASE USED TO SAY IT WAS.
+     It asserted that a recount operator lands back on the queue, defending it
+     with "a warehouse recount has no business being sent to a screen that
+     adds" — and in doing so it locked in the defect §59 names. The mode is
+     role-derived: 'add' means the role is literally `kitchen`, and every OTHER
+     operator who can open this queue — the owner, an admin, a `retail`
+     operator — reads 'recount'. So this case proved the window shut for
+     everybody it was reported broken by, and the suite stayed green.
+
+     What actually decides it is `production:log`, the capability the Record
+     button's own write is gated on. Somebody who has just closed a kitchen
+     request is doing the kitchen's work whatever mode the server files them
+     under, and the shelf is short until they say what reached it. */
+  'made-hands-over-to-a-recount-operator-who-can-record': { kitchenOnly: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['What you made', 'RS-260904-002', 'Hummus Asli', '+6'],
+    checkStatus: (st) => (st && st.status === 'prepared') ? null
+      : `the request did not close (status ${st && st.status})`,
+    // Still a proposal, not a write — the guarantee does not weaken because a
+    // different operator is holding the phone.
+    checkProd: (p) => p.length ? `${p.length} write(s) went out before Record was pressed` : null },
+
+  /* AND STILL REFUSED TO SOMEBODY WHOSE RECORD WOULD 403. The screen exists for
+     its save; offering it to an operator without the capability is the dead end
+     the gate is there to prevent. They land back on the queue, which is what
+     this file has always asserted — on the honest condition now. */
+  'a-recount-operator-who-cannot-record-gets-the-queue-back': { kitchenOnly: true, noLogProd: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
              "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
     expect: ['Production', 'To make'],
     absent: ['What you made'] },
+
+  /* THE SHELF HAS NOT ARRIVED YET. Held open, so `state.items` is still empty
+     when the request closes. The screen opens and says it is waiting rather
+     than refusing and leaving the operator on an empty queue with a closed
+     request and no record of what they made. */
+  'a-shelf-that-has-not-arrived-still-opens-the-screen': { kitchenOnly: true, hangShelf: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['What you made', 'RS-260904-002', 'Loading'],
+    checkStatus: (st) => (st && st.status === 'prepared') ? null
+      : `the request did not close (status ${st && st.status})`,
+    checkProd: (p) => p.length ? `${p.length} write(s) went out before Record was pressed` : null },
 
   /* ── A batch nobody asked for ─────────────────────────────────────────────
      Tuesday is hummus day. It is most of what a kitchen makes, and it had no

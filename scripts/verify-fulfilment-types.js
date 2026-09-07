@@ -1434,9 +1434,18 @@ check('the counter decrement goes through prepareCommitUnreservedOrder, not adju
 const MARK_PAID_SRC = extractFn('markOrderPaid', SERVER_SRC) || '';
 check('markOrderPaid was found in routes/retail.js (extraction is intact)',
   MARK_PAID_SRC !== '', true);
+// §58 (2026-09-07) narrowed WHAT that call takes, not WHETHER it fires: the
+// kitchen's own lines wait for their batch, every other line still decrements
+// here, and no address test came back. `atPayment: true` is the whole
+// difference and is pinned with the call, so removing the deferral silently is
+// as loud as removing the call was. The lines it holds back are asserted
+// behaviourally in scripts/test_fresh_stock_deferral.js — this is the spelling
+// check that the two paid routes still agree with each other.
 check('markOrderPaid decrements every paid order, with no address test in front of it',
-  /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · paid' \}\)/.test(MARK_PAID_SRC)
+  /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · paid', atPayment: true \}\)/.test(MARK_PAID_SRC)
   && !/isGuangzhouAddress/.test(MARK_PAID_SRC), true);
+check('the admin Mark paid route defers the kitchen lines on the same terms',
+  /atPayment: true,\n\s*\}\);\n\s*\} catch \(e\) \{ console\.error\('\[inventory\.commit \(admin paid\)\]'/.test(SERVER_SRC), true);
 check('the admin Mark paid route decrements every order, not counter sales alone',
   /\[inventory\.commit \(admin paid\)\]/.test(SERVER_SRC)
   && (SERVER_SRC.match(/isTerminalOnPaid\(/g) || []).length === 1, true);
