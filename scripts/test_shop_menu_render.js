@@ -1331,12 +1331,20 @@ function boxOf(text) {
       assert.strictEqual(shown.bar, true, 'the basket survived the order that emptied it');
       // The half a screenshot cannot show: the order exists.
       const row = db.prepare(
-        `SELECT recipient_name, status, channel, source, fulfillment_type, shop_order_code
+        `SELECT recipient_name, status, channel, source, shop_entry_method,
+                fulfillment_type, shop_order_code
            FROM retail_orders WHERE store_id = ? ORDER BY id DESC LIMIT 1`).get(LOC);
       assert.ok(row, 'the page said an order was placed and no order was written');
       assert.strictEqual(row.recipient_name, 'Mei');
       assert.strictEqual(row.status, 'pending_payment');
-      assert.strictEqual(row.source, 'qr');
+      assert.strictEqual(row.channel, 'shop');
+      // The door is shop_entry_method (§44, amended 2026-09-07). `source` says
+      // how the row was CREATED and is NULL for anything that arrived by
+      // itself — a QR order, like the mini-app checkout and every mirror. It
+      // held 'qr' until that amendment, which is the defect it recorded.
+      assert.strictEqual(row.shop_entry_method, 'qr');
+      assert.strictEqual(row.source, null,
+        'a QR order claimed a `source` — that column says who created the row, not which door');
       assert.strictEqual(row.fulfillment_type, 'counter');
       assert.strictEqual(String(row.shop_order_code), shown.code,
         'the number on the phone is not the number in the database');
