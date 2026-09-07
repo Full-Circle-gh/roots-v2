@@ -7229,22 +7229,21 @@ function qsFix(id){
    disagreed with the render would leave a card that repaired itself wrong. */
 function qsCountCell(p,id,recount){
   if(!recount&&state.qs.typing[id]!=null)
-    return '<input id="qsnum-'+id+'" class="num qsnum" inputmode="numeric" enterkeyhint="done"'
-      +' value="'+escAttr(state.qs.typing[id])+'"'
-      +' aria-label="'+escAttr(T('How many did you make?','制作了多少?'))+'"'
-      +' oninput="APP.cmd(\'qsTyped\','+id+',this.value)"'
-      +' onblur="APP.cmd(\'qsTypeBlur\','+id+')"'
-      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();APP.cmd(\'qsTypeCommit\','+id+')}">';
+    return `<input id="qsnum-${id}" class="num qsnum" inputmode="numeric" enterkeyhint="done"
+      value="${escAttr(state.qs.typing[id])}" aria-label="${escAttr(T('How many did you make?','制作了多少?'))}"
+      oninput="APP.cmd('qsTyped',${id},this.value)"
+      onblur="APP.cmd('qsTypeBlur',${id})"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('qsTypeCommit',${id})}">`;
   const shelf=qsShelf(p);
   const busy=recount?state.qs.fixing[id]!=null:!!state.qs.inflight[id];
   const shown=recount?(shelf==null?0:shelf):('+'+(state.qs.add[id]||0));
-  return '<button class="num qsnum" style="color:'+(busy?'var(--text-secondary)':'var(--text-primary)')+'"'
-    +' onclick="APP.cmd(\''+(recount?'qsFix':'qsType')+'\','+id+')"'
-    +' aria-label="'+escAttr(recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?'))+'">'+shown+'</button>';
+  return `<button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
+    onclick="APP.cmd('${recount?'qsFix':'qsType'}',${id})"
+    aria-label="${escAttr(recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?'))}">${shown}</button>`;
 }
 function qsCardFoot(id,recount){
   if(!recount&&state.qs.typing[id]!=null)
-    return '<button class="cta" onclick="APP.cmd(\'qsTypeCommit\','+id+')">'+T('Add to stock','加入库存')+'</button>';
+    return `<button class="cta" onclick="APP.cmd('qsTypeCommit',${id})">${T('Add to stock','加入库存')}</button>`;
   return recount?'':qsFix(id);
 }
 /* LEAVING A FIELD NOBODY TYPED IN PUTS THE CARD BACK. Reported from the floor:

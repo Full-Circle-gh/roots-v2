@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.145
+# Tacet shared-core consolidation — decisions record, v4.146
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
