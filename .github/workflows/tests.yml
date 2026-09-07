@@ -14,16 +14,40 @@ name: Tests
 #
 # It does not replace deploy.yml's gates. Those run against the changed-file
 # list on the way out of the door and are cheap; this runs the suites.
-
+#
+# ── NOTHING RUNS AUTOMATICALLY, SINCE 2026-09-07 ─────────────────────────────
+# ASH'S INSTRUCTION, TWICE: "don't do slow shared at all", then "I don't want
+# all those tests". This workflow is now MANUAL ONLY. No pull request and no
+# push to main starts it. It runs when a person presses Run workflow, and at no
+# other time.
+#
+# WHAT THAT COSTS, so nobody has to work it out later: nothing is watched. The
+# 164 fast suites and the 37 browser suites still exist, still pass, and still
+# run locally — but no push is checked by anything, so a regression reaches
+# production and is found by a person using the shop. That is the trade that
+# was chosen, deliberately, and it is a spending decision rather than a verdict
+# on the suites.
+#
+# WHAT THIS DOES NOT CHANGE: deploys. deploy.yml fires on `push: main` on its
+# own and has never had a `needs:` on this workflow — a merge to main shipped to
+# production whether these tests passed, failed, or never ran. Turning them off
+# does not make deploying faster or slower; it removes the warning, not a gate.
+#
+# TO PUT IT BACK: restore the `pull_request:` and `push: branches: [main]`
+# triggers below. To run it right now against any branch: Actions → Tests → Run
+# workflow. A manual run does BOTH shards, fast and slow.
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
-# A second push to a PR makes the first run's answer worthless — cancel it
-# rather than pay for it. Never on main: those runs are the record of what each
-# commit did, and a cancelled one is a hole in it.
+# Two manual runs on the same branch queue rather than cancel: a run somebody
+# started ON PURPOSE is not noise to be discarded, and there is no longer a
+# stream of pushes to out-race. The condition below is now always false — kept
+# in its evaluated form rather than hard-coded, so restoring the `pull_request`
+# trigger restores the cancelling with it.
+#
+# (It read "a second push to a PR makes the first run's answer worthless" while
+# this ran on pushes. That was true then and is left here as the reason the line
+# is shaped this way.)
 concurrency:
   group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -33,12 +57,32 @@ jobs:
     name: ${{ matrix.shard }} suites
     runs-on: ubuntu-latest
     strategy:
-      # Both shards always report. Failing fast here would hide a browser
+      # Both shards report when both run. Failing fast would hide a browser
       # regression behind an unrelated unit failure, and the browser shard is
       # the slow one you least want to re-queue.
       fail-fast: false
       matrix:
-        shard: [fast, slow]
+        # ── THE SLOW SHARD NO LONGER RUNS AUTOMATICALLY (2026-09-07, Ash) ────
+        # It is ON DEMAND ONLY: `workflow_dispatch` runs both shards, a pull
+        # request or a push to main runs `fast` alone.
+        #
+        # WHY. Cost, and it was not close. The fast shard is ~45 seconds; the
+        # slow shard drives a real Chromium and takes ~30 MINUTES. In the eight
+        # hours to 2026-09-07 06:00 China time, 62 Tests runs across three
+        # concurrent sessions spent on the order of thirty runner-hours, nearly
+        # all of it here, and GitHub Actions stopped starting jobs for
+        # non-payment at 06:52. A gate nobody can afford to run is not a gate.
+        #
+        # WHAT THIS COSTS, said plainly rather than discovered later: 37 browser
+        # suites stop running on every change. That includes
+        # test_shop_menu_render.js, which was RED ON MAIN for six consecutive
+        # merges when this landed. Main will now go green, and it will be green
+        # because nothing is looking — not because the chip is centred. That
+        # failure is diagnosed on PR #322 and #330 and is still open.
+        #
+        # This is a spending decision, not a verdict on the suites. Restoring
+        # them is one line: put `slow` back in the list unconditionally.
+        shard: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["fast","slow"]') || fromJSON('["fast"]') }}
     steps:
       - uses: actions/checkout@v4
 

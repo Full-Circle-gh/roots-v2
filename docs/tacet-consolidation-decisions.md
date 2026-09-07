@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.137
+# Tacet shared-core consolidation — decisions record, v4.140
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,13 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-07 · v4.137 — **§52, §53 AND §54 ADDED: THREE FINANCE RULINGS — DECIDED by Ash, 2026-09-07.** **§52: REVENUE IS ORDERS, AND ONLY ORDERS.** Finance revenue counts orders across every channel — manual, Meituan, Eleme, mini app, till counter, and any channel a tenant adds later — one row per order, and **hand-typed `income_entries` rows are NOT revenue**: they are money in, on their own staircase row below the revenue line, feeding Net. **The defect it fixes is a real disagreement one tab apart** — Summary reported money-in from `retail_orders` while Transactions reported it from `income_entries`, never reconciling, so whichever a chart or an AI picked up was arbitrary. **§52 carries an OPEN survey question that binds any Finance chart**: the Summary counts `retail_orders`, the kitchen POS writes `sales_entries`, and if till-counter takings land in the latter Tacet's revenue is short today with no screen saying so. **§53: COST OF GOODS AND GROSS PROFIT STAY BLANK.** Both remain null and **both rows render blank**; Net is revenue minus operating expenses and is **structurally higher than true net, known and accepted**. **REJECTED: deriving cost of goods from ingredient purchases inside the window** — purchases are lumpy and sales are not, so a ¥2,000 delivery on the 3rd would crater one window and inflate the next with no change in the business. The two rows fill from §31 when it lands and from nothing else, and **the AI's finance read is forbidden margin, gross profit and cost of goods in any form, including inference** — a hard prompt constraint. **§54: FINANCE CHARTS ARE HAND-ROLLED SVG, SHARED WITH REPORTS.** No charting library; the primitives are **extracted into a shared module BEFORE Finance draws anything**, both pages consuming it, because two hand-rolled copies is the never-re-implemented rule broken and it drifts silently. **FIVE LIVE CROSS-REFERENCES ARE CORRECTED FORWARD AND NO DATED ENTRY IS REWRITTEN**, per this file's own convention that superseded text keeps its body and gains a pointer: §36's staircase spine gains a row and loses two; *Revenue derives from orders* is extended to exclude the typed ledger as well as `sales_entries`; **the "no remaining live writer" line under *Counter and market sales become orders* is QUALIFIED** — it states a consequence of a decision and was never a measurement, and §52 puts it back in question; and *A missing staircase step is shown and marked Not recorded* plus *Finance is not floored at the cutover date* are **SUPERSEDED IN PART** on the token only — the rows are blank rather than Not recorded, while never-hidden, never-zero, no-dash and the unconditional no-date-condition rule all stand, and the §1.12 seventh state is untouched everywhere else. **ONE COLLISION IS RECORDED AND DELIBERATELY NOT RESOLVED**, against *Settlement receipts are excluded from Finance entirely*: §52 puts `income_entries` on the staircase, that subsection gives settlement no place on it, and **¥151,895.69 of the 26 live rows are settlement summaries filed as Mini App income with no column distinguishing them** — Transactions could draw them harmlessly because a list is not a summand, and a staircase row is. Neither ruling is bent to fit the other; a ruling from Ash is owed before the money-in row is summed. Docs only — no code, no schema, no routes. Appended as §52, §53 and §54 under the append-only convention; Related documents stays at §38.
+2026-09-07 · v4.140 — **§55, §56 AND §57 ADDED: THREE FINANCE RULINGS — DECIDED by Ash, 2026-09-07.** **§55: REVENUE IS ORDERS, AND ONLY ORDERS.** Finance revenue counts orders across every channel — manual, Meituan, Eleme, mini app, till counter, and any channel a tenant adds later — one row per order, and **hand-typed `income_entries` rows are NOT revenue**: they are money in, on their own staircase row below the revenue line, feeding Net. **The defect it fixes is a real disagreement one tab apart** — Summary reported money-in from `retail_orders` while Transactions reported it from `income_entries`, never reconciling, so whichever a chart or an AI picked up was arbitrary. **§55 carries an OPEN survey question that binds any Finance chart**: the Summary counts `retail_orders`, the kitchen POS writes `sales_entries`, and if till-counter takings land in the latter Tacet's revenue is short today with no screen saying so. **§56: COST OF GOODS AND GROSS PROFIT STAY BLANK.** Both remain null and **both rows render blank**; Net is revenue minus operating expenses and is **structurally higher than true net, known and accepted**. **REJECTED: deriving cost of goods from ingredient purchases inside the window** — purchases are lumpy and sales are not, so a ¥2,000 delivery on the 3rd would crater one window and inflate the next with no change in the business. The two rows fill from §31 when it lands and from nothing else, and **the AI's finance read is forbidden margin, gross profit and cost of goods in any form, including inference** — a hard prompt constraint. **§57: FINANCE CHARTS ARE HAND-ROLLED SVG, SHARED WITH REPORTS.** No charting library; the primitives are **extracted into a shared module BEFORE Finance draws anything**, both pages consuming it, because two hand-rolled copies is the never-re-implemented rule broken and it drifts silently. **FIVE LIVE CROSS-REFERENCES ARE CORRECTED FORWARD AND NO DATED ENTRY IS REWRITTEN**, per this file's own convention that superseded text keeps its body and gains a pointer: §36's staircase spine gains a row and loses two; *Revenue derives from orders* is extended to exclude the typed ledger as well as `sales_entries`; **the "no remaining live writer" line under *Counter and market sales become orders* is QUALIFIED** — it states a consequence of a decision and was never a measurement, and §55 puts it back in question; and *A missing staircase step is shown and marked Not recorded* plus *Finance is not floored at the cutover date* are **SUPERSEDED IN PART** on the token only — the rows are blank rather than Not recorded, while never-hidden, never-zero, no-dash and the unconditional no-date-condition rule all stand, and the §1.12 seventh state is untouched everywhere else. **ONE COLLISION IS RECORDED AND DELIBERATELY NOT RESOLVED**, against *Settlement receipts are excluded from Finance entirely*: §55 puts `income_entries` on the staircase, that subsection gives settlement no place on it, and **¥151,895.69 of the 26 live rows are settlement summaries filed as Mini App income with no column distinguishing them** — Transactions could draw them harmlessly because a list is not a summand, and a staircase row is. Neither ruling is bent to fit the other; a ruling from Ash is owed before the money-in row is summed. Docs only — no code, no schema, no routes. Appended as §55, §56 and §57 under the append-only convention; Related documents stays at §38. **WRITTEN AS §52, §53 AND §54 AND RENUMBERED TO §55, §56 AND §57 ON REBASE, 2026-09-07 — DECIDED by Ash, who ruled that the rulings do not change and only the numbers move.** All three numbers were taken on main while this branch sat open: **§52** by PR #335's *a mirrored order has no parcels* (v4.137), **§53** by PR #336's *the Quick Stock and Add Stock feature switches are deleted* (v4.138) — itself renumbered on rebase for the same reason — and **§54** by PR #340's *the phone's order drawer reads the fields it already holds on a mirrored order* (v4.139). The version moved with them, from the **v4.137** this claimed to **v4.140**, v4.137 through v4.139 having been taken by those same three. **THE FOURTH COLLISION OF THIS KIND RECORDED HERE**, after the two branches that each defined a §39 and after §46/§47, and it arose the way every one of them did: branches open at once, each taking what was the next free number when it was written. **Nothing was renumbered to make room and no live section moved** — this branch took the next free numbers and every one of its own five forward references into the Finance subsections above moved with it, in the same pass. **The three rulings are untouched in substance**: revenue is orders and only orders, cost of goods and gross profit stay blank, Finance charts are hand-rolled SVG shared with Reports. **The heading style is also left as written** (`## §NN — TITLE`, where the sections above use `## NN. Title`), because the ruling was that only the numbers move; it is noted here rather than corrected silently.
+
+2026-09-07 · v4.139 — **§54 ADDED: THE PHONE'S ORDER DRAWER READS THE FIELDS IT ALREADY HOLDS ON A MIRRORED ORDER — DECIDED by Ash**, from a phone, on GZ-140695: *"on PC you can find address and name. can gather all info that PC version have for gzgrocery order and add them to mobile"*. **§52 settled what the drawer must NOT show on a mirrored order; this is the other half — what it must.** **The finding that makes this a rendering change and not a data one is that both surfaces read the SAME payload**: `GET /api/retail-admin/orders/:id` is `SELECT o.*`, so `recipient_name`, `recipient_phone`, `address_full` and the parsed `address` all reach the phone already, and every gap was the phone declining to render a field it held. **The load-bearing one is `ordCustomerLines`** (`public/retail-admin/04-orders.js`): gzgrocery mirrors OpenCart's whole customer cell — `"Name (phone) address…"` — into `recipient_name` and leaves `recipient_phone` and the ship columns null, and the desktop splits that blob back into a name and a phone while the phone printed it raw, so the address landed in the name line. **Ported verbatim — same channel test, same six-digit floor — so the two surfaces cannot disagree about who an order is for.** **Five more, each a field already in hand:** `orderHeadMarks` had guarded on `placedFull` since it was written and nothing ever set it, so the drawer carried no date at all; the read-only tag existed only on the LIST row, so opening a mirrored order lost the one fact explaining why nothing in it can be acted on; `ITEM_TUPLE` read `options` and never `size`, so every mirrored line showed nothing under its name and two sizes of one product read alike; there was no money-gap band, so the drawer showed a total, showed the lines, and said nothing when they contradicted; and the SKU chip was inert where the desktop links the line out to its product. **Ruling: the read-only tag rides the marks strip, not the header** — the header is order number, status pill and close button on a 390px screen, and a fourth item there squeezes the order number into an ellipsis. **Ruling: it reads the RAW channel, not the display key** — `CH_BACK` still has no Eleme entry (§52), so an Eleme order read through the display key would be tagged "mini-app". **A defect found in the same card and fixed with it:** the Ship-to Copy button spread a null address, so on every order with none on file — a counter sale, a pickup, and every gzgrocery mirror — the one button on that card threw a `TypeError` and copied nothing; it now joins the parts that exist, as the desktop's copy chip does. **Deliberately NOT done, and recorded rather than left to be found:** the ship-by tile still says "Ship when ready · courier" on a mirrored order — it is visible in the screenshot that prompted this, and §52 already recorded it as a separate change, so it stays one. **A placeholder row is left exactly as it is**: an order whose dispatch note was never read carries the order id echoed into `recipient_name`, there is nothing to split, and nothing here invents a name or an address the row does not hold — which is what GZ-140695 itself does after this change. **Three of the desktop's mirrored cards were examined and deliberately not ported**, because none can fire on this channel: `renderChannelMoneyPanel` returns early for anything but Meituan and Eleme, and the daemon writes neither `channel_status` nor `channel_eta` nor `needs_cutlery`. **No composed strings** — every pair is lifted live from `04-orders.js` or already in `m.html`, so `docs/tacet-delivery-vocabulary.md` is untouched. One new suite, `scripts/test_mobile_mirrored_order_info.js`, 37 assertions across 16 cases, registered in the slow shard beside the §52 suite. Client and docs only; no route, schema or capability change. Appended as §54 under the append-only rule; Related documents stays at §38.
+
+2026-09-06 · v4.138 — **§53 ADDED: THE QUICK STOCK AND ADD STOCK FEATURE SWITCHES ARE DELETED AHEAD OF §48's LAST STEP — DECIDED by Ash**, whose framing was that Quick Stock became part of Tacet and is no longer connected to the kitchen app, so the two switches no longer describe anything an operator recognises. **The finding that prompted it is that both were already half-dead**: `features.quickStock` and `features.kitchenAdd` are not members of `lib/features.js` `FEATURES`, so they never had an entitlement layer and the `feature:` tags on `quickstock:add` / `quickstock:recount` in `lib/capabilities.js` could never fire; the only server reader folded them into one `enabled` field on `/api/retail-admin/quick-stock/context`, and the only consumer of that field was the standalone `/stock` PWA's "off" screen. **Tacet Mobile's own Add stock / Quick stock screens read `can_recount` and `stores` from the same response and ignore `enabled` entirely**, entry being gated on capability alone — so the switch an operator held in Tacet's Settings changed nothing in Tacet, and **`kitchenAdd`'s own copy, "Off: kitchen staff cannot add what they just made," was false when this was ruled.** **The cost is recorded rather than glossed**: `/stock` is still live under §48, still the only home for six flows, and `kitchen` and `store_stock` still carry `stock_app_only`, so this takes away that app's only off switch while two roles remain locked inside it — accepted, because the switch was one nobody could reach a correct conclusion from. **§48's migrate-before-delete ordering is otherwise untouched**; no role is unlocked and no flow moves. **A tenant holding either preference at `false` has that app switched back on**, and a migration deletes both `storefront_config` rows so a stored `false` cannot sit in the database meaning nothing. **The context endpoint keeps sending `enabled: true` as a constant** because `/stock` is an installed PWA and a cached shell that still tested the field would read an omitted `enabled` as falsy and show every staffer the off screen; it goes when the app does. **Rejected, both offered and declined:** narrowing the labels to name the separate `/stock` app and deleting them with it at §48 step 4, and wiring the flags into Tacet Mobile so the switches became true rather than removed. Code, docs, schema and one migration; no capability grant changes. **Written as §52 and RENUMBERED TO §53 ON REBASE** — PR #335 merged its own §52 while this was being written, so it keeps the number and this takes the next, per the append-only rule. **The third collision of this kind recorded here** (two branches each defining a §39, then §46/§47), and it arose the same way: two branches open at once, each taking what was the next free number when it was written. **Nothing was renumbered to make room and no live section moved.** Related documents stays at §38.
+
+2026-09-06 · v4.137 — **§52 ADDED: A MIRRORED ORDER HAS NO PARCELS — DECIDED by Ash.** Raised from a phone, on a gzgrocery order: *"no way I'll for gzgrocery. this is mobile. no land it air option."* **The "Land · No waybill on this parcel yet — add it on the desktop" card the phone was showing is NOT a display bug — the parcel is real, and we create it on every read.** The chain is four steps and each one is correct in isolation: `scripts/gzgrocery-order-daemon.js` mirrors the order in as `fulfillment_type='delivery'` with no address; the order-detail GET runs `shipsNothing(o) ? [] : ensureShipments(id)`, and `shipsNothing` knows only pickup and counter — **it has never heard of a channel**; `planShipments` reads an empty city, finds neither Guangzhou nor Guangdong, and falls through to the air/land split, where the default `ship_modes` of `'air,land'` yields one **Land** parcel; and the legacy back-fill then stamps that phantom parcel dispatched and delivered because the order's status is `delivered`, which is what makes it render. **The instruction on the card could not be followed**: the desktop routes read-only channels to `renderReadonlyOrder`, which shows no parcels, no tracking and no waybill field at all — so the phone was sending an operator to a screen that does not offer the thing. **The desktop was never right, only silent**: it hid the rows it was still causing to be written on every drawer open. **Ruling: BOTH ENDS — the server stops planning them and the phone stops showing them.** Either alone is a half-fix, and the reason is asymmetric rather than belt-and-braces: stopping the planner leaves every gzgrocery order already opened once carrying its Land row, and guarding only the phone leaves the rows accumulating for every other reader. **Ruling: the rule is the CHANNEL SET, not gzgrocery** — Meituan (`routes/meituan-internal.js`) and Eleme (`routes/eleme-internal.js`) mirror in the same shape, `fulfillment_type='delivery'`, and grow the same phantom parcels; the set is the one the desktop's `ordIsReadonlyChannel` has always used. **The guard goes INSIDE `ensureShipments`, and that deviates from this repo's own convention deliberately** — fulfilment type is guarded at each of the eleven callers, and §24's split/undo entry records what that convention already cost: one branch that did not guard, creating Air/Land parcels for a counter sale, with no self-heal because the detail read returns `[]` for those orders rather than reconciling them. A channel that ships nothing of ours is a property of the ORDER, not of one read path, so it is enforced where it cannot be forgotten. **`shipsNothing` is deliberately NOT widened to cover channels**, and the reason is a live dependency rather than caution: `maybeEnqueueQingyunPush` gates on it, and a Meituan order IS fulfilled by a Qingyun rider — widening it would stop the rider push on the channel that most needs it, and the desktop's read-only drawer shows that rider card on purpose. **Mobile gains the channel set the desktop already had**: `viewOnly` was computed from a display key that has no Eleme entry, so an Eleme order was not read-only on the phone at all. **Not fixed here and recorded rather than left to be found:** the ship-by tile still says "Ship when ready · courier" on a mirrored order — same class of fiction, different tile, and a separate change; the waybill POST answers `no_shipments` with a **500** where a mirrored order deserves a 4xx; and mobile's `CH_ICON`/`CH_BACK` still have no Eleme entry, so an Eleme order wears the mini-app icon. No new user-facing strings, so `docs/tacet-delivery-vocabulary.md` is untouched. Appended as §52 under the append-only convention; Related documents stays at §38.
 
 2026-09-06 · v4.136 — **§51 ADDED: A KITCHEN REQUEST PRINTS ON PAPER WHEN IT REACHES THE QUEUE; ONE KITCHEN PRINTER, AND THE TENANT SAYS WHEN IT PRINTS — DECIDED by Ash.** A warehouse→kitchen request has announced itself by push since #261, which reaches a phone; Ash raised the gap as what it is — *"except of notification, i want to have a printer that printer the order for them in the kitchen"* — and the slip is an ADDITION, the push going out unchanged. **Nothing new is wired for it, which is most of why it was a day's work**: the store printers already run on Feieyun's cloud (`lib/feie.js`), the kitchen's printer is one more device on the SAME account, and the paid-order auto-print is copied wholesale — best-effort, fire-and-forget, recording BOTH outcomes. **Ruling: ONE kitchen printer, not a map keyed by location** — the per-location alternative was offered and declined, and **the cost is recorded rather than glossed**: a second kitchen means a config shape change, a migration and the routing touched again. The single SN is also what the data model already forces, so the two answers do not conflict today — a kitchen request carries NO locations at all, `routes/restock.js` nulling both ends for anything with a kitchen on it, so there is nothing for `printer.by_store` to key on. **Ruling: WHEN it prints is per-tenant and Roots prints on arrival only** — in Ash's words *"It depends on the tenant. For roots only when job arrive"* — because **the people who would read a completion slip are the people who just cooked it**, and whoever is waiting to hear is at the other end of a push. `delivered` never prints in any setting: the kitchen direction closes at `prepared` and `PUSH_AUDIENCE` already gives it no `delivered` entry. **The slip carries no money anywhere** — a production ticket is not priced, and a cost column would invite the kitchen to think a transfer owes it something. **A failed print is recorded, not swallowed** (`print_status`/`printed_at`/`print_error` on `restock_orders`, the three `retail_orders` already carries), and a result that never reached a printer is explicitly NOT a failure — no SN, event off, or not a kitchen request would otherwise put a red mark and a reprint button on a request that was never owed a slip. **TWO DEFECTS THE NEW SUITE FOUND ARE FIXED IN THE SAME COMMIT and both would have shipped green**: the reprint leaned on `kitchenScopedOrder` to refuse a store transfer, which that middleware does not do for the roles that hold `restock:pick` — it is a SCOPE limiter confining a kitchen-only account, not an object-type guard — so the refusal was not refusing; and the reprint stamped its outcome unconditionally, so refusing a transfer stamped a failed print on the transfer. **The middleware is correctly left alone**, and the concern first filed against it — that it is "a no-op for a Tacet session" — was AUDITED THE SAME DAY AND WITHDRAWN in §51's NOT DECIDED, where the working is kept: across every shipped preset exactly one role is scoped by it, `kitchen`, and every other role reaching these endpoints works transfers legitimately. **A wrong finding is left corrected rather than deleted**, because the next reader is otherwise free to file it again. Vocabulary goes to v1.24 in the same commit per Rule 4's standing delegation — twenty-one entries, fifteen already live, six composed and all six in the settings block, with one live pair (`重打小票`) REJECTED and the rejection recorded, because `小票` is a receipt and this slip is not one. Appended as §51 under the append-only convention; Related documents stays at §38.
 
@@ -4701,7 +4707,7 @@ The universal spine, and the whole of what Finance computes:
 
 Only the top two lines are ever automatic. Operating expenses are typed in by a person, in every system that exists. So Finance is one calculated report plus one hand-entry list, and nothing more.
 
-**AMENDED 2026-09-07 — the spine gains a row, and two of its rows are blank. Neither change touches the reasoning above; Finance is still an operational money view and still not accounting.** §52 rules that hand-typed `income_entries` money-in is NOT revenue and takes **its own staircase row below the revenue line, feeding Net** — the spine as drawn here has no such row, and a reader who takes it as the complete set of rows will be missing one. §53 rules that `cost_of_goods` and `gross_profit` stay null and **render blank**, so the middle two lines are not computed today and Net is revenue minus operating expenses. **"Only the top two lines are ever automatic" is unchanged as a statement about which lines COULD be automatic; today only the first of them is.**
+**AMENDED 2026-09-07 — the spine gains a row, and two of its rows are blank. Neither change touches the reasoning above; Finance is still an operational money view and still not accounting.** §55 rules that hand-typed `income_entries` money-in is NOT revenue and takes **its own staircase row below the revenue line, feeding Net** — the spine as drawn here has no such row, and a reader who takes it as the complete set of rows will be missing one. §56 rules that `cost_of_goods` and `gross_profit` stay null and **render blank**, so the middle two lines are not computed today and Net is revenue minus operating expenses. **"Only the top two lines are ever automatic" is unchanged as a statement about which lines COULD be automatic; today only the first of them is.**
 
 ### Revenue derives from orders, not from `sales_entries`
 
@@ -4716,7 +4722,7 @@ Worked example, on a day where Roots takes ¥3,500 across six channels — Meitu
 
 The rejected option is not merely more work; it is work invested in a table scheduled to die. §21 already governs: an order is a sale, there is one record, and reporting reads from it.
 
-**EXTENDED 2026-09-07 — see §52, which restates this as REVENUE IS ORDERS, AND ONLY ORDERS and settles what this subsection left implicit.** Everything above stands. What §52 adds is the other half of the boundary: **hand-typed `income_entries` rows are money in and are NOT revenue**, so "revenue derives from orders" excludes the typed ledger as well as `sales_entries`. §52 also puts the `sales_entries` half of this subsection back in question — see the pointer under *Counter and market sales become orders* below.
+**EXTENDED 2026-09-07 — see §55, which restates this as REVENUE IS ORDERS, AND ONLY ORDERS and settles what this subsection left implicit.** Everything above stands. What §55 adds is the other half of the boundary: **hand-typed `income_entries` rows are money in and are NOT revenue**, so "revenue derives from orders" excludes the typed ledger as well as `sales_entries`. §55 also puts the `sales_entries` half of this subsection back in question — see the pointer under *Counter and market sales become orders* below.
 
 ### Structure — two screens
 
@@ -4749,7 +4755,7 @@ The rejected alternative was a typed-in daily total on the Transactions list —
 
 **Consequence for `sales_entries`.** With this decided, every one of the six channels writes orders, and the table has no remaining live writer. Its retirement under §22 stage 8 is now unblocked. Retirement itself is NOT scheduled here.
 
-**QUALIFIED 2026-09-07 — "no remaining live writer" must not be quoted as settled, and the retirement is not unblocked on the strength of it.** The DECISION above is untouched: a till or market-stall sale IS an order. What §52 puts back in question is whether the live code does it. **The kitchen POS writes `sales_entries`, a different table from the `retail_orders` the Tacet Summary counts**, and if till-counter takings land there and not in the order record then Tacet's revenue figure is short by that amount today and no screen says so. **§52 holds this open as a survey question that must be settled before any Finance chart ships.** The sentence above states the consequence of the decision; it is not evidence about what the code does, and it was never a measurement.
+**QUALIFIED 2026-09-07 — "no remaining live writer" must not be quoted as settled, and the retirement is not unblocked on the strength of it.** The DECISION above is untouched: a till or market-stall sale IS an order. What §55 puts back in question is whether the live code does it. **The kitchen POS writes `sales_entries`, a different table from the `retail_orders` the Tacet Summary counts**, and if till-counter takings land there and not in the order record then Tacet's revenue figure is short by that amount today and no screen says so. **§55 holds this open as a survey question that must be settled before any Finance chart ships.** The sentence above states the consequence of the decision; it is not evidence about what the code does, and it was never a measurement.
 
 ### `routes/finance.js` is not fixed — it is blocked and left to die — DECIDED 2026-09-01
 
@@ -4870,7 +4876,7 @@ Order coverage was still being switched on across those months — gzgrocery run
 
 **Both cost rows keep reading Not recorded UNCONDITIONALLY and take no date condition.** v4.113 decided that a missing staircase step is shown and marked, never hidden and never zero, and lifting the floor does not qualify it. Making the rows conditional on the period would replace one rule a reader can hold with two that disagree at a boundary — and **the cost reader is not built, so there is nothing for such a condition to switch between.**
 
-**SUPERSEDED IN PART, 2026-09-07 — the rows are BLANK, and UNCONDITIONALLY is exactly why this is a one-token change. See §53.** The rule this paragraph exists to defend is untouched and is the reason §53 could be written in one line: **one rule a reader can hold, no date condition, no boundary at which two rules disagree.** §53 keeps all of that and changes only what the two cells contain — blank rather than Not recorded. **The cost reader is still not built**, so as above there remains nothing for a condition to switch between; §53 states when that changes, which is when §31 lands and the two rows fill from it and nothing else.
+**SUPERSEDED IN PART, 2026-09-07 — the rows are BLANK, and UNCONDITIONALLY is exactly why this is a one-token change. See §56.** The rule this paragraph exists to defend is untouched and is the reason §56 could be written in one line: **one rule a reader can hold, no date condition, no boundary at which two rules disagree.** §56 keeps all of that and changes only what the two cells contain — blank rather than Not recorded. **The cost reader is still not built**, so as above there remains nothing for a condition to switch between; §56 states when that changes, which is when §31 lands and the two rows fill from it and nothing else.
 
 **A FINDING RECORDED WITH THE DECISION: THE FLOOR WAS NEVER IN THE CODE.** A survey on 2026-09-02, taken before anything below was written, found the literal `2026-08-01` in no file under `routes/`, `lib/`, `public/`, `reference/` or `docs/` — only in `scripts/`, as a window bound and as fixture dates in test seeds, neither of which is a floor. (It appears in `routes/` and `public/` today only inside comments that exist to say there is no floor, and the two Finance suites read comment-stripped source so those sentences cannot satisfy the assertion they describe.) `resolveWindow` in `lib/finance-window.js` is the whole of Finance’s date logic and clamps nothing; both endpoints filter on the resolved window alone; the range bar’s Today/7/30/90 presets are unclamped, so 90 days already reached back past the cutover; and **`#fin-tx-date` has never carried a `min`.** The floor existed in three comments and nowhere else — `routes/finance-transactions.js` and `public/retail-admin/22-finance.js` asserting it as a live constraint, and `scripts/export_kitchen_ledger.js` resting on it for its own justification. **All three are corrected, and the absence is now asserted rather than merely true**, in the markup and in the two Finance suites, because an untested absence is one confident reader away from being filled in.
 
@@ -4898,9 +4904,9 @@ A sale is counted at the moment the order exists. A platform payout is that same
 
 **4. Settlement receipts belong to settlement reconciliation, attached to the channel connection.** That is where a bank arrival is checked against what the orders said the channel owed. It is not the Finance staircase, and nothing about this decision puts it there.
 
-**COLLISION RECORDED 2026-09-07, NOT RESOLVED — §52 puts `income_entries` ON the staircase, and two settlement receipts are sitting in that table.** §52 gives hand-typed `income_entries` money-in **its own staircase row below the revenue line, feeding Net**. This subsection says settlement has **no place in the staircase**. On the live data those two rulings meet: consequence 3 above establishes that ¥76,105.69 (`6月`) and ¥75,790.00 (`7月`) are settlement summaries filed as Mini App income, **¥151,895.69 of the 26 rows in `income_entries`**, and *Finance is not floored at the cutover date* establishes that **no column distinguishes a settlement receipt from any other income row** — which is why those rows are drawn rather than filtered on the Transactions list, a filter having to match on description text and being refused for it. **A money-in staircase row summing that table would therefore carry ¥151,895.69 of settlement into Net, which is the double-count this subsection was written to prevent.** Transactions could hold the rows harmlessly because it is a list and not a summand; a staircase row is a summand, and the reasoning that made drawing them safe does not carry over.
+**COLLISION RECORDED 2026-09-07, NOT RESOLVED — §55 puts `income_entries` ON the staircase, and two settlement receipts are sitting in that table.** §55 gives hand-typed `income_entries` money-in **its own staircase row below the revenue line, feeding Net**. This subsection says settlement has **no place in the staircase**. On the live data those two rulings meet: consequence 3 above establishes that ¥76,105.69 (`6月`) and ¥75,790.00 (`7月`) are settlement summaries filed as Mini App income, **¥151,895.69 of the 26 rows in `income_entries`**, and *Finance is not floored at the cutover date* establishes that **no column distinguishes a settlement receipt from any other income row** — which is why those rows are drawn rather than filtered on the Transactions list, a filter having to match on description text and being refused for it. **A money-in staircase row summing that table would therefore carry ¥151,895.69 of settlement into Net, which is the double-count this subsection was written to prevent.** Transactions could hold the rows harmlessly because it is a list and not a summand; a staircase row is a summand, and the reasoning that made drawing them safe does not carry over.
 
-**This is NOT decided here and is NOT decided by §52, which does not reach it.** Neither ruling is bent to fit the other: §52 stands as written and this subsection stands as written. **What is owed is a ruling from Ash on which of three things happens** — the two rows are corrected at source so the ledger stops holding settlement as income, or the money-in row excludes settlement by some means that is not a description-text match, or §52's row is scoped to something narrower than the whole table. **It is recorded here, against the ruling it collides with, so that whoever builds the money-in row meets it before writing the sum rather than after.**
+**This is NOT decided here and is NOT decided by §55, which does not reach it.** Neither ruling is bent to fit the other: §55 stands as written and this subsection stands as written. **What is owed is a ruling from Ash on which of three things happens** — the two rows are corrected at source so the ledger stops holding settlement as income, or the money-in row excludes settlement by some means that is not a description-text match, or §55's row is scoped to something narrower than the whole table. **It is recorded here, against the ruling it collides with, so that whoever builds the money-in row meets it before writing the sum rather than after.**
 
 ### Meituan settles daily, not monthly — DECIDED 2026-09-01
 
@@ -5025,7 +5031,7 @@ This does not change what Finance counts — the decision above already excludes
 
 **Not recorded is not a new state.** It is the existing seventh state on §1.12 of `docs/tacet-desktop-patterns.md`, added there from the pre-24-August Meituan orders. **Same problem, same treatment.**
 
-**SUPERSEDED IN PART, 2026-09-07 — the two cost rows render BLANK, not Not recorded. See §53.** `cost_of_goods` and `gross_profit` stay null on the Finance summary and both rows render blank, in every period. **What still stands is most of this subsection, and it is what makes blank the right token rather than a fourth rejected option:** the step is still **never hidden** — both rows render, and a reader opening any period finds them — and **zero and a dash are still refused**, zero because it claims the goods were free and a dash because it is banned as a value. **What does not stand is the Not recorded LABEL on these two rows specifically.** The seventh state itself is untouched and goes on being used everywhere else it applies; §53 simply does not put it in these two cells.
+**SUPERSEDED IN PART, 2026-09-07 — the two cost rows render BLANK, not Not recorded. See §56.** `cost_of_goods` and `gross_profit` stay null on the Finance summary and both rows render blank, in every period. **What still stands is most of this subsection, and it is what makes blank the right token rather than a fourth rejected option:** the step is still **never hidden** — both rows render, and a reader opening any period finds them — and **zero and a dash are still refused**, zero because it claims the goods were free and a dash because it is banned as a value. **What does not stand is the Not recorded LABEL on these two rows specifically.** The seventh state itself is untouched and goes on being used everywhere else it applies; §56 simply does not put it in these two cells.
 
 ### Six ways the cost reader will silently miscount — BINDING ON ITS BUILD 2026-09-01
 
@@ -5716,7 +5722,316 @@ refusing a transfer stamped `print_status = 'failed'` on the transfer.
   detail view is the obvious second home for the button. Left out of this build
   to keep one PR to one change; the endpoint serves both realms already.
 
-## §52 — REVENUE IS ORDERS, AND ONLY ORDERS
+## 52. A mirrored order has no parcels
+
+An order mirrored in from someone else's system — Meituan, Eleme, gzgrocery —
+is a **ledger row**, not work. We do not accept it, prepare it, pack it, put it
+on a courier or enter a waybill for it; the platform that owns it does all of
+that. Ash raised the gap from a phone, looking at gzgrocery order GZ-140695:
+*"no way I'll for gzgrocery. this is mobile. no land it air option."*
+
+**Ruling (Ash, 2026-09-06): a mirrored order gets no shipment rows, ever, and
+no screen offers a parcel mode or a waybill for one.**
+
+### The card was not a display bug — we were creating the parcel
+
+Four steps, each correct on its own:
+
+1. `scripts/gzgrocery-order-daemon.js` mirrors the order in with
+   `fulfillment_type = 'delivery'` and no address. That is the honest value —
+   the goods did go somewhere — and there is no fourth fulfilment type meaning
+   "not ours to fulfil".
+2. The order-detail read calls `shipsNothing(o) ? [] : ensureShipments(id)`.
+   `shipsNothing` (`lib/fulfilment.js`) answers pickup and counter. **It has
+   never read a channel**, so a mirrored order is planned like any delivery.
+3. `planShipments` finds an empty destination city: not Guangzhou, not
+   Guangdong, so it falls through to the air/land split. **It lands on Land
+   for a second reason worth recording, because it is one column from being
+   worse**: the mirror does not copy `ship_modes` either, so
+   `COALESCE(ship_modes, 'air,land')` gives every mirrored line the Any bucket,
+   which `bucketForItem` sends to land. **Cold chain is NOT a factor** — it
+   stopped being a per-item one when ice packing moved to "everything in the
+   air parcel is packed with ice anyway". So the Air parcel is reachable only
+   for an air-ONLY product, which is a mode the mirror has no way to set today
+   and would set the moment anyone taught it to copy the column.
+4. The order's status is `delivered`, so the legacy back-fill stamps that
+   phantom parcel dispatched and delivered — which is exactly what promotes it
+   into the phone's hoisted tracking block.
+
+The result on the glass: **"Land — No waybill on this parcel yet — add it on
+the desktop."**
+
+### And the instruction could not be followed
+
+The desktop routes a read-only channel to `renderReadonlyOrder`, which renders
+no parcels, no tracking and no waybill field. So the phone was sending an
+operator to a screen that does not offer the thing it named. **The desktop was
+never right about this, only silent** — it hid the rows its own drawer opens
+were causing to be written.
+
+### Both ends, and the reason is asymmetric
+
+**Ruling: the server stops planning them AND the phone stops showing them.**
+Not belt-and-braces — each half covers what the other cannot:
+
+- Stopping the planner alone leaves every mirrored order **already opened once**
+  carrying its Land row. There is no self-heal: the detail read returns `[]`
+  for these orders rather than reconciling them.
+- Guarding the phone alone leaves the rows accumulating on every drawer open,
+  for every other reader.
+
+Existing phantom rows are **left in place, not swept**. Nothing reads them once
+both guards are in, a delete migration over live order data is a larger
+decision than this one, and a row that is never read is cheaper than a
+migration that is wrong.
+
+### The rule is the channel set, not gzgrocery
+
+**Ruling: Meituan, Eleme and gzgrocery.** Meituan
+(`routes/meituan-internal.js`) and Eleme (`routes/eleme-internal.js`) mirror in
+with the same `fulfillment_type='delivery'` and grow the same phantom parcels;
+gzgrocery is simply the one with a phone screen pointed at it. The set is the
+one the desktop's `ordIsReadonlyChannel` has used since these channels landed —
+`isMirroredChannel` in `lib/fulfilment.js` is that list given a name the server
+can share.
+
+### The guard goes inside ensureShipments, against this repo's own convention
+
+Fulfilment type is guarded at each of the eleven callers, and `ensureShipments`
+deliberately reads no fulfilment column. **The channel guard is put inside it
+anyway**, and the precedent for doing so is in this file's own §24 record: the
+split/undo branch was the one caller that forgot, created Air/Land parcels for
+a counter sale, and the damage persisted because the detail read returns `[]`
+for those orders instead of reconciling them.
+
+**A channel that ships nothing of ours is a property of the ORDER, not of one
+read path.** Enforced at the single materialisation point, it cannot be
+forgotten by caller twelve. The endpoints that ask for parcels on a mirrored
+order now get an empty list and refuse, which is the correct answer.
+
+### shipsNothing is deliberately NOT widened
+
+It would have been one line, and it would have broken a live rail.
+`maybeEnqueueQingyunPush` gates on `shipsNothing`, and **a Meituan order really
+is fulfilled by a Qingyun rider** — the desktop's read-only drawer shows that
+rider card and its dispatch control on purpose. Widening `shipsNothing` to
+cover mirrored channels would stop the rider push on the channel that most
+needs it. Two different questions — "does a parcel of ours leave?" and "is this
+order ours to fulfil at all?" — get two predicates.
+
+### Mobile gains the channel set the desktop already had
+
+The phone computed `viewOnly` from its display-channel key, which has **no
+Eleme entry at all** — so an Eleme order was not read-only on the phone in any
+respect. It now reads the raw channel through the same helper, which also
+corrects the list row's delivery cell.
+
+### NOT decided / not fixed here
+
+- **The ship-by tile still reads "Ship when ready · courier" on a mirrored
+  order.** Same class of fiction as the Land card, different tile, and
+  `annotateShipBy` guards `shipsNothing` only. One PR to one change; this is
+  the next one.
+- **The waybill POST answers `no_shipments` with a 500.** Correct refusal,
+  wrong code — a mirrored order asking for a waybill is a 4xx. Untouched
+  because no shipped screen offers it.
+- **Mobile's `CH_ICON` / `CH_BACK` have no Eleme entry**, so an Eleme order
+  wears the mini-app icon and lands in the mini-app channel filter. Display
+  only, and a separate change.
+- **The phone's DRAWER carries no read-only marking at all.** Found while
+  writing the probe for this change, which had assumed one: the "View only"
+  pill is the LIST row's, and the sheet says nothing — where the desktop's
+  read-only panel tags its own header with the channel and "view only". So an
+  operator who opens a mirrored order from the list loses the only thing on
+  screen telling them it is not theirs to work. The probe asserts the mapped
+  `viewOnly` flag instead of a pill, and this is left as its own change rather
+  than added in passing.
+- **The phantom rows already written are not swept.** See above.
+
+## 53. The Quick Stock and Add Stock feature switches are deleted ahead of §48's last step
+
+**WRITTEN AS §52 AND RENUMBERED TO §53 ON REBASE, 2026-09-06.** PR #335 merged
+its own §52 — a mirrored order has no parcels — while this was being written on
+an open branch, so that one keeps the number and this takes the next. **Nothing
+was renumbered to make room and no live section moved**, which is the whole of
+the append-only rule at the head of this file. This is the third collision of
+its kind recorded here, after two branches each defining a §39 and the §46/§47
+pair, and it arose the same way each time: two branches open at once, each
+taking what was the next free number when it was written. **Version becomes
+v4.138**; v4.137 is #335's and is not touched.
+
+**DECIDED 2026-09-06 by Ash.** The two Features switches — `quickStock` ("Quick
+Stock (mobile)" · 手机库存) and `kitchenAdd` ("Add Stock (kitchen)" · 加库存) —
+are removed from both Settings screens now, rather than retiring with `/stock`
+in §48 step 4. Ash's framing: Quick Stock became part of Tacet and is no longer
+connected to the kitchen app, so the switches no longer describe anything an
+operator recognises.
+
+**THE SWITCHES WERE ALREADY HALF-DEAD, AND THAT IS THE FINDING THAT PROMPTED
+THIS.** Both are operator preferences in `storefront_config`
+(`features.quickStock`, `features.kitchenAdd`). They are NOT members of
+`lib/features.js` `FEATURES`, so they never had an entitlement layer, and the
+`feature:` tags carried by `quickstock:add` and `quickstock:recount` in
+`lib/capabilities.js` were therefore inert: `entitlements()` only ever emits
+keys drawn from `FEATURES`, so `backend-team.js`'s
+`ent[c.feature] === false` filter could not fire for either. The only server
+reader was a pair of private helpers in `routes/retail-inventory.js`, folded
+into one `enabled` field on `/api/retail-admin/quick-stock/context`, and the
+only consumer of that field was the standalone `/stock` PWA's "off" screen.
+
+**Tacet Mobile's own Add stock / Quick stock screens never read it.** They call
+the same endpoint and take `can_recount` and `stores` from the response while
+ignoring `enabled`; entry to those screens is gated on capability alone. So the
+switch an operator was holding in Tacet's own Settings changed nothing in
+Tacet. **`kitchenAdd`'s own copy — "Off: kitchen staff cannot add what they
+just made" — was false at the time of this ruling**, because they could, from
+More → Add stock. `quickStock`'s copy named `/stock` explicitly and was
+literally true, but sat in a list where every other row governs the app the
+reader is holding.
+
+**THE COST IS RECORDED RATHER THAN GLOSSED.** `/stock` is still live under
+§48 — still served, still the only home for six flows, and `kitchen` and
+`store_stock` still carry `stock_app_only` — so deleting the switches takes
+away that app's only off switch while two roles remain locked inside it. That
+is accepted, not overlooked: the switch was a kill switch nobody could reach a
+correct conclusion from, and §48 deletes the app it guarded regardless. **§48's
+ordering rule is otherwise untouched** — migrate before delete still governs
+the app itself, and nothing here unlocks a role or removes a flow.
+
+**A tenant currently holding either preference at `false` has that app switched
+back on by this change.** A migration deletes both `storefront_config` rows so
+the stored `false` cannot sit in the database meaning nothing; leaving it would
+be indistinguishable to a later reader from a preference still honoured.
+
+**The context endpoint keeps sending `enabled: true` as a constant.** `/stock`
+is an installed PWA. Its shell is network-first and not precached, so a stale
+copy is bounded — but a cached `stock.html` that still tested the field would
+read an omitted `enabled` as falsy and show every staffer the "off" screen. The
+constant costs one line and removes that failure mode entirely; it goes when
+the app does.
+
+**Rejected, both offered and declined:** narrowing the two labels to say they
+govern the separate `/stock` app and deleting them with the app in §48 step 4;
+and wiring the flags into Tacet Mobile so the switches became true rather than
+removed — investment in a control §48 already retires.
+
+Code, docs, schema and one migration. No change to any capability grant, and no
+role gains or loses access to either screen.
+
+## 54. The phone's order drawer reads the fields it already holds on a mirrored order
+
+**DECIDED by Ash, 2026-09-07**, from a phone, looking at GZ-140695: *"on PC you
+can find address and name. can gather all info that PC version have for
+gzgrocery order and add them to mobile"*.
+
+§52 settled what the drawer must **not** show on a mirrored order — no parcel,
+no waybill, no shipping mode. This is the other half: what it must show.
+
+### The finding
+
+**Both surfaces read the same payload.** `GET /api/retail-admin/orders/:id` is
+`SELECT o.*` joined to the customer and store, so `recipient_name`,
+`recipient_phone`, `address_full` and the `address` parsed out of
+`address_json` all reach the phone already. Nothing here was a missing field, a
+missing column or a missing endpoint. **Every gap was the phone declining to
+render something it was holding**, which is why this is a client change with no
+route, schema or capability touched.
+
+### The load-bearing one: the customer blob
+
+gzgrocery mirrors OpenCart's whole customer cell — `"Name (phone) address…"` —
+into `recipient_name`, and its `recipient_phone` and ship columns stay null.
+The desktop has split that back into a name and a phone since the column
+existed (`ordCustomerLines`, `public/retail-admin/04-orders.js`); the phone
+printed it raw, so **the address landed in the name line** and the card read as
+one long run-on where the desktop shows two clean fields.
+
+Ported verbatim — same channel test, same `\((\d{6,})\)` pattern, same
+six-digit floor — rather than reimplemented, **so the two surfaces cannot
+disagree about who an order is for**. Every other channel writes real columns
+and passes straight through, and a gzgrocery order that *has* a real phone
+column is not split either: this is a repair for a missing column, not a parser
+we run on every row.
+
+**A placeholder row is left exactly as it is.** An order whose dispatch note was
+never read carries the order id echoed into `recipient_name`
+(`scripts/gzgrocery-order-daemon.js`, "Prefer the real recipient"). There is no
+blob to split there, and nothing in this change invents a name or an address the
+row does not hold — **which is what GZ-140695 itself still does after it**, and
+what the desktop does with the same row.
+
+### The five others, each a field already in hand
+
+- **When the order was placed.** `orderHeadMarks` has guarded on `placedFull`
+  since it was written — its own comment opens "when the order was placed" — and
+  nothing ever set it, so the strip drew only on the marks and the drawer
+  carried no date at all. On a mirrored order, with nothing to pack and nothing
+  to dispatch, when it was placed is most of what there is to read. Carried raw
+  and formatted at render time, never at map time: `state.liveDetail` is cached
+  and the language toggle only re-renders.
+- **The read-only tag.** The desktop tags its mirrored panel; the phone's
+  "View only" pill was the **list row's**, so opening the order lost the one
+  fact explaining why nothing in it can be acted on.
+- **The variant.** `ITEM_TUPLE` read `options` and never `size`. A storefront
+  line carries the customer's own choices in `options`; a mirrored one has none
+  and puts its variant in `size`, which is what the desktop's read-only manifest
+  prints as the line's type. Added as a fallback, so a storefront line's own
+  options still win.
+- **The money-gap band.** The drawer showed a total, showed the lines, and said
+  nothing when the two contradicted each other — and on a mirrored order the
+  phone is often the only place anyone looks. Ported with the desktop's
+  tolerance (¥5 or 30%) and its inclusive/exclusive tax rule.
+- **The SKU chip.** Inert, where the desktop links the line out to its product.
+  It now opens the phone's own product sheet, and only when the lookup behind it
+  can succeed.
+
+### Rulings
+
+- **The read-only tag rides the marks strip, not the header.** The header is
+  order number, status pill and close button on a 390px screen; a fourth item
+  there squeezes the order number into an ellipsis. The strip is full-width and
+  wraps.
+- **It reads the RAW channel, not the display key.** `CH_BACK` still has no
+  Eleme entry (§52), so an Eleme order read through the display key would be
+  tagged "mini-app". Platform names are brands — the same word in both
+  languages — so they are a data map and never `T()` pairs, which is the shape
+  `test_mobile_screens`' bilingual check exists to reject.
+
+### A defect found in the same card and fixed with it
+
+The Ship-to **Copy** button spread a null address (`T(...o.addr)`), so on every
+order with none on file — a counter sale, a pickup, and every gzgrocery mirror —
+the one button on that card threw a `TypeError` and copied nothing at all. It
+now joins the parts that exist, the way the desktop's copy chip does, and drops
+a `—` rather than pasting a placeholder into a shipping label.
+
+### Deliberately not done
+
+- **The ship-by tile still says "Ship when ready · courier" on a mirrored
+  order.** It is visible in the screenshot that prompted this change, and §52
+  already recorded it as a separate change — so it stays one rather than being
+  folded in here.
+- **Three of the desktop's mirrored cards were examined and not ported**,
+  because none can fire on this channel: `renderChannelMoneyPanel` returns early
+  for anything but Meituan and Eleme, and the gzgrocery daemon writes neither
+  `channel_status` nor `channel_eta` nor `needs_cutlery`. Porting them would
+  have added three cards that are dead by construction.
+
+### Strings
+
+**None composed.** Every pair is either already live in `m.html` ("View only")
+or lifted from `04-orders.js` ("Order placed · 下单于", "Total disagrees with the
+items · 金额与商品不符", and the two sentences of the gap band), so
+`docs/tacet-delivery-vocabulary.md` is untouched.
+
+### Scope
+
+Client and docs. `public/m.html`, one new suite
+(`scripts/test_mobile_mirrored_order_info.js`, 37 assertions across 16 cases)
+registered in the slow shard beside the §52 suite, and this entry. No route,
+schema, migration or capability change.
+
+## §55 — REVENUE IS ORDERS, AND ONLY ORDERS
 
 Decided by Ash, 2026-09-07.
 
@@ -5728,7 +6043,7 @@ THE DEFECT THIS FIXES: Summary reported money-in from `retail_orders` while Tran
 
 OPEN, AND IT MUST BE SETTLED BEFORE ANY FINANCE CHART SHIPS: the Tacet Summary counts `retail_orders`. The kitchen POS writes `sales_entries`, a different table. If till-counter takings land in `sales_entries` and not in `retail_orders`, Tacet's revenue figure is short by that amount today and no screen says so. This is a survey question, not an assumption.
 
-## §53 — COST OF GOODS AND GROSS PROFIT STAY BLANK
+## §56 — COST OF GOODS AND GROSS PROFIT STAY BLANK
 
 Decided by Ash, 2026-09-07.
 
@@ -5742,7 +6057,7 @@ True cost at the moment of sale is §31 and remains parked. When §31 lands, the
 
 CONSEQUENCE FOR THE AI: the finance read is forbidden from discussing margin, gross profit, or cost of goods in any form, including inference from other figures. This is a hard constraint in its prompt, not a preference.
 
-## §54 — FINANCE CHARTS ARE HAND-ROLLED SVG, SHARED WITH REPORTS
+## §57 — FINANCE CHARTS ARE HAND-ROLLED SVG, SHARED WITH REPORTS
 
 Decided by Ash, 2026-09-07.
 

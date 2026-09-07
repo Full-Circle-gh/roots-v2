@@ -867,6 +867,29 @@ try {
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('rename_materials_feature_to_production_v1');
   }
 } catch (e) { console.error('[migration rename_materials_feature_to_production_v1]', e); }
+// The Quick Stock and Add Stock feature switches are deleted (§53), so their
+// two storefront_config rows are dropped rather than left behind.
+//
+// THE OPPOSITE CALL TO THE MIGRATION ABOVE, and deliberately so. That one is a
+// RENAME: the preference still means something under a new name, so discarding
+// it would silently flip a tenant who had turned the feature off. This one is a
+// DELETION: nothing reads `features.quickStock` or `features.kitchenAdd` any
+// more, so a surviving row would be a stored `false` that no code honours —
+// indistinguishable, to whoever reads the table next, from a preference still
+// in force. §53 records the consequence plainly: a tenant holding either at
+// false has that app switched back on by this change, and that is the ruling
+// rather than a side effect of the cleanup.
+try {
+  const ranQsDrop = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('drop_quickstock_feature_flags_v1');
+  if (!ranQsDrop) {
+    const rows = db.prepare(
+      "SELECT key, value_json FROM storefront_config WHERE key IN ('features.quickStock','features.kitchenAdd')"
+    ).all();
+    for (const r of rows) console.log(`[migration] drop_quickstock_feature_flags_v1: dropping ${r.key}=${r.value_json}`);
+    db.prepare("DELETE FROM storefront_config WHERE key IN ('features.quickStock','features.kitchenAdd')").run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('drop_quickstock_feature_flags_v1');
+  }
+} catch (e) { console.error('[migration drop_quickstock_feature_flags_v1]', e); }
 // Payment methods used on the supplier form. Stored in the editable
 // categories table so admin can add/remove options without a code change.
 try {

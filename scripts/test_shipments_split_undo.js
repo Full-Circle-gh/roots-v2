@@ -43,7 +43,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { openTablesDb, driver } = require('./test-support/memory-db');
-const { shipsNothing } = require('../lib/fulfilment');
+const { shipsNothing, isMirroredChannel } = require('../lib/fulfilment');
 const { withTransaction } = require('../lib/db-transaction');
 
 const ROOT = path.join(__dirname, '..');
@@ -198,8 +198,13 @@ function build({ planImpl } = {}) {
     return [{ mode: 'air', label: 'Air shipment · 空运', item_ids: items.map(i => i.id) }];
   };
   const { route, ensure } = sources();
+  // isMirroredChannel is the REAL one from lib/fulfilment: ensureShipments now
+  // refuses to plan parcels for a mirrored channel (§52). Every order in this
+  // suite is a storefront order, so it answers false and the branch under test
+  // is unchanged — but it has to be in scope or the helper throws.
   const ensureShipments = new Function('tdb', 'planShipments', 'supplierShipmentLabel',
-    `${ensure}\nreturn ensureShipments;`)(tdb, planShipments, () => 'Supplier · 供应商直发');
+    'isMirroredChannel', `${ensure}\nreturn ensureShipments;`)(
+    tdb, planShipments, () => 'Supplier · 供应商直发', isMirroredChannel);
 
   let handler = null;
   const router = { post: (p, ...fns) => { handler = fns[fns.length - 1]; } };

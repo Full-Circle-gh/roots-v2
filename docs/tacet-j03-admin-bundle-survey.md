@@ -5,6 +5,55 @@ the last unaddressed finding in `docs/tacet-audit-2026-09.md` whose suggested
 direction is a refactor rather than a fix, and a refactor wants measuring before
 it wants starting.
 
+> ## ⚠️ CORRECTION, 2026-09-06 — THE LAZY-LOAD RECOMMENDATION IS WITHDRAWN
+>
+> **The cycle is 23 files and 94% of the bundle, not 14 files and 71%. The cut
+> available from lazy loading is 6%, not 29%. Do not build it.**
+>
+> This survey's coupling analysis counted three kinds of declaration —
+> `function f()`, `const/let/var x`, both at column 0 — and **missed
+> `window.f = function f()`, of which there are 408.** Those are precisely the
+> deliberately-exported names, so the edges they carry are the ones most likely
+> to cross files: `16-purchasing.js` alone exports 102, `11-meituan.js` and
+> `15-integrations.js` 44 each.
+>
+> Found by trying to build the recommendation. The rail buttons dispatch through
+> inline `onclick="finInit()"`, and `finInit` is declared
+> `window.finInit = function finInit()` in `22-finance.js` — a name this survey's
+> graph could not see, in a file it had nominated as a clean candidate.
+>
+> **Re-measured with those 408 counted, and with references through `window.x`
+> counted as edges too:**
+>
+> | | this survey said | actually |
+> |---|---|---|
+> | cycle | 14 files, 771 KB, 71% | **23 files, 1,025 KB, 94%** |
+> | lazy-loadable | 14 files, 322 KB, **29%** | **5 files, 67 KB, 6%** |
+>
+> The five that remain outside are `18-materials.js` (23 KB), `22-finance.js`
+> (17 KB), `20-waste.js` (12 KB), `24-import.js` (11 KB) and `27-keyboard.js`
+> (4 KB). Nothing in the cycle depends on them, so they genuinely could be
+> loaded on demand — it is simply not worth it. A loader, a registry, and a
+> permanent class of "screen opens on a ReferenceError" bug, for 67 KB on the
+> first load after each deploy, against the 98 KB that brotli bought for one
+> constant and no new failure mode.
+>
+> **The direction of the original finding survives and is now stronger:** the
+> admin cannot be split as it stands. It is worse than reported.
+>
+> **What actually holds from this survey:** the compression half is done and
+> measured; the bundle has grown; `01-core.js` is inside the cycle rather than
+> beneath it; and the coupling is not only function calls. Everything about the
+> *size* of the available win was wrong.
+>
+> **Method note, because this is the third error of this shape in one
+> engagement** (a truncated grep window, a function read only as far as its
+> queries, and now a declaration form not in the pattern): a hand-rolled regex
+> over 62,000 lines of JavaScript that share one global scope is not a
+> dependency graph, and each time it has erred it has erred toward *under*-
+> counting. Anything load-bearing should come from a parser, or be checked by
+> trying to build the thing.
+
 **Three headlines:**
 
 1. **Half of J-03 is already closed.** `lib/static-assets.js` was written for

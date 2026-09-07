@@ -4223,8 +4223,6 @@
   body:not(.ent-reviews)     [data-feat="reviews"],
   body:not(.ent-feedback)    [data-feat="feedback"],
   body:not(.ent-socialProof) [data-feat="socialProof"],
-  body:not(.ent-quickStock)  [data-feat="quickStock"],
-  body:not(.ent-kitchenAdd)  [data-feat="kitchenAdd"],
   body:not(.ent-production)  [data-feat="production"],
   body:not(.ent-waste)       [data-feat="waste"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
@@ -4237,7 +4235,6 @@
   body.ent-reviews:not(.feat-reviews)         .tabs [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)       .tabs [data-feat="feedback"],
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"],
-  body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"],
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"] { opacity: .5; }
   /* Production (Materials + Recipes, §28) is the exception to the dim-with-an-
      OFF-pill rule above, and it is deliberate. Option B dims rather than hides
@@ -4260,7 +4257,6 @@
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
   body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after,
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"]::after,
-  body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"]::after,
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"]::after {
     content: "OFF"; margin-left: 6px; font: 700 9px/1 var(--f-mono, monospace);
     letter-spacing: .06em; padding: 3px 5px; border-radius: 6px;
@@ -4342,15 +4338,11 @@
   body.ent-membership:not(.feat-membership)   #tab-membership > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
-  body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
-  body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
   body.ent-production:not(.feat-production)   #mat-settings-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
-  body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
-  body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home .feat-off,
   body.ent-production:not(.feat-production)   #mat-settings-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page).

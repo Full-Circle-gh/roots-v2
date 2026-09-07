@@ -1317,11 +1317,13 @@ const FEATURE_HOMES = {
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
   faq:         '#tab-faq',
-  quickStock:  '#qs-home',
-  kitchenAdd:  '#ka-home',
+  // quickStock / kitchenAdd are NOT here, and their catalogue entries are gone
+  // too (§53). #qs-home and #ka-home remain as plain cards carrying the staff
+  // link; with no FEATURE_CATALOG entry, mountFeatureControls() never visits
+  // them and no switch is injected.
   // Materials' own page is a rail tab, not a Settings panel — so the
-  // Production switch lives in Settings → Operations beside Quick Stock, next
-  // to the other two things a tenant turns on or off wholesale. Recipes has
+  // Production switch lives in Settings → Operations, next
+  // to the other things a tenant turns on or off wholesale. Recipes has
   // no separate entry here on purpose (§28: one switch, not two) — its rail
   // tab is gated by the same data-feat="production" attribute as Materials'.
   production:  '#mat-settings-home',

@@ -592,8 +592,59 @@ function boxOf(text) {
           assert.ok(l !== null, `the ${lang} chip has no text drawn in it at all`);
           const dx = (((l + r) / 2) - info.width / 2) / S;
           const dy = (((t + b) / 2) - info.height / 2) / S;
-          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its pill, across`);
-          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its pill, down`);
+
+          /* WHAT THE TRIM ASSUMED, MEASURED RATHER THAN ASSUMED.
+             `.achip.tr` takes .67em off the right padding to cancel the blank
+             half-cell a full-width closing bracket reserves. That is a CONSTANT
+             calibrated against one CJK face — and the comment beside it says so:
+             "the bracket comes from the phone's own CJK fallback face". Whether
+             the constant is right therefore depends on which face draws （）
+             here, which is not the same everywhere.
+
+             This failed on CI for six consecutive merges from 2026-09-06 while
+             passing on every developer machine, and the report said only how
+             far off it was — never WHY, because the two things that decide it
+             (the resolved font, and the bracket's real advance) were never
+             looked at. Measured here so the next failure names its own cause.
+
+             Reported on the ASSERTION MESSAGE rather than logged, because a
+             passing run should stay quiet and a failing one should arrive
+             complete. */
+          const face = await hi.evaluate((q) => {
+            const el = document.querySelector(q);
+            const cs = getComputedStyle(el);
+            // The bracket's own advance, from the layout rather than a table:
+            // one span of just （） against one of a plain ideograph. If the
+            // bracket is full-width they are equal; if the face draws it
+            // proportionally it is narrower, and the .67em trim over-corrects.
+            const probe = (ch) => {
+              const s = document.createElement('span');
+              s.textContent = ch;
+              s.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${cs.font};letter-spacing:${cs.letterSpacing}`;
+              document.body.appendChild(s);
+              const w = s.getBoundingClientRect().width;
+              s.remove();
+              return w;
+            };
+            const bracket = probe('）'), ideo = probe('麦');
+            return {
+              family: cs.fontFamily,
+              size: cs.fontSize,
+              padRight: cs.paddingRight,
+              bracket: +bracket.toFixed(3),
+              ideograph: +ideo.toFixed(3),
+              ratio: +(bracket / ideo).toFixed(3),
+            };
+          }, sel);
+          // A ratio near 1 means the bracket IS full-width and the trim is
+          // right for this face. Well under 1 means it is not, and the trim is
+          // subtracting a gap that was never there.
+          const why = `[font ${face.family} @ ${face.size}, padding-right ${face.padRight}; `
+            + `）is ${face.bracket}px vs 麦 ${face.ideograph}px = ${face.ratio}× `
+            + `— ${face.ratio > 0.9 ? 'full-width, so the trim is right for this face'
+              : 'NOT full-width, so the .67em trim removes a gap this face never reserved'}]`;
+          assert.ok(Math.abs(dx) <= 0.75, `"${text}" sits ${dx}px off the middle of its pill, across ${why}`);
+          assert.ok(Math.abs(dy) <= 0.75, `"${text}" sits ${dy}px off the middle of its pill, down ${why}`);
           // And nothing has been trimmed so far that the ink touches the edge.
           assert.ok(l / S >= 2 && (info.width - r) / S >= 2,
             `"${text}" is on the pill's edge: ${l / S} / ${(info.width - r) / S}`);

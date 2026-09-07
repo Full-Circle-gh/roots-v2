@@ -879,7 +879,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   var state = {
-    enabled: true, fullAccess: false, userName: '',
+    fullAccess: false, userName: '',
     home: null,           // server says where back goes, or that there is no back
     homeLabel: null,      // and what that screen is called, so Back can say it
     mode: 'recount',      // 'recount' (warehouse: set the count) | 'add' (kitchen: log what you made)
@@ -975,7 +975,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 
   function boot() {
     api(API + '/quick-stock/context').then(function (d) {
-      state.enabled = d.enabled;
+      // `d.enabled` is deliberately NOT read (§53). The two feature switches
+      // that fed it are deleted, the server now sends it as a constant true,
+      // and this app has no closed state to enter — what an operator may do
+      // here is their capabilities and nothing else.
       state.mode = d.mode === 'add' ? 'add' : 'recount';
       state.canRecount = d.can_recount === true;
       state.fullAccess = d.user.full_access;
@@ -989,7 +992,6 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       }
       state.stores = d.stores || [];
       mountAccount();
-      if (!state.enabled) return showScreen('off');
       if (!state.stores.length) return showScreen('nostore');
       var last = parseInt(localStorage.getItem('qs_store') || '', 10);
       var pick = state.stores.filter(function (s) { return s.id === last; })[0] || state.stores[0];
@@ -2139,20 +2141,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     if (state.sheet === 'account') state.sheet = null;
   }
 
-  // ── Full-screen states (off / no store / error) ────────────────────────
+  // ── Full-screen states (no store / error) ──────────────────────────────
   // The shell stays: a staffer who lands on "no store assigned" must still be
   // able to sign out, which the old build made impossible by hiding the whole
   // header behind these screens.
+  //
+  // THERE IS NO 'off' SCREEN ANY MORE (§53). It was reachable only from the two
+  // deleted feature switches, and it told a staffer to ask an admin to switch
+  // something on in a Settings list that no longer holds it.
   function showScreen(which) {
     state.view = which;
     $('#pageHead').hidden = true; $('#toolbar').hidden = true; $('#band').hidden = true;
     var icon, title, body, btn = '';
-    if (which === 'off') {
-      icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-      title = state.mode === 'add' ? t('Add stock is off', '加库存功能已关闭') : t('Quick stock is off', '库存功能已关闭');
-      body = t('This add-on is turned off for your store. An admin can switch it on in the back office under Settings.',
-               '此附加功能已关闭。管理员可在网店后台“设置”中开启。');
-    } else if (which === 'nostore') {
+    if (which === 'nostore') {
       icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/></svg>';
       title = t('No store assigned', '未分配门店');
       body = t('Your account isn’t linked to a store yet. Ask an admin to assign you one, then reopen Quick stock.',
@@ -3673,7 +3674,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function homeLand() {
-    if (_landed || state.view === 'off' || state.view === 'nostore') return;
+    if (_landed || state.view === 'nostore') return;
     var want = homeWanted();
     if (!wantReady(want) && _probes < PROBE_COUNT && !_armed) return;
     _landed = true;

@@ -61,6 +61,7 @@ const fs = require('fs');
 const path = require('path');
 const { openTablesDb, driver } = require('./test-support/memory-db');
 const { withTransaction, transactionDepth } = require('../lib/db-transaction');
+const { isMirroredChannel } = require('../lib/fulfilment');
 
 const SABOTAGE = process.env.HT2_SABOTAGE === '1';
 const ROOT = path.join(__dirname, '..');
@@ -189,6 +190,10 @@ const PLAN = () => [{ mode: 'land', label: 'Land shipment · 陆运', item_ids: 
 const shipmentScope = () => ({
   planShipments: PLAN,
   supplierShipmentLabel: () => 'Supplier-direct · 供应商直发',
+  // The REAL predicate, not a stub. ensureShipments refuses to plan parcels for
+  // a mirrored channel (§52); these fixtures are all storefront orders, so it
+  // answers false throughout and this batch keeps testing what it tests.
+  isMirroredChannel,
 });
 
 const countShipments = db => db.prepare('SELECT COUNT(*) c FROM retail_shipments').get().c;
