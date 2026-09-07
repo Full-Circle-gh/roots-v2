@@ -90,6 +90,24 @@ one, and a numeral or a name often needs no label at all.
 
 ## Tests
 
+**The slow shard is not run — not in CI, and not locally.** Ash's standing
+instruction, given twice: *"don't do slow shared at all"*, then *"I don't want
+all those tests"*. `.github/workflows/tests.yml` is manual-only for the same
+reason and its header carries the record. **`npm run test:fast` is the gate**;
+run the individual suites your change touches on top of it. Do not reach for
+`npm run test:slow` to be thorough — it costs about twelve minutes a round, and
+being thorough with it has never once been what was asked for.
+
+That sits in tension with the paragraph below, and the tension is deliberate.
+What is forbidden there is MOVING a failing suite somewhere it will not run, so
+a red thing looks green. Switching a shard off wholesale is a judgement about
+cost, and it is Ash's to make, not a session's to undo by running it anyway.
+
+**This rule is here because the instruction already existed and sessions kept
+missing it.** It lived only in a CI workflow comment, which a session opens only
+if it happens to look at CI; on 2026-09-07 one ran the shard three rounds
+running before being told a third time. A rule nobody reads is not a rule.
+
 A test that cannot run in CI protects nothing. A failing suite is never
 resolved by skipping it, quarantining it, relaxing a required environment
 flag, or moving it to a shard where it will not run. Fix the cause.
