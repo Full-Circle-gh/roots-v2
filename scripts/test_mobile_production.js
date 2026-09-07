@@ -87,6 +87,23 @@ const CATCH = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
 
+/* THE SHELF, AND WHEN IT ANSWERS. `state.qs.items` is filled by loadQsItems on
+   the answer to /stores/:id/stock, two chained round trips after the queue
+   first renders — so on a phone the operator can easily tap through before it
+   lands. HANGSHELF holds that one call open forever and lets everything else
+   answer; LATESHELF answers it with this store's list. Between them they pin
+   the race the third §59 report arrived through. */
+const SHELF_ROWS = `[{product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11},
+  {product_id:8,name_en:'Turkish Tomato Salad',name_cn:'土耳其番茄沙拉',sku:'1-15',physical_qty:0}]`;
+const shelfStub = (rows) => `window.__sent=[];
+  window.fetch=function(u,o){ var url=String(u); window.__sent.push({u:url,b:o&&o.body});
+    if(/\\/stores\\/\\d+\\/stock$/.test(url)) ${rows
+      ? `return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:${rows}})}});`
+      : 'return new Promise(function(){});'}
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
+const HANGSHELF = shelfStub(null);
+const LATESHELF = shelfStub(SHELF_ROWS);
+
 run('production', [
   ['the queue is a screen in this app, not a door out of it',
     KITCHEN + "state.tab='more';state.stack=[];render();", [
@@ -121,6 +138,67 @@ run('production', [
          the handover must not read the mode to decide. */
       ['for an operator the quick-stock mode calls a recounter',
        "qsMode()==='recount'"],
+    ]],
+
+  /* THE SHELF ARRIVES AFTER THE TAP, WHICH IS THE ORDINARY CASE ON A PHONE.
+     `state.qs.items` starts null and is filled two chained round trips after
+     the queue first renders. An operator who taps through faster than that
+     used to resolve every line against an empty list, get every line back
+     unmatched, and be refused the screen entirely — the request closed, nothing
+     opened, and the queue came back empty with nothing saying why. That is the
+     shape §59 was reported in a third time, and it is what these three cases
+     hold shut. */
+  ['a shelf that has not arrived yet still opens the screen',
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + HANGSHELF +
+      "APP.cmd('kqAdvance','prepared');", [
+      ['the request still closed',
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/status/.test(s.u)})"],
+      ['and the record screen is open, not skipped',
+       "state.stack[state.stack.length-1].route==='whatmade'"],
+      ['carrying the request', "state.hd.rs==='RS-44'&&state.hd.rsId===44"],
+      ['its lines held rather than resolved against nothing', "state.hd.lines===null"],
+      ['the request remembered so they can be', "state.hd.awaiting!==null"],
+      ['it did go and ask for the shelf',
+       "window.__sent.some(function(s){return /\\/stores\\/\\d+\\/stock$/.test(s.u)})"],
+      ['and the screen says it is still coming', `${body}.indexOf('Loading')>-1`],
+    ]],
+
+  ['and the lines land the moment the shelf does',
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + LATESHELF +
+      "APP.cmd('kqAdvance','prepared');", [
+      ['the screen is the record screen', "state.stack[state.stack.length-1].route==='whatmade'"],
+      ['all three lines arrived', "state.hd.lines&&state.hd.lines.length===3"],
+      ['matched to this store’s ids', "state.hd.lines[0].id===7&&state.hd.lines[1].id===8"],
+      ['nothing is left waiting', "state.hd.awaiting===null"],
+      ['and the operator is looking at them', `${body}.indexOf('Hummus Asli')>-1`],
+    ]],
+
+  /* A SHELF THAT NEVER ARRIVES IS NOT A DEAD END EITHER. The request is closed
+     by the time anybody reaches this screen and there is no way back to it, so
+     the failure has to carry the way forward. */
+  ['a shelf that failed says so and offers the way on',
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + HANGSHELF +
+      "APP.cmd('kqAdvance','prepared');state.qs.itemsErr='nope';render();", [
+      ['it names what failed', `${body}.indexOf('shelf')>-1`],
+      ['says the stock is not in yet', `${body}.indexOf('nothing has been added to stock yet')>-1`],
+      ['points at the door that needs no request', `${body}.indexOf('Log a batch')>-1`],
+      ['and offers a retry', `${body}.indexOf('Try again')>-1`],
+    ]],
+
+  /* NOT ONE LINE MATCHED IS A SENTENCE, NOT A SILENCE. The screen has always
+     been able to say which lines this store cannot take; refusing to open threw
+     that away and left nothing in its place. */
+  ['a request whose lines are none of this store’s still opens and says so',
+    SHELF + `state.kq.tried=true; state.kq.list=[{id:45,rs_number:'RS-45',item_count:1}];
+      state.kq.orderId=45;
+      state.kq.order={id:45,rs_number:'RS-45',status:'received',purpose:'shelf',items:[
+        {id:9,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4}]};
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();` +
+      CATCH + "APP.cmd('kqAdvance','prepared');", [
+      ['the screen opened', "state.stack[state.stack.length-1].route==='whatmade'"],
+      ['the line is on it', `${body}.indexOf('Something Else')>-1`],
+      ['named as not stockable here', `${body}.indexOf('not on this store')>-1`],
+      ['and there is nothing to record', "hdPending().length===0"],
     ]],
 
   /* THE DEAD TAP, from the other side. push() declines a route this operator

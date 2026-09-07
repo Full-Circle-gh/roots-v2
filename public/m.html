@@ -675,7 +675,8 @@ const state = {
      They are one piece of work: closing a request moves NO stock, so the lines
      have to be carried to the screen that adds them or the shelf stays short. */
   kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:''},
-  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1},
+  hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
+      awaiting:null},   // the request whose lines are waiting on the shelf to load
   bat:{qty:{},q:''},
   /* PICKING A RUN (§48) — the SUPPLYING end. `at` is the location doing the
      walking, which the old screen never had to ask because it ran pinned to
@@ -899,6 +900,14 @@ reg('hdReason', (i,code)=>{ const l=(state.hd.lines||[])[i]; if(!l||state.hd.bus
   l.reason=String(code); state.hd.openReason=-1; render(); });
 reg('hdWhy', i=>{ state.hd.openReason=state.hd.openReason===Number(i)?-1:Number(i); render(); });
 reg('hdCommit', ()=>hdCommit());
+// Re-ask for the shelf a record screen is still waiting on. `itemsTried` is the
+// latch loadQsItems keeps, so the retry has to lift it or the call never goes.
+reg('hdRetryShelf', ()=>{
+  state.qs.itemsErr=null; state.qs.itemsTried=false;
+  if(state.qs.storeId==null){ state.qs.ctxTried=false; loadQsCtx(); }
+  else loadQsItems(true);
+  render();
+});
 reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
   const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
   const el2=document.getElementById('mBatQ');
@@ -6634,10 +6643,45 @@ function hdResolve(order){
    is exactly ROUTE_CAP.whatmade — asked through canRoute so this and push()
    cannot answer differently. */
 function hdStart(order){
-  if(!canRoute('whatmade')||state.qs.storeId==null) return false;
-  const lines=hdResolve(order);
-  if(!lines.length||!lines.some(l=>l.id!=null)) return false;
-  return hdOpen(lines, order.rs_number||('#'+order.id), order.id);
+  if(!canRoute('whatmade')) return false;
+  // Nothing was asked for, so there is nothing to hand over. The only refusal
+  // left that is about the REQUEST rather than about this app's own readiness.
+  if(!(order.items||[]).some(li=>xfrNum(li.qty_requested)>0)) return false;
+  /* A STORE IS THE ONE THING THE RECORD SCREEN CANNOT DO WITHOUT — hdCommit
+     sends store_id — so this is still a refusal, but only once the context has
+     ANSWERED and said there is no store. Refusing while it is merely in flight
+     is what the two guards below stopped doing. */
+  if(state.qs.ctx&&state.qs.storeId==null) return false;
+  const rs=order.rs_number||('#'+order.id);
+  /* THE SHELF MAY SIMPLY NOT HAVE ARRIVED YET, AND THAT IS NOT A REASON TO
+     REFUSE. `state.qs.items` starts null and is filled two chained round trips
+     after this route first renders — loadQsCtx, then loadQsItems on its answer.
+     An operator who taps "Start making" and "Mark as made" faster than that,
+     or whose shelf fetch simply failed, resolved every line against an EMPTY
+     list, so every line came back unmatched and the old guard
+     `!lines.some(l => l.id != null)` refused to open at all.
+
+     That is the shape §59 was reported for a third time in: the request closed,
+     no screen appeared, and the queue came back empty with nothing anywhere
+     saying why. A late list is not a missing product. So the lines are HELD and
+     the screen opens now, in its loading state; loadQsItems resolves them the
+     moment the shelf lands.
+
+     AND WHEN THE SHELF HAS LANDED, AN UNMATCHED LINE NO LONGER REFUSES EITHER.
+     The screen has always been able to say it — it draws the row greyed, badges
+     it "Not on this store's list" and names the count underneath, telling the
+     operator to go and fix the catalogue. Refusing to open was throwing that
+     sentence away and leaving silence in its place, which is strictly worse
+     than the problem it was avoiding: a request whose lines this store cannot
+     take is exactly what somebody needs to be told. */
+  if(!Array.isArray(state.qs.items)){
+    state.hd.awaiting=order;
+    loadQsCtx();
+    if(state.qs.storeId!=null) loadQsItems();
+    return hdOpen(null, rs, order.id);
+  }
+  state.hd.awaiting=null;
+  return hdOpen(hdResolve(order), rs, order.id);
 }
 /* THE PREFILL IS A PROPOSAL, NOT A DEFAULT. §39's no-prefill rule is about not
    putting words in somebody's mouth — a purpose picked for them is a reason
@@ -6651,7 +6695,7 @@ function hdOpen(lines,rs,rsId){
      queue, which is what it already does for a request with nothing to add. */
   if(!canRoute('whatmade')) return false;
   const h=state.hd;
-  h.lines=lines; h.rs=rs||null; h.rsId=rsId||null;
+  h.lines=lines||null; h.rs=rs||null; h.rsId=rsId||null;
   h.busy=false; h.err=''; h.done=null; h.openReason=-1;
   loadHdReasons();
   push('whatmade');
@@ -7143,7 +7187,12 @@ function loadQsItems(force){
   state.qs.itemsTried=true;
   api('/stores/'+state.qs.storeId+'/stock').then(rows=>{
     state.qs.items=Array.isArray(rows)?rows:((rows&&rows.rows)||[]);
-    state.qs.itemsErr=null; render();
+    state.qs.itemsErr=null;
+    // A record screen opened before the shelf existed is waiting on exactly
+    // this. Resolve it here rather than making the operator go back and start
+    // the request again — it is already closed, and there is no way back to it.
+    if(state.hd.awaiting){ state.hd.lines=hdResolve(state.hd.awaiting); state.hd.awaiting=null; }
+    render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.qs.itemsErr=E('The shelf didn’t load.','货架加载失败。'); render(); });
 }
@@ -8035,6 +8084,23 @@ function screenWhatMade(){
       <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${
         h.rs?T('Back to the queue','返回制作队列'):T('Done','完成')}</button>
     </div>`;
+  }
+  /* OPENED BEFORE THE SHELF ARRIVED. hdStart no longer refuses on a list that is
+     merely late (see the note there), so this screen can be reached with its
+     lines still on the way. It says so, rather than drawing an empty list that
+     reads as "there is nothing to add". The request is already closed by the
+     time anybody gets here, so a failure has to offer the way forward — Retry,
+     and the batch door that needs no request — never a dead end. */
+  if(h.lines===null){
+    if(state.qs.itemsErr) return `<div style="padding:24px 16px">
+      <div style="font-size:17px;font-weight:500">${T('The shelf didn’t load.','货架加载失败。')}</div>
+      <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+        T('The request is closed, but nothing has been added to stock yet. Try again, or record the batch from Log a batch.',
+          '该申请已关闭，但库存尚未登记。请重试，或从「登记批次」记录本批次。')}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px"
+        onclick="APP.cmd('hdRetryShelf')">${T('Try again','重试')}</button></div>`;
+    return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${
+      T('Loading…','加载中…')}</div>`;
   }
   const lines=h.lines||[];
   const pending=hdPending();
