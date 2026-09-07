@@ -83,7 +83,7 @@ function requireInventoryRead(req, res, next) {
 // §46's grant predicate, in its own module so it can be tested without booting
 // the server — three routes here read it and they must agree. See the module
 // for why the decision moved from the job title onto the capability.
-const { quickStockMode, mayRecount, addOnlyOperator, RECOUNT_MISCOUNT } = require('../lib/quick-stock-grant');
+const { quickStockMode, mayRecount, mayLogProduction, addOnlyOperator, RECOUNT_MISCOUNT } = require('../lib/quick-stock-grant');
 
 // The shelf figure as it stands right now. Read outside adjustStock's
 // transaction on purpose — it decides only whether a QUESTION is required, and
@@ -909,6 +909,13 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
       enabled,
       mode,                       // 'add' (kitchen) | 'recount' (warehouse)
       can_recount: canRecount,    // add mode may also see and correct the count (§46)
+      /* WHETHER THIS OPERATOR MAY RECORD A BATCH (§59). `/stock` has no
+         capability list of its own — it knows only what this response says —
+         so without this field its two production screens could gate on nothing
+         but the mode, and the mode is role-derived. Tacet Mobile asks the same
+         question through its route-capability table; the derivation is shared
+         so the two apps cannot answer it differently. */
+      can_log_production: mayLogProduction(req),
       home,                       // the tool list, when there is somewhere to go back to
       home_label: homeLabel,      // that screen's own name, so Back can say it
       user: {

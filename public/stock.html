@@ -894,6 +894,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     // happened to arrive, because a stripped list and an empty shelf look the
     // same from here.
     canRecount: false,
+    /* §59: whether this operator may RECORD A BATCH — the capability
+       POST /api/retail-admin/production is gated on, which is the call the
+       Record button on "What you made" makes. Read from the server because this
+       app holds no capability list; see the note on hdStart. Defaults TRUE and
+       is read as `!== false`, so a response that predates the field leaves the
+       screen reachable rather than silently shut — the failure this replaced. */
+    canLogProduction: true,
     addedToday: {},       // product id -> units already added at this store today
     rowErr: {},           // per-product write failures — they live in the row, not in a toast
     loadErr: '',
@@ -981,6 +988,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       // here is their capabilities and nothing else.
       state.mode = d.mode === 'add' ? 'add' : 'recount';
       state.canRecount = d.can_recount === true;
+      state.canLogProduction = d.can_log_production !== false;
       state.fullAccess = d.user.full_access;
       state.home = typeof d.home === 'string' ? d.home : null;
       state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
@@ -4513,8 +4521,31 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      honest answer rather than an empty screen: this operator recounts rather
      than adds, the request has no lines, or not one line could be matched to
      this shelf. */
+  /* WHO IT HANDS OVER TO IS THE CAPABILITY THE RECORD BUTTON'S OWN WRITE IS
+     GATED ON, and it was the quick-stock MODE until §59's amendment. The mode is
+     role-derived (lib/quick-stock-grant.js answers 'add' only for an operator
+     whose role is literally `kitchen`), so on this app the handover opened for
+     that one role and for nobody else — not for the owner, not for an admin,
+     not for a `retail` operator, all of whom can open the Production queue here,
+     close a request from it, and were then handed nothing at all. The shelf
+     stayed exactly as short as it was and the screen never said why.
+
+     §59 fixed this in Tacet Mobile and scoped this file out on the reasoning
+     that the `kitchen` role does read 'add' here so the flow works. That is true
+     of the kitchen role and of no other, and it is the wrong half of the users:
+     the roles confined to this app are the ones the fix did not need.
+
+     `production:log` is the honest gate — the same one Tacet Mobile asks its
+     route table for — and this app has no capability list, so the server answers
+     it on /quick-stock/context. The mode is not consulted.
+
+     THE LOG A BATCH TILE IS DELIBERATELY LEFT ON THE MODE. That tile carries a
+     separate decision, written where it stands: stating what a batch yielded is
+     the kitchen's job and a warehouse recount has no batches. This handover is
+     not that case — the operator reaching it has just closed a kitchen request,
+     which is the kitchen's work whatever mode the server files them under. */
   function hdStart(order) {
-    if (state.mode !== 'add' || state.storeId == null) return false;
+    if (!state.canLogProduction || state.storeId == null) return false;
     var lines = hdResolve(order);
     if (!lines.length) return false;
     if (!lines.some(function (l) { return l.id != null; })) return false;
