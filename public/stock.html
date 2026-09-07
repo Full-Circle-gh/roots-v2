@@ -1510,6 +1510,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       if (silent) return mergeQuiet(mapped);
       state.items = mapped; state.pending = {}; state.addQty = {}; state.rowErr = {};
       enterOnce = true;
+      /* A record screen opened before the shelf existed is waiting on exactly
+         this. Resolve it here rather than sending the operator back for a
+         request that is already closed and no longer in the queue. */
+      if (hd.awaiting) {
+        hd.lines = hdResolve(hd.awaiting); hd.awaiting = null;
+        if (state.view === 'handoff') { hdRender(); return; }
+      }
       render();
       loadAddedToday();
     }).catch(function (e) {
@@ -4454,6 +4461,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     done: null,     // { added, units, short } once every line is on
     reasons: null,  // the gap vocabulary, read from the server (never a second copy)
     openReason: -1, // which row's reason picker is showing, -1 for none
+    awaiting: null, // the request whose lines are waiting on the shelf to load
   };
 
   /* ONE NUMBER PER ROW, AND THE SECOND ONE IS INFERRED.
@@ -4544,12 +4552,37 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      the kitchen's job and a warehouse recount has no batches. This handover is
      not that case — the operator reaching it has just closed a kitchen request,
      which is the kitchen's work whatever mode the server files them under. */
+  /* TWO REFUSALS THAT WERE SILENCE RATHER THAN AN ANSWER, both removed with the
+     same amendment that fixed them in Tacet Mobile, and for the same reason:
+     this screen has always been able to SAY what it cannot add, and refusing to
+     open threw that sentence away and left nothing in its place.
+
+       • NOT ONE LINE MATCHED is a sentence. The row draws greyed, badged "Not
+         on this store's list", with the count named underneath and the operator
+         told to go and fix the catalogue. A request whose lines this store
+         cannot take is exactly what somebody needs to be told.
+       • A SHELF THAT HAS NOT LOADED YET IS NOT A MISSING PRODUCT. `state.items`
+         is empty until loadStock answers, and resolving against an empty list
+         marks EVERY line unmatched — which then tripped the refusal above. This
+         app loads the shelf at boot so it is usually there by the time anybody
+         reaches the queue, but "usually" is what the Tacet Mobile report turned
+         out to be about. So the lines are HELD and the screen opens now; the
+         resolve happens when the shelf lands.
+
+     A STORE IS STILL REQUIRED, because hdCommit sends store_id and there is
+     nothing to record without one. */
   function hdStart(order) {
     if (!state.canLogProduction || state.storeId == null) return false;
-    var lines = hdResolve(order);
-    if (!lines.length) return false;
-    if (!lines.some(function (l) { return l.id != null; })) return false;
-    return hdOpen(lines, order.rs_number || ('#' + order.id), order.id);
+    var asked = (order.items || []).filter(function (li) { return rcNum(li.qty_requested) > 0; });
+    if (!asked.length) return false;
+    var rs = order.rs_number || ('#' + order.id);
+    if (!state.items.length) {
+      hd.awaiting = order;
+      loadStock(false);
+      return hdOpen(null, rs, order.id);
+    }
+    hd.awaiting = null;
+    return hdOpen(hdResolve(order), rs, order.id);
   }
 
   /* THE SAME SCREEN, WHETHER OR NOT ANYBODY ASKED. A batch made because it is
@@ -4560,7 +4593,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   function hdOpen(lines, rs, rsId) {
     hd.rs = rs || null;
     hd.rsId = rsId || null;
-    hd.lines = lines; hd.busy = false; hd.err = ''; hd.done = null; hd.openReason = -1;
+    hd.lines = lines || null; hd.busy = false; hd.err = ''; hd.done = null; hd.openReason = -1;
     state.view = 'handoff';
     hdRender();
     hdLoadReasons();
@@ -4864,6 +4897,24 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function hdHtml() {
+    /* OPENED BEFORE THE SHELF ARRIVED (see hdStart). It says so rather than
+       drawing an empty list, which would read as "there is nothing to add" —
+       and the request is already closed by the time anybody is here, so a
+       failure has to carry the way forward rather than being a dead end. */
+    if (hd.lines === null && !hd.done) {
+      return '<div class="rc-wrap">' +
+        '<div class="rc-head"><div class="rc-h1">' + t('What you made', '登记制作') + '</div>' +
+        '<div class="rc-sub">' + esc(hd.rs || '') + '</div></div>' +
+        '<div class="rc-body">' + (state.loadErr
+          ? '<div style="padding:16px"><div class="rc-flat rc-note">' +
+            t('The shelf didn’t load. The request is closed, but nothing has been added to stock yet — try again, or record the batch from Log a batch.',
+              '货架加载失败。该申请已关闭，但库存尚未登记 — 请重试，或从「登记批次」记录本批次。') + '</div>' +
+            '<div style="padding:16px 0"><button class="rc-big" data-hdretry>' +
+            t('Try again', '重试') + '</button></div></div>'
+          : '<div class="rc-empty"><div style="font-size:15px;color:var(--text2)">' +
+            t('Loading…', '加载中…') + '</div></div>') +
+        '</div></div>';
+    }
     if (hd.done) {
       return '<div class="rc-wrap">' +
         '<div class="rc-head">' +
@@ -4969,6 +5020,10 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     each('[data-hdadd]', function (b) { b.onclick = hdCommit; });
     each('[data-hdskip]', function (b) { b.onclick = hdExit; });
     each('[data-hdback]', function (b) { b.onclick = hdExit; });
+    // Re-ask for the shelf a record screen is still waiting on.
+    each('[data-hdretry]', function (b) {
+      b.onclick = function () { state.loadErr = ''; hdRender(); loadStock(false); };
+    });
   }
 
   /* ══ ASK FOR STOCK ═════════════════════════════════════════════════════════

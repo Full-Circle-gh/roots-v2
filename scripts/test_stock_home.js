@@ -142,6 +142,7 @@ function stub(o) {
     'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
     'var CTX=' + JSON.stringify(ctx) +
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
+    'var HANGSHELF=' + JSON.stringify(!!o.hangShelf) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
     'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) + ';\n' +
     'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
@@ -153,7 +154,12 @@ function stub(o) {
        that decides whether holding the boot screen is safe. */
     '  if(HANG&&url.indexOf("/api/restock")===0) return new Promise(function(){});\n' +
     '  if(url.indexOf("/quick-stock/context")>-1) body={success:true,data:CTX};\n' +
-    '  else if(/\\/stock$/.test(url)) body={success:true,data:STOCK};\n' +
+    /* THE SHELF, HELD OPEN. state.items is empty until this answers, and
+       resolving a request's lines against an empty list marks every one of them
+       unmatched — which used to make the handover refuse to open at all,
+       silently. The screen must say it is waiting instead. */
+    '  else if(/\\/stock$/.test(url)){ if(HANGSHELF) return new Promise(function(){});\n' +
+    '    body={success:true,data:STOCK}; }\n' +
     // The one write Add stock has ever done. The production flow no longer uses
     // it — kept answering so a stray call is recorded rather than silently 404ing.
     '  else if(/\\/stores\\/\\d+\\/stock\\/\\d+$/.test(url)){\n' +
@@ -519,6 +525,18 @@ const CASES = {
              "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
     expect: ['Production', 'To make'],
     absent: ['What you made'] },
+
+  /* THE SHELF HAS NOT ARRIVED YET. Held open, so `state.items` is still empty
+     when the request closes. The screen opens and says it is waiting rather
+     than refusing and leaving the operator on an empty queue with a closed
+     request and no record of what they made. */
+  'a-shelf-that-has-not-arrived-still-opens-the-screen': { kitchenOnly: true, hangShelf: true,
+    js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
+             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+    expect: ['What you made', 'RS-260904-002', 'Loading'],
+    checkStatus: (st) => (st && st.status === 'prepared') ? null
+      : `the request did not close (status ${st && st.status})`,
+    checkProd: (p) => p.length ? `${p.length} write(s) went out before Record was pressed` : null },
 
   /* ── A batch nobody asked for ─────────────────────────────────────────────
      Tuesday is hummus day. It is most of what a kitchen makes, and it had no
