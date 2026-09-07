@@ -371,6 +371,17 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
    the one thing a stepper must not do. */
 .qsnum{flex:1;height:56px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
   padding:0;font-family:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;cursor:pointer}
+/* THE SAME CELL, NOW BEING TYPED IN (§60). An <input> rather than a button, so
+   it must beat the global `input` rule on width, padding and font-size — every
+   one of which is set here rather than inherited, and `min-width:0` because a
+   flex item with a default width does not shrink. Accent edge and ring, because
+   the operator has to see WHICH card the keyboard belongs to: the sheet used to
+   say that by covering everything else, and nothing covers anything now. */
+input.qsnum{width:100%;min-width:0;text-align:center;padding:0;font-size:30px;
+  background:var(--surface-card);border-color:var(--accent);color:var(--text-primary);
+  box-shadow:0 0 0 3px rgba(110,103,175,.18);
+  font-variant-numeric:tabular-nums;}
+input.qsnum:focus{outline:none;border-color:var(--accent);}
 .chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid var(--edge);
   background:var(--surface-card);color:var(--text-secondary)}
@@ -697,7 +708,14 @@ const state = {
          quantity happened to arrive — a stripped list and a genuinely empty
          shelf look identical from here. `addedToday` is what has already gone
          on this store's shelf today, which is the half that needs no grant. */
-      canRecount:false, addedToday:{}, addedTried:false, fixing:{}, setBase:{}},
+      canRecount:false, addedToday:{}, addedTried:false, fixing:{}, setBase:{},
+      /* THE COUNT BEING TYPED, per product, as a RAW STRING rather than a
+         number: it is what is in the field, and a half-typed "1" on the way to
+         130 is not the number 1. Absent key = that card is not being typed in.
+         `typeErr` is the same key space, and only ever carries the one message
+         a non-numeric entry earns — never a failed WRITE, which is `rowErr`
+         and comes with a Retry the typed case must not offer. */
+      typing:{}, typeErr:{}},
   /* WASTE — the ledger and its one write. Namespaced like `qs` rather than
      spread across a dozen flat keys, for the reason the note above this
      literal gives: `pick`, `note`, `range` and `busy` are exactly the short
@@ -835,7 +853,11 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
-reg('qsMade', id=>qsAskMade(Number(id)));
+reg('qsType', id=>qsTypeOpen(Number(id)));
+/* No render and no state.focus — see the rule at the head of the Onwards
+   commands. This is a text field storing what was typed, nothing more. */
+reg('qsTyped', (id,v)=>qsTyped(Number(id),v));
+reg('qsTypeCommit', id=>qsTypeCommit(Number(id)));
 reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
   const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
   // Same caret rescue the stock search does: a re-render moves focus, and a
@@ -7283,47 +7305,74 @@ function qsFlush(id){
     .then(()=>qsWriteLanded(id,n,p))
     .catch(e=>{ if(String(e.message)==='auth') return; qsWriteFailed(id,n,e.message); });
 }
-/* ── TYPING A BATCH IN ─────────────────────────────────────────────────────
-   THE SAME DIALOG AS THE CORRECTION DOOR, ON THE OTHER QUESTION, and it is a
-   separate function for exactly the reason the two are separate controls on the
-   card (§46): this one writes a DELTA and is the kitchen's own job, needing no
-   grant; qsAskCount writes an ABSOLUTE COUNT and needs `quickstock:recount`.
-   Deriving one from the other by mode is how the two writes become one.
+/* ── TYPING A BATCH IN, ON THE CARD ITSELF (§60) ─────────────────
+   THE COUNT IS THE FIELD. One tap puts the caret in it and the number pad up;
+   there is no sheet in between, which is the whole of §60 — a sheet cost a
+   second tap to reach its field, and covered the list an operator adding to
+   twenty products has to get back to.
 
-   Every label is already live and none is minted: the title and the confirm verb
-   are `public/stock.html`'s own add keypad, which has asked this question from
-   the count button since that screen existed, and `Quantity · 数量` is this
-   file's. Only the validation line is new, and it is the shelf one with its noun
-   swapped — see docs/tacet-delivery-vocabulary.md. */
-function qsAskMade(id){
+   IT IS NOT THE CORRECTION DOOR (§46). This writes a DELTA and is the kitchen's
+   own job, needing no grant; qsAskCount writes an ABSOLUTE COUNT and needs
+   `quickstock:recount`. Separate functions, separate controls, and while the
+   count is being typed the correction door is not on the card at all — the
+   commit button stands in its place, so the two writes are never one fat finger
+   apart even for the moment the keyboard is up.
+
+   THE SEED IS THE PENDING AMOUNT, not the shelf: §46 keeps the shelf total off
+   this control, and what the taps have already built is this operator's own
+   work. Empty at the usual +0, because "0" would have to be cleared before
+   anything could be typed over it. */
+function qsTypeOpen(id){
   const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
   if(!p||qsMode()==='recount') return;
-  state.ask={
-    title: T('How many did you make?','制作了多少?'),
-    body: qsName(p),
-    confirmLabel: T('Add to stock','加入库存'),
-    // Opens on the amount the taps have built rather than empty, so a run of
-    // taps and a typed figure are the same pending number seen two ways — and
-    // never blank, because a blank field beside a card reading +6 asks whether
-    // the 6 is about to be lost.
-    fields:[{id:'n', label:T('Quantity','数量'), numeric:true,
-             value: state.qs.add[id]?String(state.qs.add[id]):''}],
-    validate:v=>{
-      const n=String(v.n||'').trim();
-      if(!/^\d+$/.test(n)) return T('Enter how many you made — a whole number, 0 or more.','请输入制作数量——整数，0 或以上。');
-      return null;
-    },
-    run:v=>qsMadeEntered(id, parseInt(String(v.n).trim(),10)) };
+  const pend=state.qs.add[id]||0, seed=pend>0?String(pend):'';
+  state.qs.typing[id]=seed;
+  delete state.qs.typeErr[id]; delete state.qs.rowErr[id];
+  // The pause behind any taps already made is stood down: the typed figure is
+  // about to replace them, and a timer left armed lands a SECOND write.
+  clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
+  /* The one focus this control ever arms, spent by the render on the next line.
+     Typing itself never arms one and never renders (see qsTyped) — the rule at
+     the head of the Onwards commands, learned on the waste picker: rebuilding a
+     field under a thumb drops the soft keyboard on a real phone. */
+  state.focus={id:'qsnum-'+id,pos:seed.length};
   render();
 }
+/* WHAT THE OPERATOR HAS TYPED, STORED AND NOTHING ELSE. No render, no
+   state.focus — the field is not rebuilt by its own typing, so there is no
+   caret to put back, and an armed focus would be spent by whatever rendered
+   next. Kept in state rather than read off the DOM at commit so the digits
+   survive a render this card did not ask for (a toast, a poller's dot). */
+function qsTyped(id,v){ state.qs.typing[id]=String(v==null?'':v); }
 /* A TYPED BATCH COMMITS AT ONCE, where a tapped one waits out the 700ms pause.
    The pause exists to collect a RUN of taps into one ledger row; a figure typed
-   whole is already that row, and waiting would only open a window for the
-   operator to walk away inside. It REPLACES the pending amount rather than
-   adding to it — the field opened showing that amount, so what they left in it
-   is what they mean — and it stands the pause down, or the taps behind it would
-   land a second write after this one. Zero writes nothing (qsFlush refuses it),
-   which makes this dialog also the way to clear a miscounted pending amount. */
+   whole is already that row.
+
+   AN EMPTY FIELD IS ZERO, and goes through the same call as any other figure.
+   The field IS the amount — it opened showing what the taps had built — so
+   clearing it and committing means add nothing, and that has to CLEAR the
+   pending amount rather than leave it. Returning early instead stranded it:
+   qsTypeOpen has already stood the tap pause down, so a +5 left behind would
+   have sat on the card for ever, never flushing, until another tap restarted a
+   timer nobody knew was gone.
+
+   A non-number keeps the field open and says why, rather than being stripped to
+   the digits inside it: "13o" silently becoming 13 writes a quantity nobody
+   entered. It carries no Retry — that button belongs to a failed WRITE. */
+function qsTypeCommit(id){
+  const raw=String(state.qs.typing[id]==null?'':state.qs.typing[id]).trim();
+  if(raw!==''&&!/^\d+$/.test(raw)){
+    state.qs.typeErr[id]=T('Enter how many you made — a whole number, 0 or more.','请输入制作数量——整数，0 或以上。');
+    state.focus={id:'qsnum-'+id,pos:raw.length};
+    render(); return;
+  }
+  delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  qsMadeEntered(id, raw===''?0:parseInt(raw,10));
+}
+/* The write itself, shared with nothing else: it REPLACES the pending amount
+   rather than adding to it — the field opened showing that amount, so what the
+   operator left in it is what they mean — and stands the tap pause down for the
+   same reason qsTypeOpen does. Zero writes nothing (qsFlush refuses it). */
 function qsMadeEntered(id,n){
   clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
   state.qs.add[id]=Math.max(0,n);
@@ -7507,11 +7556,12 @@ function screenStockAdd(){
      RECOUNT: the number IS the shelf, and − and + move it.
 
      TAPPING THE NUMBER TYPES ONE IN, IN BOTH MODES — the only way to reach a
-     big number without fifty taps, and the way the old app did it. Add mode
-     shipped without it while recount had it, so a kitchen logging 130 bowls of
-     soup tapped + a hundred and thirty times; `public/stock.html` never had that
-     gap, its keypad having opened from the count in both modes since that screen
-     existed.
+     big number without fifty taps. The two modes reach it DIFFERENTLY, and §60
+     is why: a recount opens the shared ask sheet, because it is a bounded
+     decision about somebody else's figure; an add turns THIS CELL into the
+     field, because it is the kitchen's own count and they enter twenty of them
+     in a row. A sheet cost a second tap to reach its own field and covered the
+     list they were working down.
 
      The two write DIFFERENT THINGS — a delta and an absolute count — and that
      is the distinction §46 turns on, so the number's meaning is never left to
@@ -7526,22 +7576,33 @@ function screenStockAdd(){
     // A recount can always go down to zero; an add has nothing to take away
     // from until something has been tapped in.
     const lessOff=recount ? (shelf==null||shelf<=0) : pend<=0;
+    // Typing is an ADD-MODE state only: a recount's own door is qsAskCount, and
+    // the two must not become one control (§46).
+    const typing=!recount && qs.typing[id]!=null;
     return `<div style="background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px">
       <div style="font-size:18px;font-weight:500;line-height:1.3;letter-spacing:-.01em;min-width:0">${escAttr(qsName(p))}</div>
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.sku||'')}</div>
       ${recount?'':qsMeta(p,id)}
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${lessOff?' disabled':''}
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${(lessOff||typing)?' disabled':''}
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
-        <button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
-          onclick="APP.cmd('${recount?'qsFix':'qsMade'}',${id})"
-          aria-label="${recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?')}">${shown}</button>
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
+        ${typing
+          ? `<input id="qsnum-${id}" class="num qsnum" inputmode="numeric" enterkeyhint="done"
+              value="${escAttr(qs.typing[id])}" aria-label="${T('How many did you make?','制作了多少?')}"
+              oninput="APP.cmd('qsTyped',${id},this.value)"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('qsTypeCommit',${id})}">`
+          : `<button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
+              onclick="APP.cmd('${recount?'qsFix':'qsType'}',${id})"
+              aria-label="${recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?')}">${shown}</button>`}
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"${typing?' disabled':''}
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>
       </div>
       ${flying?`<div style="font-size:13px;color:var(--text-secondary)">${T('Adding '+flying+'…','正在加 '+flying+' 件…')}</div>`:''}
       ${state.qs.fixing[id]!=null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
-      ${recount?'':qsFix(id)}
+      ${typing&&qs.typeErr[id]?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(qs.typeErr[id])}</div>`:''}
+      ${typing
+        ? `<button class="cta" onclick="APP.cmd('qsTypeCommit',${id})">${T('Add to stock','加入库存')}</button>`
+        : (recount?'':qsFix(id))}
       ${err?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:13px;color:var(--brick-ink)">${escAttr(err)}</span>
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('${recount?'qsFix':'qsFlush'}',${id})">${T('Retry','重试')}</button></div>`:''}

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.143
+# Tacet shared-core consolidation — decisions record, v4.144
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -6153,3 +6153,85 @@ It never did. `hdStart` in `public/m.html` opened only when `qsMode()==='add'`. 
 - **`public/stock.html` carries the identical gate and is not touched.** In that app the `kitchen` role does read `'add'`, so the flow works there; §48 retires the app.
 - **Neither production screen names which store it is adding to.** `state.qs.storeId` is the first active store from the context response and there is no picker. This is pre-existing, shared with Log a batch, and unchanged by this ruling — recorded here so it is not re-derived, and left for its own change.
 - No schema change, no migration, no capability grant changes, no new strings.
+
+## §60 — A KITCHEN TYPES ITS BATCH ON THE CARD; A RECOUNT KEEPS THE SHEET
+
+Decided by Ash, 2026-09-07, from the report that entering a batch still took two
+taps: *"i want to click one time on the number and input a number directly. now
+need 2 click."* Two mockups were put up and **Option B was chosen.**
+
+### What was wrong
+
+§46's add door had just been given a keypad (v4.142): tapping the count on an
+Add stock card opened the shared ask sheet with a Quantity field. That removed
+the hundred-and-thirty taps and left a smaller defect behind, which is what this
+ruling is about.
+
+**The sheet opened with nothing focused.** `sheetAsk()` renders its `<input>`
+with no `autofocus` and no `focus()` call, so the keyboard stayed down until a
+SECOND tap landed on the field. One tap to open the sheet, one to reach the
+field it exists for. The field also asked for `inputmode="text"` — the full
+keyboard rather than a number pad — for a control that accepts only digits.
+
+### The ruling
+
+**In add mode the count IS the field.** One tap turns the cell into an
+`<input inputmode="numeric">` with the caret already in it; the commit button
+takes the correction door's place on the card while it is open; there is no
+sheet. **In recount mode the sheet stays**, and the two are reached by different
+functions on purpose.
+
+**The asymmetry is the ruling, not an inconsistency.** A recount is a bounded
+decision about a figure that is not the operator's own, it is the number §46
+guards, and the drop fork hangs off it — a sheet naming the product and offering
+Cancel is the right shape for one of those. A kitchen entering what it made is
+the opposite: its own count, no fork on the way up, and twenty of them in a row
+down a list a sheet would cover between every one.
+
+### What the change must not do, and how each is held
+
+- **The two writes stay apart (§46).** `qsTypeOpen` and `qsAskCount` are
+  separate functions, not one function branching on mode — deriving one from the
+  other is how a delta and an absolute count become one write. While the count
+  is being typed the correction door is **not on the card at all**: the commit
+  button stands in its place, so the two are never one fat finger apart even for
+  the moment the keyboard is up.
+- **The shelf total still never seeds this control (§46).** The field opens on
+  the pending amount, and empty at the usual +0 — a "0" would have to be cleared
+  before anything could be typed over it.
+- **Typing never re-renders.** This is the rule already written at the head of
+  the Onwards commands and learned on the waste picker: `render()` rewrites the
+  whole app in one `innerHTML`, and destroying a field under a thumb does not
+  reliably keep an Android soft keyboard up — Ash saw it drop a letter at a
+  time. `qsTyped` stores the digits and does nothing else; no `render()`, no
+  `state.focus`. The one focus this control arms is the tap that opens it.
+- **The digits are held in state, not read off the DOM at commit**, so they
+  survive a render this card did not ask for — a toast, or a poller's dot
+  changing state.
+- **A non-number is not stripped to the digits inside it.** `13o` silently
+  becoming `13` writes a quantity nobody entered, so the field stays open and
+  says why. That message carries **no Retry**: Retry belongs to a failed write,
+  and this is not one — hence `typeErr` beside `rowErr` rather than inside it.
+
+### Scope, and what is deliberately not changed
+
+- **An empty field is zero, and goes through the same call as any figure.** The
+  field IS the amount, so clearing it and committing means add nothing — and it
+  CLEARS the pending amount rather than leaving it. Returning early instead
+  stranded those taps: opening the field stands the 700ms pause down, so a `+5`
+  left behind would have sat on the card for ever, never flushing, until another
+  tap restarted a timer nobody knew was gone. Found by the suite, on the one case
+  written with taps already made.
+- **That is also the way out of a card opened by mistake**, and there is no
+  separate Cancel, matching the mockup that was approved. If it proves too quiet
+  in the kitchen, a Cancel beside the commit button is the fix, and it is not
+  made here.
+- **`public/stock.html` is untouched.** Its own keypad opens from the count in
+  both modes and always has; §48 retires that app.
+- **No new strings.** `How many did you make? · 制作了多少?` moves from the
+  sheet's title to the field's `aria-label`, `Add to stock · 加入库存` from the
+  sheet's confirm to the card's button, and the composed validation pair locked
+  at `docs/tacet-delivery-vocabulary.md` v1.26 keeps its job. `Quantity · 数量`
+  is no longer used on this screen — a field with the count in it needs no label
+  above it — and is recorded as retired there rather than deleted from the lock.
+- No schema change, no migration, no capability change.
