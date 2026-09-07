@@ -6041,7 +6041,7 @@ Client and docs. `public/m.html`, one new suite
 registered in the slow shard beside the §52 suite, and this entry. No route,
 schema, migration or capability change.
 
-## §55 — REVENUE IS ORDERS, AND ONLY ORDERS
+## 55. Revenue is orders, and only orders
 
 Decided by Ash, 2026-09-07.
 
@@ -6053,7 +6053,7 @@ THE DEFECT THIS FIXES: Summary reported money-in from `retail_orders` while Tran
 
 OPEN, AND IT MUST BE SETTLED BEFORE ANY FINANCE CHART SHIPS: the Tacet Summary counts `retail_orders`. The kitchen POS writes `sales_entries`, a different table. If till-counter takings land in `sales_entries` and not in `retail_orders`, Tacet's revenue figure is short by that amount today and no screen says so. This is a survey question, not an assumption.
 
-## §56 — COST OF GOODS AND GROSS PROFIT STAY BLANK
+## 56. Cost of goods and gross profit stay blank
 
 Decided by Ash, 2026-09-07.
 
@@ -6067,7 +6067,7 @@ True cost at the moment of sale is §31 and remains parked. When §31 lands, the
 
 CONSEQUENCE FOR THE AI: the finance read is forbidden from discussing margin, gross profit, or cost of goods in any form, including inference from other figures. This is a hard constraint in its prompt, not a preference.
 
-## §57 — FINANCE CHARTS ARE HAND-ROLLED SVG, SHARED WITH REPORTS
+## 57. Finance charts are hand-rolled SVG, shared with Reports
 
 Decided by Ash, 2026-09-07.
 
