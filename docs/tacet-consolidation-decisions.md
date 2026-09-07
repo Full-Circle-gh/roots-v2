@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.145
+# Tacet shared-core consolidation — decisions record, v4.146
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -6245,3 +6245,41 @@ down a list a sheet would cover between every one.
   is no longer used on this screen — a field with the count in it needs no label
   above it — and is recorded as retired there rather than deleted from the lock.
 - No schema change, no migration, no capability change.
+
+### AMENDED 2026-09-07, from the floor, on the first build of this ruling
+
+Reported by Ash against the deployed v4.144: *"* and - doesnt work now if i edit
+a number manually, also if i dont add a number and i just click on the row it
+stay blank even if i leave the row. it should go back to the same dfult it is."*
+The screenshot carried three cards blank and open at once.
+
+**Both defects were one mistake: the field was a MODE WITH NO WAY OUT, and the
+two keys were switched off inside it.** A card tapped by accident stayed blank,
+and stayed blank with dead keys beside it, until something else re-rendered the
+app. Nothing on the card said how to leave, because there was nothing to say —
+no path existed. The empty-field escape this section already described only ran
+when the operator pressed the commit button, which is not what anyone does with
+a card they opened by mistake.
+
+**Two corrections, and neither changes the ruling above:**
+
+1. **The keys stay live and FOLD what was typed.** Typing 130 and tapping `+`
+   is 131; the field closes and the pending amount carries on as it always has.
+   The field and the keys are two ways at one number, not two modes. A
+   non-number is still not folded — `13o` says so rather than becoming 13 and
+   then 14, exactly as committing it would.
+2. **Leaving an empty field puts the card back** to the `+N` it opened on. A
+   field with digits in it is left alone: closing that on the way past would
+   throw away work nobody asked to discard.
+
+**THE REVERT PATCHES ONE CARD AND NEVER CALLS `render()`, and that is the whole
+reason it is safe.** Blur fires on the way to whatever was tapped next, so a
+`render()` there would rebuild the entire app under that tap and the click would
+land on a node that no longer exists — the `+` being reached for, or the next
+card's count. `qsTypeBlur` replaces that card's own two elements and touches
+nothing else, so the stepper buttons either side stay the same DOM nodes and
+every pending tap still lands. A probe asserts that identity directly.
+
+`qsCountCell` and `qsCardFoot` exist for the same reason: the full render and
+the patch draw an idle card through ONE function, so a patch cannot disagree
+with a render about what the card goes back to.

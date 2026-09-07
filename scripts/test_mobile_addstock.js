@@ -192,6 +192,68 @@ run('add stock', [
       ['and offers no Retry, which belongs to a failed write',
         `${body}.indexOf('Retry')===-1`],
     ]],
+  /* ── THE TWO DEFECTS REPORTED FROM THE FLOOR ON THE FIRST BUILD ──────────
+     "* and - doesnt work now if i edit a number manually, also if i dont add a
+     number and i just click on the row it stay blank even if i leave the row.
+     it should go back to the same dfult it is." Both came from the same cause:
+     the field was a mode with no way out, and the keys were disabled inside it,
+     so a card tapped by accident was blank AND dead until the app re-rendered
+     for some other reason. Three of them were blank at once in the report. */
+  ['the keys stay live while a count is being typed',
+    SHELF + "APP.cmd('qsType',7);", [
+      ['plus is not disabled', "!document.querySelectorAll('.stepbtn')[1].hasAttribute('disabled')"],
+    ]],
+  ['a key tapped after typing folds the typed number rather than refusing it',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsBump',7,1);", [
+      ['130 became 131', "state.qs.add[7]===131"],
+      ['and the field closed behind it', "state.qs.typing[7]==null"],
+      ['the card shows it', `${body}.indexOf('+131')>-1`],
+    ]],
+  ['minus works on a typed number too',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsBump',7,-1);", [
+      ['130 became 129', "state.qs.add[7]===129"],
+    ]],
+  /* JUNK IS NOT FOLDED INTO A QUANTITY by way of the + key any more than by the
+     commit button: "13o" must not become 13 and then 14. */
+  ['a key tapped on a non-number says so instead of folding it',
+    SHELF + CATCH + "APP.cmd('qsType',7); qsTyped(7,'13o'); APP.cmd('qsBump',7,1);", [
+      ['nothing was written', "window.__sent.length===0"],
+      ['the amount was not invented', "!state.qs.add[7]"],
+      ['and the field is still open, saying why', "state.qs.typing[7]==='13o' && !!state.qs.typeErr[7]"],
+    ]],
+  /* LEAVING AN EMPTY FIELD PUTS THE CARD BACK. This is the "it should go back
+     to the same default" half of the report. */
+  ['leaving a field nobody typed in puts the card back to its count',
+    SHELF + "APP.cmd('qsBump',7,3); APP.cmd('qsType',7); qsTyped(7,''); APP.cmd('qsTypeBlur',7);", [
+      ['the field is closed', "state.qs.typing[7]==null"],
+      ['the count it opened on is still there', "state.qs.add[7]===3"],
+      ['the cell is a button again, not an input',
+        "!document.getElementById('qsnum-7') && !!document.querySelector('button.qsnum')"],
+      ['and the commit button went with it', `${body}.indexOf('Add to stock')===-1`],
+    ]],
+  /* The same revert WITH the grant, where the card has a correction door to put
+     back — it is `qsFix` that the commit button stands in for, and this fixture
+     is the only one where that door exists to be checked. */
+  ['and with the grant, the correction door comes back with it',
+    GRANTED + "APP.cmd('qsType',7); qsTyped(7,''); APP.cmd('qsTypeBlur',7);", [
+      ['the correction door is on the card again', `${body}.indexOf('Correct the count')>-1`],
+      ['and the commit button is gone', `${body}.indexOf('Add to stock')===-1`],
+    ]],
+  /* A FIELD WITH DIGITS IN IT IS LEFT ALONE — closing it on the way past would
+     throw away work nobody asked to discard. */
+  ['leaving a field that HAS digits keeps them',
+    SHELF + "APP.cmd('qsType',7); qsTyped(7,'130'); APP.cmd('qsTypeBlur',7);", [
+      ['still open on what was typed', "state.qs.typing[7]==='130'"],
+      ['and still an input', "!!document.getElementById('qsnum-7')"],
+    ]],
+  /* THE BLUR PATCH MUST NOT REBUILD THE APP. Blur fires on the way to whatever
+     was tapped next, so a render() here would replace the very node the tap is
+     travelling towards. The stepper buttons either side must survive it. */
+  ['leaving an empty field patches the card without rebuilding the row',
+    SHELF + "APP.cmd('qsType',7); window.__less=document.querySelectorAll('.stepbtn')[0];"
+          + "APP.cmd('qsTypeBlur',7);", [
+      ['the minus key is the very same node', "document.querySelectorAll('.stepbtn')[0]===window.__less"],
+    ]],
   /* THE DOOR IS THE KITCHEN'S OWN AND NEEDS NO GRANT (§46) — it writes a delta,
      the job this screen exists for. The correction door writes an absolute count
      and needs `quickstock:recount`; one shared function would have handed the
