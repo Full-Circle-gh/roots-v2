@@ -894,6 +894,7 @@ reg('kqOpen', id=>kqOpen(id));
 reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; render(); });
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqAdvance', to=>kqAdvance(to));
+reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
 /* The chip sets the reason and closes the row's picker in one tap — there is
    no second confirm, because the answer IS the confirmation. */
@@ -6595,6 +6596,40 @@ function kqAdvance(to){
     render();
   });
 }
+/* THE KITCHEN QUEUE SPLIT (decisions §61). One line, not the whole order —
+   the request that shipped this was Ash's own: "they can split what they
+   start making, what was made. its all one batch." Each item advances on its
+   own tap; the order's own status is a rollup the server brings forward once
+   every line has caught up, which is what still fires the print/push/dispatch
+   that used to hang off the single button, and the What-you-made handover
+   (§59) the moment the LAST line reaches 'prepared'. The order is re-fetched
+   rather than guessed locally, because whether that rollup just happened is
+   the one thing the client cannot know on its own. */
+function kqItemAdvance(itemId,to){
+  const k=state.kq;
+  if(k.busy||!k.order) return;
+  k.busy=true; k.err=''; render();
+  const orderId=k.order.id;
+  apiWrite('/api/restock/'+orderId+'/item/'+itemId+'/status',{status:String(to)},'PUT').then(()=>api('/api/restock/'+orderId)).then(j=>{
+    k.busy=false;
+    const wasPrepared=k.order&&k.order.status==='prepared';
+    const updated=(j&&j.data)||j;
+    if(!wasPrepared&&updated.status==='prepared'){
+      k.order=null; k.orderId=null; loadKq(true);
+      const why=hdStart(updated);
+      if(why!==true) k.note=kqNote(why);
+    } else {
+      k.order=updated;
+    }
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false;
+    k.err=e.code==='norealm'?T('This account cannot work the kitchen queue.','此账号无法处理厨房队列。')
+                            :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
 
 /* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
    The step between closing a request and the shelf being right.
@@ -8068,22 +8103,29 @@ function screenKitchenQueue(){
     const o=k.order||{};
     const items=(o.items||[]).filter(it=>xfrNum(it.qty_requested)>0);
     const p=krPurpose(o);
-    const next=o.status==='sent'?'received':o.status==='received'?'prepared':null;
+    /* THE SPLIT (decisions §61). Each line reads its OWN status, not the
+       order's — that is the whole change. The order-wide button is gone;
+       what used to force every line to start and finish together is now one
+       button per line, and a line with nothing left just shows a check. */
+    const rows=items.map(it=>{
+      const ist=it.status||'sent';
+      const inext=ist==='sent'?'received':ist==='received'?'prepared':null;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+        <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span>
+        ${inext
+          ? `<button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('kqItemAdvance',${it.id},'${inext}')">${k.busy?T('Saving…','保存中…')
+                :(inext==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>`
+          : `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`}
+      </div>`;
+    }).join('');
     return `<div style="padding:4px 16px 12px">
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
       ${err}
       <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
       <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
-      <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
-        <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
-        <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span></div>`).join('')}</div>
-      ${next?`<div style="padding:16px">
-        <button class="btn2" style="width:auto;padding:11px 26px"${k.busy?' disabled':''}
-          onclick="APP.cmd('kqAdvance','${next}')">${k.busy?T('Saving…','保存中…')
-            :(next==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>
-        ${next==='prepared'?`<div style="font-size:13px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
-          T('The next screen asks how many reached the shelf.','下一步会询问实际入库数量。')}</div>`:''}
-      </div>`:''}`;
+      <div>${rows}</div>`;
   }
   const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;
     border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};

@@ -375,6 +375,16 @@ CREATE TABLE IF NOT EXISTS restock_items (
   unit          TEXT,
   notes         TEXT,
   is_checked    INTEGER DEFAULT 0,
+  -- The kitchen queue split (decisions §61): a kitchen request used to move
+  -- as one block, one status on restock_orders, every line forced to start
+  -- and finish together. Each line now carries its own status so the kitchen
+  -- can start and finish items one at a time. restock_orders.status stays
+  -- the rollup — it only catches up once every line here has reached the
+  -- same point, which is what keeps dispatch/push/print, all keyed on the
+  -- ORDER status, firing exactly once. Unused outside kitchen requests.
+  status        TEXT DEFAULT 'sent',  -- sent|received|prepared, mirrors STATUS_FLOW
+  received_at   DATETIME,
+  prepared_at   DATETIME,
   FOREIGN KEY (restock_id) REFERENCES restock_orders(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id)
 );

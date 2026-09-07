@@ -1232,20 +1232,29 @@ router.put('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Status transition (sent / received / prepared / delivered) ─────────────
-router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, (req, res) => {
-  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
-  const { status } = req.body;
-  if (!STATUS_FLOW.includes(status)) return res.status(400).json({ error: 'Invalid status · 状态无效' });
-
-  const fromIdx = STATUS_FLOW.indexOf(order.status);
-  const toIdx   = STATUS_FLOW.indexOf(status);
-  if (toIdx <= fromIdx) return res.status(400).json({ error: `Cannot move backward 状态不能后退: ${order.status} → ${status}` });
-
+// Applies an order-level status transition and every side effect that goes
+// with it. Pulled out of the endpoint below so the per-item rollup (the
+// kitchen queue split, decisions §61) can reach the exact same dispatch/push/
+// print path when the last line catches the order up, rather than a second
+// copy that could drift from this one.
+function _advanceOrderStatus(order, status, req) {
   const now = new Date().toISOString();
   const tsCol = { sent:'sent_at', received:'received_at', prepared:'prepared_at', delivered:'delivered_at' }[status];
   tdb().prepare(`UPDATE restock_orders SET status = ?, ${tsCol} = ? WHERE id = ?`).run(status, now, order.id);
+
+  // Kitchen lines carry their own status (§61). An order-level advance —
+  // through this function, whichever door called it — always brings every
+  // line on the order up to at least the same point, so a legacy caller that
+  // never touches a single item (the transfer flow; the old kitchen app)
+  // still leaves the two in step.
+  const itemTsCol = { received: 'received_at', prepared: 'prepared_at' }[status];
+  if (itemTsCol) {
+    const toIdx = STATUS_FLOW.indexOf(status);
+    const behind = tdb().prepare('SELECT id, status FROM restock_items WHERE restock_id = ?').all(order.id)
+      .filter(it => STATUS_FLOW.indexOf(it.status || 'sent') < toIdx);
+    const bump = tdb().prepare(`UPDATE restock_items SET status = ?, ${itemTsCol} = COALESCE(${itemTsCol}, ?) WHERE id = ?`);
+    behind.forEach(it => bump.run(status, now, it.id));
+  }
 
   logActivity(req.user.id, req.user.username, 'status_change', 'restock', order.id, { from: order.status, to: status }, req.ip);
   // OUTBOUND HALF ONLY, and only at 'prepared' — the moment stock physically
@@ -1279,6 +1288,21 @@ router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, 
   if (status === 'sent' || status === 'prepared') {
     _kprint.autoPrintKitchenRequest(order.id, status);
   }
+  return transfer;
+}
+
+// ── Status transition (sent / received / prepared / delivered) ─────────────
+router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, (req, res) => {
+  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+  const { status } = req.body;
+  if (!STATUS_FLOW.includes(status)) return res.status(400).json({ error: 'Invalid status · 状态无效' });
+
+  const fromIdx = STATUS_FLOW.indexOf(order.status);
+  const toIdx   = STATUS_FLOW.indexOf(status);
+  if (toIdx <= fromIdx) return res.status(400).json({ error: `Cannot move backward 状态不能后退: ${order.status} → ${status}` });
+
+  const transfer = _advanceOrderStatus(order, status, req);
   // The status change itself succeeded. When the stock movement did not, say so
   // in the response so the screen can put it in front of the person who just
   // pressed the button — it used to be a console warning only, which meant a
@@ -1287,6 +1311,60 @@ router.put('/api/restock/:id/status', requireRestockAccess, kitchenScopedOrder, 
     return res.json({ success: true, stock_transfer: { ok: false, error: transfer.error } });
   }
   res.json({ success: true });
+});
+
+// ── Per-item status (the kitchen queue split) ───────────────────────────────
+// A kitchen request used to move as one block: one status on restock_orders,
+// one button, every line forced to start and finish together. Ash's report —
+// "they can split what they start making, what was made. its all one batch" —
+// is decisions §61: each restock_items row now carries its own status, and
+// this is the door that advances one. restock_orders.status stays the
+// rollup, brought forward by _advanceOrderStatus the moment every line has
+// reached the same point — which is what keeps dispatch/push/print, all keyed
+// on the ORDER status, firing exactly once, exactly as before this existed.
+router.put('/api/restock/:id/item/:item_id/status', requireRestockAccess, kitchenScopedOrder, (req, res) => {
+  const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
+  // Splitting which item is being worked on is a kitchen-queue idea — a
+  // transfer between locations has no such concept and stays on the
+  // whole-order endpoint above.
+  if ((order.to_role || 'warehouse') !== 'kitchen') {
+    return res.status(403).json({
+      error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',
+    });
+  }
+  const item = tdb().prepare('SELECT * FROM restock_items WHERE id = ? AND restock_id = ?').get(req.params.item_id, req.params.id);
+  if (!item) return res.status(404).json({ error: 'Item not found · 项目未找到' });
+
+  const { status } = req.body;
+  // Only the two steps the kitchen queue actually asks for. 'sent' is where
+  // every line starts and 'delivered' never applies to a kitchen line — see
+  // the comment on STATUS_FLOW.
+  if (status !== 'received' && status !== 'prepared') {
+    return res.status(400).json({ error: 'Invalid status · 状态无效' });
+  }
+  const fromStatus = item.status || 'sent';
+  const fromIdx = STATUS_FLOW.indexOf(fromStatus);
+  const toIdx   = STATUS_FLOW.indexOf(status);
+  if (toIdx <= fromIdx) return res.status(400).json({ error: `Cannot move backward 状态不能后退: ${fromStatus} → ${status}` });
+
+  const now = new Date().toISOString();
+  const tsCol = { received: 'received_at', prepared: 'prepared_at' }[status];
+  tdb().prepare(`UPDATE restock_items SET status = ?, ${tsCol} = ? WHERE id = ?`).run(status, now, item.id);
+  logActivity(req.user.id, req.user.username, 'status_change', 'restock_item', item.id, { from: fromStatus, to: status }, req.ip);
+
+  // The order catches up the moment every one of its lines has reached this
+  // point — never before, and never for a line still behind.
+  const items = tdb().prepare('SELECT status FROM restock_items WHERE restock_id = ?').all(order.id);
+  const everyLineCaughtUp = items.length > 0 && items.every(it => STATUS_FLOW.indexOf(it.status || 'sent') >= toIdx);
+  let transfer = null;
+  if (everyLineCaughtUp && STATUS_FLOW.indexOf(order.status) < toIdx) {
+    transfer = _advanceOrderStatus(order, status, req);
+  }
+  if (transfer && transfer.ok === false) {
+    return res.json({ success: true, stock_transfer: { ok: false, error: transfer.error } });
+  }
+  res.json({ success: true, order_status: everyLineCaughtUp ? status : order.status });
 });
 
 // ── Reprint the kitchen's slip ─────────────────────────────────────────────

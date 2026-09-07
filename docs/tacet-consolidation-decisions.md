@@ -6313,3 +6313,93 @@ every pending tap still lands. A probe asserts that identity directly.
 `qsCountCell` and `qsCardFoot` exist for the same reason: the full render and
 the patch draw an idle card through ONE function, so a patch cannot disagree
 with a render about what the card goes back to.
+
+## §61 — THE KITCHEN QUEUE SPLITS: EACH LINE HAS ITS OWN STATUS, NOT THE WHOLE ORDER
+
+Decided by Ash, 2026-09-07, from a screenshot of the Kitchen queue detail
+screen (PR-260907-010, four lines, one "Start making" button) and the report:
+*"they can split what they start making, what was made. its all one batch.
+need to fix that."* Asked which axis "split" meant — which item(s) get
+started, or a partial quantity within one item — **the ruling is per-item
+status only.** A line still moves as a whole; different lines no longer have
+to move together.
+
+### What was wrong
+
+A kitchen request (a `restock_orders` row with `to_role='kitchen'`, numbered
+`PR-`) carried one `status` for the entire order — `sent → received →
+prepared`, `routes/restock.js` `STATUS_FLOW` — and `public/m.html`'s
+`screenKitchenQueue` drew exactly one button off it: *Start making* /
+*Mark as made*. Four items on one request meant four items forced through
+the same two taps together, whether the kitchen was working on one of them
+or all four. There was no way to start item 2 without also claiming item 1,
+3 and 4 had been started, and no way to finish one while the rest were still
+being made.
+
+`restock_items` had no per-line state to hang a split off — `qty_requested`,
+`qty_sent`, `is_checked`, nothing else. This is a different axis from the
+proposed, unbuilt "batch output split" in `docs/tacet-stock-movement-schema.md`
+§D6 (one batch yielding several PRODUCTS); that remains undecided and is not
+touched here.
+
+### The ruling
+
+**`restock_items` gains its own `status` (`sent|received|prepared`,
+`received_at`, `prepared_at`), mirroring `STATUS_FLOW`.** The kitchen queue
+detail screen draws one *Start making* / *Mark as made* button per line
+instead of one for the whole order; a line with nothing left to do shows a
+check. `PUT /api/restock/:id/item/:item_id/status` (`routes/restock.js`)
+advances one line, forward only, same rule as the order-level endpoint.
+
+**`restock_orders.status` stays as the ROLLUP, not a second source of truth.**
+It advances to a status only once every line on the order has reached that
+status — `_advanceOrderStatus`, called from both the per-item endpoint (when
+the last line catches up) and the existing whole-order `PUT
+/api/restock/:id/status` (used by transfers and the legacy kitchen app,
+neither of which knows about per-item state). This is deliberate: dispatch
+(`_applyDispatch`), the push fan-out, the kitchen slip print, and the
+What-you-made handover (§59) are all keyed on the ORDER'S status, and none of
+that logic is touched — it fires exactly when it always did, at the moment
+the whole order is actually done, whether that moment was reached by one tap
+or by four spread over an hour. `_advanceOrderStatus` also carries every line
+forward to at least its own new status, so a caller that never touches an
+item — a transfer, or the legacy kitchen app hitting the whole-order door
+directly — cannot leave the two out of step.
+
+**The split is kitchen-only.** The item endpoint 403s on an order whose
+`to_role` is not `kitchen` — a transfer between locations has no such
+concept — and it is on `lib/stock-app-only.js`'s allowlist beside the
+whole-order status door, or the confined kitchen role (the only role that
+reaches this screen at all — `restock:fulfil` without `restock:pick`) would
+get `kitchen_add_only` on every tap, same failure mode `test_kitchen_queue_
+reachable.js`'s history is entirely about.
+
+### Scope, and what is deliberately not changed
+
+- **No partial quantity within a line.** Ash's answer to the axis question
+  was per-item status only; "make 8 of 12 now, 4 later" on a single line is a
+  different, larger change and is not this ruling.
+- **Backfill is main-database only.** `restock_item_status_backfill_v1`
+  (`database.js`) copies each existing line's status from its parent order's
+  status/timestamps the day this ships, since up to today the order's status
+  WAS every line's status. Tenant databases get the new columns (via
+  `reconcileTenantColumns`) with the plain SQL default, no backfill — the
+  same gap `_transferContext`'s comment on `stock_applied_at` already
+  documents for `restock_goods_state_backfill_v1`. An in-flight kitchen
+  request on a tenant database shows its lines as freshly `sent` until each
+  is worked again; worst case is one extra tap per line, never a wrong stock
+  movement, and it heals itself as the queue is worked.
+- **No new strings.** *Start making · 开始制作* and *Mark as made ·
+  标记完成* move from the order-level button to the per-line one, unchanged.
+- **`public/stock.html`'s own Production queue is untouched, and that is a
+  gap rather than a judgement that it does not need this.** It carries the
+  identical whole-order `kqAdvance`/single-button shape this ruling replaces
+  in Tacet Mobile, and per §59 it is reached by exactly the operators
+  `stock_app_only` confines — the `kitchen` role among them — so a kitchen
+  account working from `/stock` still gets the old all-or-nothing button. The
+  report and screenshot this ruling answers were both Tacet Mobile
+  (`public/m.html`'s `Kitchen queue` chrome, not `/stock`'s `Production`
+  heading); porting the same split there is real work — its own render
+  function, its own DOM-patching discipline (§60) — and is left for its own
+  change rather than folded in unread, the way §59's first round found out
+  costs a second bug report.

@@ -6895,6 +6895,41 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_shop_listings_shop_sort ON shop_listings(shop_id, sort_position, id);
 `);
 
+// ─────────────────────────────────────────────────────────────────────────
+// THE KITCHEN QUEUE SPLIT — docs/tacet-consolidation-decisions.md §61
+// (2026-09-07). A kitchen request used to move as one block: one status on
+// restock_orders, every line forced to start and finish together. Each
+// restock_items row now carries its own status/received_at/prepared_at.
+// schema.sql already declares these for a fresh database; the three lines
+// below reach an existing one.
+addColumn('restock_items', 'status',      "TEXT DEFAULT 'sent'");
+addColumn('restock_items', 'received_at', 'DATETIME');
+addColumn('restock_items', 'prepared_at', 'DATETIME');
+// BACKFILL, MAIN DATABASE ONLY. An item's DEFAULT is 'sent', which is wrong
+// for a line that belongs to an order already past that — the ADD COLUMN
+// above would otherwise reopen every in-flight request's lines as "not
+// started". Copying the parent order's own status and timestamps the day
+// this ships is correct for every existing row, because up to today an
+// order's status WAS every one of its lines' status — there was no other way
+// to move it. Same tenant-DB gap as restock_goods_state_backfill_v1 above
+// (_transferContext's comment on stock_applied_at): reconcileTenantColumns
+// adds the columns to a tenant file with their SQL DEFAULT but runs no data
+// migration, so an in-flight order on a tenant database at deploy time shows
+// its lines as freshly 'sent' until each is worked again by hand — one tap
+// too many, never a wrong stock movement, and it heals itself as the queue
+// is worked.
+try {
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('restock_item_status_backfill_v1');
+  if (!done) {
+    db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    db.exec(`UPDATE restock_items SET
+        status      = (SELECT status      FROM restock_orders WHERE restock_orders.id = restock_items.restock_id),
+        received_at = (SELECT received_at FROM restock_orders WHERE restock_orders.id = restock_items.restock_id),
+        prepared_at = (SELECT prepared_at FROM restock_orders WHERE restock_orders.id = restock_items.restock_id)`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('restock_item_status_backfill_v1');
+  }
+} catch (e) { console.error('[migration restock_item_status_backfill_v1]', e); }
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
