@@ -4462,8 +4462,12 @@ function sheetWaste(){
    region that reads it, and every fetch that lands mid-typing patches too.
    ========================================================================== */
 /* The four origins the server accepts from a form (MANUAL_ORDER_ORIGINS).
-   'manual' is NOT offered: it is the till's own value, and the route refuses it
-   for anything that is not a counter sale. */
+   'manual' is NOT offered: it is the LEGACY value — rows written before the form
+   asked the question, plus till sales up to §44's 2026-09-07 amendment — and the
+   route refuses it for anything that is not a counter sale. The till no longer
+   sends it: it posts channel='shop' with shop_entry_method='till'. 'shop' is not
+   offered here either, for the reason it is not an origin — a shop sale is not an
+   answer to "how did the customer reach us?" */
 const ONW_ORIGINS=[{k:'pickup',en:'Pick up',zh:'到店自取'},{k:'wechat_chat',en:'WeChat message',zh:'微信消息'},
   {k:'wholesale',en:'Wholesale',zh:'批发'},{k:'other',en:'Other',zh:'其他'}];
 const ONW_FULS=[{k:'delivery',en:'Delivery',zh:'配送'},{k:'pickup',en:'Pickup',zh:'自提'}];
@@ -4484,6 +4488,12 @@ const ONW_WHERE={
   address_required_for_delivery:'how', address_not_allowed_for_pickup:'how',
   address_not_allowed_for_counter:'how',
   bad_channel:'from', channel_required:'from', channel_note_required:'from',
+  /* §44's till/QR door. Unreachable from this form — it offers no 'shop'
+     channel and sends no shop_entry_method — but the endpoint can answer with
+     all three, and an unmapped code lands on 'who', the top of the form, which
+     is nowhere near the control that caused it. 'from' is the channel block. */
+  bad_shop_entry_method:'from', shop_entry_method_required:'from',
+  shop_entry_method_not_allowed:'from',
 };
 /* One sentence per code, the desktop's own (04-orders.js ordNewErrText) — two
    surfaces answering the same refusal with the same words. E(), not T(): this
@@ -4505,6 +4515,13 @@ function onwErrText(code,msg){
     bad_packing_fee:E('Packing is not a valid amount.','包装费金额不正确。'),
     bad_channel:E('Pick a channel this order can be created on.','请选择可下单的渠道。'),
     channel_required:E('Say where this order came from.','请选择订单来源。'),
+    /* §44's two doors, the desktop's own words (04-orders.js ordNewErrText) —
+       the same refusal answered with the same sentence on both surfaces. Two
+       codes share the first, exactly as they do there. Locked in
+       docs/tacet-delivery-vocabulary.md v1.25. */
+    bad_shop_entry_method:E('A shop order must say which way it came in — the till or the QR menu.','门店订单需注明来自前台还是二维码。'),
+    shop_entry_method_required:E('A shop order must say which way it came in — the till or the QR menu.','门店订单需注明来自前台还是二维码。'),
+    shop_entry_method_not_allowed:E('Only a shop order comes in through the till or the QR menu.','只有门店订单才能标注前台或二维码来源。'),
     channel_note_required:E('Write where this order came from.','请填写具体来源。'),
     bad_store_id:E('Pick a store.','请选择门店。'),
     store_not_found:E('That store no longer exists. Pick another.','该门店已不存在,请另选。'),

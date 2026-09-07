@@ -444,7 +444,7 @@ function wiring() {
   is(A.ONW_ORIGINS.map((x) => x.k).join(','), allowed.join(','),
      'the origin chips are exactly MANUAL_ORDER_ORIGINS, in the server’s own order');
   yes(!A.ONW_ORIGINS.some((x) => x.k === 'manual'),
-      "and never 'manual' — the till's value, which the route refuses for anything that is not a counter sale");
+      "and never 'manual' — the legacy value, which the route refuses for anything that is not a counter sale");
   const fuls = (RET.match(/const ORDER_FULFILLMENT_TYPES\s*=\s*\[([^\]]*)\]/) || [])[1] || '';
   const fulAllowed = [...fuls.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
   yes(A.ONW_FULS.every((x) => fulAllowed.includes(x.k)), 'both fulfilment chips are types the server knows');

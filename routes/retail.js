@@ -23515,19 +23515,37 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 // messaged the shop on WeChat is 'wechat_chat', which is a different thing from
 // the mini app and now counts as one.
 //
-// 'manual' survives for the TILL only (public/till.html posts it with
-// fulfillment_type='counter') and for older API callers. A counter sale has no
-// origin question to ask — the customer is standing at the counter — so it is
-// allowed through here and rejected below for anything that isn't a counter
-// sale. New form submissions must name a real origin.
+// 'manual' survives for OLDER API CALLERS and for the rows already written
+// under it. A counter sale has no origin question to ask — the customer is
+// standing at the counter — so it is allowed through here and rejected below
+// for anything that isn't a counter sale. New form submissions must name a
+// real origin.
+//
+// THE TILL NO LONGER POSTS IT. public/till.html sends channel='shop' with
+// shop_entry_method='till' as of §44's 2026-09-07 amendment; the counter sale
+// it writes is a SHOP sale, and 'shop' is where a shop's revenue belongs. The
+// exemption below is therefore no longer the till's — it is what keeps an
+// older caller working, and historical till rows keep the 'manual' they were
+// written with. Nothing is backfilled.
 const MANUAL_ORDER_ORIGINS  = ['pickup', 'wechat_chat', 'wholesale', 'other'];
 // 'shop' is ACCEPTED but is deliberately NOT an origin, so it does not join the
 // form's picker. A shop sale is not an answer to "how did the customer reach
 // us?" — the customer is at the shop — it is the till or the QR menu writing
 // its own channel (§14, §44), which is the same reason 'manual' sits here and
-// not above. Accepted now so the first shop order is not met with a 400 from a
-// list nobody thought to widen; nothing posts it yet.
+// not above. THE TILL POSTS IT as of §44's 2026-09-07 amendment, and the QR
+// menu writes the same channel on its own INSERT in routes/shop-menu.js.
 const MANUAL_ORDER_CHANNELS = ['manual', 'shop', ...MANUAL_ORDER_ORIGINS];
+// Which of a shop's two doors the order came through — §44's "order source",
+// named by its 2026-09-07 amendment as retail_orders.shop_entry_method and
+// NOT retail_orders.source. `source` answers how the row was CREATED (keyed
+// by staff, or arrived by itself) and cannot separate these two: a till sale
+// and a QR sale are both a person standing in the shop. That is why the till's
+// row goes on binding source='manual' below — staff did key it in — while the
+// door it came through is recorded here.
+//
+// Inclusion list, never fall-through (§1.17 rule 2). Absent stays NULL, which
+// is what every row that is not a shop sale has always stored.
+const SHOP_ENTRY_METHODS = ['till', 'qr'];
 // delivery = ship/courier to an address · pickup = customer collects at a store
 // later · counter = handed over at the till now, nothing to ship or collect.
 const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
@@ -23831,6 +23849,33 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     return res.status(400).json({ success: false, error: 'channel_note_required' });
   }
 
+  // Which door a shop sale came through (§44, amended 2026-09-07). Unlike
+  // `source` — which this route binds itself, because how a row was created is
+  // not something the client gets to claim — this IS the caller's to state: the
+  // till and the QR menu are different doors and only the caller knows which
+  // one it is. It is validated rather than trusted.
+  //
+  // The rule is symmetric in both directions, and both halves matter:
+  //   · a 'shop' order MUST name its door — a shop sale that records neither
+  //     till nor QR is exactly the ambiguity §44's amendment exists to remove,
+  //     and it cannot be recovered later from any other column;
+  //   · any other channel must NOT name one — a phone order has no shop door,
+  //     and a value there would be a claim about a shop that took no part in it.
+  // Neither half can break a live caller: the till is the only client that
+  // sends the field, and it is the only client that sends channel='shop'.
+  const shopEntryMethod = b.shop_entry_method == null || b.shop_entry_method === ''
+    ? null
+    : String(b.shop_entry_method).toLowerCase();
+  if (shopEntryMethod !== null && !SHOP_ENTRY_METHODS.includes(shopEntryMethod)) {
+    return res.status(400).json({ success: false, error: 'bad_shop_entry_method', allowed: SHOP_ENTRY_METHODS });
+  }
+  if (channel === 'shop' && shopEntryMethod === null) {
+    return res.status(400).json({ success: false, error: 'shop_entry_method_required', allowed: SHOP_ENTRY_METHODS });
+  }
+  if (channel !== 'shop' && shopEntryMethod !== null) {
+    return res.status(400).json({ success: false, error: 'shop_entry_method_not_allowed' });
+  }
+
   // store_id is optional (a phone order taken before routing is decided has no
   // store yet), but an id that was SENT must resolve. Writing NULL for a store
   // the operator picked would look like "no store" instead of "we lost it".
@@ -23856,11 +23901,15 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   if (!ORDER_FULFILLMENT_TYPES.includes(fulfillmentType)) {
     return res.status(400).json({ success: false, error: 'bad_fulfillment_type', allowed: ORDER_FULFILLMENT_TYPES });
   }
-  // Origin is required for anything a human keyed on a customer's behalf. Only
-  // the till is exempt: a counter sale's origin IS the counter, already recorded
-  // in fulfillment_type, so there is nothing to ask. Everything else must name
-  // where the order came from — an unanswered origin is exactly what left this
-  // revenue with no card on the Sales page.
+  // Origin is required for anything a human keyed on a customer's behalf. The
+  // exemption is for a counter sale, whose origin IS the counter and is already
+  // recorded in fulfillment_type, so there is nothing to ask. Everything else
+  // must name where the order came from — an unanswered origin is exactly what
+  // left this revenue with no card on the Sales page.
+  //
+  // This is NO LONGER THE TILL'S PATH — the till sends channel='shop' as of
+  // §44's 2026-09-07 amendment and never reaches this guard. What it now covers
+  // is an older API caller still posting 'manual' with a counter sale.
   if (channel === 'manual' && fulfillmentType !== 'counter') {
     return res.status(400).json({ success: false, error: 'channel_required', allowed: MANUAL_ORDER_ORIGINS });
   }
@@ -24043,16 +24092,20 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            recipient_name, recipient_phone, address_full, address_json,
            subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
-           store_id, tax_amount, tax_rate_micro, tax_mode
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
         orderNo, customerId, 'pending_payment', paymentMethod,
         recipientName, recipientPhone || null, addressFull, addressJson,
         subtotal, shippingFee, packingFee, total,
+        // `source` is the literal 'manual' on every row this route writes, and
+        // it stays that way for the till too: this endpoint is reached by staff
+        // keying an order in, which is what the column records. §44's till/QR
+        // distinction is shop_entry_method, bound last — see SHOP_ENTRY_METHODS.
         customerNote, staffNote, channel, channelNote, 'manual', req.user.id, fulfillmentType, payToken,
-        storeId, taxAmount, taxRateMicro, taxMode
+        storeId, taxAmount, taxRateMicro, taxMode, shopEntryMethod
       );
       orderId = info.lastInsertRowid;
       // ship_modes / needs_ice_pack / ship_from_supplier are SNAPSHOTTED here, the
@@ -24325,8 +24378,11 @@ function buildOrderFilter(query) {
   // 'shop' is a sale that originated at a physical shop, till or QR menu (§14,
   // §44). It is listed here because an unlisted value falls to '' — the filter
   // is DISCARDED and the caller silently gets every order back, which reads as
-  // "the filter did nothing" rather than as an error. Nothing writes the value
-  // yet; it is accepted now so the facet works from the first shop order.
+  // "the filter did nothing" rather than as an error. BOTH DOORS NOW WRITE IT:
+  // the QR menu on its own INSERT (routes/shop-menu.js) and the till through
+  // the manual-order endpoint, as of §44's 2026-09-07 amendment. The facet does
+  // not narrow further by door — that is shop_entry_method, and splitting a
+  // shop's revenue across two channel lines is the thing §44 forbids.
   const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual', 'shop'].includes(String(query.channel || '').toLowerCase())
     ? String(query.channel).toLowerCase() : '';
   let filterSql = 'WHERE 1=1';

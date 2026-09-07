@@ -45,7 +45,18 @@ const pass = (msg) => console.log('  ✓ ' + msg);
 
 // ── Fixtures — one order per shape the system can actually write ────────────
 // Named so a failure below says which shape broke. `channel: null` is the mini
-// app, which sends no channel at all; 'manual' + counter is the till.
+// app, which sends no channel at all.
+//
+// THE TILL APPEARS TWICE, and both shapes must land on `pos`. It wrote
+// 'manual' + counter up to §44's 2026-09-07 amendment and writes 'shop' +
+// counter after it, and nothing is backfilled — so both are live shapes in one
+// table for as long as the historical rows exist. The QR menu writes the third
+// row: same channel, same fulfilment type, a different door (shop_entry_method),
+// and §44 is explicit that the door must NOT split a shop's revenue in two. All
+// three are here because the card that catches them keys on fulfillment_type
+// and not on channel, and that is the property worth holding down: a change
+// that made the POS card channel-keyed would drop counter sales out of the
+// Sales page silently, which is the failure this partition exists to prevent.
 const FIXTURES = [
   { order_no: 'T-MINIAPP',   channel: null,          fulfillment_type: 'delivery', expect: 'wechat' },
   { order_no: 'T-MINIEMPTY', channel: '',            fulfillment_type: 'pickup',   expect: 'wechat' },
@@ -53,6 +64,8 @@ const FIXTURES = [
   { order_no: 'T-MEITUAN',   channel: 'meituan',     fulfillment_type: 'delivery', expect: 'meituan' },
   { order_no: 'T-GZMIRROR',  channel: 'gzgrocery',   fulfillment_type: 'pickup',   expect: 'gzgrocery' },
   { order_no: 'T-TILL',      channel: 'manual',      fulfillment_type: 'counter',  expect: 'pos' },
+  { order_no: 'T-SHOPTILL',  channel: 'shop',        fulfillment_type: 'counter',  expect: 'pos' },
+  { order_no: 'T-SHOPQR',    channel: 'shop',        fulfillment_type: 'counter',  expect: 'pos' },
   { order_no: 'T-PICKUP',    channel: 'pickup',      fulfillment_type: 'pickup',   expect: 'direct' },
   { order_no: 'T-WECHATMSG', channel: 'wechat_chat', fulfillment_type: 'delivery', expect: 'direct' },
   { order_no: 'T-WHOLESALE', channel: 'wholesale',   fulfillment_type: 'delivery', expect: 'direct' },
