@@ -2634,7 +2634,7 @@ async function saveNotifCategory(el) {
 function bxRenderAutoSummary() {
   const sum = $('#bx-auto-sum');
   if (!sum) return;
-  const NAME = { order: ['Order & shipping', '订单与物流'], invoice: ['Invoices', '发票'], refund: ['Refunds', '退款'] };
+  const NAME = { order: ['Order & shipping', '订单与物流'], invoice: ['Invoices', '发票'], refund: ['Refunds', '退款'], affiliate: ['Referral rewards', '邀请奖励'] };
   const on = [], off = [];
   document.querySelectorAll('[data-notif-cat]').forEach(el => {
     const n = NAME[el.dataset.notifCat];
