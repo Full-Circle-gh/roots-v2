@@ -114,6 +114,55 @@ run('add stock', [
     ['still +0', "state.qs.add[7]===0"],
   ]],
 
+  /* ── TYPING A BATCH IN, rather than tapping it a hundred and thirty times ──
+     THE COUNT IS A DOOR IN BOTH MODES. Recount shipped with it and add did
+     not, so a kitchen logging 130 bowls of soup had no way to enter 130 but to
+     tap +. These four cases pin the three things that gap cost, and the one
+     §46 rule the fix must not break. */
+  ['the count opens a way to type the batch in', SHELF, [
+    ['it is a control, not a label', `!!document.querySelector('.qsnum')`],
+    ['and it asks how many were made',
+      `document.querySelector('.qsnum').getAttribute('aria-label')==='How many did you make?'`],
+    ['which is a different question from the correction door',
+      `document.querySelector('.qsnum').getAttribute('onclick').indexOf('qsMade')>-1`],
+  ]],
+  ['a batch typed in goes on in ONE write, whatever its size',
+    SHELF + CATCH + "APP.cmd('qsMade',7); state.ask.run({n:'130'});", [
+      ['one request, not a hundred and thirty', "window.__sent.length===1"],
+      ['carrying the whole batch', "JSON.parse(window.__sent[0].b).delta===130"],
+      ['still a delta — §46 is untouched by the door it came through',
+        "!('physical_qty' in JSON.parse(window.__sent[0].b))"],
+      ['and recorded as production', "JSON.parse(window.__sent[0].b).reason==='kitchen_add'"],
+      ['the pending amount is cleared', "state.qs.add[7]===0"],
+    ]],
+  /* A TYPED FIGURE REPLACES THE PENDING TAPS rather than adding to them: the
+     field opened showing that amount, so what the operator left in it is what
+     they meant. And it stands the 700ms pause down, or the taps behind it
+     would land a SECOND write after this one — two ledger rows for one batch,
+     which is the defect the pause exists to prevent. */
+  ['a typed figure replaces the taps and cancels their pending write',
+    SHELF + CATCH + "APP.cmd('qsBump',7,1); APP.cmd('qsBump',7,1);"
+          + "APP.cmd('qsMade',7); state.ask.run({n:'130'});", [
+      ['the two taps did not add themselves on', "JSON.parse(window.__sent[0].b).delta===130"],
+      ['and their pause was stood down', "!state.qs.timers[7]"],
+      ['so still exactly one write', "window.__sent.length===1"],
+    ]],
+  ['a typed zero writes nothing, and clears what was pending',
+    SHELF + CATCH + "APP.cmd('qsBump',7,5); APP.cmd('qsMade',7); state.ask.run({n:'0'});", [
+      ['nothing went on the shelf', "window.__sent.length===0"],
+      ['and the five are gone', "state.qs.add[7]===0"],
+    ]],
+  /* THE DOOR IS THE KITCHEN'S OWN, AND NEEDS NO GRANT (§46) — it writes a
+     delta, which is the job this screen exists for. The correction door beside
+     it writes an absolute count and needs `quickstock:recount`; a shared
+     function would have handed the ungranted operator that write. */
+  ['typing a batch needs no recount grant', SHELF, [
+    ['the shelf is not shown, so there is no grant', "!state.qs.canRecount"],
+    ['and the door still opens', "(APP.cmd('qsMade',7), !!state.ask)"],
+    ['on the batch question, not the shelf one',
+      "state.ask.title==='How many did you make?'"],
+  ]],
+
   ['the write is a DELTA — the server refuses anything else from a kitchen',
     SHELF + `window.__sent=[];
       window.fetch=function(u,o){ window.__sent.push({u:String(u),b:o&&o.body});

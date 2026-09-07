@@ -358,6 +358,19 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
 .stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
+/* THE COUNT ON A QUICK STOCK CARD IS A CONTROL, and it has to look like one.
+   Typing is the only way to reach a big number without fifty taps, and the count
+   sat between the two keys with no edge of its own — indistinguishable from the
+   SKU line above it, which is a label. A kitchen adding 130 bowls of soup tapped
+   + a hundred and thirty times. WIDE RATHER THAN SQUARE (`flex:1` against the
+   keys' fixed side), so it reads as the field it is and never as a third key.
+
+   `font-family` rather than the `font` shorthand, deliberately: the shorthand
+   resets font-variant-numeric, which would quietly drop the tabular figures
+   `.num` puts on this element — and a count that changes width as it counts is
+   the one thing a stepper must not do. */
+.qsnum{flex:1;height:56px;border-radius:8px;background:var(--surface-raised);border:1.5px solid var(--edge);
+  padding:0;font-family:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;cursor:pointer}
 .chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid var(--edge);
   background:var(--surface-card);color:var(--text-secondary)}
@@ -822,6 +835,7 @@ reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
+reg('qsMade', id=>qsAskMade(Number(id)));
 reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
   const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
   // Same caret rescue the stock search does: a re-render moves focus, and a
@@ -7239,6 +7253,54 @@ function qsFlush(id){
     .then(()=>qsWriteLanded(id,n,p))
     .catch(e=>{ if(String(e.message)==='auth') return; qsWriteFailed(id,n,e.message); });
 }
+/* ── TYPING A BATCH IN ─────────────────────────────────────────────────────
+   THE SAME DIALOG AS THE CORRECTION DOOR, ON THE OTHER QUESTION, and it is a
+   separate function for exactly the reason the two are separate controls on the
+   card (§46): this one writes a DELTA and is the kitchen's own job, needing no
+   grant; qsAskCount writes an ABSOLUTE COUNT and needs `quickstock:recount`.
+   Deriving one from the other by mode is how the two writes become one.
+
+   Every label is already live and none is minted: the title and the confirm verb
+   are `public/stock.html`'s own add keypad, which has asked this question from
+   the count button since that screen existed, and `Quantity · 数量` is this
+   file's. Only the validation line is new, and it is the shelf one with its noun
+   swapped — see docs/tacet-delivery-vocabulary.md. */
+function qsAskMade(id){
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  if(!p||qsMode()==='recount') return;
+  state.ask={
+    title: T('How many did you make?','制作了多少?'),
+    body: qsName(p),
+    confirmLabel: T('Add to stock','加入库存'),
+    // Opens on the amount the taps have built rather than empty, so a run of
+    // taps and a typed figure are the same pending number seen two ways — and
+    // never blank, because a blank field beside a card reading +6 asks whether
+    // the 6 is about to be lost.
+    fields:[{id:'n', label:T('Quantity','数量'), numeric:true,
+             value: state.qs.add[id]?String(state.qs.add[id]):''}],
+    validate:v=>{
+      const n=String(v.n||'').trim();
+      if(!/^\d+$/.test(n)) return T('Enter how many you made — a whole number, 0 or more.','请输入制作数量——整数，0 或以上。');
+      return null;
+    },
+    run:v=>qsMadeEntered(id, parseInt(String(v.n).trim(),10)) };
+  render();
+}
+/* A TYPED BATCH COMMITS AT ONCE, where a tapped one waits out the 700ms pause.
+   The pause exists to collect a RUN of taps into one ledger row; a figure typed
+   whole is already that row, and waiting would only open a window for the
+   operator to walk away inside. It REPLACES the pending amount rather than
+   adding to it — the field opened showing that amount, so what they left in it
+   is what they mean — and it stands the pause down, or the taps behind it would
+   land a second write after this one. Zero writes nothing (qsFlush refuses it),
+   which makes this dialog also the way to clear a miscounted pending amount. */
+function qsMadeEntered(id,n){
+  clearTimeout(state.qs.timers[id]); delete state.qs.timers[id];
+  state.qs.add[id]=Math.max(0,n);
+  delete state.qs.rowErr[id];
+  if(state.qs.add[id]>0) return qsFlush(id);
+  render();
+}
 /* ── CORRECTING THE COUNT (§46) ──────────────────────────────────────────
    A SEPARATE WRITE FROM THE BATCH, and the whole ruling turns on the two never
    becoming one. Logging a batch sends a positive delta and is recorded as
@@ -7412,9 +7474,14 @@ function screenStockAdd(){
 
      ADD: the number is what you are ADDING and starts at +0; the shelf total is
      context on the line above, where §46 allows it.
-     RECOUNT: the number IS the shelf, − and + move it, and tapping it types a
-     count straight in — which is the only way to reach a big number without
-     fifty taps, and the way the old app did it.
+     RECOUNT: the number IS the shelf, and − and + move it.
+
+     TAPPING THE NUMBER TYPES ONE IN, IN BOTH MODES — the only way to reach a
+     big number without fifty taps, and the way the old app did it. Add mode
+     shipped without it while recount had it, so a kitchen logging 130 bowls of
+     soup tapped + a hundred and thirty times; `public/stock.html` never had that
+     gap, its keypad having opened from the count in both modes since that screen
+     existed.
 
      The two write DIFFERENT THINGS — a delta and an absolute count — and that
      is the distinction §46 turns on, so the number's meaning is never left to
@@ -7436,10 +7503,9 @@ function screenStockAdd(){
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${lessOff?' disabled':''}
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
-        ${recount
-          ? `<button class="num" style="flex:1;height:56px;background:none;border:0;padding:0;font:inherit;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
-              onclick="APP.cmd('qsFix',${id})" aria-label="${T('Set count','设置数量')}">${shown}</button>`
-          : `<span class="num" style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:500;letter-spacing:-.01em;color:${busy?'var(--text-secondary)':'var(--text-primary)'}">${shown}</span>`}
+        <button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
+          onclick="APP.cmd('${recount?'qsFix':'qsMade'}',${id})"
+          aria-label="${recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?')}">${shown}</button>
         <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>
       </div>
