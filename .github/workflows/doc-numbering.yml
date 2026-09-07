@@ -1,0 +1,80 @@
+name: Doc numbering
+
+# WHY THIS IS A WORKFLOW AND NOT ONLY A SUITE, which is the whole design and the
+# reason it is worth its own file.
+#
+# On 2026-09-07 two open PRs each wrote `v4.139` into the header line of
+# docs/tacet-consolidation-decisions.md. Git merged them WITHOUT A CONFLICT: a
+# three-way merge only conflicts when the two sides change a line to DIFFERENT
+# text, and both had changed it to the same bytes, which git reads as agreement.
+# The duplicate reached main and was found by a person reading the changelog.
+#
+# A TREE-ONLY CHECK CANNOT CATCH THAT, and this is the point to keep hold of.
+# Run against a branch head, the check sees one v4.139 entry and passes —
+# correctly, because on that branch there IS only one. The other branch also has
+# exactly one and also passes. The duplicate does not exist in either input; it
+# is created BY the merge. A check that only ever looks at branch heads would
+# have gone green on both PRs and green again on main afterwards.
+#
+# `pull_request` is what fixes it. GitHub builds refs/pull/N/merge — the RESULT
+# of merging the PR into its current base — and actions/checkout checks that ref
+# out by default. So this runs against the file as it would exist after merging,
+# which is the first moment the duplicate is visible and the last moment before
+# it lands. That is the entire reason for the trigger.
+#
+# ── WHAT THIS IS NOT ────────────────────────────────────────────────────────
+#
+# It is NOT the test suite coming back. tests.yml was made manual-only on
+# 2026-09-07 on Ash's instruction ("I don't want all those tests") and is NOT
+# touched by this file: no trigger of its is restored, no suite of its runs
+# here, and nothing was added to it. What runs below is one node script that
+# reads two markdown files and exits — no database, no browser, no npm install,
+# no dependencies at all. It finishes in about a second.
+#
+# Approved by Ash, 2026-09-07, on that understanding. If it ever grows past
+# "parse two documents", it has stopped being the thing that was approved.
+#
+# ── WHAT IT ASSERTS ─────────────────────────────────────────────────────────
+#
+# Per document: no changelog version appears twice; the header version equals
+# the highest entry; section numbers are unique; the highest section number is
+# the last in the file. Sections are deliberately NOT required to be sequential
+# — see the long note at the head of scripts/check-doc-numbering.js, which
+# quotes the numbering rule the documents state for themselves.
+
+on:
+  pull_request:
+    # Only when one of the two documents actually moves. A PR touching neither
+    # gets no run at all rather than a green tick that means nothing.
+    paths:
+      - 'docs/tacet-consolidation-decisions.md'
+      - 'docs/tacet-delivery-vocabulary.md'
+      # The check itself, so a change to the parser is checked by the parser.
+      - 'scripts/check-doc-numbering.js'
+      - '.github/workflows/doc-numbering.yml'
+
+# A second push to a PR makes the first run's answer worthless — it was computed
+# against a merge result that no longer exists.
+concurrency:
+  group: doc-numbering-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  numbering:
+    name: versions and section numbers are unique
+    runs-on: ubuntu-latest
+    steps:
+      # No `ref:` — the default for a pull_request event is refs/pull/N/merge,
+      # the merge result, which is precisely what this needs to see. Setting
+      # `ref: ${{ github.event.pull_request.head.sha }}` here would reintroduce
+      # the exact blind spot described at the top of this file.
+      - uses: actions/checkout@v4
+
+      # No setup-node: the runner ships with node, this script requires nothing
+      # beyond fs and path, and there is no package to install. Keeping it that
+      # way is what makes the job seconds rather than minutes.
+      - name: Versions and section numbers
+        run: node scripts/check-doc-numbering.js
