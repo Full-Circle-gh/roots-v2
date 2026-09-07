@@ -68,11 +68,25 @@ const ORDER = `{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:
   {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6},
   {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4}]}`;
 
-// The queue open on that request, one tap away from closing it.
-const QUEUE = SHELF + `
+// The queue open on a request. QUEUE is the untouched one, one tap away from
+// closing; queueOn() builds the same screen over any other shape of order —
+// used for the lines that are made and still owe the shelf a batch (§61).
+const queueOn = (order) => SHELF + `
   state.kq.tried=true; state.kq.list=[{id:44,rs_number:'RS-44',item_count:3,purpose:'shelf'}];
-  state.kq.orderId=44; state.kq.order=${ORDER};
+  state.kq.orderId=44; state.kq.order=${order};
   state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();`;
+const QUEUE = queueOn(ORDER);
+
+/* MADE, AND THE SHELF IS STILL SHORT. Line 1 is `prepared` with no batch
+   recorded against it — the state an operator lands in by backing out of the
+   record screen, and the one the queue used to draw as simply done. The
+   server derives `recorded_at` per line (routes/restock.js _attachRecorded);
+   here it is set by hand, as the fetch would deliver it. */
+const ORDER_OWED = `{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
+  {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared',recorded_at:null},
+  {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
+  {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`;
+const ORDER_RECORDED = ORDER_OWED.replace('recorded_at:null', "recorded_at:'2026-09-07 10:14:00'");
 
 // The record screen, entered the way the queue enters it.
 const MADE = SHELF + `
@@ -236,6 +250,42 @@ run('production', [
        `${body}.indexOf('The request is closed')===-1`],
       ['the neutral line is shown instead, same as an unrequested batch',
        `${body}.indexOf('Across 1 product')>-1`],
+    ]],
+
+  /* THE DEAD END, REPORTED BY ASH AGAINST THE FIRST BUILD OF §61's HAND-OVER:
+     "if I'm on this page and going back I can't come back to this page again,
+     no option." Marking a line made opens the record screen; leaving it
+     without recording left the line `prepared`, drawn done, with the shelf
+     still short and no path back to the only screen that fixes it. */
+  ['a line made but not recorded keeps the door back to the record screen',
+    queueOn(ORDER_OWED), [
+      ['the line that owes the shelf offers the way back',
+       `${body}.indexOf('Record what was made')>-1`],
+      ['and it is the only line that does — one door, for one line',
+       `(${body}.match(/Record what was made/g)||[]).length===1`],
+      ['the two lines not yet made keep their own action',
+       `(${body}.match(/Start making/g)||[]).length===2`],
+    ]],
+
+  ['and that door reopens the record screen on that line alone, advancing nothing',
+    queueOn(ORDER_OWED) + CATCH + "APP.cmd('kqItemRecord',1);", [
+      ['the record screen is open again',
+       "state.stack[state.stack.length-1].route==='whatmade'"],
+      ['carrying that one line', "state.hd.lines.length===1&&state.hd.lines[0].id===7"],
+      ['naming the request it belongs to', "state.hd.rs==='RS-44'&&state.hd.rsId===44"],
+      /* THE STATUS WORK IS ALREADY DONE. A second PUT would be a second
+         status_change on a line that has not moved, and on the LAST line it
+         would re-fire the rollup's push and print. */
+      ['and nothing was written on the way — no status call at all',
+       "window.__sent.every(function(s){return !/\\/status/.test(s.u)})"],
+    ]],
+
+  ['a line whose batch IS recorded is simply done — no door, no second add',
+    queueOn(ORDER_RECORDED), [
+      ['nothing offers to record it again',
+       `${body}.indexOf('Record what was made')===-1`],
+      ['and the lines still to make are unaffected',
+       `(${body}.match(/Start making/g)||[]).length===2`],
     ]],
 
   /* THE SHELF ARRIVES AFTER THE TAP, WHICH IS THE ORDINARY CASE ON A PHONE.

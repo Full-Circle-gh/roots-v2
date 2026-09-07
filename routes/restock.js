@@ -1069,11 +1069,73 @@ router.post('/api/restock/kitchen-ready/seen', requireRestockAccess, tacetOnly, 
 });
 
 // ── Single order with items ─────────────────────────────────────────────────
+/* WHICH LINES HAVE ALREADY REACHED THE SHELF — DERIVED FROM THE BATCHES
+ * THEMSELVES, NEVER STORED ON THE LINE.
+ *
+ * §61's per-item hand-over opens the What-you-made screen the moment a line is
+ * marked made, and an operator can leave that screen without recording: the
+ * line is `prepared`, the shelf is still short, and until now the queue drew it
+ * done with no way back — the dead end Ash reported ("if I'm on this page and
+ * going back I can't come back to this page again, no option"). The queue can
+ * only offer the way back if it knows which lines are still owed.
+ *
+ * IT IS DERIVED FOR THE REASON docs/tacet-stock-movement-schema.md B3 GIVES for
+ * deriving in-transit rather than counting it: a flag on the line and the
+ * batches behind it can disagree, and a derivation cannot. It also needs no
+ * migration and is right about every request recorded before it existed, which
+ * a backfilled column would only be as far as the backfill's own guesswork.
+ *
+ * THE JOIN IS THE ONE THE RECORD SCREEN ITSELF MAKES. A kitchen request carries
+ * no product_id — it is sent null on purpose, restock_items.product_id being a
+ * kitchen products.id where every shelf table is keyed on store_products.id —
+ * so public/m.html's hdResolve matches its lines to the shelf by SKU, falling
+ * back to an exact name. This mirrors that, against the products the batches
+ * were actually written for. A line the screen could not match cannot have been
+ * recorded either, so both sides say the same thing about it.
+ *
+ * Best-effort by construction: any failure here leaves every line unmarked,
+ * which shows the way back to a screen that has already been used rather than
+ * hiding one that has not. A wrongly-offered door costs a tap; a hidden one
+ * costs the stock.
+ */
+function _attachRecorded(order, items) {
+  if ((order.to_role || 'warehouse') !== 'kitchen') return items;
+  const blank = () => items.map(it => ({ ...it, recorded_at: null, recorded_qty: null }));
+  try {
+    const batches = tdb().prepare(`
+      SELECT b.product_id, sp.sku, sp.name_en, sp.name_cn,
+             MAX(b.created_at)  AS recorded_at,
+             SUM(b.qty_shelved) AS recorded_qty
+        FROM production_batches b
+        JOIN store_products sp ON sp.id = b.product_id
+       WHERE b.request_id = ?
+       GROUP BY b.product_id`).all(order.id);
+    if (!batches.length) return blank();
+    const key = (v) => String(v == null ? '' : v).trim().toLowerCase();
+    const bySku = {}, byName = {};
+    for (const b of batches) {
+      const k = key(b.sku);
+      if (k && bySku[k] === undefined) bySku[k] = b;
+      for (const n of [b.name_en, b.name_cn]) {
+        const kn = key(n);
+        if (kn && byName[kn] === undefined) byName[kn] = b;
+      }
+    }
+    return items.map(it => {
+      const m = bySku[key(it.sku)] || byName[key(it.product_name)] || byName[key(it.product_cn)] || null;
+      return { ...it, recorded_at: m ? m.recorded_at : null, recorded_qty: m ? m.recorded_qty : null };
+    });
+  } catch (e) {
+    console.warn('[restock] recorded-line derivation:', e.message);
+    return blank();
+  }
+}
+
 router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
   const items = tdb().prepare('SELECT * FROM restock_items WHERE restock_id = ? ORDER BY id').all(order.id);
-  res.json({ success: true, data: { ...order, items } });
+  res.json({ success: true, data: { ...order, items: _attachRecorded(order, items) } });
 });
 
 // ── Create order ───────────────────────────────────────────────────────────
