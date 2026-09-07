@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.139
+# Tacet shared-core consolidation — decisions record, v4.141
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-07 · v4.139 — **§44's "ORDER SOURCE" IS NAMED: IT IS `retail_orders.shop_entry_method`, VALUES `till` AND `qr`, AND NOT `retail_orders.source` — DECIDED by Ash, 2026-09-07.** **§44 ruled that till and QR share the channel `shop` and are told apart by "order source"; it never named a column or a value, and a session sent to implement it stopped rather than choose** — correctly, because the tree offers two candidates and they disagree. **The ruling: `source` answers HOW THE ROW WAS CREATED — keyed by staff, or arrived by itself — and a till sale and a QR sale are both a person standing in the shop, so it cannot separate them.** `shop_entry_method` was added for this exact distinction and its own suite says so: `scripts/test_shop_channel.js` opens by recording that the column exists to name "which of a shop's two doors an order came through" and that it is **"deliberately NOT new values on `source`"**. **`routes/retail.js`'s rule that a client may not claim `source` STANDS and is affirmed as correct** — the till goes on posting through the manual-order endpoint, that endpoint goes on binding `'manual'`, and staff did key the order in, which remains true. **AMENDMENT IS INSERTION ONLY**: §44's Channel-and-source paragraph is not rewritten, not withdrawn and not re-worded; four paragraphs are added beside it and dated. **A LIVE DEFECT IS RECORDED AND DELIBERATELY NOT FIXED: the QR submit handler writes `source = 'qr'` as well as `shop_entry_method = 'qr'`** (`routes/shop-menu.js`, the `'shop', 'qr', 'counter'` value row in `POST /s/:shopCode/order`), which is the widening its own test file records as deliberately not done — so the tree contradicts itself and the contradiction is now written down rather than left to be re-derived. **Removing it is NOT a one-liner, which is why it is filed rather than done**: the paid-order auto-print de-dupe reads `prior.source === 'qr'` (`routes/retail.js`, inside `autoPrintOrder`) and is the column's ONLY reader anywhere, so dropping the writer without moving that predicate onto `shop_entry_method` would reprint every QR order's kitchen ticket on payment — the reader and the writer move in one commit or neither. **NO BACKFILL is ruled, implied or performed**, on `source` or on `channel`; historical rows are untouched and out of scope. **VERSION COORDINATION, recorded because two PRs are open against this file and one of them collides with main.** **PR #328 is stale**: it claims **v4.137**, which main has already used for §52 (a mirrored order has no parcels), and it appends **§52, §53 and §54**, all three of which are taken on main — §52 by that entry and §53 by v4.138's Quick Stock ruling. **Whoever rebases #328 takes the next free version after this one and renumbers its three sections from §55**, per the append-only rule; nothing here is renumbered to make room and no live section moves. **PR #333 also edits this file but claims no version** (it inserts a live-defect block under §36's Finance routes and leaves the header line alone), so it does not collide with this or with #328. This entry takes **v4.139**, the next free number on main at `05df1e2`. Docs only; no code, no schema, no migration. **No section is added** — §44 is amended in place — so Related documents stays at §38.
+2026-09-07 · v4.141 — **§44's "ORDER SOURCE" IS NAMED: IT IS `retail_orders.shop_entry_method`, VALUES `till` AND `qr`, AND NOT `retail_orders.source` — DECIDED by Ash, 2026-09-07.** **§44 ruled that till and QR share the channel `shop` and are told apart by "order source"; it never named a column or a value, and a session sent to implement it stopped rather than choose** — correctly, because the tree offers two candidates and they disagree. **The ruling: `source` answers HOW THE ROW WAS CREATED — keyed by staff, or arrived by itself — and a till sale and a QR sale are both a person standing in the shop, so it cannot separate them.** `shop_entry_method` was added for this exact distinction and its own suite says so: `scripts/test_shop_channel.js` opens by recording that the column exists to name "which of a shop's two doors an order came through" and that it is **"deliberately NOT new values on `source`"**. **`routes/retail.js`'s rule that a client may not claim `source` STANDS and is affirmed as correct** — the till goes on posting through the manual-order endpoint, that endpoint goes on binding `'manual'`, and staff did key the order in, which remains true. **AMENDMENT IS INSERTION ONLY**: §44's Channel-and-source paragraph is not rewritten, not withdrawn and not re-worded; four paragraphs are added beside it and dated. **A LIVE DEFECT IS RECORDED AND DELIBERATELY NOT FIXED: the QR submit handler writes `source = 'qr'` as well as `shop_entry_method = 'qr'`** (`routes/shop-menu.js`, the `'shop', 'qr', 'counter'` value row in `POST /s/:shopCode/order`), which is the widening its own test file records as deliberately not done — so the tree contradicts itself and the contradiction is now written down rather than left to be re-derived. **Removing it is NOT a one-liner, which is why it is filed rather than done**: the paid-order auto-print de-dupe reads `prior.source === 'qr'` (`routes/retail.js`, inside `autoPrintOrder`) and is the column's ONLY reader anywhere, so dropping the writer without moving that predicate onto `shop_entry_method` would reprint every QR order's kitchen ticket on payment — the reader and the writer move in one commit or neither. **NO BACKFILL is ruled, implied or performed**, on `source` or on `channel`; historical rows are untouched and out of scope. **VERSION COORDINATION, and this entry has already been moved once by it.** **It first claimed v4.139 and no longer does**: main took that number for §54 (the phone's order drawer on a mirrored order, PR #340) while this branch sat open, and because both sides carried the identical header line the merge resolved it SILENTLY rather than conflicting — the collision was found by reading the log, not by git. **Recorded because that is the failure mode this file keeps meeting**: a version collision between two open branches does not announce itself, and the one place it shows is a duplicated number in the changelog. **This entry now takes v4.141.** **v4.140 is RESERVED and deliberately skipped here** — PR #328's three Finance rulings take it, renumbered in the same pass to §55, §56 and §57 after all three of the numbers it claimed were taken on main (§52 by PR #335, §53 by PR #336, §54 by PR #340). That renumbering is done and pushed; this entry is written against it rather than predicting it. **PR #333 also edits this file but claims no version** (it inserts a live-defect block under §36's Finance routes and leaves the header line alone) and carries no section cross-reference at all, so it collides with neither. **Nothing here is renumbered to make room and no live section moves.** Docs only; no code, no schema, no migration. **No section is added** — §44 is amended in place — so Related documents stays at §38.
+
+2026-09-07 · v4.139 — **§54 ADDED: THE PHONE'S ORDER DRAWER READS THE FIELDS IT ALREADY HOLDS ON A MIRRORED ORDER — DECIDED by Ash**, from a phone, on GZ-140695: *"on PC you can find address and name. can gather all info that PC version have for gzgrocery order and add them to mobile"*. **§52 settled what the drawer must NOT show on a mirrored order; this is the other half — what it must.** **The finding that makes this a rendering change and not a data one is that both surfaces read the SAME payload**: `GET /api/retail-admin/orders/:id` is `SELECT o.*`, so `recipient_name`, `recipient_phone`, `address_full` and the parsed `address` all reach the phone already, and every gap was the phone declining to render a field it held. **The load-bearing one is `ordCustomerLines`** (`public/retail-admin/04-orders.js`): gzgrocery mirrors OpenCart's whole customer cell — `"Name (phone) address…"` — into `recipient_name` and leaves `recipient_phone` and the ship columns null, and the desktop splits that blob back into a name and a phone while the phone printed it raw, so the address landed in the name line. **Ported verbatim — same channel test, same six-digit floor — so the two surfaces cannot disagree about who an order is for.** **Five more, each a field already in hand:** `orderHeadMarks` had guarded on `placedFull` since it was written and nothing ever set it, so the drawer carried no date at all; the read-only tag existed only on the LIST row, so opening a mirrored order lost the one fact explaining why nothing in it can be acted on; `ITEM_TUPLE` read `options` and never `size`, so every mirrored line showed nothing under its name and two sizes of one product read alike; there was no money-gap band, so the drawer showed a total, showed the lines, and said nothing when they contradicted; and the SKU chip was inert where the desktop links the line out to its product. **Ruling: the read-only tag rides the marks strip, not the header** — the header is order number, status pill and close button on a 390px screen, and a fourth item there squeezes the order number into an ellipsis. **Ruling: it reads the RAW channel, not the display key** — `CH_BACK` still has no Eleme entry (§52), so an Eleme order read through the display key would be tagged "mini-app". **A defect found in the same card and fixed with it:** the Ship-to Copy button spread a null address, so on every order with none on file — a counter sale, a pickup, and every gzgrocery mirror — the one button on that card threw a `TypeError` and copied nothing; it now joins the parts that exist, as the desktop's copy chip does. **Deliberately NOT done, and recorded rather than left to be found:** the ship-by tile still says "Ship when ready · courier" on a mirrored order — it is visible in the screenshot that prompted this, and §52 already recorded it as a separate change, so it stays one. **A placeholder row is left exactly as it is**: an order whose dispatch note was never read carries the order id echoed into `recipient_name`, there is nothing to split, and nothing here invents a name or an address the row does not hold — which is what GZ-140695 itself does after this change. **Three of the desktop's mirrored cards were examined and deliberately not ported**, because none can fire on this channel: `renderChannelMoneyPanel` returns early for anything but Meituan and Eleme, and the daemon writes neither `channel_status` nor `channel_eta` nor `needs_cutlery`. **No composed strings** — every pair is lifted live from `04-orders.js` or already in `m.html`, so `docs/tacet-delivery-vocabulary.md` is untouched. One new suite, `scripts/test_mobile_mirrored_order_info.js`, 37 assertions across 16 cases, registered in the slow shard beside the §52 suite. Client and docs only; no route, schema or capability change. Appended as §54 under the append-only rule; Related documents stays at §38.
 
 2026-09-06 · v4.138 — **§53 ADDED: THE QUICK STOCK AND ADD STOCK FEATURE SWITCHES ARE DELETED AHEAD OF §48's LAST STEP — DECIDED by Ash**, whose framing was that Quick Stock became part of Tacet and is no longer connected to the kitchen app, so the two switches no longer describe anything an operator recognises. **The finding that prompted it is that both were already half-dead**: `features.quickStock` and `features.kitchenAdd` are not members of `lib/features.js` `FEATURES`, so they never had an entitlement layer and the `feature:` tags on `quickstock:add` / `quickstock:recount` in `lib/capabilities.js` could never fire; the only server reader folded them into one `enabled` field on `/api/retail-admin/quick-stock/context`, and the only consumer of that field was the standalone `/stock` PWA's "off" screen. **Tacet Mobile's own Add stock / Quick stock screens read `can_recount` and `stores` from the same response and ignore `enabled` entirely**, entry being gated on capability alone — so the switch an operator held in Tacet's Settings changed nothing in Tacet, and **`kitchenAdd`'s own copy, "Off: kitchen staff cannot add what they just made," was false when this was ruled.** **The cost is recorded rather than glossed**: `/stock` is still live under §48, still the only home for six flows, and `kitchen` and `store_stock` still carry `stock_app_only`, so this takes away that app's only off switch while two roles remain locked inside it — accepted, because the switch was one nobody could reach a correct conclusion from. **§48's migrate-before-delete ordering is otherwise untouched**; no role is unlocked and no flow moves. **A tenant holding either preference at `false` has that app switched back on**, and a migration deletes both `storefront_config` rows so a stored `false` cannot sit in the database meaning nothing. **The context endpoint keeps sending `enabled: true` as a constant** because `/stock` is an installed PWA and a cached shell that still tested the field would read an omitted `enabled` as falsy and show every staffer the off screen; it goes when the app does. **Rejected, both offered and declined:** narrowing the labels to name the separate `/stock` app and deleting them with it at §48 step 4, and wiring the flags into Tacet Mobile so the switches became true rather than removed. Code, docs, schema and one migration; no capability grant changes. **Written as §52 and RENUMBERED TO §53 ON REBASE** — PR #335 merged its own §52 while this was being written, so it keeps the number and this takes the next, per the append-only rule. **The third collision of this kind recorded here** (two branches each defining a §39, then §46/§47), and it arose the same way: two branches open at once, each taking what was the next free number when it was written. **Nothing was renumbered to make room and no live section moved.** Related documents stays at §38.
 
@@ -5909,3 +5911,116 @@ removed — investment in a control §48 already retires.
 
 Code, docs, schema and one migration. No change to any capability grant, and no
 role gains or loses access to either screen.
+
+## 54. The phone's order drawer reads the fields it already holds on a mirrored order
+
+**DECIDED by Ash, 2026-09-07**, from a phone, looking at GZ-140695: *"on PC you
+can find address and name. can gather all info that PC version have for
+gzgrocery order and add them to mobile"*.
+
+§52 settled what the drawer must **not** show on a mirrored order — no parcel,
+no waybill, no shipping mode. This is the other half: what it must show.
+
+### The finding
+
+**Both surfaces read the same payload.** `GET /api/retail-admin/orders/:id` is
+`SELECT o.*` joined to the customer and store, so `recipient_name`,
+`recipient_phone`, `address_full` and the `address` parsed out of
+`address_json` all reach the phone already. Nothing here was a missing field, a
+missing column or a missing endpoint. **Every gap was the phone declining to
+render something it was holding**, which is why this is a client change with no
+route, schema or capability touched.
+
+### The load-bearing one: the customer blob
+
+gzgrocery mirrors OpenCart's whole customer cell — `"Name (phone) address…"` —
+into `recipient_name`, and its `recipient_phone` and ship columns stay null.
+The desktop has split that back into a name and a phone since the column
+existed (`ordCustomerLines`, `public/retail-admin/04-orders.js`); the phone
+printed it raw, so **the address landed in the name line** and the card read as
+one long run-on where the desktop shows two clean fields.
+
+Ported verbatim — same channel test, same `\((\d{6,})\)` pattern, same
+six-digit floor — rather than reimplemented, **so the two surfaces cannot
+disagree about who an order is for**. Every other channel writes real columns
+and passes straight through, and a gzgrocery order that *has* a real phone
+column is not split either: this is a repair for a missing column, not a parser
+we run on every row.
+
+**A placeholder row is left exactly as it is.** An order whose dispatch note was
+never read carries the order id echoed into `recipient_name`
+(`scripts/gzgrocery-order-daemon.js`, "Prefer the real recipient"). There is no
+blob to split there, and nothing in this change invents a name or an address the
+row does not hold — **which is what GZ-140695 itself still does after it**, and
+what the desktop does with the same row.
+
+### The five others, each a field already in hand
+
+- **When the order was placed.** `orderHeadMarks` has guarded on `placedFull`
+  since it was written — its own comment opens "when the order was placed" — and
+  nothing ever set it, so the strip drew only on the marks and the drawer
+  carried no date at all. On a mirrored order, with nothing to pack and nothing
+  to dispatch, when it was placed is most of what there is to read. Carried raw
+  and formatted at render time, never at map time: `state.liveDetail` is cached
+  and the language toggle only re-renders.
+- **The read-only tag.** The desktop tags its mirrored panel; the phone's
+  "View only" pill was the **list row's**, so opening the order lost the one
+  fact explaining why nothing in it can be acted on.
+- **The variant.** `ITEM_TUPLE` read `options` and never `size`. A storefront
+  line carries the customer's own choices in `options`; a mirrored one has none
+  and puts its variant in `size`, which is what the desktop's read-only manifest
+  prints as the line's type. Added as a fallback, so a storefront line's own
+  options still win.
+- **The money-gap band.** The drawer showed a total, showed the lines, and said
+  nothing when the two contradicted each other — and on a mirrored order the
+  phone is often the only place anyone looks. Ported with the desktop's
+  tolerance (¥5 or 30%) and its inclusive/exclusive tax rule.
+- **The SKU chip.** Inert, where the desktop links the line out to its product.
+  It now opens the phone's own product sheet, and only when the lookup behind it
+  can succeed.
+
+### Rulings
+
+- **The read-only tag rides the marks strip, not the header.** The header is
+  order number, status pill and close button on a 390px screen; a fourth item
+  there squeezes the order number into an ellipsis. The strip is full-width and
+  wraps.
+- **It reads the RAW channel, not the display key.** `CH_BACK` still has no
+  Eleme entry (§52), so an Eleme order read through the display key would be
+  tagged "mini-app". Platform names are brands — the same word in both
+  languages — so they are a data map and never `T()` pairs, which is the shape
+  `test_mobile_screens`' bilingual check exists to reject.
+
+### A defect found in the same card and fixed with it
+
+The Ship-to **Copy** button spread a null address (`T(...o.addr)`), so on every
+order with none on file — a counter sale, a pickup, and every gzgrocery mirror —
+the one button on that card threw a `TypeError` and copied nothing at all. It
+now joins the parts that exist, the way the desktop's copy chip does, and drops
+a `—` rather than pasting a placeholder into a shipping label.
+
+### Deliberately not done
+
+- **The ship-by tile still says "Ship when ready · courier" on a mirrored
+  order.** It is visible in the screenshot that prompted this change, and §52
+  already recorded it as a separate change — so it stays one rather than being
+  folded in here.
+- **Three of the desktop's mirrored cards were examined and not ported**,
+  because none can fire on this channel: `renderChannelMoneyPanel` returns early
+  for anything but Meituan and Eleme, and the gzgrocery daemon writes neither
+  `channel_status` nor `channel_eta` nor `needs_cutlery`. Porting them would
+  have added three cards that are dead by construction.
+
+### Strings
+
+**None composed.** Every pair is either already live in `m.html` ("View only")
+or lifted from `04-orders.js` ("Order placed · 下单于", "Total disagrees with the
+items · 金额与商品不符", and the two sentences of the gap band), so
+`docs/tacet-delivery-vocabulary.md` is untouched.
+
+### Scope
+
+Client and docs. `public/m.html`, one new suite
+(`scripts/test_mobile_mirrored_order_info.js`, 37 assertions across 16 cases)
+registered in the slow shard beside the §52 suite, and this entry. No route,
+schema, migration or capability change.
