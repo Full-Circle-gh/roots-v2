@@ -674,7 +674,8 @@ const state = {
          and a duplicate key in this literal is the later one silently winning.
      They are one piece of work: closing a request moves NO stock, so the lines
      have to be carried to the screen that adds them or the shelf stays short. */
-  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:''},
+  kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
+      note:''},   // why a closed request did not reach the record screen
   hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
       awaiting:null},   // the request whose lines are waiting on the shelf to load
   bat:{qty:{},q:''},
@@ -808,7 +809,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     if(pikStores().length>1) k.at=null; }
   /* The queue is re-read on entry for the same reason the kitchen-ready list
      is: what is waiting to be made is a fact about this minute. */
-  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; }
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note=''; }
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
@@ -6542,13 +6543,31 @@ function loadKq(force){
 }
 function kqOpen(id){
   const k=state.kq;
-  k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
+  // The note is about the request that last closed; opening another is done
+  // reading it.
+  k.busy=true; k.err=''; k.note=''; k.order=null; k.orderId=Number(id); render();
   api('/api/restock/'+Number(id)).then(j=>{
     k.order=(j&&j.data)||j; k.busy=false; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.busy=false; k.err=e.message||T('That did not load.','加载失败。'); render();
   });
+}
+/* WHY A CLOSED REQUEST DID NOT REACH THE RECORD SCREEN, said on the queue it
+   drops back to. The lead clause is the locked pair from
+   docs/tacet-delivery-vocabulary.md's *A batch that could not be matched to a
+   shelf*; `登记生产批次` is `production:log`'s own label in lib/capabilities.js,
+   quoted so the operator asks an admin for the thing by the name the admin will
+   see on the permissions screen. */
+function kqNote(why){
+  const lead=T('Marked made — but the stock has not been recorded.',
+               '已标记完成 — 但库存尚未登记。');
+  if(why==='nocap') return lead+' '+T('This account cannot record a batch. Ask an admin for “Record what was made”.',
+                                      '此账号无法登记批次。请向管理员申请「登记生产批次」权限。');
+  if(why==='nostore') return lead+' '+T('There is no store on this account to add it to.',
+                                        '此账号没有可入库的门店。');
+  return lead+' '+T('This request asked for no quantities, so there is nothing to add.',
+                    '该申请没有数量，无需入库。');
 }
 function kqAdvance(to){
   const k=state.kq;
@@ -6561,7 +6580,11 @@ function kqAdvance(to){
       // asked for, and loadKq drops it.
       const made=k.order;
       k.order=null; k.orderId=null; loadKq(true);
-      if(hdStart(made)) return;   // falls through to the queue when there is nothing to hand over
+      const why=hdStart(made);
+      if(why===true) return;
+      // It closed and the stock did not move. Say so on the way back, naming
+      // what is missing — never the empty queue on its own.
+      k.note=kqNote(why);
     }
     render();
   }).catch(e=>{
@@ -6642,16 +6665,22 @@ function hdResolve(order){
    So the gate is the capability that write is gated on, `production:log`, which
    is exactly ROUTE_CAP.whatmade — asked through canRoute so this and push()
    cannot answer differently. */
+/* IT REPORTS WHY IT DECLINED, and until now it returned a bare `false` — which
+   is how one bug took four rounds to find. Every refusal here lands on somebody
+   who has JUST closed a kitchen request: the request is gone from the queue, the
+   shelf is still short, and a silent fall-back to an empty list tells them the
+   opposite of what happened. `true` when the screen opened, otherwise a reason
+   kqAdvance turns into a sentence. There is no path left that says nothing. */
 function hdStart(order){
-  if(!canRoute('whatmade')) return false;
+  if(!canRoute('whatmade')) return 'nocap';
   // Nothing was asked for, so there is nothing to hand over. The only refusal
   // left that is about the REQUEST rather than about this app's own readiness.
-  if(!(order.items||[]).some(li=>xfrNum(li.qty_requested)>0)) return false;
+  if(!(order.items||[]).some(li=>xfrNum(li.qty_requested)>0)) return 'nolines';
   /* A STORE IS THE ONE THING THE RECORD SCREEN CANNOT DO WITHOUT — hdCommit
      sends store_id — so this is still a refusal, but only once the context has
      ANSWERED and said there is no store. Refusing while it is merely in flight
      is what the two guards below stopped doing. */
-  if(state.qs.ctx&&state.qs.storeId==null) return false;
+  if(state.qs.ctx&&state.qs.storeId==null) return 'nostore';
   const rs=order.rs_number||('#'+order.id);
   /* THE SHELF MAY SIMPLY NOT HAVE ARRIVED YET, AND THAT IS NOT A REASON TO
      REFUSE. `state.qs.items` starts null and is filled two chained round trips
@@ -6693,7 +6722,7 @@ function hdOpen(lines,rs,rsId){
      over: the request closes, the screen does not change, and the early return
      skips even the re-render. Ask first and let the caller fall through to the
      queue, which is what it already does for a request with nothing to add. */
-  if(!canRoute('whatmade')) return false;
+  if(!canRoute('whatmade')) return 'nocap';
   const h=state.hd;
   h.lines=lines||null; h.rs=rs||null; h.rsId=rsId||null;
   h.busy=false; h.err=''; h.done=null; h.openReason=-1;
@@ -8027,6 +8056,13 @@ function screenKitchenQueue(){
   loadQsCtx(); loadKq();
   const k=state.kq;
   const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
+  /* WHAT HAPPENED TO THE REQUEST THAT JUST LEFT. It closed and the stock did not
+     move, and an empty queue on its own says the opposite. It is a NOTE rather
+     than an error — nothing failed, the operator did exactly the right thing —
+     and it sits above both the list and the empty state, because the empty
+     state is the one they are most likely to be looking at. */
+  const note=k.note?`<div style="margin:0 16px 12px;padding:12px 14px;border-radius:12px;
+    background:var(--surface-sunken,rgba(0,0,0,.04));font-size:14px;line-height:1.55">${escAttr(k.note)}</div>`:'';
   if(k.orderId!=null){
     if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     const o=k.order||{};
@@ -8054,9 +8090,11 @@ function screenKitchenQueue(){
     color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
   const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
   if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!k.list.length) return tabs+nothingYet(T('Nothing to make','暂无待制作'),
+  // The note goes ABOVE the empty state, not after it: "Nothing to make" with
+  // no explanation is precisely the screen this whole defect showed somebody.
+  if(!k.list.length) return tabs+note+nothingYet(T('Nothing to make','暂无待制作'),
     T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
-  return tabs+err+`<div>${k.list.map(o=>{
+  return tabs+note+err+`<div>${k.list.map(o=>{
     const p=krPurpose(o);
     return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
       onclick="APP.cmd('kqOpen',${o.id})">

@@ -201,6 +201,29 @@ run('production', [
       ['and there is nothing to record', "hdPending().length===0"],
     ]],
 
+  /* NO PATH SAYS NOTHING ANY MORE. Every refusal in hdStart lands on somebody
+     who has JUST closed a kitchen request — it is gone from the queue and the
+     shelf is still short — so a silent fall-back to an empty list tells them
+     the opposite of what happened. That silence is what made one bug take four
+     rounds to find, and these cases hold it shut. */
+  ['an operator who cannot record a batch is told so, not left guessing',
+    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" + CATCH +
+      "APP.cmd('kqAdvance','prepared');", [
+      ['the queue says the stock did not move', `${body}.indexOf('the stock has not been recorded')>-1`],
+      ['and names the permission to ask for', `${body}.indexOf('Record what was made')>-1`],
+    ]],
+
+  ['a request that asked for no quantities says that instead',
+    SHELF + `state.kq.tried=true; state.kq.list=[];
+      state.kq.orderId=46;
+      state.kq.order={id:46,rs_number:'RS-46',status:'received',purpose:'shelf',
+        items:[{id:9,sku:'1-10',product_name:'Hummus Asli',qty_requested:0}]};
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();` +
+      CATCH + "APP.cmd('kqAdvance','prepared');", [
+      ['it is not the record screen', "state.stack[state.stack.length-1].route==='kitchenqueue'"],
+      ['and the empty queue explains itself', `${body}.indexOf('no quantities')>-1`],
+    ]],
+
   /* THE DEAD TAP, from the other side. push() declines a route this operator
      cannot reach and says nothing, so hdOpen answering "opened" sent kqAdvance
      home on a handover that never happened: the request closed, the screen did
