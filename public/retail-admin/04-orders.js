@@ -292,9 +292,12 @@ function ordChannelLabel(o) {
   if (c === 'shop')      return cuT('Shop', '门店');
   // Staff-keyed origins — where the customer reached us, asked on the New order
   // form. 'manual' is the LEGACY value: rows written before the form asked the
-  // question, plus every till sale (whose origin is the counter, recorded in
-  // fulfillment_type). It is no longer selectable, and "Unattributed" says so
-  // rather than implying someone chose it.
+  // question, plus every till sale up to §44's 2026-09-07 amendment (the till
+  // now sends 'shop' and lands on the branch above; historical rows keep the
+  // 'manual' they were written with and are NOT backfilled — for those,
+  // fulfillment_type='counter' is the only reliable mark of a till sale). It is
+  // no longer selectable, and "Unattributed" says so rather than implying
+  // someone chose it.
   if (c === 'pickup')      return cuT('Pick up', '到店自取');
   if (c === 'wechat_chat') return cuT('WeChat message', '微信消息');
   if (c === 'wholesale')   return cuT('Wholesale', '批发');
@@ -9949,6 +9952,13 @@ const ONW_ERR_WHERE = {
   no_items: 'prod', invalid_item: 'prod', product_unavailable: 'prod', bad_unit_price: 'prod',
   bad_shipping_fee: 'money', bad_packing_fee: 'money', bad_total: 'money',
   bad_channel: 'route', channel_required: 'route', channel_note_required: 'route',
+  // §44's till/QR door. None of the three is reachable from THIS form — it
+  // never offers channel 'shop' and never sends shop_entry_method — but the
+  // endpoint can return them to any caller, and a code the server can send
+  // with no home on the page is what this map exists to prevent. They land in
+  // 'route' because that is the block the channel control sits in.
+  bad_shop_entry_method: 'route', shop_entry_method_required: 'route',
+  shop_entry_method_not_allowed: 'route',
   bad_store_id: 'route', store_not_found: 'route',
   store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
@@ -9996,6 +10006,19 @@ function ordNewErrText(code, detail) {
     bad_channel: cuT('Pick a channel this order can be created on.', '请选择可下单的渠道。'),
     channel_required: cuT('Say where this order came from.', '请选择订单来源。'),
     channel_note_required: cuT('Write where this order came from.', '请填写具体来源。'),
+    // §44's two doors into a shop (amended 2026-09-07): the till, or the QR
+    // menu. `bad_shop_entry_method` and `shop_entry_method_required` SHARE one
+    // sentence because they ask for the same thing — name the door — exactly as
+    // bad_fulfillment_type and fulfillment_type_required share theirs below.
+    // Both pairs are composed under Rule 4's standing delegation and declared in
+    // docs/tacet-delivery-vocabulary.md; no live string covered either, because
+    // no screen in this product has ever had two doors into one shop to name.
+    bad_shop_entry_method: cuT('A shop order must say which way it came in — the till or the QR menu.',
+                               '门店订单需注明来自前台还是二维码。'),
+    shop_entry_method_required: cuT('A shop order must say which way it came in — the till or the QR menu.',
+                                    '门店订单需注明来自前台还是二维码。'),
+    shop_entry_method_not_allowed: cuT('Only a shop order comes in through the till or the QR menu.',
+                                       '只有门店订单才能标注前台或二维码来源。'),
     bad_store_id: cuT('Pick a store.', '请选择门店。'),
     store_not_found: cuT('That store no longer exists. Pick another.', '该门店已不存在,请另选。'),
     // The server refuses a walk-in with no location: the goods left a shelf, and

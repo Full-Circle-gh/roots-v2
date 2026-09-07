@@ -1473,7 +1473,19 @@ button{font:inherit;color:inherit;margin:0}
     var body = Object.assign({
       fulfillment_type: 'counter',
       store_id: S.storeId,
-      channel: 'manual',
+      // §44 (amended 2026-09-07): a till sale and a QR sale are one shop
+      // selling the same listings, so they share ONE channel and are never
+      // split across two lines of a shop's revenue. Which door the order came
+      // through is shop_entry_method, NOT `source` — the server binds `source`
+      // itself, and 'manual' stays right for this row because staff did key it
+      // in. This used to post channel='manual', which said nothing `source`
+      // did not already say and left the sale with no card of its own.
+      //
+      // fulfillment_type stays 'counter' and is unchanged: it is what the stock
+      // decrement, the drawer and the Sales page's POS card all branch on, and
+      // it is the only reliable mark of a till sale on rows written before this.
+      channel: 'shop',
+      shop_entry_method: 'till',
       status: 'paid',
       customer_id: S.customer ? S.customer.id : null,
       // The server requires a recipient name on every manual order. A walk-in
