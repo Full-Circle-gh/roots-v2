@@ -858,6 +858,8 @@ reg('qsType', id=>qsTypeOpen(Number(id)));
    commands. This is a text field storing what was typed, nothing more. */
 reg('qsTyped', (id,v)=>qsTyped(Number(id),v));
 reg('qsTypeCommit', id=>qsTypeCommit(Number(id)));
+/* Patches this card only, never renders — see qsTypeBlur. */
+reg('qsTypeBlur', id=>qsTypeBlur(Number(id)));
 reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
   const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
   // Same caret rescue the stock search does: a re-render moves focus, and a
@@ -7221,6 +7223,56 @@ function qsFix(id){
     onclick="APP.cmd('qsFix',${id})">${T('Correct the count','校正数量')}</button>`;
 }
 
+/* THE COUNT CELL AND THE CARD'S LAST CONTROL, drawn by BOTH the full render and
+   the blur patch below. They are functions rather than inline template so the
+   two paths cannot drift on what an idle card looks like — a patch that
+   disagreed with the render would leave a card that repaired itself wrong. */
+function qsCountCell(p,id,recount){
+  if(!recount&&state.qs.typing[id]!=null)
+    return '<input id="qsnum-'+id+'" class="num qsnum" inputmode="numeric" enterkeyhint="done"'
+      +' value="'+escAttr(state.qs.typing[id])+'"'
+      +' aria-label="'+escAttr(T('How many did you make?','制作了多少?'))+'"'
+      +' oninput="APP.cmd(\'qsTyped\','+id+',this.value)"'
+      +' onblur="APP.cmd(\'qsTypeBlur\','+id+')"'
+      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();APP.cmd(\'qsTypeCommit\','+id+')}">';
+  const shelf=qsShelf(p);
+  const busy=recount?state.qs.fixing[id]!=null:!!state.qs.inflight[id];
+  const shown=recount?(shelf==null?0:shelf):('+'+(state.qs.add[id]||0));
+  return '<button class="num qsnum" style="color:'+(busy?'var(--text-secondary)':'var(--text-primary)')+'"'
+    +' onclick="APP.cmd(\''+(recount?'qsFix':'qsType')+'\','+id+')"'
+    +' aria-label="'+escAttr(recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?'))+'">'+shown+'</button>';
+}
+function qsCardFoot(id,recount){
+  if(!recount&&state.qs.typing[id]!=null)
+    return '<button class="cta" onclick="APP.cmd(\'qsTypeCommit\','+id+')">'+T('Add to stock','加入库存')+'</button>';
+  return recount?'':qsFix(id);
+}
+/* LEAVING A FIELD NOBODY TYPED IN PUTS THE CARD BACK. Reported from the floor:
+   tapping a count and walking away left that card blank for ever, and three of
+   them blank at once down the list. A field with DIGITS in it is left alone —
+   closing that would throw away work nobody asked to discard — so only an empty
+   one reverts, to the +N the card showed before it was opened.
+
+   IT PATCHES, AND THAT IS THE WHOLE REASON IT IS SAFE. Blur fires on the way to
+   whatever was tapped next, so a render() here would rebuild the entire app
+   under that tap and the click would land on a node that no longer exists — the
+   + being reached for, or the next card's count. This replaces THIS card's two
+   elements and nothing else, so the stepper buttons either side stay the same
+   nodes and every pending tap still lands. */
+function qsTypeBlur(id){
+  if(state.qs.typing[id]==null) return;
+  if(String(state.qs.typing[id]).trim()!=='') return;
+  delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  const inp=document.getElementById('qsnum-'+id); if(!inp) return;
+  const row=inp.parentNode, card=row.parentNode;
+  const p=(state.qs.items||[]).find(x=>(x.product_id===id||x.id===id));
+  inp.outerHTML=qsCountCell(p,id,false);
+  const foot=card.querySelector('.cta'); if(foot) foot.outerHTML=qsCardFoot(id,false);
+  const errln=card.querySelector('.qs-typeerr'); if(errln) errln.parentNode.removeChild(errln);
+  // The minus follows the amount the card has gone back to showing.
+  const less=row.querySelector('.stepbtn');
+  if(less){ if((state.qs.add[id]||0)<=0) less.setAttribute('disabled',''); else less.removeAttribute('disabled'); }
+}
 function qsRows(){
   const all=state.qs.items||[];
   const q=state.qs.q.trim().toLowerCase();
@@ -7232,6 +7284,19 @@ function qsRows(){
    FLUSH, not the tap. */
 function qsBump(id,d){
   if(qsMode()==='recount') return qsBumpCount(id,d);
+  /* A KEY TAPPED WHILE THE FIELD IS OPEN FOLDS WHAT WAS TYPED and closes it,
+     rather than being refused. Reported from the floor: the two keys were
+     disabled whenever a count had been typed by hand, and on a card that never
+     closed itself that meant disabled for good. Typing 130 and tapping + is
+     131 — the field and the keys are two ways at one number, not two modes. */
+  if(state.qs.typing[id]!=null){
+    const raw=String(state.qs.typing[id]).trim();
+    // Junk is not folded into a quantity: say so and keep the field, exactly as
+    // committing it would. "13o" must never become 13 by way of the + key.
+    if(raw!==''&&!/^\d+$/.test(raw)) return qsTypeCommit(id);
+    if(raw!=='') state.qs.add[id]=parseInt(raw,10);
+    delete state.qs.typing[id]; delete state.qs.typeErr[id];
+  }
   const cur=state.qs.add[id]||0;
   state.qs.add[id]=Math.max(0,cur+d);
   delete state.qs.rowErr[id];
@@ -7572,9 +7637,9 @@ function screenStockAdd(){
     const pend=qs.add[id]||0, flying=qs.inflight[id], err=qs.rowErr[id];
     const shelf=qsShelf(p);
     const busy=recount ? state.qs.fixing[id]!=null : !!flying;
-    const shown=recount ? (shelf==null?0:shelf) : ('+'+pend);
     // A recount can always go down to zero; an add has nothing to take away
-    // from until something has been tapped in.
+    // from until something has been tapped in — but a card being typed in keeps
+    // BOTH keys live, because they now fold what was typed (see qsBump).
     const lessOff=recount ? (shelf==null||shelf<=0) : pend<=0;
     // Typing is an ADD-MODE state only: a recount's own door is qsAskCount, and
     // the two must not become one control (§46).
@@ -7584,25 +7649,16 @@ function screenStockAdd(){
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(p.sku||'')}</div>
       ${recount?'':qsMeta(p,id)}
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${(lessOff||typing)?' disabled':''}
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},-1)"${lessOff&&!typing?' disabled':''}
           aria-label="${T('Less','减少')}">${ic('minus',24)}</button>
-        ${typing
-          ? `<input id="qsnum-${id}" class="num qsnum" inputmode="numeric" enterkeyhint="done"
-              value="${escAttr(qs.typing[id])}" aria-label="${T('How many did you make?','制作了多少?')}"
-              oninput="APP.cmd('qsTyped',${id},this.value)"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('qsTypeCommit',${id})}">`
-          : `<button class="num qsnum" style="color:${busy?'var(--text-secondary)':'var(--text-primary)'}"
-              onclick="APP.cmd('${recount?'qsFix':'qsType'}',${id})"
-              aria-label="${recount?T('Set count','设置数量'):T('How many did you make?','制作了多少?')}">${shown}</button>`}
-        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"${typing?' disabled':''}
+        ${qsCountCell(p,id,recount)}
+        <button class="stepbtn" style="width:56px;height:56px" onclick="APP.cmd('qsBump',${id},1)"
           aria-label="${T('More','增加')}">${ic('plus',24)}</button>
       </div>
       ${flying?`<div style="font-size:13px;color:var(--text-secondary)">${T('Adding '+flying+'…','正在加 '+flying+' 件…')}</div>`:''}
       ${state.qs.fixing[id]!=null?`<div style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</div>`:''}
-      ${typing&&qs.typeErr[id]?`<div style="font-size:13px;color:var(--brick-ink)">${escAttr(qs.typeErr[id])}</div>`:''}
-      ${typing
-        ? `<button class="cta" onclick="APP.cmd('qsTypeCommit',${id})">${T('Add to stock','加入库存')}</button>`
-        : (recount?'':qsFix(id))}
+      ${typing&&qs.typeErr[id]?`<div class="qs-typeerr" style="font-size:13px;color:var(--brick-ink)">${escAttr(qs.typeErr[id])}</div>`:''}
+      ${qsCardFoot(id,recount)}
       ${err?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:13px;color:var(--brick-ink)">${escAttr(err)}</span>
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('${recount?'qsFix':'qsFlush'}',${id})">${T('Retry','重试')}</button></div>`:''}
