@@ -6557,9 +6557,20 @@ The mechanism that actually fits is the one every other automatic per-customer e
 
 - No new WeChat template, no new consent flow.
 - No change to `retail_broadcasts` / `fanOutBroadcast` — this event never goes through it, and an admin still composes and sends those by hand exactly as before.
-- `notifCategoryEnabled('affiliate')` has no explicit entry in `config.notifications.categories` and so defaults to always-on, the same as `broadcast` — an admin cannot currently mute this category from Settings. If muting it turns out to be wanted, that is a separate, later ask.
 - The referee's own one-shot welcome credit (`refereeReward`, paid to the invited friend on their first order) is untouched — only the referrer is notified, matching exactly what was asked ("every affiliate that just got rewarded").
 
 ### Vocabulary
 
 Two composed pairs (notification title + body) plus the notification-center category chip are recorded in `docs/tacet-delivery-vocabulary.md` under *Affiliate reward notification — the mini app inbox*, reusing `已到账` from the already-locked refund-paid pair and `邀请` / `奖励` / `完成首单` / `钱包` from the affiliate and wallet pages' own live copy.
+
+### AMENDED 2026-09-07, by Ash: a tenant can turn this off
+
+The ruling above named the gap and left it for later — *"`notifCategoryEnabled('affiliate')` has no explicit entry… an admin cannot currently mute this category from Settings. If muting it turns out to be wanted, that is a separate, later ask."* Ash asked for exactly that: a toggle so a tenant can turn the affiliate reward notification on or off.
+
+**No server code changed, because none needed to.** `notifyCustomer()` — the one place every automatic in-app notification funnels through — already calls `notifCategoryEnabled(n.category)` unconditionally, for whatever category string it's handed; that check was never hardcoded to `order`/`invoice`/`refund`, so `creditReferralReward()`'s `notifyCustomer(..., { category: 'affiliate', ... })` call from the ruling above was already muteable the moment it shipped. The only thing missing was a switch in the admin UI to flip it, on `PUT /api/retail-admin/config`, which already takes any dotted key (`notifications.categories.affiliate` included) with no whitelist.
+
+**What was added is one row.** A fourth `.nc-row` beside Order/Invoices/Refunds in `public/retail-admin.html`'s automatic-updates panel (Marketing → Broadcasts), wired with the same generic `data-notif-cat="affiliate"` attribute the other three already use — `loadNotifCategories()` and `saveNotifCategory()` in `public/retail-admin/05-marketing.js` read and write it exactly as they do the other three, no new logic. The one-line summary's `NAME` map gained `affiliate: ['Referral rewards', '邀请奖励']` so the folded row's on/off summary names it too.
+
+**Off means neither half fires**, per the existing comment on `notifCategoryEnabled` (`routes/retail.js:6811`): *"Off means neither the in-app row nor the WeChat push is created."* This category has no WeChat push (§62's ruling above), so off means only the in-app row stops — the wallet credit and the retail-admin ledger's Waiting → Rewarded flip are unaffected; only the affiliate's own notice of it is switched off.
+
+Two bilingual strings, both in `public/retail-admin.html`: the row's title reuses the `邀请奖励` pair this document's vocabulary section already locks, and its subtitle — *Sent to the referrer when their reward is credited · 邀请奖励到账时发送给邀请人* — is composed, recorded in `docs/tacet-delivery-vocabulary.md` alongside the rest of this feature's strings.
