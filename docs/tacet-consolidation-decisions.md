@@ -6458,3 +6458,31 @@ Only the shelf-recording screen's trigger moved from the order to the line.
   (`Across N products.`) — no new string, a fallback that already existed
   for a different reason.
 - No schema change, no migration, no new capability, no new strings.
+
+## §62 — AN AFFILIATE'S REWARD REACHES THEM THROUGH THE EXISTING IN-APP INBOX, AUTOMATICALLY, NOT A NEW PUSH CHANNEL
+
+Decided by Ash, 2026-09-07, from the retail-admin affiliate ledger (`Jess → Piper` flipping Waiting → Rewarded): affiliates should be told when their referral reward lands. Two questions were open before any code was written — who is told, and on what trigger — and both were put to Ash rather than guessed.
+
+### The ruling
+
+**Who: the affiliate — the referrer — not staff.** The retail-admin ledger already shows the reward to staff; the gap was the referrer's own side, in the mini app.
+
+**Channel: the existing per-customer in-app inbox (`retail_notifications`, written through `notifyCustomer()`), not a new WeChat subscribe-message template and not the operator-composed `retail_broadcasts` campaign feature.** All three notification surfaces already exist in this codebase and are easy to conflate:
+- `routes/push.js` is Web Push to tenant STAFF browsers only — no route from it reaches a customer's mini app.
+- WeChat `subscribeMessage` (`miniapp/utils/notifications.js`) reaches customers, but only per-order, and only after an explicit system-prompt consent tied to a registered template ID. No template exists for this event, and minting a new WeChat template + consent flow was not what was asked.
+- `retail_broadcasts` / `fanOutBroadcast()` is the ADMIN-composed announcement campaign — one message, an operator-picked audience, always operator-initiated (per the existing comment at `routes/retail.js:6814`: *"'broadcast', which is always operator-initiated"*). This event has exactly one recipient, decided by an order paying, never by an admin composing anything — the wrong shape for that feature.
+
+The mechanism that actually fits is the one every other automatic per-customer event already uses: `notifyForOrder`/`notifyCustomer` writing straight into `retail_notifications`, the same path `refund_paid`, `invoice_issued` and `feedback` notifications take. New category `affiliate`, type `reward_earned`.
+
+**Trigger: automatic, one notification per reward, fired from inside `creditReferralReward()`** the instant the referrer's wallet is actually credited — not a manual "broadcast" button an admin has to press per reward. Confirmed by Ash directly (second question, answered "Automatic, per reward"). Only fires when `reward > 0`: a blocked referrer (`affiliate_blocked`) earns nothing on this order, so there is nothing to announce.
+
+### What is NOT changed
+
+- No new WeChat template, no new consent flow.
+- No change to `retail_broadcasts` / `fanOutBroadcast` — this event never goes through it, and an admin still composes and sends those by hand exactly as before.
+- `notifCategoryEnabled('affiliate')` has no explicit entry in `config.notifications.categories` and so defaults to always-on, the same as `broadcast` — an admin cannot currently mute this category from Settings. If muting it turns out to be wanted, that is a separate, later ask.
+- The referee's own one-shot welcome credit (`refereeReward`, paid to the invited friend on their first order) is untouched — only the referrer is notified, matching exactly what was asked ("every affiliate that just got rewarded").
+
+### Vocabulary
+
+Two composed pairs (notification title + body) plus the notification-center category chip are recorded in `docs/tacet-delivery-vocabulary.md` under *Affiliate reward notification — the mini app inbox*, reusing `已到账` from the already-locked refund-paid pair and `邀请` / `奖励` / `完成首单` / `钱包` from the affiliate and wallet pages' own live copy.
