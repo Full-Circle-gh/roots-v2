@@ -1548,8 +1548,14 @@ function expandStockLines(resolvedLines) {
 // the checkout reserve path does — then hands the expanded lines to the idempotent
 // inventory.commitUnreservedOrder (which no-ops if the order already reserved or
 // was already prepare-committed). Best-effort; never blocks the status change.
-function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null } = {}) {
-  const o = tdb().prepare('SELECT id, order_no FROM retail_orders WHERE id = ?').get(orderId);
+//
+// `atPayment` marks the two callers that fire on the PAID transition — the
+// gateway callback and the admin's Mark paid. They hold back the kitchen's own
+// lines; see freshLinesDeferred below. Every other caller is a forward
+// transition into fulfilment and takes everything, which is where the held-back
+// lines land.
+function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null, atPayment = false } = {}) {
+  const o = tdb().prepare('SELECT id, order_no, fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
   if (!o) return;
   const items = tdb().prepare(
     'SELECT product_id, qty, options_json FROM retail_order_items WHERE order_id = ?'
@@ -1563,8 +1569,47 @@ function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel 
     try { const oj = JSON.parse(it.options_json || '[]'); if (Array.isArray(oj)) options = oj; } catch { /* no options */ }
     resolved.push({ product: prod, qty: Number(it.qty) || 0, options });
   }
-  const lines = expandStockLines(resolved);
+  let lines = expandStockLines(resolved);
+  if (atPayment && freshLinesDeferred(o)) {
+    const fresh = batchMadeProductIds(lines.map((l) => l.product_id));
+    if (fresh.size) {
+      lines = lines.filter((l) => !fresh.has(l.product_id));
+      if (!lines.length) return { skipped: 'fresh_deferred' };
+    }
+  }
   return inventory.commitUnreservedOrder(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
+}
+// §58 — does this order hold its kitchen lines back at payment?
+//
+// A counter sale does not: the goods left in the same instant the money arrived,
+// so its fresh line is out of the fridge and the count owes it now. isCounter is
+// the test rather than "has no address", because a counter sale is forbidden to
+// carry one and every OTHER address-less order would fall through the same hole.
+//
+// Everything else that reaches the paid-transition commit without a reservation
+// is, by construction, not going out today: the checkout stock gate reserves
+// exactly the Guangzhou same-day and collection orders, so what arrives here
+// unreserved is out-of-city or booked for a later day. Both wait for a batch,
+// and the batch is what the deferral is for.
+function freshLinesDeferred(order) {
+  return !isCounter(order);
+}
+// Which of these product ids the kitchen makes. `is_batch_made` and NOT
+// oos_policy: the policy flag lets an operator open ANY product to out-of-city
+// pre-order, shelf goods included, and a jar opened that way still has no batch
+// behind it to make good on the deferral. §58 rule 3.
+//
+// Reads the EXPANDED ids, so a bundle's batch-made components are caught by the
+// flag they carry rather than by the flag on the bundle wrapper, which typically
+// has none.
+function batchMadeProductIds(productIds) {
+  const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
+  if (!ids.length) return new Set();
+  const ph = ids.map(() => '?').join(',');
+  return new Set(
+    tdb().prepare(`SELECT id FROM store_products WHERE id IN (${ph}) AND is_batch_made = 1`)
+      .all(...ids).map((r) => r.id)
+  );
 }
 // The mirror image of the function above: the expanded component lines to hand
 // BACK when a ledger-committed order is refunded or cancelled.
@@ -4871,8 +4916,20 @@ function markOrderPaid(orderId) {
       // on the counter sale committed a few lines above, and on any prior
       // prepare-commit — so the preparing/dispatch calls that still make this
       // call for orders paid before this change cannot double-count.
+      //
+      // §58, 2026-09-07: `atPayment` holds back the KITCHEN'S OWN lines, and
+      // only those. The paragraph above is unchanged for everything else — a
+      // grocery line on this same order still decrements here, whatever its
+      // address, because a jar has no batch behind it and a count that does not
+      // move answers "5 left" to the next shopper and the next. A batch-made
+      // line does have one: it was SOLD on the promise that the kitchen makes
+      // the next batch on a named day, so taking it out of today's count says
+      // sold out to today's shoppers over food that is still in the fridge, and
+      // where the shelf is already at zero it drives physical_qty negative.
+      // Those lines land on the first fulfilment transition, which is the same
+      // call, one status later.
       try {
-        prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid' });
+        prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid', atPayment: true });
       } catch (e) { console.error('[inventory.prepareCommit (paid)]', e); }
     }
     // Award earn-points on the actual transition. awardOrderPoints is
@@ -7328,6 +7385,14 @@ function autoDeliverLocalEtaForTenant() {
         WHERE id = ? AND status IN (${AUTO_DELIVER_FROM_SQL})`
     ).run(o.id);
     if (claim.changes === 0) continue;
+    // This sweep can claim an order straight out of 'paid' (see
+    // AUTO_DELIVER_FROM_STATUSES), so it IS the forward transition into
+    // fulfilment for those — and since §58 a paid order can still owe the shelf
+    // its batch-made lines. Without this the sweep would deliver a local fresh
+    // pre-order and leave the kitchen's units on the count forever. Idempotent,
+    // and a no-op for the dispatched/preparing orders that already committed.
+    try { prepareCommitUnreservedOrder(o.id, { actorLabel: 'Auto · delivered (ETA)' }); }
+    catch (e) { console.warn('[auto-deliver] stock commit', o.id, e.message); }
     // Keep per-parcel state in lockstep with the whole-order flip (mirrors the
     // manual "Mark delivered" transition).
     try {
@@ -7513,6 +7578,11 @@ function autoDeliverQingyunForTenant() {
         WHERE id = ? AND status IN (${AUTO_DELIVER_FROM_SQL})`
     ).run(o.id);
     if (claim.changes === 0) continue;
+    // Same reason as the ETA sweep above: this one claims from 'paid' too, so a
+    // rider dropping off IS the forward transition, and since §58 the kitchen's
+    // lines may still be owed at that point. Idempotent.
+    try { prepareCommitUnreservedOrder(o.id, { actorLabel: 'Auto · delivered (rider)' }); }
+    catch (e) { console.warn('[auto-deliver-qy] stock commit', o.id, e.message); }
     try {
       tdb().prepare(
         `UPDATE retail_shipments
@@ -29496,11 +29566,18 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // bug, recorded in docs/tacet-pos-counter-survey.md under "ADJACENT BUG",
     // and deliberately NOT fixed here. The stock decrement is correct either
     // way: it is keyed on the sale being paid, not on the status it lands in.
+    //
+    // `atPayment` for the same reason markOrderPaid passes it (§58): money
+    // arriving off-app is the same moment as money arriving through the gateway,
+    // so the kitchen's lines wait for their batch here too. A counter sale
+    // settled from this drawer is unaffected — freshLinesDeferred excludes it by
+    // fulfilment type, on both routes.
     if (o.status !== 'paid') {
       try {
         prepareCommitUnreservedOrder(id, {
           actorUserId: req.user.id,
           actorLabel: req.user.display_name || req.user.username || null,
+          atPayment: true,
         });
       } catch (e) { console.error('[inventory.commit (admin paid)]', e); }
     }

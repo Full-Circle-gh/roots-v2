@@ -110,6 +110,7 @@
     "test:broadcast-expiry": "node scripts/test_broadcast_expiry.js",
     "test:point-search": "node scripts/test_point_search.js",
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
+    "test:fresh-stock-deferral": "node scripts/test_fresh_stock_deferral.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",
     "test:sync-start": "node scripts/test_sync_start_time.js",
     "test:unit-mismatch": "node scripts/test_recipe_unit_mismatch_warnings.js",
