@@ -2634,11 +2634,12 @@ function screenOrders(){
       <button class="card${o.isNew?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
-            <span class="num" style="font-size:13px">${o.id} · ${o.placed}</span></span>
+            <span class="num" style="font-size:13px">${o.ch==='shop'?T('Shop','门店')+' · ':''}${o.id} · ${o.placed}</span></span>
           <span class="num" style="font-size:18px;font-weight:500;flex:none">${o.total}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
             <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${T(...o.cust)}</span>
+            ${o.shopCode?`<span class="num" style="font-size:13px;color:var(--text-secondary);flex:none" title="${escAttr(T('Pick-up number','取餐号'))}">#${escAttr(o.shopCode)}</span>`:''}
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         ${o.payNote?`<div style="display:flex;align-items:center;gap:7px;color:var(--${o.payNote.sev});font-size:13px">${ic(o.payNote.icon,15)}<span>${T(...o.payNote.label)}</span></div>`:''}
@@ -9582,6 +9583,9 @@ function sheetOrderDetail(){
      <div id="dragHandle" style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default);touch-action:none;cursor:grab">
        <div class="grabber"></div>
        <div style="display:flex;align-items:center;gap:12px;min-width:0">
+         ${o.shopCode?`<span style="display:flex;flex-direction:column;align-items:flex-start;flex:none">
+           <span class="num" style="font-size:18px;font-weight:500;letter-spacing:-.01em">${escAttr(o.shopCode)}</span>
+           <span style="font-size:10.5px;color:var(--text-secondary);white-space:nowrap">${T('Pick-up number','取餐号')}</span></span>`:''}
          <span class="num" style="font-size:18px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.id}</span>
          ${pill(o.kind,T(...o.status))}
          <span style="flex:1"></span>
@@ -13082,6 +13086,10 @@ function mapOrderRow(r){
   return {
     id:r.order_no||('#'+r.id), _id:r.id,
     ch, cust:[cl.name, cl.name],
+    // The counter/QR pick-up number (§49) — desktop's ordShopCode(). A customer
+    // who typed "A" into the QR menu is not lying about their name; the number
+    // is what the counter actually calls out, and this list showed neither.
+    shopCode:(r.shop_order_code!=null&&r.shop_order_code!=='')?String(r.shop_order_code):null,
     // fmtDay, not hhmm: an order from three days ago showed a bare "9:07 AM".
     total:money(CUR,r.total), placed:fmtDay(r.placed_at),
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
