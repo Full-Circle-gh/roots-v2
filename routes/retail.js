@@ -18535,9 +18535,11 @@ function creditReferralReward(orderId) {
   const o = tdb().prepare('SELECT id, customer_id, status FROM retail_orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'paid') return;
   const ref = tdb().prepare(
-    `SELECT id, referrer_id, invitee_id, reward_amount, referee_reward_amount, status
-       FROM retail_referrals
-      WHERE invitee_id = ? AND status = 'joined'`
+    `SELECT r.id, r.referrer_id, r.invitee_id, r.reward_amount, r.referee_reward_amount, r.status,
+            c.nickname AS invitee_nickname
+       FROM retail_referrals r
+       JOIN retail_customers c ON c.id = r.invitee_id
+      WHERE r.invitee_id = ? AND r.status = 'joined'`
   ).get(o.customer_id);
   if (!ref) return;
   // Only the FIRST paid order counts — if there's already an earlier paid
@@ -18594,7 +18596,24 @@ function creditReferralReward(orderId) {
         WHERE id = ? AND status = 'joined'`
     ).run(orderId, ref.id);
   });
-  try { tx(); } catch (e) { console.error('[creditReferralReward]', e); }
+  try {
+    tx();
+    // Tell the referrer their reward landed — the mini app's in-app inbox
+    // (retail_notifications), the same automatic path refund/invoice/feedback
+    // events already use. Only when they were actually paid: a blocked
+    // referrer earns nothing on this order, so there is nothing to announce.
+    if (reward > 0) {
+      const nameEn = ref.invitee_nickname || 'Your friend';
+      const nameCn = ref.invitee_nickname || '朋友';
+      notifyCustomer(ref.referrer_id, {
+        category: 'affiliate', type: 'reward_earned',
+        title_en: 'Referral reward paid', title_cn: '邀请奖励已到账',
+        body_en: `${nameEn} placed their first order — ¥${reward.toFixed(2)} has been added to your wallet.`,
+        body_cn: `${nameCn}完成首单，¥${reward.toFixed(2)} 已存入你的钱包。`,
+        ref_type: 'deeplink', ref_id: '/pages/affiliate/affiliate',
+      });
+    }
+  } catch (e) { console.error('[creditReferralReward]', e); }
 }
 
 // Lifetime revenue-share: pay the referrer a % of EVERY paid order their invitee

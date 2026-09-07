@@ -24,6 +24,7 @@ const CAT = {
   invoice:   { en: 'INVOICE',      cn: '发票' },
   feedback:  { en: 'REPLY',        cn: '回复' },
   account:   { en: 'ACCOUNT',      cn: '账户' },
+  affiliate: { en: 'REFERRAL',     cn: '邀请奖励' },
   broadcast: { en: '📣 ANNOUNCEMENT', cn: '📣 公告' },
 };
 
