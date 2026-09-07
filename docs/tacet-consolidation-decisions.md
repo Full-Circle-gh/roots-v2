@@ -6459,6 +6459,83 @@ Only the shelf-recording screen's trigger moved from the order to the line.
   for a different reason.
 - No schema change, no migration, no new capability, no new strings.
 
+### AMENDED AGAIN 2026-09-07, by Ash: a line made and left unrecorded keeps its door
+
+Reported against the amendment above, from the record screen itself: *"if I'm
+on this page and going back I can't come back to this page again, no
+option."*
+
+**What was wrong, and it is the amendment above's own defect.** Splitting the
+hand-over per line made the record screen reachable four times a request
+instead of once — and made it losable four times too. Marking a line made
+sets its status to `prepared` on the server BEFORE the screen opens, so an
+operator who backs out of that screen leaves a line that is closed with a
+shelf that is still short. The queue drew that line with a tick and no
+control, so there was no way back to the only screen that adds the units.
+The one remaining route was Log a batch, which names no request — the stock
+would land, and nothing would say which morning's request it answered.
+
+**This is the shape §59 spent four rounds on, one layer further in.** There,
+a refusal that landed on somebody who had just changed state was silent;
+here, a state change succeeds and then strands the half that matters. The
+rule generalises: **a step that leaves work outstanding must leave the way to
+finish it visible on the screen the operator lands on.**
+
+### The ruling
+
+**A line that is made but whose batch is not recorded keeps a door back to
+the record screen**, labelled with `production:log`'s own live pair —
+*Record what was made · 登记生产批次*, quoted from `lib/capabilities.js`, the
+words an admin sees on the permissions screen and the ones §59's refusal
+already names. **The tick now means made AND on the shelf**, which is what
+anybody reading that list assumes it means.
+
+**Whether a line has been recorded is DERIVED, never stored on the line.**
+`_attachRecorded` in `routes/restock.js` answers it on the request's own GET,
+by reading the batches written against that request (`production_batches`
+carries `request_id` already) and matching them to lines the way the record
+screen matches them to the shelf — SKU first, exact name as the fallback,
+because a kitchen request carries no `product_id`. Three reasons, in order:
+
+1. **A flag and the batches behind it can disagree; a derivation cannot** —
+   `docs/tacet-stock-movement-schema.md` B3's argument for deriving in-transit
+   rather than counting it, and it holds here for the same reason.
+2. **It needs no migration and is right about every request recorded before
+   it existed.** A stored column would have needed a backfill computing
+   exactly this join, and would have been right only as far as that backfill
+   was.
+3. **It is per LINE and per REQUEST.** A batch against another request, for
+   the same product, does not tick this one off.
+
+**It fails open, deliberately.** Any error in the derivation leaves every
+line unmarked, which offers the way back to a screen that may already have
+been used. A wrongly-offered door costs a tap and a second batch the operator
+can see themselves about to write; a hidden one costs the stock, silently.
+That asymmetry is the whole reason the default falls this way.
+
+**Reopening advances nothing.** `kqItemRecord` issues no PUT — the status
+work is finished — it only calls the same `hdStart(order, item)` that the
+tap on *Mark as made* runs. A second status call would re-fire the rollup's
+push and print on the last line of a request.
+
+### Scope, and what is deliberately not changed
+
+- **The queue's tabs are untouched.** A request whose every line is made
+  moves to *Done* even when a line still owes a batch, so the way back to it
+  is through that tab rather than *To make*. Keeping it in *To make* means
+  putting this derivation into the list query for every restock row,
+  including transfers that have no such concept; it is left for its own
+  change, and named here so the next reader does not have to re-derive that
+  it was a choice.
+- **Only the request's own GET carries `recorded_at`/`recorded_qty`**, and
+  only for `to_role = 'kitchen'`. A transfer line carries neither key.
+- **`hdCommit` refreshes the open request** (`kqRefreshOpen`) as well as the
+  list, so the line just recorded comes back ticked rather than still
+  offering the door it has been through. Quiet on failure: the write already
+  succeeded, and a stale tick is not worth an error over.
+- No schema change, no migration, no new capability, and **no new strings** —
+  the button's pair is `production:log`'s own label, copied.
+
 ## §62 — AN AFFILIATE'S REWARD REACHES THEM THROUGH THE EXISTING IN-APP INBOX, AUTOMATICALLY, NOT A NEW PUSH CHANNEL
 
 Decided by Ash, 2026-09-07, from the retail-admin affiliate ledger (`Jess → Piper` flipping Waiting → Rewarded): affiliates should be told when their referral reward lands. Two questions were open before any code was written — who is told, and on what trigger — and both were put to Ash rather than guessed.

@@ -45,6 +45,9 @@ const putItem = (orderId, itemId, status) => F.callRoute(restock, 'put', '/api/r
 const putOrder = (orderId, status) => F.callRoute(restock, 'put', '/api/restock/:id/status', {
   params: { id: String(orderId) }, body: { status }, user: ACTOR, permissions: PERMS,
 });
+const getOrder = (orderId) => F.callRoute(restock, 'get', '/api/restock/:id', {
+  params: { id: String(orderId) }, user: ACTOR, permissions: PERMS,
+});
 
 const orderRow = (id) => h.db.prepare('SELECT * FROM restock_orders WHERE id = ?').get(id);
 const itemRow  = (id) => h.db.prepare('SELECT * FROM restock_items WHERE id = ?').get(id);
@@ -158,5 +161,46 @@ const pushedBefore = notes.operator.length;
 r = putItem(o5.id, o5.itemIds[0], 'prepared');
 eq(r.status, 400, 'and the split door now refuses that same line — it has nothing left to move to');
 eq(notes.operator.length, pushedBefore, 'no second push fired');
+
+// ── 7. Which lines still owe the shelf a batch ──────────────────────────────
+section('Case 7 — a line reports whether its batch has been recorded, derived from the batches');
+
+const o6 = seedKitchenOrder(['Peanut Butter', 'Zhoug']);
+// The shelf side of the same two products. A kitchen request carries no
+// product_id, so the join back is the SKU — the same one the record screen
+// matches on.
+const skuOf = (itemId) => itemRow(itemId).sku;
+F.seedProduct(h.db, { id: 640, name: 'Peanut Butter', sku: skuOf(o6.itemIds[0]) });
+F.seedProduct(h.db, { id: 641, name: 'Zhoug',         sku: skuOf(o6.itemIds[1]) });
+
+let got = getOrder(o6.id);
+ok(got.body && got.body.data, 'the request opens');
+eq(got.body.data.items.length, 2, 'both lines come back');
+eq(got.body.data.items[0].recorded_at, null, 'nothing recorded yet — line 1 is owed');
+eq(got.body.data.items[1].recorded_at, null, 'nor line 2');
+
+// Exactly what POST /api/retail-admin/production writes for one line.
+h.db.prepare(`INSERT INTO production_batches (date, recipe_name, store_id, product_id, qty_made, qty_shelved, request_id)
+              VALUES ('2026-09-07', 'Peanut Butter', 1, 640, 4, 4, ?)`).run(o6.id);
+
+got = getOrder(o6.id);
+ok(!!got.body.data.items[0].recorded_at, 'the line whose batch was recorded now says so');
+eq(got.body.data.items[0].recorded_qty, 4, 'and how much of it reached the shelf');
+eq(got.body.data.items[1].recorded_at, null, 'the line still owed is untouched — this is per line, not per request');
+
+// A batch against a DIFFERENT request must not mark this one's line done: it
+// is what would let one morning's recording tick off another's.
+const o7 = seedKitchenOrder(['Peanut Butter']);
+h.db.prepare(`INSERT INTO restock_items (restock_id, product_name, sku, qty_requested) VALUES (?, 'Peanut Butter', ?, 4)`)
+  .run(o7.id, skuOf(o6.itemIds[0]));
+const o7line = h.db.prepare('SELECT id FROM restock_items WHERE restock_id = ? ORDER BY id DESC').get(o7.id).id;
+got = getOrder(o7.id);
+eq(got.body.data.items.find(it => it.id === o7line).recorded_at, null,
+   "another request's batch for the same product does not mark this line recorded");
+
+// A transfer between locations has no such concept and is left exactly as it was.
+const o8 = seedKitchenOrder(['Boxes'], { toRole: 'store' });
+got = getOrder(o8.id);
+eq(got.body.data.items[0].recorded_at, undefined, 'a transfer line carries no recorded_at at all');
 
 done();
