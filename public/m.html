@@ -6585,8 +6585,32 @@ function hdResolve(order){
   });
   return out;
 }
+/* WHO IT HANDS OVER TO IS THE CAPABILITY ITS OWN WRITE IS GATED ON, and until
+   §59 it was the quick-stock MODE — which is why this screen had never once
+   opened from this queue. `qsMode()` reads `mode` off /quick-stock/context, and
+   lib/quick-stock-grant.js derives that from the ROLE: it answers 'add' only for
+   a backend operator whose `tenant_users.role` is literally `kitchen`. That role
+   ships `stock_app_only`, and server.js uses that flag to keep it out of Tacet
+   Mobile altogether — every /api/ call not on lib/stock-app-only.js's list 403s
+   `kitchen_add_only`. So the two conditions could not both hold: everybody who
+   can actually reach this queue reads 'recount', hdStart returned false on every
+   tap, and the queue's own promise one screen earlier — "The next screen asks
+   how many reached the shelf" — was never kept for anybody.
+
+   NOTHING ABOUT THE MODE WAS LOAD-BEARING, which is the part worth saying out
+   loud, because the line it replaces carried a reason. That reason was that an
+   absolute recounter has no business being handed a delta to apply. This screen
+   hands over no delta: Record posts /api/retail-admin/production, which writes
+   the batch and moves the shelf in one transaction and has no mode gate of its
+   own — only a store-scope check on restricted roles. The proof it was already
+   wrong is one row up the More list: `logbatch` opens THIS screen with THIS
+   write for a recount-mode operator and always has.
+
+   So the gate is the capability that write is gated on, `production:log`, which
+   is exactly ROUTE_CAP.whatmade — asked through canRoute so this and push()
+   cannot answer differently. */
 function hdStart(order){
-  if(qsMode()!=='add'||state.qs.storeId==null) return false;
+  if(!canRoute('whatmade')||state.qs.storeId==null) return false;
   const lines=hdResolve(order);
   if(!lines.length||!lines.some(l=>l.id!=null)) return false;
   return hdOpen(lines, order.rs_number||('#'+order.id), order.id);
@@ -6596,6 +6620,12 @@ function hdStart(order){
    they did not give. A quantity here is not that: it is what was ASKED for,
    quoted back, and the operator says whether it is also what was made. */
 function hdOpen(lines,rs,rsId){
+  /* push() DECLINES A ROUTE THIS OPERATOR CANNOT REACH, AND SAYS NOTHING, so
+     answering "opened" without asking sends kqAdvance home believing it handed
+     over: the request closes, the screen does not change, and the early return
+     skips even the re-render. Ask first and let the caller fall through to the
+     queue, which is what it already does for a request with nothing to add. */
+  if(!canRoute('whatmade')) return false;
   const h=state.hd;
   h.lines=lines; h.rs=rs||null; h.rsId=rsId||null;
   h.busy=false; h.err=''; h.done=null; h.openReason=-1;

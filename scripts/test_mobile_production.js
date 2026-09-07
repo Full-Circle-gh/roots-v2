@@ -34,11 +34,22 @@ const { run } = require('./lib/m-probe');
 // The operator these screens exist for: works the queue, logs production, adds.
 const KITCHEN = "state.caps=['quickstock:add','restock:fulfil','production:log'];";
 
-/* The shelf this kitchen adds to. `mode:'add'` is load-bearing: hdStart hands
-   over only to an operator who ADDS, because an absolute recounter has no
-   business being handed a delta to apply. */
+/* The shelf this kitchen adds to, and `mode:'recount'` is deliberate — it is
+   the mode EVERY operator who can reach these screens is actually in.
+
+   IT SAID `mode:'add'` AND THAT IS WHY THIS SUITE PASSED OVER A DEAD FLOW for
+   as long as it existed. The fixture was written against hdStart's old gate,
+   `qsMode()==='add'`, and the note beside it called that gate load-bearing. It
+   was unreachable: lib/quick-stock-grant.js answers 'add' only for a backend
+   operator whose role is literally `kitchen`, that role ships `stock_app_only`,
+   and server.js uses that flag to refuse it Tacet Mobile entirely — so no
+   session that can open this queue has ever been in add mode, the handover
+   never fired once, and the suite proved a state the app cannot be in. §59
+   moved the gate onto `production:log`, the capability the Record button's own
+   write is gated on; this fixture now reproduces the live session instead of
+   the one that made the old assertion pass. */
 const SHELF = KITCHEN + `
-  state.qs.ctx={enabled:true,mode:'add',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
+  state.qs.ctx={enabled:true,mode:'recount',stores:[{id:1,name_en:'Tianhe',name_cn:'天河'}]};
   state.qs.ctxTried=true; state.qs.storeId=1; state.qs.itemsTried=true;
   state.qs.items=[
     {product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11},
@@ -105,6 +116,26 @@ run('production', [
       ['the two that matched carry this store’s ids',
        "state.hd.lines[0].id===7&&state.hd.lines[1].id===8"],
       ['and the one that did not is kept, not dropped', "state.hd.lines[2].id===null"],
+      /* THE REGRESSION THIS SUITE COULD NOT SEE. The operator holding this
+         queue is in recount mode — every operator who can reach it is — and
+         the handover must not read the mode to decide. */
+      ['for an operator the quick-stock mode calls a recounter',
+       "qsMode()==='recount'"],
+    ]],
+
+  /* THE DEAD TAP, from the other side. push() declines a route this operator
+     cannot reach and says nothing, so hdOpen answering "opened" sent kqAdvance
+     home on a handover that never happened: the request closed, the screen did
+     not move, and the early return skipped even the re-render. */
+  ['an operator who cannot record a batch closes the request and lands back on the queue',
+    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" + CATCH +
+      "APP.cmd('kqAdvance','prepared');", [
+      ['the record screen is refused them', "canRoute('whatmade')===false"],
+      ['the status still went to the server',
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/status/.test(s.u)})"],
+      ['they are not sent into a screen they cannot reach',
+       "state.stack[state.stack.length-1].route==='kitchenqueue'"],
+      ['and the queue is not left holding a closed request', "state.kq.order===null"],
     ]],
 
   ['the unmatched line is shown and said out loud, never silently dropped', MADE, [
