@@ -1834,16 +1834,28 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         INSERT INTO retail_orders (
           order_no, customer_id, status, payment_method,
           recipient_name, subtotal, shipping_fee, packing_fee, total,
-          channel, source, fulfillment_type, store_id,
+          channel, fulfillment_type, store_id,
           shop_entry_method, shop_order_code, shop_order_date,
           tax_amount, tax_rate_micro, tax_mode, pay_token, placed_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       `).run(
         orderNo, null, 'pending_payment', PLACEHOLDER_TENDER,
         name, subtotal, 0, 0, total,
         // §44: till and QR share the channel `shop` and are told apart by
-        // source, so a shop's revenue is never split across two channel lines.
-        'shop', 'qr', 'counter', shop.location_id,
+        // shop_entry_method, so a shop's revenue is never split across two
+        // channel lines.
+        //
+        // `source` IS DELIBERATELY NOT WRITTEN, and its absence is the value.
+        // The column records how a row was CREATED — keyed in by staff, or
+        // arrived by itself — which §44's 2026-09-07 amendment states and which
+        // routes/retail.js enforces by binding 'manual' itself and refusing to
+        // let a client claim it. A QR order arrived by itself, so it leaves the
+        // column NULL, exactly as the mini-app checkout, the web store and the
+        // Meituan / Eleme / gzgrocery mirrors all already do: every one of them
+        // omits `source` from its INSERT. Nothing new is invented here; this
+        // path simply stops being the only self-service writer that claimed a
+        // value, which is the defect §44's amendment recorded.
+        'shop', 'counter', shop.location_id,
         'qr', shopCode, shopDate,
         taxCfg.enabled ? moneyLib.fromMinor(taxLine.taxMinor) : null,
         taxCfg.enabled ? taxCfg.rateMicro : null,
@@ -1912,7 +1924,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   //
   // NOTHING IS NEEDED IN autoPrintOrder FOR THAT SECOND HALF TO WORK, and the
   // reason is worth stating because it looks like an omission. Its skip guard
-  // is `source='qr' AND print_status='printed'` — deliberately narrow, per its
+  // is `shop_entry_method='qr' AND print_status='printed'` (it read `source='qr'
+  // until §44's 2026-09-07 amendment) — deliberately narrow, per its
   // own comment. A WeChat order reaches the paid transition having never
   // printed, so print_status is null, the guard does not fire, and the paid
   // path prints it once. A WeChat order that is instead settled at the till
@@ -2002,13 +2015,22 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   if (!/^[a-f0-9]{16,64}$/i.test(token)) return notFoundPage(req, res);
 
   const order = tdb().prepare(
-    `SELECT id, order_no, status, total, recipient_name, shop_order_code, store_id, source
+    `SELECT id, order_no, status, total, recipient_name, shop_order_code, store_id,
+            shop_entry_method
        FROM retail_orders WHERE pay_token = ?`
   ).get(token);
   // AN ORDER FROM ANOTHER SHOP IS A 404, not an error — the same answer a wrong
   // shop code gets, for the same reason the menu gives it (this page must not
   // confirm which guesses hit something real).
-  if (!order || order.store_id !== shop.location_id || order.source !== 'qr') {
+  //
+  // THE DOOR TEST READS shop_entry_method, NOT source, as of §44's 2026-09-07
+  // amendment. It read `source !== 'qr'` until then. This page exists for an
+  // order placed on the QR menu, so what it needs to know is which door the
+  // order came through — which is precisely the question shop_entry_method
+  // answers and `source` does not: `source` records how the row was CREATED,
+  // and a till sale keyed by staff and a QR order that arrived by itself are
+  // not told apart by it.
+  if (!order || order.store_id !== shop.location_id || order.shop_entry_method !== 'qr') {
     return notFoundPage(req, res);
   }
 
