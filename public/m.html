@@ -1103,7 +1103,14 @@ reg('printOrder', ()=>{
 });
 reg('copyAddr', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  copyText(o?`${T(...o.cust)} · ${o.phone}\n${T(...o.addr)}`:'');
+  /* Built the way the desktop's ship-to copy chip builds it: the parts that
+     EXIST, joined. `T(...o.addr)` spread a null on every order with no address
+     on file — a counter sale, a pickup, and every gzgrocery mirror — so the one
+     button on that card threw a TypeError and copied nothing at all. A dash is
+     a placeholder for a reader, never something to paste into a label, so an
+     absent name or phone drops out here rather than travelling as "—". */
+  copyText(o?[o.cust&&T(...o.cust), o.phone, o.addr&&T(...o.addr)]
+    .filter(v=>v&&v!=='—').join('\n'):'');
 });
 reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
@@ -8954,6 +8961,27 @@ function refundPanel(o){
       <span>${T('The money is moving through the payment gateway. This finishes on its own — nothing to do.','正在通过支付网关打款，会自动完成，无需操作。')}</span></div>`:''}
   </div>`;
 }
+/* The band under the total when it disagrees with the lines beneath it. The
+   desktop has carried one since the drawer could be wrong out loud; the phone
+   showed a total, showed the lines, and said nothing when they contradicted
+   each other — and on a mirrored order the phone is often the only place anyone
+   looks. Amber, not red: on a channel order it may well be a real platform
+   discount, so this is "read this before you act", not an error. The channel
+   clause is added only when there IS somewhere to go and check — on the shop's
+   own order the two figures are the whole of what can be said. */
+function moneyGapBand(o){
+  const g=o.moneyGap; if(!g) return '';
+  const chan=MIRROR_NAME[o.chanRaw]||'';
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);color:var(--amber-ink)">
+    <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',16)}</span>
+    <span style="font-size:12.5px;line-height:1.5">
+      <span style="display:block;font-weight:500">${T('Total disagrees with the items','金额与商品不符')}</span>
+      <span style="display:block;margin-top:3px">${T(
+        'Items add up to '+money(CUR,g.items)+', but this order records '+money(CUR,g.total)+'.',
+        '商品合计 '+money(CUR,g.items)+'，但订单金额为 '+money(CUR,g.total)+'。')}${
+        chan?' '+T('Check '+chan+' before refunding.','退款前请先核对 '+chan+'。'):''}</span>
+    </span></div>`;
+}
 /* The promise this order was sold on — the desktop's Ship-by tile. The list row
    carries it; the drawer did not, so opening an order lost the one fact that
    says whether it is late. */
@@ -8978,6 +9006,11 @@ function shipByTile(o){
       ${(tone&&!echo)?`<span class="pill" style="background:var(--${tone}-tint);color:var(--${tone}-ink)">${word}</span>`:''}</div>
     ${p.sub?`<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${escAttr(p.sub)}</div>`:''}</div>`;
 }
+/* The platforms we mirror orders in from, by their own names. A brand is the
+   same word in both languages, so these are a data map and never T() pairs —
+   T('Gzgrocery','Gzgrocery') is exactly the shape test_mobile_screens' bilingual
+   check exists to reject. */
+const MIRROR_NAME={meituan:'Meituan', eleme:'Eleme', gzgrocery:'Gzgrocery'};
 /* The desktop's od-marks strip: when the order was placed, and every mark that
    changes what happens next. "Partially shipped" is the one that explains why a
    Dispatched order is still in the Paid tab; "Print failed" is a failure an
@@ -8990,8 +9023,22 @@ function orderHeadMarks(o){
     marks.push({sev:'amber',icon:'plus',label:T('Items added · +'+money(CUR,o.addonTotal),'加单 · +'+money(CUR,o.addonTotal))});
   if(o.stockPending) marks.push({sev:'amber',icon:'box',label:T('Stock not deducted yet','库存待扣')});
   if(o.printFailed!=null) marks.push({sev:'brick',icon:'printer',label:T('Receipt did not print','小票打印失败')});
-  if(!marks.length&&!o.placedFull) return '';
+  /* The read-only tag. The desktop's mirrored panel tags its own header —
+     "Gzgrocery · view only" — and the phone's drawer carried no such marking at
+     all: the "View only" pill was the LIST row's, so an operator who opened the
+     order lost the one fact that explains why nothing here can be acted on.
+     Recorded as a known gap in §52 and closed here. It rides the marks strip
+     rather than the header because the header is order number + status pill +
+     close button on a 390px screen, and a fourth item there squeezes the order
+     number into an ellipsis; this strip is full-width and wraps. */
+  const mirrorTag=o.viewOnly
+    ? `<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${MIRROR_NAME[o.chanRaw]?MIRROR_NAME[o.chanRaw]+' · ':''}${T('View only','只读')}</span>`
+    : '';
+  if(!marks.length&&!mirrorTag&&!o.placedFull) return '';
   return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    ${o.placedFull?`<span style="width:100%;display:flex;align-items:baseline;gap:6px;font-size:12.5px;color:var(--text-secondary)">
+      ${T('Order placed','下单于')} <span class="num">${escAttr(tdWhen(o.placedFull,'dateTime',_tdL()))}</span></span>`:''}
+    ${mirrorTag}
     ${marks.map(m=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;border-radius:999px;background:var(--${m.sev}-tint);color:var(--${m.sev}-ink)">${ic(m.icon,13)}${m.label}</span>`).join('')}
     ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick-ink)">${escAttr(o.printFailed)}</span>`:''}
   </div>`;
@@ -9109,6 +9156,7 @@ function sheetOrderDetail(){
            ${o.tax?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${o.tax.mode==='inclusive'?T('incl. tax','含税'):T('Tax','税费')}</span><span class="num">${money(CUR,o.tax.amount)}</span></div>`:''}
            ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
          </div>`:''}</div>
+       ${moneyGapBand(o)}
        ${isPO?'':`
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
          <span class="eyebrow">${o.counter?T('Counter sale','前台销售'):o.pickup?T('Pickup','到店自提'):T('Ship to','收货地址')}</span>
@@ -9174,7 +9222,23 @@ function itemRow(it){
     <span style="flex:1;min-width:0">
       <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>
       ${opts?`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(...opts))}</span>`:''}
-      ${sku?`<span class="num" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px">${ic('barcode',11)}${sku}</span>`:''}
+      ${(() => {
+        if(!sku) return '';
+        /* The SKU chip opens the product. The desktop links the line's NAME out
+           to the catalogue; the phone has a product sheet of its own, so the tap
+           goes there instead of to a new browser tab — openProduct takes a SKU
+           and resolves it against DB.products. Only offered when that lookup can
+           actually succeed: a line whose product was deleted or re-SKU'd still
+           prints its chip, and a tap that opens an empty sheet is worse than a
+           chip that is plainly just a label. The chip is the affordance and the
+           name is already above it, so this needs no new string. */
+        const chip=`${ic('barcode',11)}${sku}`;
+        const style='display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px';
+        const known=Array.isArray(DB.products)&&DB.products.some(x=>x&&x.sku===sku);
+        return known
+          ? `<button class="num" onclick="APP.cmd('openProduct','${escAttr(String(sku))}')" style="${style};cursor:pointer;font-family:inherit">${chip}</button>`
+          : `<span class="num" style="${style}">${chip}</span>`;
+      })()}
     </span>
     <span style="text-align:right;flex:none">
       <span class="num" style="display:block;font-size:14px">${it[2]}</span>
@@ -12519,6 +12583,29 @@ function payStatusWord(pm){
            refunded:['refunded','已退'],failed:['failed','失败']}[pm.status];
   return w||null;
 }
+/* The gzgrocery mirror has no structured customer. OpenCart's whole list cell —
+   "Name (phone) address…" — arrives in recipient_name, and its recipient_phone
+   and ship columns stay null, so printed raw the address spills into the name
+   line and the phone card reads as one long run-on where the desktop shows two
+   clean fields. Split it back exactly as the desktop's ordCustomerLines does
+   (public/retail-admin/04-orders.js) — same channel test, same pattern, same
+   six-digit floor — so the two surfaces cannot disagree about who an order is
+   for. Every other channel has real columns and passes straight through.
+
+   An order whose dispatch note was never read carries the ORDER ID echoed into
+   recipient_name instead of a blob (gzgrocery-order-daemon.js §"Prefer the real
+   recipient"). There is nothing to split there and nothing here invents one:
+   it falls through and shows what the row actually holds, which is the same
+   thing the desktop does with it. */
+function custLines(r){
+  if(r&&String(r.channel||'').toLowerCase()==='gzgrocery'&&!r.recipient_phone){
+    const blob=String(r.recipient_name||r.nickname||'');
+    const m=/\((\d{6,})\)/.exec(blob);
+    if(m) return {name:blob.slice(0,m.index).trim()||'—', phone:m[1]};
+  }
+  return {name:(r&&(r.recipient_name||r.nickname))||'—',
+          phone:(r&&(r.recipient_phone||r.customer_phone))||'—'};
+}
 function mapOrderRow(r){
   let sk=ORDER_STATUS[r.status]||['pending',r.status||'—',r.status||'—'];
   let kind=sk[0];
@@ -12532,15 +12619,22 @@ function mapOrderRow(r){
             const cn=[r.ship_city,r.ship_district].filter(Boolean).join(' · ')||'—';
             return [en,cn]; })();
   const deliv = deliveryLine(r);
+  const cl = custLines(r);
   return {
     id:r.order_no||('#'+r.id), _id:r.id,
-    ch, cust:[r.recipient_name||r.nickname||'—', r.recipient_name||r.nickname||'—'],
+    ch, cust:[cl.name, cl.name],
     // fmtDay, not hhmm: an order from three days ago showed a bare "9:07 AM".
     total:money(CUR,r.total), placed:fmtDay(r.placed_at),
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     deliv,
     viewOnly: isMirrorCh(r.channel),
+    /* The RAW channel, kept beside the display key `ch`. The drawer's read-only
+       tag needs to name the platform an order was mirrored from, and `ch` runs
+       through CH_BACK, which still has no Eleme entry (§52) — so an Eleme order
+       reading `ch` would be tagged "mini-app". A brand name is the same word in
+       both languages, so this never becomes a T() pair. */
+    chanRaw: String(r.channel||'').toLowerCase(),
     // A proof is not a status — the order never moved, it is still
     // pending_payment. It rides its own row as a mark, exactly as the desktop
     // does, so the Pending list can be scanned for the one that needs a person.
@@ -12567,7 +12661,7 @@ function mapOrderRow(r){
        rider is — could not see it at all. The list row's copy has the stage,
        ETA and distance; the detail read adds the rider's name and number. */
     courier: r.courier||null,
-    phone:r.recipient_phone||r.customer_phone||'—',
+    phone:cl.phone,
     addr:r.address_full?[r.address_full,r.address_full]:null,
     pay:payLabel(r.payment_method), payRaw:payIsKnown(r.payment_method)?null:(r.payment_method||''),
     payKey:String(r.payment_method||'').toLowerCase().trim(),
@@ -12610,7 +12704,15 @@ function itemOpts(it){
    first whatever the language, so a Chinese operator got English product names. */
 const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
   [it.name_en||it.name||it.name_cn||'Item', it.name_cn||it.name||it.name_en||'Item'],
-  money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'', itemOpts(it)];
+  money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'',
+  /* The variant line. A storefront order carries the customer's own choices in
+     `options` ("Heat up?: Yes"); a mirrored one has no options at all and puts
+     the variant in `size` — which is what the desktop's read-only manifest
+     prints as the line's type. Reading only `options` left every mirrored line
+     with nothing under its name, so two sizes of one product read as the same
+     thing twice. Same slot, same renderer: whichever the row actually has.
+     `size` is one stored string, not a translated pair, so both sides get it. */
+  itemOpts(it)||(it.size?[String(it.size),String(it.size)]:null)];
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
@@ -12640,6 +12742,38 @@ function mapDetail(o){
   (o.shipments||[]).forEach(sp=>(sp.items||[]).forEach(it=>inParcel.add(it.id)));
   base.loose=(o.items||[]).filter(it=>!inParcel.has(it.id)).map(ITEM_TUPLE);
   base.rawStatus=o.status||null;
+  /* WHEN THE ORDER WAS PLACED. orderHeadMarks has guarded on `placedFull` since
+     it was written — its own comment opens "when the order was placed" — and
+     nothing ever set it, so the strip drew only on the marks and the drawer
+     never carried a date at all. The desktop has always shown one ("Order
+     placed · 下单于"), and on a mirrored order it is most of what there is to
+     read. Carried RAW and formatted at render time, never here: mapDetail's
+     result is cached in state.liveDetail and the language toggle only
+     re-renders, so a time formatted at map time would keep speaking the old
+     language until the next fetch — the same rule ITEM_TUPLE follows above. */
+  base.placedFull=o.placed_at||null;
+  /* Does the total agree with the lines under it? Ported from the desktop's
+     ordMoneyGap, tolerance included — ¥5 or 30% of the basket, which absorbs
+     packing, delivery and an ordinary promotion. An inclusive tax is already
+     inside the line totals and must not be added twice; an exclusive one was
+     added to them and must be. Only when every line carries a real line_total:
+     a mirrored order that captured no per-line money cannot disagree with
+     anything, and guessing at one would invent the discrepancy it claims to
+     report. */
+  base.moneyGap=(()=>{
+    const its=o.items||[];
+    if(!its.length||!its.every(it=>Number(it.line_total)>0)) return null;
+    const total=Number(o.total);
+    if(!Number.isFinite(total)) return null;
+    const items=Math.round(its.reduce((a,it)=>a+Number(it.line_total),0)*100)/100;
+    const taxAdded=(o.tax_mode==='exclusive'&&o.tax_amount!=null)?(Number(o.tax_amount)||0):0;
+    const surcharges=Number(o.shipping_fee||0)+Number(o.packing_fee||0)+taxAdded;
+    const deductions=Number(o.voucher_amount||0)+Number(o.points_amount||0)+Number(o.balance_used||0);
+    const expected=Math.round((items+surcharges-deductions)*100)/100;
+    const gap=Math.round((expected-total)*100)/100;
+    if(Math.abs(gap)<=Math.max(5,items*0.3)) return null;
+    return {items, total, gap};
+  })();
   // The facts the desktop drawer carries and this one did not. Every one of
   // them is already in the payload — the drawer was simply not reading them.
   base.custNote=(o.customer_note||'').trim()||null;         // what the CUSTOMER asked for
