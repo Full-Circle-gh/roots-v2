@@ -897,6 +897,7 @@ reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; re
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqAdvance', to=>kqAdvance(to));
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
+reg('kqItemRecord', id=>kqItemRecord(Number(id)));
 reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
 /* The chip sets the reason and closes the row's picker in one tap — there is
    no second confirm, because the answer IS the confirmation. */
@@ -6544,6 +6545,20 @@ function loadKq(force){
     k.list=[]; k.err=''; render();
   });
 }
+/* THE OPEN ORDER, RE-READ WITHOUT DISTURBING THE SCREEN. kqOpen clears the
+   order and shows Loading… — right when somebody taps a request, wrong for a
+   refresh behind a screen they are already reading. Used after a batch is
+   recorded, so the line that was owed comes back marked done rather than
+   still offering the door it has just been through. Silent on failure: the
+   write already succeeded, and a stale tick is not worth an error over. */
+function kqRefreshOpen(){
+  const id=state.kq.orderId;
+  if(id==null) return;
+  api('/api/restock/'+id).then(j=>{
+    const o=(j&&j.data)||j;
+    if(o&&o.id===id&&state.kq.orderId===id){ state.kq.order=o; render(); }
+  }).catch(()=>{});
+}
 function kqOpen(id){
   const k=state.kq;
   // The note is about the request that last closed; opening another is done
@@ -6641,6 +6656,30 @@ function kqItemAdvance(itemId,to){
                             :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
     render();
   });
+}
+
+/* THE WAY BACK TO THE RECORD SCREEN, for a line that was marked made and left
+   unrecorded. Reported by Ash against the first build of §61's per-item
+   hand-over: "if I'm on this page and going back I can't come back to this
+   page again, no option." The line was already `prepared`, so the queue drew
+   it done and offered nothing — the shelf stayed short with no path to fix
+   it but Log a batch, which names no request.
+
+   IT ADVANCES NOTHING. The status work is finished; this is only the second
+   half of it being opened again, so there is no PUT and no busy state — just
+   the same hdStart the tap on "Mark as made" runs, on the same line. */
+function kqItemRecord(itemId){
+  const k=state.kq;
+  if(k.busy||!k.order) return;
+  const item=(k.order.items||[]).find(it=>it.id===itemId);
+  if(!item) return;
+  const why=hdStart(k.order,item);
+  if(why===true) return;
+  // Refused (no capability, no store, nothing asked) — the same sentence, on
+  // the queue it drops back to, that a refusal after "Mark as made" gets.
+  k.order=null; k.orderId=null; loadKq(true);
+  k.note=kqNote(why);
+  render();
 }
 
 /* ══ WHAT YOU MADE ═════════════════════════════════════════════════════════
@@ -6881,6 +6920,9 @@ function hdCommit(){
         // off h.closesRequest, decided at hdOpen time, not re-derived here.
         h.done={added:added,units:units,short:short,closed:!!h.closesRequest};
         loadKq(true);
+        // …and the request itself, if one is open behind this screen, so the
+        // line just recorded is drawn done rather than still owed (§61).
+        kqRefreshOpen();
       }
       render();
     });
@@ -8149,10 +8191,19 @@ function screenKitchenQueue(){
     /* THE SPLIT (decisions §61). Each line reads its OWN status, not the
        order's — that is the whole change. The order-wide button is gone;
        what used to force every line to start and finish together is now one
-       button per line, and a line with nothing left just shows a check. */
+       button per line.
+
+       A LINE THAT IS MADE IS NOT NECESSARILY DONE. Marking it made opens the
+       record screen, and an operator can leave that screen without recording
+       — the line is closed and the shelf is still short. Such a line keeps a
+       door back to that screen rather than drawing a tick over the gap; the
+       tick is now the honest one, meaning made AND on the shelf. Whether the
+       batch was recorded is derived server-side from the batches themselves
+       (routes/restock.js _attachRecorded), so it cannot disagree with them. */
     const rows=items.map(it=>{
       const ist=it.status||'sent';
       const inext=ist==='sent'?'received':ist==='received'?'prepared':null;
+      const owed=!inext&&!it.recorded_at;
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
         <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span>
@@ -8160,6 +8211,9 @@ function screenKitchenQueue(){
           ? `<button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
                onclick="APP.cmd('kqItemAdvance',${it.id},'${inext}')">${k.busy?T('Saving…','保存中…')
                 :(inext==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>`
+          : owed
+          ? `<button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('kqItemRecord',${it.id})">${T('Record what was made','登记生产批次')}</button>`
           : `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`}
       </div>`;
     }).join('');
