@@ -96,6 +96,7 @@
     "test:invoice-no-payables": "node scripts/test_invoice_no_payables.js",
     "test:invoice-no-invoice-mark": "node scripts/test_invoice_no_invoice_mark.js",
     "test:material-supplier-picker": "node scripts/test_material_supplier_picker.js",
+    "test:material-search-typing": "node scripts/test_material_search_typing.js",
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:finance-summary": "node scripts/test_finance_summary.js",
     "test:finance-transactions": "node scripts/test_finance_transactions.js",
