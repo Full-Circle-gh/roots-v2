@@ -434,6 +434,12 @@ app.use(require('./routes/retail-shops')); // Shops + shop listings (门店商�
 // which shop-menu depends for two helpers.
 app.use('/s', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/shop-menu'));
+// The counter till's live channel — "an order just arrived at your shop".
+// Separate from routes/events.js above and NOT a duplicate of it: that one is
+// behind requireAuth (a global `users` row) and the till's operator is a tenant
+// operator with no such row, and its subscriber registry has no tenant
+// dimension. The file's own header carries the full reasoning.
+app.use(require('./routes/shop-events'));
 app.use(require('./routes/retail-production')); // Production (生产) — what the kitchen MADE, in the realm the kitchen is actually in. production_batches has been empty since it shipped because its only two screens are kitchen-realm and the cooks are Tacet operators. NOT routes/production.js, which is those screens' API
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
 app.use(require('./routes/recycle'));     // Recently deleted (audit E-07) — what was removed, and putting it back
