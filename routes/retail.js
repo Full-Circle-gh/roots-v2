@@ -16518,17 +16518,30 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     try {
       if (!kitchenReady.kitchenScopedSession(req) && kitchenReady.canSeeKitchenReady(req)) {
         const krCount = tdb().prepare(
-          `SELECT COUNT(*) AS n FROM restock_orders WHERE ${kitchenReady.KITCHEN_READY_WHERE}`
+          `SELECT COUNT(*) AS n FROM ${kitchenReady.KITCHEN_READY_FROM}
+            WHERE ${kitchenReady.KITCHEN_READY_WHERE}`
         ).get().n;
         // `waiting_since` is the name every other fire's items carry, because
         // tdOldestMins() and the phone's oldestMins() both read exactly that
         // key. It counts from when the KITCHEN finished — how long the news has
         // gone unread, which is the fact the row's "oldest 4h" states.
+        //
+        // THE NAMES TRAVEL WITH IT (§69), which no other fire's preview does.
+        // Every other row here opens onto a queue whose rows are orders, and an
+        // order's number is what identifies it; this one opens onto a shelf,
+        // where "Peanut Butter" is the entire fact and PR-260908-005 is not one
+        // the warehouse can act on. Both name columns go, not the one matching
+        // this request's language: the dashboard's language toggle repaints
+        // from the payload it already holds without re-fetching (dashRender),
+        // so a payload carrying one language would flip the row into the wrong
+        // one until the next poll.
         const krItems = tdb().prepare(`
-          SELECT id, rs_number, prepared_at AS waiting_since
-            FROM restock_orders
+          SELECT i.id, i.restock_id, r.rs_number,
+                 i.product_name AS name_en, i.product_cn AS name_cn,
+                 ${kitchenReady.KITCHEN_READY_MADE_AT} AS waiting_since
+            FROM ${kitchenReady.KITCHEN_READY_FROM}
            WHERE ${kitchenReady.KITCHEN_READY_WHERE}
-           ORDER BY prepared_at ASC LIMIT @preview
+           ORDER BY waiting_since ASC, i.id ASC LIMIT @preview
         `).all({ preview: previewLimit });
         kitchen_ready = { count: krCount, items: krItems };
       }

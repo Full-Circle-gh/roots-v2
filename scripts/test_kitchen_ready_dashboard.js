@@ -27,6 +27,13 @@
  *      anywhere in the tree.
  *   2. WHAT COUNTS AS NEWS — kitchen direction only, made only, not archived,
  *      not already read. A dispatched store transfer is none of this business.
+ *      THE GRAIN IS THE LINE (§69): one product made out of three is news on
+ *      its own, and the two legacy arms (a request at 'prepared' whose lines
+ *      were never backfilled; a request acknowledged before restock_items had
+ *      a seen_at) keep the new clause a strict superset of the old one.
+ *   2b. AND THE ROW NAMES THEM. The names are what saves the trip to the
+ *      order screen, so the payload carries both languages and the row spends
+ *      its meta run on two of them plus an honest tail.
  *   3. THE CLOCK, and it is the reason the row is amber. Needs-you sorts by age
  *      and a fire with no age sorts LAST; on this role the only other fire is
  *      Restock needed, which has no clock by design. Proven by running the
@@ -122,20 +129,30 @@ console.log(`  (sqlite driver: ${driver})`);
 // database.js. Both, or the suite runs against a table thinner than the one the
 // route reads, which is exactly the drift memory-db.js exists to end.
 function freshDb() {
-  return addTables(openMemoryDb(), SCHEMA_SQL, DATABASE_JS, ['restock_orders']);
+  // BOTH TABLES SINCE §69. The clause joins them — a fixture holding only
+  // restock_orders would have proved nothing about a signal that is now
+  // counted per line.
+  return addTables(openMemoryDb(), SCHEMA_SQL, DATABASE_JS,
+    ['restock_orders', 'restock_items']);
 }
 
-let seq = 0;
-/** One request. Defaults are the case the row exists for: the kitchen made it
- *  and nobody has read it yet. Each fixture overrides the one field that makes
- *  it different. */
+let seq = 0, itemSeq = 0;
+/** One request AND its lines. Defaults are the case the row exists for: the
+ *  kitchen made it and nobody has read it yet. Each fixture overrides the one
+ *  field that makes it different.
+ *
+ *  `lines` is an array of per-line overrides — `[{}, {}]` is two lines both
+ *  finished, `[{ status: 'sent' }, {}]` is the half-made request §69 exists
+ *  for. A line inherits the request's own status when it names none, which is
+ *  what every request looked like before §61 split them. */
 function seedRequest(db, row = {}) {
+  const { lines, ...rest } = row;
   const r = {
     to_role: 'kitchen', from_role: 'warehouse', status: 'prepared',
     // `date` is NOT NULL on the real table and every insert path sets it; the
     // clause never reads it, but a fixture that skips it tests nothing at all.
     date: '2026-09-08',
-    prepared_at: '2026-09-08 06:00:00', archived_at: null, seen_at: null, ...row,
+    prepared_at: '2026-09-08 06:00:00', archived_at: null, seen_at: null, ...rest,
   };
   const n = ++seq;
   db.prepare(`INSERT INTO restock_orders
@@ -143,6 +160,20 @@ function seedRequest(db, row = {}) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(n, 'PR-260908-' + String(n).padStart(3, '0'), r.date, r.status, r.from_role,
       r.to_role, r.prepared_at, r.archived_at, r.seen_at);
+  for (const line of (lines || [{}])) {
+    const i = ++itemSeq;
+    const L = {
+      product_name: 'Peanut Butter ' + i, product_cn: '花生酱 ' + i,
+      qty_requested: 1, status: r.status,
+      prepared_at: r.status === 'prepared' ? r.prepared_at : null,
+      seen_at: null, ...line,
+    };
+    db.prepare(`INSERT INTO restock_items
+        (id, restock_id, product_name, product_cn, qty_requested, status, prepared_at, seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(i, n, L.product_name, L.product_cn, L.qty_requested, L.status,
+        L.prepared_at, L.seen_at);
+  }
   return n;
 }
 const krCount = (db) => db.prepare(KR_COUNT_SQL).get().n;
@@ -161,7 +192,7 @@ it('the row runs the SHARED clause, not a copy of its own', () => {
 });
 
 it('and so does the phone\'s dot — the two cannot answer differently', () => {
-  assert.ok(/KITCHEN_READY_WHERE\s*\}\s*=\s*_kready/.test(RESTOCK_JS)
+  assert.ok(/KITCHEN_READY_WHERE[\s\S]{0,120}?\}\s*=\s*_kready/.test(RESTOCK_JS)
     || /_kready\.KITCHEN_READY_WHERE/.test(RESTOCK_JS),
     'routes/restock.js no longer takes its clause from lib/kitchen-ready.js');
 });
@@ -262,6 +293,98 @@ it('the count is exact even when the preview caps the list', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+section('2b · One product made out of three (§69)');
+
+it('a request with ONE of three lines made is the fire, and counts one', () => {
+  /* THE DEFECT THIS SECTION EXISTS FOR. Ash, from the kitchen queue showing one
+     product made of three: "if only 1 product marked as made, it wont show it
+     on dashboard, thats a problem." §61 split the WORK to the line and left
+     restock_orders.status a rollup that only catches up when every line is
+     done — so the request below sits at 'sent' and the old clause, reading the
+     order, answered zero about a jar already on the shelf. */
+  const db = freshDb();
+  seedRequest(db, { status: 'sent', prepared_at: null, lines: [
+    { status: 'prepared', prepared_at: '2026-09-08 06:00:00' },
+    { status: 'received' },
+    { status: 'sent' },
+  ] });
+  assert.strictEqual(krCount(db), 1, 'a finished product is news whatever its request says');
+});
+
+it('and it counts PRODUCTS, so three made on one request is three', () => {
+  const db = freshDb();
+  seedRequest(db, { lines: [{}, {}, {}] });
+  assert.strictEqual(krCount(db), 3, 'the pill counts what the kitchen made, not what was asked');
+});
+
+it('a zero line is not a product', () => {
+  // Both screens already filter these out of the lists they draw, and a fire
+  // counting what neither screen shows is the same lie as one that disagrees
+  // with its queue.
+  const db = freshDb();
+  seedRequest(db, { lines: [{}, { qty_requested: 0 }] });
+  assert.strictEqual(krCount(db), 1);
+});
+
+it('reading one product does not silence the next', () => {
+  // The whole reason the stamp had to come down to the line with the count.
+  const db = freshDb();
+  seedRequest(db, { lines: [{ seen_at: '2026-09-08 07:00:00' }, {}] });
+  assert.strictEqual(krCount(db), 1);
+});
+
+section('   …and the two legacy arms, which make it a superset and not a swap');
+
+it('a request finished before §61 split the lines still counts', () => {
+  // §61's backfill ran on the MAIN database only; a tenant file got the columns
+  // with their plain 'sent' default and no data migration. Reading the rollup
+  // as well is what keeps those requests on the screen.
+  const db = freshDb();
+  seedRequest(db, { status: 'prepared', lines: [{ status: 'sent', prepared_at: null }] });
+  assert.strictEqual(krCount(db), 1);
+});
+
+it('…and takes the request\'s own prepared_at as its age', () => {
+  const db = freshDb();
+  seedRequest(db, { status: 'prepared', prepared_at: '2026-09-07 05:00:00',
+    lines: [{ status: 'sent', prepared_at: null }] });
+  assert.strictEqual(krItems(db)[0].waiting_since, '2026-09-07 05:00:00',
+    'a line with no stamp of its own must fall back to its request\'s');
+});
+
+it('a request acknowledged before restock_items had a seen_at stays quiet', () => {
+  /* NOTHING RE-LIGHTS ON THE DEPLOY THAT SHIPS THIS, and that is what the
+     second arm buys. Under the order-level clause `seen_at` could only ever be
+     stamped on a request whose every line was done, so an acknowledged order
+     means acknowledged lines; dropping the arm would relight months of read
+     history as unread news on the morning §69 ships. */
+  const db = freshDb();
+  seedRequest(db, { seen_at: '2026-09-08 07:00:00', lines: [{}, {}, {}] });
+  assert.strictEqual(krCount(db), 0);
+});
+
+section('   …and the names the row spends its meta run on');
+
+it('the preview carries BOTH languages, never just this request\'s', () => {
+  /* The dashboard's language toggle repaints from the payload it already holds
+     (dashRender) without re-fetching, so a payload carrying one language would
+     flip the row into the wrong one until the next poll. */
+  const db = freshDb();
+  seedRequest(db, { lines: [{ product_name: 'Peanut Butter', product_cn: '花生酱' }] });
+  const [row] = krItems(db);
+  assert.strictEqual(row.name_en, 'Peanut Butter');
+  assert.strictEqual(row.name_cn, '花生酱');
+});
+
+it('and the request it belongs to, so the list can still be opened at it', () => {
+  const db = freshDb();
+  const id = seedRequest(db, { lines: [{}] });
+  const [row] = krItems(db);
+  assert.strictEqual(row.restock_id, id);
+  assert.ok(/^PR-/.test(row.rs_number), 'the request number travels with the line');
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 section('3 · Who is told (server)');
 
 const caps = (...keys) => ({ caps: new Set(keys) });
@@ -330,22 +453,68 @@ section('4 · The row on the desktop dashboard');
 const KR_FIRE_SRC = sliceBlock(DASH_JS, "if (kr.count && dashCardWants('kitchen_ready')",
   { from: '// The kitchen finished what the warehouse asked for' });
 
-function kitchenFire(kitchen_ready, { can = true, mins = 240 } = {}) {
+function kitchenFire(kitchen_ready, { can = true, mins = 240, cn = false } = {}) {
   const fires = [];
+  // `window` and `cuLang` are stubbed because the row reads the LANGUAGE now:
+  // product names are data and carry no EN/CN pair, so which of the two the row
+  // prints is decided here rather than by cuT. The shipped guard is
+  // `window.cuLang && cuLang() === 'cn'`, so both have to be present.
+  const win = { cuLang: () => (cn ? 'cn' : 'en') };
   vm.runInNewContext(
     `const kr = DASH_OPS.kitchen_ready || { count: 0, items: [] }; ${KR_FIRE_SRC}`, {
       fires, DASH_OPS: { kitchen_ready },
       dashCardWants: () => can,
-      cuT: (en) => en,                    // assert on the EN half
+      window: win, cuLang: win.cuLang,
+      cuT: (en, zh) => (cn ? zh : en),
       tdOldestMins: (items) => ((items || []).length ? mins : null),
     });
   return fires[0] || null;
 }
+const NAMED = (...names) => names.map((n, i) => ({ id: i + 1, name_en: n, name_cn: n + '(中)' }));
 
 it('a finished request raises an amber row that counts them', () => {
   const f = kitchenFire({ count: 3, items: [{ id: 1 }] });
   assert.strictEqual(f.n, 3);
   assert.strictEqual(f.sev, 'amber');
+});
+
+section('   …and it names what was made, which is why it exists (§69)');
+
+it('one product is named outright', () => {
+  /* THE SECOND HALF OF THE REPORT: "why not to mention the specific product
+     kitchen made directly on the dashboard this way the user wont need to open
+     the order, too many clicks." A request NUMBER is the one fact about a
+     finished jar the warehouse cannot act on. */
+  const f = kitchenFire({ count: 1, items: NAMED('Peanut Butter') });
+  assert.strictEqual(f.state, 'Peanut Butter');
+});
+
+it('two are named, and a third becomes an honest tail', () => {
+  // The meta run truncates at a narrow width by design (retail-admin.css
+  // .td-nmeta), so a third name would ellipsize mid-word rather than read.
+  const f = kitchenFire({ count: 3, items: NAMED('Maple Almond', 'Peanut Butter', 'BioCurcumin+') });
+  assert.strictEqual(f.state, 'Maple Almond, Peanut Butter +1 more');
+});
+
+it('the tail counts off the COUNT, never the capped preview', () => {
+  // The server previews 8; a tail computed from the preview would say "+6"
+  // while 14 sat waiting.
+  const f = kitchenFire({ count: 14, items: NAMED('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H') });
+  assert.strictEqual(f.state, 'A, B +12 more');
+});
+
+it('in Chinese it reads Chinese, from the same payload', () => {
+  const f = kitchenFire({ count: 3, items: NAMED('Maple Almond', 'Peanut Butter') }, { cn: true });
+  assert.strictEqual(f.state, 'Maple Almond(中)，Peanut Butter(中) +1 更多',
+    'the row must repaint from the payload it holds, both names and tail');
+});
+
+it('a payload with no names still raises the row, just without them', () => {
+  // The count and the clock are the row's floor; a preview that failed to
+  // carry names must never cost the fire itself.
+  const f = kitchenFire({ count: 2, items: [{ id: 1 }, { id: 2 }] });
+  assert.strictEqual(f.n, 2);
+  assert.strictEqual(f.state, null);
 });
 
 it('the row wears the list\'s own name, so both say the same words', () => {
@@ -434,6 +603,17 @@ it('Home raises it from the same snapshot key', () => {
   assert.ok(/items\('kitchen_ready'\)/.test(block), 'without the items it has no age to sort on');
   assert.ok(/T\('Ready from the kitchen','厨房已完成'\)/.test(block),
     'the phone row must carry the live bilingual pair');
+});
+
+it('and it names the products too — the phone is where the report came from', () => {
+  const block = sliceBlock(M_HTML, "if(c('kitchen_ready')", { from: 'function opsFires' });
+  assert.ok(/name_en\|\|x\.name_cn|name_cn\|\|x\.name_en/.test(block),
+    'the phone row must read the names out of the same payload the desktop does');
+  assert.ok(/slice\(0,2\)/.test(block), 'two names, as on the desktop');
+  assert.ok(/T\('more','更多'\)/.test(block),
+    'the tail must carry the live bilingual pair, not an English-only "+N more"');
+  assert.ok(/c\('kitchen_ready'\)-krNm\.length/.test(block),
+    'the tail must count off the COUNT, never the capped preview');
 });
 
 it('gated on the row it points at, like the inbox count', () => {
