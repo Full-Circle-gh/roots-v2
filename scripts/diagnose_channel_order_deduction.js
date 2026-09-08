@@ -64,8 +64,16 @@ const ago = (t) => {
 // `key` and `at` are the real column names, which differ between the two tables
 // (eleme_order_id vs meituan_order_no; both stamp imported_at, not created_at).
 const CH = {
-  eleme:   { imp: 'eleme_order_import',   key: 'eleme_order_id',   at: 'imported_at', log: 'eleme_sync_log',   reason: 'eleme_order' },
-  meituan: { imp: 'meituan_order_import', key: 'meituan_order_no', at: 'imported_at', log: 'meituan_sync_log', reason: 'meituan_order' },
+  eleme: {
+    imp: 'eleme_order_import', key: 'eleme_order_id', at: 'imported_at',
+    log: 'eleme_sync_log',
+    reason: 'eleme_order', back: 'eleme_cancel', again: 'eleme_uncancel',
+  },
+  meituan: {
+    imp: 'meituan_order_import', key: 'meituan_order_no', at: 'imported_at',
+    log: 'meituan_sync_log',
+    reason: 'meituan_order', back: 'meituan_cancel', again: 'meituan_uncancel',
+  },
 };
 
 let examined = 0;
@@ -123,24 +131,35 @@ for (const file of candidates()) {
     // defaults here), so the ONLY link back to the order is the note — which
     // always carries the platform ref. Matched per product so a partially
     // deducted order is visible as such.
+    //
+    // All THREE reasons the channel writes, not just the ingest one: an order
+    // that deducted at ingest and was handed back by a later 已取消 poll
+    // (reason *_cancel) reads as "not deducted" on the shelf while having a
+    // perfectly good ingest row, and the two are only distinguishable together.
     const ledgerFor = (productId) => {
       if (!ref || !has('retail_stock_ledger')) return [];
       return all(`
-        SELECT id, delta, balance_after, created_at, note
+        SELECT id, delta, reason, balance_after, created_at, note
           FROM retail_stock_ledger
-         WHERE reason = ? AND store_id = ? AND product_id = ?
+         WHERE reason IN (?, ?, ?) AND store_id = ? AND product_id = ?
            AND note LIKE ?
          ORDER BY id
-      `, c.reason, o.store_id, productId, `%${ref}%`);
+      `, c.reason, c.back, c.again, o.store_id, productId, `%${ref}%`);
     };
 
     const lines = items.map(it => {
       const led = it.product_id ? ledgerFor(it.product_id) : [];
+      // `took` is the NET effect on the shelf; `ingested` is whether the ingest
+      // itself ever ran for this line. A cancel that gave the units back leaves
+      // took = 0 with ingested true, which is a different fault from never
+      // having deducted at all.
       const took = led.reduce((a, r) => a + (r.delta || 0), 0);
-      return { it, led, took };
+      const ingested = led.some(r => r.reason === c.reason);
+      return { it, led, took, ingested };
     });
 
-    const anyDeduct = lines.some(l => l.led.length);
+    const anyDeduct = lines.some(l => l.ingested);
+    const handedBack = lines.some(l => l.led.some(r => r.reason === c.back));
     const allMatched = items.length > 0 && items.every(i => i.product_id);
     if (!anyDeduct) noDeduct++;
 
@@ -152,6 +171,8 @@ for (const file of candidates()) {
       else if (!items.length) why = 'order has no line items at all';
       else if (!items.some(i => i.product_id)) why = 'ALL LINES UNRESOLVED — no product matched';
       else why = 'LINES MATCHED BUT NO LEDGER ROW — ingest deduction did not run';
+    } else if (handedBack) {
+      why = 'DEDUCTED THEN RESTORED — a later poll read the order as voided';
     } else if (!allMatched) {
       why = 'PARTIAL — some lines unresolved';
     }
@@ -163,7 +184,7 @@ for (const file of candidates()) {
     console.log(`   placed ${o.placed_at || '-'} (${ago(o.placed_at || o.created_at)})` +
                 (impRow ? `  import=${impRow.status}` : '  import=(none)'));
     console.log(`   → ${why}`);
-    for (const { it, led, took } of lines) {
+    for (const { it, led, took, ingested } of lines) {
       const name = it.name_en || it.name_cn || '(unnamed)';
       const pid  = it.product_id ? `product ${it.product_id}${it.prod_active === 0 ? ' (INACTIVE)' : ''}` : 'UNRESOLVED';
       const want = (parseInt(it.qty, 10) || 0) * (parseInt(it.pack_units, 10) || 1);
@@ -171,8 +192,8 @@ for (const file of candidates()) {
                   ` pack=${it.pack_units}  ${pid}`);
       if (it.product_id) {
         if (!led.length) console.log(`         NO LEDGER ROW (expected −${want})`);
-        else for (const r of led) console.log(`         ledger #${r.id} Δ${r.delta} → ${r.balance_after}  ${ago(r.created_at)}`);
-        if (led.length && took !== -want) console.log(`         ⚠ ledger total ${took}, expected −${want}`);
+        else for (const r of led) console.log(`         ledger #${r.id} ${r.reason} Δ${r.delta} → ${r.balance_after}  ${ago(r.created_at)}`);
+        if (ingested && took !== -want) console.log(`         ⚠ net ${took} on the shelf, ingest expected −${want}`);
       }
     }
 
@@ -197,8 +218,9 @@ for (const file of candidates()) {
   }
 
   // ── Is this a per-order miss or has the whole path stopped? ────────────────
-  console.log(`\nChannel ingest ledger activity, last ${DAYS} days:`);
-  for (const reason of ['eleme_order', 'meituan_order']) {
+  console.log(`\nChannel stock ledger activity, last ${DAYS} days:`);
+  for (const reason of ['eleme_order', 'eleme_cancel', 'eleme_uncancel',
+                        'meituan_order', 'meituan_cancel', 'meituan_uncancel']) {
     const r = one(`
       SELECT COUNT(*) n, MAX(created_at) newest
         FROM retail_stock_ledger
