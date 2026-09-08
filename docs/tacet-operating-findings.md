@@ -1,4 +1,4 @@
-# Findings that outlive the Postgres migration, v1.0
+# Findings that outlive the Postgres migration, v1.1
 
 **2026-08-23 · Everything found during the Postgres work that is not about Postgres.** The migration is cancelled (`docs/tacet-consolidation-decisions.md` §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*) and its runbook is retired. **None of what follows retires with it.** It is about instruments, about live defects in code that has nothing to do with which database it runs on, and about how this box actually behaves.
 
@@ -6,7 +6,7 @@
 
 ---
 
-# PART 1 — THE FIVE INSTRUMENTS THAT LIED
+# PART 1 — THE SIX INSTRUMENTS THAT LIED
 
 **Every one of these was trusted to answer a question and answered a different one.** They are grouped because the shape repeats: **an instrument that cannot see something reports its blindness as good news.**
 
@@ -79,6 +79,27 @@ crontab -l | sed 's|...|...|' | crontab -
 
 **THE RULE: NEVER PIPE A STORE INTO ITSELF.** Read to a file, verify the file, transform the file, install the file. **Three of the four jobs on this box exist to protect data; the pipeline that edits their schedule is the least protected step in the system.**
 
+## 1.6 The server-hotfix diff — it could not see a carriage return, and neither could the log
+
+**Added 2026-09-08.** The costliest one so far, because it did not report blindness as good news — **it reported blindness as an emergency**, and three sessions acted on it.
+
+**What it was trusted for:** `scripts/diagnose_server_hotfix_diff.js` shows *what* the drifted files on the box actually say, so a hand-edit can be read and judged before anything overwrites it.
+
+**What it showed, run #94 on 2026-09-07:** every line of `lib/geocode.js`, `lib/po-returns.js` and `lib/qingyun-payload.js` removed and re-added — **with identical text on both sides.** Read as a wholesale rewrite. Recorded as: production running code `main` does not contain, the box holding the only copy, urgent, do not full_sync.
+
+**What it actually was:** a **CRLF conversion**. All eleven drifted files on the box are `main`'s own committed bytes with `\r\n` terminators. Proof, and it needs no access to the box: take each file's blob from `main`, replace every LF with CRLF, and the git blob SHA-1 equals the hash the box reports — **eleven of eleven, exactly, zero unexplained.** Content identical everywhere. Nobody edited anything.
+
+**TWO INSTRUMENTS FAILED IN SERIES, AND THAT IS THE FINDING.** Either alone would have been caught:
+
+1. **The diff split both sides on `'\n'`**, so every box line kept a trailing `'\r'` and *no* line compared equal. The LCS was correct — there genuinely were zero common lines — and correctly emitted a full rewrite.
+2. **The CI log viewer eats a lone `'\r'`.** So the two sides printed identically. **The evidence that they differed was the one character being swallowed on the way to the screen.**
+
+**AND A THIRD CHECK WAS TRUE AND MISLEADING AT ONCE.** `git cat-file -e` on the deployed bytes says they have never existed in this repository. That is a fact, and it means nothing: `.gitattributes` opens with `* text=auto`, so this repo stores LF and **only** LF, and a CRLF copy of any tracked file can never match a committed blob however faithful its content. **"These bytes were never committed anywhere" is what a pure line-ending change looks like.** It sounds like a finding about the code and is a statement about terminators.
+
+**THE RULE, and it is Part 2's shape one level up: A COMPARISON IS ALSO AN INSTRUMENT, AND SO IS THE THING THAT DISPLAYS IT.** Normalise what you are not asking about *before* you compare, and classify a difference before you render it. A diff that cannot distinguish "every line changed" from "the terminator changed" will always report the second as the first, and will always look like the more alarming of the two. Fixed in `diagnose_server_hotfix_diff.js`: both sides normalise to LF first, line endings are counted and named per side, and a file matching once normalised reports `LINE ENDINGS ONLY` with no diff printed — because there is nothing in it to read.
+
+**The residue is a real but small question:** something converted them, and it was not CI — the deploy `scp`s verbatim. A Windows SFTP client in text/ASCII mode is the usual cause. Nothing is at risk meanwhile: a `full_sync` restores LF on all eleven and costs nothing.
+
 ---
 
 # PART 2 — THE RULES. NINE WAYS AN INSTRUMENT REPORTS BLINDNESS AS GOOD NEWS
@@ -139,6 +160,10 @@ crontab -l | sed 's|...|...|' | crontab -
 
 **The detector exists:** `scripts/diagnose_deployed_tree.js` section 4 reports *files on the box the repository does not have*. It currently reports **15**.
 
+> **UPDATED 2026-09-08, from ro-query run #106 against a manifest re-zeroed at `2acc2434`.** `EXTRA` is now **7**, plus one deliberately untracked and not counted (`scripts/zero_yuexiu_stock.js`). The seven are `public/stock.html` and four `test_stock_*.js` suites — residue of §48 step 4, which deleted the standalone stock app from the repository and, per the mechanism above, could not remove it from the box — plus `scripts/td-datetime-check.js` and `scripts/test_storefront_currency.js`. **The order lesson in the note below applies directly: they are gone from `main` already, so removing them from the box by hand is now safe and will not be undone.** Both halves of this entry stay OPEN: `EXTRA` still never fails, and nothing still schedules the tool.
+>
+> **The manifest was 174 commits stale when that run was set up**, and re-zeroing it did not change the `DIFFERS` count — eleven before, eleven after. That is what makes §1.6's eleven a fact about the box rather than about the baseline, and it is the check v4.62 says to make before believing any of this tool's output.
+
 **Neither half of making it useful is done.** `EXTRA` **never fails the run** — deliberately, because a permanently red check stops being read, and that reasoning is sound and is not being overturned. And **nothing runs the tool**: `ro-query.yml` is `workflow_dispatch` only, with no schedule, no cron entry and no systemd timer. **A detector that is unscheduled and non-failing is a detector nobody has.**
 
 **Whether to schedule it is a decision nobody has taken.** It is smaller now than it was — the tree is clean apart from 15 known files — which is exactly when it is cheap to schedule.
@@ -162,6 +187,22 @@ crontab -l | sed 's|...|...|' | crontab -
 **AND `restore-test.sh` IS THE SHARPER FINDING.** A tool that proves the backups are restorable exists, dated 2026-05-18, and **nothing schedules it.** Its own header says *"on demand or via cron"*; the crontab has four entries and it is not one of them. **An unproven restore was recorded as a gap for weeks while a script that would have started proving it sat unrun in an untracked directory.**
 
 **The cheap fix is two lines:** copy the three into the repository (or into the backup set), and add `restore-test.sh` to cron. **Neither is done.**
+
+## 3.5 ✅ CLOSED — eleven files "in no branch, no commit and no backup" were a line-ending conversion
+
+**Opened 2026-09-07, closed 2026-09-08. Kept rather than deleted, because what it cost is the point.**
+
+**The claim, as recorded:** eleven files on the box differ from the repository; `git cat-file -e` says the deployed bytes have never existed in it; three are live application code (`lib/geocode.js`, `lib/po-returns.js`, `lib/qingyun-payload.js`); they were edited directly on the server; **the bytes on the box are the only copy**, so a `full_sync` or any deploy touching one of them destroys a fix with no record it existed. A `full_sync` dispatch (run #1785) was cancelled on the strength of it.
+
+**What was true:** eleven files do differ, and their bytes are in no commit. **Both halves stand.**
+
+**What was false: the conclusion drawn from them.** All eleven are `main`'s own bytes with CRLF terminators — proven by reconstructing each box hash from `main`'s blob, eleven of eleven exact. **No hotfix exists. Nothing was lost, nothing was at risk, and no decision about what to keep was ever needed.** Eight of the eleven are `scripts/` diagnostics and tests, not runtime code; the three in `lib/` are content-identical to `main`.
+
+**HOW IT WENT WRONG IS §1.6** — a diff blind to `\r`, a log viewer that eats `\r`, and a `git cat-file -e` check that is true of every line-ending change. **Three sessions and two production runs were spent on it.**
+
+**THE LESSON THAT IS NOT ABOUT LINE ENDINGS.** The finding as recorded was *a conclusion*, and it travelled between sessions as though it were *a measurement*. The measurement — eleven hashes differ — was correct throughout and is still correct. **"Someone edited them directly on the box" was an inference laid on top of it, and it inherited the measurement's confidence without inheriting its evidence.** Everything downstream, including the urgency and the cancelled deploy, followed from the inference and not from the numbers. **Carry the hashes, not the story.**
+
+**Still open, and it is the whole residue:** something converted those files, and it was not CI — the deploy `scp`s bytes verbatim. A Windows SFTP client in text/ASCII mode is the usual cause. **A `full_sync` restores LF on all eleven and costs nothing.**
 
 ---
 
