@@ -66,6 +66,7 @@
     "test:eleme-ingest-backfill": "node scripts/test_eleme_ingest_backfill.js",
     "test:eleme-sku-token": "node scripts/test_eleme_sku_token.js",
     "test:channel-line-report": "node scripts/test_channel_line_report.js",
+    "test:resolver-parity": "node scripts/test_channel_resolver_parity.js",
     "test:channel-money-panel": "node scripts/test_channel_money_panel.js",
     "test:channel-settlement": "node scripts/test_channel_settlement.js",
     "test:drift-sweep": "node scripts/test_channel_drift_sweep.js",
