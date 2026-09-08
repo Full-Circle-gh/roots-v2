@@ -869,6 +869,26 @@ img{display:block;max-width:100%}
   .done-amt{text-box:trim-both cap alphabetic;padding:14px 18px}
 }
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
+
+/* WHAT THEY ORDERED, and it is the basket's own row with the stepper taken
+   out. Reported 2026-09-08 from a phone: a customer who had placed an order
+   could see the number, the name and the amount, and nowhere at all what the
+   amount was FOR. The basket that held the lines is memory only, and
+   submitting empties it — so the one screen that could still answer "what did
+   I order" never asked.
+   THE ROWS COME BACK FROM retail_order_items, which has carried a bilingual
+   name per line since the order was written. Nothing is composed for this: the
+   customer reads the same product name they tapped on the menu.
+   .ln, .ln-t, .ln-r and .ln-p are the basket's, reused rather than restyled —
+   a placed line and a line still in the basket are the same line, and two
+   layouts for it would be two answers to the same question.
+   LEFT-ALIGNED INSIDE A CENTRED SCREEN. .done centres everything, which is
+   right for a number somebody calls across a room and wrong for a column of
+   names and prices: a ragged centre cannot be read down. */
+.done-it{text-align:left;margin-top:18px}
+/* The quantity, where the stepper used to be. Olive and quiet, because on a
+   placed order it states a fact rather than offering a control. */
+.ln-q{flex:none;font-variant-numeric:tabular-nums;font-size:14px;color:var(--olive)}
 /* Cancelling. Quiet by construction — it sits below the order number, is the
    smallest thing on the screen, and takes two taps. A customer who wants it
    finds it; one who does not never has it under their thumb.
@@ -1247,6 +1267,26 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'<span class="mo-v">'+esc(money(o.t))+'</span>'+` +
   `'<span class="mo-c">\\u203a</span></a>'}` +
   `return h};` +
+  // THE LINES OF THE ORDER JUST PLACED, drawn from what the create response
+  // already sends back. The server has returned `items` on every path since the
+  // route was written and this screen simply dropped them — the customer was
+  // handed the number, the name and the amount, and no account of what the
+  // amount was for.
+  //
+  // THE SAME ROW THE SERVER DRAWS on the order page, and the same one the
+  // basket above it draws: .ln with the stepper swapped for a plain quantity.
+  // The done sheet and the page its bar links to are two views of one order and
+  // must not disagree about how a line looks.
+  //
+  // money() IS THIS SCRIPT'S OWN, the one the basket and the bar already use,
+  // so the line totals here round exactly as the ones the customer read before
+  // submitting. A second formatter would be a price that changed at the till.
+  `var lineRows=function(a){if(!a||!a.length)return '';var h='';` +
+  `for(var i=0;i<a.length;i++){var it=a[i];` +
+  `h+='<div class="ln"><div class="ln-t">'+bi(it.name_en,it.name_cn)+'</div>'+` +
+  `'<div class="ln-r"><span class="ln-q">\u00d7'+esc(String(it.qty))+'</span>'+` +
+  `'<div class="ln-p">'+money(it.line_total)+'</div></div></div>'}` +
+  `return '<div class="done-it">'+h+'</div>'};` +
   // THE SHEET'S FOURTH FACE. The panel is the basket, the placed order and the
   // refusal — and now the list, which is the same furniture with the footer put
   // away and the header renamed. A second panel would have been a second thing
@@ -1420,6 +1460,15 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
   `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
+  // WHAT THEY ORDERED, IMMEDIATELY ABOVE THE AMOUNT. The lines and then what
+  // they come to — the order the basket they just closed read in, and the order
+  // a receipt reads in. A total printed above the things it totals asks the
+  // customer to read the screen backwards.
+  //
+  // The sub-line sits BELOW the amount on this screen and above it on the order
+  // page. That is pre-existing and left alone: what had to agree between the
+  // two surfaces is that the lines lead into the figure, and here they do.
+  `lineRows(d.items)+` +
   // THE AMOUNT, because they are about to pay it. The screen has always said
   // where to pay and never how much, which left the customer to remember a
   // figure from the basket they just closed. Same money() the basket and the
@@ -2320,6 +2369,50 @@ function backLink(req) {
     `<span class="cv">‹</span>${bi('Back', '返回')}</a>`;
 }
 
+/* THE LINES OF A PLACED ORDER — reported 2026-09-08 from a phone: "after order
+   was made customer cant see the order details at all, nowhere."
+
+   AND THERE WAS NOWHERE. The items were written to retail_order_items the
+   moment the order was created and then never read back on any customer
+   surface: this page selected the header columns only, and the done sheet
+   threw away the items the create response had already handed it. The
+   customer's own basket is memory only, and submitting clears it — so between
+   them, the shop kept every line of the order and showed the customer none of
+   them.
+
+   READ HERE RATHER THAN JOINED INTO THE HEADER QUERY, because one order has
+   many lines and the header must stay one row. The read is by order_id, which
+   is the table's own index.
+
+   IT NEVER TAKES THE PAGE DOWN. An order page that failed to draw because the
+   items table would not answer would cost the customer the number they are
+   about to be called by — the one thing this screen exists to carry. A failed
+   read renders no lines, exactly as an order with none would.
+
+   BILINGUAL WITH NOTHING COMPOSED. name_en and name_cn are on every row,
+   written from the menu the customer ordered from, so bi() has both halves of
+   every string it needs and no wording is invented here. */
+function orderLines(orderId, cur) {
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT name_en, name_cn, qty, line_total
+         FROM retail_order_items WHERE order_id = ? ORDER BY id`
+    ).all(orderId);
+  } catch (e) {
+    console.error('[shop-menu/lines]', orderId, e.message);
+    return '';
+  }
+  if (!rows || !rows.length) return '';
+  return `<div class="done-it">` + rows.map(r =>
+    `<div class="ln"><div class="ln-t">${bi(r.name_en, r.name_cn)}</div>` +
+      `<div class="ln-r">` +
+        `<span class="ln-q">×${esc(String(r.qty))}</span>` +
+        `<div class="ln-p">${esc(money(r.line_total, cur))}</div>` +
+      `</div>` +
+    `</div>`).join('') + `</div>`;
+}
+
 function payScreen(req, res, { status, order, main, extra }) {
   const { vars, fonts } = themeBits();
   const lang = req.query.lang === 'cn' ? 'cn' : 'en';
@@ -2333,6 +2426,12 @@ function payScreen(req, res, { status, order, main, extra }) {
         `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
         `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
         main +
+        // THE LINES, THEN THE TOTAL — the order the basket already reads in,
+        // and the order a receipt reads in. Between the status and the amount
+        // rather than below it, because the amount is what the two of them add
+        // up to: a total printed above the things it totals asks the customer
+        // to read the screen backwards.
+        orderLines(order.id, cur) +
         // The amount, in the same box and the same formatter the done sheet
         // uses, so the figure the customer was shown when they ordered is the
         // figure they find when they come back to it.
@@ -2598,10 +2697,18 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   // halves do. Showing "paid" the instant WeChat says ok — rather than
   // reloading — is deliberate: the async notify may be a second or two behind,
   // and a reload could show the customer an unpaid order they have just paid.
+  // BOTH FACES OF THIS PAGE GET THE LINES TOO, for the same reason payScreen
+  // does: a customer who dismisses WeChat's own sheet is left standing on the
+  // waiting face, which is a counter screen like any other, and one who pays is
+  // left on the paid face wondering what they just bought. Read once — the two
+  // blocks are one document and only CSS chooses between them.
+  const lines = orderLines(order.id, normalizeCurrency(cfg('currency', null)));
+
   const paid = `<div class="done" id="payOk" hidden>` +
     `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
     `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
     PAID_MAIN +
+    lines +
     `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
     // BOTH FACES OF THIS PAGE GET THE WAY BACK, not only the one that renders
     // first. They are two blocks in one document with CSS choosing between
@@ -2640,6 +2747,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
         `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
         `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
         COUNTER_MAIN +
+        lines +
         `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
         backLink(req) +
       `</div>` + paid +

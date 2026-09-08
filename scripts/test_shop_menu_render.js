@@ -1366,6 +1366,81 @@ function boxOf(text) {
         'the number on the phone is not the number in the database');
     });
 
+    /* WHAT THE CUSTOMER ORDERED, ON THE SCREEN THAT CONFIRMS IT — reported
+       2026-09-08 from a phone: "after order was made customer cant see the
+       order details at all, nowhere."
+
+       THE SERVER HAD ALREADY SENT THEM. The create response has carried an
+       `items` array on every path since the route was written; this sheet took
+       the number, the name, the amount and the order number out of it and threw
+       the lines away. So the one moment the customer is looking straight at
+       their order was also the moment the last copy of what was in it — the
+       basket, which is memory only — had just been cleared.
+
+       A BROWSER CHECK BECAUSE THE SHEET IS DRAWN BY SCRIPT. A served-bytes
+       suite can prove lineRows was SENT; only a browser that really placed an
+       order can prove it ran and put the lines on screen.
+
+       READ-ONLY, AND IT LEAVES THE SHEET OPEN. The check after this one closes
+       it deliberately to prove the bar takes over, so nothing here may touch it.
+
+       CHECKED AGAINST THE DATABASE, not against a fixture name written out
+       twice. What the screen says has to be what was actually written down, and
+       comparing the two is the only assertion that cannot drift when the
+       fixtures change. */
+    await check('THE DONE SHEET SAYS WHAT WAS ORDERED', async () => {
+      const shown = await page.evaluate(() => {
+        const box = document.querySelector('.done-it');
+        if (!box) return { box: false };
+        const rows = [...box.querySelectorAll('.ln')].map(ln => ({
+          en:  (ln.querySelector('.ln-t .l-en') || {}).textContent || '',
+          cn:  (ln.querySelector('.ln-t .l-cn') || {}).textContent || '',
+          qty: (ln.querySelector('.ln-q') || {}).textContent || '',
+          amt: (ln.querySelector('.ln-p') || {}).textContent || '',
+        }));
+        const amt = document.querySelector('.done-amt');
+        // Document order: the lines have to lead INTO the figure they add up
+        // to, the same way the order page and the basket read. Compared by
+        // position among .done's own children rather than with
+        // compareDocumentPosition — both are direct children, and the constant
+        // that call needs lives on a DOM global the linter does not have here.
+        const kids = [...box.parentNode.children];
+        return {
+          box: true, rows,
+          beforeAmount: !!amt && kids.indexOf(box) < kids.indexOf(amt),
+          // On screen, not merely in the DOM.
+          visible: box.getBoundingClientRect().height > 0,
+        };
+      });
+      assert.ok(shown.box, 'the done sheet listed nothing the order was made of');
+      assert.ok(shown.visible, 'the lines are in the document but have no box');
+      assert.ok(shown.beforeAmount, 'the total was printed above the lines it totals');
+
+      const order = db.prepare(
+        'SELECT id FROM retail_orders WHERE store_id = ? ORDER BY id DESC LIMIT 1').get(LOC);
+      const want = db.prepare(
+        `SELECT name_en, name_cn, qty, line_total
+           FROM retail_order_items WHERE order_id = ? ORDER BY id`).all(order.id);
+      assert.ok(want.length, 'the fixture placed an order with no lines to check');
+      assert.strictEqual(shown.rows.length, want.length,
+        `the sheet drew ${shown.rows.length} lines for an order of ${want.length}`);
+      want.forEach((w, i) => {
+        const got = shown.rows[i];
+        // BOTH LANGUAGES IN EVERY ROW. The toggle has to work on this screen
+        // like it works on the menu behind it, and a Chinese phone shown only
+        // the English name is back where the report started.
+        assert.strictEqual(got.en.trim(), String(w.name_en || ''),
+          `line ${i + 1} does not name what was ordered in English`);
+        assert.strictEqual(got.cn.trim(), String(w.name_cn || ''),
+          `line ${i + 1} does not name what was ordered in Chinese`);
+        assert.strictEqual(got.qty.trim(), '×' + w.qty,
+          `line ${i + 1} does not say how many: ${JSON.stringify(got.qty)}`);
+        // The figure, not the formatting — the symbol is the tenant's.
+        assert.ok(got.amt.includes(Number(w.line_total).toFixed(2)),
+          `line ${i + 1} does not say what it came to: ${JSON.stringify(got.amt)}`);
+      });
+    });
+
     /* ── THE ORDER THIS PHONE HAS ALREADY PLACED ───────────────────────────
        Two reports from the counter, 2026-09-08, and they are the same defect
        seen from both ends: "he has no way to see his order, order number or
