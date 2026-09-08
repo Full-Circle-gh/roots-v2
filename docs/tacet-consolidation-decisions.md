@@ -6574,3 +6574,43 @@ The ruling above named the gap and left it for later — *"`notifCategoryEnabled
 **Off means neither half fires**, per the existing comment on `notifCategoryEnabled` (`routes/retail.js:6811`): *"Off means neither the in-app row nor the WeChat push is created."* This category has no WeChat push (§62's ruling above), so off means only the in-app row stops — the wallet credit and the retail-admin ledger's Waiting → Rewarded flip are unaffected; only the affiliate's own notice of it is switched off.
 
 Two bilingual strings, both in `public/retail-admin.html`: the row's title reuses the `邀请奖励` pair this document's vocabulary section already locks, and its subtitle — *Sent to the referrer when their reward is credited · 邀请奖励到账时发送给邀请人* — is composed, recorded in `docs/tacet-delivery-vocabulary.md` alongside the rest of this feature's strings.
+
+## §63 — A BROADCAST IS WRITTEN ON THE PHONE; THE "AUTHORING STAYS ON DESKTOP" RULE IS NARROWED, NOT KEPT
+
+Decided by Ash, 2026-09-07, from the phone: *"board section mobile — can't create broadcast + no setting. gather all broadcast function same as PC version, make it available on mobile."* Put to him that this reverses a standing decision, with the alternative (settings only, authoring left on the desktop) offered beside it, he chose the reversal.
+
+**THIS OVERTURNS A DECISION THAT WAS MADE TWICE, and the earlier one is not deleted.** `docs/tacet-mobile-parity.md` records — at its line 70, in its Broadcasts parity table, and again in its §4 *Decided* — that composing coupons, flash sales and broadcasts belongs on a keyboard; the mobile create-sheet was **deleted outright** on that reasoning rather than wired up, because it had a submit handler that closed the sheet and toasted "Created" without sending anything. That record stands as the account of what was decided then. What follows is what is decided now, and it moves ONE of those three.
+
+### The ruling
+
+**Broadcasts are written, targeted, scheduled and sent from the phone.** The mobile screen had a read-only feed and a Cancel button, and told the operator in its own empty state that broadcasts "are written and sent from desktop" — a sentence that is now false and has gone with it.
+
+**Coupons and flash sales are NOT moved.** The parity document's rule survives for them, narrowed rather than repealed: what earned the exception is that a broadcast is a *sentence and an audience*, decided in the moment something is worth interrupting customers for — the shop is out of something, a batch just landed, the doors are shut today — while a coupon is a rule with money in it and a flash sale is a schedule against stock. **The test the next reader should apply is not "is it authoring" but "is the decision made standing up?"** A broadcast is. Do not read this ruling as opening the other two.
+
+### What is NOT built, and why the parity document was right about it
+
+- **No rich text, no image, no template library.** The desktop composer has none of these either; the payload is a title, a body, an audience, a time and an optional deeplink.
+- **No draft state.** The desktop has no draft either (`status='draft'` exists in the column and nothing writes it), and a half-written broadcast surviving on one phone is a message that goes out later than the moment that prompted it.
+- **The form opens empty on every entry**, on the same reasoning as the kitchen request screens: what is left in it after a send is the last thing sent, and re-opening on it is how one announcement goes out twice.
+
+### What it is built on — and the server is untouched
+
+**Not one line of server code changed.** Every endpoint the phone now calls already existed for the desktop: `POST /api/retail-admin/broadcasts`, `GET /broadcasts/audience-count`, `GET /broadcasts/regions`, and `PUT /config` for the automatic-updates switches. This is a client that had been kept away from a finished API.
+
+**Who may send is decided in one place and it is not this screen.** `lib/cap-routes.js` maps every write under `/api/retail-admin/broadcasts` to `broadcasts:send`, so the phone gates the Write button and the composer route on that same capability — the Waste screen's pattern exactly: the screen is `broadcasts:view`, the button carries the write. An operator holding only view gets the list and an empty slot rather than four steps ending in a 403.
+
+**The audience count is the server's, never the phone's.** The count under the buttons comes from `/broadcasts/audience-count`, debounced, and every answer carries the sequence it was asked under — chips tap faster than a request returns, and a late reply for a filter nobody is on any more is the number that would get believed. It is also the number the send button says, from the same call, so the two can never describe different audiences.
+
+**A local time typed into a phone is converted once.** `<input type="datetime-local">` yields the operator's own wall clock and `scheduled_for`/`expires_at` are UTC; the conversion happens in `bcfWhenISO()` and nowhere else. This is the first datetime input in `public/m.html`.
+
+### The four switches, which are the other half of the report
+
+*"No setting"* named a real absence: the desktop's Broadcasts tab carries the **Automatic updates** panel — Order & shipping, Invoices, Refunds, Referral rewards (§62) — and the phone had no route to any of it. It now has the same four switches, reading and writing the same `notifications.categories.<key>` on the shared storefront config, reached from a row on the Broadcasts screen exactly as the desktop reaches them from that tab. A category with no entry is ON, so nothing is backfilled and no shop's messages change because this shipped.
+
+**The switches use the phone's own ink track, not the desktop's sage checkbox.** The two surfaces have disagreed about what "on" looks like since both existed (`public/m.html`'s `toggle()` is ink — *"a shop owner flipping their own setting is the owner acting, not Tacet"* — and `public/retail-admin.html`'s `.bx-tgl` is sage). Each surface keeps its own, because a switch that matches every other switch on the screen it is on beats one that matches a screen the operator is not looking at. **The collision is recorded, not resolved** — a ruling on it is a sweep of both files and is not this change.
+
+### Recorded, and deliberately NOT fixed here
+
+1. **THE CANCEL-SEND BUTTON ON THE LIST IS UNGATED.** `POST /broadcasts/:id/recall` is `broadcasts:send` server-side like every other write there, and the phone's existing Cancel button has never checked it — an operator with view-only sees a button that 403s. It is left alone in this change because it predates it and touching it here would hide a working button on a stale capability read; it is named so the next reader does not have to rediscover it.
+2. **REGIONS ARE CAPPED AT TWELVE CHIPS.** The desktop lists every city with a saved address; the phone shows the first twelve and no "more" control. A shop with a long tail of cities can still send — it simply cannot narrow to a thirteenth from here.
+3. **THE DESKTOP KEEPS `Send again`.** Repopulating the composer from a sent broadcast is a list-row action the phone does not have; nothing depends on it and it is a separate change.

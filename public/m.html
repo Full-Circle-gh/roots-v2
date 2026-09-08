@@ -705,6 +705,16 @@ const state = {
       from:null,             // ask-for-stock: the location being asked to supply
       to:null,               // ...and the one asking, where there is a choice
       qty:{},busy:false,err:'',sent:null},
+  /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
+     gets it, when it goes, and a last look before it does. `count` is the
+     server's own audience preview — never derived here, because the phone does
+     not hold the customer table the desktop's counter reads. */
+  bcf:{step:1, title:'', body:'', title2:'', body2:'', lang2:false,
+       activity:'all', tiers:[], cities:[],
+       when:'now', at:'', ends:'never', endsAt:'', deeplink:'',
+       count:null, countBusy:false, countSeq:0, countTimer:null,
+       regions:null, regionsTried:false,
+       busy:false, err:'', sent:null},
   qs:{ctx:null,ctxTried:false,ctxErr:null,storeId:null,
       items:null,itemsTried:false,itemsErr:null,q:'',
       add:{},inflight:{},rowErr:{},timers:{},
@@ -815,6 +825,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
+  /* A broadcast is written from an empty screen every time. What was left in
+     the form after one was sent is the LAST one sent, and re-opening on it is
+     how the same announcement goes out twice. */
+  if(route==='bcnew') bcfReset();
   state.stack.push({route,title:s.title}); render(); }
 function pop(){ forgetScroll(); state.stack.pop(); render(); }
 
@@ -1006,6 +1020,10 @@ reg('closeSearch', ()=>{ state.search=false; render(); });
 /* Opening the inbox IS reading it — the desktop stamps last-seen the moment
    its sub-tab becomes active, and the dot has nothing to count afterwards. */
 reg('push', k=>{ push(k); if(k==='inbox') markInboxSeen(); });
+/* The header's Back, reachable from inside a screen. A screen that ENDS —
+   a receipt, a confirmation — needs to offer the way out that the header
+   already has, rather than leaving it as the only exit. */
+reg('pop', ()=>pop());
 reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
@@ -3064,6 +3082,237 @@ function statusPopups(){
   if(!Array.isArray(list)||!list.length) return '';
   const live=list.filter(p=>puState(p).live).length;
   return T(live+' showing now',live+' 个正在展示') + ' · ' + T(list.length+' in total',list.length+' 个共计');
+}
+
+/* ==========================================================================
+   Automatic updates — the system messages a shop sends without being asked
+   ==========================================================================
+   The desktop's Broadcasts tab carries these four switches and the phone had
+   none of them, which is half of what "no settings on mobile" meant. They are
+   the SAME setting the desktop writes — notifications.categories.<key> on the
+   shared storefront config — so a shop that switched refunds off at a desk
+   sees them off here. A category with no entry is ON: nothing is backfilled,
+   and a switch that has never been touched behaves as it always did. */
+const NOTIF_CATS=[
+  {k:'order',     en:'Order & shipping', zh:'订单与物流', icon:'package',
+   subEn:'Paid, preparing, shipped, delivered, cancelled, tracking', subZh:'已支付、准备中、已发货、已送达、已取消、物流进度'},
+  {k:'invoice',   en:'Invoices', zh:'发票', icon:'receipt',
+   subEn:'Sent when an invoice is issued for an order', subZh:'订单开具发票时发送'},
+  {k:'refund',    en:'Refunds', zh:'退款', icon:'rotate-ccw',
+   subEn:'Refund approved, paid, or declined', subZh:'退款通过、到账或被拒'},
+  {k:'affiliate', en:'Referral rewards', zh:'邀请奖励', icon:'users',
+   subEn:'Sent to the referrer when their reward is credited', subZh:'邀请奖励到账时发送给邀请人'},
+];
+function notifCatOn(k){ const v=cfgGet('notifications.categories.'+k,null); return v==null?true:!!v; }
+function toggleNotifCat(k){
+  if(state.featBusy) return;
+  const next=!notifCatOn(k);
+  state.featBusy='notif:'+k; state.featErr=null; render();
+  apiWrite('/config',{['notifications.categories.'+k]:next},'PUT').then(()=>{
+    state.cfg=state.cfg||{};
+    const n=Object.assign({},state.cfg.notifications||{});
+    n.categories=Object.assign({},n.categories||{},{[k]:next});
+    state.cfg.notifications=n;
+    state.featBusy=null; render();
+    showToast(next?T('Turned on','已开启'):T('Turned off','已关闭'));
+  }).catch(e=>{
+    state.featBusy=null;
+    if(String(e.message)==='auth') return;
+    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
+reg('toggleNotifCat', k=>toggleNotifCat(k));
+function statusNotifCats(){
+  const off=NOTIF_CATS.filter(c=>!notifCatOn(c.k)).length;
+  return off ? T(off+' switched off',off+' 项已关闭') : T('All on','全部开启');
+}
+function screenNotifCats(){
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:14px;color:var(--text-secondary);line-height:1.6">${
+      T('These go to customers on their own, as orders and refunds move. Off means neither the message in the app nor the WeChat push.',
+        '订单与退款推进时,这些消息会自动发给顾客。关闭后应用内消息和微信推送都不会发送。')}</div>
+    ${state.featErr?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5">${state.featErr}</div>`:''}
+    <div class="list">${NOTIF_CATS.map((c,i)=>`${i?'<div class="sep" style="margin-left:68px"></div>':''}
+      <div class="row" style="cursor:default">
+        <span class="rowico">${ic(c.icon,18)}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px">${T(c.en,c.zh)}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.45">${T(c.subEn,c.subZh)}</span></span>
+        ${state.featBusy==='notif:'+c.k
+          ? `<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+          : toggle(notifCatOn(c.k),`APP.cmd('toggleNotifCat','${c.k}')`)}
+      </div>`).join('')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.55">${
+      T('The same switches as on desktop — changing one here changes it there.','与电脑端是同一组开关 — 在此更改,电脑端同步生效。')}</div>
+  </div>`;
+}
+
+/* ==========================================================================
+   Writing a broadcast — the screen (§63)
+   ========================================================================== */
+/* How many people, in words, wherever the number is shown. One sentence, so
+   the count under the buttons and the count on the send button can never
+   describe two different audiences. */
+function bcfCountLine(){
+  const f=state.bcf;
+  if(f.countBusy&&f.count==null) return T('Counting…','统计中…');
+  if(f.count==null) return T('Everyone this reaches will be counted when it sends.','发送时将统计实际收到人数。');
+  return T('Reaches '+f.count+(f.count===1?' person':' people'), '将发送给 '+f.count+' 人');
+}
+/* The step dots. Sage for a step that is answered, ink for the one being
+   answered — the app's own two colours for done and now, not a third. */
+function bcfDots(){
+  const step=state.bcf.step;
+  return `<div style="display:flex;gap:6px;align-items:center">${[1,2,3,4].map(n=>{
+    const bg = n<step ? 'var(--sage)' : n===step ? 'var(--text-primary)' : 'var(--surface-raised)';
+    return `<span style="display:block;height:6px;width:${n===step?'18px':'6px'};border-radius:999px;background:${bg}"></span>`;
+  }).join('')}</div>`;
+}
+function bcfField(label,inner,hint){
+  return `<div style="display:flex;flex-direction:column;gap:6px">
+    ${label?`<span class="eyebrow">${label}</span>`:''}${inner}
+    ${hint?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${hint}</span>`:''}</div>`;
+}
+/* A single-answer list. The app has chips for this, and uses them where the
+   answers are short words; these are sentences about who a customer is, and
+   five of them wrapped into chips is a paragraph of pills. */
+function bcfPickList(items,current,cmd){
+  return `<div class="list">${items.map((it,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+    <button class="row" onclick="APP.cmd('${cmd}','${escAttr(String(it.k))}')">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px">${T(it.en,it.zh)}</span>
+        ${it.sub?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${it.sub}</span>`:''}</span>
+      ${String(it.k)===String(current)?`<span style="color:var(--text-primary);display:flex;flex:none">${ic('check',18,2)}</span>`:''}
+    </button>`).join('')}</div>`;
+}
+function bcfFootHtml(){
+  const f=state.bcf, blocked=bcfBlocked();
+  const last=f.step===4;
+  const label = f.busy ? T('Sending…','发送中…')
+    : last ? (f.when==='later'?T('Schedule it','确认排期'):T('Send','发送'))
+    : T('Next','下一步');
+  const cmd = last ? "APP.cmd('bcfSend')" : `APP.cmd('bcfStep',${f.step+1})`;
+  // Step 1 blocks on a title; the later steps block on their own answers. A
+  // Next that cannot be pressed says why rather than sitting grey.
+  const stop = f.step===1 ? (!f.title.trim()&&!f.title2.trim() ? T('Give it a title first.','请先填写标题。') : null)
+             : f.step===3 ? blocked
+             : last ? blocked : null;
+  return `${f.err?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5">${f.err}</div>`:''}
+    ${stop?`<div style="font-size:13px;color:var(--amber-ink);line-height:1.5">${stop}</div>`
+          :(f.step>=2?`<div style="font-size:13px;color:var(--text-secondary)">${bcfCountLine()}</div>`:'')}
+    <div style="display:flex;gap:10px">
+      ${f.step>1?`<button class="btn2" style="width:auto;flex:none;padding:0 20px" onclick="APP.cmd('bcfStep',${f.step-1})">${T('Back','返回')}</button>`:''}
+      <button class="cta" style="flex:1${(stop||f.busy)?';opacity:.55':''}" ${(stop||f.busy)?'disabled':''} onclick="${cmd}">${label}</button>
+    </div>`;
+}
+function screenBcNew(){
+  const f=state.bcf;
+  /* The receipt. A broadcast that has gone out is not a form any more, and
+     leaving the form up invites a second send of the same thing. */
+  if(f.sent){
+    const n=f.sent.count;
+    return `<div style="padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
+      <span style="width:52px;height:52px;border-radius:50%;background:var(--sage-tint);color:var(--sage-ink);display:flex;align-items:center;justify-content:center">${ic('check',24,2)}</span>
+      <span style="font-size:18px;font-weight:500">${f.sent.scheduled?T('Scheduled','已排期'):T('Sent','已发送')}</span>
+      <span style="font-size:14px;color:var(--text-secondary);line-height:1.55;max-width:280px">${
+        f.sent.scheduled ? T('It goes out on its own. You can still stop it from the list.','将自动发送。仍可在列表中取消。')
+        : n!=null ? T('It reached '+n+(n===1?' person.':' people.'), '已发送给 '+n+' 人。')
+        : T('It has gone out.','已经发出。')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px;margin-top:8px" onclick="APP.cmd('pop')">${T('Back','返回')}</button>
+    </div>`;
+  }
+  const step=f.step;
+  let bodyHtml='';
+  if(step===1){
+    bodyHtml=`
+      <div class="eyebrow">${T('Step 1 of 4','第 1 步,共 4 步')}</div>
+      <div style="font-size:20px;font-weight:500;line-height:1.35">${T('What do you want to say?','要说什么？')}</div>
+      ${bcfField(T('Title','标题'),
+        `<input id="mBcfTitle" value="${escAttr(f.title)}" maxlength="80" placeholder="${T('Mid-Autumn gift boxes are here','中秋礼盒上新')}" style="width:100%" oninput="APP.cmd('bcfTitle',this.value)">`,
+        T('This is the line customers see first.','顾客最先看到的就是这一行。'))}
+      ${bcfField(T('Message','消息'),
+        `<textarea id="mBcfBody" rows="4" maxlength="400" placeholder="${T('Write a message…','写下消息…')}" style="width:100%;font-family:inherit" oninput="APP.cmd('bcfBody',this.value)">${escAttr(f.body)}</textarea>`)}
+      <button class="btn2" style="width:100%;justify-content:space-between" onclick="APP.cmd('bcfLang2')">
+        <span>${T('Add a second language','添加第二语言')}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic(f.lang2?'chevron-up':'chevron-down',18)}</span></button>
+      ${f.lang2?(()=>{
+        // The OTHER language, named as itself in itself. Working in Chinese,
+        // the second field is English — labelling it 中文 either way would put
+        // the operator's own language on the field that is not it.
+        const other=LANG==='cn'?'English':'中文';
+        return `<div style="display:flex;flex-direction:column;gap:14px">
+        ${bcfField(T('Title','标题')+' · '+other,
+          `<input id="mBcfTitle2" value="${escAttr(f.title2)}" maxlength="80" style="width:100%" oninput="APP.cmd('bcfTitle2',this.value)">`)}
+        ${bcfField(T('Message','消息')+' · '+other,
+          `<textarea id="mBcfBody2" rows="4" maxlength="400" style="width:100%;font-family:inherit" oninput="APP.cmd('bcfBody2',this.value)">${escAttr(f.body2)}</textarea>`)}
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T('Each customer reads the language their app is in.','顾客按各自的应用语言阅读。')}</span>
+      </div>`;})():''}`;
+  } else if(step===2){
+    const acts=[{k:'all',en:BC_ACT.all[0],zh:BC_ACT.all[1]},{k:'buyers',en:BC_ACT.buyers[0],zh:BC_ACT.buyers[1]},
+      {k:'never',en:BC_ACT.never[0],zh:BC_ACT.never[1]},{k:'active',en:BC_ACT.active[0],zh:BC_ACT.active[1]},
+      {k:'lapsed',en:BC_ACT.lapsed[0],zh:BC_ACT.lapsed[1]}];
+    const regions=f.regions||[];
+    bodyHtml=`
+      <div class="eyebrow">${T('Step 2 of 4','第 2 步,共 4 步')}</div>
+      <div style="font-size:20px;font-weight:500;line-height:1.35">${T('Who gets this?','发送给谁？')}</div>
+      ${bcfPickList(acts,f.activity,'bcfActivity')}
+      ${bcfField(T('Tiers','会员等级'),
+        `<div style="display:flex;flex-wrap:wrap;gap:8px">${['seed','sprout','root','tree'].map(k=>
+          `<button class="chip ${f.tiers.indexOf(k)>=0?'on':''}" onclick="APP.cmd('bcfTier','${k}')"><span>${T(...(TIER_LABEL[k]||[k,k]))}</span></button>`).join('')}</div>`,
+        T('None chosen reaches every tier.','不选则包含所有等级。'))}
+      ${regions.length?bcfField(T('Regions','地区'),
+        // The INDEX, not the city name: a name reaches the handler through an
+        // HTML attribute and a JS string literal, and one apostrophe in it
+        // would end the argument early. Nothing is escaped that is not sent.
+        `<div style="display:flex;flex-wrap:wrap;gap:8px">${regions.slice(0,12).map((r,i)=>
+          `<button class="chip ${f.cities.indexOf(r.city)>=0?'on':''}" onclick="APP.cmd('bcfCity',${i})"><span>${escAttr(LANG==='en'&&r.city_en?r.city_en:r.city)}</span><span class="c">${r.n}</span></button>`).join('')}</div>`,
+        T('None chosen reaches every region.','不选则包含所有地区。')):''}`;
+  } else if(step===3){
+    bodyHtml=`
+      <div class="eyebrow">${T('Step 3 of 4','第 3 步,共 4 步')}</div>
+      <div style="font-size:20px;font-weight:500;line-height:1.35">${T('When does it go out?','什么时候发送？')}</div>
+      ${bcfPickList([{k:'now',en:'Now',zh:'立即'},{k:'later',en:'Later',zh:'稍后'}],f.when,'bcfWhen')}
+      ${f.when==='later'?bcfField(T('Goes out','发送时间'),
+        `<input id="mBcfAt" type="datetime-local" value="${escAttr(f.at)}" style="width:100%" oninput="APP.cmd('bcfAt',this.value)">`,
+        T('It sends on its own, whether or not this phone is open.','到点自动发送,无需打开此应用。')):''}
+      ${bcfField(T('Stops showing','停止显示'),
+        bcfPickList([{k:'never',en:'Never',zh:'不限'},{k:'date',en:'On a date',zh:'指定日期'}],f.ends,'bcfEnds'),
+        f.ends==='never'?T('It stays in the inbox until it is read, or until you take it back.','会一直保留在消息中,直到被阅读或被撤回。'):'')}
+      ${f.ends==='date'?bcfField('',
+        `<input id="mBcfEndsAt" type="datetime-local" value="${escAttr(f.endsAt)}" style="width:100%" oninput="APP.cmd('bcfEndsAt',this.value)">`):''}`;
+  } else {
+    const aud=bcAudience(bcfAudience());
+    const shownTitle=f.title.trim()||f.title2.trim();
+    const shownBody=(f.body.trim()||f.body2.trim());
+    const rows=[
+      {k:T('To','发送对象'), v:T(...aud), go:2},
+      {k:T('Goes out','发送时间'), v:f.when==='later'?(fmtDay(bcfWhenISO(f.at))||T('Later','稍后')):T('Now','立即'), go:3},
+      {k:T('Stops showing','停止显示'), v:f.ends==='date'?(fmtDay(bcfWhenISO(f.endsAt))||T('On a date','指定日期')):T('Never','不限'), go:3},
+    ];
+    bodyHtml=`
+      <div class="eyebrow">${T('Step 4 of 4','第 4 步,共 4 步')}</div>
+      <div style="font-size:20px;font-weight:500;line-height:1.35">${T('Ready to send?','确认发送？')}</div>
+      <div class="card" style="padding:14px;display:flex;gap:12px">
+        <span style="width:34px;height:34px;border-radius:10px;background:var(--surface-raised);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;flex:none">${ic('megaphone',17)}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:15px;font-weight:500;line-height:1.4">${escAttr(shownTitle)}</span>
+          ${shownBody?`<span style="font-size:14px;color:var(--text-secondary);line-height:1.55;white-space:pre-wrap">${escAttr(shownBody)}</span>`:''}</span>
+      </div>
+      <div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:16px"></div>':''}
+        <button class="row" onclick="APP.cmd('bcfStep',${r.go})">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:13px;color:var(--text-secondary)">${r.k}</span>
+            <span style="font-size:15px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.v}</span></span>
+          <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`).join('')}</div>
+      ${bcfField(T('Opens to','打开位置'),
+        `<input id="mBcfLink" value="${escAttr(f.deeplink)}" placeholder="/pages/shop/shop" style="width:100%" oninput="APP.cmd('bcfLink',this.value)">`,
+        T('Optional. Leave it empty and tapping the message just opens it.','可留空。留空时点击消息只会打开消息本身。'))}`;
+  }
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${bcfDots()}
+    ${bodyHtml}
+    <div id="mBcfFoot" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">${bcfFootHtml()}</div>
+  </div>`;
 }
 function screenPopups(){
   const list=cfgGet('popups.list',null);
@@ -6269,12 +6518,28 @@ const SUBS={
     </div>`).join('')}
     ${desktopNote()}</div>`;
   }},
-  broadcasts:{title:['Broadcasts','广播'],render:()=>{
+  /* §63 — writing one is no longer a desktop-only act, so the CTA is a Write
+     button rather than a note saying where to go. It carries broadcasts:send
+     on its own, exactly as Waste carries waste:record: the SCREEN is
+     broadcasts:view, and an operator holding only view gets the list and an
+     empty slot rather than a button the server would refuse. */
+  broadcasts:{title:['Broadcasts','广播'],
+    cta:()=>mCan('broadcasts:send')
+      ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('push','bcnew')">${T('Write','撰写')}</button>` : '',
+    render:()=>{
     const list=DB.broadcasts||[];
+    const auto=`<button class="row" style="border-radius:14px;background:var(--surface-card);border:1px solid var(--border-default)" onclick="APP.cmd('push','bcauto')">
+      <span class="rowico">${ic('bell',18)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px">${T('Automatic updates','自动通知')}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${statusNotifCats()}</span></span>
+      <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`;
     if(!state.bcLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
+    if(!list.length) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">${auto}
+      ${nothingYet(T('No broadcasts','没有广播'),T('Nothing has been sent yet. Write one and it goes to the customers you choose.','还没有发送过。撰写一条,发送给你选择的顾客。'))}</div>`;
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.bcErr}</div>`:''}
+    ${auto}
     ${list.map(b=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.title)}</span>
@@ -6287,9 +6552,12 @@ const SUBS={
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
         <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
         ${b.st==='scheduled'&&b.id!=null?`<button class="btn2" style="width:auto;min-height:40px;padding:0 14px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
-    </div>`).join('')}
-    ${desktopNote()}</div>`;
+    </div>`).join('')}</div>`;
+    // No desktopNote: this screen writes and sends now (§63), so "best edited
+    // on desktop" would be sending an operator away from the tool they are in.
   }},
+  bcnew:{title:['New broadcast','新建广播'],render:()=>screenBcNew()},
+  bcauto:{title:['Automatic updates','自动通知'],status:()=>statusNotifCats(),render:()=>screenNotifCats()},
   sharecards:{title:['Share cards','分享卡片'],render:()=>screenShareCards()},
   popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
@@ -8458,6 +8726,161 @@ function recallBroadcast(id){
     state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
+
+/* The list, re-read. Called at boot with everything else, and again by the
+   composer once a send lands — the feed behind it is wrong by exactly one row
+   at that moment, and a sent broadcast that does not appear reads as a send
+   that did not happen. */
+function loadBroadcasts(){
+  return api('/broadcasts').then(r=>{
+    state.bcLoaded=true;
+    if(Array.isArray(r)) DB.broadcasts=r.map(mapBroadcast);
+    render();
+  }).catch(()=>{});
+}
+
+/* ==========================================================================
+   Writing a broadcast (§63)
+   ==========================================================================
+   Four steps: say it, choose who, choose when, look once more. The server is
+   the same one the desktop composer posts to — POST /broadcasts, gated on
+   broadcasts:send by lib/cap-routes.js — so nothing here decides who may send,
+   it only stops offering what the server would refuse. */
+function bcfReset(){
+  const f=state.bcf;
+  clearTimeout(f.countTimer);
+  f.step=1; f.title=''; f.body=''; f.title2=''; f.body2=''; f.lang2=false;
+  f.activity='all'; f.tiers=[]; f.cities=[];
+  f.when='now'; f.at=''; f.ends='never'; f.endsAt=''; f.deeplink='';
+  f.count=null; f.countBusy=false; f.countSeq++; f.countTimer=null;
+  f.busy=false; f.err=''; f.sent=null;
+  // Regions are the shop's own saved addresses and do not change while a
+  // broadcast is being written, so they survive a reset and are fetched once.
+}
+/* The audience as the SERVER reads it. One shape, built in one place, so the
+   count that is previewed and the audience that is sent can never disagree. */
+function bcfAudience(){
+  const f=state.bcf;
+  return {activity:f.activity, tiers:f.tiers.slice(), cities:f.cities.slice()};
+}
+/* How many people this reaches, counted by the server. Debounced, and every
+   answer carries the sequence it was asked under: chips tap faster than a
+   request returns, and a late reply for a filter nobody is on any more is the
+   number that gets believed. */
+function bcfCount(){
+  const f=state.bcf;
+  clearTimeout(f.countTimer);
+  const seq=++f.countSeq;
+  f.countBusy=true;
+  f.countTimer=setTimeout(()=>{
+    api('/broadcasts/audience-count?aud='+encodeURIComponent(JSON.stringify(bcfAudience()))).then(r=>{
+      if(seq!==f.countSeq) return;
+      f.count=(r&&r.count!=null)?r.count:null; f.countBusy=false; render();
+    }).catch(()=>{ if(seq!==f.countSeq) return; f.count=null; f.countBusy=false; render(); });
+  },250);
+}
+/* Cities customers have actually saved an address in. Best-effort: the region
+   filter is optional, so a shop whose regions cannot be read still sends — it
+   just cannot narrow by one. */
+function bcfLoadRegions(){
+  const f=state.bcf;
+  if(f.regions||f.regionsTried) return;
+  f.regionsTried=true;
+  api('/broadcasts/regions').then(r=>{ f.regions=Array.isArray(r)?r:[]; render(); })
+    .catch(()=>{ f.regions=[]; render(); });
+}
+/* Local wall-clock ("2026-09-08T09:00") as the server's UTC instant. The input
+   is the operator's own clock and the column is UTC; new Date() on that string
+   is read as local by every browser this app runs in, which is the conversion. */
+function bcfWhenISO(v){
+  const d=new Date(String(v||''));
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+/* What still stands between this screen and a send, in the operator's words.
+   Null means nothing does. */
+function bcfBlocked(){
+  const f=state.bcf;
+  if(!f.title.trim()&&!f.title2.trim()) return T('Give it a title first.','请先填写标题。');
+  if(f.when==='later'){
+    const at=bcfWhenISO(f.at);
+    if(!at) return T('Pick when it goes out.','请选择发送时间。');
+    if(new Date(at).getTime()<Date.now()+30000) return T('Pick a time that has not passed.','请选择尚未过去的时间。');
+  }
+  if(f.ends==='date'){
+    const end=bcfWhenISO(f.endsAt);
+    if(!end) return T('Pick when it stops showing.','请选择停止显示的时间。');
+    const from=f.when==='later'?bcfWhenISO(f.at):new Date().toISOString();
+    if(from&&new Date(end).getTime()<=new Date(from).getTime())
+      return T('It has to stop showing after it goes out.','停止显示的时间必须晚于发送时间。');
+  }
+  if(f.deeplink&&!/^\/pages\//.test(f.deeplink)) return T('A link has to start with /pages/.','链接必须以 /pages/ 开头。');
+  return null;
+}
+function bcfSend(){
+  const f=state.bcf;
+  if(f.busy||bcfBlocked()) return;
+  f.busy=true; f.err=''; render();
+  /* THE FIRST FIELD IS THE LANGUAGE THE OPERATOR IS WORKING IN, and it lands
+     in that language's column. Writing it always into `_en` would file a
+     Chinese shop's announcements as English: the mini app reads `title_cn`
+     first for a Chinese customer, so it would have shown them through the
+     fallback while the columns said the opposite of the truth. */
+  const prime=LANG==='cn'?'cn':'en', other=LANG==='cn'?'en':'cn';
+  const body={audience:bcfAudience(), deeplink:f.deeplink||null};
+  body['title_'+prime]=f.title.trim();
+  body['body_'+prime] =f.body.trim();
+  body['title_'+other]=(f.lang2?f.title2:'').trim();
+  body['body_'+other] =(f.lang2?f.body2:'').trim();
+  if(f.when==='later') body.scheduled_for=bcfWhenISO(f.at);
+  if(f.ends==='date')  body.expires_at=bcfWhenISO(f.endsAt);
+  apiWrite('/broadcasts', body).then(j=>{
+    f.busy=false;
+    const n=(j&&j.data&&j.data.recipient_count!=null)?j.data.recipient_count
+           :(j&&j.recipient_count!=null)?j.recipient_count:null;
+    f.sent={scheduled:f.when==='later', count:n};
+    // The list behind this screen is now wrong by exactly one row.
+    state.bcLoaded=false; loadBroadcasts();
+    render();
+  }).catch(e=>{
+    f.busy=false;
+    if(String(e.message)==='auth') return;
+    f.err = e.code==='norealm'
+      ? T('This account cannot send broadcasts.','此账号无法发送广播。')
+      : (e.message||T('That did not send. Nothing has gone out.','未发送,没有任何内容发出。'));
+    render();
+  });
+}
+/* The footer is repainted on its own while the operator types, for the reason
+   given at the head of the Onwards commands: a text field that re-renders the
+   screen it lives in loses the caret on every letter. */
+function bcfRepaintFoot(){
+  const el=document.getElementById('mBcfFoot');
+  if(el) el.innerHTML=bcfFootHtml(); else render();
+}
+reg('bcfTitle', v=>{ state.bcf.title=String(v==null?'':v); bcfRepaintFoot(); });
+reg('bcfBody',  v=>{ state.bcf.body =String(v==null?'':v); });
+reg('bcfTitle2',v=>{ state.bcf.title2=String(v==null?'':v); bcfRepaintFoot(); });
+reg('bcfBody2', v=>{ state.bcf.body2 =String(v==null?'':v); });
+reg('bcfLang2', ()=>{ state.bcf.lang2=!state.bcf.lang2; render(); });
+reg('bcfStep',  n=>{ const f=state.bcf; f.step=Math.max(1,Math.min(4,Number(n)||1)); f.err='';
+  if(f.step>=2) bcfLoadRegions();
+  if(f.step>=2&&f.count==null&&!f.countBusy) bcfCount();
+  forgetScroll(); render(); });
+reg('bcfActivity', k=>{ state.bcf.activity=String(k); bcfCount(); render(); });
+reg('bcfTier', k=>{ const t=state.bcf.tiers, i=t.indexOf(k);
+  if(i<0) t.push(k); else t.splice(i,1); bcfCount(); render(); });
+reg('bcfCity', idx=>{ const f=state.bcf, r=(f.regions||[])[Number(idx)];
+  if(!r) return;
+  const i=f.cities.indexOf(r.city);
+  if(i<0) f.cities.push(r.city); else f.cities.splice(i,1);
+  bcfCount(); render(); });
+reg('bcfWhen', k=>{ state.bcf.when=String(k); state.bcf.err=''; render(); });
+reg('bcfAt',   v=>{ state.bcf.at=String(v||''); state.bcf.err=''; bcfRepaintFoot(); });
+reg('bcfEnds', k=>{ state.bcf.ends=String(k); state.bcf.err=''; render(); });
+reg('bcfEndsAt', v=>{ state.bcf.endsAt=String(v||''); state.bcf.err=''; bcfRepaintFoot(); });
+reg('bcfLink', v=>{ state.bcf.deeplink=String(v||'').trim(); bcfRepaintFoot(); });
+reg('bcfSend', ()=>bcfSend());
+
 async function loadMirror(which){
   if(state.mirrorLoading===which) return;
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
@@ -11345,6 +11768,13 @@ const ROUTE_CAP={
   // More → Marketing.
   coupons:'coupons:view', flash:'flash:view', popups:'popups:view', affiliate:'affiliate:view',
   sharecards:'sharing:edit', broadcasts:'broadcasts:view', social:'social:edit',
+  /* The composer is gated on the capability its POST is gated on server-side
+     (lib/cap-routes.js maps every write under /broadcasts to broadcasts:send),
+     so the screen can never be walked into by an operator whose send would
+     403 at the end of four steps. `bcauto` writes the shared storefront
+     config, which carries no capability of its own; it is gated with the
+     screen it lives inside rather than left open on a screen that is not. */
+  bcnew:'broadcasts:send', bcauto:'broadcasts:send',
   // More → Loyalty & Wallet.
   membership:'loyalty:view', wallet:'topup:edit', leaderboard:'leaderboard:edit', voting:'voting:edit',
   // More → Content.
@@ -13876,7 +14306,7 @@ async function loadLive(){
   api('/vouchers').then(r=>set(()=>{ state.vchLoaded=true; if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
     DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); } })).catch(()=>{});
   api('/flash-sales').then(r=>set(()=>{ state.flashLoaded=true; if(Array.isArray(r)) DB.flash=r.map(mapFlash); })).catch(()=>{});
-  api('/broadcasts').then(r=>set(()=>{ state.bcLoaded=true; if(Array.isArray(r)) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
+  loadBroadcasts();
   api('/feedback').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows) DB.feedback=rows.map(mapFeedback); })).catch(()=>{});
 
 

@@ -1559,3 +1559,83 @@ Ash should correct any of this if it reads wrong; nothing depends on the exact p
 | `affiliateToggleSub` | Sent to the referrer when their reward is credited | 邀请奖励到账时发送给邀请人 | **COMPOSED** under Rule 4's standing delegation |
 
 **`affiliateToggleSub` follows the shape the sibling Invoices row already uses** — `Sent when an invoice is issued for an order · 订单开具发票时发送` — reusing `发送` (sent) and the live clause `到账` this whole section is built on; `邀请人` is the mini app's own live word for the referrer (`referredByLabel` on the affiliate page), not a new coinage for the same person the customer-facing strings above call "you".
+
+## Writing a broadcast on the phone (2026-09-08)
+
+The four-step composer and the automatic-updates switches `public/m.html` gained under `docs/tacet-consolidation-decisions.md` §63. Register: OPERATOR (Rule 1) throughout — every string here is read by shop staff on their own phone, never by a customer; the message they WRITE is their own words and is not vocabulary.
+
+**The ratio is the point, and it is the good direction: nineteen pairs are taken verbatim from strings already live in this same file, seven more lift a live TERM into a new pair, and the four automatic-updates rows are copied character-for-character from the desktop panel they mirror.** What is composed is the wizard's own furniture — the questions each step asks, the sentences that explain a choice, and the refusals — because no screen in this product has ever asked an operator to compose a message to customers before.
+
+### Taken verbatim (no new Chinese)
+
+`Back · 返回`, `Next · 下一步`, `Send · 发送`, `Sending… · 发送中…`, `Saving… · 保存中…`, `Loading… · 加载中…`, `Turned on · 已开启`, `Turned off · 已关闭`, `Message · 消息`, `Write a message… · 写下消息…`, `No broadcasts · 没有广播`, `Sent · 已发送`, `Scheduled · 已排期`, and the five audience descriptions in `BC_ACT` (`All active customers · 所有活跃客户`, `Has ordered · 曾下单`, `Never ordered · 从未下单`, `Ordered in the last 30 days · 近 30 天下单`, `No order in 60 days · 60 天未下单`) with the four `TIER_LABEL` names. **The audience descriptions matter most:** they are the words the list screen already uses to say who a scheduled broadcast is about to reach, so the operator choosing an audience and the operator reading one back meet the same sentence.
+
+### A live TERM, a new pair
+
+| key | EN | CN | the live source of the term |
+|---|---|---|---|
+| `bcfNow` | Now | 立即 | `立即刷新` (Refresh now), `立即配送` (Right away) |
+| `bcfLater` | Later | 稍后 | `请稍后重试` (try again in a moment) |
+| `bcfWrite` | Write | 撰写 | `弹窗的撰写、排期与预览在电脑端进行。` — the pop-up screen's own verb |
+| `bcfTitle` | Title | 标题 | `未设置标题 — 由页面自动生成。` |
+| `bcfTiers` | Tiers | 会员等级 | `暂无会员等级` |
+| `bcfRegions` | Regions | 地区 | `N 个地区`, in `bcAudience()` in this same file |
+| `bcfNever` | Never | 不限 | `每人不限次` (unlimited per person) |
+
+**`Write · 撰写` is deliberately the verb the deleted sentence used.** The empty state this change removes said broadcasts `在电脑端撰写与发送` — written and sent on the desktop; the button that makes that sentence false keeps its verb, so an operator who read the old screen meets the same word doing the thing it said they could not.
+
+### Composed
+
+| key | EN | CN |
+|---|---|---|
+| `bcfStepN` | Step N of 4 | 第 N 步,共 4 步 |
+| `bcfAskSay` | What do you want to say? | 要说什么？ |
+| `bcfTitleHint` | This is the line customers see first. | 顾客最先看到的就是这一行。 |
+| `bcfAddLang` | Add a second language | 添加第二语言 |
+| `bcfLangHint` | Each customer reads the language their app is in. | 顾客按各自的应用语言阅读。 |
+| `bcfAskWho` | Who gets this? | 发送给谁？ |
+| `bcfAllTiers` | None chosen reaches every tier. | 不选则包含所有等级。 |
+| `bcfAllRegions` | None chosen reaches every region. | 不选则包含所有地区。 |
+| `bcfAskWhen` | When does it go out? | 什么时候发送？ |
+| `bcfGoesOut` | Goes out | 发送时间 |
+| `bcfAutoSend` | It sends on its own, whether or not this phone is open. | 到点自动发送,无需打开此应用。 |
+| `bcfStops` | Stops showing | 停止显示 |
+| `bcfOnDate` | On a date | 指定日期 |
+| `bcfStaysUntil` | It stays in the inbox until it is read, or until you take it back. | 会一直保留在消息中,直到被阅读或被撤回。 |
+| `bcfAskReady` | Ready to send? | 确认发送？ |
+| `bcfTo` | To | 发送对象 |
+| `bcfOpensTo` | Opens to | 打开位置 |
+| `bcfLinkHint` | Optional. Leave it empty and tapping the message just opens it. | 可留空。留空时点击消息只会打开消息本身。 |
+| `bcfScheduleIt` | Schedule it | 确认排期 |
+| `bcfCounting` | Counting… | 统计中… |
+| `bcfCountUnknown` | Everyone this reaches will be counted when it sends. | 发送时将统计实际收到人数。 |
+| `bcfReaches` | Reaches N people | 将发送给 N 人 |
+| `bcfNeedTitle` | Give it a title first. | 请先填写标题。 |
+| `bcfNeedWhen` | Pick when it goes out. | 请选择发送时间。 |
+| `bcfPastTime` | Pick a time that has not passed. | 请选择尚未过去的时间。 |
+| `bcfNeedEnd` | Pick when it stops showing. | 请选择停止显示的时间。 |
+| `bcfEndAfter` | It has to stop showing after it goes out. | 停止显示的时间必须晚于发送时间。 |
+| `bcfBadLink` | A link has to start with /pages/. | 链接必须以 /pages/ 开头。 |
+| `bcfSendFailed` | That did not send. Nothing has gone out. | 未发送,没有任何内容发出。 |
+| `bcfNoCap` | This account cannot send broadcasts. | 此账号无法发送广播。 |
+| `bcfScheduledOk` | It goes out on its own. You can still stop it from the list. | 将自动发送。仍可在列表中取消。 |
+| `bcfSentN` | It reached N people. | 已发送给 N 人。 |
+| `bcfSentPlain` | It has gone out. | 已经发出。 |
+| `bcfEmpty` | Nothing has been sent yet. Write one and it goes to the customers you choose. | 还没有发送过。撰写一条,发送给你选择的顾客。 |
+| `bcAutoTitle` | Automatic updates | 自动通知 |
+| `bcAutoAllOn` | All on | 全部开启 |
+| `bcAutoNOff` | N switched off | N 项已关闭 |
+| `bcAutoBlurb` | These go to customers on their own, as orders and refunds move. Off means neither the message in the app nor the WeChat push. | 订单与退款推进时,这些消息会自动发给顾客。关闭后应用内消息和微信推送都不会发送。 |
+| `bcAutoSameAsDesk` | The same switches as on desktop — changing one here changes it there. | 与电脑端是同一组开关 — 在此更改,电脑端同步生效。 |
+
+**The four category rows carry NO new Chinese** — `Order & shipping · 订单与物流`, `Invoices · 发票`, `Refunds · 退款` and `Referral rewards · 邀请奖励`, with all four of their subtitles, are copied character-for-character from `public/retail-admin.html`'s Automatic-updates panel, the last of them being the pair this document locked at v1.30. They are the same setting on two surfaces and must never drift into two descriptions of it.
+
+**`bcfSendFailed` and `bcfNoCap` follow the two live refusal shapes in this file rather than inventing a third**: `未发送,数据未变 — 请重试。` (the kitchen request's failure) gives the *nothing happened* clause, and `此账号无法向厨房下单。` gives `此账号无法…`, the house pattern for a capability an account does not hold.
+
+**`bcfStaysUntil` says what the server does, in the server's own terms.** `routes/retail.js` records that a broadcast without an end date "stays in the inbox until it is read or recalled"; the phone's sentence is that fact, with `撤回` — recall — the word the desktop's own Recall control uses.
+
+**Two live candidates were considered and rejected, and both rejections are recorded so the search is not repeated.** `建议在电脑端编辑` (*Best edited on desktop*, the file's `desktopNote()`) is REMOVED from this screen rather than reworded — the screen it sat on now does the editing, and a note sending an operator to a desktop for the thing they are holding is worse than no note. And `发消息` (from `给顾客发消息`, Message this customer) was considered for the Write button and rejected: that pair names writing to ONE customer from their own record, and a broadcast's whole nature is that nobody is named.
+
+**`bcfReaches` and `bcfSentN` are INTERPOLATED and must not be glued**: the count is a number the server supplies and both halves place it themselves (`将发送给 N 人`), on the same terms as `categorySubtotals` in the Finance section.
+
+Ash should correct any of this if it reads wrong to a Chinese operator; nothing depends on the exact phrasing.
