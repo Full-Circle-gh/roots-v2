@@ -99,8 +99,21 @@ const READY = {
   id: 93, rs_number: 'RS-260904-004', status: 'prepared', from_role: 'warehouse', to_role: 'kitchen',
   purpose: 'shelf', goods_state: 'none', item_count: 1, prepared_at: '2026-09-04 03:20:00',
   seen_at: null,
-  items: [{ id: 931, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10', qty_requested: 8 }],
+  items: [{ id: 931, product_id: null, product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10',
+            qty_requested: 8, status: 'prepared', prepared_at: '2026-09-04 03:20:00' }],
 };
+
+/* WHAT THE LIST ITSELF READS SINCE §69 — one row per finished PRODUCT, from
+   GET /api/restock/kitchen-ready/lines, rather than the request rows above.
+   The request is still what a tap opens, which is why `restock_id` travels
+   with each line; READY (above) is what /api/restock/:id answers with when it
+   does. The two must describe the same request or a case here would prove
+   nothing about the screen. */
+const READY_LINES = [{
+  id: 931, restock_id: 93, rs_number: 'RS-260904-004', purpose: 'shelf',
+  product_name: 'Hummus Asli', product_cn: '鹰嘴豆泥', sku: '1-10',
+  qty_requested: 8, unit: null, made_at: '2026-09-04 03:20:00', seen_at: null,
+}];
 
 // TWO LOCATIONS, which is the whole subject of the "Ask for stock" cases below.
 // Roots really has these two, and the second one is what makes the screen mean
@@ -136,6 +149,7 @@ function stub(o) {
   if (o.noLogProd) ctx.can_log_production = false;
   const queue = o.noQueue ? [] : (o.twoLine ? [KITCHEN_REQ2] : [KITCHEN_REQ]);
   const ready = o.ready ? [READY] : [];
+  const readyLines = o.ready ? READY_LINES : [];
   return '<script>\n' +
     'window.__e=[];window.__calls=[];window.__patch=[];window.__prod=[];window.__seen=[];\n' +
     'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
@@ -144,7 +158,8 @@ function stub(o) {
       ',STOCK=' + JSON.stringify(ROWS) + ';\n' +
     'var HANGSHELF=' + JSON.stringify(!!o.hangShelf) + ';\n' +
     'var ORDERS=' + JSON.stringify(orders) + ',DENY=' + JSON.stringify(!!o.deny) + ';\n' +
-    'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) + ';\n' +
+    'var KITCHEN=' + JSON.stringify(queue) + ',READY=' + JSON.stringify(ready) +
+      ',READYL=' + JSON.stringify(readyLines) + ';\n' +
     'var PATCHFAIL=' + JSON.stringify(!!o.patchFail) + ';\n' +
     'var KONLY=' + JSON.stringify(!!o.kitchenOnly) + ',SLOW=' + JSON.stringify(!!o.slow) +
       ',HANG=' + JSON.stringify(!!o.hang) + ';\n' +
@@ -213,9 +228,12 @@ function stub(o) {
        case can assert that the tile's count drops for what was SHOWN and not
        for whatever happened to be unread. */
     '    if(/\\/kitchen-ready\\/seen$/.test(url)){\n' +
+    // `item_ids` since §69: the ids are LINES now, because a request with one
+    // of three products made is news the moment that one is finished, and one
+    // stamp per request would silence the second.
     '      var sb=JSON.parse(opts.body||"{}"); window.__seen.push(sb);\n' +
-    '      (READY||[]).forEach(function(o){ if((sb.ids||[]).indexOf(o.id)>=0) o.seen_at="2026-09-04T04:00:00Z"; });\n' +
-    '      body={success:true,data:{seen:(sb.ids||[]).length}};\n' +
+    '      (READYL||[]).forEach(function(l){ if((sb.item_ids||[]).indexOf(l.id)>=0) l.seen_at="2026-09-04T04:00:00Z"; });\n' +
+    '      body={success:true,data:{seen:(sb.item_ids||[]).length}};\n' +
     '    }\n' +
     '    else if(opts&&opts.method==="POST"){ window.__post=JSON.parse(opts.body||"{}");\n' +
     '      body={success:true,id:99,rs_number:"RS-260904-001"}; }\n' +
@@ -226,6 +244,7 @@ function stub(o) {
     '    else if(m) body={success:true,data:ORDERS.concat(KITCHEN).concat(READY).filter(function(o){return o.id===Number(m[1])})[0]};\n' +
     // The queue and the ready list read the same route from opposite sides —
     // `tab=active` is what is still to make, `tab=history` is what is made.
+    '    else if(/\\/kitchen-ready\\/lines/.test(url)) body={success:true,data:READYL};\n' +
     '    else if(url.indexOf("to_role=kitchen")>-1)\n' +
     '      body={success:true,data:url.indexOf("tab=history")>-1?READY:KITCHEN};\n' +
     '    else body={success:true,data:ORDERS};\n' +
@@ -887,9 +906,16 @@ const CASES = {
     expect: ['Ready from the kitchen', 'Made and on the shelf', '1 new'],
     absent: ['waiting for you', 'Collected', 'collect'] },
 
-  'ready-list-names-the-request': { ready: true,
+  /* IT NAMES THE PRODUCT (§69), and the request follows it. Ash: "why not to
+     mention the speicifc product kitchen made directly on the dashbaord this
+     way the user wont need to open the order and check inside, too many
+     clicks." The row the dashboard draws names products, and a list of request
+     numbers under it would be the two-surfaces-disagreeing failure
+     lib/kitchen-ready.js exists to prevent. */
+  'ready-list-names-the-product-then-the-request': { ready: true,
     js: seq(["'[data-kropen]'", '250']),
-    expect: ['Ready from the kitchen', '1 made · already on the shelf', 'RS-260904-004', 'For the shelf'] },
+    expect: ['Ready from the kitchen', '1 made · already on the shelf',
+             'Hummus Asli', 'RS-260904-004', 'For the shelf'] },
 
   'ready-empty-says-so-rather-than-painting-nothing': {
     js: seq(["'[data-kropen]'", '250']),
@@ -901,7 +927,11 @@ const CASES = {
      rather than the one that looked. */
   'opening-the-list-is-what-marks-it-read': { ready: true,
     js: seq(["'[data-kropen]'", '400']),
-    checkSeen: (s) => s.length === 1 && Array.isArray(s[0].ids) && s[0].ids.length === 1 && s[0].ids[0] === 93
+    // THE LINE ids, not the request's (§69). 931 is the product; 93 is the
+    // request it belongs to, and stamping that would silence every other
+    // product on it — including ones the kitchen has not made yet.
+    checkSeen: (s) => s.length === 1 && Array.isArray(s[0].item_ids)
+      && s[0].item_ids.length === 1 && s[0].item_ids[0] === 931
       ? null : 'opening the list did not mark what it showed as read: ' + JSON.stringify(s),
     // THE IDS IT DREW, never "everything unseen": the kitchen can finish
     // something between the render and the post, and clearing a request nobody
@@ -913,15 +943,18 @@ const CASES = {
   // the screen and only the COUNT goes quiet.
   'reading-it-does-not-hide-it': { ready: true,
     js: seq(["'[data-kropen]'", '400']),
-    expect: ['RS-260904-004'] },
+    expect: ['Hummus Asli', 'RS-260904-004'] },
 
   /* NOTHING TO DO HERE, and the detail says so as a statement about where the
      stock already went — not as a warning about what a button will not do. */
   'the-detail-says-the-job-is-already-finished': { ready: true,
     js: seq(["'[data-kropen]'", '200', "'[data-kropen2]'", '300']),
-    expect: ['RS-260904-004', 'Hummus Asli',
+    // '1/1 made' since §69 — the detail can now be opened on a request that is
+    // only PARTLY made, so it states how much of it is, and the request-wide
+    // "nothing to do here" appears only when it is true of the whole thing.
+    expect: ['RS-260904-004', 'Hummus Asli', '1/1 made',
              'The kitchen has put this on the shelf and recorded the stock. Nothing to do here.', 'Done'],
-    absent: ['Collected', 'Collecting this'],
+    absent: ['Collected', 'Collecting this', 'To make'],
     checkPatch: (p) => p.length ? 'reading a finished request wrote a stock change: ' + JSON.stringify(p) : null },
 
   /* THE PUSH'S OWN DOOR. routes/restock.js addresses the 'prepared' alert to
@@ -929,7 +962,7 @@ const CASES = {
      told somebody about a job and then asked them to go and find it. */
   'go-ready-opens-the-list-not-the-launcher': { ready: true, search: '?go=ready',
     js: 'window.__done();',
-    expect: ['Ready from the kitchen', 'RS-260904-004'],
+    expect: ['Ready from the kitchen', 'Hummus Asli', 'RS-260904-004'],
     check: (out) => /data-view="home"/.test(out) ? 'the deep link landed on the launcher' : null },
 
   /* AND IT OPENS ON NOTHING ELSE FIRST — the same rule as the two doors above,
@@ -943,7 +976,7 @@ const CASES = {
 
   'ready-cn': { ready: true, pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-kropen]'", '250']),
-    expect: ['厨房已完成', '已上架', 'RS-260904-004'],
+    expect: ['厨房已完成', '已上架', '鹰嘴豆泥', 'RS-260904-004'],
     absent: ['待领取'] },
 
   // A session the transfer realm refuses never asked the kitchen for anything,
@@ -1064,7 +1097,11 @@ function main() {
       /^\/api\/push\/pref$/, /^\/api\/backend\/push\/pref$/,
       // Reading the ready list IS the acknowledgement — the stub above records
       // it and a case below asserts on what was stamped.
-      /^\/api\/restock\/kitchen-ready\/seen$/];
+      /^\/api\/restock\/kitchen-ready\/seen$/,
+      // And what the list itself is, since §69: finished PRODUCTS, from the
+      // clause's own endpoint. `?to_role=kitchen&tab=history` returns orders,
+      // and there is no order-shaped answer to "which products are made".
+      /^\/api\/restock\/kitchen-ready\/lines$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u}`]);
 

@@ -833,41 +833,20 @@ img{display:block;max-width:100%}
   cursor:pointer;-webkit-tap-highlight-color:transparent}
 .pw button.on{background:var(--lime)}
 
-/* The placed order. The number is the biggest thing on the phone, because the
-   whole of what happens next is somebody calling it across a room. */
-.done{padding:26px 14px 30px;text-align:center}
-.done-n{font-family:var(--f-bear);font-size:76px;line-height:1;
+/* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
+   Three surfaces render this block and they are one screen: the sheet that
+   opens the instant the order is submitted, the order page the customer comes
+   back to, and §50's in-page WeChat screen. THE RULES ARE THEREFORE ON .done
+   ITSELF, not on the page that hosts it — see the note at .ordp for what is
+   still the page's own and why.
+   The number is the biggest thing on the phone, because the whole of what
+   happens next is somebody calling it across a room. It no longer sits alone
+   in a centred column, though: .done-hd puts it beside the name and the order
+   reference, and everything below shares that one left edge. */
+.done{padding:22px 14px 26px;text-align:left}
+.done-n{flex:none;font-family:var(--f-bear);font-size:76px;line-height:.82;
   font-variant-numeric:tabular-nums}
-.done-nm{font-family:var(--f-bear);font-size:20px;margin-top:6px}
-.done-h{font-family:var(--f-bear);font-size:17px;margin-top:16px}
-/* What they owe. Second only to the number in size, and boxed in the accent so
-   the eye lands on it without reading — the customer is walking to a counter
-   with two things to carry, the number they will be called by and the amount
-   they will hand over. inline-block so the rule sits on the figure rather than
-   running the width of the sheet. */
-/* THE PADDING IS NOT SYMMETRIC, AND THAT IS WHAT CENTRES IT. Reported on the
-   device: the figure sat visibly high in its box. The cause is the digit
-   substitution above — the numerals are Lilita One while the letters are Bear
-   Serif — and Lilita One's ink OVERSHOOTS its own ascent metric. Measured in
-   Chromium at 34px against the shipped faces: fontAscent 22 but inkAscent 23,
-   fontDescent 8, inkDescent 1. With line-height:1 the half-leading is 2px, the
-   baseline lands at 24, and the ink then occupies 1..25 of a 34px line box —
-   leaving 12px above the glyphs and 20px below them. Symmetric padding cannot
-   fix an asymmetry that is inside the line box.
-   13/5 moves the 8px difference back: 16px above, 16px below, measured to 0.00.
-   Re-measure if the display face or the substitute ever changes — the number is
-   a property of those fonts, not of this layout. */
-.done-amt{display:inline-block;font-family:var(--f-bear);font-size:34px;line-height:1;
-  margin-top:14px;padding:13px 18px 5px;background:var(--lime);border:2px solid var(--ink);
-  font-variant-numeric:tabular-nums}
-/* Where the browser can trim the line box to the glyphs themselves, do that and
-   let the padding go back to symmetric: it is then correct for ANY tenant's
-   display face rather than tuned to the one this theme ships. The fallback
-   above stays because the browser that matters most here — WeChat's — is
-   usually many Chromium versions behind. */
-@supports (text-box: trim-both cap alphabetic){
-  .done-amt{text-box:trim-both cap alphabetic;padding:14px 18px}
-}
+.done-nm{font-family:var(--f-bear);font-size:20px;line-height:1.1;overflow-wrap:anywhere}
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
 
 /* WHAT THEY ORDERED, and it is the basket's own row with the stepper taken
@@ -879,13 +858,13 @@ img{display:block;max-width:100%}
    THE ROWS COME BACK FROM retail_order_items, which has carried a bilingual
    name per line since the order was written. Nothing is composed for this: the
    customer reads the same product name they tapped on the menu.
-   .ln, .ln-t, .ln-r and .ln-p are the basket's, reused rather than restyled —
-   a placed line and a line still in the basket are the same line, and two
-   layouts for it would be two answers to the same question.
-   LEFT-ALIGNED INSIDE A CENTRED SCREEN. .done centres everything, which is
-   right for a number somebody calls across a room and wrong for a column of
-   names and prices: a ragged centre cannot be read down. */
-.done-it{text-align:left;margin-top:18px}
+   .ln, .ln-t, .ln-r and .ln-p ARE the basket's classes, but a placed line is
+   laid out differently from one still in the basket and the difference is not
+   an inconsistency — see .done-it .ln below. The basket stacks its name over
+   its controls to make room for a stepper; a placed line has no stepper, so it
+   reads as one row. Same classes, one rule apiece, keyed on .done-it.
+   LEFT-ALIGNED, like the rest of .done: a column of names and prices cannot be
+   read down a ragged centre. */
 /* The quantity, where the stepper used to be. Olive and quiet, because on a
    placed order it states a fact rather than offering a control. */
 .ln-q{flex:none;font-variant-numeric:tabular-nums;font-size:14px;color:var(--olive)}
@@ -906,7 +885,7 @@ img{display:block;max-width:100%}
 .cx-go{margin-top:12px;width:100%;border:2px solid var(--ink);background:var(--oat);
   color:var(--ink);padding:11px;font:inherit;font-family:var(--f-bear);font-size:15px;
   cursor:pointer;-webkit-tap-highlight-color:transparent}
-.done-o{font-size:12px;color:var(--olive);margin-top:14px;
+.done-o{font-size:12px;color:var(--olive);margin-top:4px;
   font-variant-numeric:tabular-nums}
 
 /* THE WAY OFF THIS PAGE, and it is a box rather than a second underlined line.
@@ -915,13 +894,144 @@ img{display:block;max-width:100%}
    the whole thing. The cancel below it is an underlined olive link, and a
    BACK that looked the same would put "leave this page" and "destroy this
    order" in one visual register a thumb cannot tell apart — so this one is
-   bordered, ink on oat, and sits ABOVE the cancel: the safe way out first, the
-   destructive one last and still behind its own disclosure. */
+   bordered, ink on oat, and the cancel stays an underlined olive link behind
+   its own disclosure.
+   THE ORDER OF THE TWO IS INVERTED ON THE ORDER PAGE as of the regroup below,
+   and deliberately: Back is pinned to a rail at the foot of the screen, so the
+   cancel now comes FIRST in reading order and Back last. What v4.157 was
+   protecting is the register, which is unchanged, and the distance between the
+   two, which is larger — the destructive control is further from the resting
+   thumb than it was when it sat immediately under a centred Back. */
 .bk{display:inline-block;margin-top:20px;border:2px solid var(--ink);
   background:var(--oat);color:var(--ink);text-decoration:none;
   padding:11px 22px;font-family:var(--f-bear);font-size:15px;
   -webkit-tap-highlight-color:transparent}
 .bk .cv{color:var(--olive);margin-right:6px}
+
+/* ── THE ORDER PAGE, REGROUPED ──────────────────────────────────────────
+   Reported by Ash, 2026-09-08, from a phone: "right now its not great
+   alignment and use of space on the screen."
+
+   IT WAS SEVEN CENTRED THINGS AND A HOLE. Number, name, status, lines, total,
+   order code and Back were centred one under another, so nothing on the screen
+   had a rank except by type size; the item row spent a whole line putting a
+   quantity at the far left and a price at the far right with three hundred
+   pixels of nothing between them; the total floated in a box that lined up
+   with neither; and the last 40% of the phone was bare oat with the only way
+   out adrift in the middle of it.
+
+   THE FIX IS GROUPING, NOT RESTYLING. Every colour, face, border and string
+   below is already on this page. Three blocks, each with one left edge — who
+   the order is for, what is in it, what it comes to — and a rail at the bottom
+   that gives the page a floor.
+
+   .ordp IS THE PAGE'S OWN FURNITURE AND NOTHING ELSE — the full-height column,
+   the rail at the foot, the tone the status carries. Everything about the
+   BLOCK itself lives on .done above, where all three surfaces that draw a
+   placed order can reach it.
+   IT DID NOT START THAT WAY, AND THE CORRECTION IS THE RECORD. v4.162 scoped
+   the whole treatment here, leaving the done sheet and the WeChat screen on the
+   old centred column with the old stacked rows — named at the time as a
+   divergence that ought to be closed. It was reported from a phone the same
+   day, against the done sheet, in the same words as the first report: "the
+   quantity still not in the same line." One order drawn three ways is one
+   screen, and a rule that only reaches one of them is half a rule. */
+.ordp{display:flex;flex-direction:column;min-height:100vh}
+/* dvh where it exists: on a phone 100vh is the chrome-less height, so the rail
+   would sit below the fold until the address bar hid itself. WeChat's Chromium
+   runs several versions behind, so vh stays as the floor and dvh is the
+   improvement rather than the requirement. */
+@supports (height:100dvh){.ordp{min-height:100dvh}}
+.ordp .done{flex:1}
+
+/* WHO THE ORDER IS FOR. The number keeps all 76px of it — the whole of what
+   happens next is somebody calling it across a room — but it stops being the
+   first of three centred lines and becomes the left edge everything below
+   aligns to. The name and the order reference sit beside it, and the block
+   closes with the same 2px rule the rest of the page is drawn in.
+   THE ORDER CODE COMES UP HERE from below the total, where it was stranded
+   between the amount and a button. It identifies the order, so it belongs with
+   the rest of the order's identity rather than in the middle of the money. */
+.done-hd{display:flex;align-items:flex-end;gap:14px;
+  padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.done-who{flex:1;min-width:0;padding-bottom:4px}
+
+/* THE STATUS IS A CHIP, not a third line of display type. It is the one thing
+   on this screen that changes between visits, and a bordered box is how the
+   rest of this page marks something that stands on its own.
+
+   AND THE ACCENT NOW MEANS ONE THING. Lime is what the customer still has to
+   act on. It was painted on the total in every state alike, so a CANCELLED
+   order showed the same bright figure as one still waiting to be paid — the
+   page telling somebody who owes nothing to walk to a till. The chip and the
+   total now take their tone from one class on the wrapper, so the two can
+   never disagree about whether money is owed:
+     (none)  lime   still to hand over at the counter
+     .paid   ink    settled — the ink chip the order list already wears
+     .void   olive  cancelled: nothing owed, so nothing calls */
+.done-h{display:inline-block;margin-top:16px;padding:7px 13px;
+  border:2px solid var(--ink);background:var(--lime);
+  font-family:var(--f-bear);font-size:15px;line-height:1.1}
+/* #payOk IS the paid face — it is what the WeChat screen reveals when the
+   charge lands — so it carries the settled tone by name. The order page
+   keeps its tone on the wrapper because its .done element must stay exactly
+   div class="done" and nothing else: three checks find the block by those
+   bytes. */
+.ordp.paid .done-h,#payOk .done-h{background:var(--ink);color:var(--oat);border-color:var(--ink)}
+.ordp.void .done-h{background:transparent;color:var(--olive);border-color:var(--olive)}
+
+/* ONE ROW PER LINE. The row this page borrows from the basket stacks the name
+   over the quantity because a BASKET needs that width for a stepper; a placed
+   order has no stepper, and the second line was carrying a quantity and a
+   price at opposite edges of the phone with nothing in between.
+   Name flexes, quantity and price travel together at the right edge, which is
+   where a receipt puts them. A long name in either language still wraps inside
+   its own column — .ln-t keeps the min-width:0 it is given above and the pair
+   on the right is flex:none, so the price cannot be pushed off the edge. */
+.done-it{text-align:left;margin-top:20px;border-top:1px solid rgba(0,0,0,.14)}
+.done-it .ln{flex-direction:row;align-items:baseline;gap:12px;padding:11px 0;
+  border-bottom:1px solid rgba(0,0,0,.14)}
+.done-it .ln-t{flex:1}
+.done-it .ln-r{flex:none;gap:10px}
+.done-it .ln-p{min-width:62px;text-align:right}
+
+/* THE TOTAL KEEPS ITS SIZE AND GAINS ITS EDGES AND A LABEL. Still the
+   second-biggest thing on the phone and still boxed in the accent where money
+   is owed — but it now spans the column it totals instead of floating in the
+   middle of it, and it says what it is. On a one-line order the customer was
+   shown the same figure twice with nothing telling them which was which.
+   THE LABEL IS THE BASKET'S OWN PAIR, taken from the sheet footer this same
+   file draws a hundred lines up. Nothing is composed: the figure quoted before
+   they submitted and the figure they come back to are now the same labelled
+   row, which is the whole reason for reusing it rather than minting a word. */
+.done-amt{display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;width:100%;margin-top:18px;padding:13px 16px 11px;
+  font-family:var(--f-bear);font-size:34px;line-height:1;
+  background:var(--lime);border:2px solid var(--ink);
+  font-variant-numeric:tabular-nums}
+.ordp.paid .done-amt,#payOk .done-amt{background:transparent}
+.ordp.void .done-amt{background:transparent;border-color:var(--olive);color:var(--olive)}
+.done-amt-l{font-size:15px;line-height:1}
+/* The cap-trim above is written for a figure alone in its box. Here the box
+   holds a label as well, so the trim moves onto the figure itself and the box
+   goes back to symmetric padding. */
+@supports (text-box: trim-both cap alphabetic){
+  .done-amt{padding:14px 16px}
+  .done-amt-v{text-box:trim-both cap alphabetic}
+}
+
+/* THE PAGE GETS A FLOOR. Back moves out of the middle of an empty half-screen
+   into a rail at the bottom — flex:none, a 2px top rule, the safe-area padding
+   — which is the rail the product sheet already ends with. The content above
+   it can then be as short as a one-line order without the page appearing to
+   simply run out.
+   THE CANCEL DOES NOT COME WITH IT, AND THE GAP IS THE POINT. It stays up
+   under the total, the smallest thing on the screen and behind its own
+   disclosure; the band of oat between the two is what keeps the destructive
+   control out of reach of the thumb resting on the safe one. */
+.ord-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  border-top:2px solid var(--ink);background:var(--oat)}
+.ordp .bk{display:block;margin-top:0;text-align:center;padding:13px 22px}
 
 /* Tapping a rail category jumps to its section, and the bar is sticky over the
    top of wherever that lands — so without this the heading the customer just
@@ -1457,9 +1567,22 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(mine[i].u!==e0.u)nx.push(mine[i])}mine=nx;` +
   `try{localStorage.setItem(OKEY,JSON.stringify(mine))}catch(e){/* a phone that cannot remember still shows the bar for this visit; mine is set in memory above */}}` +
   `paintBar();` +
-  `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
-  `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  // ONE BLOCK WITH ONE LEFT EDGE, the same one the order page draws: the number
+  // that will be called, the name it will be called with, and the reference
+  // that identifies the order, rather than three centred lines and the
+  // reference stranded at the bottom under the money.
+  `body.innerHTML='<div class="done"><div class="done-hd">'+` +
+  `'<div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
+  `'<div class="done-who"><div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  `'</div></div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
+  // THE SUB-LINE MOVES ABOVE THE AMOUNT, which is where the order page has
+  // always had it. It used to sit below, and the note that stood here said the
+  // difference was harmless because what had to agree was the lines-then-figure
+  // reading. With the two surfaces now drawing the same block, "harmless" is
+  // not a reason to keep them different.
+  `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
   // WHAT THEY ORDERED, IMMEDIATELY ABOVE THE AMOUNT. The lines and then what
   // they come to — the order the basket they just closed read in, and the order
   // a receipt reads in. A total printed above the things it totals asks the
@@ -1475,9 +1598,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // bar use, so the number they were shown before submitting is the number
   // they are shown after it — a second formatter here could round differently
   // and would be read as a price that changed at the till.
-  `'<div class="done-amt">'+money(d.total)+'</div>'+` +
-  `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
-  `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  `'<div class="done-amt"><span class="done-amt-l">'+bi(${JSON.stringify('Total')},${JSON.stringify('合计')})+'</span>'+` +
+  `'<span class="done-amt-v">'+money(d.total)+'</span></div>'+` +
   // NO LINK HERE. The way back is the bar, which appears the moment this sheet
   // closes and carries the same number and amount — one route to the order
   // page, not two. A link here would also have needed a label, and the only
@@ -2413,18 +2535,41 @@ function orderLines(orderId, cur) {
     `</div>`).join('') + `</div>`;
 }
 
-function payScreen(req, res, { status, order, main, extra }) {
+function payScreen(req, res, { status, order, main, extra, shop }) {
   const { vars, fonts } = themeBits();
   const lang = req.query.lang === 'cn' ? 'cn' : 'en';
   const cur = normalizeCurrency(cfg('currency', null));
+  // THE TONE IS READ OFF THE ORDER, not passed in beside it. A caller that
+  // chose the screen and the colour separately could hand the paid screen the
+  // colour that means "money is still owed", which is the exact confusion this
+  // class exists to end. One source, and it is the row itself.
+  const tone = order.status === 'paid' ? ' paid'
+    : order.status === 'cancelled' ? ' void' : '';
+  // The bar carries the shop's name here for the same reason it carries it on
+  // the menu: it was an empty band with a 2px rule under it and one small
+  // toggle at the far left, and a customer holding an order wants to know
+  // whose counter it is at. shopName() is the menu's own, so no name is
+  // written into this file.
+  const name = shopName(shop);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(status).type('html').send(shell({
     lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
     title: brandText(), vars, faces: fontFaces(fonts),
-    body: `<div class="bar">${toggle(lang)}</div>` +
+    body: `<div class="ordp${tone}">` +
+      `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>` +
       `<div class="done">` +
-        `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
-        `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+        // WHO THE ORDER IS FOR, in one block with one left edge: the number
+        // that will be called, the name it will be called with, and the
+        // reference that identifies it if anything has to be looked up. The
+        // order code used to sit below the total, between the amount and a
+        // button, which is the one place on the screen it explains nothing.
+        `<div class="done-hd">` +
+          `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
+          `<div class="done-who">` +
+            `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+            `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+          `</div>` +
+        `</div>` +
         main +
         // THE LINES, THEN THE TOTAL — the order the basket already reads in,
         // and the order a receipt reads in. Between the status and the amount
@@ -2432,15 +2577,25 @@ function payScreen(req, res, { status, order, main, extra }) {
         // up to: a total printed above the things it totals asks the customer
         // to read the screen backwards.
         orderLines(order.id, cur) +
-        // The amount, in the same box and the same formatter the done sheet
-        // uses, so the figure the customer was shown when they ordered is the
-        // figure they find when they come back to it.
-        `<div class="done-amt">${esc(money(order.total, cur))}</div>` +
-        `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
-        // The safe way out comes BEFORE the destructive one, and the cancel
-        // stays last and behind its own disclosure.
-        backLink(req) +
+        // The amount, in the same formatter the done sheet uses, so the figure
+        // the customer was shown when they ordered is the figure they find
+        // when they come back to it — and now LABELLED with the pair the
+        // basket footer already draws, because on a one-line order the same
+        // number appeared twice with nothing saying which was the line and
+        // which was the total.
+        `<div class="done-amt">` +
+          `<span class="done-amt-l">${bi('Total', '合计')}</span>` +
+          `<span class="done-amt-v">${esc(money(order.total, cur))}</span>` +
+        `</div>` +
+        // The cancel stays here, under the total and behind its own
+        // disclosure: away from the bottom of the screen, which is where the
+        // thumb rests and where the safe way out now lives.
         (extra || '') +
+      `</div>` +
+      // THE WAY OUT, IN A RAIL AT THE FOOT OF THE PAGE rather than adrift in
+      // the middle of it. It is still the only control down there, and it is
+      // still the safe one.
+      `<div class="ord-f">${backLink(req)}</div>` +
       `</div>`,
   }));
 }
@@ -2573,11 +2728,11 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     return notFoundPage(req, res);
   }
 
-  if (order.status === 'paid') return payScreen(req, res, { status: 200, order, main: PAID_MAIN });
+  if (order.status === 'paid') return payScreen(req, res, { status: 200, order, main: PAID_MAIN, shop });
   // A cancelled order still answers here rather than 404ing. The customer who
   // just cancelled it lands on this page, and "the order does not exist" is the
   // wrong thing to tell somebody about an order they placed ten minutes ago.
-  if (order.status === 'cancelled') return payScreen(req, res, { status: 200, order, main: CANCELLED_MAIN });
+  if (order.status === 'cancelled') return payScreen(req, res, { status: 200, order, main: CANCELLED_MAIN, shop });
 
   /* CANCELLING, and why it is a <details> and a plain form rather than a
      confirm() and a fetch.
@@ -2609,7 +2764,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     `</details>`;
 
   const counter = () => payScreen(req, res, {
-    status: 200, order, main: COUNTER_MAIN,
+    status: 200, order, main: COUNTER_MAIN, shop,
     // Offered only while the order is still unpaid and still this shop's to
     // cancel. Past that the money has moved or the kitchen has it, and the
     // answer is a person at the counter rather than a button here.
@@ -2704,12 +2859,30 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   // blocks are one document and only CSS chooses between them.
   const lines = orderLines(order.id, normalizeCurrency(cfg('currency', null)));
 
-  const paid = `<div class="done" id="payOk" hidden>` +
+  // THE SAME BLOCK THE OTHER TWO SURFACES DRAW — see the .done rules. One order
+  // rendered three ways is one screen, and this face was the last of the three
+  // still on the old centred column.
+  const head = `<div class="done-hd">` +
     `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
-    `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+    `<div class="done-who">` +
+      `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+      `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    `</div>` +
+  `</div>`;
+  // AND IT SAYS WHAT IS BEING CHARGED. This screen has shown the lines since
+  // v4.160 and never the figure they come to — on the one page whose whole
+  // purpose is a customer about to hand money over. Same labelled row as the
+  // order page, same formatter, so the two cannot disagree.
+  const amount = `<div class="done-amt">` +
+    `<span class="done-amt-l">${bi('Total', '合计')}</span>` +
+    `<span class="done-amt-v">${esc(money(order.total, normalizeCurrency(cfg('currency', null))))}</span>` +
+  `</div>`;
+
+  const paid = `<div class="done" id="payOk" hidden>` +
+    head +
     PAID_MAIN +
     lines +
-    `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    amount +
     // BOTH FACES OF THIS PAGE GET THE WAY BACK, not only the one that renders
     // first. They are two blocks in one document with CSS choosing between
     // them, so a link on the waiting screen alone would vanish at the moment
@@ -2744,11 +2917,10 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     title: brandText(), vars, faces: fontFaces(fonts),
     body: `<div class="bar">${toggle(lang)}</div>` +
       `<div class="done" id="payWait">` +
-        `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
-        `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+        head +
         COUNTER_MAIN +
         lines +
-        `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+        amount +
         backLink(req) +
       `</div>` + paid +
       `<script>${script}</script>`,

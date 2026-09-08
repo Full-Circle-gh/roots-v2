@@ -5911,7 +5911,7 @@ function loadReceive(poId){
     /* EVERY LINE IS CONFIRMED ONE AT A TIME. `on` is the confirmation: false
        means nobody has said anything about this product yet, and a line nobody
        has spoken for is NOT SENT — the server leaves qty_received null and the
-       product stays outstanding for the van that brings it (recvSave).
+       product stays outstanding for the van that brings it (recvFlush).
        A whole order arriving at once is still one tap: "All arrived" on the
        supplier header. What the old screen could not say at all is the case
        this exists for — one product of twelve turned up.
@@ -7747,19 +7747,27 @@ function xfrConfirm(){
    THE LIST IS NOT THE DOT. It shows what the kitchen has finished, seen or
    not, because it is a record — "what did they make today" has to still answer
    the day after somebody glanced at it. Only the COUNT is unseen-only, and
-   that count is the one the dot already polls. */
+   that count is the one the dot already polls.
+
+   IT LISTS PRODUCTS, NOT REQUEST NUMBERS (§69). It listed requests until
+   2026-09-08 and inherited that grain's bug with it: a request with one of
+   three products made never reached 'prepared', so the jar already on the shelf
+   appeared on no screen at all. The fire that opens this list now counts lines
+   and names them, and a list of request numbers under a row naming products
+   would be the two-surfaces-disagreeing failure lib/kitchen-ready.js exists to
+   prevent. The request is still one tap away, on the row itself. */
 function loadKr(force){
   const k=state.kr;
   if(k.tried&&!force) return;
   k.tried=true;
-  /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
-     defined for this direction as "prepared" — for warehouse→kitchen, prepared
-     IS the closure — and the endpoint drops archived rows from every tab. The
-     status filter is belt and braces for a row that reached 'delivered' under
-     an older client. */
-  api('/api/restock?to_role=kitchen&tab=history').then(j=>{
-    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
-    k.list=rows.filter(o=>o.status==='prepared');
+  /* THE CLAUSE'S OWN ENDPOINT, rather than the queue's list route filtered
+     client-side. `?to_role=kitchen&tab=history` returns ORDERS, and there is no
+     order-shaped answer to "which products has the kitchen finished" — a
+     request with two of three lines made belongs on this screen twice over and
+     in that list not at all. routes/restock.js kitchen-ready/lines reads the
+     same clause the dot and the fire read, minus the two seen arms. */
+  api('/api/restock/kitchen-ready/lines').then(j=>{
+    k.list=(j&&j.data)||[];
     k.err=''; render(); krMarkSeen();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
@@ -7769,6 +7777,21 @@ function loadKr(force){
   });
 }
 function krUnseen(){ return (state.kr.list||[]).filter(o=>!o.seen_at); }
+function krLineName(it){
+  return (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—';
+}
+/* WHICH LINE IS ACTUALLY FINISHED (§69). This screen is reached from a fire
+   that counts LINES, so it now opens on requests that are only partly made — a
+   state it could never be in when only whole requests reached it, and one where
+   "the kitchen has already put this on the shelf" would be a lie about two
+   thirds of the page. Reads the line's own status and falls back to the
+   request's, the same pair lib/kitchen-ready.js reads and for the same reason:
+   a line written before §61, or on a tenant that never ran its backfill,
+   carries no status of its own and the rollup is the only true thing known. */
+function krLineMade(it,o){
+  const s=(it&&it.status)||'', os=(o&&o.status)||'';
+  return s==='prepared'||s==='delivered'||os==='prepared'||os==='delivered';
+}
 /* READING IT IS THE ACKNOWLEDGEMENT, and this is the whole of it. No button and
    no confirmation.
 
@@ -7790,7 +7813,9 @@ function krMarkSeen(){
   const ids=krUnseen().map(o=>o.id);
   if(!ids.length) return;
   k.seen=true;
-  apiWrite('/api/restock/kitchen-ready/seen',{ids:ids}).then(()=>{
+  // `item_ids`, because the ids are lines now (§69). The endpoint still honours
+  // the old `ids` (requests) for a page cached before this deploy.
+  apiWrite('/api/restock/kitchen-ready/seen',{item_ids:ids}).then(()=>{
     const now=new Date().toISOString();
     (k.list||[]).forEach(o=>{ if(ids.indexOf(o.id)>=0) o.seen_at=now; });
     // The dot behind this screen goes out on the way back rather than on the
@@ -8533,34 +8558,49 @@ function screenKitchenReady(){
       <button class="btn2" style="width:auto;padding:11px 26px;margin-top:16px" onclick="APP.cmd('krList')">${T('Back','返回')}</button></div>`;
     const o=k.order||{};
     const items=(o.items||[]).filter(it=>Number(it.qty_requested||0)>0);
+    const made=items.filter(it=>krLineMade(it,o));
     const p=krPurpose(o);
+    /* A NUMERAL RATHER THAN A SENTENCE about partial progress — "1/3 made" is
+       the same three characters in both languages and needs no clause composed
+       for the half that is still cooking. */
+    const tally=made.length+'/'+items.length+' '+T('made','完成');
     return `<div style="padding:4px 16px 12px">
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('krList')">${T('Ready','已完成')}</button>
       </div>
       <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
-      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${escAttr(tally)}${p?' · '+escAttr(p):''}</div>
       <div>${items.map(it=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
         <span class="num" style="min-width:44px;font-size:18px;font-weight:500">${Number(it.qty_requested||0)}</span>
-        <span style="flex:1;min-width:0;font-size:15px">${escAttr(
-          (LANG==='en'?(it.product_name||it.product_cn):(it.product_cn||it.product_name))||it.sku||'—')}</span>
+        <span style="flex:1;min-width:0;font-size:15px">${escAttr(krLineName(it))}</span>
+        ${krLineMade(it,o)
+          ? `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`
+          : `<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('To make','待制作')}</span>`}
       </div>`).join('')}</div>
-      <div style="padding:16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
-        T('The kitchen has already put this on the shelf. Nothing to collect.','厨房已将其上架，无需领取。')}</div>`;
+      ${made.length===items.length
+        ? `<div style="padding:16px;font-size:13px;color:var(--text-secondary);line-height:1.55">${
+            T('The kitchen has already put this on the shelf. Nothing to collect.','厨房已将其上架，无需领取。')}</div>`
+        : ''}`;
   }
   if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!k.list.length) return nothingYet(T('Nothing finished yet','暂无已完成'),
     T('What the kitchen makes for you shows up here.','厨房为你制作完成的申请会显示在这里。'));
+  /* THE PRODUCT LEADS AND THE REQUEST FOLLOWS IT — the same inversion the fire
+     that opens this screen makes, and for the same reason: the name is what the
+     warehouse came to find out and the number is how to go and check. The
+     quantity sits where the queue screen puts it, so a row here and a row there
+     read the same way round. Tapping still opens the whole request. */
   return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
       T(k.list.length+' made · already on the shelf',k.list.length+' 项已完成 · 已上架')}</div>
-    <div>${k.list.map(o=>{
-      const p=krPurpose(o);
+    <div>${k.list.map(it=>{
+      const p=krPurpose(it);
       return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
-        onclick="APP.cmd('krOpen',${o.id})">
+        onclick="APP.cmd('krOpen',${Number(it.restock_id)})">
+        <span class="num" style="min-width:44px;font-size:18px;font-weight:500">${Number(it.qty_requested||0)}</span>
         <span style="flex:1;min-width:0">
-          <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(krLineName(it))}</span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary)">${escAttr(it.rs_number||('#'+it.restock_id))}${p?' · '+escAttr(p):''}</span>
         </span>
-        ${!o.seen_at?`<span style="width:8px;height:8px;border-radius:99px;background:var(--sage-ink);flex:none"></span>`:''}
+        ${!it.seen_at?`<span style="width:8px;height:8px;border-radius:99px;background:var(--sage-ink);flex:none"></span>`:''}
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
       </button>`;
     }).join('')}</div>`;
@@ -9900,9 +9940,21 @@ function opsFires(){
      Gated on the row it points at, exactly as the inbox count is — a fire must
      never promise work behind a door this operator cannot open. The server
      applies the same gate again (lib/kitchen-ready.js) and simply sends no key. */
+  /* IT COUNTS PRODUCTS AND IT NAMES THEM (§69) — the same change the desktop
+     row carries, for the same report, and the phone is the surface it was made
+     from. `meta` non-empty also means `age:false`, so the row prints the names
+     instead of "oldest 4h" while still SORTING on the age it was given: the
+     clock has not been lost, it has been spent on the fact that saves the trip.
+     Two names then a tail, and the tail counts off the total rather than the
+     8-line preview the server sends. */
   if(c('kitchen_ready')&&canRoute('kitchenready')){
+    const krIt=items('kitchen_ready');
+    const krNm=krIt.map(x=>(LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||'').filter(Boolean).slice(0,2);
+    const krRest=Math.max(0,c('kitchen_ready')-krNm.length);
     add(true,'amber','circle-check',T('Ready from the kitchen','厨房已完成'),
-      c('kitchen_ready'),items('kitchen_ready'),'',"APP.cmd('push','kitchenready')");
+      c('kitchen_ready'),krIt,
+      krNm.length?krNm.join(T(', ','，'))+(krRest>0?' +'+krRest+' '+T('more','更多'):''):'',
+      "APP.cmd('push','kitchenready')");
   }
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
