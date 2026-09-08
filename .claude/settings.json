@@ -6,6 +6,9 @@
       "mcp__Claude_Code_Remote__get_session",
       "mcp__Claude_Code_Remote__list_repos",
       "mcp__Claude_Code_Remote__list_environments"
+    ],
+    "deny": [
+      "mcp__Claude_Code_Remote__send_later"
     ]
   }
 }
