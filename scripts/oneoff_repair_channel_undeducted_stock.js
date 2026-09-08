@@ -40,6 +40,10 @@
  *     sets the number to what is physically there and absorbs the miss. From
  *     that moment the figure is true, and deducting the old sale would make it
  *     wrong in the other direction. See RECOUNT_REASONS below.
+ *   • ANY PRODUCT WHOSE SHELF CANNOT ABSORB THE DEDUCTION. If the count is
+ *     already at or below what these lines want taken off, the over-count is no
+ *     longer identifiable in it, and writing a negative today would describe
+ *     this morning rather than a sale months ago.
  *
  * ── WHAT IT WRITES, per repaired line ─────────────────────────────────────
  *   retail_order_items   product_id, name_cn, name_en, sku  ← the line stops
@@ -247,22 +251,47 @@ if (net.size) {
   }
 }
 
-// A shelf that would go below zero means this repair is not the whole story for
-// that product — refuse rather than write a number nobody has looked at.
-let negative = false;
+// ── A shelf that cannot absorb the deduction ────────────────────────────────
+// Measured on the live database (oneoff runs 34235000551 and 34235682616): the
+// store-2 July lines want 9 units off a shelf showing 0. No 'adjust' re-count
+// stands between the sale and today, so the gate above lets them through, and
+// they would drive the count to −9.
+//
+// That number would be a lie about today. §39 rulings 1 and 7 are right that a
+// negative is the honest record of stock sold that was never held — but they are
+// about a movement happening NOW. A backfill writing −9 in September, for sales
+// in July, on a product that has been out of stock and traded through since,
+// tells the operator they are 9 short this morning. They are not. The over-count
+// this script exists to remove is no longer identifiable in that number.
+//
+// So the product is skipped, loudly, and the rest of the run proceeds. Refusing
+// the WHOLE run — which is what this did until now — let twelve unfixable July
+// lines block the handful of recent ones that are still exactly fixable.
+const unabsorbed = [];
 for (const [k, units] of net) {
   const [storeId, productId] = k.split(':');
   const cur = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, productId);
-  if ((cur ? cur.physical_qty : 0) - units < 0) negative = true;
+  const have = cur ? cur.physical_qty : 0;
+  if (have - units < 0) unabsorbed.push({ key: k, storeId, productId, have, units });
 }
-if (negative) {
-  console.error('\nREFUSING: at least one product would go below zero.');
-  console.error('');
-  console.error('A shelf that cannot absorb the deduction is saying the over-count is no longer');
-  console.error('there to remove — most likely it was already re-counted, by a path this script');
-  console.error('does not recognise as a re-count. Deducting anyway would invent a shortfall');
-  console.error('rather than correct one. Look at those products before going further.');
-  process.exit(1);
+if (unabsorbed.length) {
+  const drop = new Set(unabsorbed.map(u => u.key));
+  console.log('\n' + '='.repeat(78));
+  console.log(`SHELF CANNOT ABSORB IT — ${unabsorbed.length} product(s), and their lines are skipped\n`);
+  console.log('  These sales really did go undeducted. But the shelf is at or below what they');
+  console.log('  want taken off, so the over-count is no longer identifiable in the number, and');
+  console.log('  writing a negative today would describe this morning rather than the sale.\n');
+  for (const u of unabsorbed) {
+    const p = db.prepare('SELECT name_en FROM store_products WHERE id = ?').get(u.productId);
+    const lines = plan.filter(x => `${x.l.store_id}:${x.product.id}` === u.key);
+    console.log(`  store ${u.storeId} #${u.productId} ${p ? p.name_en : '?'}: shelf ${u.have}, lines want ${u.units}`);
+    for (const x of lines) console.log(`    ${x.l.order_no} "${x.name}" x${x.l.qty}  placed ${x.l.placed_at}`);
+    net.delete(u.key);
+  }
+  for (let i = plan.length - 1; i >= 0; i--) {
+    if (drop.has(`${plan[i].l.store_id}:${plan[i].product.id}`)) plan.splice(i, 1);
+  }
+  console.log(`\n  ${plan.length} line(s) still to repair after this.`);
 }
 
 // ── Settled by a later re-count ──────────────────────────────────────────────
