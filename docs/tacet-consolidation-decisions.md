@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.158
+# Tacet shared-core consolidation — decisions record, v4.159
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.159 — **THE ROLE'S DASHBOARD CARDS REACH THE PHONE, AND THE ONE CARD THAT NEVER HAD A MONEY GATE GETS ONE. §67 addendum records it.** Reported with a screenshot of each side: the Roles editor for Stockroom — *"Has a dashboard"* ticked, layout **The full view**, and **Today, Customers and Unhandled orders UNTICKED** — and the phone's Home underneath it showing **Today: Revenue ¥732, Avg. order ¥222.45, New customers 10**, with *Also today* beneath it. **THE DATA WAS ON THE WIRE THE WHOLE TIME AND THE PHONE THREW IT AWAY.** `/api/backend/me` has shipped `dashboardCards` since the field existed (`routes/backend-auth.js`), and the DESKTOP has honoured it since then (`dashCardGate`, 03-dashboard.js); `public/m.html` read the same endpoint, ignored the key, and drew every card regardless. **The screen was contradicting its own control**: the Roles editor says, in its own words, that the dashboard is *"this role's first screen on desktop and the Home tab on the phone"* and that *"the layout and cards below decide what is on it"* — on the phone they decided nothing. **FOUR OF THE TEN CATALOGUE KEYS HAVE A SECTION OF THEIR OWN ON HOME and are now gated on exactly the key their desktop twin carries**: `recap` → *While you were away*, `needs` → *Needs you*, `orders` → *Today* (the desktop block headed *Today · 今日*), `customers` → *Also today* (the desktop *Customers* card, whose contents are Sessions / Conversion / Returning). **The other six — `unhandled`, `inventory`, `incoming`, `onroad`, `ready`, `delivery` — are desktop cards with NO phone twin**, because the phone surfaces those states as Needs-you fires and Quick actions; **the divergence is named rather than papered over**, and inventing a section on Home to hold a tick would be worse than the gap. **null STAYS "no override" on both surfaces** — a role whose owner never opened that field must not lose every card on the phone. **THE MONEY HALF IS WORSE THAN THE CARD HALF AND WAS FOUND WITH IT.** *Today*'s twin is hidden for the `warehouse`, `dispatch` and `customer-service` boards by `retail-admin.css`; on the phone that card carried **no money gate at all** — not even the `recapNoMoney()` one its own immediate neighbour `vitalsBlock()` already had — so a stock or delivery role read the shop's takings off the FIRST SCREEN THE APP OPENS. It now carries both gates, **in the desktop's order of precedence**: an owner's card override cannot switch the money back ON for a board that hides it (over there the override CLEARS an inline style and the board's CSS rule still wins), so either gate hiding is enough. **THE REPORTING ACCOUNT'S LAYOUT IS `default` ("The full view"), NOT the warehouse board** — which is why neither `recapNoMoney()` nor the `body.pos-warehouse` rules were ever going to save it, and why the card override was the only thing that could. **Verified in Chromium** through the shared `m-probe` harness, four cases: no override leaves Home exactly as it was; the reporting role's own array takes *Today* and *Also today* away with no revenue left on the screen and Quick actions still in place; an unticked `needs` takes the fires with it; and the warehouse board with no override at all now hides the money too. `scripts/test_backend_nav_parity.js` gains §4 (fast shard, 56 assertions total), and the two load-bearing ones were checked to fail with their fix reverted. No Chinese was composed — no string was added. Code, tests and docs; no schema, no migration, no capability grant changed.
 
 2026-09-08 · v4.158 — **§68 ADDED: A VARIANT FAMILY IS EDITED FROM THE SHEET ITS CARD OPENS, AND SAVE WRITES THE FAMILY.** Reported by Ash from the phone with the sheet open on `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*. **The catalogue collapses a family into one card — correctly — and then opened only its representative**, `members.find(m => m._id === p.gid) || members[0]`, whichever size happens to own the group. The other sizes were printed along the card's second line as TEXT, and were reachable from nowhere on the phone: not the card, not the sheet, not search, which matches the same collapsed units. A price or a count on any size but one could only be changed from a desktop. **The sheet carries the family now** — a chip row under the quick-edit note, one chip per size, the marked one being the size on screen. **Switching writes nothing, and THEREFORE Save writes the family**: once the sheet moves between sizes freely, a Save that took only what was in front of the operator would drop the rest silently, so pending edits are held per product id and Save walks every size and writes the ones that changed. Save-on-switch and warn-on-switch are both recorded as rejected, as is turning the card's size line into three ~40px targets. **A failure part-way through a family no longer claims nothing changed** — the count of writes that landed picks the message, and the partial one says the rest can be pressed again; one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.34. **And one bug it uncovered, fixed in the same pass because it is the same box:** `render()` rebuilds the price `<input>` on every paint, so a price typed and then followed by a tap on a stock stepper was painted back to the stored figure — no variants required, and shipping for as long as the sheet has had both controls.
 
@@ -6890,6 +6892,74 @@ above is correct under either answer, which is why it did not wait on one.
    for a leak nobody has reported. Named so the next reader knows the level was chosen, not missed.
 2. **`opsFires()` and `dashCardWants()` still gate the dashboard's fires differently on the two surfaces** — §66's own
    "deliberately NOT fixed" list already carries this, and nothing here touched it.
+
+### §67 addendum — the role's Dashboard cards reach the phone, and Today gets the money gate it never had (decided 2026-09-08)
+
+§67 above closed the desktop's half of "no syncing between what the warehouse account sees on mobile compared to what it
+sees on pc". The report continued, with a screenshot of each side — the Roles editor for Stockroom, and the phone's Home
+under it — and the second half is the mirror image of the first: **where the rail had rules the phone already had, Home
+had none of a rule the desktop already had.**
+
+**The setup, as configured.** *Has a dashboard* ticked. Layout **The full view**. Cards: *Needs you*, *While you were
+away*, *Inventory*, *On the way / Drafts*, *On the road*, *Ready to hand off* and *Delivery* ticked — **Today**,
+**Customers** and **Unhandled orders** unticked.
+
+**What the phone showed.** *Today*: Revenue (all channels) ¥732, Orders 5, Avg. order ¥222.45, New customers 10. And
+*Also today*: Sessions, Conversion, Returning, Refunded. Both of the cards the owner had turned off, and both of them
+the money ones.
+
+### Why it happened
+
+`/api/backend/me` has carried `dashboardCards` since the field existed, and the desktop has honoured it since then —
+`dashCardGate()` in `03-dashboard.js`, applied as an inline style so it beats the `body.pos-*` rules on specificity.
+`public/m.html` calls the same endpoint and **never read the key.** There was no gate to break; there was nothing.
+
+That is also why the *layout* half could not have saved it. `recapNoMoney()` narrows the Recap and *Also today* for the
+`warehouse`, `dispatch` and `customer_service` boards, and this role's layout is **`default`** — the full view. A board
+that is not one of those three was always going to be handed the owner's numbers.
+
+### The ruling
+
+**Four of the ten catalogue keys have a section of their own on Home, and each is gated on exactly the key its desktop
+twin carries:**
+
+| Card key | Desktop block | Phone section |
+| --- | --- | --- |
+| `recap` | *While you were away* | `recapCard()` |
+| `needs` | Needs you (full-width, outside the grid) | the fires list |
+| `orders` | *Today · 今日* | *Today* |
+| `customers` | *Customers · 客户* (New today, Sessions, Conversion, Returning) | *Also today* |
+
+**The other six — `unhandled`, `inventory`, `incoming`, `onroad`, `ready`, `delivery` — are desktop cards with no phone
+twin, and that is recorded rather than closed.** Home surfaces those states as Needs-you fires and Quick actions, not as
+cards of their own. **Rejected: inventing a section on Home for each so every tick has something to hide.** A checkbox
+that grows a card nobody asked for is a worse answer than a checkbox that governs the desktop only, and the mapping
+above says plainly which is which. The suite asserts the catalogue is still ten, so a new card cannot be added without
+someone deciding what it means on the phone.
+
+**`null` stays "no override" on both surfaces.** Every role whose owner has never opened that field resolves to null,
+and a null that hid everything would empty Home for the whole product on the deploy that shipped this.
+
+### The money half, which is worse
+
+*Today*'s desktop twin is hidden for the `warehouse`, `dispatch` and `customer-service` boards by `retail-admin.css`. On
+the phone **that card had no money gate at all** — not the card override, which did not exist, and not even the
+`recapNoMoney()` line its own immediate neighbour `vitalsBlock()` carries three lines further down. A stock or delivery
+role read the shop's takings off the first screen the app opens, on a board built to exclude them.
+
+It now carries both, **in the desktop's order of precedence: either gate hiding is enough.** An owner's card override
+cannot switch the money back ON for a board that hides it — on the desktop an allowed card has its inline display
+*cleared* rather than forced, so the board's CSS rule still wins, and the phone matches that rather than inventing a
+precedence of its own.
+
+### Recorded, and deliberately NOT fixed here
+
+1. **The layout dropdown offers "The full view" to any role**, and that is what this account is set to. Nothing here
+   changes it: which board a role opens on is the owner's call, and the card override is the control that answers it
+   per-card. Named only so the next reader knows the `default` layout was the configuration, not a fault.
+2. **Quick actions are not in the card catalogue** and are not gated by it. They are the operator's own six, chosen on
+   the handset from what their capabilities already allow, which is a different question from what an owner puts on a
+   role's board.
 
 ## §68 — A VARIANT FAMILY IS EDITED FROM THE SHEET IT COLLAPSES INTO, AND SAVE WRITES THE FAMILY
 
