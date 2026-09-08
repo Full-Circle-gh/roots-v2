@@ -579,6 +579,10 @@ const state = {
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
   trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
+  /* The role's Dashboard cards, from the Roles editor — null until /me
+     answers, and null FOREVER for a role whose owner never opened that
+     field. null means no override, exactly as on the desktop. */
+  dashCards:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   /* The operator's own Quick actions — an array of catalogue keys, null until
      the first read pulls it back off this phone (see quickKeys()), and
@@ -2228,6 +2232,8 @@ function recapSinceLabel(){
   return T('you left '+mo+'/'+da+' — '+hm, '您于'+mo+'月'+da+'日 '+hm+' 离开');
 }
 function recapCard(){
+  // Its twin on the desktop is the `recap` block — "While you were away".
+  if(!showDashCard('recap')) return '';
   loadRecap();
   const rows=recapRows();
   const workBtn=`<button onclick="APP.cmd('toggleWork')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${state.workOpen?T('Hide the work ▴','收起明细 ▴'):T('Show the work ▾','查看明细 ▾')}</button>`;
@@ -2270,8 +2276,53 @@ function recapCard(){
 
    Every cell renders a dash when there is nothing to divide, never a zero
    dressed up as a result. */
+/* WHICH CARDS THIS ROLE SEES ON HOME — the desktop's dashCardGate, for the
+   phone. state.dashCards is either null (no owner override: the board rules
+   below keep deciding, exactly as before this existed) or an explicit array an
+   owner chose in the Roles editor, and an array is AUTHORITATIVE regardless of
+   layout — the same rule 03-dashboard.js states.
+
+   Four of the ten catalogue keys have a section of their own on this screen and
+   are gated here. The other six — unhandled, inventory, incoming, onroad, ready,
+   delivery — are desktop CARDS with no phone twin: the phone surfaces those
+   states as Needs-you fires and Quick actions instead, so there is nothing for
+   a tick to hide and inventing a section to hold one would be worse than the
+   gap. That divergence is recorded rather than papered over.
+
+   Like the desktop, this only ever REMOVES: an allowed card still has to have
+   something to say before it draws. */
+function showDashCard(key){
+  return !Array.isArray(state.dashCards) || state.dashCards.indexOf(key)!==-1;
+}
+/* TODAY — revenue, orders, average order, new customers. Its twin on the desktop
+   is the `orders` block, headed "Today · 今日", and that block is hidden for the
+   warehouse, dispatch and customer-service boards by retail-admin.css. THIS CARD
+   HAD NO MONEY GATE AT ALL — not even the one its own neighbour vitalsBlock()
+   carries — so a stock or delivery role read the shop's takings off the first
+   screen the app opens, on a board built to exclude them. Both gates now, and
+   in the desktop's order of precedence: an owner's card override cannot turn
+   the money back ON for a board that hides it (over there the override CLEARS
+   an inline style and the board's CSS rule still wins), so either one hiding
+   is enough. */
+function todayBlock(kpis){
+  if(!showDashCard('orders')) return '';
+  if(recapNoMoney()) return '';
+  return `<div class="rise" style="animation-delay:.12s">
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
+        ? kpis.map(([l,v,d])=>
+        `<div style="min-width:0">
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${T(...l)}</span>
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${T(...d)}</span>`:''}</div>`).join('')
+        : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
+        `<div style="min-width:0">
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>`;
+}
 function vitalsBlock(){
   const v=state.liveVitals; if(!v) return '';
+  if(!showDashCard('customers')) return '';   // its twin is the desktop's Customers card
   if(recapNoMoney()) return '';   // same gate as the Recap: money is owner-only
   const CONV_MIN=20;
   const cell=(label,fig,sub)=>`<div style="min-width:0">
@@ -2474,7 +2525,7 @@ function screenHome(){
   return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine, controls:true})}
   <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
-    ${fires&&fires.length?`<div class="rise" style="animation-delay:.06s">
+    ${showDashCard('needs')&&fires.length?`<div class="rise" style="animation-delay:.06s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>
       <div class="list">${fires.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${a.go}">
@@ -2489,18 +2540,7 @@ function screenHome(){
           </span>
           <span class="num" style="min-width:24px;height:24px;padding:0 8px;border-radius:999px;background:var(--${a.sev}-tint);color:var(--${a.sev}-ink);font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
-    <div class="rise" style="animation-delay:.12s">
-      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
-      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
-        ? kpis.map(([l,v,d])=>
-        `<div style="min-width:0">
-           <span style="display:block;font-size:13px;color:var(--text-secondary)">${T(...l)}</span>
-           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
-           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${T(...d)}</span>`:''}</div>`).join('')
-        : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
-        `<div style="min-width:0">
-           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
-           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>
+    ${todayBlock(kpis)}
     ${vitalsBlock()}
     ${quickAny?`<div class="rise" style="animation-delay:.18s">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 4px 8px">
@@ -14378,6 +14418,15 @@ async function loadMe(){
        and the two reads at the top of this file did not have to move. */
     const BOARDS=['store_manager','warehouse','customer_service','dispatch'];
     if(BOARDS.includes(u.roleLayout)) state.pos=u.roleLayout;
+    /* DASHBOARD CARDS, PICKED PER ROLE. The server has shipped this on /me
+       since the field existed (routes/backend-auth.js) and the DESKTOP has
+       honoured it since then too (dashCardGate, 03-dashboard.js) — this screen
+       simply threw it away, so every card an owner unticked went on drawing
+       here. The Roles editor says, in its own words, that the dashboard is
+       "this role's first screen on desktop and the Home tab on the phone" and
+       that "the layout and cards below decide what is on it"; on the phone
+       that was not true. null = no override, as on the desktop. */
+    state.dashCards=Array.isArray(u.dashboardCards)?u.dashboardCards:null;
     // The platform ceiling. A feature the tenant is not entitled to must not
     // carry a switch here — the desktop hides it, and a switch that writes a
     // preference nobody will ever honour is worse than an absent one. A

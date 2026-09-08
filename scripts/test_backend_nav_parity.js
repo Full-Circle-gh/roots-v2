@@ -23,6 +23,13 @@
  *        dashboard's own "The full numbers live in Reports" foot link opened
  *        Reports for a role holding neither dashboard:view nor reports:view.
  *
+ *   §4 · THE ROLE'S DASHBOARD CARDS REACH THE PHONE. The Roles editor's own
+ *        words are that the dashboard is "this role's first screen on desktop
+ *        and the Home tab on the phone"; m.html read /me and threw the field
+ *        away, so a Stockroom role with Today and Customers unticked read the
+ *        shop's revenue off Home anyway. The money half is worse: that card
+ *        carried no gate at all, not even the one its neighbour has.
+ *
  *   §3 · EVERY SCREEN THE PHONE GATES, THE RAIL GATES. Two rows carried no
  *        capability at all: Manage team (the roster, every teammate's
  *        permissions) and Sales (today's takings, per channel). The phone has
@@ -42,6 +49,7 @@ const CORE  = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core
 const SHELL = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
 const OPS   = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '02-settings-ops.js'), 'utf8');
 const PHONE = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
+const CORE_DASH = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '03-dashboard.js'), 'utf8');
 
 let pass = 0; let fail = 0;
 const ok  = (m) => { pass++; console.log('  ✓ ' + m); };
@@ -168,5 +176,70 @@ yes(bareMetrics === 0 && gatedMetrics > 0,
   'a bare .sales-ch-metrics shows that channel\'s revenue and AOV to a role without dashboard:view');
 
 // ─────────────────────────────────────────────────────────────────────────
+section('4 · the role\'s Dashboard cards reach the phone, not just the desktop');
+
+/* Reported with a screenshot of each: the Roles editor for Stockroom, with
+   Today, Customers and Unhandled orders UNTICKED — and the phone's Home
+   underneath it showing Today (¥732 revenue, average order, new customers) and
+   Also today. The server has shipped `dashboardCards` on /api/backend/me since
+   the field existed and the desktop has honoured it since then (dashCardGate);
+   m.html read /me, ignored the key, and drew every card regardless. The editor
+   says in its own words that the dashboard is "this role's first screen on
+   desktop and the Home tab on the phone" and that the cards "decide what is on
+   it", so the screen was contradicting its own control. */
+const ROLES = fs.readFileSync(path.join(ROOT, 'lib', 'roles.js'), 'utf8');
+const catalogue = /const DASH_CARDS = \[([^\]]*)\]/.exec(ROLES);
+yes(!!catalogue, 'lib/roles.js still owns the card catalogue');
+const CARD_KEYS = catalogue ? catalogue[1].match(/'([a-z]+)'/g).map(x => x.replace(/'/g, '')) : [];
+
+yes(/state\.dashCards=Array\.isArray\(u\.dashboardCards\)\?u\.dashboardCards:null;/.test(PHONE),
+  'the phone keeps dashboardCards off /me instead of throwing it away');
+yes(/function showDashCard\(key\)\{/.test(PHONE),
+  'and has a gate to read it with');
+/* null must stay "no override" on both surfaces, or a role whose owner never
+   opened that field would lose every card on the phone. */
+yes(/!Array\.isArray\(state\.dashCards\)\s*\|\|/.test(PHONE),
+  'no override (null) hides nothing — the same contract dashCardGate keeps');
+yes(/if \(!Array\.isArray\(window\.RA_DASH_CARDS\)\) return;/.test(CORE_DASH),
+  'and the desktop still keeps it too');
+
+/* The four keys with a section of their own on Home. Each is asserted BOTH to
+   be a real catalogue key and to be the one gating its section — a renamed card
+   breaks this suite rather than silently ungating a screen. */
+for (const [key, marker, what] of [
+  ['recap',     /function recapCard\(\)\{[\s\S]{0,200}?showDashCard\('recap'\)/,     'While you were away'],
+  ['needs',     /\$\{showDashCard\('needs'\)&&fires\.length\?/,                        'Needs you'],
+  ['orders',    /function todayBlock\(kpis\)\{[\s\S]{0,140}?showDashCard\('orders'\)/, 'Today'],
+  ['customers', /function vitalsBlock\(\)\{[\s\S]{0,240}?showDashCard\('customers'\)/, 'Also today'],
+]) {
+  yes(CARD_KEYS.includes(key), `${key} is a real card in lib/roles DASH_CARDS`);
+  yes(marker.test(PHONE), `${what} is gated on '${key}' — as its desktop twin is`);
+}
+
+/* THE MONEY HALF, which is worse than the card half and was found with it.
+   Today's twin — the desktop's `orders` block — is hidden for the warehouse,
+   dispatch and customer-service boards by retail-admin.css. On the phone that
+   card had NO money gate at all, not even the one its own neighbour carries, so
+   a stock or delivery role read the shop's takings off the first screen the app
+   opens. */
+const todayFn = /function todayBlock\(kpis\)\{[\s\S]*?\n\}/.exec(PHONE);
+yes(!!todayFn && /if\(recapNoMoney\(\)\) return '';/.test(todayFn[0]),
+  'Today carries the money gate its neighbour already had',
+  'without it a warehouse / dispatch / customer-service board reads revenue on Home');
+yes(/body\.pos-warehouse \.td-block\[data-block="orders"\]/.test(
+      fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8')),
+  'and the desktop still hides the same card for the same boards — the rule being mirrored');
+
+/* The six catalogue keys with no section on Home. Named, so the next reader
+   knows the gap was measured rather than missed: the phone surfaces these
+   states as Needs-you fires and Quick actions, and inventing a section to hold
+   a tick would be worse than the divergence. */
+const NO_PHONE_TWIN = ['unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
+yes(CARD_KEYS.length === 4 + NO_PHONE_TWIN.length,
+  `the catalogue is still ten cards — four gated on Home, ${NO_PHONE_TWIN.length} desktop-only`,
+  `lib/roles DASH_CARDS now has ${CARD_KEYS.length}; a new card needs a decision about Home`);
+yes(NO_PHONE_TWIN.every(k => CARD_KEYS.includes(k)),
+  "and the desktop-only six are still the six named in showDashCard's note");
+
 console.log(`\n${fail ? '✗' : '✓'} backend nav parity — ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
